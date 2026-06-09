@@ -38,6 +38,25 @@
             <EinstufungBadge Wert="Person.Einstufung" />
         </MudStack>
 
+        @* Zugehörigkeit (Fraktionen/Gruppen) auf einen Blick – ohne Tab-Wechsel. *@
+        @if (Zugehoerigkeiten.Count > 0)
+        {
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-1">Zugehörigkeit</MudText>
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @foreach (var z in Zugehoerigkeiten)
+                    {
+                        <MudTooltip Text="@Titel(z)">
+                            <MudChip T="string" Size="Size.Small"
+                                     Variant="@(z.IstLeitung ? Variant.Filled : Variant.Outlined)"
+                                     Color="@(z.IstLeitung ? Color.Warning : Color.Default)"
+                                     Icon="@TypIcon(z.Typ)" Href="@Route(z)">@z.Name</MudChip>
+                        </MudTooltip>
+                    }
+                </MudStack>
+            </div>
+        }
+
         <MudDivider />
 
         @* Meta + Kennzahlen aus den bereits geladenen Daten *@
@@ -59,11 +78,35 @@
 @code {
     [Parameter, EditorRequired] public Person Person { get; set; } = default!;
 
+    @* Aktive Fraktions-/Gruppen-Zugehörigkeiten (von der Akte geladen, Verschlusssache-gefiltert). *@
+    [Parameter] public IReadOnlyList<PersonZugehoerigkeit> Zugehoerigkeiten { get; set; } = [];
+
     private IEnumerable<(int Wert, string Label)> Kennzahlen()
     {
         yield return (Person.Fotos.Count, "Fotos");
         yield return (Person.Aliase.Count, "Aliase");
         yield return (Person.Telefonnummern.Count, "Telefon");
+    }
+
+    private static string Route(PersonZugehoerigkeit z)
+        => z.Typ == nameof(Personengruppe) ? $"/personengruppen/{z.Id}" : $"/fraktionen/{z.Id}";
+
+    private static string TypIcon(string typ)
+        => typ == nameof(Personengruppe) ? Icons.Material.Filled.Diversity3 : Icons.Material.Filled.Groups;
+
+    @* Tooltip-Text: Typ, ggf. „Leitung", ggf. Rang/Rolle – mit „ · " verbunden. *@
+    private static string Titel(PersonZugehoerigkeit z)
+    {
+        var teile = new List<string> { z.Typ == nameof(Personengruppe) ? "Gruppe" : "Fraktion" };
+        if (z.IstLeitung)
+        {
+            teile.Add("Leitung");
+        }
+        if (!string.IsNullOrWhiteSpace(z.Rolle))
+        {
+            teile.Add(z.Rolle);
+        }
+        return string.Join(" · ", teile);
     }
 
     private static string Initialen(string? name)

@@ -261,9 +261,11 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             return;
         }
         var personId = mitglied.PersonId;
-        // Entfernen + Kollegen-Verknüpfungen nachführen in EINER Transaktion (kein Zwischenzustand).
+        // Austritt + Kollegen-Verknüpfungen nachführen in EINER Transaktion (kein Zwischenzustand).
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
-        // Kein Soft-Delete (Join-Entity) → physisch entfernen; Interceptor protokolliert „Geloescht".
+        // Soft-Delete (Join-Entity ist ISoftDelete): der Interceptor setzt GeloeschtAm (= Austrittsdatum) statt
+        // hart zu löschen → die Mitgliedschaft bleibt als Verlaufseintrag erhalten. KollegenSync sieht danach
+        // nur noch aktive Mitglieder (globaler Filter) und entfernt die Fraktionskollegen-Links korrekt.
         db.FraktionMitglieder.Remove(mitglied);
         await db.SaveChangesAsync(cancellationToken);
         await FraktionskollegenSyncAsync(db, personId, cancellationToken);

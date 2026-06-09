@@ -287,6 +287,8 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             return;
         }
         var personId = mitglied.PersonId;
+        // Austritt + Kollegen-Verknüpfungen in EINER Transaktion. Soft-Delete (ISoftDelete): der Interceptor setzt
+        // GeloeschtAm (= Austrittsdatum) statt hart zu löschen → Mitgliedschaft bleibt als Verlaufseintrag erhalten.
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PersonengruppeMitglieder.Remove(mitglied);
         await db.SaveChangesAsync(cancellationToken);

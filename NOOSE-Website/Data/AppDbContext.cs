@@ -308,8 +308,9 @@ public class AppDbContext : IdentityDbContext<Agent>
             // FK auf Person mit Restrict (Fraktion cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
             b.HasOne(m => m.Person).WithMany()
                 .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
-            // Eine Person nur einmal pro Fraktion.
-            b.HasIndex(m => new { m.FraktionId, m.PersonId }).IsUnique();
+            // Kein Unique-Index: Mitgliedschaften sind soft-deletebar (Verlauf), und ein Wiedereintritt legt
+            // eine neue aktive Zeile neben der beendeten an. Aktiv-Eindeutigkeit prüft FraktionService.
+            b.HasIndex(m => new { m.FraktionId, m.PersonId });
             b.HasIndex(m => m.PersonId);
         });
 
@@ -336,7 +337,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             // FK auf Person mit Restrict (Gruppe cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
             b.HasOne(m => m.Person).WithMany()
                 .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
-            b.HasIndex(m => new { m.PersonengruppeId, m.PersonId }).IsUnique();
+            // Kein Unique-Index: soft-deletebar (Verlauf) + Wiedereintritt; Aktiv-Eindeutigkeit prüft PersonengruppeService.
+            b.HasIndex(m => new { m.PersonengruppeId, m.PersonId });
             b.HasIndex(m => m.PersonId);
         });
 

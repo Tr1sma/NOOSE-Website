@@ -37,8 +37,14 @@ public interface IPersonService
     /// <summary>Append-only Einstufungs-Verlauf der Person (neueste zuerst).</summary>
     Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>Fraktionen/Personengruppen, denen die Person angehört (Rück-Verknüpfungen, Verschlusssache-gefiltert).</summary>
+    /// <summary>Fraktionen/Personengruppen, denen die Person aktuell angehört (Rück-Verknüpfungen, Verschlusssache-gefiltert).</summary>
     Task<List<PersonZugehoerigkeit>> GetZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ehemalige (beendete) Zugehörigkeiten der Person mit Beitritts-/Austrittsdatum, neueste zuerst –
+    /// für den Mitgliedschafts-Verlauf. Verschlusssache-gefiltert; Akten im Papierkorb werden ausgeblendet.
+    /// </summary>
+    Task<List<PersonZugehoerigkeit>> GetEhemaligeZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Abgeleitete Verbündete/Gegner: Mitglieder von Organisationen, die mit einer Organisation der Person

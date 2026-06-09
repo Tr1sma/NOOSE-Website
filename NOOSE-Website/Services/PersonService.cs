@@ -214,13 +214,14 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
+        // Der globale Soft-Delete-Filter blendet beendete Mitgliedschaften aus → nur aktive (BeendetAm = null).
         var fraktionen = await (
             from m in db.FraktionMitglieder
             where m.PersonId == personId
             join f in db.Fraktionen on m.FraktionId equals f.Id
             where istFuehrung || !f.IstVerschlusssache
             orderby f.Name
-            select new PersonZugehoerigkeit(nameof(Fraktion), m.Id, f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung))
+            select new PersonZugehoerigkeit(nameof(Fraktion), m.Id, f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung, m.ErstelltAm, (DateTime?)null))
             .ToListAsync(cancellationToken);
 
         var gruppen = await (
@@ -229,10 +230,35 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             join g in db.Personengruppen on m.PersonengruppeId equals g.Id
             where istFuehrung || !g.IstVerschlusssache
             orderby g.Name
-            select new PersonZugehoerigkeit(nameof(Personengruppe), m.Id, g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung))
+            select new PersonZugehoerigkeit(nameof(Personengruppe), m.Id, g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung, m.ErstelltAm, (DateTime?)null))
             .ToListAsync(cancellationToken);
 
         return fraktionen.Concat(gruppen).ToList();
+    }
+
+    public async Task<List<PersonZugehoerigkeit>> GetEhemaligeZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // IgnoreQueryFilters: beendete (soft-gelöschte) Mitgliedschaften gezielt holen. Achtung – das schaltet
+        // ALLE Filter der Query ab, auch die der Eltern-Akte → Papierkorb/Verschlusssache hier manuell nachsetzen.
+        var fraktionen = await (
+            from m in db.FraktionMitglieder.IgnoreQueryFilters()
+            where m.PersonId == personId && m.IstGeloescht
+            join f in db.Fraktionen on m.FraktionId equals f.Id
+            where !f.IstGeloescht && (istFuehrung || !f.IstVerschlusssache)
+            select new PersonZugehoerigkeit(nameof(Fraktion), m.Id, f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung, m.ErstelltAm, m.GeloeschtAm))
+            .ToListAsync(cancellationToken);
+
+        var gruppen = await (
+            from m in db.PersonengruppeMitglieder.IgnoreQueryFilters()
+            where m.PersonId == personId && m.IstGeloescht
+            join g in db.Personengruppen on m.PersonengruppeId equals g.Id
+            where !g.IstGeloescht && (istFuehrung || !g.IstVerschlusssache)
+            select new PersonZugehoerigkeit(nameof(Personengruppe), m.Id, g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung, m.ErstelltAm, m.GeloeschtAm))
+            .ToListAsync(cancellationToken);
+
+        // Neueste Beendigung zuerst (typübergreifend).
+        return fraktionen.Concat(gruppen).OrderByDescending(z => z.BeendetAm).ToList();
     }
 
     public async Task<List<AbgeleiteteBeziehung>> GetAbgeleiteteBeziehungenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)

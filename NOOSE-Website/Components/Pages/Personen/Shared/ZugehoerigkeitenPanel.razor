@@ -42,9 +42,41 @@
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@z.Rolle</MudChip>
                         }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">seit @z.BeitrittAm.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
                     </MudStack>
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                    OnClick="@(() => EntfernenAsync(z))" aria-label="Zugehörigkeit entfernen" />
+                </MudStack>
+            </MudPaper>
+        }
+    }
+
+    @* Mitgliedschafts-Verlauf: beendete Zugehörigkeiten mit Beitritts-/Austrittsdatum (nur lesbar). *@
+    @if (!_laden && _ehemalige.Count > 0)
+    {
+        <MudDivider Class="my-2" />
+        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Ehemalige Zugehörigkeiten (@_ehemalige.Count)</MudText>
+        @foreach (var z in _ehemalige)
+        {
+            <MudPaper Class="pa-3" Outlined="true" Style="opacity:.7;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@TypIcon(z.Typ)" Color="Color.Default" Size="Size.Small" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@TypAnzeige(z.Typ)</MudChip>
+                    <MudLink Href="@Route(z)" Typo="Typo.body2">@z.Name</MudLink>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@z.Aktenzeichen</MudText>
+                    @if (z.IstLeitung)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Star">Leitung</MudChip>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(z.Rolle))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@z.Rolle</MudChip>
+                    }
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.DateRange" Size="Size.Small" Class="mud-text-secondary" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @z.BeitrittAm.ToLocalTime().ToString("dd.MM.yyyy") – @(z.BeendetAm?.ToLocalTime().ToString("dd.MM.yyyy"))
+                    </MudText>
                 </MudStack>
             </MudPaper>
         }
@@ -55,16 +87,37 @@
     [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
+    @* Wird nach Hinzufügen/Entfernen ausgelöst, damit die Eltern-Akte (Übersichtskarte + Historie) aktualisiert. *@
+    [Parameter] public EventCallback Changed { get; set; }
+
     private bool _laden = true;
     private List<PersonZugehoerigkeit> _zugehoerigkeiten = new();
+    private List<PersonZugehoerigkeit> _ehemalige = new();
 
     protected override async Task OnInitializedAsync() => await LadenAsync();
 
     private async Task LadenAsync()
     {
         _laden = true;
-        _zugehoerigkeiten = await PersonService.GetZugehoerigkeitenAsync(PersonId, User.IstFuehrung());
+        var istFuehrung = User.IstFuehrung();
+        _zugehoerigkeiten = await PersonService.GetZugehoerigkeitenAsync(PersonId, istFuehrung);
+        _ehemalige = await PersonService.GetEhemaligeZugehoerigkeitenAsync(PersonId, istFuehrung);
         _laden = false;
+    }
+
+    @* Nach einer Änderung: ist die Komponente in eine Akte eingebunden, benachrichtigt sie die Eltern – die
+       re-keyen dieses Panel (frisches Neuladen) und aktualisieren die Übersichtskarte. Sonst lädt sie sich
+       selbst neu (Standalone-Betrieb). Vermeidet Doppel-Laden über das Re-Key. *@
+    private async Task AktualisierenAsync()
+    {
+        if (Changed.HasDelegate)
+        {
+            await Changed.InvokeAsync();
+        }
+        else
+        {
+            await LadenAsync();
+        }
     }
 
     private async Task HinzufuegenAsync()
@@ -87,7 +140,7 @@
                 await GruppeService.MitgliedHinzufuegenAsync(wahl.ZielId, new GruppeMitgliedEingabe { PersonId = PersonId }, User);
             }
             Snackbar.Add("Zugehörigkeit hinzugefügt.", Severity.Success);
-            await LadenAsync();
+            await AktualisierenAsync();
         }
         catch (Exception ex)
         {
@@ -112,7 +165,7 @@
             await GruppeService.MitgliedEntfernenAsync(z.MitgliedId, User);
         }
         Snackbar.Add("Zugehörigkeit entfernt.", Severity.Success);
-        await LadenAsync();
+        await AktualisierenAsync();
     }
 
     private static string Route(PersonZugehoerigkeit z)
