@@ -7,11 +7,12 @@ using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Fraktionen;
+using NOOSE_Website.Models.Personen;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IFraktionService" />
-public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag) : IFraktionService
+public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService) : IFraktionService
 {
     public async Task<List<Fraktion>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -201,11 +202,9 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         {
             throw new InvalidOperationException($"Fraktion '{fraktionId}' nicht gefunden.");
         }
-        if (!await db.Personen.AnyAsync(p => p.Id == eingabe.PersonId, cancellationToken))
-        {
-            throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
-        }
-        if (await db.FraktionMitglieder.AnyAsync(m => m.FraktionId == fraktionId && m.PersonId == eingabe.PersonId, cancellationToken))
+
+        var personId = await PersonIdErmittelnAsync(db, eingabe.PersonId, eingabe.NeuePersonName, handelnder, cancellationToken);
+        if (await db.FraktionMitglieder.AnyAsync(m => m.FraktionId == fraktionId && m.PersonId == personId, cancellationToken))
         {
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Fraktion.");
         }
@@ -216,13 +215,31 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         db.FraktionMitglieder.Add(new FraktionMitglied
         {
             FraktionId = fraktionId,
-            PersonId = eingabe.PersonId,
+            PersonId = personId,
             Rang = Leer(eingabe.Rang),
             IstLeitung = eingabe.IstLeitung,
         });
         await db.SaveChangesAsync(cancellationToken);
-        await FraktionskollegenSyncAsync(db, eingabe.PersonId, cancellationToken);
+        await FraktionskollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Liefert die Personen-Id: entweder die übergebene bestehende (mit Existenzprüfung) oder – wenn nur ein
+    /// neuer Name angegeben ist – eine frisch angelegte Personen-Akte (committet, eigenes Aktenzeichen).
+    /// </summary>
+    private async Task<string> PersonIdErmittelnAsync(AppDbContext db, string? personId, string? neuerName, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(personId) && !string.IsNullOrWhiteSpace(neuerName))
+        {
+            var person = await personService.ErstellenAsync(new PersonEingabe { Name = neuerName.Trim() }, handelnder, cancellationToken);
+            return person.Id;
+        }
+        if (string.IsNullOrWhiteSpace(personId) || !await db.Personen.AnyAsync(p => p.Id == personId, cancellationToken))
+        {
+            throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
+        }
+        return personId;
     }
 
     public async Task MitgliedAendernAsync(string mitgliedId, string? rang, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)

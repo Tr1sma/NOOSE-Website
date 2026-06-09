@@ -1,6 +1,8 @@
-@* Verknüpfungen einer Personen-Akte: generische (bidirektionale) Verknüpfungen + typisierte Person-Beziehungen. *@
+@* Verknüpfungen einer Personen-Akte: typisierte Person-Beziehungen, generische (Standard-)Verknüpfungen
+   und abgeleitete Verbündete/Gegner aus Bündnissen/Konflikten der Organisationen der Person. *@
 @inject IVerknuepfungService VerknuepfungService
 @inject IBeziehungService BeziehungService
+@inject IPersonService PersonService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -99,6 +101,39 @@
             }
         }
     </MudStack>
+
+    <MudDivider />
+
+    @* ---- Abgeleitet: Verbündete/Gegner über Bündnisse/Konflikte der eigenen Organisationen ---- *@
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.subtitle1">Über Bündnisse &amp; Konflikte (@_abgeleitete.Count)</MudText>
+        @if (!_laden && _abgeleitete.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Keine abgeleiteten Verbündeten/Gegner. (Ergibt sich automatisch, wenn eine Fraktion/Gruppe der Person
+                ein Bündnis oder einen Konflikt hat.)
+            </MudText>
+        }
+        else if (!_laden)
+        {
+            @foreach (var a in _abgeleitete)
+            {
+                var verbuendet = a.Art == VerknuepfungArt.Buendnis;
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                        <MudIcon Icon="@(verbuendet ? Icons.Material.Filled.Handshake : Icons.Material.Filled.Bolt)"
+                                 Color="@(verbuendet ? Color.Success : Color.Error)" Size="Size.Small" />
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(verbuendet ? Color.Success : Color.Error)">
+                            @(verbuendet ? "Verbündeter" : "Gegner")
+                        </MudChip>
+                        <MudLink Href="@($"/personen/{a.PersonId}")" Typo="Typo.body2"><b>@a.PersonName</b></MudLink>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Aktenzeichen</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">· über @a.QuelleName ↔ @a.PartnerName</MudText>
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudStack>
 </MudStack>
 
 @code {
@@ -108,6 +143,7 @@
     private bool _laden = true;
     private List<BeziehungAnzeige> _beziehungen = new();
     private List<VerknuepfungAnzeige> _verknuepfungen = new();
+    private List<AbgeleiteteBeziehung> _abgeleitete = new();
 
     protected override async Task OnInitializedAsync() => await LadenAsync();
 
@@ -116,7 +152,8 @@
         _laden = true;
         var istFuehrung = User.IstFuehrung();
         _beziehungen = await BeziehungService.GetFuerPersonAsync(PersonId, istFuehrung);
-        _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Person), PersonId, istFuehrung);
+        _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Person), PersonId, istFuehrung, VerknuepfungArt.Standard);
+        _abgeleitete = await PersonService.GetAbgeleiteteBeziehungenAsync(PersonId, istFuehrung);
         _laden = false;
     }
 

@@ -2,8 +2,10 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
+using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
 
 namespace NOOSE_Website.Services;
@@ -11,7 +13,7 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IVerknuepfungService" />
 public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IVerknuepfungService
 {
-    public async Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, VerknuepfungArt? art = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (!await AkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
@@ -19,9 +21,14 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             return new();
         }
 
-        var roh = await db.Verknuepfungen
+        var query = db.Verknuepfungen
             .Where(v => (v.VonTyp == entitaetTyp && v.VonId == entitaetId)
-                     || (v.NachTyp == entitaetTyp && v.NachId == entitaetId))
+                     || (v.NachTyp == entitaetTyp && v.NachId == entitaetId));
+        if (art is not null)
+        {
+            query = query.Where(v => v.Art == art.Value);
+        }
+        var roh = await query
             .OrderByDescending(v => v.ErstelltAm)
             .ToListAsync(cancellationToken);
 
@@ -46,6 +53,12 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             .Where(f => fraktionIds.Contains(f.Id))
             .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache })
             .ToListAsync(cancellationToken)).ToDictionary(f => f.Id);
+
+        var gruppenIds = paare.Where(p => p.AndereTyp == nameof(Personengruppe)).Select(p => p.AndereId).Distinct().ToList();
+        var gruppenMap = (await db.Personengruppen
+            .Where(g => gruppenIds.Contains(g.Id))
+            .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache })
+            .ToListAsync(cancellationToken)).ToDictionary(g => g.Id);
 
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)
@@ -76,6 +89,19 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
                 ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
                     $"{fraktion.Name} ({fraktion.Aktenzeichen})", p.V.Automatisch));
             }
+            else if (p.AndereTyp == nameof(Personengruppe))
+            {
+                if (!gruppenMap.TryGetValue(p.AndereId, out var gruppe))
+                {
+                    continue;
+                }
+                if (gruppe.IstVerschlusssache && !istFuehrung)
+                {
+                    continue;
+                }
+                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
+                    $"{gruppe.Name} ({gruppe.Aktenzeichen})", p.V.Automatisch));
+            }
             else
             {
                 // Andere Aktentypen folgen in späteren Phasen – vorerst Rohbezeichnung.
@@ -85,7 +111,7 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         return ergebnis;
     }
 
-    public async Task ErstellenAsync(string vonTyp, string vonId, string nachTyp, string nachId, string? label, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task ErstellenAsync(string vonTyp, string vonId, string nachTyp, string nachId, string? label, ClaimsPrincipal handelnder, VerknuepfungArt art = VerknuepfungArt.Standard, CancellationToken cancellationToken = default)
     {
         if (vonTyp == nachTyp && vonId == nachId)
         {
@@ -100,6 +126,7 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             NachTyp = nachTyp,
             NachId = nachId,
             Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
+            Art = art,
         });
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -134,6 +161,14 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
                 .Select(f => new { f.IstVerschlusssache })
                 .FirstOrDefaultAsync(cancellationToken);
             return fraktion is not null && (istFuehrung || !fraktion.IstVerschlusssache);
+        }
+        if (entitaetTyp == nameof(Personengruppe))
+        {
+            var gruppe = await db.Personengruppen
+                .Where(g => g.Id == entitaetId)
+                .Select(g => new { g.IstVerschlusssache })
+                .FirstOrDefaultAsync(cancellationToken);
+            return gruppe is not null && (istFuehrung || !gruppe.IstVerschlusssache);
         }
         return true;
     }

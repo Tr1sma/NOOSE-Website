@@ -51,4 +51,10 @@ public class MitgliedEingabe
     public string PersonId { get; set; } = string.Empty;
     public string? Rang { get; set; }
     public bool IstLeitung { get; set; }
+
+    /// <summary>
+    /// Ist <see cref="PersonId"/> leer und dies gesetzt, wird beim Hinzufügen automatisch eine neue
+    /// Personen-Akte mit diesem Namen angelegt und als Mitglied verknüpft.
+    /// </summary>
+    public string? NeuePersonName { get; set; }
 }

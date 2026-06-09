@@ -6,11 +6,12 @@ using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Gruppen;
+using NOOSE_Website.Models.Personen;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonengruppeService" />
-public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen) : IPersonengruppeService
+public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, IPersonService personService) : IPersonengruppeService
 {
     public async Task<List<Personengruppe>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -85,33 +86,52 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         db.Personengruppen.Add(gruppe);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Im Anlege-Formular erfasste Mitglieder übernehmen (nur existierende Personen, dedupliziert)
-        // und anschließend die Gruppenkollegen-Verknüpfungen aufbauen – alles in derselben Transaktion.
-        var ids = eingabe.Mitglieder
-            .Select(m => m.PersonId)
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct()
-            .ToList();
-        if (ids.Count > 0)
+        // Im Anlege-Formular erfasste Mitglieder übernehmen (bestehende Personen + automatisch angelegte
+        // neue Akten, dedupliziert) und anschließend die Gruppenkollegen-Verknüpfungen aufbauen.
+        if (eingabe.Mitglieder.Count > 0)
         {
-            var existierend = (await db.Personen.Where(p => ids.Contains(p.Id)).Select(p => p.Id)
-                .ToListAsync(cancellationToken)).ToHashSet();
+            var bestehendeIds = eingabe.Mitglieder
+                .Select(m => m.PersonId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct()
+                .ToList();
+            var existierend = bestehendeIds.Count == 0
+                ? new HashSet<string>()
+                : (await db.Personen.Where(p => bestehendeIds.Contains(p.Id)).Select(p => p.Id)
+                    .ToListAsync(cancellationToken)).ToHashSet();
+
             var hinzugefuegt = new List<string>();
             var gesehen = new HashSet<string>();
+            var gesehenNeueNamen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var m in eingabe.Mitglieder)
             {
-                if (!existierend.Contains(m.PersonId) || !gesehen.Add(m.PersonId))
+                string? pid = null;
+                if (!string.IsNullOrWhiteSpace(m.PersonId) && existierend.Contains(m.PersonId))
+                {
+                    pid = m.PersonId;
+                }
+                else if (string.IsNullOrWhiteSpace(m.PersonId) && !string.IsNullOrWhiteSpace(m.NeuePersonName))
+                {
+                    // Derselbe neue Name im selben Formular → nur EINE Akte anlegen (keine Dubletten).
+                    if (!gesehenNeueNamen.Add(m.NeuePersonName.Trim()))
+                    {
+                        continue;
+                    }
+                    var person = await personService.ErstellenAsync(new PersonEingabe { Name = m.NeuePersonName.Trim() }, handelnder, cancellationToken);
+                    pid = person.Id;
+                }
+                if (pid is null || !gesehen.Add(pid))
                 {
                     continue;
                 }
                 db.PersonengruppeMitglieder.Add(new PersonengruppeMitglied
                 {
                     PersonengruppeId = gruppe.Id,
-                    PersonId = m.PersonId,
+                    PersonId = pid,
                     Rolle = Leer(m.Rolle),
                     IstLeitung = m.IstLeitung,
                 });
-                hinzugefuegt.Add(m.PersonId);
+                hinzugefuegt.Add(pid);
             }
             if (hinzugefuegt.Count > 0)
             {
@@ -209,11 +229,9 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         {
             throw new InvalidOperationException($"Personengruppe '{gruppeId}' nicht gefunden.");
         }
-        if (!await db.Personen.AnyAsync(p => p.Id == eingabe.PersonId, cancellationToken))
-        {
-            throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
-        }
-        if (await db.PersonengruppeMitglieder.AnyAsync(m => m.PersonengruppeId == gruppeId && m.PersonId == eingabe.PersonId, cancellationToken))
+
+        var personId = await PersonIdErmittelnAsync(db, eingabe.PersonId, eingabe.NeuePersonName, handelnder, cancellationToken);
+        if (await db.PersonengruppeMitglieder.AnyAsync(m => m.PersonengruppeId == gruppeId && m.PersonId == personId, cancellationToken))
         {
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Gruppe.");
         }
@@ -223,13 +241,31 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         db.PersonengruppeMitglieder.Add(new PersonengruppeMitglied
         {
             PersonengruppeId = gruppeId,
-            PersonId = eingabe.PersonId,
+            PersonId = personId,
             Rolle = Leer(eingabe.Rolle),
             IstLeitung = eingabe.IstLeitung,
         });
         await db.SaveChangesAsync(cancellationToken);
-        await GruppenkollegenSyncAsync(db, eingabe.PersonId, cancellationToken);
+        await GruppenkollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Liefert die Personen-Id: bestehende (mit Existenzprüfung) oder – bei nur neuem Namen – eine frisch
+    /// angelegte Personen-Akte (committet, eigenes Aktenzeichen).
+    /// </summary>
+    private async Task<string> PersonIdErmittelnAsync(AppDbContext db, string? personId, string? neuerName, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(personId) && !string.IsNullOrWhiteSpace(neuerName))
+        {
+            var person = await personService.ErstellenAsync(new PersonEingabe { Name = neuerName.Trim() }, handelnder, cancellationToken);
+            return person.Id;
+        }
+        if (string.IsNullOrWhiteSpace(personId) || !await db.Personen.AnyAsync(p => p.Id == personId, cancellationToken))
+        {
+            throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
+        }
+        return personId;
     }
 
     public async Task MitgliedAendernAsync(string mitgliedId, string? rolle, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)

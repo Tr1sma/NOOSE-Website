@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Abstractions;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Data.Entities.Querschnitt;
 
@@ -17,8 +18,11 @@ public class Verknuepfung : IAuditable, ISoftDelete
     public string NachTyp { get; set; } = string.Empty;
     public string NachId { get; set; } = string.Empty;
 
-    /// <summary>Optionaler Beziehungslabel („Quelle für", „siehe auch" …).</summary>
+    /// <summary>Optionaler Beziehungslabel/Notiz („Quelle für", „Revierkonflikt", „Waffenbruderschaft" …).</summary>
     public string? Label { get; set; }
+
+    /// <summary>Art der Verknüpfung: allgemein (Standard) oder fachliche Organisations-Beziehung (Konflikt/Bündnis).</summary>
+    public VerknuepfungArt Art { get; set; } = VerknuepfungArt.Standard;
 
     /// <summary>
     /// Automatisch erzeugte Verknüpfung (z. B. „Fraktionskollege" durch eine Fraktions-Mitgliedschaft).

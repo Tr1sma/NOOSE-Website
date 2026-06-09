@@ -5,6 +5,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
@@ -232,6 +233,133 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToListAsync(cancellationToken);
 
         return fraktionen.Concat(gruppen).ToList();
+    }
+
+    public async Task<List<AbgeleiteteBeziehung>> GetAbgeleiteteBeziehungenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen).
+        var meineFraktionen = await db.FraktionMitglieder
+            .Where(m => m.PersonId == personId)
+            .Join(db.Fraktionen, m => m.FraktionId, f => f.Id, (m, f) => f)
+            .Where(f => istFuehrung || !f.IstVerschlusssache)
+            .Select(f => new { f.Id, f.Name })
+            .ToListAsync(cancellationToken);
+        var meineGruppen = await db.PersonengruppeMitglieder
+            .Where(m => m.PersonId == personId)
+            .Join(db.Personengruppen, m => m.PersonengruppeId, g => g.Id, (m, g) => g)
+            .Where(g => istFuehrung || !g.IstVerschlusssache)
+            .Select(g => new { g.Id, g.Name })
+            .ToListAsync(cancellationToken);
+
+        var orgNamen = new Dictionary<string, string>();
+        foreach (var f in meineFraktionen) orgNamen[$"{nameof(Fraktion)}|{f.Id}"] = f.Name;
+        foreach (var g in meineGruppen) orgNamen[$"{nameof(Personengruppe)}|{g.Id}"] = g.Name;
+        if (orgNamen.Count == 0)
+        {
+            return new();
+        }
+
+        // 2. Bündnis-/Konflikt-Verknüpfungen, an denen eine meiner Organisationen beteiligt ist.
+        var meineOrgIds = meineFraktionen.Select(f => f.Id).Concat(meineGruppen.Select(g => g.Id)).ToList();
+        var roh = await db.Verknuepfungen
+            .Where(v => (v.Art == VerknuepfungArt.Buendnis || v.Art == VerknuepfungArt.Konflikt)
+                     && (meineOrgIds.Contains(v.VonId) || meineOrgIds.Contains(v.NachId)))
+            .Select(v => new { v.VonTyp, v.VonId, v.NachTyp, v.NachId, v.Art })
+            .ToListAsync(cancellationToken);
+
+        // Je Verknüpfung die eigene Seite (Quelle) und die Partner-Organisation bestimmen.
+        var partner = new List<(string QuelleKey, string PartnerTyp, string PartnerId, VerknuepfungArt Art)>();
+        foreach (var v in roh)
+        {
+            var vonKey = $"{v.VonTyp}|{v.VonId}";
+            var nachKey = $"{v.NachTyp}|{v.NachId}";
+            if (orgNamen.ContainsKey(vonKey))
+            {
+                partner.Add((vonKey, v.NachTyp, v.NachId, v.Art));
+            }
+            else if (orgNamen.ContainsKey(nachKey))
+            {
+                partner.Add((nachKey, v.VonTyp, v.VonId, v.Art));
+            }
+        }
+        if (partner.Count == 0)
+        {
+            return new();
+        }
+
+        // 3. Sichtbare Partner-Organisationen auflösen (Name; Verschlusssache nur für Führung).
+        var partnerFraktionIds = partner.Where(p => p.PartnerTyp == nameof(Fraktion)).Select(p => p.PartnerId).Distinct().ToList();
+        var partnerGruppenIds = partner.Where(p => p.PartnerTyp == nameof(Personengruppe)).Select(p => p.PartnerId).Distinct().ToList();
+        var partnerFraktionen = (await db.Fraktionen
+            .Where(f => partnerFraktionIds.Contains(f.Id) && (istFuehrung || !f.IstVerschlusssache))
+            .Select(f => new { f.Id, f.Name }).ToListAsync(cancellationToken)).ToDictionary(f => f.Id, f => f.Name);
+        var partnerGruppen = (await db.Personengruppen
+            .Where(g => partnerGruppenIds.Contains(g.Id) && (istFuehrung || !g.IstVerschlusssache))
+            .Select(g => new { g.Id, g.Name }).ToListAsync(cancellationToken)).ToDictionary(g => g.Id, g => g.Name);
+
+        // 4. Mitglieder der Partner-Organisationen (Person-Ids je Partner).
+        var sichtbareFraktionIds = partnerFraktionen.Keys.ToList();
+        var sichtbareGruppenIds = partnerGruppen.Keys.ToList();
+        var fraktionMitglieder = await db.FraktionMitglieder
+            .Where(m => sichtbareFraktionIds.Contains(m.FraktionId))
+            .Select(m => new { m.FraktionId, m.PersonId }).ToListAsync(cancellationToken);
+        var gruppenMitglieder = await db.PersonengruppeMitglieder
+            .Where(m => sichtbareGruppenIds.Contains(m.PersonengruppeId))
+            .Select(m => new { m.PersonengruppeId, m.PersonId }).ToListAsync(cancellationToken);
+        var mitgliederJePartner = fraktionMitglieder.GroupBy(m => m.FraktionId).ToDictionary(g => g.Key, g => g.Select(x => x.PersonId).ToList());
+        foreach (var grp in gruppenMitglieder.GroupBy(m => m.PersonengruppeId))
+        {
+            mitgliederJePartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
+        }
+
+        // 5. Kandidaten bilden (dedupliziert je (Person, Art); sich selbst ausschließen).
+        var kandidaten = new Dictionary<(string PersonId, VerknuepfungArt Art), (string QuelleName, string PartnerName)>();
+        foreach (var p in partner)
+        {
+            var partnerName = p.PartnerTyp == nameof(Fraktion)
+                ? (partnerFraktionen.TryGetValue(p.PartnerId, out var fn) ? fn : null)
+                : (partnerGruppen.TryGetValue(p.PartnerId, out var gn) ? gn : null);
+            if (partnerName is null || !mitgliederJePartner.TryGetValue(p.PartnerId, out var mids))
+            {
+                continue;
+            }
+            var quelleName = orgNamen[p.QuelleKey];
+            foreach (var mid in mids)
+            {
+                if (mid == personId)
+                {
+                    continue;
+                }
+                kandidaten.TryAdd((mid, p.Art), (quelleName, partnerName));
+            }
+        }
+        if (kandidaten.Count == 0)
+        {
+            return new();
+        }
+
+        // 6. Personen auflösen (Name/Aktenzeichen; Verschlusssache nur für Führung).
+        var personIds = kandidaten.Keys.Select(k => k.PersonId).Distinct().ToList();
+        var personen = (await db.Personen
+            .Where(p => personIds.Contains(p.Id) && (istFuehrung || !p.IstVerschlusssache))
+            .Select(p => new { p.Id, p.Name, p.Aktenzeichen }).ToListAsync(cancellationToken))
+            .ToDictionary(p => p.Id);
+
+        var ergebnis = new List<AbgeleiteteBeziehung>();
+        foreach (var ((pid, art), (quelleName, partnerName)) in kandidaten)
+        {
+            if (!personen.TryGetValue(pid, out var person))
+            {
+                continue;
+            }
+            ergebnis.Add(new AbgeleiteteBeziehung(art, person.Id, person.Name, person.Aktenzeichen, quelleName, partnerName));
+        }
+        return ergebnis
+            .OrderBy(e => e.Art)
+            .ThenBy(e => e.PersonName)
+            .ToList();
     }
 
     public async Task<PersonFoto> FotoHinzufuegenAsync(string personId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)

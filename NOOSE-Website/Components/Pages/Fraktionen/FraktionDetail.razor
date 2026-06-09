@@ -81,8 +81,8 @@ else
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <EinstufungPanel Aktuell="_fraktion.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
                 </MudTabPanel>
-                <MudTabPanel Text="Konflikte" Icon="@Icons.Material.Filled.Bolt">
-                    <KonfliktePanel FraktionId="@_fraktion.Id" User="_user" />
+                <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
+                    <OrgBeziehungenPanel EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" User="_user" />

@@ -92,7 +92,16 @@
     {
         var ausschluss = Eingabe.Mitglieder.Select(m => m.PersonId).ToList();
         var neu = await GruppeMitgliedDialog.ZeigenAsync(DialogService, IstFuehrung, ausschluss);
-        if (neu is not null)
+        if (neu is null)
+        {
+            return;
+        }
+        // Doppelte vermeiden: gleiche bestehende Person oder gleicher neuer Name (Akte würde sonst doppelt entstehen).
+        var schonVorhanden =
+            (!string.IsNullOrWhiteSpace(neu.PersonId) && Eingabe.Mitglieder.Any(m => m.PersonId == neu.PersonId))
+            || (!string.IsNullOrWhiteSpace(neu.NeuePersonName)
+                && Eingabe.Mitglieder.Any(m => string.Equals(m.NeuePersonName, neu.NeuePersonName, StringComparison.OrdinalIgnoreCase)));
+        if (!schonVorhanden)
         {
             Eingabe.Mitglieder.Add(neu);
         }

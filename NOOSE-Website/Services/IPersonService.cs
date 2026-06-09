@@ -40,6 +40,12 @@ public interface IPersonService
     /// <summary>Fraktionen/Personengruppen, denen die Person angehört (Rück-Verknüpfungen, Verschlusssache-gefiltert).</summary>
     Task<List<PersonZugehoerigkeit>> GetZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Abgeleitete Verbündete/Gegner: Mitglieder von Organisationen, die mit einer Organisation der Person
+    /// verbündet/verfeindet sind (berechnet, nicht gespeichert; Verschlusssache-gefiltert).
+    /// </summary>
+    Task<List<AbgeleiteteBeziehung>> GetAbgeleiteteBeziehungenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
+
     Task<PersonFoto> FotoHinzufuegenAsync(string personId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
     Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 

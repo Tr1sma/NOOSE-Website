@@ -26,6 +26,12 @@ public class GruppeMitgliedEingabe
 
     /// <summary>Nur für die Anzeige im Anlege-Formular; vom Dienst ignoriert.</summary>
     public string? PersonName { get; set; }
+
+    /// <summary>
+    /// Ist <see cref="PersonId"/> leer und dies gesetzt, wird beim Hinzufügen automatisch eine neue
+    /// Personen-Akte mit diesem Namen angelegt und als Mitglied verknüpft.
+    /// </summary>
+    public string? NeuePersonName { get; set; }
 }
 
 /// <summary>Erfassungsfortschritt einer Gruppe: erfasste Mitglieder (x) gegenüber geschätzter Gesamtgröße (y).</summary>
