@@ -43,6 +43,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<TagZuordnung> TagZuordnungen => Set<TagZuordnung>();
     public DbSet<Kommentar> Kommentare => Set<Kommentar>();
 
+    // ---- Phase 3b: Verknüpfungs-Engine (generisch) + Person-Beziehungen (typisiert) ----
+    public DbSet<Verknuepfung> Verknuepfungen => Set<Verknuepfung>();
+    public DbSet<PersonBeziehung> PersonBeziehungen => Set<PersonBeziehung>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -195,6 +199,31 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(k => k.EntitaetId).HasMaxLength(64);
             b.Property(k => k.AutorName).HasMaxLength(128);
             b.HasIndex(k => new { k.EntitaetTyp, k.EntitaetId });
+        });
+
+        // ---- Phase 3b: Verknüpfungen + Person-Beziehungen ----
+        modelBuilder.Entity<Verknuepfung>(b =>
+        {
+            b.Property(v => v.VonTyp).HasMaxLength(128);
+            b.Property(v => v.VonId).HasMaxLength(64);
+            b.Property(v => v.NachTyp).HasMaxLength(128);
+            b.Property(v => v.NachId).HasMaxLength(64);
+            b.Property(v => v.Label).HasMaxLength(200);
+            // Beide Richtungen schnell auffindbar.
+            b.HasIndex(v => new { v.VonTyp, v.VonId });
+            b.HasIndex(v => new { v.NachTyp, v.NachId });
+        });
+
+        modelBuilder.Entity<PersonBeziehung>(b =>
+        {
+            b.Property(x => x.Notiz).HasMaxLength(500);
+            // Zwei FKs auf dieselbe Tabelle (Personen) → Restrict statt Cascade (sonst „multiple cascade paths").
+            b.HasOne(x => x.PersonA).WithMany()
+                .HasForeignKey(x => x.PersonAId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.PersonB).WithMany()
+                .HasForeignKey(x => x.PersonBId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => x.PersonAId);
+            b.HasIndex(x => x.PersonBId);
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

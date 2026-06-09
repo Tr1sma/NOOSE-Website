@@ -1,0 +1,186 @@
+@* Verknüpfungen einer Personen-Akte: generische (bidirektionale) Verknüpfungen + typisierte Person-Beziehungen. *@
+@inject IVerknuepfungService VerknuepfungService
+@inject IBeziehungService BeziehungService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="6">
+    @* ---- Person-Beziehungen (typisiert) ---- *@
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.subtitle1">Beziehungen (@_beziehungen.Count)</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeueBeziehungAsync">
+                Beziehung hinzufügen
+            </MudButton>
+        </MudStack>
+
+        @if (_laden)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_beziehungen.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Beziehungen erfasst.</MudText>
+        }
+        else
+        {
+            @foreach (var b in _beziehungen)
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="@TypFarbe(b.Typ)" Variant="Variant.Filled">@BeziehungsTypAnzeige.Name(b.Typ)</MudChip>
+                            <MudLink Href="@($"/personen/{b.AnderePersonId}")" Typo="Typo.body2">
+                                <b>@b.AnderePersonName</b>
+                            </MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@b.AnderePersonAktenzeichen</MudText>
+                        </MudStack>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => BeziehungEntfernenAsync(b))" aria-label="Beziehung löschen" />
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(b.Notiz))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">@b.Notiz</MudText>
+                    }
+                </MudPaper>
+            }
+        }
+    </MudStack>
+
+    <MudDivider />
+
+    @* ---- Generische Verknüpfungen (bidirektional) ---- *@
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_verknuepfungen.Count)</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="NeueVerknuepfungAsync">
+                Verknüpfung hinzufügen
+            </MudButton>
+        </MudStack>
+
+        @if (!_laden && _verknuepfungen.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Verknüpfungen erfasst.</MudText>
+        }
+        else if (!_laden)
+        {
+            @foreach (var v in _verknuepfungen)
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Small" />
+                            @if (v.AndereTyp == nameof(Person))
+                            {
+                                <MudLink Href="@($"/personen/{v.AndereId}")" Typo="Typo.body2"><b>@v.AndereBezeichnung</b></MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2"><b>@v.AndereBezeichnung</b></MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(v.Label))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
+                            }
+                        </MudStack>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => VerknuepfungEntfernenAsync(v))" aria-label="Verknüpfung löschen" />
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudStack>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<BeziehungAnzeige> _beziehungen = new();
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        var istFuehrung = User.IstFuehrung();
+        _beziehungen = await BeziehungService.GetFuerPersonAsync(PersonId, istFuehrung);
+        _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Person), PersonId, istFuehrung);
+        _laden = false;
+    }
+
+    private async Task NeueBeziehungAsync()
+    {
+        var eingabe = await BeziehungDialog.ZeigenAsync(DialogService, User.IstFuehrung(), PersonId);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await BeziehungService.ErstellenAsync(PersonId, eingabe.ZielPersonId, eingabe.Typ, eingabe.Notiz, User);
+            Snackbar.Add("Beziehung gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task NeueVerknuepfungAsync()
+    {
+        var eingabe = await VerknuepfungDialog.ZeigenAsync(DialogService, User.IstFuehrung(), PersonId);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await VerknuepfungService.ErstellenAsync(nameof(Person), PersonId, nameof(Person), eingabe.ZielId, eingabe.Label, User);
+            Snackbar.Add("Verknüpfung gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task BeziehungEntfernenAsync(BeziehungAnzeige b)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Beziehung löschen?",
+            $"Die Beziehung zu „{b.AnderePersonName}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await BeziehungService.EntfernenAsync(b.BeziehungId, User);
+        Snackbar.Add("Beziehung gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private async Task VerknuepfungEntfernenAsync(VerknuepfungAnzeige v)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Verknüpfung löschen?",
+            $"Die Verknüpfung zu „{v.AndereBezeichnung}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await VerknuepfungService.EntfernenAsync(v.VerknuepfungId, User);
+        Snackbar.Add("Verknüpfung gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private static Color TypFarbe(BeziehungsTyp typ) => typ switch
+    {
+        BeziehungsTyp.Familie => Color.Info,
+        BeziehungsTyp.Verbuendeter => Color.Success,
+        BeziehungsTyp.Feind => Color.Error,
+        BeziehungsTyp.Geschaeftspartner => Color.Warning,
+        _ => Color.Default,
+    };
+}

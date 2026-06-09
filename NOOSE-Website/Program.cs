@@ -114,6 +114,9 @@ builder.Services.AddScoped<IPersonDokService, PersonDokService>();
 builder.Services.AddScoped<IQuelleService, QuelleService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IKommentarService, KommentarService>();
+// Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
+builder.Services.AddScoped<IVerknuepfungService, VerknuepfungService>();
+builder.Services.AddScoped<IBeziehungService, BeziehungService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>

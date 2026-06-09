@@ -88,6 +88,9 @@ else
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
+                    <VerknuepfungPanel PersonId="@_person.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <KommentarPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
                 </MudTabPanel>
