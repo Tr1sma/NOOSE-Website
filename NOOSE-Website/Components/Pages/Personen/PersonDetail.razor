@@ -63,16 +63,16 @@ else
             </MudGrid>
         </MudTabPanel>
         <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
-            <DokPanel PersonId="_person.Id" User="_user" PersonChanged="NeuLadenAsync" />
+            <DokPanel PersonId="@_person.Id" User="_user" PersonChanged="NeuLadenAsync" />
         </MudTabPanel>
         <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
             <EinstufungPanel Person="_person" User="_user" Changed="NeuLadenAsync" />
         </MudTabPanel>
         <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
-            <FotoGalerie PersonId="_person.Id" Fotos="_person.Fotos" User="_user" Changed="NeuLadenAsync" />
+            <FotoGalerie PersonId="@_person.Id" Fotos="_person.Fotos" User="_user" Changed="NeuLadenAsync" />
         </MudTabPanel>
         <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-            <HistorieTimeline PersonId="_person.Id" @key="_historieKey" />
+            <HistorieTimeline PersonId="@_person.Id" @key="_historieKey" />
         </MudTabPanel>
     </MudTabs>
 }
