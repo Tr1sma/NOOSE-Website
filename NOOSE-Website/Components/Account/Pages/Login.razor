@@ -1,0 +1,45 @@
+@page "/Account/Login"
+@layout AccountLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Anmeldung · NOOSE</PageTitle>
+
+<MudPaper Elevation="4" Class="pa-8" Style="max-width:420px;width:100%;">
+    <MudStack AlignItems="AlignItems.Center" Spacing="4">
+        <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Width="84" Height="84" />
+        <MudStack AlignItems="AlignItems.Center" Spacing="0">
+            <MudText Typo="Typo.h5" Style="font-weight:700;letter-spacing:.12em;">N.O.O.S.E.</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">National Office of Security Enforcement</MudText>
+        </MudStack>
+
+        @if (!string.IsNullOrEmpty(Fehler))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Style="width:100%;">
+                @Fehler
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mud-text-secondary">
+            Anmeldung ausschliesslich ueber Discord. Neue Konten muessen vor der ersten Nutzung
+            von der Fuehrung freigegeben werden.
+        </MudText>
+
+        <form method="post" action="/Account/PerformExternalLogin" style="width:100%;">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                       Size="Size.Large" FullWidth="true" StartIcon="@Icons.Material.Filled.Login">
+                Mit Discord anmelden
+            </MudButton>
+        </form>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "fehler")]
+    private string? Fehler { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+}

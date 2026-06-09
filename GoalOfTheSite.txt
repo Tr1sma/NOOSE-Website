@@ -1,0 +1,123 @@
+Das hier ist eine Website für einen FiveM-Server und zwar für das NOOSE
+
+Funktionen: 
+Accountsystem [Administrator / normaler Atze]
+Ränge NOOSE:
+Junior Agent
+Special Agent
+Senior Special Agent
+Supervisory Special Agent - ab hier beginnt die Führung
+Deputy Director
+Director
+Untergruppierung in der jeder Rang rein kann:
+Tactical Response Unit
+
+Ränge DoJ
+Attorney General
+Deputy Attorney General
+Richterschaft
+
+Ränge LSPD
+Los Santos Police Department
+METRO
+Internal Affairs
+Behördenleitung
+
+Ränge LSMD
+Psychologe
+LSMD-Leitung
+
+Basisdaten Bearbeitbar als Admin
+User Bearbeitbar als Admin
+Globale suche über alles auf das man zugriff hat
+
+Alles soll auf die Personen gemappt werden, das quasi eine Akte erstellt wird für jede Person und man in dieser alles über die Person erfährt. Das gleiche soll andersherum auch für Fraktionen der Fall sein, die dann auch hyperlinks zu den Quellen haben, aus denen das kommt und zu den Personen und andersherum. Das Ganze dient dazu eine möglichst gute Übersicht über die Informationen, die zu der Person oder zu der Fraktion vorhanden sind. Aktuell wird alles in Discord Threads gehalten, was den Nachteil hat, dass man beim Anschauen erst die Nachrichten lesen muss und auch nicht weis ob die Informationen noch aktuell sind. Es soll möglichst viel durch vorgaben gemacht werden damit man das ganze mit schönen stats und ansichten gut auswerten kann
+
+
+
+
+
+
+
+
+Was auf die Website verlagert wird:
+
+Personen-Dok
+
+
+Name
+Datum & Uhrzeit
+Grund
+Fraktionszugehörigkeit Drop-Down
+Erhaltene Informationen
+Wahrheitsserum Drop-Down mit Ja/Nein
+Beendigung der Maßnahme Button zur Auswahl Spritze/offiziell/erschossen/laufen
+Im Anhang Bild der Person 
+
+
+Personen (-gruppen)
+Zur Bewertung sicherheitsrelevanter Personen und Personengruppen erfolgt eine Einordnung in drei Stufen:
+
+Prüffall
+Kann durch jeden Agenten initiiert werden. In dieser Phase wird geprüft, ob von einer Person oder Gruppierung eine mögliche sicherheitsrelevante Bedeutung für das National Office of Security Enforcement ausgeht.
+
+Verdachtsfall
+Kann ebenfalls durch jeden Agenten eingestuft werden. Liegt ein begründeter Verdacht vor, beginnen ab diesem Zeitpunkt aktive Ermittlungen, um mögliche extremistische, terroristische oder anderweitig sicherheitsgefährdende Aktivitäten aufzuklären.
+
+Gesichert staatsgefährdend
+Höchste Einstufung. welche ab dem Dienstgrad Senior Special Agent eigenständig vorgenommen werden können. Unterhalb dieses Dienstgrades muss ein Antrag bei mindestens einem Senior Special Agent gestellt werden. Sie umfasst eine nahezu dauerhafte operative Aufmerksamkeit, einschließlich umfassender Überwachung und vollständiger Übernahme relevanter Ermittlungen im Kontext der nationalen Sicherheit. Zudem übernehmen die Einsatz- und operativen Leitungen sämtliche kriminellen Aktivitäten im Zuständigkeitsbereich des N.O.O.S.E. und üben dabei das koordinierende Recht gegenüber allen Behörden aus.
+
+Zusätzliche Informationen
+Es wird seitens der Behörden- und Abteilungsleitung keine Vorlage zur Verfügung gestellt. Die Aufarbeitung oder Informationsfluss ist dem Threadersteller selbst überlassen. 
+
+Es soll die möglichkeit geben Personen-Doks und Personengruppen miteinander zu verknüpfen da es auch der fall sein kann das Personen eingepackt werden die zu einer Personengruppe gehören
+
+Frak-Infos
+Name / Art:
+Funk:
+Darkchat:
+Ausstellungszeiten
+Konflikte
+Leaderschaft
+Mitglieder
+Erkennungsfarbe
+Bestand Waffen 
+Bestand Fraktion Lager
+Ränge 
+Ziele
+
+
+
+
+
+
+Parteien
+Prüffall
+Kann durch jeden Agenten initiiert werden. In dieser Phase wird geprüft, ob von einer Person oder Gruppierung eine mögliche sicherheitsrelevante Bedeutung für das National Office of Security Enforcement ausgeht.
+
+Verdachtsfall
+Kann ebenfalls durch jeden Agenten eingestuft werden. Liegt ein begründeter Verdacht vor, beginnen ab diesem Zeitpunkt aktive Ermittlungen, um mögliche extremistische, terroristische oder anderweitig sicherheitsgefährdende Aktivitäten aufzuklären.
+
+Gesichert staatsgefährdend
+Höchste Einstufung. welche ab dem Dienstgrad Senior Special Agent eigenständig vorgenommen werden können. Unterhalb dieses Dienstgrades muss ein Antrag bei mindestens einem Senior Special Agent gestellt werden. Sie umfasst eine nahezu dauerhafte operative Aufmerksamkeit, einschließlich umfassender Überwachung und vollständiger Übernahme relevanter Ermittlungen im Kontext der nationalen Sicherheit. Zudem übernehmen die Einsatz- und operativen Leitungen sämtliche kriminellen Aktivitäten im Zuständigkeitsbereich des 
+N.O.O.S.E. und üben dabei das koordinierende Recht gegenüber allen Behörden aus.
+
+Name der Partei
+Leitung
+Mitglieder
+Einstufung
+Ziele
+[- Bemerkungen -]
+
+Zugeteilte Special Agents
+
+
+
+Taskforces [mit Genehmigung]
+Chefermittler (Leitender Special Agent)
+CID-Lead immer operative Leitung | TRU-Lead immer taktischoperative Leitung
+Mitglieder
+Sinn und Zweck
+Geltungsbereich Überbehördlich / Innerbehördlich
+
+

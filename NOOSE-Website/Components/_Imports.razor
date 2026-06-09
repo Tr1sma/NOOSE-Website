@@ -1,0 +1,27 @@
+﻿@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using MudBlazor
+@using NOOSE_Website
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Components
+@using NOOSE_Website.Components.Account
+@using NOOSE_Website.Components.Account.Shared
+@using NOOSE_Website.Components.Layout
+@using NOOSE_Website.Data
+@using NOOSE_Website.Data.Entities
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Services
+@using NOOSE_Website.Theme
+
+@* App-weiter Standard: jede Seite verlangt einen aktiven (eingeloggten) Agent.
+   Anonyme Seiten (Login/Ausstehend/Gesperrt/Error/NotFound) heben das mit [AllowAnonymous] auf. *@
+@attribute [Authorize(Policy = Policies.AktiverAgent)]

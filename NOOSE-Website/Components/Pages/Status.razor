@@ -1,0 +1,108 @@
+@page "/status"
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject IHostEnvironment Env
+
+<PageTitle>System-Status · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">System-Status</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">Technischer Zustand der Anwendung (Phase 0).</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" />
+                    <MudText Typo="Typo.subtitle1">Datenbank-Verbindung</MudText>
+                </MudStack>
+                @if (!_checked)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_dbOk)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        <MudText Typo="Typo.subtitle2" Color="Color.Success">Verbunden</MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" />
+                        <MudText Typo="Typo.subtitle2" Color="Color.Error">Keine Verbindung</MudText>
+                    </MudStack>
+                }
+            </MudStack>
+
+            @if (_checked && _dbOk && _serverVersion is not null)
+            {
+                <MudDivider Class="my-3" />
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Server-Version</MudText>
+                    <MudText Typo="Typo.body2">MySQL @_serverVersion</MudText>
+                </div>
+            }
+            @if (_checked && !_dbOk && _error is not null)
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.caption" Color="Color.Error">@_error</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Anwendung</MudText>
+            <MudStack Spacing="2">
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Umgebung</MudText>
+                    <MudText Typo="Typo.body2">@Env.EnvironmentName</MudText>
+                </div>
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Render-Modus</MudText>
+                    <MudText Typo="Typo.body2">Interactive Server</MudText>
+                </div>
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Health-Endpoint</MudText>
+                    <MudLink Href="/health" Target="_blank">/health</MudLink>
+                </div>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _checked;
+    private bool _dbOk;
+    private string? _error;
+    private string? _serverVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _dbOk = await Db.Database.CanConnectAsync();
+            if (_dbOk)
+            {
+                var conn = Db.Database.GetDbConnection();
+                await conn.OpenAsync();
+                _serverVersion = conn.ServerVersion;
+                await conn.CloseAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _dbOk = false;
+            _error = ex.Message;
+        }
+        finally
+        {
+            _checked = true;
+        }
+    }
+}

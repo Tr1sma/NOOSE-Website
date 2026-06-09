@@ -1,0 +1,14 @@
+@inject NavigationManager Navigation
+
+@* Leitet nicht angemeldete Nutzer auf die Login-Seite um und merkt sich das urspruengliche Ziel. *@
+
+@code {
+    protected override void OnInitialized()
+    {
+        var relativeUri = Navigation.ToBaseRelativePath(Navigation.Uri);
+        var returnUrl = "/" + relativeUri;
+        Navigation.NavigateTo(
+            $"/Account/Login?returnUrl={Uri.EscapeDataString(returnUrl)}",
+            forceLoad: true);
+    }
+}

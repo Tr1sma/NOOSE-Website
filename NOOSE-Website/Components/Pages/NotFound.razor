@@ -1,0 +1,20 @@
+@page "/not-found"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@layout MainLayout
+
+<PageTitle>Nicht gefunden · NOOSE</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudPaper Class="pa-8" Elevation="2">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.h5">Seite nicht gefunden</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" Align="Align.Center">
+                Der gesuchte Inhalt existiert nicht oder wurde verschoben.
+            </MudText>
+            <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Home">Zum Dashboard</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>

@@ -1,0 +1,54 @@
+@page "/"
+
+<PageTitle>Dashboard · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Lagezentrum</MudText>
+</MudStack>
+<MudText Typo="Typo.body1" Class="mud-text-secondary mb-6">
+    Willkommen im NOOSE-Aktensystem. Die Fachmodule (Personen, Fraktionen, Fälle …) entstehen in den nächsten Phasen.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Personen-Akten</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Fraktionen</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Warning" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Anträge</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Verschlusssachen</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-6" Icon="@Icons.Material.Filled.Construction">
+    Aktueller Stand: <b>Phase 0 – Fundament</b>. Login &amp; Rechte folgen in Phase 1, die Personen-Akten in Phase 2.
+</MudAlert>

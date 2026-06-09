@@ -1,0 +1,20 @@
+@page "/Account/Ausstehend"
+@layout AccountLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Freigabe ausstehend · NOOSE</PageTitle>
+
+<MudPaper Elevation="4" Class="pa-8" Style="max-width:460px;width:100%;">
+    <MudStack AlignItems="AlignItems.Center" Spacing="4">
+        <MudIcon Icon="@Icons.Material.Filled.HourglassTop" Color="Color.Warning" Size="Size.Large" />
+        <MudText Typo="Typo.h5" Align="Align.Center">Konto wartet auf Freigabe</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mud-text-secondary">
+            Dein Discord-Konto wurde registriert und muss nun von der NOOSE-Fuehrung freigeschaltet
+            werden. Sobald ein Dienstgrad zugewiesen wurde, erhaeltst du beim naechsten Login Zugriff.
+            Bitte wende dich an deine Vorgesetzten.
+        </MudText>
+        <MudButton Href="/Account/Login" Variant="Variant.Outlined" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.ArrowBack">Zurueck zur Anmeldung</MudButton>
+    </MudStack>
+</MudPaper>
