@@ -210,6 +210,9 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Fraktion.");
         }
 
+        // Mitgliedschaft + automatische Fraktionskollegen-Verknüpfungen in EINER Transaktion,
+        // damit nach außen kein Zwischenzustand (Mitglied ohne Kollegen-Links) sichtbar wird.
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.FraktionMitglieder.Add(new FraktionMitglied
         {
             FraktionId = fraktionId,
@@ -218,6 +221,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             IstLeitung = eingabe.IstLeitung,
         });
         await db.SaveChangesAsync(cancellationToken);
+        await FraktionskollegenSyncAsync(db, eingabe.PersonId, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task MitgliedAendernAsync(string mitgliedId, string? rang, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -238,9 +243,14 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         {
             return;
         }
+        var personId = mitglied.PersonId;
+        // Entfernen + Kollegen-Verknüpfungen nachführen in EINER Transaktion (kein Zwischenzustand).
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         // Kein Soft-Delete (Join-Entity) → physisch entfernen; Interceptor protokolliert „Geloescht".
         db.FraktionMitglieder.Remove(mitglied);
         await db.SaveChangesAsync(cancellationToken);
+        await FraktionskollegenSyncAsync(db, personId, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task<List<AuditLog>> GetHistorieAsync(string fraktionId, CancellationToken cancellationToken = default)
@@ -294,6 +304,39 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         }
         await vorschlag.VormerkenAsync(db, VorschlagTyp.Waffe, fraktion.Waffenbestand.Select(w => w.Bezeichnung), cancellationToken);
         await vorschlag.VormerkenAsync(db, VorschlagTyp.Lagerbestand, fraktion.Lagerbestand.Select(l => l.Bezeichnung), cancellationToken);
+    }
+
+    /// <summary>
+    /// Synchronisiert die automatischen „Fraktionskollege"-Verknüpfungen der Person: Zwischen P und Q soll
+    /// genau dann eine automatische Verknüpfung bestehen, wenn beide mindestens eine Fraktion teilen. Wird
+    /// nach jeder Mitglieder-Änderung für die betroffene Person aufgerufen (greift auch von der Fraktionsseite).
+    /// </summary>
+    /// <remarks>
+    /// Invariante: pro Personen-Paar genau EINE automatische Verknüpfung (eine Richtung). Es genügt, nur die
+    /// betroffene Person P abzugleichen, weil eine Verknüpfung nur eine Zeile ist und hier beide Richtungen
+    /// (<c>VonId == P || NachId == P</c>) berücksichtigt werden – ein späterer Abgleich von Q findet die
+    /// Zeile von P aus wieder und legt keine Gegen-Richtung an. Etwaige Alt-Duplikate werden hier mit
+    /// abgeräumt. Bewusst KEIN Unique-Index auf (Von/Nach), da der für manuelle, soft-gelöschte
+    /// Verknüpfungen kollidieren würde. Automatische Verknüpfungen werden hart gelöscht (maschinell gepflegt,
+    /// kein Papierkorb, keine Soft-Delete-Reste).
+    /// </remarks>
+    private static async Task FraktionskollegenSyncAsync(AppDbContext db, string personId, CancellationToken cancellationToken)
+    {
+        var meineFraktionen = await db.FraktionMitglieder
+            .Where(m => m.PersonId == personId)
+            .Select(m => m.FraktionId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var soll = meineFraktionen.Count == 0
+            ? new List<string>()
+            : await db.FraktionMitglieder
+                .Where(m => meineFraktionen.Contains(m.FraktionId) && m.PersonId != personId)
+                .Select(m => m.PersonId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+        await KollegenSync.SyncAsync(db, personId, KollegenSync.Fraktionskollege, soll, cancellationToken);
     }
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

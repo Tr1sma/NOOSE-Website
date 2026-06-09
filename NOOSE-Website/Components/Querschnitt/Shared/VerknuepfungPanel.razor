@@ -80,11 +80,20 @@
                             }
                             @if (!string.IsNullOrWhiteSpace(v.Label))
                             {
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(v.Automatisch ? Color.Info : Color.Default)">@v.Label</MudChip>
                             }
                         </MudStack>
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => VerknuepfungEntfernenAsync(v))" aria-label="Verknüpfung löschen" />
+                        @if (v.Automatisch)
+                        {
+                            <MudTooltip Text="Automatisch durch Fraktions-Mitgliedschaft – wird mit der Mitgliedschaft gepflegt.">
+                                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Default" Size="Size.Small" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => VerknuepfungEntfernenAsync(v))" aria-label="Verknüpfung löschen" />
+                        }
                     </MudStack>
                 </MudPaper>
             }

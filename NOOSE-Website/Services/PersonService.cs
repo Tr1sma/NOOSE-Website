@@ -219,7 +219,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             join f in db.Fraktionen on m.FraktionId equals f.Id
             where istFuehrung || !f.IstVerschlusssache
             orderby f.Name
-            select new PersonZugehoerigkeit(nameof(Fraktion), f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung))
+            select new PersonZugehoerigkeit(nameof(Fraktion), m.Id, f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung))
             .ToListAsync(cancellationToken);
 
         var gruppen = await (
@@ -228,7 +228,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             join g in db.Personengruppen on m.PersonengruppeId equals g.Id
             where istFuehrung || !g.IstVerschlusssache
             orderby g.Name
-            select new PersonZugehoerigkeit(nameof(Personengruppe), g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung))
+            select new PersonZugehoerigkeit(nameof(Personengruppe), m.Id, g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung))
             .ToListAsync(cancellationToken);
 
         return fraktionen.Concat(gruppen).ToList();

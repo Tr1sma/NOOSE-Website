@@ -84,6 +84,45 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
 
         db.Personengruppen.Add(gruppe);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Im Anlege-Formular erfasste Mitglieder übernehmen (nur existierende Personen, dedupliziert)
+        // und anschließend die Gruppenkollegen-Verknüpfungen aufbauen – alles in derselben Transaktion.
+        var ids = eingabe.Mitglieder
+            .Select(m => m.PersonId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct()
+            .ToList();
+        if (ids.Count > 0)
+        {
+            var existierend = (await db.Personen.Where(p => ids.Contains(p.Id)).Select(p => p.Id)
+                .ToListAsync(cancellationToken)).ToHashSet();
+            var hinzugefuegt = new List<string>();
+            var gesehen = new HashSet<string>();
+            foreach (var m in eingabe.Mitglieder)
+            {
+                if (!existierend.Contains(m.PersonId) || !gesehen.Add(m.PersonId))
+                {
+                    continue;
+                }
+                db.PersonengruppeMitglieder.Add(new PersonengruppeMitglied
+                {
+                    PersonengruppeId = gruppe.Id,
+                    PersonId = m.PersonId,
+                    Rolle = Leer(m.Rolle),
+                    IstLeitung = m.IstLeitung,
+                });
+                hinzugefuegt.Add(m.PersonId);
+            }
+            if (hinzugefuegt.Count > 0)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                foreach (var pid in hinzugefuegt)
+                {
+                    await GruppenkollegenSyncAsync(db, pid, cancellationToken);
+                }
+            }
+        }
+
         await tx.CommitAsync(cancellationToken);
         return gruppe;
     }
@@ -179,6 +218,8 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Gruppe.");
         }
 
+        // Mitgliedschaft + automatische Gruppenkollegen-Verknüpfungen in EINER Transaktion.
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PersonengruppeMitglieder.Add(new PersonengruppeMitglied
         {
             PersonengruppeId = gruppeId,
@@ -187,6 +228,8 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             IstLeitung = eingabe.IstLeitung,
         });
         await db.SaveChangesAsync(cancellationToken);
+        await GruppenkollegenSyncAsync(db, eingabe.PersonId, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task MitgliedAendernAsync(string mitgliedId, string? rolle, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -207,8 +250,12 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         {
             return;
         }
+        var personId = mitglied.PersonId;
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PersonengruppeMitglieder.Remove(mitglied);
         await db.SaveChangesAsync(cancellationToken);
+        await GruppenkollegenSyncAsync(db, personId, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task<List<PersonengruppeAgent>> GetAgentenAsync(string gruppeId, CancellationToken cancellationToken = default)
@@ -292,6 +339,30 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
             .OrderByDescending(a => a.Zeitpunkt)
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Synchronisiert die automatischen „Gruppenkollege"-Verknüpfungen der Person (analog zu den
+    /// Fraktionskollegen): zwischen P und Q soll genau dann eine bestehen, wenn beide mindestens eine
+    /// Personengruppe teilen. Wird nach jeder Mitglieder-Änderung für die betroffene Person aufgerufen.
+    /// </summary>
+    private static async Task GruppenkollegenSyncAsync(AppDbContext db, string personId, CancellationToken cancellationToken)
+    {
+        var meineGruppen = await db.PersonengruppeMitglieder
+            .Where(m => m.PersonId == personId)
+            .Select(m => m.PersonengruppeId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var soll = meineGruppen.Count == 0
+            ? new List<string>()
+            : await db.PersonengruppeMitglieder
+                .Where(m => meineGruppen.Contains(m.PersonengruppeId) && m.PersonId != personId)
+                .Select(m => m.PersonId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+        await KollegenSync.SyncAsync(db, personId, KollegenSync.Gruppenkollege, soll, cancellationToken);
     }
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

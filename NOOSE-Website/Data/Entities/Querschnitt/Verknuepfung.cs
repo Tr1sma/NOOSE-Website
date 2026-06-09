@@ -20,6 +20,12 @@ public class Verknuepfung : IAuditable, ISoftDelete
     /// <summary>Optionaler Beziehungslabel („Quelle für", „siehe auch" …).</summary>
     public string? Label { get; set; }
 
+    /// <summary>
+    /// Automatisch erzeugte Verknüpfung (z. B. „Fraktionskollege" durch eine Fraktions-Mitgliedschaft).
+    /// Wird vom System gepflegt – nicht manuell anlegbar/löschbar – und bei Wegfall der Grundlage entfernt.
+    /// </summary>
+    public bool Automatisch { get; set; }
+
     // ---- IAuditable ----
     public DateTime ErstelltAm { get; set; }
     public string? ErstelltVonId { get; set; }

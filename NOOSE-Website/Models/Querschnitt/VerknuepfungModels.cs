@@ -13,4 +13,5 @@ public record VerknuepfungAnzeige(
     string AndereTyp,
     string AndereId,
     string? Label,
-    string AndereBezeichnung);
+    string AndereBezeichnung,
+    bool Automatisch = false);

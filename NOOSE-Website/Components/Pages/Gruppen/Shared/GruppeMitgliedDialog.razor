@@ -82,6 +82,7 @@
             PersonId = IstBearbeiten ? string.Empty : _person!.Id,
             Rolle = _rolle,
             IstLeitung = _istLeitung,
+            PersonName = IstBearbeiten ? PersonNameVorhanden : _person!.Name,
         }));
     }
 

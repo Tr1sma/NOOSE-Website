@@ -1,0 +1,91 @@
+@* Dialog zum Zuordnen der Person zu einer Fraktion oder Personengruppe (Mitgliedschaft). *@
+@inject IFraktionService FraktionService
+@inject IPersonengruppeService GruppeService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:360px;">
+            <MudRadioGroup T="string" @bind-Value="Typ">
+                <MudRadio T="string" Value="@nameof(Fraktion)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                <MudRadio T="string" Value="@nameof(Personengruppe)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+            </MudRadioGroup>
+
+            <MudAutocomplete T="AkteTreffer" Label="@(IstFraktion ? "Fraktion" : "Personengruppe")"
+                             @bind-Value="_ziel" SearchFunc="@Suchen" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                             Adornment="Adornment.Start" AdornmentIcon="@(IstFraktion ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)"
+                             HelperText="Akte auswählen, der die Person zugeordnet wird.">
+                <ItemTemplate Context="a">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@(IstFraktion ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2">@a.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Aktenzeichen</MudText>
+                    </MudStack>
+                </ItemTemplate>
+            </MudAutocomplete>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Hinzufügen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public bool IstFuehrung { get; set; }
+    [Parameter] public IReadOnlyList<string> AusschlussFraktionIds { get; set; } = Array.Empty<string>();
+    [Parameter] public IReadOnlyList<string> AusschlussGruppenIds { get; set; } = Array.Empty<string>();
+
+    private string _typ = nameof(Fraktion);
+    private string Typ
+    {
+        get => _typ;
+        set { if (_typ != value) { _typ = value; _ziel = null; } }
+    }
+    private bool IstFraktion => _typ == nameof(Fraktion);
+    private AkteTreffer? _ziel;
+
+    private async Task<IEnumerable<AkteTreffer>> Suchen(string value, CancellationToken token)
+    {
+        if (IstFraktion)
+        {
+            var treffer = await FraktionService.SucheAsync(value, IstFuehrung, 20, token);
+            return treffer.Where(f => !AusschlussFraktionIds.Contains(f.Id))
+                .Select(f => new AkteTreffer(f.Id, f.Name, f.Aktenzeichen));
+        }
+        var gruppen = await GruppeService.SucheAsync(value, IstFuehrung, 20, token);
+        return gruppen.Where(g => !AusschlussGruppenIds.Contains(g.Id))
+            .Select(g => new AkteTreffer(g.Id, g.Name, g.Aktenzeichen));
+    }
+
+    private void Speichern()
+    {
+        if (_ziel is null)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new ZugehoerigkeitWahl(_typ, _ziel.Id)));
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    public record AkteTreffer(string Id, string Name, string Aktenzeichen);
+    public record ZugehoerigkeitWahl(string Typ, string ZielId);
+
+    public static async Task<ZugehoerigkeitWahl?> ZeigenAsync(IDialogService dialog, bool istFuehrung,
+        IReadOnlyList<string> ausschlussFraktionIds, IReadOnlyList<string> ausschlussGruppenIds)
+    {
+        var parameters = new DialogParameters<ZugehoerigkeitDialog>
+        {
+            { x => x.IstFuehrung, istFuehrung },
+            { x => x.AusschlussFraktionIds, ausschlussFraktionIds },
+            { x => x.AusschlussGruppenIds, ausschlussGruppenIds },
+        };
+        var referenz = await dialog.ShowAsync<ZugehoerigkeitDialog>("Zugehörigkeit hinzufügen", parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: ZugehoerigkeitWahl w } ? w : null;
+    }
+}

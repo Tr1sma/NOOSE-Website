@@ -1,4 +1,6 @@
 @page "/"
+@using NOOSE_Website.Models.Dashboard
+@inject IDashboardService Dashboard
 
 <PageTitle>Dashboard · NOOSE</PageTitle>
 
@@ -10,7 +12,7 @@
     <AuthorizeView>
         <Authorized Context="auth">Willkommen zurück, <b>@Codename(auth.User)</b>. </Authorized>
     </AuthorizeView>
-    Die Fachmodule (Personen, Fraktionen, Fälle …) entstehen in den nächsten Phasen.
+    Überblick über den aktuellen Bestand und die jüngsten Aktivitäten im Dienst.
 </MudText>
 
 <MudGrid>
@@ -20,16 +22,16 @@
                 <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" />
                 <MudText Typo="Typo.overline" Class="mud-text-secondary">Personen-Akten</MudText>
             </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.Personen)</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Fraktionen</MudText>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Fraktionen &amp; Personengruppen</MudText>
             </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.FraktionenUndGruppen)</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
@@ -38,7 +40,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Warning" />
                 <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Anträge</MudText>
             </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.OffeneAntraege)</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
@@ -47,19 +49,110 @@
                 <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" />
                 <MudText Typo="Typo.overline" Class="mud-text-secondary">Verschlusssachen</MudText>
             </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">0</MudText>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.Verschlusssachen)</MudText>
         </MudPaper>
     </MudItem>
 </MudGrid>
 
-<MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-6" Icon="@Icons.Material.Filled.Construction">
-    Aktueller Stand: <b>Phase 1 – Auth, Accounts &amp; Rechte</b> aktiv. Die Personen-Akten folgen in Phase 2.
-</MudAlert>
+<MudPaper Class="pa-4 mt-6" Elevation="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" />
+        <MudText Typo="Typo.h6">Letzte Änderungen</MudText>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_aenderungen.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Änderungen erfasst.</MudText>
+    }
+    else
+    {
+        <MudTimeline TimelinePosition="TimelinePosition.Start" Class="mt-2">
+            @foreach (var x in _aenderungen)
+            {
+                <MudTimelineItem Color="@Farbe(x.Aktion)" Size="Size.Small">
+                    <MudText Typo="Typo.body2">
+                        <b>@TypLabel(x.AkteTyp)</b>
+                        @if (x.AkteGeloescht)
+                        {
+                            <span>»@x.AkteName«</span>
+                            <span class="mud-text-secondary"> (im Papierkorb)</span>
+                        }
+                        else
+                        {
+                            <MudLink Href="@Link(x)">»@x.AkteName«</MudLink>
+                        }
+                        <span class="mud-text-secondary"> · @AktionText(x)</span>
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @x.Aktenzeichen · @x.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(x.AgentName ?? "System")
+                    </MudText>
+                </MudTimelineItem>
+            }
+        </MudTimeline>
+    }
+</MudPaper>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private DashboardKennzahlen? _kennzahlen;
+    private List<DashboardAenderung> _aenderungen = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var istFuehrung = (await AuthStateTask).User.IstFuehrung();
+        _kennzahlen = await Dashboard.GetKennzahlenAsync(istFuehrung);
+        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(istFuehrung);
+        _laden = false;
+    }
+
+    private string Zahl(Func<DashboardKennzahlen, int> auswahl)
+        => _kennzahlen is { } k ? auswahl(k).ToString() : "…";
+
     private static string Codename(System.Security.Claims.ClaimsPrincipal user)
     {
         var codename = user.GetCodename();
         return string.IsNullOrWhiteSpace(codename) ? "Unbenannter Agent" : codename;
     }
+
+    private static string TypLabel(DashboardAkteTyp t) => t switch
+    {
+        DashboardAkteTyp.Person => "Person",
+        DashboardAkteTyp.Fraktion => "Fraktion",
+        _ => "Personengruppe",
+    };
+
+    private static string Link(DashboardAenderung x) => x.AkteTyp switch
+    {
+        DashboardAkteTyp.Person => $"/personen/{x.AkteId}",
+        DashboardAkteTyp.Fraktion => $"/fraktionen/{x.AkteId}",
+        _ => $"/personengruppen/{x.AkteId}",
+    };
+
+    private static string AktionText(DashboardAenderung x)
+    {
+        var verb = x.Aktion switch
+        {
+            AuditAktion.Erstellt => x.Detail is null ? "angelegt" : "hinzugefügt",
+            AuditAktion.Geaendert => "geändert",
+            AuditAktion.Geloescht => x.Detail is null ? "in den Papierkorb verschoben" : "entfernt",
+            AuditAktion.Wiederhergestellt => "wiederhergestellt",
+            _ => x.Aktion.ToString(),
+        };
+        return x.Detail is null ? verb : $"{x.Detail} {verb}";
+    }
+
+    private static Color Farbe(AuditAktion a) => a switch
+    {
+        AuditAktion.Erstellt => Color.Success,
+        AuditAktion.Geaendert => Color.Info,
+        AuditAktion.Geloescht => Color.Error,
+        AuditAktion.Wiederhergestellt => Color.Warning,
+        _ => Color.Default,
+    };
 }

@@ -61,7 +61,7 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
                     continue;
                 }
                 ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
-                    $"{person.Name} ({person.Aktenzeichen})"));
+                    $"{person.Name} ({person.Aktenzeichen})", p.V.Automatisch));
             }
             else if (p.AndereTyp == nameof(Fraktion))
             {
@@ -74,12 +74,12 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
                     continue;
                 }
                 ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
-                    $"{fraktion.Name} ({fraktion.Aktenzeichen})"));
+                    $"{fraktion.Name} ({fraktion.Aktenzeichen})", p.V.Automatisch));
             }
             else
             {
                 // Andere Aktentypen folgen in späteren Phasen – vorerst Rohbezeichnung.
-                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label, p.AndereId));
+                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label, p.AndereId, p.V.Automatisch));
             }
         }
         return ergebnis;

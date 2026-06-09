@@ -12,6 +12,9 @@ public class PersonengruppeEingabe
     public string? EinstufungBegruendung { get; set; }
     public int? GeschaetzteMitgliederzahl { get; set; }
     public bool IstVerschlusssache { get; set; }
+
+    /// <summary>Mitglieder, die bereits beim Anlegen erfasst werden (auf der Detailseite weiter pflegbar).</summary>
+    public List<GruppeMitgliedEingabe> Mitglieder { get; set; } = new();
 }
 
 /// <summary>Eingabe zum Hinzufügen/Ändern einer Gruppen-Mitgliedschaft.</summary>
@@ -20,6 +23,9 @@ public class GruppeMitgliedEingabe
     public string PersonId { get; set; } = string.Empty;
     public string? Rolle { get; set; }
     public bool IstLeitung { get; set; }
+
+    /// <summary>Nur für die Anzeige im Anlege-Formular; vom Dienst ignoriert.</summary>
+    public string? PersonName { get; set; }
 }
 
 /// <summary>Erfassungsfortschritt einer Gruppe: erfasste Mitglieder (x) gegenüber geschätzter Gesamtgröße (y).</summary>

@@ -137,6 +137,8 @@ builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>(
 builder.Services.AddScoped<IFraktionService, FraktionService>();
 // Phase 4b: Personengruppen.
 builder.Services.AddScoped<IPersonengruppeService, PersonengruppeService>();
+// Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>
