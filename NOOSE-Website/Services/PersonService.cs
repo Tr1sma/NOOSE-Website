@@ -213,9 +213,11 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
         {
             return;
         }
-        fileStorage.Loeschen(foto.DateinameGespeichert);
+        // Erst den DB-Datensatz entfernen (Quelle der Wahrheit), dann die Datei löschen. So bleibt
+        // bei einem Speicherfehler kein verwaister Datensatz zurück, der auf eine fehlende Datei zeigt.
         db.PersonFotos.Remove(foto);
         await db.SaveChangesAsync(cancellationToken);
+        fileStorage.Loeschen(foto.DateinameGespeichert);
     }
 
     public Task<PersonFoto?> GetFotoMitPersonAsync(string fotoId, CancellationToken cancellationToken = default)
