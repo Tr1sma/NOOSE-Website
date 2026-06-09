@@ -18,8 +18,17 @@ public class PersonDok : IAuditable, ISoftDelete
 
     public string? Grund { get; set; }
 
-    /// <summary>Fraktionszugehörigkeit als Freitext (eigenes Fraktions-Modul erst ab Phase 4).</summary>
+    /// <summary>Fraktionszugehörigkeit als Freitext – Rückfallebene, falls die Organisation (noch)
+    /// nicht als Akte existiert. Existiert sie, wird stattdessen über <see cref="OrgTyp"/>/<see cref="OrgId"/> verknüpft.</summary>
     public string? Fraktion { get; set; }
+
+    /// <summary>Typ der verknüpften Organisation: <c>nameof(Fraktion)</c> oder <c>nameof(Personengruppe)</c>;
+    /// null, wenn keine Akte verknüpft ist (dann zählt der Freitext <see cref="Fraktion"/>).</summary>
+    public string? OrgTyp { get; set; }
+
+    /// <summary>Id der verknüpften Fraktion bzw. Personengruppe (lose Verknüpfung ohne FK, analog der
+    /// generischen Entitaet-Assoziationen). Der Name wird erst bei der Anzeige aufgelöst.</summary>
+    public string? OrgId { get; set; }
 
     public string? ErhalteneInformationen { get; set; }
 

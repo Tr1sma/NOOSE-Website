@@ -10,10 +10,11 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IPersonDokService
 {
-    Task<List<PersonDok>> GetFuerPersonAsync(string personId, CancellationToken cancellationToken = default);
+    /// <summary>Doks einer Person inkl. aufgelöster (Verschlusssache-gefilterter) Verknüpfungs-Anzeige.</summary>
+    Task<List<PersonDokAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
 
-    /// <summary>Alle Doks (übergreifend) inkl. zugehöriger Person; respektiert den Verschlusssachen-Filter.</summary>
-    Task<List<PersonDok>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default);
+    /// <summary>Alle Doks (übergreifend) inkl. zugehöriger Person und aufgelöster Verknüpfung; respektiert den Verschlusssachen-Filter.</summary>
+    Task<List<PersonDokAnzeige>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default);
 
     Task<PersonDok> ErstellenAsync(string personId, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 

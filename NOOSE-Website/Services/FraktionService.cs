@@ -82,6 +82,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             Funk = Leer(eingabe.Funk),
             Darkchat = Leer(eingabe.Darkchat),
             Ausstellungszeiten = Leer(eingabe.Ausstellungszeiten),
+            Anwesen = Leer(eingabe.Anwesen),
             Erkennungsfarbe = Leer(eingabe.Erkennungsfarbe),
             Ziele = Leer(eingabe.Ziele),
             Beschreibung = Leer(eingabe.Beschreibung),
@@ -118,6 +119,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         fraktion.Funk = Leer(eingabe.Funk);
         fraktion.Darkchat = Leer(eingabe.Darkchat);
         fraktion.Ausstellungszeiten = Leer(eingabe.Ausstellungszeiten);
+        fraktion.Anwesen = Leer(eingabe.Anwesen);
         fraktion.Erkennungsfarbe = Leer(eingabe.Erkennungsfarbe);
         fraktion.Ziele = Leer(eingabe.Ziele);
         fraktion.Beschreibung = Leer(eingabe.Beschreibung);

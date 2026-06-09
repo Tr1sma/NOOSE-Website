@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Fraktionen;
+using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Personen;
@@ -10,24 +12,69 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IPersonDokService" />
 public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPersonService personService) : IPersonDokService
 {
-    public async Task<List<PersonDok>> GetFuerPersonAsync(string personId, CancellationToken cancellationToken = default)
+    public async Task<List<PersonDokAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.PersonDoks
+        var doks = await db.PersonDoks
             .Where(d => d.PersonId == personId)
             .OrderByDescending(d => d.Zeitpunkt)
             .ToListAsync(cancellationToken);
+        return await ZuAnzeigeAsync(db, doks, istFuehrung, cancellationToken);
     }
 
-    public async Task<List<PersonDok>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<PersonDokAnzeige>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.PersonDoks
+        var doks = await db.PersonDoks
             .Include(d => d.Person)
             // Der Soft-Delete-Filter setzt Person bei gelöschten Akten auf null → solche Doks ausblenden.
             .Where(d => d.Person != null && (istFuehrung || !d.Person.IstVerschlusssache))
             .OrderByDescending(d => d.Zeitpunkt)
             .ToListAsync(cancellationToken);
+        return await ZuAnzeigeAsync(db, doks, istFuehrung, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reichert geladene Doks mit den Anzeigedaten ihrer verknüpften Organisation an. Namen werden in je
+    /// einer Sammelabfrage je Org-Typ aufgelöst und dabei Verschlusssache-gefiltert (<paramref name="istFuehrung"/>);
+    /// der globale Soft-Delete-Filter blendet gelöschte Orgs automatisch aus. Nicht (mehr) sichtbare oder
+    /// nicht verknüpfte Doks erhalten leere Org-Felder → die Anzeige fällt auf den Freitext zurück.
+    /// </summary>
+    private static async Task<List<PersonDokAnzeige>> ZuAnzeigeAsync(AppDbContext db, List<PersonDok> doks, bool istFuehrung, CancellationToken cancellationToken)
+    {
+        var fraktionIds = doks.Where(d => d.OrgTyp == nameof(Fraktion) && d.OrgId is not null).Select(d => d.OrgId!).Distinct().ToList();
+        var gruppenIds = doks.Where(d => d.OrgTyp == nameof(Personengruppe) && d.OrgId is not null).Select(d => d.OrgId!).Distinct().ToList();
+
+        var fraktionen = new Dictionary<string, (string Name, string Aktenzeichen)>();
+        if (fraktionIds.Count > 0)
+        {
+            fraktionen = await db.Fraktionen
+                .Where(f => fraktionIds.Contains(f.Id) && (istFuehrung || !f.IstVerschlusssache))
+                .Select(f => new { f.Id, f.Name, f.Aktenzeichen })
+                .ToDictionaryAsync(f => f.Id, f => (f.Name, f.Aktenzeichen), cancellationToken);
+        }
+
+        var gruppen = new Dictionary<string, (string Name, string Aktenzeichen)>();
+        if (gruppenIds.Count > 0)
+        {
+            gruppen = await db.Personengruppen
+                .Where(g => gruppenIds.Contains(g.Id) && (istFuehrung || !g.IstVerschlusssache))
+                .Select(g => new { g.Id, g.Name, g.Aktenzeichen })
+                .ToDictionaryAsync(g => g.Id, g => (g.Name, g.Aktenzeichen), cancellationToken);
+        }
+
+        return doks.Select(d =>
+        {
+            if (d.OrgId is not null && d.OrgTyp == nameof(Fraktion) && fraktionen.TryGetValue(d.OrgId, out var f))
+            {
+                return new PersonDokAnzeige(d, f.Name, f.Aktenzeichen, $"/fraktionen/{d.OrgId}");
+            }
+            if (d.OrgId is not null && d.OrgTyp == nameof(Personengruppe) && gruppen.TryGetValue(d.OrgId, out var g))
+            {
+                return new PersonDokAnzeige(d, g.Name, g.Aktenzeichen, $"/personengruppen/{d.OrgId}");
+            }
+            return new PersonDokAnzeige(d, null, null, null);
+        }).ToList();
     }
 
     public async Task<PersonDok> ErstellenAsync(string personId, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -71,6 +118,10 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         dok.Zeitpunkt = eingabe.Zeitpunkt;
         dok.Grund = Leer(eingabe.Grund);
         dok.Fraktion = Leer(eingabe.Fraktion);
+        var aktOrgId = Leer(eingabe.OrgId);
+        dok.OrgId = aktOrgId;
+        // Kein verwaister Typ ohne Id (Freitext-Fallback).
+        dok.OrgTyp = aktOrgId is null ? null : Leer(eingabe.OrgTyp);
         dok.ErhalteneInformationen = Leer(eingabe.ErhalteneInformationen);
         dok.Wahrheitsserum = eingabe.Wahrheitsserum;
         dok.Ausgang = eingabe.Ausgang;
@@ -124,12 +175,16 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
 
     private async Task<PersonDok> ErstelleDokAsync(AppDbContext db, string personId, PersonDokEingabe eingabe, CancellationToken cancellationToken)
     {
+        var orgId = Leer(eingabe.OrgId);
         var dok = new PersonDok
         {
             PersonId = personId,
             Zeitpunkt = eingabe.Zeitpunkt,
             Grund = Leer(eingabe.Grund),
             Fraktion = Leer(eingabe.Fraktion),
+            OrgId = orgId,
+            // Kein verwaister Typ ohne Id (Freitext-Fallback).
+            OrgTyp = orgId is null ? null : Leer(eingabe.OrgTyp),
             ErhalteneInformationen = Leer(eingabe.ErhalteneInformationen),
             Wahrheitsserum = eingabe.Wahrheitsserum,
             Ausgang = eingabe.Ausgang,

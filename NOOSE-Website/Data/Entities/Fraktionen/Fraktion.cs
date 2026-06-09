@@ -26,6 +26,9 @@ public class Fraktion : IAuditable, ISoftDelete
     public string? Darkchat { get; set; }
     public string? Ausstellungszeiten { get; set; }
 
+    /// <summary>Anwesen/Sitz der Fraktion als Freitext (z. B. Adresse + Zugangsnotizen).</summary>
+    public string? Anwesen { get; set; }
+
     /// <summary>Erkennungsfarbe als Hex-Code (z. B. #1E88E5).</summary>
     public string? Erkennungsfarbe { get; set; }
 

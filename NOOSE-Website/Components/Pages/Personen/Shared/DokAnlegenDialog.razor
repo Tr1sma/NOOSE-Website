@@ -1,6 +1,8 @@
 @* Übergreifender Dialog zum Anlegen eines Personen-Doks: Person wird über ein suchbares Dropdown
    ausgewählt; existiert sie noch nicht, wird beim Speichern automatisch eine Akte angelegt. *@
 @inject IPersonService PersonService
+@inject IFraktionService FraktionService
+@inject IPersonengruppeService GruppeService
 
 <MudDialog>
     <DialogContent>
@@ -64,7 +66,33 @@
                     </MudAlert>
                 }
                 <MudTextField @bind-Value="_eingabe.Grund" Label="Grund" Lines="2" Variant="Variant.Outlined" />
-                <MudTextField @bind-Value="_eingabe.Fraktion" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined" />
+
+                @* Fraktionszugehörigkeit: bevorzugt eine bestehende Akte verknüpfen, sonst Freitext. *@
+                <MudRadioGroup T="string" @bind-Value="Typ">
+                    <MudRadio T="string" Value="@nameof(Fraktion)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                    <MudRadio T="string" Value="@nameof(Personengruppe)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+                </MudRadioGroup>
+                <MudAutocomplete T="ZugehoerigkeitDialog.AkteTreffer" Label="Fraktion / Gruppe (verknüpft)"
+                                 @bind-Value="_ziel" SearchFunc="@Suchen" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                                 Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                 ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                 Adornment="Adornment.Start" AdornmentIcon="@(IstFraktion ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)"
+                                 HelperText="Bestehende Akte verknüpfen – oder leer lassen und unten Freitext nutzen.">
+                    <ItemTemplate Context="a">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@(IstFraktion ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@a.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Aktenzeichen</MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+                @if (_ziel is not null)
+                {
+                    <MudCheckBox T="bool" @bind-Value="_alsMitglied" Color="Color.Primary" Dense="true"
+                                 Label="Person als Mitglied dieser Akte eintragen" />
+                }
+                <MudTextField @bind-Value="_eingabe.Fraktion" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined"
+                              HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
                 <MudTextField @bind-Value="_eingabe.ErhalteneInformationen" Label="Erhaltene Informationen" Lines="3" Variant="Variant.Outlined" />
                 <MudSwitch T="bool" @bind-Value="_eingabe.Wahrheitsserum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
             </MudStack>
@@ -86,6 +114,28 @@
     private readonly PersonDokEingabe _eingabe = new();
     private DateTime? _datum = DateTime.Now;
     private TimeSpan? _zeit = DateTime.Now.TimeOfDay;
+
+    private string _orgTyp = nameof(Fraktion);
+    private string Typ
+    {
+        get => _orgTyp;
+        // Typwechsel verwirft die bisherige Auswahl (Fraktion- und Gruppen-Treffer sind nicht austauschbar).
+        set { if (_orgTyp != value) { _orgTyp = value; _ziel = null; } }
+    }
+    private bool IstFraktion => _orgTyp == nameof(Fraktion);
+    private ZugehoerigkeitDialog.AkteTreffer? _ziel;
+    private bool _alsMitglied;
+
+    private async Task<IEnumerable<ZugehoerigkeitDialog.AkteTreffer>> Suchen(string value, CancellationToken token)
+    {
+        if (IstFraktion)
+        {
+            var treffer = await FraktionService.SucheAsync(value, IstFuehrung, 20, token);
+            return treffer.Select(f => new ZugehoerigkeitDialog.AkteTreffer(f.Id, f.Name, f.Aktenzeichen));
+        }
+        var gruppen = await GruppeService.SucheAsync(value, IstFuehrung, 20, token);
+        return gruppen.Select(g => new ZugehoerigkeitDialog.AkteTreffer(g.Id, g.Name, g.Aktenzeichen));
+    }
 
     private Person? _person;
     private string? _personText;
@@ -119,6 +169,10 @@
         var zeit = _zeit ?? TimeSpan.Zero;
         // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen.
         _eingabe.Zeitpunkt = DateTime.SpecifyKind(datum + zeit, DateTimeKind.Local).ToUniversalTime();
+        // Verknüpfung übernehmen; ohne Auswahl bleibt nur der Freitext.
+        _eingabe.OrgId = _ziel?.Id;
+        _eingabe.OrgTyp = _ziel is null ? null : _orgTyp;
+        _eingabe.AlsMitglied = _ziel is not null && _alsMitglied;
 
         MudDialog.Close(DialogResult.Ok(new DokAnlegenErgebnis
         {

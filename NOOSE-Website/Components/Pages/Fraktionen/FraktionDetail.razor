@@ -52,6 +52,13 @@ else
                                 </div>
                             }
                         </MudStack>
+                        @if (!string.IsNullOrWhiteSpace(_fraktion.Anwesen))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Anwesen</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_fraktion.Anwesen</MudText>
+                            </div>
+                        }
                         @if (!string.IsNullOrWhiteSpace(_fraktion.Ziele))
                         {
                             <div>

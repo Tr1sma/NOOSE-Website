@@ -15,6 +15,7 @@ public class FraktionEingabe
     public string? Funk { get; set; }
     public string? Darkchat { get; set; }
     public string? Ausstellungszeiten { get; set; }
+    public string? Anwesen { get; set; }
     public string? Erkennungsfarbe { get; set; }
     public string? Ziele { get; set; }
     public string? Beschreibung { get; set; }

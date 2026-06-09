@@ -173,7 +173,11 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<PersonDok>(b =>
         {
             b.Property(d => d.Fraktion).HasMaxLength(200);
+            // Lose Verknüpfung zu Fraktion/Personengruppe (kein FK – analog EntitaetTyp/EntitaetId).
+            b.Property(d => d.OrgTyp).HasMaxLength(128);
+            b.Property(d => d.OrgId).HasMaxLength(64);
             b.HasIndex(d => d.PersonId);
+            b.HasIndex(d => new { d.OrgTyp, d.OrgId });
         });
 
         modelBuilder.Entity<AktenzeichenZaehler>(b =>
@@ -270,6 +274,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.Funk).HasMaxLength(100);
             b.Property(f => f.Darkchat).HasMaxLength(100);
             b.Property(f => f.Ausstellungszeiten).HasMaxLength(300);
+            b.Property(f => f.Anwesen).HasMaxLength(500);
             b.Property(f => f.Erkennungsfarbe).HasMaxLength(32);
             b.Property(f => f.Ziele).HasMaxLength(2000);
             b.Property(f => f.Beschreibung).HasMaxLength(2000);
