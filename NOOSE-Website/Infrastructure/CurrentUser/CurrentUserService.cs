@@ -42,5 +42,5 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, IServi
     }
 
     private static CurrentUserInfo Build(ClaimsPrincipal user)
-        => new(user.GetAgentId(), user.GetAnzeigename() ?? user.Identity?.Name);
+        => new(user.GetAgentId(), user.GetCodename() ?? user.Identity?.Name);
 }

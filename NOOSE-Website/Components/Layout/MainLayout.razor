@@ -19,12 +19,12 @@
             <Authorized Context="auth">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
                     <MudStack Spacing="0" AlignItems="AlignItems.End" Class="d-none d-sm-flex">
-                        <MudText Typo="Typo.body2" Style="line-height:1.2;">@auth.User.GetAnzeigename()</MudText>
+                        <MudText Typo="Typo.body2" Style="line-height:1.2;">@AnzeigeName(auth.User)</MudText>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.2;">
                             @RangZeile(auth.User)
                         </MudText>
                     </MudStack>
-                    <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initiale(auth.User.GetAnzeigename())</MudAvatar>
+                    <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initiale(AnzeigeName(auth.User))</MudAvatar>
                     <form method="post" action="/Account/Logout">
                         <AntiforgeryToken />
                         <MudIconButton ButtonType="ButtonType.Submit" Icon="@Icons.Material.Filled.Logout"
@@ -61,9 +61,18 @@
     private static string Initiale(string? name)
         => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();
 
+    private static string AnzeigeName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var codename = user.GetCodename();
+        return string.IsNullOrWhiteSpace(codename) ? "Unbenannter Agent" : codename;
+    }
+
     private static string RangZeile(System.Security.Claims.ClaimsPrincipal user)
     {
-        var teile = new List<string> { DienstgradAnzeige.Name(user.GetDienstgrad()) };
+        var teile = new List<string>();
+        var dienstnummer = user.GetDienstnummer();
+        if (!string.IsNullOrWhiteSpace(dienstnummer)) teile.Add($"Nr. {dienstnummer}");
+        teile.Add(DienstgradAnzeige.Name(user.GetDienstgrad()));
         if (user.IstTRU()) teile.Add("TRU");
         if (user.IstAdmin()) teile.Add("Admin");
         return string.Join(" · ", teile);

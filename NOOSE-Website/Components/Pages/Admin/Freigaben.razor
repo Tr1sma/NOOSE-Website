@@ -37,7 +37,7 @@ else
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Agent">
-                <MudText Typo="Typo.body2">@context.Anzeigename</MudText>
+                <MudText Typo="Typo.body2">@AnzeigeName(context)</MudText>
             </MudTd>
             <MudTd DataLabel="Discord">
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.DiscordUsername ?? context.DiscordId)</MudText>
@@ -111,7 +111,7 @@ else
         var auswahl = Auswahl(agent.Id);
         var user = (await AuthStateTask).User;
         await AgentService.FreigebenAsync(agent.Id, auswahl.Grad, auswahl.Tru, user);
-        Snackbar.Add($"{agent.Anzeigename} als {DienstgradAnzeige.Name(auswahl.Grad)} freigegeben.", Severity.Success);
+        Snackbar.Add($"{AnzeigeName(agent)} als {DienstgradAnzeige.Name(auswahl.Grad)} freigegeben.", Severity.Success);
         await LadenAsync();
     }
 
@@ -119,7 +119,11 @@ else
     {
         var user = (await AuthStateTask).User;
         await AgentService.AblehnenAsync(agent.Id, "Registrierung abgelehnt", user);
-        Snackbar.Add($"{agent.Anzeigename} abgelehnt.", Severity.Info);
+        Snackbar.Add($"{AnzeigeName(agent)} abgelehnt.", Severity.Info);
         await LadenAsync();
     }
+
+    // Neu registrierte Konten haben noch keinen Codenamen – zur Identifikation dient die Discord-Spalte.
+    private static string AnzeigeName(Agent agent)
+        => string.IsNullOrWhiteSpace(agent.Codename) ? "Neuer Agent" : agent.Codename;
 }

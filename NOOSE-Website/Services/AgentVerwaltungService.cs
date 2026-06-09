@@ -20,7 +20,7 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public Task<List<Agent>> GetAlleAsync(CancellationToken cancellationToken = default)
         => db.Users.OrderByDescending(a => a.Status == AgentStatus.Ausstehend)
-            .ThenBy(a => a.Anzeigename)
+            .ThenBy(a => a.Codename)
             .ToListAsync(cancellationToken);
 
     public Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default)
@@ -48,6 +48,25 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         agent.GesperrtGrund = string.IsNullOrWhiteSpace(grund) ? "Registrierung abgelehnt" : grund;
 
         Audit(agent, AuditAktion.Geaendert, handelnder, $"Registrierung abgelehnt: {agent.GesperrtGrund}");
+        await Speichern(agent, neuerStamp: true);
+    }
+
+    public async Task StammdatenAendernAsync(string agentId, string? klarname, string codename, string? dienstnummer, ClaimsPrincipal handelnder)
+    {
+        codename = codename?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(codename))
+        {
+            throw new InvalidOperationException("Der Codename darf nicht leer sein.");
+        }
+
+        var agent = await GetOrThrow(agentId);
+        agent.Klarname = string.IsNullOrWhiteSpace(klarname) ? null : klarname.Trim();
+        agent.Codename = codename;
+        agent.Dienstnummer = string.IsNullOrWhiteSpace(dienstnummer) ? null : dienstnummer.Trim();
+
+        Audit(agent, AuditAktion.Geaendert, handelnder, $"Stammdaten geändert (Codename: {agent.Codename})");
+        // Neuer Stamp: der betroffene Agent erhält beim nächsten Login frische Claims
+        // (eigener Codename/Dienstnummer in Navbar & Begrüßung).
         await Speichern(agent, neuerStamp: true);
     }
 
@@ -108,11 +127,11 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         {
             Zeitpunkt = DateTime.UtcNow,
             AgentId = handelnder.GetAgentId(),
-            AgentName = handelnder.GetAnzeigename(),
+            AgentName = handelnder.GetCodename(),
             EntitaetTyp = nameof(Agent),
             EntitaetId = ziel.Id,
             Aktion = aktion,
-            AenderungenJson = JsonSerializer.Serialize(new { ziel = ziel.Anzeigename, hinweis }),
+            AenderungenJson = JsonSerializer.Serialize(new { ziel = ziel.Codename, hinweis }),
         });
 
     /// <summary>

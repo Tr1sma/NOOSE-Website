@@ -12,6 +12,9 @@
         <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
             Freigaben
         </MudNavLink>
+        <MudNavLink Href="/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
+            Tags
+        </MudNavLink>
         <AuthorizeView Policy="@Policies.Admin" Context="adminInner">
             <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
                 Agenten-Verwaltung

@@ -10,10 +10,16 @@ namespace NOOSE_Website.Data.Entities;
 /// </summary>
 public class Agent : IdentityUser
 {
-    /// <summary>Anzeigename im System (initial der Discord-Global-Name bzw. -Username).</summary>
-    public string Anzeigename { get; set; } = string.Empty;
+    /// <summary>Codename (Deckname). Wird ALLEN Nutzern überall angezeigt. Vom Admin vergeben; bei neuen Konten leer.</summary>
+    public string Codename { get; set; } = string.Empty;
 
-    /// <summary>Numerische Discord-Benutzer-ID (stabiler externer Schlüssel, eindeutig).</summary>
+    /// <summary>Klarname (echter Name des Agenten). NUR für Admins sichtbar, nie für normale Nutzer.</summary>
+    public string? Klarname { get; set; }
+
+    /// <summary>Dienstnummer (alphanumerische Dienstkennung, Freitext). Für alle Nutzer sichtbar.</summary>
+    public string? Dienstnummer { get; set; }
+
+    /// <summary>Numerische Discord-Benutzer-ID (stabiler externer Schlüssel, eindeutig). Rein intern.</summary>
     public string DiscordId { get; set; } = string.Empty;
 
     /// <summary>Discord-Benutzername (z. B. "name" bzw. altes "name#1234"), rein informativ.</summary>

@@ -13,8 +13,16 @@ public static class AgentPrincipalExtensions
     public static string? GetAgentId(this ClaimsPrincipal user)
         => user.FindFirstValue(ClaimTypes.NameIdentifier);
 
-    public static string? GetAnzeigename(this ClaimsPrincipal user)
-        => user.FindFirstValue(AgentClaimTypes.Anzeigename);
+    /// <summary>Codename (Deckname) – der für alle Nutzer sichtbare Name.</summary>
+    public static string? GetCodename(this ClaimsPrincipal user)
+        => user.FindFirstValue(AgentClaimTypes.Codename);
+
+    /// <summary>Dienstnummer (Freitext) – für alle Nutzer sichtbar, leer wenn nicht vergeben.</summary>
+    public static string? GetDienstnummer(this ClaimsPrincipal user)
+    {
+        var wert = user.FindFirstValue(AgentClaimTypes.Dienstnummer);
+        return string.IsNullOrWhiteSpace(wert) ? null : wert;
+    }
 
     public static Dienstgrad? GetDienstgrad(this ClaimsPrincipal user)
     {

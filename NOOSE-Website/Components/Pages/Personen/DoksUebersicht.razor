@@ -2,7 +2,6 @@
 @inject IPersonDokService DokService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject NavigationManager Nav
 
 <PageTitle>Personen-Doks · NOOSE</PageTitle>
 
@@ -24,7 +23,7 @@
 }
 else
 {
-    <MudTable Items="_doks" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
+    <MudTable T="PersonDok" Items="_doks" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
               Filter="Filter" RowClass="cursor-pointer" OnRowClick="@(args => Oeffnen(args.Item))">
         <ToolBarContent>
             <MudTextField @bind-Value="_suche" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
@@ -63,9 +62,9 @@ else
                 </MudText>
             </MudTd>
         </RowTemplate>
-        <NoRecordsPlaceholder>
+        <NoRecordsContent>
             <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Doks erfasst.</MudText>
-        </NoRecordsPlaceholder>
+        </NoRecordsContent>
     </MudTable>
 }
 
@@ -103,7 +102,9 @@ else
             || (dok.Person?.Aktenzeichen?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    private void Oeffnen(PersonDok dok) => Nav.NavigateTo($"/personen/{dok.PersonId}");
+    // Klick auf eine Zeile öffnet das Dok als Detail-Dialog (mit „Zur Akte"-Sprung).
+    private Task Oeffnen(PersonDok? dok)
+        => dok is null ? Task.CompletedTask : DokDetailDialog.ZeigenAsync(DialogService, dok, zeigeZurAkte: true);
 
     private async Task NeuAsync()
     {
@@ -123,7 +124,7 @@ else
             else
             {
                 await DokService.ErstellenFuerNeuePersonAsync(ergebnis.NeuerName!, ergebnis.Eingabe, _user);
-                Snackbar.Add($"Neue Akte „{ergebnis.NeuerName}" samt Dok angelegt.", Severity.Success);
+                Snackbar.Add($"Neue Akte „{ergebnis.NeuerName}“ samt Dok angelegt.", Severity.Success);
             }
             await LadenAsync();
         }

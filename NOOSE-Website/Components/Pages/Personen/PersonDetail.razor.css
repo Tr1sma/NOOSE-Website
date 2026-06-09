@@ -1,0 +1,9 @@
+/* Die Steckkarte klebt auf Desktop oben mit, während rechts die Tabs scrollen.
+   84px = AppBar-Höhe (60px) + etwas Abstand. Unterhalb von md stapelt das Grid,
+   dort ist sticky unnötig und bleibt deaktiviert. */
+@media (min-width: 960px) {
+    .akte-steckkarte {
+        position: sticky;
+        top: 84px;
+    }
+}

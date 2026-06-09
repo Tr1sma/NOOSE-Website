@@ -7,7 +7,7 @@ using NOOSE_Website.Data.Entities;
 namespace NOOSE_Website.Components.Account;
 
 /// <summary>
-/// Schreibt beim Login die NOOSE-spezifischen Claims (Dienstgrad, Status, TRU, Admin, Anzeigename)
+/// Schreibt beim Login die NOOSE-spezifischen Claims (Dienstgrad, Status, TRU, Admin, Codename, Dienstnummer)
 /// in das Identity-Cookie. Dadurch entscheiden Policies und UI rein aus den Claims – ohne DB-Zugriff
 /// pro Anfrage. Änderungen an Rang/Status erzwingen über den SecurityStamp einen erneuten Login,
 /// sodass die Claims aktuell bleiben.
@@ -22,7 +22,8 @@ public class AgentClaimsPrincipalFactory(
     {
         var identity = await base.GenerateClaimsAsync(user);
 
-        identity.AddClaim(new Claim(AgentClaimTypes.Anzeigename, user.Anzeigename ?? string.Empty));
+        identity.AddClaim(new Claim(AgentClaimTypes.Codename, user.Codename ?? string.Empty));
+        identity.AddClaim(new Claim(AgentClaimTypes.Dienstnummer, user.Dienstnummer ?? string.Empty));
         identity.AddClaim(new Claim(AgentClaimTypes.Status, user.Status.ToString()));
         identity.AddClaim(new Claim(AgentClaimTypes.IstAdmin, user.IstAdmin ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IstTRU, user.IstTRU ? "true" : "false"));

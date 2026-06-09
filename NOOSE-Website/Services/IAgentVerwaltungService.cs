@@ -22,6 +22,9 @@ public interface IAgentVerwaltungService
     /// <summary>Registrierung ablehnen → Status Gesperrt mit Begründung.</summary>
     Task AblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder);
 
+    /// <summary>Stammdaten (Klarname, Codename, Dienstnummer) eines Agents setzen. Codename ist Pflicht.</summary>
+    Task StammdatenAendernAsync(string agentId, string? klarname, string codename, string? dienstnummer, ClaimsPrincipal handelnder);
+
     Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder);
     Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder);
     Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder);

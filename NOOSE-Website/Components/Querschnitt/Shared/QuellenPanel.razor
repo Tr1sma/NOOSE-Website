@@ -1,0 +1,126 @@
+@* Quellen-/Anhang-Liste einer Akte: Upload/Link/interne Verknüpfung/Freitext anhängen und entfernen. *@
+@inject IQuelleService QuelleService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Quellen &amp; Anhänge (@_quellen.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">
+            Quelle hinzufügen
+        </MudButton>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_quellen.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Quellen erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var q in _quellen)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@TypIcon(q.Typ)" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@q.Titel</b></MudText>
+                    </MudStack>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => EntfernenAsync(q))" aria-label="Quelle löschen" />
+                </MudStack>
+
+                @switch (q.Typ)
+                {
+                    case QuelleTyp.Link:
+                        <MudLink Href="@q.Url" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">@q.Url</MudLink>
+                        break;
+                    case QuelleTyp.Upload:
+                        <MudLink Href="@($"/dateien/quellen/{q.Id}")" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" Class="mr-1" />@(q.OriginalName ?? "Datei herunterladen")
+                        </MudLink>
+                        break;
+                    case QuelleTyp.Intern when q.ZielTyp == nameof(Person) && q.ZielId is not null:
+                        <MudLink Href="@($"/personen/{q.ZielId}")" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />Verknüpfte Akte öffnen
+                        </MudLink>
+                        break;
+                    case QuelleTyp.Freitext:
+                        <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@q.Beschreibung</MudText>
+                        break;
+                }
+
+                @if (q.Typ != QuelleTyp.Freitext && !string.IsNullOrWhiteSpace(q.Beschreibung))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">@q.Beschreibung</MudText>
+                }
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                    @QuelleTypAnzeige.Name(q.Typ) · @q.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                </MudText>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<Quelle> _quellen = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _quellen = await QuelleService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, User.IstFuehrung());
+        _laden = false;
+    }
+
+    private async Task NeuAsync()
+    {
+        var eingabe = await QuelleDialog.ZeigenAsync(DialogService, User.IstFuehrung());
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await QuelleService.ErstellenAsync(EntitaetTyp, EntitaetId, eingabe, User);
+            Snackbar.Add("Quelle gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EntfernenAsync(Quelle quelle)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Quelle löschen?",
+            $"„{quelle.Titel}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await QuelleService.EntfernenAsync(quelle.Id, User);
+        Snackbar.Add("Quelle gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private static string TypIcon(QuelleTyp typ) => typ switch
+    {
+        QuelleTyp.Upload => Icons.Material.Filled.AttachFile,
+        QuelleTyp.Link => Icons.Material.Filled.Link,
+        QuelleTyp.Intern => Icons.Material.Filled.AccountTree,
+        QuelleTyp.Freitext => Icons.Material.Filled.Notes,
+        _ => Icons.Material.Filled.Description,
+    };
+}

@@ -1,0 +1,81 @@
+@* Schreibgeschützte Detailansicht eines Personen-Doks. Öffnet sich per Klick aus der Übersicht und der Akte. *@
+@inject NavigationManager Nav
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2">
+                <b>@Dok.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @MassnahmeAusgangAnzeige.Name(Dok.Ausgang)
+            </MudText>
+            @if (Dok.Person is not null)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Person: @Dok.Person.Name (@Dok.Person.Aktenzeichen)
+                </MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Dok.Grund))
+            {
+                <MudText Typo="Typo.body2"><b>Grund:</b> @Dok.Grund</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Dok.Fraktion))
+            {
+                <MudText Typo="Typo.body2"><b>Fraktion:</b> @Dok.Fraktion</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Dok.ErhalteneInformationen))
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle2">Erhaltene Informationen</MudText>
+                    <MudText Typo="Typo.body2">@Dok.ErhalteneInformationen</MudText>
+                </div>
+            }
+            @if (Dok.Wahrheitsserum || Dok.GedaechtnisGeloescht)
+            {
+                <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                    @if (Dok.Wahrheitsserum)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Science">Wahrheitsserum</MudChip>
+                    }
+                    @if (Dok.GedaechtnisGeloescht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Psychology">Gedächtnisverlust</MudChip>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (ZeigeZurAkte)
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.Badge" OnClick="ZurAkte">Zur Akte</MudButton>
+        }
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Schliessen">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public PersonDok Dok { get; set; } = default!;
+    [Parameter] public bool ZeigeZurAkte { get; set; } = true;
+
+    private void Schliessen() => MudDialog.Close();
+
+    private void ZurAkte()
+    {
+        MudDialog.Close();
+        Nav.NavigateTo($"/personen/{Dok.PersonId}");
+    }
+
+    /// <summary>Zeigt die schreibgeschützte Dok-Detailansicht an.</summary>
+    public static async Task ZeigenAsync(IDialogService dialog, PersonDok dok, bool zeigeZurAkte = true)
+    {
+        var parameters = new DialogParameters<DokDetailDialog>
+        {
+            { x => x.Dok, dok },
+            { x => x.ZeigeZurAkte, zeigeZurAkte },
+        };
+        var titel = dok.Person is not null ? $"Dok · {dok.Person.Name}" : "Dok";
+        var referenz = await dialog.ShowAsync<DokDetailDialog>(titel, parameters);
+        await referenz.Result;
+    }
+}

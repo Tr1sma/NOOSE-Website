@@ -1,0 +1,134 @@
+@page "/tags"
+@attribute [Authorize(Policy = Policies.Fuehrung)]
+@inject ITagService TagService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Tags · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Label" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Tags</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">
+        Neuer Tag
+    </MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Tags sind übergreifende Labels, die jeder aktive Agent an Akten vergeben kann. Hier werden sie zentral
+    verwaltet (anlegen, umbenennen, einfärben, löschen). Beim Löschen verschwindet das Tag von allen Akten.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_eintraege" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Tag</MudTh>
+            <MudTh>Farbe</MudTh>
+            <MudTh>Verwendungen</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Tag">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@FarbeVon(context.Tag.Farbe)">@context.Tag.Name</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Farbe">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.Tag.Farbe ?? "Standard")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Verwendungen">
+                <MudText Typo="Typo.body2">@context.Anzahl</MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => BearbeitenAsync(context))" aria-label="Tag bearbeiten" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => LoeschenAsync(context))" aria-label="Tag löschen" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Tags angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<TagVerwendung> _eintraege = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _eintraege = await TagService.GetMitVerwendungAsync();
+        _laden = false;
+    }
+
+    private async Task NeuAsync()
+    {
+        var eingabe = await TagDialog.ZeigenAsync(DialogService, "Neuer Tag");
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await TagService.ErstellenAsync(eingabe.Name, eingabe.Farbe, _user);
+            Snackbar.Add($"Tag „{eingabe.Name}“ angelegt.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task BearbeitenAsync(TagVerwendung eintrag)
+    {
+        var eingabe = await TagDialog.ZeigenAsync(DialogService, "Tag bearbeiten", eintrag.Tag.Name, eintrag.Tag.Farbe);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await TagService.AktualisierenAsync(eintrag.Tag.Id, eingabe.Name, eingabe.Farbe, _user);
+            Snackbar.Add("Tag gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoeschenAsync(TagVerwendung eintrag)
+    {
+        var text = eintrag.Anzahl > 0
+            ? $"„{eintrag.Tag.Name}“ wird gelöscht und von {eintrag.Anzahl} Akte(n) entfernt."
+            : $"„{eintrag.Tag.Name}“ wird gelöscht.";
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Tag löschen?", text);
+        if (!ok)
+        {
+            return;
+        }
+        await TagService.LoeschenAsync(eintrag.Tag.Id, _user);
+        Snackbar.Add("Tag gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private static Color FarbeVon(string? farbe) => Enum.TryParse<Color>(farbe, out var c) ? c : Color.Default;
+}

@@ -290,7 +290,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             Begruendung = Leer(begruendung),
             Zeitpunkt = DateTime.UtcNow,
             AgentId = handelnder.GetAgentId(),
-            AgentName = handelnder.GetAnzeigename(),
+            AgentName = handelnder.GetCodename(),
         };
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

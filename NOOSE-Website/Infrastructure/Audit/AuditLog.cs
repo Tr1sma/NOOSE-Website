@@ -14,7 +14,7 @@ public class AuditLog
     /// <summary>Agent-Id (Identity-Key) des Verursachers; null bei System-/Hintergrundaktionen.</summary>
     public string? AgentId { get; set; }
 
-    /// <summary>Anzeigename des Verursachers zum Zeitpunkt der Aktion (denormalisiert).</summary>
+    /// <summary>Codename des Verursachers zum Zeitpunkt der Aktion (denormalisiert).</summary>
     public string? AgentName { get; set; }
 
     /// <summary>CLR-Typname der betroffenen Entität (z. B. "Person").</summary>

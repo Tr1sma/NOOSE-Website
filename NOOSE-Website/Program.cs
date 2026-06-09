@@ -8,6 +8,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Components;
 using NOOSE_Website.Components.Account;
 using NOOSE_Website.Components.Personen;
+using NOOSE_Website.Components.Querschnitt;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Audit;
@@ -106,8 +107,13 @@ builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuth
 builder.Services.AddScoped<IAgentVerwaltungService, AgentVerwaltungService>();
 builder.Services.AddScoped<IZugriffsLogService, ZugriffsLogService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IQuellenStorageService, QuellenStorageService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDokService, PersonDokService>();
+// Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
+builder.Services.AddScoped<IQuelleService, QuelleService>();
+builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.AddScoped<IKommentarService, KommentarService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>
@@ -148,6 +154,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapNooseAccountEndpoints();
 app.MapNoosePersonenDateiEndpoints();
+app.MapNooseQuellenDateiEndpoints();
 
 // Seeding: technische "Admin"-Rolle sicherstellen (für spätere Nutzung; Admin-Rechte laufen
 // aktuell über das IstAdmin-Flag des Agents).

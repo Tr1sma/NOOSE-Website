@@ -1,6 +1,7 @@
 @page "/admin/agenten"
 @attribute [Authorize(Policy = Policies.Admin)]
 @inject IAgentVerwaltungService AgentService
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Agenten-Verwaltung · NOOSE</PageTitle>
@@ -31,8 +32,12 @@ else
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Agent">
-                <MudText Typo="Typo.body2">@context.Anzeigename</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.DiscordUsername ?? context.DiscordId)</MudText>
+                <MudText Typo="Typo.body2">@AnzeigeName(context)</MudText>
+                @if (!string.IsNullOrWhiteSpace(KlarnameDienstnummer(context)))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@KlarnameDienstnummer(context)</MudText>
+                }
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@(context.DiscordUsername ?? context.DiscordId)</MudText>
             </MudTd>
             <MudTd DataLabel="Dienstgrad">
                 <MudSelect T="Dienstgrad" Value="@(context.Dienstgrad ?? Dienstgrad.JuniorAgent)"
@@ -59,19 +64,25 @@ else
                            Color="Color.Secondary" Disabled="@(context.Id == _meineId)" />
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
-                @if (context.Status == AgentStatus.Gesperrt)
-                {
-                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
-                               StartIcon="@Icons.Material.Filled.LockOpen"
-                               OnClick="() => Entsperren(context)">Entsperren</MudButton>
-                }
-                else
-                {
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
-                               StartIcon="@Icons.Material.Filled.Block"
-                               Disabled="@(context.Id == _meineId)"
-                               OnClick="() => Sperren(context)">Sperren</MudButton>
-                }
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudTooltip Text="Stammdaten bearbeiten">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="() => Bearbeiten(context)" aria-label="Stammdaten bearbeiten" />
+                    </MudTooltip>
+                    @if (context.Status == AgentStatus.Gesperrt)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.LockOpen"
+                                   OnClick="() => Entsperren(context)">Entsperren</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Block"
+                                   Disabled="@(context.Id == _meineId)"
+                                   OnClick="() => Sperren(context)">Sperren</MudButton>
+                    }
+                </MudStack>
             </MudTd>
         </RowTemplate>
     </MudTable>
@@ -98,6 +109,26 @@ else
         _laden = false;
     }
 
+    private async Task Bearbeiten(Agent agent)
+    {
+        var ergebnis = await AgentBearbeitenDialog.ZeigenAsync(DialogService, agent);
+        if (ergebnis is null)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.StammdatenAendernAsync(agent.Id, ergebnis.Klarname, ergebnis.Codename, ergebnis.Dienstnummer, user);
+            Snackbar.Add($"Stammdaten von {ergebnis.Codename} gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
     private async Task RangAendern(Agent agent, Dienstgrad grad)
     {
         if (agent.Dienstgrad == grad)
@@ -106,7 +137,7 @@ else
         }
         var user = (await AuthStateTask).User;
         await AgentService.RangAendernAsync(agent.Id, grad, user);
-        Snackbar.Add($"{agent.Anzeigename}: Dienstgrad auf {DienstgradAnzeige.Name(grad)} gesetzt.", Severity.Success);
+        Snackbar.Add($"{AnzeigeName(agent)}: Dienstgrad auf {DienstgradAnzeige.Name(grad)} gesetzt.", Severity.Success);
         await LadenAsync();
     }
 
@@ -114,7 +145,7 @@ else
     {
         var user = (await AuthStateTask).User;
         await AgentService.TruSetzenAsync(agent.Id, wert, user);
-        Snackbar.Add($"{agent.Anzeigename}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
+        Snackbar.Add($"{AnzeigeName(agent)}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
         await LadenAsync();
     }
 
@@ -122,7 +153,7 @@ else
     {
         var user = (await AuthStateTask).User;
         await AgentService.AdminSetzenAsync(agent.Id, wert, user);
-        Snackbar.Add($"{agent.Anzeigename}: Admin-Rechte {(wert ? "vergeben" : "entzogen")}.", Severity.Success);
+        Snackbar.Add($"{AnzeigeName(agent)}: Admin-Rechte {(wert ? "vergeben" : "entzogen")}.", Severity.Success);
         await LadenAsync();
     }
 
@@ -130,7 +161,7 @@ else
     {
         var user = (await AuthStateTask).User;
         await AgentService.SperrenAsync(agent.Id, "Notfall-Sperre durch Admin", user);
-        Snackbar.Add($"{agent.Anzeigename} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
+        Snackbar.Add($"{AnzeigeName(agent)} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
         await LadenAsync();
     }
 
@@ -138,9 +169,16 @@ else
     {
         var user = (await AuthStateTask).User;
         await AgentService.EntsperrenAsync(agent.Id, user);
-        Snackbar.Add($"{agent.Anzeigename} entsperrt.", Severity.Success);
+        Snackbar.Add($"{AnzeigeName(agent)} entsperrt.", Severity.Success);
         await LadenAsync();
     }
+
+    private static string AnzeigeName(Agent agent)
+        => string.IsNullOrWhiteSpace(agent.Codename) ? "Unbenannter Agent" : agent.Codename;
+
+    private static string KlarnameDienstnummer(Agent agent)
+        => string.Join(" · ", new[] { agent.Klarname, agent.Dienstnummer }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
 
     private static Color StatusFarbe(AgentStatus status) => status switch
     {

@@ -11,5 +11,6 @@ public static class AgentClaimTypes
     public const string Status = "noose:status";
     public const string IstTRU = "noose:tru";
     public const string IstAdmin = "noose:admin";
-    public const string Anzeigename = "noose:anzeigename";
+    public const string Codename = "noose:codename";
+    public const string Dienstnummer = "noose:dienstnummer";
 }

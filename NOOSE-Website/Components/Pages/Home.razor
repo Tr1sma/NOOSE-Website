@@ -8,7 +8,7 @@
 </MudStack>
 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-6">
     <AuthorizeView>
-        <Authorized Context="auth">Willkommen zurück, <b>@auth.User.GetAnzeigename()</b>. </Authorized>
+        <Authorized Context="auth">Willkommen zurück, <b>@Codename(auth.User)</b>. </Authorized>
     </AuthorizeView>
     Die Fachmodule (Personen, Fraktionen, Fälle …) entstehen in den nächsten Phasen.
 </MudText>
@@ -55,3 +55,11 @@
 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-6" Icon="@Icons.Material.Filled.Construction">
     Aktueller Stand: <b>Phase 1 – Auth, Accounts &amp; Rechte</b> aktiv. Die Personen-Akten folgen in Phase 2.
 </MudAlert>
+
+@code {
+    private static string Codename(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var codename = user.GetCodename();
+        return string.IsNullOrWhiteSpace(codename) ? "Unbenannter Agent" : codename;
+    }
+}

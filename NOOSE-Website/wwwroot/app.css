@@ -3,6 +3,11 @@ html, body {
     background-color: #0E1116;
 }
 
+/* Hilfsklasse: zeigt anklickbare Elemente (Tabellenzeilen, Dok-Karten) als klickbar an. */
+.cursor-pointer {
+    cursor: pointer;
+}
+
 /* Fehler-Grenze (ErrorBoundary) */
 .blazor-error-boundary {
     background: #b32121;

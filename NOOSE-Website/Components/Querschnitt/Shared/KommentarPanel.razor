@@ -1,0 +1,110 @@
+@* Kommentare/Vermerke einer Akte: neueste zuerst, Inline-Verfassen, Löschen (eigene oder Führung). *@
+@inject IKommentarService KommentarService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.subtitle1">Kommentare (@_kommentare.Count)</MudText>
+
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+        <MudTextField @bind-Value="_neuerText" Placeholder="Vermerk hinzufügen …" Lines="2"
+                      Variant="Variant.Outlined" Immediate="true" Class="flex-grow-1" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                   OnClick="HinzufuegenAsync" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_neuerText))">
+            Kommentieren
+        </MudButton>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_kommentare.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Kommentare.</MudText>
+    }
+    else
+    {
+        @foreach (var k in _kommentare)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Size="Size.Small" Color="Color.Default" />
+                        <MudText Typo="Typo.body2"><b>@(string.IsNullOrWhiteSpace(k.AutorName) ? "Unbekannt" : k.AutorName)</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            · @k.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                        </MudText>
+                    </MudStack>
+                    @if (DarfLoeschen(k))
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => LoeschenAsync(k))" aria-label="Kommentar löschen" />
+                    }
+                </MudStack>
+                <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@k.Text</MudText>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _speichert;
+    private string _neuerText = string.Empty;
+    private List<Kommentar> _kommentare = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _kommentare = await KommentarService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, User.IstFuehrung());
+        _laden = false;
+    }
+
+    private async Task HinzufuegenAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_neuerText))
+        {
+            return;
+        }
+        _speichert = true;
+        try
+        {
+            await KommentarService.ErstellenAsync(EntitaetTyp, EntitaetId, _neuerText, User);
+            _neuerText = string.Empty;
+            Snackbar.Add("Kommentar gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _speichert = false;
+        }
+    }
+
+    private async Task LoeschenAsync(Kommentar kommentar)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Kommentar löschen?",
+            "Der Kommentar wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await KommentarService.LoeschenAsync(kommentar.Id, User);
+        Snackbar.Add("Kommentar gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+
+    // Löschen darf der Verfasser selbst oder die Führung.
+    private bool DarfLoeschen(Kommentar k)
+        => User.IstFuehrung() || (k.ErstelltVonId is not null && k.ErstelltVonId == User.GetAgentId());
+}

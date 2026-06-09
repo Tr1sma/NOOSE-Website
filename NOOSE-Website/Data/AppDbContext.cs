@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -36,13 +37,21 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<PersonWaffe> PersonWaffen => Set<PersonWaffe>();
     public DbSet<AktenzeichenZaehler> AktenzeichenZaehler => Set<AktenzeichenZaehler>();
 
+    // ---- Phase 3a: Querschnitt (Tags, Kommentare, Quellen) – generisch über EntitaetTyp/EntitaetId ----
+    public DbSet<Quelle> Quellen => Set<Quelle>();
+    public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<TagZuordnung> TagZuordnungen => Set<TagZuordnung>();
+    public DbSet<Kommentar> Kommentare => Set<Kommentar>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.Entity<Agent>(b =>
         {
-            b.Property(a => a.Anzeigename).HasMaxLength(128);
+            b.Property(a => a.Codename).HasMaxLength(128);
+            b.Property(a => a.Klarname).HasMaxLength(128);
+            b.Property(a => a.Dienstnummer).HasMaxLength(32);
             b.Property(a => a.DiscordId).HasMaxLength(32);
             b.Property(a => a.DiscordUsername).HasMaxLength(64);
             b.Property(a => a.AvatarUrl).HasMaxLength(512);
@@ -143,6 +152,49 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasKey(z => z.Jahr);
             // Jahr ist eine echte Jahreszahl (kein Auto-Increment) – wird beim Insert explizit gesetzt.
             b.Property(z => z.Jahr).ValueGeneratedNever();
+        });
+
+        // ---- Phase 3a: Querschnitt ----
+        // Generische Assoziationen (Quelle/Tag-Zuordnung/Kommentar) verweisen polymorph per
+        // EntitaetTyp+EntitaetId auf ihre Eltern-Akte (wie Audit-/Zugriffs-Log) – kein FK, daher
+        // ist der kombinierte Index der schnelle Lade-Pfad „alle X einer Akte".
+        modelBuilder.Entity<Quelle>(b =>
+        {
+            b.Property(q => q.EntitaetTyp).HasMaxLength(128);
+            b.Property(q => q.EntitaetId).HasMaxLength(64);
+            b.Property(q => q.Titel).HasMaxLength(300).IsRequired();
+            b.Property(q => q.Url).HasMaxLength(2048);
+            b.Property(q => q.ZielTyp).HasMaxLength(128);
+            b.Property(q => q.ZielId).HasMaxLength(64);
+            b.Property(q => q.DateinameGespeichert).HasMaxLength(128);
+            b.Property(q => q.OriginalName).HasMaxLength(260);
+            b.Property(q => q.ContentType).HasMaxLength(100);
+            b.HasIndex(q => new { q.EntitaetTyp, q.EntitaetId });
+        });
+
+        modelBuilder.Entity<Tag>(b =>
+        {
+            b.Property(t => t.Name).HasMaxLength(60).IsRequired();
+            b.Property(t => t.Farbe).HasMaxLength(32);
+            b.HasIndex(t => t.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<TagZuordnung>(b =>
+        {
+            b.Property(z => z.EntitaetTyp).HasMaxLength(128);
+            b.Property(z => z.EntitaetId).HasMaxLength(64);
+            b.HasOne(z => z.Tag).WithMany().HasForeignKey(z => z.TagId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(z => new { z.EntitaetTyp, z.EntitaetId });
+            // Verhindert Doppel-Tagging derselben Akte mit demselben Tag.
+            b.HasIndex(z => new { z.TagId, z.EntitaetTyp, z.EntitaetId }).IsUnique();
+        });
+
+        modelBuilder.Entity<Kommentar>(b =>
+        {
+            b.Property(k => k.EntitaetTyp).HasMaxLength(128);
+            b.Property(k => k.EntitaetId).HasMaxLength(64);
+            b.Property(k => k.AutorName).HasMaxLength(128);
+            b.HasIndex(k => new { k.EntitaetTyp, k.EntitaetId });
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

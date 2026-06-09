@@ -20,14 +20,9 @@ else if (_person is null)
 }
 else
 {
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    @* Schlanke Aktionsleiste: Zurück links, Aktionen rechts. Name/Status leben in der Steckkarte. *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
-        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Large" />
-        <MudText Typo="Typo.h4">@_person.Name</MudText>
-        @if (_person.IstVerschlusssache)
-        {
-            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Title="Verschlusssache" />
-        }
         <MudSpacer />
         <MudButton Href="@($"/personen/{_person.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         <AuthorizeView Policy="@Policies.Fuehrung">
@@ -35,46 +30,73 @@ else
         </AuthorizeView>
     </MudStack>
 
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4" Class="mb-4 flex-wrap">
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_person.Aktenzeichen</MudText>
-        <LebensstatusBadge Status="_person.Lebensstatus" TotBis="_person.TotBis" />
-        <EinstufungBadge Wert="_person.Einstufung" />
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Zuletzt aktualisiert: @((_person.GeaendertAm ?? _person.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-        </MudText>
-    </MudStack>
+    @* Tags der Akte – ohne Tab-Wechsel sichtbar und vergebbar. *@
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
+    </MudPaper>
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
-        <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
-            <MudGrid>
-                <MudItem xs="12" md="6">
-                    <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                        @(string.IsNullOrWhiteSpace(_person.Beschreibung) ? "—" : _person.Beschreibung)
-                    </MudText>
-                    <SteckbriefListe Titel="Aliase" Werte="AliasTexte()" />
-                    <SteckbriefListe Titel="Telefonnummern" Werte="TelefonTexte()" />
-                    <SteckbriefListe Titel="Waffen" Werte="WaffenTexte()" />
-                </MudItem>
-                <MudItem xs="12" md="6">
-                    <SteckbriefListe Titel="Fahrzeuge" Werte="FahrzeugTexte()" />
-                    <SteckbriefListe Titel="Bekannte Orte" Werte="OrtTexte()" />
-                </MudItem>
-            </MudGrid>
-        </MudTabPanel>
-        <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
-            <DokPanel PersonId="@_person.Id" User="_user" PersonChanged="NeuLadenAsync" />
-        </MudTabPanel>
-        <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-            <EinstufungPanel Person="_person" User="_user" Changed="NeuLadenAsync" />
-        </MudTabPanel>
-        <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
-            <FotoGalerie PersonId="@_person.Id" Fotos="_person.Fotos" User="_user" Changed="NeuLadenAsync" />
-        </MudTabPanel>
-        <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-            <HistorieTimeline PersonId="@_person.Id" @key="_historieKey" />
-        </MudTabPanel>
-    </MudTabs>
+    <MudGrid>
+        @* Links: feste Identitäts-/Steckkarte (auf Desktop klebend). *@
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <Identitaetskarte Person="_person" />
+            </div>
+        </MudItem>
+
+        @* Rechts: die bestehenden Inhalte als Tabs. *@
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
+                <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
+                    @{
+                        var hatSteckbrief = !string.IsNullOrWhiteSpace(_person.Beschreibung)
+                            || _person.Aliase.Count > 0 || _person.Telefonnummern.Count > 0
+                            || _person.Fahrzeuge.Count > 0 || _person.Waffen.Count > 0 || _person.Orte.Count > 0;
+                    }
+                    @if (!hatSteckbrief)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Steckbrief-Daten erfasst.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="3">
+                            @if (!string.IsNullOrWhiteSpace(_person.Beschreibung))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_person.Beschreibung</MudText>
+                                </div>
+                            }
+                            <MudStack Spacing="2">
+                                <SteckbriefListe Titel="Aliase" Werte="AliasTexte()" />
+                                <SteckbriefListe Titel="Telefonnummern" Werte="TelefonTexte()" />
+                                <SteckbriefListe Titel="Fahrzeuge" Werte="FahrzeugTexte()" />
+                                <SteckbriefListe Titel="Waffen" Werte="WaffenTexte()" />
+                                <SteckbriefListe Titel="Bekannte Orte" Werte="OrtTexte()" />
+                            </MudStack>
+                        </MudStack>
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                    <DokPanel PersonId="@_person.Id" User="_user" PersonChanged="NeuLadenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                    <EinstufungPanel Person="_person" User="_user" Changed="NeuLadenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    <FotoGalerie PersonId="@_person.Id" Fotos="_person.Fotos" User="_user" Changed="NeuLadenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <QuellenPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <KommentarPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
+                    <HistorieTimeline PersonId="@_person.Id" @key="_historieKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {

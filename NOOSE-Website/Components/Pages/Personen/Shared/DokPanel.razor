@@ -21,13 +21,16 @@
     {
         @foreach (var dok in _doks)
         {
-            <MudPaper Class="pa-3" Elevation="1">
+            <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => OeffnenAsync(dok))">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <MudText Typo="Typo.body2">
                         <b>@dok.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @MassnahmeAusgangAnzeige.Name(dok.Ausgang)
                     </MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                   OnClick="@(() => LoeschenAsync(dok))" aria-label="Dok löschen" />
+                    @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
+                    <div @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => LoeschenAsync(dok))" aria-label="Dok löschen" />
+                    </div>
                 </MudStack>
                 @if (!string.IsNullOrWhiteSpace(dok.Grund))
                 {
@@ -65,6 +68,9 @@
     private List<PersonDok> _doks = new();
 
     protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    // Klick auf eine Dok-Karte öffnet die schreibgeschützte Detailansicht (man ist bereits in der Akte).
+    private Task OeffnenAsync(PersonDok dok) => DokDetailDialog.ZeigenAsync(DialogService, dok, zeigeZurAkte: false);
 
     private async Task LadenAsync()
     {

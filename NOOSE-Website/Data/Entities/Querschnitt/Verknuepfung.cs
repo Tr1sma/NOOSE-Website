@@ -1,0 +1,33 @@
+using NOOSE_Website.Models.Abstractions;
+
+namespace NOOSE_Website.Data.Entities.Querschnitt;
+
+/// <summary>
+/// Eine gerichtet gespeicherte, aber <b>bidirektional</b> dargestellte Verknüpfung zwischen zwei
+/// beliebigen Akten (polymorph über Von-/Nach-Typ + -Id). Wird nur einmal abgelegt; der Dienst
+/// normalisiert beim Laden auf „die jeweils andere Seite". Speist später Beziehungsgraph/Pfadsuche.
+/// </summary>
+public class Verknuepfung : IAuditable, ISoftDelete
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+
+    public string VonTyp { get; set; } = string.Empty;
+    public string VonId { get; set; } = string.Empty;
+
+    public string NachTyp { get; set; } = string.Empty;
+    public string NachId { get; set; } = string.Empty;
+
+    /// <summary>Optionaler Beziehungslabel („Quelle für", „siehe auch" …).</summary>
+    public string? Label { get; set; }
+
+    // ---- IAuditable ----
+    public DateTime ErstelltAm { get; set; }
+    public string? ErstelltVonId { get; set; }
+    public DateTime? GeaendertAm { get; set; }
+    public string? GeaendertVonId { get; set; }
+
+    // ---- ISoftDelete ----
+    public bool IstGeloescht { get; set; }
+    public DateTime? GeloeschtAm { get; set; }
+    public string? GeloeschtVonId { get; set; }
+}

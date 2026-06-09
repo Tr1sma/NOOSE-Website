@@ -1,0 +1,173 @@
+@* Dialog zum Anlegen einer Quelle/eines Anhangs. Je nach Typ erscheinen passende Felder.
+   Bei Upload wird die Datei sofort in den Speicher gepuffert (kein Browser-Stream über die Dialog-Dauer). *@
+@inject IQuellenStorageService Storage
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudSelect T="QuelleTyp" Label="Art der Quelle" @bind-Value="_eingabe.Typ" Variant="Variant.Outlined">
+                    @foreach (var t in QuelleTypAnzeige.Alle)
+                    {
+                        <MudSelectItem Value="t">@QuelleTypAnzeige.Name(t)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudTextField @bind-Value="_eingabe.Titel" Label="Titel" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Titel ist erforderlich" />
+
+                @switch (_eingabe.Typ)
+                {
+                    case QuelleTyp.Link:
+                        <MudTextField @bind-Value="_eingabe.Url" Label="URL" Variant="Variant.Outlined"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link"
+                                      Placeholder="https://…" />
+                        <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        break;
+
+                    case QuelleTyp.Freitext:
+                        <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Inhalt" Lines="5" Variant="Variant.Outlined"
+                                      Required="true" RequiredError="Bitte einen Text eingeben" />
+                        break;
+
+                    case QuelleTyp.Intern:
+                        <MudAutocomplete T="Person" Label="Ziel-Akte (Person)" @bind-Value="_zielPerson"
+                                         SearchFunc="@SuchePersonen" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                         Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                         ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch"
+                                         HelperText="Verknüpfte Person auswählen.">
+                            <ItemTemplate Context="p">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Primary" />
+                                    <MudText Typo="Typo.body2">@p.Name</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.Aktenzeichen</MudText>
+                                </MudStack>
+                            </ItemTemplate>
+                        </MudAutocomplete>
+                        <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        break;
+
+                    case QuelleTyp.Upload:
+                        <MudFileUpload T="IBrowserFile" FilesChanged="DateiGewaehlt">
+                            <CustomContent>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AttachFile"
+                                           OnClick="@context.OpenFilePickerAsync">
+                                    Datei auswählen
+                                </MudButton>
+                            </CustomContent>
+                        </MudFileUpload>
+                        @if (!string.IsNullOrEmpty(_dateiName))
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.InsertDriveFile">
+                                @_dateiName
+                            </MudAlert>
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Erlaubt: PDF, Bilder, Office-Dokumente, Text, ZIP – max. @(Storage.MaxBytes / (1024 * 1024)) MB.
+                        </MudText>
+                        <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        break;
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Quelle speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Steuert, ob auch Verschlusssachen in der Personensuche erscheinen.</summary>
+    [Parameter] public bool IstFuehrung { get; set; }
+
+    private MudForm _form = default!;
+    private readonly QuelleEingabe _eingabe = new();
+    private Person? _zielPerson;
+    private string? _dateiName;
+
+    private async Task<IEnumerable<Person>> SuchePersonen(string value, CancellationToken token)
+        => await PersonService.SucheAsync(value, IstFuehrung, 20, token);
+
+    private async Task DateiGewaehlt(IBrowserFile? datei)
+    {
+        if (datei is null)
+        {
+            return;
+        }
+        if (datei.Size > Storage.MaxBytes)
+        {
+            Snackbar.Add($"„{datei.Name}“: zu groß (max. {Storage.MaxBytes / (1024 * 1024)} MB).", Severity.Warning);
+            return;
+        }
+        if (!Storage.IstErlaubterTyp(datei.ContentType))
+        {
+            Snackbar.Add($"„{datei.Name}“: Dateityp nicht erlaubt.", Severity.Warning);
+            return;
+        }
+
+        using var ms = new MemoryStream();
+        await datei.OpenReadStream(Storage.MaxBytes).CopyToAsync(ms);
+        _eingabe.DateiInhalt = ms.ToArray();
+        _eingabe.OriginalName = datei.Name;
+        _eingabe.ContentType = datei.ContentType;
+        _eingabe.GroesseBytes = datei.Size;
+        _dateiName = datei.Name;
+
+        // Titel vorbelegen, falls noch leer.
+        if (string.IsNullOrWhiteSpace(_eingabe.Titel))
+        {
+            _eingabe.Titel = datei.Name;
+        }
+    }
+
+    private async Task Speichern()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        switch (_eingabe.Typ)
+        {
+            case QuelleTyp.Link when string.IsNullOrWhiteSpace(_eingabe.Url):
+                Snackbar.Add("Bitte eine URL angeben.", Severity.Warning);
+                return;
+            case QuelleTyp.Intern:
+                if (_zielPerson is null)
+                {
+                    Snackbar.Add("Bitte eine Ziel-Akte auswählen.", Severity.Warning);
+                    return;
+                }
+                _eingabe.ZielTyp = nameof(Person);
+                _eingabe.ZielId = _zielPerson.Id;
+                if (string.IsNullOrWhiteSpace(_eingabe.Titel))
+                {
+                    _eingabe.Titel = _zielPerson.Name;
+                }
+                break;
+            case QuelleTyp.Upload when _eingabe.DateiInhalt is null:
+                Snackbar.Add("Bitte eine Datei auswählen.", Severity.Warning);
+                return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(_eingabe));
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert die Eingabe oder null bei Abbruch.</summary>
+    public static async Task<QuelleEingabe?> ZeigenAsync(IDialogService dialog, bool istFuehrung)
+    {
+        var parameters = new DialogParameters<QuelleDialog> { { x => x.IstFuehrung, istFuehrung } };
+        var referenz = await dialog.ShowAsync<QuelleDialog>("Quelle hinzufügen", parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: QuelleEingabe e } ? e : null;
+    }
+}

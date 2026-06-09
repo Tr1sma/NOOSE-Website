@@ -111,7 +111,6 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     {
         var discordId = info.ProviderKey;
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
-        var globalName = info.Principal.FindFirstValue("urn:discord:global_name");
         var email = info.Principal.FindFirstValue(ClaimTypes.Email);
 
         var bootstrapId = configuration["Bootstrap:AdminDiscordId"];
@@ -123,7 +122,8 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             UserName = discordId, // Discord-Snowflake (nur Ziffern) – erfüllt die Identity-Namensregeln.
             Email = email,
             EmailConfirmed = email is not null,
-            Anzeigename = FirstNonEmpty(globalName, username) ?? $"Agent {discordId}",
+            // Codename/Klarname/Dienstnummer bleiben leer – die Stammdaten vergibt ein Admin
+            // auf der Agenten-Verwaltung. Der Discord-Name wird NIE als Codename übernommen.
             DiscordId = discordId,
             DiscordUsername = username,
             AvatarUrl = ExtrahiereAvatarUrl(info.Principal),
@@ -152,24 +152,23 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         }
 
         // Hinweis: Admin-Rechte laufen über das IstAdmin-Flag/Claim, nicht über Identity-Rollen.
-        logger.LogInformation("Neuer Agent registriert: {Anzeigename} ({DiscordId}), Status {Status}.",
-            agent.Anzeigename, discordId, agent.Status);
+        logger.LogInformation("Neuer Agent registriert: {DiscordUsername} ({DiscordId}), Status {Status}.",
+            agent.DiscordUsername ?? discordId, discordId, agent.Status);
         return agent;
     }
 
-    /// <summary>Hält Anzeigename/Username/Avatar bei jedem Login mit Discord aktuell.</summary>
+    /// <summary>
+    /// Hält die internen Discord-Stammdaten (Username, Avatar) bei jedem Login aktuell.
+    /// Der nutzersichtbare Codename wird NIE aus Discord befüllt – er wird ausschließlich vom Admin vergeben.
+    /// </summary>
     private static async Task AktualisiereStammdatenAsync(UserManager<Agent> userManager, Agent agent, ExternalLoginInfo info)
     {
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
-        var globalName = info.Principal.FindFirstValue("urn:discord:global_name");
         var avatar = ExtrahiereAvatarUrl(info.Principal);
 
         var geaendert = false;
         if (username is not null && username != agent.DiscordUsername) { agent.DiscordUsername = username; geaendert = true; }
         if (avatar is not null && avatar != agent.AvatarUrl) { agent.AvatarUrl = avatar; geaendert = true; }
-
-        var neuerName = FirstNonEmpty(globalName, username);
-        if (neuerName is not null && string.IsNullOrWhiteSpace(agent.Anzeigename)) { agent.Anzeigename = neuerName; geaendert = true; }
 
         if (geaendert)
         {
@@ -180,7 +179,4 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     private static string? ExtrahiereAvatarUrl(ClaimsPrincipal principal)
         => principal.FindFirstValue("urn:discord:avatar:url")
            ?? principal.FindFirstValue("urn:discord:avatar");
-
-    private static string? FirstNonEmpty(params string?[] werte)
-        => werte.FirstOrDefault(w => !string.IsNullOrWhiteSpace(w));
 }

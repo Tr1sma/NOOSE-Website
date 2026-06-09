@@ -1,19 +1,17 @@
-@* Zeigt einen benannten Steckbrief-Abschnitt als einfache Aufzählung (Lesedarstellung). *@
+@* Zeigt einen benannten Steckbrief-Abschnitt als Label + Chips. Ist die Liste leer, wird nichts gerendert. *@
 @{
     var liste = Werte.Where(w => !string.IsNullOrWhiteSpace(w)).ToList();
 }
-<MudText Typo="Typo.subtitle2" Class="mt-2">@Titel</MudText>
-@if (liste.Count == 0)
+@if (liste.Count > 0)
 {
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">—</MudText>
-}
-else
-{
-    <MudStack Spacing="0" Class="mb-2">
-        @foreach (var w in liste)
-        {
-            <MudText Typo="Typo.body2">• @w</MudText>
-        }
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="min-width:120px;">@Titel</MudText>
+        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+            @foreach (var w in liste)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@w</MudChip>
+            }
+        </MudStack>
     </MudStack>
 }
 
