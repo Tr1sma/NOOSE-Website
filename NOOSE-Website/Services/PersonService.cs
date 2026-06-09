@@ -72,7 +72,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Person>> FindeDuplikateAsync(string name, IEnumerable<string> telefonnummern, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> FindeDuplikateAsync(string name, IEnumerable<string> telefonnummern, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         var nameLower = (name ?? string.Empty).Trim().ToLower();
         var nummern = telefonnummern
@@ -81,7 +81,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToList();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Verschlusssachen nur für die Führung als mögliche Dublette anzeigen – sonst leakt der Warn-Dialog
+        // Name + Aktenzeichen klassifizierter Akten an jeden Agenten (Namens-/Nummern-Raten genügt).
         return await db.Personen
+            .Where(p => istFuehrung || !p.IstVerschlusssache)
             .Include(p => p.Telefonnummern)
             .Where(p => p.Name.ToLower() == nameLower
                      || p.Telefonnummern.Any(t => nummern.Contains(t.Nummer)))
@@ -132,6 +135,12 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
+        // Verschlusssache nur für die Führung bearbeitbar (serverseitig erzwungen, nicht nur via UI).
+        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
         var altStatus = person.Lebensstatus;
         var altTotBis = person.TotBis;
 
@@ -141,11 +150,12 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         person.Lebensstatus = eingabe.Lebensstatus;
         if (eingabe.Lebensstatus == Lebensstatus.Tot)
         {
-            // Manuell auf Tot: 20-Minuten-Fenster ab jetzt (sofern nicht bereits eines läuft).
-            if (!LebensstatusLogic.IstTotFenster(altStatus, altTotBis, DateTime.UtcNow))
-            {
-                person.TotBis = LebensstatusLogic.TotBisAb(DateTime.UtcNow);
-            }
+            // Ein frisches 20-Minuten-Fenster startet NUR beim echten Übergang nach „Tot" (vorher kein Tot).
+            // War die Person bereits „Tot", bleibt das bestehende Fenster erhalten – auch ein abgelaufenes wird
+            // nicht neu gestartet (sonst „tötet" eine harmlose Bearbeitung die Person erneut).
+            person.TotBis = altStatus != Lebensstatus.Tot
+                ? LebensstatusLogic.TotBisAb(DateTime.UtcNow)
+                : altTotBis;
         }
         else
         {
@@ -166,6 +176,9 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        // Löschen/Archivieren ist laut Rechte-Matrix Führung/Admin vorbehalten – serverseitig erzwingen.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
@@ -176,6 +189,9 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
 
     public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        // Wiederherstellen aus dem Papierkorb ist Führung/Admin vorbehalten.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen.IgnoreQueryFilters()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
@@ -196,14 +212,24 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
+        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
         person.Einstufung = neu;
         db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Person), id, neu, begruendung, handelnder));
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default)
+    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Verschlusssache-/Papierkorb-Schutz: Verlauf einer nicht sichtbaren Akte nicht ausliefern.
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), id, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         return await db.EinstufungVerlauf
             .Where(e => e.EntitaetTyp == nameof(Person) && e.EntitaetId == id)
             .OrderByDescending(e => e.Zeitpunkt)
@@ -213,6 +239,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     public async Task<List<PersonZugehoerigkeit>> GetZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
         // Der globale Soft-Delete-Filter blendet beendete Mitgliedschaften aus → nur aktive (BeendetAm = null).
         var fraktionen = await (
@@ -239,6 +269,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     public async Task<List<PersonZugehoerigkeit>> GetEhemaligeZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         // IgnoreQueryFilters: beendete (soft-gelöschte) Mitgliedschaften gezielt holen. Achtung – das schaltet
         // ALLE Filter der Query ab, auch die der Eltern-Akte → Papierkorb/Verschlusssache hier manuell nachsetzen.
         var fraktionen = await (
@@ -264,6 +298,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     public async Task<List<AbgeleiteteBeziehung>> GetAbgeleiteteBeziehungenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
 
         // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen).
         var meineFraktionen = await db.FraktionMitglieder
@@ -394,6 +432,20 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             throw new InvalidOperationException($"Dateityp '{contentType}' ist nicht erlaubt.");
         }
+        // Größenlimit serverseitig erzwingen (nicht nur in der UI) – verhindert Disk-Filling über andere Pfade.
+        if (groesse > fileStorage.MaxBytes)
+        {
+            throw new InvalidOperationException($"Datei zu groß (max. {fileStorage.MaxBytes / (1024 * 1024)} MB).");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Existenz + Verschlusssache-Sichtbarkeit der Akte prüfen, BEVOR eine Datei geschrieben wird.
+        var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
+            ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
+        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
 
         var dateiname = await fileStorage.SpeichernAsync(inhalt, contentType, cancellationToken);
         var foto = new PersonFoto
@@ -406,19 +458,31 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             ErstelltAm = DateTime.UtcNow,
             ErstelltVonId = handelnder.GetAgentId(),
         };
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.PersonFotos.Add(foto);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Schlägt der DB-Insert fehl, die bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
+            fileStorage.Loeschen(dateiname);
+            throw;
+        }
         return foto;
     }
 
     public async Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var foto = await db.PersonFotos.FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
+        var foto = await db.PersonFotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
         if (foto is null)
         {
             return;
+        }
+        if (foto.Person?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         // Erst den DB-Datensatz entfernen (Quelle der Wahrheit), dann die Datei löschen. So bleibt
         // bei einem Speicherfehler kein verwaister Datensatz zurück, der auf eine fehlende Datei zeigt.
@@ -433,9 +497,13 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         return await db.PersonFotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string personId, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistorieAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         // Kind-IDs (Doks) einsammeln, damit deren Audit-Einträge in der Akten-Historie erscheinen.
         var dokIds = await db.PersonDoks.IgnoreQueryFilters()
             .Where(d => d.PersonId == personId)
@@ -493,5 +561,5 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await vorschlag.VormerkenAsync(db, VorschlagTyp.Ort, person.Orte.Select(o => o.Text), cancellationToken);
     }
 
-    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? Leer(string? s) => s.TrimToNull();
 }

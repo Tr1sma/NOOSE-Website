@@ -27,7 +27,7 @@ else
         <MudGrid>
             <MudItem xs="12" md="8">
                 <MudTextField @bind-Value="_eingabe.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
-                              Variant="Variant.Outlined" />
+                              Variant="Variant.Outlined" AutoFocus="true" />
             </MudItem>
             <MudItem xs="12" md="4">
                 <MudSelect T="Lebensstatus" @bind-Value="_eingabe.Lebensstatus" Label="Lebensstatus" Variant="Variant.Outlined">
@@ -40,8 +40,14 @@ else
             <MudItem xs="12">
                 <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
             </MudItem>
-            <MudItem xs="12" md="6" Class="d-flex align-center">
+            <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
                 <MudSwitch T="bool" @bind-Value="_eingabe.IstVerschlusssache" Color="Color.Warning" Label="Verschlusssache (nur Führung sichtbar)" />
+                @if (_eingabe.IstVerschlusssache && !_istFuehrung)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Warning">
+                        Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
+                    </MudText>
+                }
             </MudItem>
         </MudGrid>
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -66,20 +72,24 @@ else
     private MudForm _form = default!;
     private PersonEingabe? _eingabe;
     private ClaimsPrincipal _user = default!;
+    private bool _istFuehrung;
     private bool _laden = true;
     private bool _speichert;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        var p = await PersonService.GetDetailAsync(Id, _user.IstFuehrung());
+        _istFuehrung = _user.IstFuehrung();
+        var p = await PersonService.GetDetailAsync(Id, _istFuehrung);
         if (p is not null)
         {
             _eingabe = new PersonEingabe
             {
                 Name = p.Name,
                 Beschreibung = p.Beschreibung,
-                Lebensstatus = p.Lebensstatus,
+                // Effektiven Status vorbefüllen: eine Person, deren 20-Min-Tot-Fenster abgelaufen ist, gilt
+                // als „Lebend" – so startet eine harmlose Bearbeitung kein neues Tot-Fenster.
+                Lebensstatus = LebensstatusLogic.Effektiv(p.Lebensstatus, p.TotBis, DateTime.UtcNow),
                 Einstufung = p.Einstufung,
                 IstVerschlusssache = p.IstVerschlusssache,
                 Aliase = p.Aliase.Select(a => new AliasEingabe { Aliasname = a.Aliasname }).ToList(),

@@ -98,7 +98,7 @@ else
                     <KommentarPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <HistorieTimeline PersonId="@_person.Id" @key="_historieKey" />
+                    <HistorieTimeline PersonId="@_person.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -135,7 +135,7 @@ else
         _person = await PersonService.GetDetailAsync(Id, _user.IstFuehrung());
         _einstufungVerlauf = _person is null
             ? new()
-            : await PersonService.GetEinstufungVerlaufAsync(_person.Id);
+            : await PersonService.GetEinstufungVerlaufAsync(_person.Id, _user.IstFuehrung());
         // Aktive Zugehörigkeiten für die Übersichtskarte (Verschlusssache-gefiltert via istFuehrung).
         _zugehoerigkeiten = _person is null
             ? new()

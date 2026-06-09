@@ -1,0 +1,23 @@
+using System.Security.Claims;
+using NOOSE_Website.Authorization;
+
+namespace NOOSE_Website.Services;
+
+/// <summary>
+/// Serverseitige Durchsetzung der Rechte-Matrix (Plan.md §6) in der Service-Schicht. <c>AuthorizeView</c>
+/// in Razor versteckt nur die UI – die schreibenden Dienste müssen Rang/Eigentum selbst prüfen. Diese
+/// Guards werfen <see cref="UnauthorizedAccessException"/> mit einer für den Nutzer verständlichen
+/// Meldung (die UI fängt Service-Ausnahmen ab und zeigt sie als Snackbar).
+/// </summary>
+public static class Berechtigung
+{
+    /// <summary>Wirft, wenn der Handelnde nicht der Führung (Supervisory Special Agent+) oder Admin angehört.</summary>
+    public static void VerlangeFuehrung(ClaimsPrincipal handelnder)
+    {
+        if (!handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist der Führung (ab Supervisory Special Agent) oder Admins vorbehalten.");
+        }
+    }
+}
