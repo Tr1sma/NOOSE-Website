@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AspNet.Security.OAuth.Discord;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using NOOSE_Website.Data.Entities;
@@ -8,12 +9,12 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Components.Account;
 
 /// <summary>
-/// Statische HTTP-Endpoints fuer den Login-/Logout-Fluss. Diese koennen NICHT in interaktiven
-/// Komponenten leben, weil der OAuth-Ablauf echte HTTP-Redirects (zu Discord und zurueck) braucht.
+/// Statische HTTP-Endpoints für den Login-/Logout-Fluss. Diese können NICHT in interaktiven
+/// Komponenten leben, weil der OAuth-Ablauf echte HTTP-Redirects (zu Discord und zurück) braucht.
 /// </summary>
 public static class IdentityComponentsEndpointRouteBuilderExtensions
 {
-    /// <summary>Name der Rate-Limiting-Policy fuer den Login-Start (in Program.cs konfiguriert).</summary>
+    /// <summary>Name der Rate-Limiting-Policy für den Login-Start (in Program.cs konfiguriert).</summary>
     public const string LoginRateLimitPolicy = "noose-login";
 
     public static IEndpointConventionBuilder MapNooseAccountEndpoints(this IEndpointRouteBuilder endpoints)
@@ -21,18 +22,26 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         var group = endpoints.MapGroup("/Account");
 
         // 1) Login-Start: fordert den Discord-OAuth-Flow an.
-        group.MapPost("/PerformExternalLogin", (
-            HttpContext context,
+        group.MapPost("/PerformExternalLogin", async (
             [FromServices] SignInManager<Agent> signInManager,
+            [FromServices] IAuthenticationSchemeProvider schemeProvider,
             [FromForm] string? returnUrl) =>
         {
+            // Falls Discord (noch) nicht konfiguriert ist, existiert das Schema nicht.
+            var schema = await schemeProvider.GetSchemeAsync(DiscordAuthenticationDefaults.AuthenticationScheme);
+            if (schema is null)
+            {
+                return RedirectZurLoginSeite(
+                    "Discord-Login ist noch nicht konfiguriert. Bitte Client-ID und Secret in den User Secrets hinterlegen.");
+            }
+
             var redirectUrl = $"/Account/ExternalLogin?returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}";
             var properties = signInManager.ConfigureExternalAuthenticationProperties(
                 DiscordAuthenticationDefaults.AuthenticationScheme, redirectUrl);
             return Results.Challenge(properties, [DiscordAuthenticationDefaults.AuthenticationScheme]);
         }).RequireRateLimiting(LoginRateLimitPolicy);
 
-        // 2) Rueckkanal nach erfolgreicher Discord-Authentifizierung.
+        // 2) Rückkanal nach erfolgreicher Discord-Authentifizierung.
         group.MapGet("/ExternalLogin", async (
             [FromServices] SignInManager<Agent> signInManager,
             [FromServices] UserManager<Agent> userManager,
@@ -69,7 +78,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 await AktualisiereStammdatenAsync(userManager, agent, info);
             }
 
-            // Status-Gate: ausschliesslich aktive Agenten erhalten eine Sitzung.
+            // Status-Gate: ausschließlich aktive Agenten erhalten eine Sitzung.
             switch (agent.Status)
             {
                 case AgentStatus.Aktiv:
@@ -111,7 +120,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
 
         var agent = new Agent
         {
-            UserName = discordId, // Discord-Snowflake (nur Ziffern) – erfuellt die Identity-Namensregeln.
+            UserName = discordId, // Discord-Snowflake (nur Ziffern) – erfüllt die Identity-Namensregeln.
             Email = email,
             EmailConfirmed = email is not null,
             Anzeigename = FirstNonEmpty(globalName, username) ?? $"Agent {discordId}",
@@ -136,19 +145,19 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         var addLogin = await userManager.AddLoginAsync(agent, info);
         if (!addLogin.Succeeded)
         {
-            logger.LogError("Discord-Login verknuepfen fehlgeschlagen ({DiscordId}): {Fehler}",
+            logger.LogError("Discord-Login verknüpfen fehlgeschlagen ({DiscordId}): {Fehler}",
                 discordId, string.Join("; ", addLogin.Errors.Select(e => e.Description)));
             await userManager.DeleteAsync(agent);
             return null;
         }
 
-        // Hinweis: Admin-Rechte laufen ueber das IstAdmin-Flag/Claim, nicht ueber Identity-Rollen.
+        // Hinweis: Admin-Rechte laufen über das IstAdmin-Flag/Claim, nicht über Identity-Rollen.
         logger.LogInformation("Neuer Agent registriert: {Anzeigename} ({DiscordId}), Status {Status}.",
             agent.Anzeigename, discordId, agent.Status);
         return agent;
     }
 
-    /// <summary>Haelt Anzeigename/Username/Avatar bei jedem Login mit Discord aktuell.</summary>
+    /// <summary>Hält Anzeigename/Username/Avatar bei jedem Login mit Discord aktuell.</summary>
     private static async Task AktualisiereStammdatenAsync(UserManager<Agent> userManager, Agent agent, ExternalLoginInfo info)
     {
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);

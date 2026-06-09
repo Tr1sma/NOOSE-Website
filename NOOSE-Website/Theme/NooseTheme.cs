@@ -4,8 +4,8 @@ namespace NOOSE_Website.Theme;
 
 /// <summary>
 /// Dunkles NOOSE-Theme ("Anthrazit + Cyan"). Zentrale Farb- und Layout-Definition der App.
-/// Wird in <c>MainLayout</c> an den <see cref="MudThemeProvider"/> gehaengt (IsDarkMode = true).
-/// In Phase 7 kann das Theme spaeter im Admin (ohne Code) angepasst werden.
+/// Wird in <c>MainLayout</c> an den <see cref="MudThemeProvider"/> gehängt (IsDarkMode = true).
+/// In Phase 7 kann das Theme später im Admin (ohne Code) angepasst werden.
 /// </summary>
 public static class NooseTheme
 {

@@ -9,7 +9,7 @@ namespace NOOSE_Website.Authorization;
 /// </summary>
 public static class AgentPrincipalExtensions
 {
-    /// <summary>Identity-Schluessel (GUID) des Agents oder null, falls nicht eingeloggt.</summary>
+    /// <summary>Identity-Schlüssel (GUID) des Agents oder null, falls nicht eingeloggt.</summary>
     public static string? GetAgentId(this ClaimsPrincipal user)
         => user.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -36,7 +36,7 @@ public static class AgentPrincipalExtensions
     public static bool IstTRU(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IstTRU), "true", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Fuehrung = Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
+    /// <summary>Führung = Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
     public static bool IstFuehrung(this ClaimsPrincipal user)
         => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SupervisorySpecialAgent;
 }

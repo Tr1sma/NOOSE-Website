@@ -1,0 +1,125 @@
+@page "/admin/freigaben"
+@attribute [Authorize(Policy = Policies.Fuehrung)]
+@inject IAgentVerwaltungService AgentService
+@inject ISnackbar Snackbar
+
+<PageTitle>Freigaben · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Freigabe-Posteingang</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Neu registrierte Discord-Konten warten hier auf Freigabe. Beim Freischalten wird ein Dienstgrad
+    vergeben; danach erhält der Agent beim nächsten Login Zugriff.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_ausstehende.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Keine ausstehenden Freigaben. Alles erledigt.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="_ausstehende" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+        <HeaderContent>
+            <MudTh>Agent</MudTh>
+            <MudTh>Discord</MudTh>
+            <MudTh>Registriert</MudTh>
+            <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
+            <MudTh>TRU</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Agent">
+                <MudText Typo="Typo.body2">@context.Anzeigename</MudText>
+            </MudTd>
+            <MudTd DataLabel="Discord">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.DiscordUsername ?? context.DiscordId)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Registriert">
+                <MudText Typo="Typo.caption">@context.RegistriertAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Dienstgrad">
+                <MudSelect T="Dienstgrad" @bind-Value="Auswahl(context.Id).Grad" Dense="true" Margin="Margin.Dense"
+                           Variant="Variant.Outlined">
+                    @foreach (var dg in DienstgradAnzeige.Alle)
+                    {
+                        <MudSelectItem Value="dg">@DienstgradAnzeige.Name(dg)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudTd>
+            <MudTd DataLabel="TRU">
+                <MudCheckBox T="bool" @bind-Value="Auswahl(context.Id).Tru" Color="Color.Primary" />
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                           OnClick="() => Freigeben(context)">Freigeben</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Close"
+                           OnClick="() => Ablehnen(context)">Ablehnen</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<Agent> _ausstehende = new();
+    private readonly Dictionary<string, Auswahlzustand> _auswahl = new();
+
+    private sealed class Auswahlzustand
+    {
+        public Dienstgrad Grad { get; set; } = Dienstgrad.JuniorAgent;
+        public bool Tru { get; set; }
+    }
+
+    private Auswahlzustand Auswahl(string agentId)
+    {
+        if (!_auswahl.TryGetValue(agentId, out var zustand))
+        {
+            zustand = new Auswahlzustand();
+            _auswahl[agentId] = zustand;
+        }
+        return zustand;
+    }
+
+    protected override Task OnInitializedAsync() => LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _ausstehende = await AgentService.GetAusstehendeAsync();
+        foreach (var agent in _ausstehende)
+        {
+            _ = Auswahl(agent.Id);
+        }
+        _laden = false;
+    }
+
+    private async Task Freigeben(Agent agent)
+    {
+        var auswahl = Auswahl(agent.Id);
+        var user = (await AuthStateTask).User;
+        await AgentService.FreigebenAsync(agent.Id, auswahl.Grad, auswahl.Tru, user);
+        Snackbar.Add($"{agent.Anzeigename} als {DienstgradAnzeige.Name(auswahl.Grad)} freigegeben.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private async Task Ablehnen(Agent agent)
+    {
+        var user = (await AuthStateTask).User;
+        await AgentService.AblehnenAsync(agent.Id, "Registrierung abgelehnt", user);
+        Snackbar.Add($"{agent.Anzeigename} abgelehnt.", Severity.Info);
+        await LadenAsync();
+    }
+}

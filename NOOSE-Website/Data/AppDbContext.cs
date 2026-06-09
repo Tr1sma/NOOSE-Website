@@ -9,9 +9,9 @@ namespace NOOSE_Website.Data;
 
 /// <summary>
 /// Zentraler EF-Core-Kontext der NOOSE-Website.
-/// Ab Phase 1 ein <see cref="IdentityDbContext{TUser}"/> fuer ASP.NET Core Identity
+/// Ab Phase 1 ein <see cref="IdentityDbContext{TUser}"/> für ASP.NET Core Identity
 /// (Nutzer = <see cref="Agent"/>) plus die Querschnitts-Tabellen Audit-/Zugriffs-Log.
-/// Domaenen-Akten (Person, Personen-Dok, ...) kommen ab Phase 2 hinzu.
+/// Domänen-Akten (Person, Personen-Dok, ...) kommen ab Phase 2 hinzu.
 /// </summary>
 public class AppDbContext : IdentityDbContext<Agent>
 {
@@ -56,8 +56,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => new { a.EntitaetTyp, a.EntitaetId });
         });
 
-        // Globaler Soft-Delete-Filter: jede Entitaet, die ISoftDelete implementiert, wird
-        // standardmaessig ohne die als geloescht markierten Datensaetze abgefragt. Greift ab
+        // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird
+        // standardmäßig ohne die als gelöscht markierten Datensätze abgefragt. Greift ab
         // Phase 2 (sobald Akten ISoftDelete nutzen) – das Plumbing steht hier bereits.
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
                      .Where(t => typeof(ISoftDelete).IsAssignableFrom(t.ClrType))

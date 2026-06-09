@@ -7,7 +7,10 @@
     <MudText Typo="Typo.h4">Lagezentrum</MudText>
 </MudStack>
 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-6">
-    Willkommen im NOOSE-Aktensystem. Die Fachmodule (Personen, Fraktionen, Fälle …) entstehen in den nächsten Phasen.
+    <AuthorizeView>
+        <Authorized Context="auth">Willkommen zurück, <b>@auth.User.GetAnzeigename()</b>. </Authorized>
+    </AuthorizeView>
+    Die Fachmodule (Personen, Fraktionen, Fälle …) entstehen in den nächsten Phasen.
 </MudText>
 
 <MudGrid>
@@ -50,5 +53,5 @@
 </MudGrid>
 
 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-6" Icon="@Icons.Material.Filled.Construction">
-    Aktueller Stand: <b>Phase 0 – Fundament</b>. Login &amp; Rechte folgen in Phase 1, die Personen-Akten in Phase 2.
+    Aktueller Stand: <b>Phase 1 – Auth, Accounts &amp; Rechte</b> aktiv. Die Personen-Akten folgen in Phase 2.
 </MudAlert>

@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Authorization;
 namespace NOOSE_Website.Authorization;
 
 /// <summary>
-/// Stub-Handler fuer <see cref="VerschlusssacheRequirement"/>: laesst in Phase 1 Fuehrung/Admin
-/// durch. Ab der Akten-Phase wird hier zusaetzlich die konkrete Akte als Ressource geprueft
-/// (markiert als Verschlusssache? Agent ausdruecklich zugewiesen?).
+/// Stub-Handler für <see cref="VerschlusssacheRequirement"/>: lässt in Phase 1 Führung/Admin
+/// durch. Ab der Akten-Phase wird hier zusätzlich die konkrete Akte als Ressource geprüft
+/// (markiert als Verschlusssache? Agent ausdrücklich zugewiesen?).
 /// </summary>
 public class VerschlusssacheAuthorizationHandler : AuthorizationHandler<VerschlusssacheRequirement>
 {

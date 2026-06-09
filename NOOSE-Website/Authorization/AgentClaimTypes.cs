@@ -2,7 +2,7 @@ namespace NOOSE_Website.Authorization;
 
 /// <summary>
 /// Eigene Claim-Typen, die der <c>AgentClaimsPrincipalFactory</c> beim Login in das Cookie
-/// schreibt. So koennen Policies und UI rein aus den Claims entscheiden – ohne DB-Zugriff pro
+/// schreibt. So können Policies und UI rein aus den Claims entscheiden – ohne DB-Zugriff pro
 /// Anfrage.
 /// </summary>
 public static class AgentClaimTypes

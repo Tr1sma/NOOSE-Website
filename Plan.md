@@ -174,21 +174,24 @@
 
 > **⚠️ DB-Erkenntnis (wichtig für Phase 10):** Die gehostete **IONOS-MySQL** (`database-…​.webspace-host.com`) ist **nur aus dem IONOS-Hosting erreichbar**, nicht vom lokalen Rechner (DNS liefert keine öffentliche IP, Port 3306 von außen zu). Daher: **lokale Entwicklung gegen XAMPP-MySQL** (DB `noose`, User `root`), **Produktion gegen IONOS** (Connection-String dort als Umgebungsvariable). Der Code ist dank `AutoDetect` für beide identisch.
 
-### Phase 1 – Auth, Accounts & Rechte
+### Phase 1 – Auth, Accounts & Rechte  ✅ ABGESCHLOSSEN
 **Ziel:** Sicherer Login mit Freigabe und dienstgradbasierten Rechten.
-- [ ] ASP.NET Core Identity + **Discord-Login**.
-- [ ] `Agent`-Modell (Dienstgrad/Partner-Rolle, Status, TRU-Flag).
-- [ ] Registrierungs-Flow: erster Discord-Login → Status **Ausstehend**.
-- [ ] **Freigabe-Posteingang** (Führung/Admin): freischalten, Rang/Rolle zuweisen, sperren.
-- [ ] Dienstgrad-Hierarchie + **Authorization-Policies** (Lesen/Schreiben/Löschen/Führung/Admin/Höchste-Einstufung).
-- [ ] **Verschlusssachen-Policy** vorbereiten (Sichtbarkeits-Requirement für markierte Akten/zugewiesene Agenten).
-- [ ] **Notfall-Sperre (Kill-Switch)**: Account sofort sperren + alle Sitzungen beenden (Führung/Admin).
-- [ ] **Discord-Rollen-Sync** (optional): NOOSE-Dienstgrad ↔ Discord-Rolle abgleichen.
-- [ ] Admin-Nutzerverwaltung (Liste, Rang ändern, sperren).
-- [ ] Seeding: erster Admin, Dienstgrade/Rollen.
-- [ ] **Audit- & Zugriffs-Log-Infrastruktur** (Interceptor) + **Soft-Delete-Basis** – Grundgerüst.
+- [x] ASP.NET Core Identity + **Discord-Login** (Identity.EFCore 9.0.16, AspNet.Security.OAuth.Discord 10.0.0; eigene deutsche Blazor-Login-Seite, keine scaffolded UI).
+- [x] `Agent`-Modell (`IdentityUser` + Dienstgrad, Status, TRU-Flag, Discord-Bezug).
+- [x] Registrierungs-Flow: erster Discord-Login → Status **Ausstehend**; nur **Aktive** erhalten eine Sitzung.
+- [x] **Freigabe-Posteingang** (`/admin/freigaben`, Führung): freischalten + Rang/TRU zuweisen, ablehnen.
+- [x] Dienstgrad-Hierarchie + **Authorization-Policies** (AktiverAgent/Führung/Admin/HöchsteEinstufung/BeförderungEntscheiden) – Claims-basiert.
+- [x] **Verschlusssachen-Policy** vorbereitet (Requirement + Stub-Handler; volle ressourcenbasierte Prüfung ab Akten-Phase).
+- [x] **Notfall-Sperre (Kill-Switch)**: SecurityStamp + kurze Revalidierung (`RevalidatingServerAuthenticationStateProvider`) → Sperre beendet alle Sitzungen sofort.
+- [ ] **Discord-Rollen-Sync** (optional): *Struktur vorbereitet (`DiscordRollenSyncAm`), Bot-Sync bewusst auf spätere Phase verschoben.*
+- [x] Admin-Nutzerverwaltung (`/admin/agenten`, Admin): Liste, Rang/TRU/Admin ändern, sperren/entsperren.
+- [x] Seeding: erster Admin via **Bootstrap-Admin-Discord-ID** (User Secrets) → Director+Admin+Aktiv; „Admin"-Rolle geseedet.
+- [x] **Audit- & Zugriffs-Log-Infrastruktur** (`AuditSaveChangesInterceptor`, `AuditLog`/`ZugriffsLog`) + **Soft-Delete-Basis** (`ISoftDelete` + globaler Query-Filter) – Grundgerüst steht.
 
 **Abnahme:** Discord-Login funktioniert; neue Accounts landen „Ausstehend"; Admin gibt frei und vergibt Rang; ohne Login kein Zugriff; gesperrter Account fliegt sofort raus; zu niedrige Aktion wird serverseitig verweigert.
+
+> **Verifiziert (ohne Discord-Secrets):** Build 0/0 · Migration `AddIdentityAndAudit` angewandt (Identity- + Audit-Tabellen, `DiscordId` unique) · `/health`=Healthy · `/`→302 auf `/Account/Login` · `/status`→302 (geschützt) · Login-Seite rendert Discord-Button + Antiforgery-Token.
+> **Zum Voll-Test nötig (Auftraggeber):** Discord-App anlegen, Redirect `https://localhost:7063/signin-discord`, dann per User Secrets setzen: `Authentication:Discord:ClientId`, `Authentication:Discord:ClientSecret`, `Bootstrap:AdminDiscordId` (eigene Discord-ID). Ohne diese Secrets läuft die App, der Login-Button zeigt aber einen Konfigurationshinweis.
 
 ### Phase 2 – Personen-Akten (MVP-Kern)
 **Ziel:** Der erste echte Mehrwert – Personen verwalten.

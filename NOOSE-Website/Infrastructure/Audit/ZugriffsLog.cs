@@ -1,8 +1,8 @@
 namespace NOOSE_Website.Infrastructure.Audit;
 
 /// <summary>
-/// Lese-/Zugriffsprotokoll: haelt fest, wer wann eine (sensible) Akte angesehen hat.
-/// Wird ueber den <c>IZugriffsLogService</c> explizit aus den Detailansichten geschrieben.
+/// Lese-/Zugriffsprotokoll: hält fest, wer wann eine (sensible) Akte angesehen hat.
+/// Wird über den <c>IZugriffsLogService</c> explizit aus den Detailansichten geschrieben.
 /// </summary>
 public class ZugriffsLog
 {

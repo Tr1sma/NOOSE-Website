@@ -5,9 +5,9 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <summary>
-/// Account-Verwaltung fuer Fuehrung/Admin: Freigabe-Posteingang, Rang-/Rollenvergabe und die
-/// Notfall-Sperre (Kill-Switch). Alle veraendernden Aktionen werden protokolliert; Sperren/
-/// Entsperren/Rangaenderungen erneuern den SecurityStamp und beenden damit laufende Sitzungen
+/// Account-Verwaltung für Führung/Admin: Freigabe-Posteingang, Rang-/Rollenvergabe und die
+/// Notfall-Sperre (Kill-Switch). Alle verändernden Aktionen werden protokolliert; Sperren/
+/// Entsperren/Rangänderungen erneuern den SecurityStamp und beenden damit laufende Sitzungen
 /// des betroffenen Agents.
 /// </summary>
 public interface IAgentVerwaltungService
@@ -19,7 +19,7 @@ public interface IAgentVerwaltungService
     /// <summary>Ausstehenden Account freischalten und Rang/TRU vergeben → Status Aktiv.</summary>
     Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, ClaimsPrincipal handelnder);
 
-    /// <summary>Registrierung ablehnen → Status Gesperrt mit Begruendung.</summary>
+    /// <summary>Registrierung ablehnen → Status Gesperrt mit Begründung.</summary>
     Task AblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder);
 
     Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder);

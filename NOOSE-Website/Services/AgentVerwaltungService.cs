@@ -117,8 +117,8 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     /// <summary>
     /// Persistiert den Agent (samt offenem AuditLog im selben Kontext). Bei <paramref name="neuerStamp"/>
-    /// wird zusaetzlich der SecurityStamp erneuert – das invalidiert alle bestehenden Cookies des
-    /// Agents (Sitzungen enden) und erzwingt beim naechsten Login frische Claims/Rechte.
+    /// wird zusätzlich der SecurityStamp erneuert – das invalidiert alle bestehenden Cookies des
+    /// Agents (Sitzungen enden) und erzwingt beim nächsten Login frische Claims/Rechte.
     /// </summary>
     private async Task Speichern(Agent agent, bool neuerStamp)
     {

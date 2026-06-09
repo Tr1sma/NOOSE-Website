@@ -9,18 +9,18 @@ public static class Policies
     /// <summary>Eingeloggt und Status = Aktiv. App-weiter Standard (in <c>_Imports.razor</c>).</summary>
     public const string AktiverAgent = "AktiverAgent";
 
-    /// <summary>Fuehrung: Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
+    /// <summary>Führung: Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
     public const string Fuehrung = "Fuehrung";
 
     /// <summary>Technische Systemrolle.</summary>
     public const string Admin = "Admin";
 
-    /// <summary>"Gesichert staatsgefaehrdend" direkt setzen: Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
+    /// <summary>"Gesichert staatsgefährdend" direkt setzen: Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
     public const string HoechsteEinstufung = "HoechsteEinstufung";
 
     /// <summary>Beförderung entscheiden: Dienstgrad ≥ Deputy Director oder Admin.</summary>
     public const string BefoerderungEntscheiden = "BefoerderungEntscheiden";
 
-    /// <summary>Verschlusssachen sehen (Stub – volle ressourcenbasierte Pruefung in spaeterer Phase).</summary>
+    /// <summary>Verschlusssachen sehen (Stub – volle ressourcenbasierte Prüfung in späterer Phase).</summary>
     public const string Verschlusssache = "Verschlusssache";
 }

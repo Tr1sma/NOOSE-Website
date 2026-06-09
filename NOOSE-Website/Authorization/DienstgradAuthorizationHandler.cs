@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace NOOSE_Website.Authorization;
 
 /// <summary>
-/// Erfuellt eine <see cref="DienstgradRequirement"/>, wenn der Agent Admin ist oder sein
+/// Erfüllt eine <see cref="DienstgradRequirement"/>, wenn der Agent Admin ist oder sein
 /// Dienstgrad mindestens dem geforderten Minimum entspricht.
 /// </summary>
 public class DienstgradAuthorizationHandler : AuthorizationHandler<DienstgradRequirement>

@@ -1,9 +1,9 @@
 namespace NOOSE_Website.Models.Abstractions;
 
 /// <summary>
-/// Markiert eine Entitaet fuer den Papierkorb: statt physisch geloescht zu werden, wird sie
-/// nur als geloescht markiert (durch den <c>AuditSaveChangesInterceptor</c>) und von einem
-/// globalen Query-Filter standardmaessig ausgeblendet. Wiederherstellbar durch Fuehrung.
+/// Markiert eine Entität für den Papierkorb: statt physisch gelöscht zu werden, wird sie
+/// nur als gelöscht markiert (durch den <c>AuditSaveChangesInterceptor</c>) und von einem
+/// globalen Query-Filter standardmäßig ausgeblendet. Wiederherstellbar durch Führung.
 /// </summary>
 public interface ISoftDelete
 {

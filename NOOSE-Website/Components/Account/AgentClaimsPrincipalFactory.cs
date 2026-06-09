@@ -9,7 +9,7 @@ namespace NOOSE_Website.Components.Account;
 /// <summary>
 /// Schreibt beim Login die NOOSE-spezifischen Claims (Dienstgrad, Status, TRU, Admin, Anzeigename)
 /// in das Identity-Cookie. Dadurch entscheiden Policies und UI rein aus den Claims – ohne DB-Zugriff
-/// pro Anfrage. Aenderungen an Rang/Status erzwingen ueber den SecurityStamp einen erneuten Login,
+/// pro Anfrage. Änderungen an Rang/Status erzwingen über den SecurityStamp einen erneuten Login,
 /// sodass die Claims aktuell bleiben.
 /// </summary>
 public class AgentClaimsPrincipalFactory(

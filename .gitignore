@@ -361,3 +361,17 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# ----- NOOSE: Secrets / lokale Konfiguration -----
+# Die echten Zugangsdaten (Discord ClientId/ClientSecret, Bootstrap-Admin-Discord-ID,
+# DB-Connection-String) liegen in den .NET User Secrets AUSSERHALB des Repos:
+#   %APPDATA%\Microsoft\UserSecrets\d41f8a93-2c7b-4e16-9a55-0b3e7c1f6d28\secrets.json
+# Sie werden daher gar nicht erst eingecheckt. Falls doch mal lokale Override-/Secret-Dateien
+# im Projekt landen, fangen die folgenden Regeln sie als Sicherheitsnetz ab:
+appsettings.*.local.json
+appsettings.Local.json
+appsettings.Secrets.json
+secrets.json
+*.secrets.json
+.env
+.env.*

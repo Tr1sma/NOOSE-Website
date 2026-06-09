@@ -27,9 +27,9 @@
 </html>
 
 @code {
-    // Globale Interaktivitaet: alle Seiten laufen als Interactive Server,
-    // ausser sie sind mit [ExcludeFromInteractiveRouting] als statisch markiert
-    // (z. B. /Error und /not-found, die HttpContext brauchen bzw. keine Interaktion benoetigen).
+    // Globale Interaktivität: alle Seiten laufen als Interactive Server,
+    // außer sie sind mit [ExcludeFromInteractiveRouting] als statisch markiert
+    // (z. B. /Error und /not-found, die HttpContext brauchen bzw. keine Interaktion benötigen).
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
 

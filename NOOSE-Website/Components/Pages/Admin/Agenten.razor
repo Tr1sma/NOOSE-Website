@@ -1,0 +1,160 @@
+@page "/admin/agenten"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inject IAgentVerwaltungService AgentService
+@inject ISnackbar Snackbar
+
+<PageTitle>Agenten-Verwaltung · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Agenten-Verwaltung</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Dienstgrade vergeben, TRU- und Admin-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
+    alle laufenden Sitzungen des Agents sofort (Kill-Switch).
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_agenten" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Agent</MudTh>
+            <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>TRU</MudTh>
+            <MudTh>Admin</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Agent">
+                <MudText Typo="Typo.body2">@context.Anzeigename</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.DiscordUsername ?? context.DiscordId)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Dienstgrad">
+                <MudSelect T="Dienstgrad" Value="@(context.Dienstgrad ?? Dienstgrad.JuniorAgent)"
+                           ValueChanged="@(grad => RangAendern(context, grad))"
+                           Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                           Disabled="@(context.Status != AgentStatus.Aktiv)">
+                    @foreach (var dg in DienstgradAnzeige.Alle)
+                    {
+                        <MudSelectItem Value="dg">@DienstgradAnzeige.Name(dg)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@StatusIcon(context.Status)" Color="@StatusFarbe(context.Status)" Size="Size.Small" />
+                    <MudText Typo="Typo.body2" Color="@StatusFarbe(context.Status)">@AgentStatusAnzeige.Name(context.Status)</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="TRU">
+                <MudSwitch T="bool" Value="context.IstTRU" ValueChanged="@(v => TruSetzen(context, v))" Color="Color.Primary" />
+            </MudTd>
+            <MudTd DataLabel="Admin">
+                <MudSwitch T="bool" Value="context.IstAdmin" ValueChanged="@(v => AdminSetzen(context, v))"
+                           Color="Color.Secondary" Disabled="@(context.Id == _meineId)" />
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                @if (context.Status == AgentStatus.Gesperrt)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.LockOpen"
+                               OnClick="() => Entsperren(context)">Entsperren</MudButton>
+                }
+                else
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Block"
+                               Disabled="@(context.Id == _meineId)"
+                               OnClick="() => Sperren(context)">Sperren</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<Agent> _agenten = new();
+    private string? _meineId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _meineId = (await AuthStateTask).User.GetAgentId();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _agenten = await AgentService.GetAlleAsync();
+        _laden = false;
+    }
+
+    private async Task RangAendern(Agent agent, Dienstgrad grad)
+    {
+        if (agent.Dienstgrad == grad)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        await AgentService.RangAendernAsync(agent.Id, grad, user);
+        Snackbar.Add($"{agent.Anzeigename}: Dienstgrad auf {DienstgradAnzeige.Name(grad)} gesetzt.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private async Task TruSetzen(Agent agent, bool wert)
+    {
+        var user = (await AuthStateTask).User;
+        await AgentService.TruSetzenAsync(agent.Id, wert, user);
+        Snackbar.Add($"{agent.Anzeigename}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private async Task AdminSetzen(Agent agent, bool wert)
+    {
+        var user = (await AuthStateTask).User;
+        await AgentService.AdminSetzenAsync(agent.Id, wert, user);
+        Snackbar.Add($"{agent.Anzeigename}: Admin-Rechte {(wert ? "vergeben" : "entzogen")}.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private async Task Sperren(Agent agent)
+    {
+        var user = (await AuthStateTask).User;
+        await AgentService.SperrenAsync(agent.Id, "Notfall-Sperre durch Admin", user);
+        Snackbar.Add($"{agent.Anzeigename} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
+        await LadenAsync();
+    }
+
+    private async Task Entsperren(Agent agent)
+    {
+        var user = (await AuthStateTask).User;
+        await AgentService.EntsperrenAsync(agent.Id, user);
+        Snackbar.Add($"{agent.Anzeigename} entsperrt.", Severity.Success);
+        await LadenAsync();
+    }
+
+    private static Color StatusFarbe(AgentStatus status) => status switch
+    {
+        AgentStatus.Aktiv => Color.Success,
+        AgentStatus.Ausstehend => Color.Warning,
+        AgentStatus.Gesperrt => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string StatusIcon(AgentStatus status) => status switch
+    {
+        AgentStatus.Aktiv => Icons.Material.Filled.CheckCircle,
+        AgentStatus.Ausstehend => Icons.Material.Filled.HourglassTop,
+        AgentStatus.Gesperrt => Icons.Material.Filled.Block,
+        _ => Icons.Material.Filled.Help,
+    };
+}

@@ -9,15 +9,15 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Infrastructure.Audit;
 
 /// <summary>
-/// Querschnitts-Interceptor fuer alle Speichervorgaenge:
+/// Querschnitts-Interceptor für alle Speichervorgänge:
 /// <list type="bullet">
-///   <item>stempelt <see cref="IAuditable"/>-Entitaeten (ErstelltAm/Von, GeaendertAm/Von),</item>
-///   <item>wandelt physisches Loeschen von <see cref="ISoftDelete"/>-Entitaeten in Soft-Delete um,</item>
-///   <item>schreibt einen <see cref="AuditLog"/>-Eintrag pro betroffener Akte (mit final aufgeloestem
-///   Schluessel, daher zweiphasig: sammeln in <c>SavingChanges</c>, schreiben in <c>SavedChanges</c>).</item>
+///   <item>stempelt <see cref="IAuditable"/>-Entitäten (ErstelltAm/Von, GeaendertAm/Von),</item>
+///   <item>wandelt physisches Löschen von <see cref="ISoftDelete"/>-Entitäten in Soft-Delete um,</item>
+///   <item>schreibt einen <see cref="AuditLog"/>-Eintrag pro betroffener Akte (mit final aufgelöstem
+///   Schlüssel, daher zweiphasig: sammeln in <c>SavingChanges</c>, schreiben in <c>SavedChanges</c>).</item>
 /// </list>
 /// Greift produktiv ab Phase 2, sobald Akten diese Interfaces implementieren. In Phase 1 existieren
-/// noch keine auditierbaren Entitaeten – das Geruest ist aber vollstaendig verdrahtet.
+/// noch keine auditierbaren Entitäten – das Gerüst ist aber vollständig verdrahtet.
 /// </summary>
 public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
@@ -70,7 +70,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
         var logs = _pending.Select(p => p.ToAuditLog()).ToList();
         _pending = new();
         context.Set<AuditLog>().AddRange(logs);
-        // Erneutes Speichern; loest keine Rekursion aus, da AuditLog weder IAuditable noch ISoftDelete ist.
+        // Erneutes Speichern; löst keine Rekursion aus, da AuditLog weder IAuditable noch ISoftDelete ist.
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -145,8 +145,8 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
     }
 
     /// <summary>
-    /// Haelt einen Eintrag fest, dessen finaler Primaerschluessel erst nach dem Speichern feststeht.
-    /// Geaenderte Felder werden bereits beim Sammeln (alt → neu) erfasst.
+    /// Hält einen Eintrag fest, dessen finaler Primärschlüssel erst nach dem Speichern feststeht.
+    /// Geänderte Felder werden bereits beim Sammeln (alt → neu) erfasst.
     /// </summary>
     private sealed class PendingAudit
     {

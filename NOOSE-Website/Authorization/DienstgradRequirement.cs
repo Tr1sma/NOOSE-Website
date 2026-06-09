@@ -5,7 +5,7 @@ namespace NOOSE_Website.Authorization;
 
 /// <summary>
 /// Verlangt mindestens den angegebenen <see cref="Dienstgrad"/> – oder Admin.
-/// Geprueft vom <see cref="DienstgradAuthorizationHandler"/>.
+/// Geprüft vom <see cref="DienstgradAuthorizationHandler"/>.
 /// </summary>
 public class DienstgradRequirement : IAuthorizationRequirement
 {

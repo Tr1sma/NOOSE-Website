@@ -15,7 +15,24 @@
             National Office of Security Enforcement
         </MudText>
         <MudSpacer />
-        <MudText Typo="Typo.caption" Class="mud-text-secondary d-none d-sm-flex">Aktensystem</MudText>
+        <AuthorizeView>
+            <Authorized Context="auth">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudStack Spacing="0" AlignItems="AlignItems.End" Class="d-none d-sm-flex">
+                        <MudText Typo="Typo.body2" Style="line-height:1.2;">@auth.User.GetAnzeigename()</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.2;">
+                            @RangZeile(auth.User)
+                        </MudText>
+                    </MudStack>
+                    <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initiale(auth.User.GetAnzeigename())</MudAvatar>
+                    <form method="post" action="/Account/Logout">
+                        <AntiforgeryToken />
+                        <MudIconButton ButtonType="ButtonType.Submit" Icon="@Icons.Material.Filled.Logout"
+                                       Color="Color.Inherit" aria-label="Abmelden" title="Abmelden" />
+                    </form>
+                </MudStack>
+            </Authorized>
+        </AuthorizeView>
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always"
@@ -40,4 +57,15 @@
     private bool _drawerOpen = true;
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private static string Initiale(string? name)
+        => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();
+
+    private static string RangZeile(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var teile = new List<string> { DienstgradAnzeige.Name(user.GetDienstgrad()) };
+        if (user.IstTRU()) teile.Add("TRU");
+        if (user.IstAdmin()) teile.Add("Admin");
+        return string.Join(" · ", teile);
+    }
 }

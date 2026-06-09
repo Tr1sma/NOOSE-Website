@@ -6,8 +6,8 @@ namespace NOOSE_Website.Infrastructure.CurrentUser;
 
 /// <summary>
 /// Liest den aktuellen Agent zuerst aus dem <see cref="HttpContext"/> (deckt OAuth-Endpoints und
-/// die initiale SSR-Anfrage ab) und faellt sonst auf den Blazor-<see cref="AuthenticationStateProvider"/>
-/// zurueck (deckt interaktive Circuit-Updates ab, in denen kein HttpContext mehr existiert).
+/// die initiale SSR-Anfrage ab) und fällt sonst auf den Blazor-<see cref="AuthenticationStateProvider"/>
+/// zurück (deckt interaktive Circuit-Updates ab, in denen kein HttpContext mehr existiert).
 /// </summary>
 public class CurrentUserService(IHttpContextAccessor httpContextAccessor, IServiceProvider serviceProvider)
     : ICurrentUserService
@@ -34,7 +34,7 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, IServi
             }
             catch
             {
-                // Ausserhalb eines Circuits nicht verfuegbar – als System behandeln.
+                // Außerhalb eines Circuits nicht verfügbar – als System behandeln.
             }
         }
 

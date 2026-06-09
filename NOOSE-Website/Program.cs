@@ -36,7 +36,7 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
            .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
 
-// Health-Checks: prueft die DB-Erreichbarkeit (genutzt von /health und der Status-Seite).
+// Health-Checks: prüft die DB-Erreichbarkeit (genutzt von /health und der Status-Seite).
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database");
 
@@ -64,15 +64,25 @@ var authentication = builder.Services.AddAuthentication(options =>
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
 });
-authentication.AddDiscord(options =>
+
+// Discord nur registrieren, wenn konfiguriert. Der OAuth-Handler ist ein Request-Handler und
+// validiert seine ClientId bei JEDER Anfrage – mit leerer ClientId würde die App sonst bei jedem
+// Request abstürzen. So läuft die App auch ohne Secrets (Login-Seite zeigt dann einen Hinweis).
+var discordClientId = builder.Configuration["Authentication:Discord:ClientId"];
+var discordClientSecret = builder.Configuration["Authentication:Discord:ClientSecret"];
+if (!string.IsNullOrWhiteSpace(discordClientId) && !string.IsNullOrWhiteSpace(discordClientSecret))
 {
-    options.ClientId = builder.Configuration["Authentication:Discord:ClientId"] ?? string.Empty;
-    options.ClientSecret = builder.Configuration["Authentication:Discord:ClientSecret"] ?? string.Empty;
-    // Damit GetExternalLoginInfoAsync funktioniert, meldet der OAuth-Handler am External-Cookie an.
-    options.SignInScheme = IdentityConstants.ExternalScheme;
-    options.Scope.Add("email");
-    options.SaveTokens = true;
-});
+    authentication.AddDiscord(options =>
+    {
+        options.ClientId = discordClientId;
+        options.ClientSecret = discordClientSecret;
+        // Damit GetExternalLoginInfoAsync funktioniert, meldet der OAuth-Handler am External-Cookie an.
+        options.SignInScheme = IdentityConstants.ExternalScheme;
+        options.Scope.Add("email");
+        options.SaveTokens = true;
+    });
+}
+
 authentication.AddIdentityCookies();
 
 // ---- Autorisierung: NOOSE-Policies (Rechte-Matrix Plan.md §6) ----
@@ -125,8 +135,8 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapNooseAccountEndpoints();
 
-// Seeding: technische "Admin"-Rolle sicherstellen (fuer spaetere Nutzung; Admin-Rechte laufen
-// aktuell ueber das IstAdmin-Flag des Agents).
+// Seeding: technische "Admin"-Rolle sicherstellen (für spätere Nutzung; Admin-Rechte laufen
+// aktuell über das IstAdmin-Flag des Agents).
 using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
