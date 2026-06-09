@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -22,6 +23,18 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<ZugriffsLog> ZugriffsLogs => Set<ZugriffsLog>();
+
+    // ---- Phase 2: Personen-Akten ----
+    public DbSet<Person> Personen => Set<Person>();
+    public DbSet<PersonDok> PersonDoks => Set<PersonDok>();
+    public DbSet<PersonFoto> PersonFotos => Set<PersonFoto>();
+    public DbSet<EinstufungVerlauf> EinstufungVerlauf => Set<EinstufungVerlauf>();
+    public DbSet<PersonAlias> PersonAliase => Set<PersonAlias>();
+    public DbSet<PersonTelefon> PersonTelefone => Set<PersonTelefon>();
+    public DbSet<PersonFahrzeug> PersonFahrzeuge => Set<PersonFahrzeug>();
+    public DbSet<PersonOrt> PersonOrte => Set<PersonOrt>();
+    public DbSet<PersonWaffe> PersonWaffen => Set<PersonWaffe>();
+    public DbSet<AktenzeichenZaehler> AktenzeichenZaehler => Set<AktenzeichenZaehler>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,6 +67,82 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.AgentId).HasMaxLength(64);
             b.Property(a => a.AgentName).HasMaxLength(128);
             b.HasIndex(a => new { a.EntitaetTyp, a.EntitaetId });
+        });
+
+        // ---- Phase 2: Personen-Akten ----
+        modelBuilder.Entity<Person>(b =>
+        {
+            b.Property(p => p.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(p => p.Name).HasMaxLength(200).IsRequired();
+            b.HasIndex(p => p.Aktenzeichen).IsUnique();
+            b.HasIndex(p => p.Name);
+            b.HasIndex(p => p.IstVerschlusssache);
+
+            b.HasMany(p => p.Aliase).WithOne(a => a.Person!)
+                .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Telefonnummern).WithOne(t => t.Person!)
+                .HasForeignKey(t => t.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Fahrzeuge).WithOne(f => f.Person!)
+                .HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Orte).WithOne(o => o.Person!)
+                .HasForeignKey(o => o.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Waffen).WithOne(w => w.Person!)
+                .HasForeignKey(w => w.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Fotos).WithOne(f => f.Person!)
+                .HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Doks).WithOne(d => d.Person!)
+                .HasForeignKey(d => d.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.EinstufungVerlauf).WithOne(e => e.Person!)
+                .HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PersonAlias>(b => b.Property(a => a.Aliasname).HasMaxLength(200));
+        modelBuilder.Entity<PersonTelefon>(b =>
+        {
+            b.Property(t => t.Nummer).HasMaxLength(40);
+            b.Property(t => t.Bezeichnung).HasMaxLength(100);
+            b.HasIndex(t => t.Nummer);
+        });
+        modelBuilder.Entity<PersonFahrzeug>(b =>
+        {
+            b.Property(f => f.Bezeichnung).HasMaxLength(200);
+            b.Property(f => f.Kennzeichen).HasMaxLength(40);
+        });
+        modelBuilder.Entity<PersonOrt>(b =>
+        {
+            b.Property(o => o.Text).HasMaxLength(300);
+            b.Property(o => o.Notiz).HasMaxLength(500);
+        });
+        modelBuilder.Entity<PersonWaffe>(b => b.Property(w => w.Text).HasMaxLength(200));
+
+        modelBuilder.Entity<PersonFoto>(b =>
+        {
+            b.Property(f => f.DateinameGespeichert).HasMaxLength(128);
+            b.Property(f => f.OriginalName).HasMaxLength(260);
+            b.Property(f => f.ContentType).HasMaxLength(100);
+            b.Property(f => f.ErstelltVonId).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<EinstufungVerlauf>(b =>
+        {
+            b.Property(e => e.Begruendung).HasMaxLength(1000);
+            b.Property(e => e.AgentId).HasMaxLength(64);
+            b.Property(e => e.AgentName).HasMaxLength(128);
+            b.Property(e => e.AntragId).HasMaxLength(64);
+            b.HasIndex(e => e.PersonId);
+        });
+
+        modelBuilder.Entity<PersonDok>(b =>
+        {
+            b.Property(d => d.Fraktion).HasMaxLength(200);
+            b.HasIndex(d => d.PersonId);
+        });
+
+        modelBuilder.Entity<AktenzeichenZaehler>(b =>
+        {
+            b.HasKey(z => z.Jahr);
+            // Jahr ist eine echte Jahreszahl (kein Auto-Increment) – wird beim Insert explizit gesetzt.
+            b.Property(z => z.Jahr).ValueGeneratedNever();
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

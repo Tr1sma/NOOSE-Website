@@ -1,0 +1,77 @@
+@* Formular-Dialog zum Anlegen eines Personen-Doks. Liefert eine PersonDokEingabe zurück. *@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudGrid>
+                    <MudItem xs="7">
+                        <MudDatePicker Label="Datum der Maßnahme" @bind-Date="_datum" Required="true"
+                                       RequiredError="Datum ist erforderlich" />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_zeit" />
+                    </MudItem>
+                </MudGrid>
+                <MudSelect T="MassnahmeAusgang" Label="Beendigung der Maßnahme" @bind-Value="_eingabe.Ausgang" Variant="Variant.Outlined">
+                    @foreach (var a in MassnahmeAusgangAnzeige.Alle)
+                    {
+                        <MudSelectItem Value="a">@MassnahmeAusgangAnzeige.Name(a)</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_eingabe.Ausgang == MassnahmeAusgang.Erschossen)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                        Setzt den Lebensstatus für 20 Minuten auf „Tot" (Respawn-Zeit).
+                    </MudAlert>
+                }
+                else if (_eingabe.Ausgang == MassnahmeAusgang.Spritze)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.
+                    </MudAlert>
+                }
+                <MudTextField @bind-Value="_eingabe.Grund" Label="Grund" Lines="2" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_eingabe.Fraktion" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_eingabe.ErhalteneInformationen" Label="Erhaltene Informationen" Lines="3" Variant="Variant.Outlined" />
+                <MudSwitch T="bool" @bind-Value="_eingabe.Wahrheitsserum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Dok speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly PersonDokEingabe _eingabe = new();
+    private DateTime? _datum = DateTime.Now;
+    private TimeSpan? _zeit = DateTime.Now.TimeOfDay;
+
+    private async Task Speichern()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        var datum = (_datum ?? DateTime.Now).Date;
+        var zeit = _zeit ?? TimeSpan.Zero;
+        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen.
+        _eingabe.Zeitpunkt = DateTime.SpecifyKind(datum + zeit, DateTimeKind.Local).ToUniversalTime();
+        MudDialog.Close(DialogResult.Ok(_eingabe));
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert die Eingabe oder null bei Abbruch.</summary>
+    public static async Task<PersonDokEingabe?> ZeigenAsync(IDialogService dialog)
+    {
+        var referenz = await dialog.ShowAsync<DokDialog>("Neues Dok");
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: PersonDokEingabe e } ? e : null;
+    }
+}

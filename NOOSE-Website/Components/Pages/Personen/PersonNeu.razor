@@ -1,0 +1,105 @@
+@page "/personen/neu"
+@inject IPersonService PersonService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Person · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Person anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudTextField @bind-Value="_eingabe.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
+                          Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="Lebensstatus" @bind-Value="_eingabe.Lebensstatus" Label="Lebensstatus" Variant="Variant.Outlined">
+                @foreach (var s in LebensstatusAnzeige.Alle)
+                {
+                    <MudSelectItem Value="s">@LebensstatusAnzeige.Name(s)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudSelect T="Einstufung" @bind-Value="_eingabe.Einstufung" Label="Einstufung" Variant="Variant.Outlined">
+                @foreach (var e in EinstufungAnzeige.Alle)
+                {
+                    <MudSelectItem Value="e" Disabled="@(e == Einstufung.GesichertStaatsgefaehrdend && !_darfHoechste)">
+                        @EinstufungAnzeige.Name(e)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="6" Class="d-flex align-center">
+            <MudSwitch T="bool" @bind-Value="_eingabe.IstVerschlusssache" Color="Color.Warning" Label="Verschlusssache (nur Führung sichtbar)" />
+        </MudItem>
+    </MudGrid>
+
+    <MudDivider Class="my-4" />
+    <MudText Typo="Typo.h6" Class="mb-2">Steckbrief</MudText>
+    <SteckbriefForm Eingabe="_eingabe" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/personen">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly PersonEingabe _eingabe = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _darfHoechste;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _darfHoechste = _user.DarfHoechsteEinstufung();
+    }
+
+    private async Task SpeichernAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            var nummern = _eingabe.Telefonnummern.Select(t => t.Nummer).Where(n => !string.IsNullOrWhiteSpace(n));
+            var duplikate = await PersonService.FindeDuplikateAsync(_eingabe.Name, nummern);
+            if (duplikate.Count > 0)
+            {
+                var weiter = await DuplikatDialog.ZeigenAsync(DialogService, duplikate);
+                if (!weiter)
+                {
+                    _speichert = false;
+                    return;
+                }
+            }
+
+            var person = await PersonService.ErstellenAsync(_eingabe, _user);
+            Snackbar.Add($"Akte {person.Aktenzeichen} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/personen/{person.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

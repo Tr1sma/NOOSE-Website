@@ -1,0 +1,23 @@
+@* Zeigt einen benannten Steckbrief-Abschnitt als einfache Aufzählung (Lesedarstellung). *@
+@{
+    var liste = Werte.Where(w => !string.IsNullOrWhiteSpace(w)).ToList();
+}
+<MudText Typo="Typo.subtitle2" Class="mt-2">@Titel</MudText>
+@if (liste.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">—</MudText>
+}
+else
+{
+    <MudStack Spacing="0" Class="mb-2">
+        @foreach (var w in liste)
+        {
+            <MudText Typo="Typo.body2">• @w</MudText>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Titel { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public IEnumerable<string> Werte { get; set; } = Enumerable.Empty<string>();
+}

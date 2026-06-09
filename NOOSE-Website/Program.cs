@@ -2,14 +2,17 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using MudBlazor.Services;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Components;
 using NOOSE_Website.Components.Account;
+using NOOSE_Website.Components.Personen;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +22,9 @@ builder.Services.AddMudServices();
 
 // HttpContext-Zugriff (vom CurrentUserService / Audit genutzt).
 builder.Services.AddHttpContextAccessor();
+
+// Datei-Upload-Konfiguration (Foto-Galerie der Personen-Akten).
+builder.Services.Configure<FileUploadOptions>(builder.Configuration.GetSection("FileUpload"));
 
 // Datenbank (MySQL 8.0 / MariaDB via Pomelo / EF Core) inkl. Audit-Interceptor.
 // Verbindungs-String kommt aus den User Secrets (lokal) bzw. Umgebungsvariablen (Server),
@@ -34,7 +40,11 @@ builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 // Produktion MySQL 8.0). Setzt voraus, dass die DB beim Start erreichbar ist.
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
-           .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
+           .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>())
+           // Steckbrief-Kinder (Alias/Telefon/…) werden ausschließlich über die – bereits
+           // soft-delete-gefilterte – Person geladen. Die EF-Warnung zum Zusammenspiel von
+           // Query-Filter und Pflichtnavigation ist daher für unsere Zugriffsmuster unkritisch.
+           .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
 
 // Health-Checks: prüft die DB-Erreichbarkeit (genutzt von /health und der Status-Seite).
 builder.Services.AddHealthChecks()
@@ -95,6 +105,9 @@ builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuth
 // Fachliche Dienste.
 builder.Services.AddScoped<IAgentVerwaltungService, AgentVerwaltungService>();
 builder.Services.AddScoped<IZugriffsLogService, ZugriffsLogService>();
+builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IPersonService, PersonService>();
+builder.Services.AddScoped<IPersonDokService, PersonDokService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>
@@ -134,6 +147,7 @@ app.MapHealthChecks("/health").AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapNooseAccountEndpoints();
+app.MapNoosePersonenDateiEndpoints();
 
 // Seeding: technische "Admin"-Rolle sicherstellen (für spätere Nutzung; Admin-Rechte laufen
 // aktuell über das IstAdmin-Flag des Agents).

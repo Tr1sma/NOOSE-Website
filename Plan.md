@@ -193,19 +193,23 @@
 > **Verifiziert (ohne Discord-Secrets):** Build 0/0 · Migration `AddIdentityAndAudit` angewandt (Identity- + Audit-Tabellen, `DiscordId` unique) · `/health`=Healthy · `/`→302 auf `/Account/Login` · `/status`→302 (geschützt) · Login-Seite rendert Discord-Button + Antiforgery-Token.
 > **Zum Voll-Test nötig (Auftraggeber):** Discord-App anlegen, Redirect `https://localhost:7063/signin-discord`, dann per User Secrets setzen: `Authentication:Discord:ClientId`, `Authentication:Discord:ClientSecret`, `Bootstrap:AdminDiscordId` (eigene Discord-ID). Ohne diese Secrets läuft die App, der Login-Button zeigt aber einen Konfigurationshinweis.
 
-### Phase 2 – Personen-Akten (MVP-Kern)
+### Phase 2 – Personen-Akten (MVP-Kern)  ✅ ABGESCHLOSSEN
 **Ziel:** Der erste echte Mehrwert – Personen verwalten.
-- [ ] `Person`-Entität inkl. erweitertem **Steckbrief** (Aliase, Telefon, Fahrzeuge/Kennzeichen, Orte, Waffen, Lebensstatus).
-- [ ] **Foto-Galerie**: Mehrfach-Upload, geschützte Speicherung, autorisierte Auslieferung.
-- [ ] `Personen-Dok` mit allen Feldern; **Beendigung der Maßnahme** setzt ggf. Personenstatus.
-- [ ] **Einstufung** (Wert + Verlauf), Rang-Gate für „Gesichert staatsgefährdend" (Antrag-Stub → voll in Phase 5).
-- [ ] **Papierkorb/Soft-Delete** durchgängig (Markieren statt Hard-Delete, Wiederherstellung durch Führung).
-- [ ] **Duplikat-Erkennung** beim Anlegen (Warnung bei gleichem Namen/Telefon).
-- [ ] **Listenansicht** (MudDataGrid: Filter/Sortierung/Paging) + **Detail-/Aktenansicht**.
-- [ ] Anlegen/Bearbeiten-Formulare mit Validierung.
-- [ ] „Zuletzt aktualisiert" + **Änderungs-Historie** pro Akte.
+- [x] `Person`-Entität inkl. erweitertem **Steckbrief** (Aliase, Telefon, Fahrzeuge/Kennzeichen, Orte, Waffen, Lebensstatus) – mit lesbarem **Aktenzeichen** (`NOOSE-P-{Jahr}-{Nr}`, race-sicher per Zähler-Tabelle) + GUID-PK.
+- [x] **Foto-Galerie**: Mehrfach-Upload (`MudFileUpload`), Speicherung geschützt außerhalb wwwroot (`App_Data/uploads`), Auslieferung nur an eingeloggte Agenten über autorisierten Minimal-API-Endpoint `/dateien/personen/foto/{id}`.
+- [x] `Personen-Dok` mit allen Feldern; **Beendigung der Maßnahme**: „Erschossen" → Lebensstatus **Tot** (temporär, 20-Min-Respawn ab Maßnahme-Zeit); „Amnestie-Spritze" → Person lebt, nur Gedächtnisverlust.
+- [x] **Einstufung** (Wert + Verlauf-Timeline), Rang-Gate „Gesichert staatsgefährdend" (ab Senior Special Agent/Admin, sonst Antrag-Stub → Phase 5) – serverseitig erzwungen.
+- [x] **Papierkorb/Soft-Delete** durchgängig (Hard-Delete → Soft-Delete via Interceptor, Wiederherstellung nur Führung unter `/personen/papierkorb`).
+- [x] **Duplikat-Erkennung** beim Anlegen (Warn-Dialog bei gleichem Namen/Telefon, „Trotzdem anlegen").
+- [x] **Listenansicht** (MudDataGrid: Quick-Filter/Sortierung/Paging) + **Detail-/Aktenansicht** (Tabs: Steckbrief/Doks/Einstufung/Fotos/Historie).
+- [x] Anlegen/Bearbeiten-Formulare mit Validierung (`MudForm`).
+- [x] „Zuletzt aktualisiert" + **Änderungs-Historie** pro Akte (aus Audit-Log, inkl. Doks).
+- [x] **Verschlusssache**-Flag je Akte: in Liste/Detail/Foto nur für Führung/Admin sichtbar.
 
 **Abnahme:** Person anlegen, Doks hinzufügen, Fotos hochladen, Einstufung setzen (Rang wird geprüft), Historie einsehen, Liste durchsuchen/sortieren, Gelöschtes im Papierkorb wiederherstellen.
+
+> **Verifiziert (ohne Discord-Login):** Build 0/0 · Migration `Phase2_PersonenAkten` angewandt (alle Tabellen + Unique-Index `Personen.Aktenzeichen`) · App startet sauber · `/health`=Healthy · `/personen`, `/personen/papierkorb`, `/dateien/personen/foto/…` → 302 auf Login (Auth + Policy greifen).
+> **Voll-Test (Auftraggeber):** nach Discord-Login Person anlegen → Aktenzeichen wird vergeben; Dok „Erschossen" → „Tot · respawnt in 20 Min", nach Ablauf wieder „Lebend"; Foto-Upload/Galerie; Einstufung + Rang-Gate; Papierkorb/Wiederherstellen; Verschlusssache.
 
 ### Phase 3 – Verknüpfungen, Quellen, Suche, Tags, Kommentare
 **Ziel:** Das Herzstück – alles wird verknüpfbar und auffindbar.

@@ -375,3 +375,8 @@ secrets.json
 *.secrets.json
 .env
 .env.*
+
+# ----- NOOSE: lokale Upload-Dateien (Foto-Galerie etc.) – nie einchecken -----
+# Die hochgeladenen Dateien liegen geschützt außerhalb von wwwroot unter App_Data/uploads.
+NOOSE-Website/App_Data/uploads/
+App_Data/uploads/

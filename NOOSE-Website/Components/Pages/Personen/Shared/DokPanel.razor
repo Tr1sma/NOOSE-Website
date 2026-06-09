@@ -1,0 +1,102 @@
+@* Liste der Personen-Doks + Anlegen (Dialog) + Löschen. *@
+@inject IPersonDokService DokService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Doks (@_doks.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">Neues Dok</MudButton>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_doks.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Doks erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var dok in _doks)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">
+                        <b>@dok.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @MassnahmeAusgangAnzeige.Name(dok.Ausgang)
+                    </MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => LoeschenAsync(dok))" aria-label="Dok löschen" />
+                </MudStack>
+                @if (!string.IsNullOrWhiteSpace(dok.Grund))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1"><b>Grund:</b> @dok.Grund</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(dok.Fraktion))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Fraktion: @dok.Fraktion</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(dok.ErhalteneInformationen))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1">@dok.ErhalteneInformationen</MudText>
+                }
+                <MudStack Row="true" Spacing="2" Class="mt-2">
+                    @if (dok.Wahrheitsserum)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Science">Wahrheitsserum</MudChip>
+                    }
+                    @if (dok.GedaechtnisGeloescht)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Psychology">Gedächtnisverlust</MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback PersonChanged { get; set; }
+
+    private bool _laden = true;
+    private List<PersonDok> _doks = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _doks = await DokService.GetFuerPersonAsync(PersonId);
+        _laden = false;
+    }
+
+    private async Task NeuAsync()
+    {
+        var eingabe = await DokDialog.ZeigenAsync(DialogService);
+        if (eingabe is null)
+        {
+            return;
+        }
+        await DokService.ErstellenAsync(PersonId, eingabe, User);
+        Snackbar.Add("Dok gespeichert.", Severity.Success);
+        await LadenAsync();
+        // Der Maßnahme-Ausgang kann den Lebensstatus geändert haben → Eltern neu laden.
+        await PersonChanged.InvokeAsync();
+    }
+
+    private async Task LoeschenAsync(PersonDok dok)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Dok löschen?",
+            "Das Dok wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await DokService.LoeschenAsync(dok.Id, User);
+        Snackbar.Add("Dok gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+}

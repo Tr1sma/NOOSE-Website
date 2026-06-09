@@ -1,0 +1,120 @@
+@page "/personen/{Id}/bearbeiten"
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Akte bearbeiten · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_eingabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Akte nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/personen/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Akte bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudTextField @bind-Value="_eingabe.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
+                              Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudSelect T="Lebensstatus" @bind-Value="_eingabe.Lebensstatus" Label="Lebensstatus" Variant="Variant.Outlined">
+                    @foreach (var s in LebensstatusAnzeige.Alle)
+                    {
+                        <MudSelectItem Value="s">@LebensstatusAnzeige.Name(s)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_eingabe.IstVerschlusssache" Color="Color.Warning" Label="Verschlusssache (nur Führung sichtbar)" />
+            </MudItem>
+        </MudGrid>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+        </MudText>
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.h6" Class="mb-2">Steckbrief</MudText>
+        <SteckbriefForm Eingabe="_eingabe" />
+    </MudForm>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/personen/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private PersonEingabe? _eingabe;
+    private ClaimsPrincipal _user = default!;
+    private bool _laden = true;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        var p = await PersonService.GetDetailAsync(Id, _user.IstFuehrung());
+        if (p is not null)
+        {
+            _eingabe = new PersonEingabe
+            {
+                Name = p.Name,
+                Beschreibung = p.Beschreibung,
+                Lebensstatus = p.Lebensstatus,
+                Einstufung = p.Einstufung,
+                IstVerschlusssache = p.IstVerschlusssache,
+                Aliase = p.Aliase.Select(a => new AliasEingabe { Aliasname = a.Aliasname }).ToList(),
+                Telefonnummern = p.Telefonnummern.Select(t => new TelefonEingabe { Nummer = t.Nummer, Bezeichnung = t.Bezeichnung }).ToList(),
+                Fahrzeuge = p.Fahrzeuge.Select(f => new FahrzeugEingabe { Bezeichnung = f.Bezeichnung, Kennzeichen = f.Kennzeichen }).ToList(),
+                Orte = p.Orte.Select(o => new OrtEingabe { Text = o.Text, Notiz = o.Notiz }).ToList(),
+                Waffen = p.Waffen.Select(w => new WaffeEingabe { Text = w.Text }).ToList(),
+            };
+        }
+        _laden = false;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_eingabe is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            await PersonService.AktualisierenAsync(Id, _eingabe, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/personen/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

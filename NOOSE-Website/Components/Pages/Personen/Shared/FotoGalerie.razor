@@ -1,0 +1,104 @@
+@* Foto-Galerie einer Person: Mehrfach-Upload, geschützte Anzeige, Löschen. *@
+@inject IPersonService PersonService
+@inject IFileStorageService FileStorage
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Foto-Galerie (@Fotos.Count)</MudText>
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="HochladenAsync" Accept="image/*" MaximumFileCount="20">
+            <CustomContent>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload"
+                           OnClick="@context.OpenFilePickerAsync" Disabled="_laden">
+                    Fotos hochladen
+                </MudButton>
+            </CustomContent>
+            <SelectedTemplate />
+        </MudFileUpload>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+
+    @if (Fotos.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Fotos.</MudText>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-3">
+            @foreach (var foto in Fotos)
+            {
+                <MudPaper Class="pa-1" Elevation="2" Style="width:160px;">
+                    <MudImage Src="@($"/dateien/personen/foto/{foto.Id}")" Alt="@foto.OriginalName"
+                              Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="px-1">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            @foto.OriginalName
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => EntfernenAsync(foto))" aria-label="Foto löschen" />
+                    </MudStack>
+                </MudPaper>
+            }
+        </div>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public List<PersonFoto> Fotos { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _laden;
+
+    private async Task HochladenAsync(IReadOnlyList<IBrowserFile> dateien)
+    {
+        _laden = true;
+        try
+        {
+            foreach (var datei in dateien)
+            {
+                if (!FileStorage.IstErlaubterTyp(datei.ContentType))
+                {
+                    Snackbar.Add($"'{datei.Name}': Dateityp nicht erlaubt (nur Bilder).", Severity.Warning);
+                    continue;
+                }
+                if (datei.Size > FileStorage.MaxBytes)
+                {
+                    Snackbar.Add($"'{datei.Name}': zu groß (max. {FileStorage.MaxBytes / (1024 * 1024)} MB).", Severity.Warning);
+                    continue;
+                }
+                await using var stream = datei.OpenReadStream(FileStorage.MaxBytes);
+                await PersonService.FotoHinzufuegenAsync(PersonId, stream, datei.Name, datei.ContentType, datei.Size, User);
+            }
+            Snackbar.Add("Fotos hochgeladen.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Upload fehlgeschlagen: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _laden = false;
+        }
+    }
+
+    private async Task EntfernenAsync(PersonFoto foto)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Foto löschen?",
+            $"'{foto.OriginalName}' wird dauerhaft gelöscht.");
+        if (!ok)
+        {
+            return;
+        }
+        await PersonService.FotoEntfernenAsync(foto.Id, User);
+        Snackbar.Add("Foto gelöscht.", Severity.Success);
+        await Changed.InvokeAsync();
+    }
+}

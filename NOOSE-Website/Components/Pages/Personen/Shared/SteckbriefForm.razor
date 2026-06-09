@@ -1,0 +1,78 @@
+@* Editor für die Mehrfach-Felder des Steckbriefs. Bindet direkt an das übergebene PersonEingabe. *@
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.subtitle2">Aliase</MudText>
+            @foreach (var a in Eingabe.Aliase)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="a.Aliasname" Placeholder="Aliasname" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Eingabe.Aliase.Remove(a))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Eingabe.Aliase.Add(new()))">Alias hinzufügen</MudButton>
+        </MudStack>
+
+        <MudStack Spacing="1" Class="mt-4">
+            <MudText Typo="Typo.subtitle2">Telefonnummern</MudText>
+            @foreach (var t in Eingabe.Telefonnummern)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="t.Nummer" Placeholder="Nummer" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="t.Bezeichnung" Placeholder="Bezeichnung (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Eingabe.Telefonnummern.Remove(t))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Eingabe.Telefonnummern.Add(new()))">Nummer hinzufügen</MudButton>
+        </MudStack>
+
+        <MudStack Spacing="1" Class="mt-4">
+            <MudText Typo="Typo.subtitle2">Waffen</MudText>
+            @foreach (var w in Eingabe.Waffen)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="w.Text" Placeholder="Waffe" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Eingabe.Waffen.Remove(w))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Eingabe.Waffen.Add(new()))">Waffe hinzufügen</MudButton>
+        </MudStack>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.subtitle2">Fahrzeuge</MudText>
+            @foreach (var f in Eingabe.Fahrzeuge)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="f.Bezeichnung" Placeholder="Fahrzeug" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="f.Kennzeichen" Placeholder="Kennzeichen (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Eingabe.Fahrzeuge.Remove(f))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Eingabe.Fahrzeuge.Add(new()))">Fahrzeug hinzufügen</MudButton>
+        </MudStack>
+
+        <MudStack Spacing="1" Class="mt-4">
+            <MudText Typo="Typo.subtitle2">Bekannte Orte</MudText>
+            @foreach (var o in Eingabe.Orte)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="o.Text" Placeholder="Ort" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="o.Notiz" Placeholder="Notiz (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Eingabe.Orte.Remove(o))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Eingabe.Orte.Add(new()))">Ort hinzufügen</MudButton>
+        </MudStack>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public PersonEingabe Eingabe { get; set; } = default!;
+}

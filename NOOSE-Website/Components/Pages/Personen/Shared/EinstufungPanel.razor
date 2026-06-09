@@ -1,0 +1,91 @@
+@* Einstufung anzeigen/ändern (mit Rang-Gate) und Verlauf als Zeitleiste. *@
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.subtitle1">Aktuelle Einstufung:</MudText>
+        <EinstufungBadge Wert="Person.Einstufung" />
+    </MudStack>
+
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Einstufung ändern</MudText>
+        <MudStack Spacing="2">
+            <MudSelect T="Einstufung" @bind-Value="_neu" Label="Neue Einstufung" Variant="Variant.Outlined" Dense="true">
+                @foreach (var e in EinstufungAnzeige.Alle)
+                {
+                    <MudSelectItem Value="e" Disabled="@(e == Einstufung.GesichertStaatsgefaehrdend && !_darfHoechste)">
+                        @EinstufungAnzeige.Name(e)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+            @if (!_darfHoechste)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    „Gesichert staatsgefährdend" kann erst ab Senior Special Agent direkt gesetzt werden –
+                    darunter per Antrag (kommt in Phase 5).
+                </MudAlert>
+            }
+            <MudTextField @bind-Value="_begruendung" Label="Begründung (optional)" Lines="2" Variant="Variant.Outlined" />
+            <div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SetzenAsync" Disabled="@(_neu == Person.Einstufung)">Einstufung speichern</MudButton>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <MudText Typo="Typo.subtitle2">Verlauf</MudText>
+    @if (Person.EinstufungVerlauf.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Einstufungs-Änderungen.</MudText>
+    }
+    else
+    {
+        <MudTimeline TimelinePosition="TimelinePosition.Start">
+            @foreach (var v in Person.EinstufungVerlauf.OrderByDescending(x => x.Zeitpunkt))
+            {
+                <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                    <MudText Typo="Typo.body2"><b>@EinstufungAnzeige.Name(v.Wert)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @v.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(v.AgentName ?? "—")
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(v.Begruendung))
+                    {
+                        <MudText Typo="Typo.body2">@v.Begruendung</MudText>
+                    }
+                </MudTimelineItem>
+            }
+        </MudTimeline>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Person Person { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private Einstufung _neu;
+    private string? _begruendung;
+    private bool _darfHoechste;
+
+    protected override void OnInitialized()
+    {
+        _neu = Person.Einstufung;
+        _darfHoechste = User.DarfHoechsteEinstufung();
+    }
+
+    private async Task SetzenAsync()
+    {
+        try
+        {
+            await PersonService.EinstufungSetzenAsync(Person.Id, _neu, _begruendung, User);
+            Snackbar.Add($"Einstufung auf {EinstufungAnzeige.Name(_neu)} gesetzt.", Severity.Success);
+            _begruendung = null;
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}
