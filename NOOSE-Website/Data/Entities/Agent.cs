@@ -13,7 +13,8 @@ public class Agent : IdentityUser
     /// <summary>Codename (Deckname). Wird ALLEN Nutzern überall angezeigt. Vom Admin vergeben; bei neuen Konten leer.</summary>
     public string Codename { get; set; } = string.Empty;
 
-    /// <summary>Klarname (echter Name des Agenten). NUR für Admins sichtbar, nie für normale Nutzer.</summary>
+    /// <summary>Klarname (echter Name des Agenten). Nur für die Führungsebene (Supervisory+) und Admins sichtbar,
+    /// nie für rangniedrigere Nutzer. Sichtbarkeit überall via <c>ClaimsPrincipal.DarfKlarnameSehen()</c> prüfen.</summary>
     public string? Klarname { get; set; }
 
     /// <summary>Dienstnummer (alphanumerische Dienstkennung, Freitext). Für alle Nutzer sichtbar.</summary>
@@ -49,4 +50,23 @@ public class Agent : IdentityUser
 
     /// <summary>Zeitpunkt des letzten Discord-Rollen-Syncs (vorbereitet, derzeit ungenutzt).</summary>
     public DateTime? DiscordRollenSyncAm { get; set; }
+
+    // --- Ausstehende Selbst-Namensänderung -----------------------------------------------------
+    // Ränge unterhalb Supervisory können ihre Stammdaten nicht direkt ändern; der gewünschte
+    // Zielzustand wird hier als vollständiger Schnappschuss zwischengelagert, bis die Führung ihn
+    // im Freigabe-Posteingang genehmigt (Werte werden übernommen) oder ablehnt (Felder werden geleert).
+    // Maßgeblich für „es liegt ein Antrag vor" ist allein NamensaenderungBeantragtAm (Klarname/
+    // Dienstnummer dürfen auch im Antrag legitim null sein = Feld soll geleert werden).
+
+    /// <summary>Beantragter neuer Codename (nur gültig, wenn <see cref="NamensaenderungBeantragtAm"/> gesetzt ist).</summary>
+    public string? AusstehenderCodename { get; set; }
+
+    /// <summary>Beantragter neuer Klarname (Schnappschuss; null = Feld soll geleert werden).</summary>
+    public string? AusstehenderKlarname { get; set; }
+
+    /// <summary>Beantragte neue Dienstnummer (Schnappschuss; null = Feld soll geleert werden).</summary>
+    public string? AusstehendeDienstnummer { get; set; }
+
+    /// <summary>Zeitpunkt des offenen Namensänderungs-Antrags. Null = kein offener Antrag.</summary>
+    public DateTime? NamensaenderungBeantragtAm { get; set; }
 }

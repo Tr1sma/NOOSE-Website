@@ -48,6 +48,12 @@ public static class AgentPrincipalExtensions
     public static bool IstFuehrung(this ClaimsPrincipal user)
         => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SupervisorySpecialAgent;
 
+    /// <summary>
+    /// Darf den (sonst verborgenen) Klarnamen sehen = Führungsebene oder Admin. Einzige Quelle der
+    /// Klarname-Sichtbarkeitsregel – überall hierüber prüfen, statt Dienstgrad/Admin einzeln abzufragen.
+    /// </summary>
+    public static bool DarfKlarnameSehen(this ClaimsPrincipal user) => user.IstFuehrung();
+
     /// <summary>Darf „Gesichert staatsgefährdend" direkt setzen = Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
     public static bool DarfHoechsteEinstufung(this ClaimsPrincipal user)
         => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SeniorSpecialAgent;

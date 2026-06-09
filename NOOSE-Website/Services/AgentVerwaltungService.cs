@@ -68,11 +68,76 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         agent.Klarname = string.IsNullOrWhiteSpace(klarname) ? null : klarname.Trim();
         agent.Codename = codename;
         agent.Dienstnummer = string.IsNullOrWhiteSpace(dienstnummer) ? null : dienstnummer.Trim();
+        // Direkt gesetzte Stammdaten sind maßgeblich und lösen einen evtl. offenen Selbst-Antrag auf
+        // (z. B. Supervisory+-Selbständerung oder Admin-Eingriff), damit kein widersprüchlicher Antrag zurückbleibt.
+        PendingNamensaenderungLeeren(agent);
 
         Audit(agent, AuditAktion.Geaendert, handelnder, $"Stammdaten geändert (Codename: {agent.Codename})");
         // Neuer Stamp: der betroffene Agent erhält beim nächsten Login frische Claims
         // (eigener Codename/Dienstnummer in Navbar & Begrüßung).
         await Speichern(agent, neuerStamp: true);
+    }
+
+    public async Task NamensaenderungBeantragenAsync(string agentId, string? klarname, string codename, string? dienstnummer, ClaimsPrincipal handelnder)
+    {
+        codename = codename?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(codename))
+        {
+            throw new InvalidOperationException("Der Codename darf nicht leer sein.");
+        }
+
+        var agent = await GetOrThrow(agentId);
+        // Vollständiger Schnappschuss des gewünschten Zielzustands; null = Feld soll bei Genehmigung geleert werden.
+        agent.AusstehenderCodename = codename;
+        agent.AusstehenderKlarname = string.IsNullOrWhiteSpace(klarname) ? null : klarname.Trim();
+        agent.AusstehendeDienstnummer = string.IsNullOrWhiteSpace(dienstnummer) ? null : dienstnummer.Trim();
+        agent.NamensaenderungBeantragtAm = DateTime.UtcNow;
+
+        Audit(agent, AuditAktion.Geaendert, handelnder, $"Namensänderung beantragt (Codename: {codename})");
+        // Kein neuer Stamp: die Live-Identität ändert sich noch nicht, der Antragsteller bleibt eingeloggt.
+        await Speichern(agent, neuerStamp: false);
+    }
+
+    public Task<List<Agent>> GetAusstehendeNamensaenderungenAsync(CancellationToken cancellationToken = default)
+        => db.Users.Where(a => a.NamensaenderungBeantragtAm != null)
+            .OrderBy(a => a.NamensaenderungBeantragtAm)
+            .ToListAsync(cancellationToken);
+
+    public async Task NamensaenderungGenehmigenAsync(string agentId, ClaimsPrincipal handelnder)
+    {
+        var agent = await GetOrThrow(agentId);
+        if (agent.NamensaenderungBeantragtAm is null)
+        {
+            throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
+        }
+
+        // Beantragten Schnappschuss übernehmen (inkl. Leeren von Klarname/Dienstnummer).
+        agent.Codename = agent.AusstehenderCodename ?? string.Empty;
+        agent.Klarname = agent.AusstehenderKlarname;
+        agent.Dienstnummer = agent.AusstehendeDienstnummer;
+        PendingNamensaenderungLeeren(agent);
+
+        Audit(agent, AuditAktion.Geaendert, handelnder, $"Namensänderung genehmigt (Codename: {agent.Codename})");
+        // Neuer Stamp: der betroffene Agent erhält beim nächsten Login frische Claims (neuer Codename in Navbar).
+        await Speichern(agent, neuerStamp: true);
+    }
+
+    public async Task NamensaenderungAblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder)
+    {
+        var agent = await GetOrThrow(agentId);
+        if (agent.NamensaenderungBeantragtAm is null)
+        {
+            throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
+        }
+
+        var beantragterCodename = agent.AusstehenderCodename;
+        PendingNamensaenderungLeeren(agent);
+
+        var hinweis = string.IsNullOrWhiteSpace(grund) ? "ohne Angabe" : grund.Trim();
+        Audit(agent, AuditAktion.Geaendert, handelnder,
+            $"Namensänderung abgelehnt (beantragter Codename: {beantragterCodename}): {hinweis}");
+        // Kein neuer Stamp: die Live-Identität wurde nicht verändert.
+        await Speichern(agent, neuerStamp: false);
     }
 
     public async Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder)
@@ -126,6 +191,14 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
     private async Task<Agent> GetOrThrow(string agentId)
         => await db.Users.FirstOrDefaultAsync(a => a.Id == agentId)
            ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
+
+    private static void PendingNamensaenderungLeeren(Agent agent)
+    {
+        agent.AusstehenderCodename = null;
+        agent.AusstehenderKlarname = null;
+        agent.AusstehendeDienstnummer = null;
+        agent.NamensaenderungBeantragtAm = null;
+    }
 
     private void Audit(Agent ziel, AuditAktion aktion, ClaimsPrincipal handelnder, string hinweis)
         => db.AuditLogs.Add(new AuditLog

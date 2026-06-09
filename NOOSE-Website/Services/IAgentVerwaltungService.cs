@@ -25,6 +25,22 @@ public interface IAgentVerwaltungService
     /// <summary>Stammdaten (Klarname, Codename, Dienstnummer) eines Agents setzen. Codename ist Pflicht.</summary>
     Task StammdatenAendernAsync(string agentId, string? klarname, string codename, string? dienstnummer, ClaimsPrincipal handelnder);
 
+    /// <summary>
+    /// Beantragt eine Selbst-Stammdatenänderung für Ränge unterhalb Supervisory: Der gewünschte Zielzustand
+    /// wird zwischengelagert (Live-Daten bleiben unverändert), bis die Führung ihn freigibt. Codename ist Pflicht.
+    /// Ein erneuter Aufruf überschreibt einen offenen Antrag.
+    /// </summary>
+    Task NamensaenderungBeantragenAsync(string agentId, string? klarname, string codename, string? dienstnummer, ClaimsPrincipal handelnder);
+
+    /// <summary>Offene Namensänderungs-Anträge (für den Freigabe-Posteingang).</summary>
+    Task<List<Agent>> GetAusstehendeNamensaenderungenAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Genehmigt den offenen Namensänderungs-Antrag: beantragte Werte werden übernommen, Sitzungen enden.</summary>
+    Task NamensaenderungGenehmigenAsync(string agentId, ClaimsPrincipal handelnder);
+
+    /// <summary>Lehnt den offenen Namensänderungs-Antrag ab: Pending-Felder werden verworfen, Live-Daten bleiben.</summary>
+    Task NamensaenderungAblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder);
+
     Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder);
     Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder);
     Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder);

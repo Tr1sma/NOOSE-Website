@@ -57,7 +57,7 @@
     private async Task ZuteilenAsync()
     {
         var ausschluss = _agenten.Select(a => a.AgentId).ToList();
-        var agentId = await AgentZuteilenDialog.ZeigenAsync(DialogService, ausschluss);
+        var agentId = await AgentZuteilenDialog.ZeigenAsync(DialogService, ausschluss, User.DarfKlarnameSehen());
         if (agentId is null)
         {
             return;

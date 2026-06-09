@@ -23,13 +23,16 @@
                                   Margin="Margin.Dense" Variant="Variant.Outlined"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                                   OnKeyDown="SucheKeyDown" Class="d-none d-md-flex mt-0" Style="max-width:240px;" />
-                    <MudStack Spacing="0" AlignItems="AlignItems.End" Class="d-none d-sm-flex">
-                        <MudText Typo="Typo.body2" Style="line-height:1.2;">@AnzeigeName(auth.User)</MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.2;">
-                            @RangZeile(auth.User)
-                        </MudText>
-                    </MudStack>
-                    <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initiale(AnzeigeName(auth.User))</MudAvatar>
+                    <MudLink Href="/profil" Underline="Underline.None" Color="Color.Inherit"
+                             Class="d-flex align-center" title="Mein Profil">
+                        <MudStack Spacing="0" AlignItems="AlignItems.End" Class="d-none d-sm-flex mr-3">
+                            <MudText Typo="Typo.body2" Style="line-height:1.2;">@AnzeigeName(auth.User)</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.2;">
+                                @RangZeile(auth.User)
+                            </MudText>
+                        </MudStack>
+                        <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initiale(AnzeigeName(auth.User))</MudAvatar>
+                    </MudLink>
                     <form method="post" action="/Account/Logout">
                         <AntiforgeryToken />
                         <MudIconButton ButtonType="ButtonType.Submit" Icon="@Icons.Material.Filled.Logout"
