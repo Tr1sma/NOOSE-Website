@@ -22,6 +22,18 @@ public class PersonEingabe
     public List<WaffeEingabe> Waffen { get; set; } = new();
 }
 
+/// <summary>
+/// Gemeinsame Sicht auf ein Steckbrief-Mehrfachfeld: ein Hauptwert plus optionaler Zusatz. Erlaubt der
+/// generischen Chip-Eingabe (<c>SteckbriefMehrfachFeld</c>), einheitlich auf die unterschiedlich
+/// benannten Felder von Waffe/Fahrzeug/Ort zuzugreifen. Implementiert wird das Interface explizit,
+/// damit die Originalfelder (Text/Bezeichnung/Notiz/Kennzeichen) für Persistenz und Lese-Ansicht erhalten bleiben.
+/// </summary>
+public interface ISteckbriefMehrfach
+{
+    string Hauptwert { get; set; }
+    string? Zusatz { get; set; }
+}
+
 public class AliasEingabe
 {
     public string Aliasname { get; set; } = string.Empty;
@@ -33,19 +45,29 @@ public class TelefonEingabe
     public string? Bezeichnung { get; set; }
 }
 
-public class FahrzeugEingabe
+public class FahrzeugEingabe : ISteckbriefMehrfach
 {
     public string Bezeichnung { get; set; } = string.Empty;
     public string? Kennzeichen { get; set; }
+
+    string ISteckbriefMehrfach.Hauptwert { get => Bezeichnung; set => Bezeichnung = value; }
+    string? ISteckbriefMehrfach.Zusatz { get => Kennzeichen; set => Kennzeichen = value; }
 }
 
-public class OrtEingabe
+public class OrtEingabe : ISteckbriefMehrfach
 {
     public string Text { get; set; } = string.Empty;
     public string? Notiz { get; set; }
+
+    string ISteckbriefMehrfach.Hauptwert { get => Text; set => Text = value; }
+    string? ISteckbriefMehrfach.Zusatz { get => Notiz; set => Notiz = value; }
 }
 
-public class WaffeEingabe
+public class WaffeEingabe : ISteckbriefMehrfach
 {
     public string Text { get; set; } = string.Empty;
+
+    string ISteckbriefMehrfach.Hauptwert { get => Text; set => Text = value; }
+    // Waffen haben kein Zusatzfeld.
+    string? ISteckbriefMehrfach.Zusatz { get => null; set { } }
 }

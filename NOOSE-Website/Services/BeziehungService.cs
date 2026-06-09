@@ -8,10 +8,11 @@ using NOOSE_Website.Models.Querschnitt;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IBeziehungService" />
-public class BeziehungService(AppDbContext db) : IBeziehungService
+public class BeziehungService(IDbContextFactory<AppDbContext> dbFactory) : IBeziehungService
 {
     public async Task<List<BeziehungAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var roh = await db.PersonBeziehungen
             .Include(b => b.PersonA)
             .Include(b => b.PersonB)
@@ -43,6 +44,8 @@ public class BeziehungService(AppDbContext db) : IBeziehungService
         {
             throw new InvalidOperationException("Bitte eine andere Person als Gegenüber auswählen.");
         }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (!await db.Personen.AnyAsync(p => p.Id == personBId, cancellationToken))
         {
             throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
@@ -60,6 +63,7 @@ public class BeziehungService(AppDbContext db) : IBeziehungService
 
     public async Task EntfernenAsync(string beziehungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var b = await db.PersonBeziehungen.FirstOrDefaultAsync(x => x.Id == beziehungId, cancellationToken);
         if (b is null)
         {

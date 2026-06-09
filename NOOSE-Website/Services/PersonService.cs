@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Fraktionen;
+using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Storage;
@@ -11,17 +13,21 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonService" />
-public class PersonService(AppDbContext db, IFileStorageService fileStorage) : IPersonService
+public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, ISteckbriefVorschlagService vorschlag, IAktenzeichenService aktenzeichen) : IPersonService
 {
-    public Task<List<Person>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
-        => db.Personen
+    public async Task<List<Person>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Personen
             .Where(p => istFuehrung || !p.IstVerschlusssache)
             .Include(p => p.Aliase)
             .OrderByDescending(p => p.GeaendertAm ?? p.ErstelltAm)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<Person?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen
             .Include(p => p.Aliase)
             .Include(p => p.Telefonnummern)
@@ -29,7 +35,6 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             .Include(p => p.Orte)
             .Include(p => p.Waffen)
             .Include(p => p.Fotos)
-            .Include(p => p.EinstufungVerlauf)
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
@@ -40,14 +45,18 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
         return person;
     }
 
-    public Task<List<Person>> GetPapierkorbAsync(CancellationToken cancellationToken = default)
-        => db.Personen.IgnoreQueryFilters()
+    public async Task<List<Person>> GetPapierkorbAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Personen.IgnoreQueryFilters()
             .Where(p => p.IstGeloescht)
             .OrderByDescending(p => p.GeloeschtAm)
             .ToListAsync(cancellationToken);
+    }
 
-    public Task<List<Person>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var query = db.Personen.Where(p => istFuehrung || !p.IstVerschlusssache);
 
         var s = suchtext?.Trim();
@@ -56,7 +65,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             query = query.Where(p => p.Name.Contains(s) || p.Aktenzeichen.Contains(s));
         }
 
-        return query
+        return await query
             .OrderBy(p => p.Name)
             .Take(max)
             .ToListAsync(cancellationToken);
@@ -70,6 +79,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             .Where(n => n.Length > 0)
             .ToList();
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Personen
             .Include(p => p.Telefonnummern)
             .Where(p => p.Name.ToLower() == nameLower
@@ -79,25 +89,14 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
 
     public async Task<Person> ErstellenAsync(PersonEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
-        if (eingabe.Einstufung == Einstufung.GesichertStaatsgefaehrdend && !handelnder.DarfHoechsteEinstufung())
-        {
-            throw new InvalidOperationException(
-                "'Gesichert staatsgefährdend' darf erst ab Senior Special Agent direkt gesetzt werden – sonst per Antrag.");
-        }
+        EinstufungHelfer.PruefeRangGate(eingabe.Einstufung, handelnder);
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
-
-        var jahr = DateTime.UtcNow.Year;
-        // Atomarer, race-sicherer Zähler-Inkrement (MariaDB/MySQL-nativ).
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO AktenzeichenZaehler (Jahr, LetzteNummer) VALUES ({jahr}, 1) ON DUPLICATE KEY UPDATE LetzteNummer = LetzteNummer + 1;",
-            cancellationToken);
-        var nummer = (await db.AktenzeichenZaehler.AsNoTracking()
-            .FirstAsync(z => z.Jahr == jahr, cancellationToken)).LetzteNummer;
 
         var person = new Person
         {
-            Aktenzeichen = $"NOOSE-P-{jahr}-{nummer:0000}",
+            Aktenzeichen = await aktenzeichen.NaechstesAsync(db, "P", cancellationToken),
             Name = eingabe.Name.Trim(),
             Beschreibung = Leer(eingabe.Beschreibung),
             Lebensstatus = eingabe.Lebensstatus,
@@ -106,10 +105,11 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             IstVerschlusssache = eingabe.IstVerschlusssache,
         };
         KinderMappen(person, eingabe);
+        await VorschlaegeVormerkenAsync(db, person, cancellationToken);
 
         if (eingabe.Einstufung != Einstufung.Unbekannt)
         {
-            person.EinstufungVerlauf.Add(VerlaufEintrag(person.Id, eingabe.Einstufung, eingabe.EinstufungBegruendung, handelnder));
+            db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Person), person.Id, eingabe.Einstufung, eingabe.EinstufungBegruendung, handelnder));
         }
 
         db.Personen.Add(person);
@@ -120,6 +120,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
 
     public async Task AktualisierenAsync(string id, PersonEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen
             .Include(p => p.Aliase)
             .Include(p => p.Telefonnummern)
@@ -157,12 +158,14 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
         db.PersonOrte.RemoveRange(person.Orte);
         db.PersonWaffen.RemoveRange(person.Waffen);
         KinderMappen(person, eingabe);
+        await VorschlaegeVormerkenAsync(db, person, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
         // Hard-Delete wird vom Interceptor in Soft-Delete umgewandelt (+ Audit „Geloescht").
@@ -172,6 +175,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
 
     public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen.IgnoreQueryFilters()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
@@ -185,18 +189,49 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
 
     public async Task EinstufungSetzenAsync(string id, Einstufung neu, string? begruendung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
-        if (neu == Einstufung.GesichertStaatsgefaehrdend && !handelnder.DarfHoechsteEinstufung())
-        {
-            throw new InvalidOperationException(
-                "'Gesichert staatsgefährdend' darf erst ab Senior Special Agent direkt gesetzt werden – sonst per Antrag (Phase 5).");
-        }
+        EinstufungHelfer.PruefeRangGate(neu, handelnder);
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
         person.Einstufung = neu;
-        db.EinstufungVerlauf.Add(VerlaufEintrag(id, neu, begruendung, handelnder));
+        db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Person), id, neu, begruendung, handelnder));
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.EinstufungVerlauf
+            .Where(e => e.EntitaetTyp == nameof(Person) && e.EntitaetId == id)
+            .OrderByDescending(e => e.Zeitpunkt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<PersonZugehoerigkeit>> GetZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
+        var fraktionen = await (
+            from m in db.FraktionMitglieder
+            where m.PersonId == personId
+            join f in db.Fraktionen on m.FraktionId equals f.Id
+            where istFuehrung || !f.IstVerschlusssache
+            orderby f.Name
+            select new PersonZugehoerigkeit(nameof(Fraktion), f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung))
+            .ToListAsync(cancellationToken);
+
+        var gruppen = await (
+            from m in db.PersonengruppeMitglieder
+            where m.PersonId == personId
+            join g in db.Personengruppen on m.PersonengruppeId equals g.Id
+            where istFuehrung || !g.IstVerschlusssache
+            orderby g.Name
+            select new PersonZugehoerigkeit(nameof(Personengruppe), g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung))
+            .ToListAsync(cancellationToken);
+
+        return fraktionen.Concat(gruppen).ToList();
     }
 
     public async Task<PersonFoto> FotoHinzufuegenAsync(string personId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -217,6 +252,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             ErstelltAm = DateTime.UtcNow,
             ErstelltVonId = handelnder.GetAgentId(),
         };
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.PersonFotos.Add(foto);
         await db.SaveChangesAsync(cancellationToken);
         return foto;
@@ -224,6 +260,7 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
 
     public async Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var foto = await db.PersonFotos.FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
         if (foto is null)
         {
@@ -236,11 +273,15 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
         fileStorage.Loeschen(foto.DateinameGespeichert);
     }
 
-    public Task<PersonFoto?> GetFotoMitPersonAsync(string fotoId, CancellationToken cancellationToken = default)
-        => db.PersonFotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
+    public async Task<PersonFoto?> GetFotoMitPersonAsync(string fotoId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.PersonFotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
+    }
 
     public async Task<List<AuditLog>> GetHistorieAsync(string personId, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Kind-IDs (Doks) einsammeln, damit deren Audit-Einträge in der Akten-Historie erscheinen.
         var dokIds = await db.PersonDoks.IgnoreQueryFilters()
             .Where(d => d.PersonId == personId)
@@ -282,16 +323,21 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             .ToList();
     }
 
-    private static EinstufungVerlauf VerlaufEintrag(string personId, Einstufung wert, string? begruendung, ClaimsPrincipal handelnder)
-        => new()
+    /// <summary>
+    /// Speist die erfassten Steckbrief-Werte in den gemeinsamen Vorschlagskatalog ein (Waffen/Fahrzeuge/Orte).
+    /// Verschlusssachen bleiben außen vor, damit klassifizierte Werte nicht in die geteilte Liste gelangen.
+    /// Merkt nur im übergebenen Context vor – persistiert wird mit dem nachfolgenden SaveChanges der Person (atomar).
+    /// </summary>
+    private async Task VorschlaegeVormerkenAsync(AppDbContext db, Person person, CancellationToken cancellationToken)
+    {
+        if (person.IstVerschlusssache)
         {
-            PersonId = personId,
-            Wert = wert,
-            Begruendung = Leer(begruendung),
-            Zeitpunkt = DateTime.UtcNow,
-            AgentId = handelnder.GetAgentId(),
-            AgentName = handelnder.GetCodename(),
-        };
+            return;
+        }
+        await vorschlag.VormerkenAsync(db, VorschlagTyp.Waffe, person.Waffen.Select(w => w.Text), cancellationToken);
+        await vorschlag.VormerkenAsync(db, VorschlagTyp.Fahrzeug, person.Fahrzeuge.Select(f => f.Bezeichnung), cancellationToken);
+        await vorschlag.VormerkenAsync(db, VorschlagTyp.Ort, person.Orte.Select(o => o.Text), cancellationToken);
+    }
 
     private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

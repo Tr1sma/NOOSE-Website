@@ -1,11 +1,11 @@
-@* Einstufung anzeigen/ändern (mit Rang-Gate) und Verlauf als Zeitleiste. *@
-@inject IPersonService PersonService
+@* Einstufung anzeigen/ändern (mit Rang-Gate) und Verlauf als Zeitleiste. Akten-agnostisch:
+   der Aufrufer reicht aktuelle Einstufung + Verlauf herein und behandelt das Setzen via OnSetzen. *@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
         <MudText Typo="Typo.subtitle1">Aktuelle Einstufung:</MudText>
-        <EinstufungBadge Wert="Person.Einstufung" />
+        <EinstufungBadge Wert="Aktuell" />
     </MudStack>
 
     <MudPaper Class="pa-3" Elevation="1">
@@ -29,20 +29,20 @@
             <MudTextField @bind-Value="_begruendung" Label="Begründung (optional)" Lines="2" Variant="Variant.Outlined" />
             <div>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
-                           OnClick="SetzenAsync" Disabled="@(_neu == Person.Einstufung)">Einstufung speichern</MudButton>
+                           OnClick="SetzenAsync" Disabled="@(_neu == Aktuell)">Einstufung speichern</MudButton>
             </div>
         </MudStack>
     </MudPaper>
 
     <MudText Typo="Typo.subtitle2">Verlauf</MudText>
-    @if (Person.EinstufungVerlauf.Count == 0)
+    @if (Verlauf.Count == 0)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Einstufungs-Änderungen.</MudText>
     }
     else
     {
         <MudTimeline TimelinePosition="TimelinePosition.Start">
-            @foreach (var v in Person.EinstufungVerlauf.OrderByDescending(x => x.Zeitpunkt))
+            @foreach (var v in Verlauf.OrderByDescending(x => x.Zeitpunkt))
             {
                 <MudTimelineItem Color="Color.Primary" Size="Size.Small">
                     <MudText Typo="Typo.body2"><b>@EinstufungAnzeige.Name(v.Wert)</b></MudText>
@@ -60,28 +60,38 @@
 </MudStack>
 
 @code {
-    [Parameter, EditorRequired] public Person Person { get; set; } = default!;
+    [Parameter, EditorRequired] public Einstufung Aktuell { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<EinstufungVerlauf> Verlauf { get; set; } = Array.Empty<EinstufungVerlauf>();
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
-    [Parameter] public EventCallback Changed { get; set; }
+    /// <summary>Wird mit (neue Einstufung, Begründung) aufgerufen; der Aufrufer persistiert und lädt neu.</summary>
+    [Parameter, EditorRequired] public EventCallback<(Einstufung Neu, string? Begruendung)> OnSetzen { get; set; }
 
     private Einstufung _neu;
+    private Einstufung _zuletztAktuell;
+    private bool _initialisiert;
     private string? _begruendung;
     private bool _darfHoechste;
 
-    protected override void OnInitialized()
+    protected override void OnParametersSet()
     {
-        _neu = Person.Einstufung;
         _darfHoechste = User.DarfHoechsteEinstufung();
+        // Auswahl an die aktuelle Einstufung angleichen – aber nur bei echter Änderung, damit
+        // eine laufende Auswahl des Nutzers nicht durch Re-Renders des Elternteils zurückgesetzt wird.
+        if (!_initialisiert || _zuletztAktuell != Aktuell)
+        {
+            _neu = Aktuell;
+            _zuletztAktuell = Aktuell;
+            _initialisiert = true;
+        }
     }
 
     private async Task SetzenAsync()
     {
         try
         {
-            await PersonService.EinstufungSetzenAsync(Person.Id, _neu, _begruendung, User);
+            await OnSetzen.InvokeAsync((_neu, _begruendung));
             Snackbar.Add($"Einstufung auf {EinstufungAnzeige.Name(_neu)} gesetzt.", Severity.Success);
             _begruendung = null;
-            await Changed.InvokeAsync();
         }
         catch (Exception ex)
         {

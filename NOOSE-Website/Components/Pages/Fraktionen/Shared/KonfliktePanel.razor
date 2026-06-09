@@ -1,0 +1,99 @@
+@* Konflikte einer Fraktion zu anderen Fraktionen/Parteien – über die generische Verknüpfungs-Engine. *@
+@inject IVerknuepfungService VerknuepfungService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Konflikte (@_konflikte.Count)</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Bolt" OnClick="HinzufuegenAsync">
+            Konflikt hinzufügen
+        </MudButton>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_konflikte.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Konflikte erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var k in _konflikte)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Error" Size="Size.Small" />
+                        @if (k.AndereTyp == nameof(Fraktion))
+                        {
+                            <MudLink Href="@($"/fraktionen/{k.AndereId}")" Typo="Typo.body2"><b>@k.AndereBezeichnung</b></MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2"><b>@k.AndereBezeichnung</b></MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(k.Label))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@k.Label</MudChip>
+                        }
+                    </MudStack>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => EntfernenAsync(k))" aria-label="Konflikt entfernen" />
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string FraktionId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<VerknuepfungAnzeige> _konflikte = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _konflikte = await VerknuepfungService.GetFuerAkteAsync(nameof(Fraktion), FraktionId, User.IstFuehrung());
+        _laden = false;
+    }
+
+    private async Task HinzufuegenAsync()
+    {
+        var eingabe = await KonfliktDialog.ZeigenAsync(DialogService, User.IstFuehrung(), FraktionId);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            var label = string.IsNullOrWhiteSpace(eingabe.Label) ? "Konflikt" : eingabe.Label;
+            await VerknuepfungService.ErstellenAsync(nameof(Fraktion), FraktionId, nameof(Fraktion), eingabe.ZielId, label, User);
+            Snackbar.Add("Konflikt gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EntfernenAsync(VerknuepfungAnzeige k)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Konflikt löschen?",
+            $"Der Konflikt zu „{k.AndereBezeichnung}“ wird entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        await VerknuepfungService.EntfernenAsync(k.VerknuepfungId, User);
+        Snackbar.Add("Konflikt gelöscht.", Severity.Success);
+        await LadenAsync();
+    }
+}

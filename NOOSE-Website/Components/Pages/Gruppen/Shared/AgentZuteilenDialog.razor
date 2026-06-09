@@ -1,0 +1,74 @@
+@* Dialog zum Zuteilen eines NOOSE-Agents zu einer Personengruppe. *@
+@inject IAgentVerwaltungService AgentService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:360px;">
+            <MudAutocomplete T="Agent" Label="Agent" @bind-Value="_agent"
+                             SearchFunc="@SucheAgenten" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"
+                             Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.ManageAccounts"
+                             HelperText="Aktiven Agent der Gruppe zuteilen.">
+                <ItemTemplate Context="a">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2">@a.Codename</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@DienstgradAnzeige.Name(a.Dienstgrad)</MudText>
+                    </MudStack>
+                </ItemTemplate>
+            </MudAutocomplete>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Zuteilen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public IReadOnlyList<string> AusschlussAgentIds { get; set; } = Array.Empty<string>();
+
+    private Agent? _agent;
+    private List<Agent> _alle = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var alle = await AgentService.GetAlleAsync();
+        _alle = alle.Where(a => a.Status == AgentStatus.Aktiv && !AusschlussAgentIds.Contains(a.Id)).ToList();
+    }
+
+    private Task<IEnumerable<Agent>> SucheAgenten(string value, CancellationToken token)
+    {
+        IEnumerable<Agent> treffer = string.IsNullOrWhiteSpace(value)
+            ? _alle
+            : _alle.Where(a => a.Codename.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase)
+                            || (a.Klarname ?? string.Empty).Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(treffer);
+    }
+
+    private void Speichern()
+    {
+        if (_agent is null)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(_agent.Id));
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog; liefert die Agent-Id oder null bei Abbruch.</summary>
+    public static async Task<string?> ZeigenAsync(IDialogService dialog, IReadOnlyList<string> ausschlussAgentIds)
+    {
+        var parameters = new DialogParameters<AgentZuteilenDialog>
+        {
+            { x => x.AusschlussAgentIds, ausschlussAgentIds },
+        };
+        var referenz = await dialog.ShowAsync<AgentZuteilenDialog>("Agent zuteilen", parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: string id } ? id : null;
+    }
+}

@@ -69,8 +69,17 @@
 
     protected override async Task OnInitializedAsync() => await LadenAsync();
 
-    // Klick auf eine Dok-Karte öffnet die schreibgeschützte Detailansicht (man ist bereits in der Akte).
-    private Task OeffnenAsync(PersonDok dok) => DokDetailDialog.ZeigenAsync(DialogService, dok, zeigeZurAkte: false);
+    // Klick auf eine Dok-Karte öffnet die Detailansicht (lesen + bearbeiten); man ist bereits in der Akte.
+    private async Task OeffnenAsync(PersonDok dok)
+    {
+        var geaendert = await DokDetailDialog.ZeigenAsync(DialogService, dok, User, zeigeZurAkte: false);
+        if (geaendert)
+        {
+            await LadenAsync();
+            // Der Maßnahme-Ausgang kann den Lebensstatus geändert haben → Eltern neu laden.
+            await PersonChanged.InvokeAsync();
+        }
+    }
 
     private async Task LadenAsync()
     {

@@ -7,13 +7,17 @@ using NOOSE_Website.Models.Querschnitt;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ITagService" />
-public class TagService(AppDbContext db) : ITagService
+public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 {
-    public Task<List<Tag>> GetAlleAsync(CancellationToken cancellationToken = default)
-        => db.Tags.OrderBy(t => t.Name).ToListAsync(cancellationToken);
+    public async Task<List<Tag>> GetAlleAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Tags.OrderBy(t => t.Name).ToListAsync(cancellationToken);
+    }
 
     public async Task<List<TagVerwendung>> GetMitVerwendungAsync(CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var tags = await db.Tags.OrderBy(t => t.Name).ToListAsync(cancellationToken);
         var anzahlen = await db.TagZuordnungen
             .GroupBy(z => z.TagId)
@@ -30,6 +34,7 @@ public class TagService(AppDbContext db) : ITagService
         {
             throw new InvalidOperationException("Der Tag-Name darf nicht leer sein.");
         }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (await db.Tags.AnyAsync(t => t.Name == name, cancellationToken))
         {
             throw new InvalidOperationException($"Ein Tag „{name}“ existiert bereits.");
@@ -48,6 +53,7 @@ public class TagService(AppDbContext db) : ITagService
         {
             throw new InvalidOperationException("Der Tag-Name darf nicht leer sein.");
         }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var tag = await db.Tags.FirstOrDefaultAsync(t => t.Id == tagId, cancellationToken)
             ?? throw new InvalidOperationException("Tag nicht gefunden.");
         if (await db.Tags.AnyAsync(t => t.Id != tagId && t.Name == name, cancellationToken))
@@ -62,6 +68,7 @@ public class TagService(AppDbContext db) : ITagService
 
     public async Task LoeschenAsync(string tagId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var tag = await db.Tags.FirstOrDefaultAsync(t => t.Id == tagId, cancellationToken);
         if (tag is null)
         {
@@ -72,16 +79,20 @@ public class TagService(AppDbContext db) : ITagService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public Task<List<Tag>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, CancellationToken cancellationToken = default)
-        => db.Tags
+    public async Task<List<Tag>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Tags
             .Where(t => db.TagZuordnungen.Any(z => z.TagId == t.Id && z.EntitaetTyp == entitaetTyp && z.EntitaetId == entitaetId))
             .OrderBy(t => t.Name)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task SetzenAsync(string entitaetTyp, string entitaetId, IEnumerable<string> tagIds, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         var ziel = tagIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToHashSet();
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var bestehende = await db.TagZuordnungen
             .Where(z => z.EntitaetTyp == entitaetTyp && z.EntitaetId == entitaetId)
             .ToListAsync(cancellationToken);

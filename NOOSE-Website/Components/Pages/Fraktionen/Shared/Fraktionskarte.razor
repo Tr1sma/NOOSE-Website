@@ -1,0 +1,68 @@
+@* Identitäts-/Steckkarte der Fraktions-Akte: Name, Erkennungsfarbe, Einstufung und Kerndaten auf einen Blick. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        @* Farb-Banner in der Erkennungsfarbe (falls gesetzt), sonst neutraler Platzhalter. *@
+        <div style="@BannerStyle()" class="rounded d-flex align-center justify-center">
+            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="font-size:3rem;color:#fff;opacity:.85;" />
+        </div>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Fraktion.Name</MudText>
+                @if (Fraktion.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Fraktion.Aktenzeichen</MudText>
+            @if (!string.IsNullOrWhiteSpace(Fraktion.Art))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Fraktion.Art</MudText>
+            }
+        </div>
+
+        <MudStack Spacing="1">
+            <EinstufungBadge Wert="Fraktion.Einstufung" />
+            @if (!string.IsNullOrWhiteSpace(Fraktion.Erkennungsfarbe))
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="@($"width:18px;height:18px;border-radius:4px;background:{Fraktion.Erkennungsfarbe};border:1px solid rgba(255,255,255,.3);")"></div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Fraktion.Erkennungsfarbe</MudText>
+                </MudStack>
+            }
+        </MudStack>
+
+        <MudDivider />
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Zuletzt aktualisiert: @((Fraktion.GeaendertAm ?? Fraktion.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+        </MudText>
+        <MudStack Row="true" Spacing="4" Class="flex-wrap">
+            @foreach (var (wert, label) in Kennzahlen())
+            {
+                <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@wert</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Fraktion Fraktion { get; set; } = default!;
+    [Parameter] public int Mitgliederzahl { get; set; }
+
+    private string BannerStyle()
+    {
+        var farbe = string.IsNullOrWhiteSpace(Fraktion.Erkennungsfarbe) ? "var(--mud-palette-primary)" : Fraktion.Erkennungsfarbe;
+        return $"height:120px;width:100%;background:{farbe};";
+    }
+
+    private IEnumerable<(int Wert, string Label)> Kennzahlen()
+    {
+        yield return (Mitgliederzahl, "Mitglieder");
+        yield return (Fraktion.Raenge.Count, "Ränge");
+        yield return (Fraktion.Waffenbestand.Count + Fraktion.Lagerbestand.Count, "Bestände");
+    }
+}

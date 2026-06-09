@@ -1,0 +1,89 @@
+@* Der Gruppe zugeteilte NOOSE-Agents: Liste + Zuteilen/Entfernen. *@
+@inject IPersonengruppeService GruppeService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Zugeteilte Agents (@_agenten.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="ZuteilenAsync">
+            Agent zuteilen
+        </MudButton>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_agenten.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Agents zugeteilt.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _agenten)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@DienstgradAnzeige.Name(a.Agent?.Dienstgrad)</MudChip>
+                    </MudStack>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => EntfernenAsync(a))" aria-label="Agent entfernen" />
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string GruppeId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<PersonengruppeAgent> _agenten = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _agenten = await GruppeService.GetAgentenAsync(GruppeId);
+        _laden = false;
+    }
+
+    private async Task ZuteilenAsync()
+    {
+        var ausschluss = _agenten.Select(a => a.AgentId).ToList();
+        var agentId = await AgentZuteilenDialog.ZeigenAsync(DialogService, ausschluss);
+        if (agentId is null)
+        {
+            return;
+        }
+        try
+        {
+            await GruppeService.AgentZuteilenAsync(GruppeId, agentId, User);
+            Snackbar.Add("Agent zugeteilt.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EntfernenAsync(PersonengruppeAgent a)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Zuteilung aufheben?",
+            $"„{a.Agent?.Codename}“ wird der Gruppe nicht mehr zugeteilt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        await GruppeService.AgentEntfernenAsync(a.Id, User);
+        Snackbar.Add("Zuteilung aufgehoben.", Severity.Success);
+        await LadenAsync();
+    }
+}

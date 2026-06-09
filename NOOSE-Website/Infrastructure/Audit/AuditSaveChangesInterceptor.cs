@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -21,7 +22,10 @@ namespace NOOSE_Website.Infrastructure.Audit;
 /// </summary>
 public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
-    private List<PendingAudit> _pending = new();
+    // Mit der DbContext-Factory teilt sich ein (scoped) Interceptor mehrere kurzlebige Contexts pro
+    // Circuit. Die noch ausstehenden Audit-Einträge daher pro Context halten, statt in einem Feld –
+    // sonst überschreiben sich gleichzeitige Speichervorgänge gegenseitig.
+    private readonly ConditionalWeakTable<DbContext, List<PendingAudit>> _pending = new();
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
@@ -29,7 +33,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
         if (eventData.Context is not null)
         {
             var user = await currentUserService.GetAsync();
-            _pending = StampAndCollect(eventData.Context, user);
+            _pending.AddOrUpdate(eventData.Context, StampAndCollect(eventData.Context, user));
         }
 
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
@@ -41,7 +45,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
         if (eventData.Context is not null)
         {
             var user = currentUserService.GetAsync().GetAwaiter().GetResult();
-            _pending = StampAndCollect(eventData.Context, user);
+            _pending.AddOrUpdate(eventData.Context, StampAndCollect(eventData.Context, user));
         }
 
         return base.SavingChanges(eventData, result);
@@ -62,13 +66,20 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
     private async Task WritePendingAsync(DbContext? context, CancellationToken cancellationToken)
     {
-        if (context is null || _pending.Count == 0)
+        if (context is null || !_pending.TryGetValue(context, out var pending))
         {
             return;
         }
 
-        var logs = _pending.Select(p => p.ToAuditLog()).ToList();
-        _pending = new();
+        // Pro Context nur einmal verarbeiten – auch der re-entrante AuditLog-Save unten landet hier
+        // (dann mit leerer Liste, da AuditLog nicht auditierbar ist) und wird so sauber abgeräumt.
+        _pending.Remove(context);
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        var logs = pending.Select(p => p.ToAuditLog()).ToList();
         context.Set<AuditLog>().AddRange(logs);
         // Erneutes Speichern; löst keine Rekursion aus, da AuditLog weder IAuditable noch ISoftDelete ist.
         await context.SaveChangesAsync(cancellationToken);

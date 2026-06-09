@@ -1,0 +1,299 @@
+@page "/suche"
+@using System.Text.Json
+@inject ISearchService SearchService
+@inject IGespeicherteSucheService GespeicherteSucheService
+@inject ITagService TagService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Suche · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Globale Suche</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Durchsucht Personen, Fraktionen, Personengruppen, Doks, Quellen und Kommentare. Verschlusssachen erscheinen nur für die Führung.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudTextField @bind-Value="_text" Placeholder="Suchbegriff…" Variant="Variant.Outlined" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="SucheKeyDown" Class="flex-grow-1 mt-0" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search"
+                       OnClick="SuchenAsync">Suchen</MudButton>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Kategorien:</MudText>
+            <MudCheckBox T="bool" @bind-Value="_katPerson" Label="Personen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katFraktion" Label="Fraktionen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katGruppe" Label="Personengruppen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katDok" Label="Doks" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katQuelle" Label="Quellen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katKommentar" Label="Kommentare" Dense="true" />
+            <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_tagAuswahl" Label="Tags" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:220px;"
+                       MultiSelectionTextFunc="@(items => $"{items.Count} Tag(s)")">
+                @foreach (var t in _tags)
+                {
+                    <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudTextField @bind-Value="_speichernName" Placeholder="Suche speichern als…" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:240px;" Class="mt-0" />
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.BookmarkAdd"
+                       OnClick="SpeichernAsync" Disabled="@string.IsNullOrWhiteSpace(_speichernName)">Speichern</MudButton>
+
+            @if (_gespeicherte.Count > 0)
+            {
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Gespeichert:</MudText>
+                @foreach (var g in _gespeicherte)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                             OnClick="@(() => AnwendenAsync(g))" OnClose="@(() => SucheLoeschenAsync(g))">@g.Name</MudChip>
+                }
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_gesucht && _gruppen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine Treffer.</MudAlert>
+}
+else if (!_gesucht)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Suchbegriff eingeben oder Tags wählen und „Suchen" klicken.</MudText>
+}
+else
+{
+    <MudStack Spacing="4">
+        @foreach (var gruppe in _gruppen)
+        {
+            <div>
+                <MudText Typo="Typo.subtitle1" Class="mb-2">
+                    <MudIcon Icon="@KategorieIcon(gruppe.Kategorie)" Size="Size.Small" Class="mr-1" />@gruppe.Anzeige (@gruppe.Treffer.Count)
+                </MudText>
+                <MudStack Spacing="2">
+                    @foreach (var t in gruppe.Treffer)
+                    {
+                        <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => Oeffnen(t))">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2"><b>@t.Titel</b></MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@t.Aktenzeichen</MudText>
+                            </MudStack>
+                            @if (!string.IsNullOrWhiteSpace(t.Schnipsel))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"
+                                         Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:720px;">
+                                    @t.Schnipsel
+                                </MudText>
+                            }
+                        </MudPaper>
+                    }
+                </MudStack>
+            </div>
+        }
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "q")] private string? Q { get; set; }
+
+    private ClaimsPrincipal _user = default!;
+    private string? _agentId;
+    private bool _istFuehrung;
+
+    private string _text = string.Empty;
+    private bool _katPerson = true, _katFraktion = true, _katGruppe = true, _katDok = true, _katQuelle = true, _katKommentar = true;
+    private IReadOnlyCollection<string> _tagAuswahl = new HashSet<string>();
+    private string _speichernName = string.Empty;
+
+    private bool _laden;
+    private bool _suchtGerade;
+    private bool _erneutSuchen;
+    private bool _gesucht;
+    private List<SuchErgebnisGruppe> _gruppen = new();
+    private List<Tag> _tags = new();
+    private List<GespeicherteSuche> _gespeicherte = new();
+
+    private string? _angewandtesQ;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _agentId = _user.GetAgentId();
+        _istFuehrung = _user.IstFuehrung();
+        _tags = await TagService.GetAlleAsync();
+        await GespeicherteLadenAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Aufruf über die Topbar/Command-Palette: ?q=… übernehmen und sofort suchen.
+        if (Q != _angewandtesQ)
+        {
+            _angewandtesQ = Q;
+            if (!string.IsNullOrWhiteSpace(Q))
+            {
+                _text = Q;
+                await SuchenAsync();
+            }
+        }
+    }
+
+    private async Task GespeicherteLadenAsync()
+    {
+        if (_agentId is not null)
+        {
+            _gespeicherte = await GespeicherteSucheService.GetFuerAgentAsync(_agentId);
+        }
+    }
+
+    private async Task SucheKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SuchenAsync();
+        }
+    }
+
+    private SuchKriterien BaueKriterien()
+    {
+        var kategorien = new List<string>();
+        if (_katPerson) kategorien.Add(nameof(Person));
+        if (_katFraktion) kategorien.Add(nameof(Fraktion));
+        if (_katGruppe) kategorien.Add(nameof(Personengruppe));
+        if (_katDok) kategorien.Add(nameof(PersonDok));
+        if (_katQuelle) kategorien.Add(nameof(Quelle));
+        if (_katKommentar) kategorien.Add(nameof(Kommentar));
+
+        return new SuchKriterien
+        {
+            Text = _text,
+            // Alle sechs aktiv → leere Liste (= alle), sonst die gewählte Teilmenge.
+            Kategorien = kategorien.Count == 6 ? new() : kategorien,
+            TagIds = _tagAuswahl.ToList(),
+        };
+    }
+
+    private async Task SuchenAsync()
+    {
+        if (!_katPerson && !_katFraktion && !_katGruppe && !_katDok && !_katQuelle && !_katKommentar)
+        {
+            Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
+            return;
+        }
+        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen
+        // (geteilter DbContext pro Circuit). Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt –
+        // verhindert den inkonsistenten Zustand „Feld zeigt X, Treffer zeigen Y".
+        if (_suchtGerade)
+        {
+            _erneutSuchen = true;
+            return;
+        }
+
+        _suchtGerade = true;
+        _laden = true;
+        StateHasChanged();
+        try
+        {
+            do
+            {
+                _erneutSuchen = false;
+                _gruppen = await SearchService.SuchenAsync(BaueKriterien(), _istFuehrung);
+                _gesucht = true;
+            }
+            while (_erneutSuchen);
+        }
+        catch (Exception ex)
+        {
+            // Fehler sichtbar machen statt den Ladeindikator hängen zu lassen.
+            _gruppen = new();
+            _gesucht = true;
+            Snackbar.Add($"Suche fehlgeschlagen: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _laden = false;
+            _suchtGerade = false;
+        }
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_agentId is null)
+        {
+            return;
+        }
+        try
+        {
+            await GespeicherteSucheService.SpeichernAsync(_agentId, _speichernName, BaueKriterien(), _user);
+            Snackbar.Add($"Suche „{_speichernName.Trim()}“ gespeichert.", Severity.Success);
+            _speichernName = string.Empty;
+            await GespeicherteLadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task AnwendenAsync(GespeicherteSuche g)
+    {
+        SuchKriterien? k = null;
+        try { k = JsonSerializer.Deserialize<SuchKriterien>(g.SuchparameterJson); }
+        catch { /* defekte gespeicherte Suche ignorieren */ }
+        if (k is null)
+        {
+            return;
+        }
+
+        _text = k.Text ?? string.Empty;
+        var katSet = k.Kategorien is { Count: > 0 } ? k.Kategorien.ToHashSet() : null;
+        _katPerson = katSet is null || katSet.Contains(nameof(Person));
+        _katFraktion = katSet is null || katSet.Contains(nameof(Fraktion));
+        _katGruppe = katSet is null || katSet.Contains(nameof(Personengruppe));
+        _katDok = katSet is null || katSet.Contains(nameof(PersonDok));
+        _katQuelle = katSet is null || katSet.Contains(nameof(Quelle));
+        _katKommentar = katSet is null || katSet.Contains(nameof(Kommentar));
+        _tagAuswahl = new HashSet<string>(k.TagIds ?? new());
+
+        await SuchenAsync();
+    }
+
+    private async Task SucheLoeschenAsync(GespeicherteSuche g)
+    {
+        if (_agentId is null)
+        {
+            return;
+        }
+        await GespeicherteSucheService.LoeschenAsync(g.Id, _agentId);
+        await GespeicherteLadenAsync();
+    }
+
+    private void Oeffnen(SuchTreffer t) => Nav.NavigateTo(SuchNavigation.Route(t.Kategorie, t.ZielId));
+
+    private static string KategorieIcon(string kategorie) => kategorie switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Fraktion) => Icons.Material.Filled.Groups,
+        nameof(Personengruppe) => Icons.Material.Filled.Diversity3,
+        nameof(PersonDok) => Icons.Material.Filled.Description,
+        nameof(Quelle) => Icons.Material.Filled.AttachFile,
+        nameof(Kommentar) => Icons.Material.Filled.Comment,
+        _ => Icons.Material.Filled.Article,
+    };
+}

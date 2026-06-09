@@ -23,5 +23,11 @@ public interface IPersonDokService
     /// </summary>
     Task<PersonDok> ErstellenFuerNeuePersonAsync(string name, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Bearbeitet ein bestehendes Dok. Der Maßnahme-Ausgang wird neu ausgewertet und wirkt – sofern das
+    /// aktuelle Tot-Fenster der Person von genau diesem Dok stammt – erneut auf deren Lebensstatus.
+    /// </summary>
+    Task<PersonDok> AktualisierenAsync(string dokId, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
     Task LoeschenAsync(string dokId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 }

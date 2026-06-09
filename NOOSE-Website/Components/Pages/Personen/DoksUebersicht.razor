@@ -102,9 +102,19 @@ else
             || (dok.Person?.Aktenzeichen?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    // Klick auf eine Zeile öffnet das Dok als Detail-Dialog (mit „Zur Akte"-Sprung).
-    private Task Oeffnen(PersonDok? dok)
-        => dok is null ? Task.CompletedTask : DokDetailDialog.ZeigenAsync(DialogService, dok, zeigeZurAkte: true);
+    // Klick auf eine Zeile öffnet das Dok als Detail-Dialog (lesen + bearbeiten, mit „Zur Akte"-Sprung).
+    private async Task Oeffnen(PersonDok? dok)
+    {
+        if (dok is null)
+        {
+            return;
+        }
+        var geaendert = await DokDetailDialog.ZeigenAsync(DialogService, dok, _user, zeigeZurAkte: true);
+        if (geaendert)
+        {
+            await LadenAsync();
+        }
+    }
 
     private async Task NeuAsync()
     {

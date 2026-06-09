@@ -1,0 +1,149 @@
+@* Command-Palette (Strg+K / Cmd+K): Schnellzugriff auf Akten und Funktionen.
+   Als Singleton im MainLayout platziert; der Hotkey wird per JS-Interop registriert. *@
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject ISearchService SearchService
+@implements IAsyncDisposable
+
+<MudDialog @bind-Visible="_open" Options="_options">
+    <TitleContent>
+        <MudText Typo="Typo.subtitle1">
+            <MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Small" Class="mr-1" />Schnellzugriff
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAutocomplete T="PaletteItem" @ref="_auto" SearchFunc="Suche" ToStringFunc="@(i => i?.Label ?? string.Empty)"
+                         ValueChanged="GewaehltAsync" Placeholder="Akte suchen oder Befehl wählen…"
+                         Variant="Variant.Outlined" MinCharacters="0" Immediate="true" Clearable="true"
+                         ResetValueOnEmptyText="true" AutoFocus="true"
+                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search">
+            <ItemTemplate Context="i">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@i.Icon" Size="Size.Small" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2">@i.Label</MudText>
+                    @if (!string.IsNullOrEmpty(i.Sub))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@i.Sub</MudText>
+                    }
+                </MudStack>
+            </ItemTemplate>
+            <NoItemsTemplate>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary pa-2">Keine Treffer.</MudText>
+            </NoItemsTemplate>
+        </MudAutocomplete>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">Strg+K öffnet diesen Schnellzugriff überall.</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _open;
+    private bool _istFuehrung;
+    private MudAutocomplete<PaletteItem> _auto = default!;
+    private IJSObjectReference? _modul;
+    private DotNetObjectReference<CommandPalette>? _ref;
+    private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+    private List<PaletteItem> _befehle = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _istFuehrung = user.IstFuehrung();
+        _befehle = new List<PaletteItem>
+        {
+            new("Personen-Akten", "Liste", Icons.Material.Filled.Badge, "/personen"),
+            new("Neue Person anlegen", null, Icons.Material.Filled.PersonAdd, "/personen/neu"),
+            new("Personen-Doks", "Übersicht", Icons.Material.Filled.Description, "/doks"),
+            new("Fraktionen", "Liste", Icons.Material.Filled.Groups, "/fraktionen"),
+            new("Neue Fraktion anlegen", null, Icons.Material.Filled.Add, "/fraktionen/neu"),
+            new("Personengruppen", "Liste", Icons.Material.Filled.Diversity3, "/personengruppen"),
+            new("Neue Personengruppe anlegen", null, Icons.Material.Filled.Add, "/personengruppen/neu"),
+            new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
+            new("Papierkorb", null, Icons.Material.Filled.Delete, "/personen/papierkorb"),
+        };
+        if (_istFuehrung)
+        {
+            _befehle.Add(new PaletteItem("Tags verwalten", null, Icons.Material.Filled.Label, "/tags"));
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // JS-Interop erst nach dem ersten Render verfügbar (Interactive Server).
+        if (firstRender)
+        {
+            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js");
+            _ref = DotNetObjectReference.Create(this);
+            await _modul.InvokeVoidAsync("registerCommandPalette", _ref);
+        }
+    }
+
+    [JSInvokable]
+    public Task Oeffnen()
+    {
+        _open = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<IEnumerable<PaletteItem>> Suche(string value, CancellationToken token)
+    {
+        var v = value?.Trim() ?? string.Empty;
+        var ergebnis = new List<PaletteItem>();
+        ergebnis.AddRange(string.IsNullOrEmpty(v)
+            ? _befehle
+            : _befehle.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
+
+        if (!string.IsNullOrEmpty(v))
+        {
+            try
+            {
+                var treffer = await SearchService.SchnellsucheAsync(v, _istFuehrung, 8, token);
+                ergebnis.AddRange(treffer.Select(t => new PaletteItem(t.Name, t.Aktenzeichen, PaletteIcon(t.Kategorie), SuchNavigation.Route(t.Kategorie, t.ZielId))));
+            }
+            catch
+            {
+                // Schnellsuche-Fehler (z. B. seltene DbContext-Nebenläufigkeit auf dem geteilten Circuit-Context)
+                // nicht eskalieren – dann nur die statischen Befehle anzeigen.
+            }
+        }
+        return ergebnis;
+    }
+
+    private async Task GewaehltAsync(PaletteItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+        _open = false;
+        await _auto.ClearAsync();
+        Nav.NavigateTo(item.Url);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_modul is not null)
+            {
+                await _modul.InvokeVoidAsync("unregisterCommandPalette");
+                await _modul.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit bereits getrennt – nichts zu tun.
+        }
+        _ref?.Dispose();
+    }
+
+    private static string PaletteIcon(string kategorie) => kategorie switch
+    {
+        nameof(Fraktion) => Icons.Material.Filled.Groups,
+        nameof(Personengruppe) => Icons.Material.Filled.Diversity3,
+        _ => Icons.Material.Filled.Badge,
+    };
+
+    private record PaletteItem(string Label, string? Sub, string Icon, string Url);
+}

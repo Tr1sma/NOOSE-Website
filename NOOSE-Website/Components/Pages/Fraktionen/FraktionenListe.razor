@@ -1,0 +1,108 @@
+@page "/fraktionen"
+@inject IFraktionService FraktionService
+@inject NavigationManager Nav
+
+<PageTitle>Fraktionen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Fraktionen</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Fuehrung">
+        <MudButton Href="/fraktionen/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Organisationen (Gangs, Konzerne, …) mit Mitgliedern, Beständen, Rängen und Konflikten.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="FraktionZeile" Items="_zeilen" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Oeffnen(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_suche" Placeholder="Suchen (Name, Aktenzeichen, Art)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
+            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <PropertyColumn Property="x => x.Art" Title="Art" />
+            <PropertyColumn Property="x => x.Mitgliederzahl" Title="Mitglieder" />
+            <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
+                <CellTemplate>
+                    <EinstufungBadge Wert="context.Item.Einstufung" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Verschluss" Sortable="false">
+                <CellTemplate>
+                    @if (context.Item.IstVerschlusssache)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
+        </Columns>
+        <PagerContent>
+            <MudDataGridPager T="FraktionZeile" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string _suche = string.Empty;
+    private List<FraktionZeile> _zeilen = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var fraktionen = await FraktionService.GetListeAsync(user.IstFuehrung());
+        _zeilen = fraktionen.Select(f => new FraktionZeile
+        {
+            Id = f.Id,
+            Aktenzeichen = f.Aktenzeichen,
+            Name = f.Name,
+            Art = f.Art ?? "—",
+            Mitgliederzahl = f.Mitglieder.Count,
+            Einstufung = f.Einstufung,
+            IstVerschlusssache = f.IstVerschlusssache,
+            Aktualisiert = (f.GeaendertAm ?? f.ErstelltAm).ToLocalTime(),
+        }).ToList();
+        _laden = false;
+    }
+
+    private bool Filter(FraktionZeile z)
+    {
+        if (string.IsNullOrWhiteSpace(_suche))
+        {
+            return true;
+        }
+        var s = _suche.Trim();
+        return z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Aktenzeichen.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Art.Contains(s, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Oeffnen(FraktionZeile z) => Nav.NavigateTo($"/fraktionen/{z.Id}");
+
+    private sealed class FraktionZeile
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Aktenzeichen { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Art { get; set; } = string.Empty;
+        public int Mitgliederzahl { get; set; }
+        public Einstufung Einstufung { get; set; }
+        public bool IstVerschlusssache { get; set; }
+        public DateTime Aktualisiert { get; set; }
+    }
+}

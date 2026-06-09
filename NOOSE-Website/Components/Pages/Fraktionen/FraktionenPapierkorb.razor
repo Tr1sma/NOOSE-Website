@@ -1,0 +1,73 @@
+@page "/fraktionen/papierkorb"
+@attribute [Authorize(Policy = Policies.Fuehrung)]
+@inject IFraktionService FraktionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Papierkorb – Fraktionen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Papierkorb – Fraktionen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Gelöschte Fraktionen. Die Führung kann sie wiederherstellen; sie erscheinen dann wieder in der Liste.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_fraktionen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Der Papierkorb ist leer.</MudAlert>
+}
+else
+{
+    <MudTable Items="_fraktionen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Gelöscht am</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.body2">@context.Aktenzeichen</MudText></MudTd>
+            <MudTd DataLabel="Name"><MudText Typo="Typo.body2">@context.Name</MudText></MudTd>
+            <MudTd DataLabel="Gelöscht am">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.GeloeschtAm?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Restore"
+                           OnClick="@(() => WiederherstellenAsync(context))">Wiederherstellen</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<Fraktion> _fraktionen = new();
+
+    protected override Task OnInitializedAsync() => LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _fraktionen = await FraktionService.GetPapierkorbAsync();
+        _laden = false;
+    }
+
+    private async Task WiederherstellenAsync(Fraktion fraktion)
+    {
+        var user = (await AuthStateTask).User;
+        await FraktionService.WiederherstellenAsync(fraktion.Id, user);
+        Snackbar.Add($"Fraktion {fraktion.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        await LadenAsync();
+    }
+}

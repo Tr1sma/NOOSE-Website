@@ -1,0 +1,59 @@
+@page "/fraktionen/neu"
+@inject IFraktionService FraktionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Fraktion · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Fraktion anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <FraktionForm Eingabe="_eingabe" ZeigeEinstufung="true" DarfHoechste="_darfHoechste" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/fraktionen">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly FraktionEingabe _eingabe = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _darfHoechste;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _darfHoechste = _user.DarfHoechsteEinstufung();
+    }
+
+    private async Task SpeichernAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            var fraktion = await FraktionService.ErstellenAsync(_eingabe, _user);
+            Snackbar.Add($"Fraktion {fraktion.Aktenzeichen} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/fraktionen/{fraktion.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

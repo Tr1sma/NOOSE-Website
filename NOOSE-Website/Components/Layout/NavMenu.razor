@@ -5,6 +5,9 @@
     <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">AKTEN</MudText>
     <MudNavLink Href="/personen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Badge">Personen-Akten</MudNavLink>
     <MudNavLink Href="/doks" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Description">Personen-Doks</MudNavLink>
+    <MudNavLink Href="/fraktionen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups">Fraktionen</MudNavLink>
+    <MudNavLink Href="/personengruppen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Diversity3">Personengruppen</MudNavLink>
+    <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
 
     <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
         <MudDivider Class="my-2" />
@@ -28,7 +31,5 @@
     <MudDivider Class="my-2" />
     <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">BALD VERFÜGBAR</MudText>
 
-    <MudNavLink Icon="@Icons.Material.Filled.Groups" Disabled="true">Fraktionen &amp; Gruppen</MudNavLink>
-    <MudNavLink Icon="@Icons.Material.Filled.AccountTree" Disabled="true">Verknüpfungen</MudNavLink>
-    <MudNavLink Icon="@Icons.Material.Filled.Search" Disabled="true">Suche</MudNavLink>
+    <MudNavLink Icon="@Icons.Material.Filled.Hub" Disabled="true">Beziehungsgraph</MudNavLink>
 </MudNavMenu>

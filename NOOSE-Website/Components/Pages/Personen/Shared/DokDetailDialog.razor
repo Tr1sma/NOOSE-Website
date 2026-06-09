@@ -1,5 +1,8 @@
-@* Schreibgeschützte Detailansicht eines Personen-Doks. Öffnet sich per Klick aus der Übersicht und der Akte. *@
+@* Detailansicht eines Personen-Doks (lesen + bearbeiten). Öffnet sich per Klick aus der Übersicht und der Akte. *@
 @inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject IPersonDokService DokService
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -44,6 +47,7 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.Edit" OnClick="BearbeitenAsync">Bearbeiten</MudButton>
         @if (ZeigeZurAkte)
         {
             <MudButton StartIcon="@Icons.Material.Filled.Badge" OnClick="ZurAkte">Zur Akte</MudButton>
@@ -56,6 +60,7 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     [Parameter, EditorRequired] public PersonDok Dok { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
     [Parameter] public bool ZeigeZurAkte { get; set; } = true;
 
     private void Schliessen() => MudDialog.Close();
@@ -66,16 +71,34 @@
         Nav.NavigateTo($"/personen/{Dok.PersonId}");
     }
 
-    /// <summary>Zeigt die schreibgeschützte Dok-Detailansicht an.</summary>
-    public static async Task ZeigenAsync(IDialogService dialog, PersonDok dok, bool zeigeZurAkte = true)
+    private async Task BearbeitenAsync()
+    {
+        var eingabe = await DokDialog.ZeigenZumBearbeitenAsync(DialogService, Dok);
+        if (eingabe is null)
+        {
+            return;
+        }
+        await DokService.AktualisierenAsync(Dok.Id, eingabe, User);
+        Snackbar.Add("Dok aktualisiert.", Severity.Success);
+        // Detail schließen und dem Aufrufer „geändert" melden → Liste neu laden.
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Zeigt die Dok-Detailansicht an und liefert true, wenn das Dok darin bearbeitet wurde
+    /// (damit der Aufrufer seine Liste neu laden kann).
+    /// </summary>
+    public static async Task<bool> ZeigenAsync(IDialogService dialog, PersonDok dok, ClaimsPrincipal user, bool zeigeZurAkte = true)
     {
         var parameters = new DialogParameters<DokDetailDialog>
         {
             { x => x.Dok, dok },
+            { x => x.User, user },
             { x => x.ZeigeZurAkte, zeigeZurAkte },
         };
         var titel = dok.Person is not null ? $"Dok · {dok.Person.Name}" : "Dok";
         var referenz = await dialog.ShowAsync<DokDetailDialog>(titel, parameters);
-        await referenz.Result;
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: bool geaendert } && geaendert;
     }
 }

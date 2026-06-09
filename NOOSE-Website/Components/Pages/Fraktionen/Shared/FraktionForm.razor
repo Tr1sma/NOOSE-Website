@@ -1,0 +1,121 @@
+@* Gemeinsames Formular für Anlegen/Bearbeiten einer Fraktion: Stammdaten + strukturierte Listen
+   (Ränge, Waffen-/Lagerbestand). Bindet direkt an das übergebene FraktionEingabe. Mitglieder werden
+   nicht hier, sondern in der Akte (Tab „Mitglieder") gepflegt. *@
+@using MudBlazor.Utilities
+@inject ISteckbriefVorschlagService VorschlagService
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        <MudTextField @bind-Value="Eingabe.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
+                      Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        @* Wie das Waffen-Feld: Autocomplete mit Vorschlägen aus dem gemeinsamen Katalog; freie Eingabe erlaubt. *@
+        <MudAutocomplete T="string" @bind-Value="Eingabe.Art" Label="Art (z. B. Gang, Konzern)"
+                         SearchFunc="@ArtSuchen" Variant="Variant.Outlined"
+                         CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                         MinCharacters="0" Immediate="true" MaxItems="20" Clearable="true"
+                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category" />
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudTextField @bind-Value="Eingabe.Funk" Label="Funk" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudTextField @bind-Value="Eingabe.Darkchat" Label="Darkchat" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudTextField @bind-Value="Eingabe.Ausstellungszeiten" Label="Ausstellungszeiten" Variant="Variant.Outlined" />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudColorPicker Label="Erkennungsfarbe (optional)" Value="_farbe" ValueChanged="FarbeGesetzt"
+                        Variant="Variant.Outlined" Placeholder="z. B. #1E88E5" Clearable="true" />
+    </MudItem>
+    <MudItem xs="12" md="6" Class="d-flex align-center">
+        <MudSwitch T="bool" @bind-Value="Eingabe.IstVerschlusssache" Color="Color.Warning"
+                   Label="Verschlusssache (nur Führung sichtbar)" />
+    </MudItem>
+
+    @if (ZeigeEinstufung)
+    {
+        <MudItem xs="12" md="6">
+            <MudSelect T="Einstufung" @bind-Value="Eingabe.Einstufung" Label="Einstufung" Variant="Variant.Outlined">
+                @foreach (var e in EinstufungAnzeige.Alle)
+                {
+                    <MudSelectItem Value="e" Disabled="@(e == Einstufung.GesichertStaatsgefaehrdend && !DarfHoechste)">
+                        @EinstufungAnzeige.Name(e)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    }
+
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Eingabe.Ziele" Label="Ziele" Lines="2" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Eingabe.Beschreibung" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+    </MudItem>
+</MudGrid>
+
+<MudDivider Class="my-4" />
+<MudGrid>
+    @* Ränge als einfache Zeilen (Reihenfolge = Listenreihenfolge). *@
+    <MudItem xs="12" md="6">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.subtitle2">Ränge</MudText>
+            @foreach (var r in Eingabe.Raenge)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="r.Bezeichnung" Placeholder="Rang-Bezeichnung" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Eingabe.Raenge.Remove(r))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Eingabe.Raenge.Add(new()))">Rang hinzufügen</MudButton>
+        </MudStack>
+
+        <div class="mt-4">
+            <SteckbriefMehrfachFeld TItem="BestandEingabe" Titel="Waffenbestand" Items="Eingabe.Waffenbestand"
+                                    Typ="VorschlagTyp.Waffe" ZeigeZusatz="true"
+                                    HauptPlaceholder="Waffe" ZusatzPlaceholder="Menge (optional)" />
+        </div>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <SteckbriefMehrfachFeld TItem="BestandEingabe" Titel="Lagerbestand" Items="Eingabe.Lagerbestand"
+                                Typ="VorschlagTyp.Lagerbestand" ZeigeZusatz="true"
+                                HauptPlaceholder="Gegenstand" ZusatzPlaceholder="Menge (optional)" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public FraktionEingabe Eingabe { get; set; } = default!;
+    /// <summary>Einstufung im Formular zeigen (nur beim Anlegen; im Bearbeiten läuft sie über den Tab „Einstufung").</summary>
+    [Parameter] public bool ZeigeEinstufung { get; set; }
+    [Parameter] public bool DarfHoechste { get; set; }
+
+    private MudColor? _farbe;
+    private IReadOnlyList<string> _artVorschlaege = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+        => _artVorschlaege = await VorschlagService.GetAsync(VorschlagTyp.Art);
+
+    protected override void OnParametersSet()
+        => _farbe = string.IsNullOrWhiteSpace(Eingabe.Erkennungsfarbe) ? null : new MudColor(Eingabe.Erkennungsfarbe);
+
+    private Task<IEnumerable<string>> ArtSuchen(string value, CancellationToken token)
+    {
+        IEnumerable<string> treffer = string.IsNullOrWhiteSpace(value)
+            ? _artVorschlaege
+            : _artVorschlaege.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(treffer);
+    }
+
+    private void FarbeGesetzt(MudColor? farbe)
+    {
+        _farbe = farbe;
+        Eingabe.Erkennungsfarbe = farbe is null ? null : farbe.ToString(MudColorOutputFormats.Hex);
+    }
+}

@@ -11,6 +11,11 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IAgentVerwaltungService" />
+// Bewusste Ausnahme von der DbContext-Factory: Dieser Dienst arbeitet eng mit dem UserManager zusammen,
+// dessen Identity-Store denselben scoped AppDbContext nutzt. Agent-Änderung und der zugehörige AuditLog
+// werden in EINEM Kontext gesammelt und über UserManager.UpdateAsync gespeichert – ein eigener
+// Factory-Context würde den hier vorgemerkten AuditLog nicht mitspeichern. Die Admin-Seiten lösen keine
+// parallelen Kontextzugriffe aus, daher ist der geteilte scoped Context hier unkritisch.
 public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext db) : IAgentVerwaltungService
 {
     public Task<List<Agent>> GetAusstehendeAsync(CancellationToken cancellationToken = default)

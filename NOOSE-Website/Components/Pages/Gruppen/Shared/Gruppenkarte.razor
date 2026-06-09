@@ -1,0 +1,64 @@
+@* Identitäts-/Steckkarte der Personengruppe: Name, Einstufung, Erfassungsfortschritt x/y. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.Diversity3" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Gruppe.Name</MudText>
+                @if (Gruppe.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Gruppe.Aktenzeichen</MudText>
+        </div>
+
+        <EinstufungBadge Wert="Gruppe.Einstufung" />
+
+        <MudDivider />
+
+        @* Erfassungsfortschritt x/y *@
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle2">Erfassungsfortschritt</MudText>
+                <MudText Typo="Typo.body2">@Fortschritt.Erfasst / @(Fortschritt.Geschaetzt?.ToString() ?? "?")</MudText>
+            </MudStack>
+            @if (Fortschritt.Geschaetzt is > 0)
+            {
+                <MudProgressLinear Color="Color.Primary" Value="@Prozent()" Class="mt-1" Rounded="true" Size="Size.Medium" />
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @Fortschritt.Erfasst Mitglied(er) erfasst – keine geschätzte Gesamtgröße hinterlegt.
+                </MudText>
+            }
+        </div>
+
+        <MudDivider />
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Zuletzt aktualisiert: @((Gruppe.GeaendertAm ?? Gruppe.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Personengruppe Gruppe { get; set; } = default!;
+    [Parameter, EditorRequired] public PersonengruppeFortschritt Fortschritt { get; set; } = default!;
+
+    private double Prozent()
+    {
+        if (Fortschritt.Geschaetzt is not > 0)
+        {
+            return 0;
+        }
+        var p = (double)Fortschritt.Erfasst / Fortschritt.Geschaetzt.Value * 100;
+        return Math.Clamp(p, 0, 100);
+    }
+}

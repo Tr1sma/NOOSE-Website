@@ -1,0 +1,71 @@
+@* Dialog zum Anlegen eines Konflikts: Auswahl einer anderen Fraktion + optionale Bezeichnung. *@
+@inject IFraktionService FraktionService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:360px;">
+            <MudAutocomplete T="Fraktion" Label="Gegnerische Fraktion" @bind-Value="_ziel"
+                             SearchFunc="@SucheFraktionen" ToStringFunc="@(f => f?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups"
+                             HelperText="Fraktion auswählen, zu der ein Konflikt besteht.">
+                <ItemTemplate Context="f">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2">@f.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.Aktenzeichen</MudText>
+                    </MudStack>
+                </ItemTemplate>
+            </MudAutocomplete>
+            <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. Revierkonflikt, langjährige Feindschaft" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Konflikt hinzufügen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public bool IstFuehrung { get; set; }
+    /// <summary>Die aktuelle Fraktion wird aus der Auswahl ausgeschlossen.</summary>
+    [Parameter] public string? AusschlussFraktionId { get; set; }
+
+    private Fraktion? _ziel;
+    private string? _label;
+
+    private async Task<IEnumerable<Fraktion>> SucheFraktionen(string value, CancellationToken token)
+    {
+        var treffer = await FraktionService.SucheAsync(value, IstFuehrung, 20, token);
+        return AusschlussFraktionId is null ? treffer : treffer.Where(f => f.Id != AusschlussFraktionId);
+    }
+
+    private void Speichern()
+    {
+        if (_ziel is null)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new KonfliktEingabe(_ziel.Id, string.IsNullOrWhiteSpace(_label) ? null : _label.Trim())));
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    public record KonfliktEingabe(string ZielId, string? Label);
+
+    public static async Task<KonfliktEingabe?> ZeigenAsync(IDialogService dialog, bool istFuehrung, string ausschlussFraktionId)
+    {
+        var parameters = new DialogParameters<KonfliktDialog>
+        {
+            { x => x.IstFuehrung, istFuehrung },
+            { x => x.AusschlussFraktionId, ausschlussFraktionId },
+        };
+        var referenz = await dialog.ShowAsync<KonfliktDialog>("Konflikt hinzufügen", parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: KonfliktEingabe e } ? e : null;
+    }
+}

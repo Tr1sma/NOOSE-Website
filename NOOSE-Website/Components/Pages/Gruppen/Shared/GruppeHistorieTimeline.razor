@@ -1,0 +1,66 @@
+@* Akten-Historie der Personengruppe: Audit-Einträge der Gruppe, Mitgliedschaften und Agent-Zuteilungen. *@
+@inject IPersonengruppeService GruppeService
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_logs.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Historie vorhanden.</MudText>
+}
+else
+{
+    <MudTimeline TimelinePosition="TimelinePosition.Start">
+        @foreach (var log in _logs)
+        {
+            <MudTimelineItem Color="@Farbe(log.Aktion)" Size="Size.Small">
+                <MudText Typo="Typo.body2"><b>@AktionText(log)</b></MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @log.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(log.AgentName ?? "System")
+                </MudText>
+            </MudTimelineItem>
+        }
+    </MudTimeline>
+}
+
+@code {
+    [Parameter, EditorRequired] public string GruppeId { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<AuditLog> _logs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _logs = await GruppeService.GetHistorieAsync(GruppeId);
+        _laden = false;
+    }
+
+    private static string AktionText(AuditLog log)
+    {
+        var typ = log.EntitaetTyp switch
+        {
+            nameof(PersonengruppeMitglied) => "Mitglied",
+            nameof(PersonengruppeAgent) => "Agent-Zuteilung",
+            _ => "Gruppe",
+        };
+        var aktion = log.Aktion switch
+        {
+            AuditAktion.Erstellt => "erstellt",
+            AuditAktion.Geaendert => "geändert",
+            AuditAktion.Geloescht => "entfernt",
+            AuditAktion.Wiederhergestellt => "wiederhergestellt",
+            _ => log.Aktion.ToString(),
+        };
+        return $"{typ} {aktion}";
+    }
+
+    private static Color Farbe(AuditAktion a) => a switch
+    {
+        AuditAktion.Erstellt => Color.Success,
+        AuditAktion.Geaendert => Color.Info,
+        AuditAktion.Geloescht => Color.Error,
+        AuditAktion.Wiederhergestellt => Color.Warning,
+        _ => Color.Default,
+    };
+}

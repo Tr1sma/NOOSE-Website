@@ -8,11 +8,12 @@ using NOOSE_Website.Data.Entities.Querschnitt;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IKommentarService" />
-public class KommentarService(AppDbContext db) : IKommentarService
+public class KommentarService(IDbContextFactory<AppDbContext> dbFactory) : IKommentarService
 {
     public async Task<List<Kommentar>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
-        if (!await AkteSichtbarAsync(entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await AkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
         {
             return new();
         }
@@ -31,6 +32,7 @@ public class KommentarService(AppDbContext db) : IKommentarService
             throw new InvalidOperationException("Der Kommentar darf nicht leer sein.");
         }
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var kommentar = new Kommentar
         {
             EntitaetTyp = entitaetTyp,
@@ -45,6 +47,7 @@ public class KommentarService(AppDbContext db) : IKommentarService
 
     public async Task LoeschenAsync(string kommentarId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var kommentar = await db.Kommentare.FirstOrDefaultAsync(k => k.Id == kommentarId, cancellationToken);
         if (kommentar is null)
         {
@@ -55,7 +58,7 @@ public class KommentarService(AppDbContext db) : IKommentarService
     }
 
     /// <summary>Vgl. <c>QuelleService</c>: Eltern-Sichtbarkeit ohne FK-Navigation prüfen (nur Person in Phase 3).</summary>
-    private async Task<bool> AkteSichtbarAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
+    private static async Task<bool> AkteSichtbarAsync(AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
     {
         if (entitaetTyp != nameof(Person))
         {

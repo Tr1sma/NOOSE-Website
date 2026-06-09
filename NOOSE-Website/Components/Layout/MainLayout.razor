@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject NavigationManager Nav
 
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -18,6 +19,10 @@
         <AuthorizeView>
             <Authorized Context="auth">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudTextField T="string" @bind-Value="_suche" Placeholder="Suchen…" Immediate="true"
+                                  Margin="Margin.Dense" Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  OnKeyDown="SucheKeyDown" Class="d-none d-md-flex mt-0" Style="max-width:240px;" />
                     <MudStack Spacing="0" AlignItems="AlignItems.End" Class="d-none d-sm-flex">
                         <MudText Typo="Typo.body2" Style="line-height:1.2;">@AnzeigeName(auth.User)</MudText>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.2;">
@@ -45,6 +50,13 @@
             @Body
         </MudContainer>
     </MudMainContent>
+
+    @* Command-Palette (Strg+K) – nur für eingeloggte Agenten aktiv. *@
+    <AuthorizeView>
+        <Authorized Context="cp">
+            <CommandPalette />
+        </Authorized>
+    </AuthorizeView>
 </MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
@@ -55,8 +67,17 @@
 
 @code {
     private bool _drawerOpen = true;
+    private string _suche = string.Empty;
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private void SucheKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_suche))
+        {
+            Nav.NavigateTo($"/suche?q={Uri.EscapeDataString(_suche.Trim())}");
+        }
+    }
 
     private static string Initiale(string? name)
         => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();

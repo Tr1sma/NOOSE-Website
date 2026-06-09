@@ -1,0 +1,100 @@
+@page "/fraktionen/{Id}/bearbeiten"
+@inject IFraktionService FraktionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Fraktion bearbeiten · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_eingabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Fraktion nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/fraktionen/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Fraktion bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <FraktionForm Eingabe="_eingabe" ZeigeEinstufung="false" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/fraktionen/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private FraktionEingabe? _eingabe;
+    private ClaimsPrincipal _user = default!;
+    private bool _laden = true;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        var f = await FraktionService.GetDetailAsync(Id, _user.IstFuehrung());
+        if (f is not null)
+        {
+            _eingabe = new FraktionEingabe
+            {
+                Name = f.Name,
+                Art = f.Art,
+                Funk = f.Funk,
+                Darkchat = f.Darkchat,
+                Ausstellungszeiten = f.Ausstellungszeiten,
+                Erkennungsfarbe = f.Erkennungsfarbe,
+                Ziele = f.Ziele,
+                Beschreibung = f.Beschreibung,
+                Einstufung = f.Einstufung,
+                IstVerschlusssache = f.IstVerschlusssache,
+                Raenge = f.Raenge.OrderBy(r => r.Reihenfolge).Select(r => new RangEingabe { Bezeichnung = r.Bezeichnung }).ToList(),
+                Waffenbestand = f.Waffenbestand.Select(w => new BestandEingabe { Bezeichnung = w.Bezeichnung, Menge = w.Menge }).ToList(),
+                Lagerbestand = f.Lagerbestand.Select(l => new BestandEingabe { Bezeichnung = l.Bezeichnung, Menge = l.Menge }).ToList(),
+            };
+        }
+        _laden = false;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_eingabe is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            await FraktionService.AktualisierenAsync(Id, _eingabe, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/fraktionen/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

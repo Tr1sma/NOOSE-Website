@@ -2,6 +2,8 @@ using System.Reflection;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Fraktionen;
+using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
@@ -35,6 +37,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<PersonFahrzeug> PersonFahrzeuge => Set<PersonFahrzeug>();
     public DbSet<PersonOrt> PersonOrte => Set<PersonOrt>();
     public DbSet<PersonWaffe> PersonWaffen => Set<PersonWaffe>();
+    public DbSet<SteckbriefVorschlag> SteckbriefVorschlaege => Set<SteckbriefVorschlag>();
     public DbSet<AktenzeichenZaehler> AktenzeichenZaehler => Set<AktenzeichenZaehler>();
 
     // ---- Phase 3a: Querschnitt (Tags, Kommentare, Quellen) – generisch über EntitaetTyp/EntitaetId ----
@@ -46,6 +49,21 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Phase 3b: Verknüpfungs-Engine (generisch) + Person-Beziehungen (typisiert) ----
     public DbSet<Verknuepfung> Verknuepfungen => Set<Verknuepfung>();
     public DbSet<PersonBeziehung> PersonBeziehungen => Set<PersonBeziehung>();
+
+    // ---- Phase 3c: gespeicherte Suchen ----
+    public DbSet<GespeicherteSuche> GespeicherteSuchen => Set<GespeicherteSuche>();
+
+    // ---- Phase 4a: Fraktionen ----
+    public DbSet<Fraktion> Fraktionen => Set<Fraktion>();
+    public DbSet<FraktionRang> FraktionRaenge => Set<FraktionRang>();
+    public DbSet<FraktionWaffenbestand> FraktionWaffenbestaende => Set<FraktionWaffenbestand>();
+    public DbSet<FraktionLagerbestand> FraktionLagerbestaende => Set<FraktionLagerbestand>();
+    public DbSet<FraktionMitglied> FraktionMitglieder => Set<FraktionMitglied>();
+
+    // ---- Phase 4b: Personengruppen ----
+    public DbSet<Personengruppe> Personengruppen => Set<Personengruppe>();
+    public DbSet<PersonengruppeMitglied> PersonengruppeMitglieder => Set<PersonengruppeMitglied>();
+    public DbSet<PersonengruppeAgent> PersonengruppeAgenten => Set<PersonengruppeAgent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -105,8 +123,6 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(p => p.Doks).WithOne(d => d.Person!)
                 .HasForeignKey(d => d.PersonId).OnDelete(DeleteBehavior.Cascade);
-            b.HasMany(p => p.EinstufungVerlauf).WithOne(e => e.Person!)
-                .HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PersonAlias>(b => b.Property(a => a.Aliasname).HasMaxLength(200));
@@ -128,6 +144,13 @@ public class AppDbContext : IdentityDbContext<Agent>
         });
         modelBuilder.Entity<PersonWaffe>(b => b.Property(w => w.Text).HasMaxLength(200));
 
+        modelBuilder.Entity<SteckbriefVorschlag>(b =>
+        {
+            b.Property(v => v.Wert).HasMaxLength(300).IsRequired();
+            // Eindeutig je Typ+Wert (case-insensitiv über die DB-Collation) → keine doppelten Vorschläge.
+            b.HasIndex(v => new { v.Typ, v.Wert }).IsUnique();
+        });
+
         modelBuilder.Entity<PersonFoto>(b =>
         {
             b.Property(f => f.DateinameGespeichert).HasMaxLength(128);
@@ -138,11 +161,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<EinstufungVerlauf>(b =>
         {
+            b.Property(e => e.EntitaetTyp).HasMaxLength(128);
+            b.Property(e => e.EntitaetId).HasMaxLength(64);
             b.Property(e => e.Begruendung).HasMaxLength(1000);
             b.Property(e => e.AgentId).HasMaxLength(64);
             b.Property(e => e.AgentName).HasMaxLength(128);
             b.Property(e => e.AntragId).HasMaxLength(64);
-            b.HasIndex(e => e.PersonId);
+            b.HasIndex(e => new { e.EntitaetTyp, e.EntitaetId });
         });
 
         modelBuilder.Entity<PersonDok>(b =>
@@ -153,7 +178,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<AktenzeichenZaehler>(b =>
         {
-            b.HasKey(z => z.Jahr);
+            // Zusammengesetzter Schlüssel (Praefix, Jahr) → eine eigene Sequenz je Aktentyp und Jahr.
+            b.HasKey(z => new { z.Praefix, z.Jahr });
+            b.Property(z => z.Praefix).HasMaxLength(8);
             // Jahr ist eine echte Jahreszahl (kein Auto-Increment) – wird beim Insert explizit gesetzt.
             b.Property(z => z.Jahr).ValueGeneratedNever();
         });
@@ -224,6 +251,102 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(x => x.PersonBId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(x => x.PersonAId);
             b.HasIndex(x => x.PersonBId);
+        });
+
+        modelBuilder.Entity<GespeicherteSuche>(b =>
+        {
+            b.Property(g => g.AgentId).HasMaxLength(64);
+            b.Property(g => g.Name).HasMaxLength(120).IsRequired();
+            b.HasOne<Agent>().WithMany().HasForeignKey(g => g.AgentId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(g => g.AgentId);
+        });
+
+        // ---- Phase 4a: Fraktionen ----
+        modelBuilder.Entity<Fraktion>(b =>
+        {
+            b.Property(f => f.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(f => f.Name).HasMaxLength(200).IsRequired();
+            b.Property(f => f.Art).HasMaxLength(100);
+            b.Property(f => f.Funk).HasMaxLength(100);
+            b.Property(f => f.Darkchat).HasMaxLength(100);
+            b.Property(f => f.Ausstellungszeiten).HasMaxLength(300);
+            b.Property(f => f.Erkennungsfarbe).HasMaxLength(32);
+            b.Property(f => f.Ziele).HasMaxLength(2000);
+            b.Property(f => f.Beschreibung).HasMaxLength(2000);
+            b.HasIndex(f => f.Aktenzeichen).IsUnique();
+            b.HasIndex(f => f.Name);
+            b.HasIndex(f => f.IstVerschlusssache);
+
+            b.HasMany(f => f.Raenge).WithOne(r => r.Fraktion!)
+                .HasForeignKey(r => r.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Waffenbestand).WithOne(w => w.Fraktion!)
+                .HasForeignKey(w => w.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Lagerbestand).WithOne(l => l.Fraktion!)
+                .HasForeignKey(l => l.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Mitglieder).WithOne(m => m.Fraktion!)
+                .HasForeignKey(m => m.FraktionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FraktionRang>(b =>
+        {
+            b.Property(r => r.Bezeichnung).HasMaxLength(100).IsRequired();
+        });
+        modelBuilder.Entity<FraktionWaffenbestand>(b =>
+        {
+            b.Property(w => w.Bezeichnung).HasMaxLength(200).IsRequired();
+            b.Property(w => w.Menge).HasMaxLength(50);
+        });
+        modelBuilder.Entity<FraktionLagerbestand>(b =>
+        {
+            b.Property(l => l.Bezeichnung).HasMaxLength(200).IsRequired();
+            b.Property(l => l.Menge).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<FraktionMitglied>(b =>
+        {
+            b.Property(m => m.Rang).HasMaxLength(100);
+            // FK auf Person mit Restrict (Fraktion cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
+            b.HasOne(m => m.Person).WithMany()
+                .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
+            // Eine Person nur einmal pro Fraktion.
+            b.HasIndex(m => new { m.FraktionId, m.PersonId }).IsUnique();
+            b.HasIndex(m => m.PersonId);
+        });
+
+        // ---- Phase 4b: Personengruppen ----
+        modelBuilder.Entity<Personengruppe>(b =>
+        {
+            b.Property(g => g.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(g => g.Name).HasMaxLength(200).IsRequired();
+            b.Property(g => g.Beschreibung).HasMaxLength(2000);
+            b.Property(g => g.Ziele).HasMaxLength(2000);
+            b.HasIndex(g => g.Aktenzeichen).IsUnique();
+            b.HasIndex(g => g.Name);
+            b.HasIndex(g => g.IstVerschlusssache);
+
+            b.HasMany(g => g.Mitglieder).WithOne(m => m.Personengruppe!)
+                .HasForeignKey(m => m.PersonengruppeId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(g => g.Agenten).WithOne(a => a.Personengruppe!)
+                .HasForeignKey(a => a.PersonengruppeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PersonengruppeMitglied>(b =>
+        {
+            b.Property(m => m.Rolle).HasMaxLength(100);
+            // FK auf Person mit Restrict (Gruppe cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
+            b.HasOne(m => m.Person).WithMany()
+                .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(m => new { m.PersonengruppeId, m.PersonId }).IsUnique();
+            b.HasIndex(m => m.PersonId);
+        });
+
+        modelBuilder.Entity<PersonengruppeAgent>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(a => new { a.PersonengruppeId, a.AgentId }).IsUnique();
+            b.HasIndex(a => a.AgentId);
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

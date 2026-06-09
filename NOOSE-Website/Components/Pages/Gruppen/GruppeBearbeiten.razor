@@ -1,0 +1,93 @@
+@page "/personengruppen/{Id}/bearbeiten"
+@inject IPersonengruppeService GruppeService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Personengruppe bearbeiten · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_eingabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Personengruppe nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/personengruppen/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Personengruppe bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <GruppeForm Eingabe="_eingabe" ZeigeEinstufung="false" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/personengruppen/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private PersonengruppeEingabe? _eingabe;
+    private ClaimsPrincipal _user = default!;
+    private bool _laden = true;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        var g = await GruppeService.GetDetailAsync(Id, _user.IstFuehrung());
+        if (g is not null)
+        {
+            _eingabe = new PersonengruppeEingabe
+            {
+                Name = g.Name,
+                Beschreibung = g.Beschreibung,
+                Ziele = g.Ziele,
+                Einstufung = g.Einstufung,
+                GeschaetzteMitgliederzahl = g.GeschaetzteMitgliederzahl,
+                IstVerschlusssache = g.IstVerschlusssache,
+            };
+        }
+        _laden = false;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_eingabe is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            await GruppeService.AktualisierenAsync(Id, _eingabe, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/personengruppen/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

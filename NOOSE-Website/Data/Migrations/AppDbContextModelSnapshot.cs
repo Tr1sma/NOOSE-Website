@@ -275,15 +275,362 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Aktenzeichen")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("Art")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Ausstellungszeiten")
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<int?>("BedrohungsScore")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Beschreibung")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("Darkchat")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("Einstufung")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Erkennungsfarbe")
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Funk")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstVerschlusssache")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Ziele")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Aktenzeichen")
+                        .IsUnique();
+
+                    b.HasIndex("IstVerschlusssache");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Fraktionen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionLagerbestand", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Bezeichnung")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("FraktionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Menge")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FraktionId");
+
+                    b.ToTable("FraktionLagerbestaende");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionMitglied", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("FraktionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstLeitung")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("PersonId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Rang")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId");
+
+                    b.HasIndex("FraktionId", "PersonId")
+                        .IsUnique();
+
+                    b.ToTable("FraktionMitglieder");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionRang", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Bezeichnung")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("FraktionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("Reihenfolge")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FraktionId");
+
+                    b.ToTable("FraktionRaenge");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionWaffenbestand", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Bezeichnung")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("FraktionId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Menge")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FraktionId");
+
+                    b.ToTable("FraktionWaffenbestaende");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Gruppen.Personengruppe", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Aktenzeichen")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("Beschreibung")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<int>("Einstufung")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("GeschaetzteMitgliederzahl")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstVerschlusssache")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Ziele")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Aktenzeichen")
+                        .IsUnique();
+
+                    b.HasIndex("IstVerschlusssache");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Personengruppen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Gruppen.PersonengruppeAgent", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("PersonengruppeId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.HasIndex("PersonengruppeId", "AgentId")
+                        .IsUnique();
+
+                    b.ToTable("PersonengruppeAgenten");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Gruppen.PersonengruppeMitglied", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstLeitung")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("PersonId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("PersonengruppeId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Rolle")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId");
+
+                    b.HasIndex("PersonengruppeId", "PersonId")
+                        .IsUnique();
+
+                    b.ToTable("PersonengruppeMitglieder");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.AktenzeichenZaehler", b =>
                 {
+                    b.Property<string>("Praefix")
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)");
+
                     b.Property<int>("Jahr")
                         .HasColumnType("int");
 
                     b.Property<int>("LetzteNummer")
                         .HasColumnType("int");
 
-                    b.HasKey("Jahr");
+                    b.HasKey("Praefix", "Jahr");
 
                     b.ToTable("AktenzeichenZaehler");
                 });
@@ -309,9 +656,15 @@ namespace NOOSE_Website.Data.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
 
-                    b.Property<string>("PersonId")
+                    b.Property<string>("EntitaetId")
                         .IsRequired()
-                        .HasColumnType("varchar(255)");
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("EntitaetTyp")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
 
                     b.Property<int>("Wert")
                         .HasColumnType("int");
@@ -321,7 +674,7 @@ namespace NOOSE_Website.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PersonId");
+                    b.HasIndex("EntitaetTyp", "EntitaetId");
 
                     b.ToTable("EinstufungVerlauf");
                 });
@@ -656,6 +1009,65 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("PersonId");
 
                     b.ToTable("PersonWaffen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.SteckbriefVorschlag", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("Typ")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Wert")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Typ", "Wert")
+                        .IsUnique();
+
+                    b.ToTable("SteckbriefVorschlaege");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.GespeicherteSuche", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("SuchparameterJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.ToTable("GespeicherteSuchen");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.Kommentar", b =>
@@ -1043,15 +1455,94 @@ namespace NOOSE_Website.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.EinstufungVerlauf", b =>
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionLagerbestand", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", "Fraktion")
+                        .WithMany("Lagerbestand")
+                        .HasForeignKey("FraktionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Fraktion");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionMitglied", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", "Fraktion")
+                        .WithMany("Mitglieder")
+                        .HasForeignKey("FraktionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Personen.Person", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Fraktion");
+
+                    b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionRang", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", "Fraktion")
+                        .WithMany("Raenge")
+                        .HasForeignKey("FraktionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Fraktion");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionWaffenbestand", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", "Fraktion")
+                        .WithMany("Waffenbestand")
+                        .HasForeignKey("FraktionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Fraktion");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Gruppen.PersonengruppeAgent", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Gruppen.Personengruppe", "Personengruppe")
+                        .WithMany("Agenten")
+                        .HasForeignKey("PersonengruppeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+
+                    b.Navigation("Personengruppe");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Gruppen.PersonengruppeMitglied", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Personen.Person", "Person")
-                        .WithMany("EinstufungVerlauf")
+                        .WithMany()
                         .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Gruppen.Personengruppe", "Personengruppe")
+                        .WithMany("Mitglieder")
+                        .HasForeignKey("PersonengruppeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Person");
+
+                    b.Navigation("Personengruppe");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.PersonAlias", b =>
@@ -1150,6 +1641,15 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Person");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.GespeicherteSuche", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.TagZuordnung", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Querschnitt.Tag", "Tag")
@@ -1161,13 +1661,29 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", b =>
+                {
+                    b.Navigation("Lagerbestand");
+
+                    b.Navigation("Mitglieder");
+
+                    b.Navigation("Raenge");
+
+                    b.Navigation("Waffenbestand");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Gruppen.Personengruppe", b =>
+                {
+                    b.Navigation("Agenten");
+
+                    b.Navigation("Mitglieder");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.Person", b =>
                 {
                     b.Navigation("Aliase");
 
                     b.Navigation("Doks");
-
-                    b.Navigation("EinstufungVerlauf");
 
                     b.Navigation("Fahrzeuge");
 

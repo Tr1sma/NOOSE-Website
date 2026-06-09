@@ -39,13 +39,23 @@ builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 
 // AutoDetect ermittelt die passende Server-Variante automatisch (lokal MariaDB/XAMPP,
 // Produktion MySQL 8.0). Setzt voraus, dass die DB beim Start erreichbar ist.
-builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+//
+// Factory statt scoped DbContext: In Blazor Server lebt ein scoped Context den gesamten Circuit lang
+// und wird von Seite, Kind-Komponenten und Diensten geteilt. Gleichzeitige Zugriffe (parallele
+// OnInitializedAsync-Aufrufe mehrerer Komponenten, der 30-Sekunden-Status-Timer) lösen dann
+// „A second operation was started on this context instance" aus. Mit der Factory bekommt jede
+// Arbeitseinheit ihren eigenen, kurzlebigen Context. Als Scoped registriert, damit der (scoped)
+// Audit-Interceptor mit dem aktuellen Agent aufgelöst wird; AddDbContextFactory registriert
+// AppDbContext zusätzlich als scoped Service – das deckt Identity (AddEntityFrameworkStores),
+// den Health-Check und das Seeding ab.
+builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
            .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>())
            // Steckbrief-Kinder (Alias/Telefon/…) werden ausschließlich über die – bereits
            // soft-delete-gefilterte – Person geladen. Die EF-Warnung zum Zusammenspiel von
            // Query-Filter und Pflichtnavigation ist daher für unsere Zugriffsmuster unkritisch.
-           .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
+           .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)),
+    ServiceLifetime.Scoped);
 
 // Health-Checks: prüft die DB-Erreichbarkeit (genutzt von /health und der Status-Seite).
 builder.Services.AddHealthChecks()
@@ -108,8 +118,11 @@ builder.Services.AddScoped<IAgentVerwaltungService, AgentVerwaltungService>();
 builder.Services.AddScoped<IZugriffsLogService, ZugriffsLogService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IQuellenStorageService, QuellenStorageService>();
+// Gemeinsame Aktenzeichen-Vergabe (Person/Fraktion/Gruppe).
+builder.Services.AddScoped<IAktenzeichenService, AktenzeichenService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDokService, PersonDokService>();
+builder.Services.AddScoped<ISteckbriefVorschlagService, SteckbriefVorschlagService>();
 // Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
 builder.Services.AddScoped<IQuelleService, QuelleService>();
 builder.Services.AddScoped<ITagService, TagService>();
@@ -117,6 +130,13 @@ builder.Services.AddScoped<IKommentarService, KommentarService>();
 // Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
 builder.Services.AddScoped<IVerknuepfungService, VerknuepfungService>();
 builder.Services.AddScoped<IBeziehungService, BeziehungService>();
+// Phase 3c: globale Suche + gespeicherte Suchen.
+builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>();
+// Phase 4a: Fraktionen.
+builder.Services.AddScoped<IFraktionService, FraktionService>();
+// Phase 4b: Personengruppen.
+builder.Services.AddScoped<IPersonengruppeService, PersonengruppeService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>

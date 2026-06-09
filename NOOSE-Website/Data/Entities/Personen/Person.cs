@@ -39,7 +39,8 @@ public class Person : IAuditable, ISoftDelete
     public List<PersonWaffe> Waffen { get; set; } = new();
     public List<PersonFoto> Fotos { get; set; } = new();
     public List<PersonDok> Doks { get; set; } = new();
-    public List<EinstufungVerlauf> EinstufungVerlauf { get; set; } = new();
+    // Der Einstufungs-Verlauf ist seit Phase 4 polymorph (EntitaetTyp/EntitaetId) und wird nicht
+    // mehr als Navigation an der Person gehalten – er wird über den Dienst geladen.
 
     // ---- IAuditable ----
     public DateTime ErstelltAm { get; set; }

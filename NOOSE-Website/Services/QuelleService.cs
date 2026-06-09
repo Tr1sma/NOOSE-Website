@@ -10,13 +10,14 @@ using NOOSE_Website.Models.Querschnitt;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IQuelleService" />
-public class QuelleService(AppDbContext db, IQuellenStorageService storage) : IQuelleService
+public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenStorageService storage) : IQuelleService
 {
     public async Task<List<Quelle>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Verschlusssache-Schutz: bei Personen-Akten die Sichtbarkeit der Eltern-Akte prüfen
         // (keine FK-Navigation bei polymorphen Assoziationen → expliziter Lookup).
-        if (!await AkteSichtbarAsync(entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        if (!await AkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
         {
             return new();
         }
@@ -86,6 +87,7 @@ public class QuelleService(AppDbContext db, IQuellenStorageService storage) : IQ
                 break;
         }
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.Quellen.Add(quelle);
         await db.SaveChangesAsync(cancellationToken);
         return quelle;
@@ -93,6 +95,7 @@ public class QuelleService(AppDbContext db, IQuellenStorageService storage) : IQ
 
     public async Task EntfernenAsync(string quelleId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var quelle = await db.Quellen.FirstOrDefaultAsync(q => q.Id == quelleId, cancellationToken);
         if (quelle is null)
         {
@@ -106,12 +109,13 @@ public class QuelleService(AppDbContext db, IQuellenStorageService storage) : IQ
 
     public async Task<Quelle?> GetFuerDownloadAsync(string quelleId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var quelle = await db.Quellen.FirstOrDefaultAsync(q => q.Id == quelleId, cancellationToken);
         if (quelle is null || quelle.Typ != QuelleTyp.Upload || string.IsNullOrEmpty(quelle.DateinameGespeichert))
         {
             return null;
         }
-        return await AkteSichtbarAsync(quelle.EntitaetTyp, quelle.EntitaetId, istFuehrung, cancellationToken)
+        return await AkteSichtbarAsync(db, quelle.EntitaetTyp, quelle.EntitaetId, istFuehrung, cancellationToken)
             ? quelle
             : null;
     }
@@ -121,7 +125,7 @@ public class QuelleService(AppDbContext db, IQuellenStorageService storage) : IQ
     /// im Papierkorb → für alle „nicht vorhanden"; Verschlusssache → nur Führung. Andere Typen (später)
     /// gelten vorerst als sichtbar.
     /// </summary>
-    private async Task<bool> AkteSichtbarAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
+    private static async Task<bool> AkteSichtbarAsync(AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
     {
         if (entitaetTyp != nameof(Person))
         {

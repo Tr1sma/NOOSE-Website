@@ -1,0 +1,58 @@
+@* Rück-Verknüpfungen einer Person: Fraktionen und Personengruppen, denen sie angehört (klickbar). *@
+@inject IPersonService PersonService
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_zugehoerigkeiten.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Fraktions- oder Gruppen-Zugehörigkeit erfasst.</MudText>
+}
+else
+{
+    <MudStack Spacing="2">
+        @foreach (var z in _zugehoerigkeiten)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@TypIcon(z.Typ)" Color="Color.Primary" Size="Size.Small" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@TypAnzeige(z.Typ)</MudChip>
+                    <MudLink Href="@Route(z)" Typo="Typo.body2"><b>@z.Name</b></MudLink>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@z.Aktenzeichen</MudText>
+                    @if (z.IstLeitung)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Star">Leitung</MudChip>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(z.Rolle))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@z.Rolle</MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<PersonZugehoerigkeit> _zugehoerigkeiten = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _zugehoerigkeiten = await PersonService.GetZugehoerigkeitenAsync(PersonId, User.IstFuehrung());
+        _laden = false;
+    }
+
+    private static string Route(PersonZugehoerigkeit z)
+        => z.Typ == nameof(Personengruppe) ? $"/personengruppen/{z.Id}" : $"/fraktionen/{z.Id}";
+
+    private static string TypAnzeige(string typ)
+        => typ == nameof(Personengruppe) ? "Gruppe" : "Fraktion";
+
+    private static string TypIcon(string typ)
+        => typ == nameof(Personengruppe) ? Icons.Material.Filled.Diversity3 : Icons.Material.Filled.Groups;
+}

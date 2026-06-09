@@ -39,17 +39,39 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Dok speichern</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">@(IstBearbeiten ? "Änderungen speichern" : "Dok speichern")</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
+    /// <summary>Beim Bearbeiten gesetzt: vorhandene Werte zum Vorbefüllen. Null = Anlegen.</summary>
+    [Parameter] public PersonDokEingabe? Vorhanden { get; set; }
+
+    private bool IstBearbeiten => Vorhanden is not null;
+
     private MudForm _form = default!;
     private readonly PersonDokEingabe _eingabe = new();
     private DateTime? _datum = DateTime.Now;
     private TimeSpan? _zeit = DateTime.Now.TimeOfDay;
+
+    protected override void OnInitialized()
+    {
+        if (Vorhanden is null)
+        {
+            return;
+        }
+        // Edit-Modus: Felder sowie Datum/Uhrzeit (in Ortszeit) aus den vorhandenen Werten übernehmen.
+        _eingabe.Grund = Vorhanden.Grund;
+        _eingabe.Fraktion = Vorhanden.Fraktion;
+        _eingabe.ErhalteneInformationen = Vorhanden.ErhalteneInformationen;
+        _eingabe.Wahrheitsserum = Vorhanden.Wahrheitsserum;
+        _eingabe.Ausgang = Vorhanden.Ausgang;
+        var lokal = Vorhanden.Zeitpunkt.ToLocalTime();
+        _datum = lokal.Date;
+        _zeit = lokal.TimeOfDay;
+    }
 
     private async Task Speichern()
     {
@@ -71,6 +93,24 @@
     public static async Task<PersonDokEingabe?> ZeigenAsync(IDialogService dialog)
     {
         var referenz = await dialog.ShowAsync<DokDialog>("Neues Dok");
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: PersonDokEingabe e } ? e : null;
+    }
+
+    /// <summary>Zeigt den Dialog im Bearbeiten-Modus (vorbefüllt) und liefert die geänderte Eingabe oder null bei Abbruch.</summary>
+    public static async Task<PersonDokEingabe?> ZeigenZumBearbeitenAsync(IDialogService dialog, PersonDok dok)
+    {
+        var vorhanden = new PersonDokEingabe
+        {
+            Zeitpunkt = dok.Zeitpunkt,
+            Grund = dok.Grund,
+            Fraktion = dok.Fraktion,
+            ErhalteneInformationen = dok.ErhalteneInformationen,
+            Wahrheitsserum = dok.Wahrheitsserum,
+            Ausgang = dok.Ausgang,
+        };
+        var parameters = new DialogParameters<DokDialog> { { x => x.Vorhanden, vorhanden } };
+        var referenz = await dialog.ShowAsync<DokDialog>("Dok bearbeiten", parameters);
         var ergebnis = await referenz.Result;
         return ergebnis is { Canceled: false, Data: PersonDokEingabe e } ? e : null;
     }
