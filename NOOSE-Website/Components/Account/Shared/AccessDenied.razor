@@ -1,18 +1,68 @@
 @* Wird von <AuthorizeRouteView> angezeigt, wenn ein eingeloggter Agent eine Seite ohne
-   ausreichende Rechte aufruft. Rendert innerhalb des MainLayout (Navigation bleibt sichtbar). *@
-<PageTitle>Keine Berechtigung · NOOSE</PageTitle>
+   ausreichende Rechte aufruft. Vollflächige Sperranzeige: großes rotes "ACCESS DENIED"
+   mittig auf schwarzem Hintergrund. *@
+<PageTitle>ACCESS DENIED · NOOSE</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
-    <MudPaper Class="pa-8" Elevation="2">
-        <MudStack AlignItems="AlignItems.Center" Spacing="3">
-            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" Size="Size.Large" />
-            <MudText Typo="Typo.h5" Align="Align.Center">Keine Berechtigung</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary" Align="Align.Center">
-                Dein Dienstgrad reicht für diese Aktion nicht aus. Wenn du Zugriff benötigst,
-                wende dich an die Führung.
-            </MudText>
-            <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Home">Zum Dashboard</MudButton>
-        </MudStack>
-    </MudPaper>
-</MudContainer>
+<div class="noose-access-denied">
+    <div class="noose-access-denied__inner">
+        <MudIcon Icon="@Icons.Material.Filled.Block" Class="noose-access-denied__icon" />
+        <div class="noose-access-denied__title">ACCESS DENIED</div>
+        <div class="noose-access-denied__text">
+            Dein Dienstgrad reicht für diese Aktion nicht aus.
+            Wenn du Zugriff benötigst, wende dich an die Führung.
+        </div>
+        <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.Home"
+                   Class="noose-access-denied__btn">Zum Dashboard</MudButton>
+    </div>
+</div>
+
+<style>
+    /* Überdeckt das gesamte Fenster – inkl. AppBar/Navigation – für eine kompromisslose Sperranzeige. */
+    .noose-access-denied {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+    }
+
+    .noose-access-denied__inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+    }
+
+    .noose-access-denied__icon {
+        font-size: 5rem !important;
+        width: 5rem !important;
+        height: 5rem !important;
+        color: #F85149;
+    }
+
+    .noose-access-denied__title {
+        color: #F85149;
+        font-weight: 800;
+        letter-spacing: 0.15em;
+        line-height: 1;
+        font-size: clamp(3rem, 12vw, 9rem);
+        text-transform: uppercase;
+        text-shadow: 0 0 32px rgba(248, 81, 73, 0.55);
+    }
+
+    .noose-access-denied__text {
+        color: #C2CBD6;
+        max-width: 36rem;
+        font-size: 1.05rem;
+        line-height: 1.6;
+    }
+
+    .noose-access-denied__btn {
+        margin-top: 8px;
+    }
+</style>
