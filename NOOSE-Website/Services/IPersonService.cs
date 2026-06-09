@@ -17,6 +17,12 @@ public interface IPersonService
     Task<Person?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default);
     Task<List<Person>> GetPapierkorbAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Sucht Personen nach Name oder Aktenzeichen (für Auswahl-/Autocomplete-Felder). Liefert die
+    /// ersten Treffer alphabetisch; respektiert den Verschlusssachen-Filter.
+    /// </summary>
+    Task<List<Person>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default);
+
     /// <summary>Mögliche Dubletten anhand identischem Namen oder gemeinsamer Telefonnummer.</summary>
     Task<List<Person>> FindeDuplikateAsync(string name, IEnumerable<string> telefonnummern, CancellationToken cancellationToken = default);
 

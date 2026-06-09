@@ -46,6 +46,22 @@ public class PersonService(AppDbContext db, IFileStorageService fileStorage) : I
             .OrderByDescending(p => p.GeloeschtAm)
             .ToListAsync(cancellationToken);
 
+    public Task<List<Person>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default)
+    {
+        var query = db.Personen.Where(p => istFuehrung || !p.IstVerschlusssache);
+
+        var s = suchtext?.Trim();
+        if (!string.IsNullOrEmpty(s))
+        {
+            query = query.Where(p => p.Name.Contains(s) || p.Aktenzeichen.Contains(s));
+        }
+
+        return query
+            .OrderBy(p => p.Name)
+            .Take(max)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<List<Person>> FindeDuplikateAsync(string name, IEnumerable<string> telefonnummern, CancellationToken cancellationToken = default)
     {
         var nameLower = (name ?? string.Empty).Trim().ToLower();
