@@ -1,0 +1,135 @@
+@page "/doks"
+@inject IPersonDokService DokService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Personen-Doks · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Personen-Doks</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="NeuAsync">Neues Dok</MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Übergreifende Liste aller Verhör- und Maßnahmen-Doks. Beim Anlegen wird die Person über die Suche
+    gewählt – existiert sie noch nicht, wird automatisch eine neue Akte angelegt.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_doks" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
+              Filter="Filter" RowClass="cursor-pointer" OnRowClick="@(args => Oeffnen(args.Item))">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_suche" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Person</MudTh>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Zeitpunkt</MudTh>
+            <MudTh>Ausgang</MudTh>
+            <MudTh>Grund</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Person">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">@context.Person?.Name</MudText>
+                    @if (context.Person?.IstVerschlusssache == true)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Person?.Aktenzeichen</MudText>
+            </MudTd>
+            <MudTd DataLabel="Zeitpunkt">
+                <MudText Typo="Typo.body2">@context.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Ausgang">
+                <MudText Typo="Typo.body2">@MassnahmeAusgangAnzeige.Name(context.Ausgang)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Grund">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary"
+                         Style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    @(string.IsNullOrWhiteSpace(context.Grund) ? "—" : context.Grund)
+                </MudText>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsPlaceholder>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Doks erfasst.</MudText>
+        </NoRecordsPlaceholder>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string _suche = string.Empty;
+    private List<PersonDok> _doks = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _istFuehrung;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _doks = await DokService.GetAlleAsync(_istFuehrung);
+        _laden = false;
+    }
+
+    private bool Filter(PersonDok dok)
+    {
+        if (string.IsNullOrWhiteSpace(_suche))
+        {
+            return true;
+        }
+        var s = _suche.Trim();
+        return (dok.Person?.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (dok.Person?.Aktenzeichen?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void Oeffnen(PersonDok dok) => Nav.NavigateTo($"/personen/{dok.PersonId}");
+
+    private async Task NeuAsync()
+    {
+        var ergebnis = await DokAnlegenDialog.ZeigenAsync(DialogService, _istFuehrung);
+        if (ergebnis is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (ergebnis.PersonId is not null)
+            {
+                await DokService.ErstellenAsync(ergebnis.PersonId, ergebnis.Eingabe, _user);
+                Snackbar.Add("Dok gespeichert.", Severity.Success);
+            }
+            else
+            {
+                await DokService.ErstellenFuerNeuePersonAsync(ergebnis.NeuerName!, ergebnis.Eingabe, _user);
+                Snackbar.Add($"Neue Akte „{ergebnis.NeuerName}" samt Dok angelegt.", Severity.Success);
+            }
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

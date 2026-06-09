@@ -61,6 +61,7 @@
         _laden = true;
         try
         {
+            var hochgeladen = 0;
             foreach (var datei in dateien)
             {
                 if (!FileStorage.IstErlaubterTyp(datei.ContentType))
@@ -75,9 +76,15 @@
                 }
                 await using var stream = datei.OpenReadStream(FileStorage.MaxBytes);
                 await PersonService.FotoHinzufuegenAsync(PersonId, stream, datei.Name, datei.ContentType, datei.Size, User);
+                hochgeladen++;
             }
-            Snackbar.Add("Fotos hochgeladen.", Severity.Success);
-            await Changed.InvokeAsync();
+
+            // Nur melden/neu laden, wenn tatsächlich mindestens ein Foto gespeichert wurde.
+            if (hochgeladen > 0)
+            {
+                Snackbar.Add(hochgeladen == 1 ? "Foto hochgeladen." : $"{hochgeladen} Fotos hochgeladen.", Severity.Success);
+                await Changed.InvokeAsync();
+            }
         }
         catch (Exception ex)
         {
