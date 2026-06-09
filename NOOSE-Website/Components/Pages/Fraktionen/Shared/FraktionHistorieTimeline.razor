@@ -38,7 +38,12 @@ else
 
     private static string AktionText(AuditLog log)
     {
-        var typ = log.EntitaetTyp == nameof(FraktionMitglied) ? "Mitglied" : "Fraktion";
+        var typ = log.EntitaetTyp switch
+        {
+            nameof(FraktionMitglied) => "Mitglied",
+            nameof(Verknuepfung) => "Beziehung",
+            _ => "Fraktion",
+        };
         var aktion = log.Aktion switch
         {
             AuditAktion.Erstellt => "erstellt",

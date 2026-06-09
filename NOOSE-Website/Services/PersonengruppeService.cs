@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Gruppen;
@@ -369,9 +370,20 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
+        // Manuelle Beziehungen (Konflikte/Bündnisse), die diese Gruppe als Quelle oder Ziel berühren –
+        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        var beziehungIds = await db.Verknuepfungen
+            .IgnoreQueryFilters()
+            .Where(v => !v.Automatisch
+                && ((v.VonTyp == nameof(Personengruppe) && v.VonId == gruppeId)
+                 || (v.NachTyp == nameof(Personengruppe) && v.NachId == gruppeId)))
+            .Select(v => v.Id)
+            .ToListAsync(cancellationToken);
+
         var ids = new HashSet<string>(mitgliedIds) { gruppeId };
         ids.UnionWith(agentZuteilungIds);
-        var typen = new[] { nameof(Personengruppe), nameof(PersonengruppeMitglied), nameof(PersonengruppeAgent) };
+        ids.UnionWith(beziehungIds);
+        var typen = new[] { nameof(Personengruppe), nameof(PersonengruppeMitglied), nameof(PersonengruppeAgent), nameof(Verknuepfung) };
 
         return await db.AuditLogs
             .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))

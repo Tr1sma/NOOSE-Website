@@ -4,6 +4,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Fraktionen;
@@ -282,8 +283,19 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .Select(m => m.Id)
             .ToListAsync(cancellationToken);
 
+        // Manuelle Beziehungen (Konflikte/Bündnisse), die diese Fraktion als Quelle oder Ziel berühren –
+        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        var beziehungIds = await db.Verknuepfungen
+            .IgnoreQueryFilters()
+            .Where(v => !v.Automatisch
+                && ((v.VonTyp == nameof(Fraktion) && v.VonId == fraktionId)
+                 || (v.NachTyp == nameof(Fraktion) && v.NachId == fraktionId)))
+            .Select(v => v.Id)
+            .ToListAsync(cancellationToken);
+
         var ids = new HashSet<string>(mitgliedIds) { fraktionId };
-        var typen = new[] { nameof(Fraktion), nameof(FraktionMitglied) };
+        ids.UnionWith(beziehungIds);
+        var typen = new[] { nameof(Fraktion), nameof(FraktionMitglied), nameof(Verknuepfung) };
 
         return await db.AuditLogs
             .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
