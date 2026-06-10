@@ -24,7 +24,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <FraktionForm Eingabe="_eingabe" ZeigeEinstufung="false" />
+        <FraktionForm Eingabe="_eingabe" ZeigeEinstufung="false" IstFuehrung="_istFuehrung" />
     </MudForm>
     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
         Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
@@ -43,13 +43,15 @@ else
     private MudForm _form = default!;
     private FraktionEingabe? _eingabe;
     private ClaimsPrincipal _user = default!;
+    private bool _istFuehrung;
     private bool _laden = true;
     private bool _speichert;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        var f = await FraktionService.GetDetailAsync(Id, _user.IstFuehrung());
+        _istFuehrung = _user.IstFuehrung();
+        var f = await FraktionService.GetDetailAsync(Id, _istFuehrung);
         if (f is not null)
         {
             _eingabe = new FraktionEingabe

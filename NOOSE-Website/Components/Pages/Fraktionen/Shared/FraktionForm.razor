@@ -32,9 +32,15 @@
         <MudColorPicker Label="Erkennungsfarbe (optional)" Value="_farbe" ValueChanged="FarbeGesetzt"
                         Variant="Variant.Outlined" Placeholder="z. B. #1E88E5" Clearable="true" />
     </MudItem>
-    <MudItem xs="12" md="6" Class="d-flex align-center">
+    <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
         <MudSwitch T="bool" @bind-Value="Eingabe.IstVerschlusssache" Color="Color.Warning"
                    Label="Verschlusssache (nur Führung sichtbar)" />
+        @if (Eingabe.IstVerschlusssache && !IstFuehrung)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Warning">
+                Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
+            </MudText>
+        }
     </MudItem>
 
     @if (ZeigeEinstufung)
@@ -99,6 +105,8 @@
     /// <summary>Einstufung im Formular zeigen (nur beim Anlegen; im Bearbeiten läuft sie über den Tab „Einstufung").</summary>
     [Parameter] public bool ZeigeEinstufung { get; set; }
     [Parameter] public bool DarfHoechste { get; set; }
+    /// <summary>Ob der aktuelle Nutzer der Führung angehört (für die Verschlusssache-Selbstaussperr-Warnung).</summary>
+    [Parameter] public bool IstFuehrung { get; set; }
 
     private MudColor? _farbe;
     private IReadOnlyList<string> _artVorschlaege = Array.Empty<string>();

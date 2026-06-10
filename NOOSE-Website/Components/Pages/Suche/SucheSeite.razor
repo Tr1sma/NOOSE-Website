@@ -3,6 +3,7 @@
 @inject ISearchService SearchService
 @inject IGespeicherteSucheService GespeicherteSucheService
 @inject ITagService TagService
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
@@ -280,7 +281,15 @@ else
         {
             return;
         }
+        // Das X liegt direkt neben „Suche anwenden" → vor dem Löschen kurz bestätigen (kein versehentlicher Verlust).
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Gespeicherte Suche löschen?",
+            $"„{g.Name}“ wird dauerhaft entfernt.");
+        if (!ok)
+        {
+            return;
+        }
         await GespeicherteSucheService.LoeschenAsync(g.Id, _agentId);
+        Snackbar.Add($"Suche „{g.Name}“ gelöscht.", Severity.Success);
         await GespeicherteLadenAsync();
     }
 
