@@ -46,11 +46,26 @@ else
     private bool _istFuehrung;
     private bool _laden = true;
     private bool _speichert;
+    private string? _geladeneId;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _istFuehrung = _user.IstFuehrung();
+    }
+
+    // Diese Seite wird bei /fraktionen/{A}/bearbeiten → /fraktionen/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
+    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _laden = true;
+        _eingabe = null;
         var f = await FraktionService.GetDetailAsync(Id, _istFuehrung);
         if (f is not null)
         {

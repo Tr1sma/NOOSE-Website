@@ -63,6 +63,7 @@ else
     private Agent? _agent;
     private ClaimsPrincipal _user = default!;
     private Guid _reloadKey = Guid.NewGuid();
+    private string? _geladeneId;
 
     private int _aktiverTab;
     // Reihenfolge muss den MudTabPanels entsprechen; der Kommentare-Tab existiert nur für die Führung.
@@ -70,12 +71,27 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Betrachter-abhängige (für alle Personalakten gleiche) Werte einmalig setzen.
         _user = (await AuthStateTask).User;
         _istFuehrung = _user.IstFuehrung();
         _darfKlarname = _user.DarfKlarnameSehen();
         _tabs = _istFuehrung
             ? new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "kommentare" }
             : new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen" };
+    }
+
+    // Diese Seite wird bei Navigation /personal/{A} → /personal/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den AgentId-Wechsel reagieren – sonst bliebe die alte
+    // Personalakte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == AgentId)
+        {
+            return;
+        }
+        _geladeneId = AgentId;
+        _laden = true;
+        _agent = null;
         _aktiverTab = TabUrlState.Read(Nav, _tabs);
         _agent = await AgentService.FindAsync(AgentId);
         _laden = false;

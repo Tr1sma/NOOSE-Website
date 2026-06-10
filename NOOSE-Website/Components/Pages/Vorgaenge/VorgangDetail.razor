@@ -106,6 +106,7 @@ else
     private List<EinstufungVerlauf> _einstufungVerlauf = new();
     private ClaimsPrincipal _user = default!;
     private Guid _historieKey = Guid.NewGuid();
+    private string? _geladeneId;
 
     // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
     private int _aktiverTab;
@@ -118,6 +119,21 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+    }
+
+    // Diese Seite wird bei Navigation /vorgaenge/{A} → /vorgaenge/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
+    // Akte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch. Tab-/Query-Wechsel: Id
+    // bleibt gleich → kein Neuladen.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _laden = true;
+        _vorgang = null;
         _aktiverTab = TabUrlState.Read(Nav, _tabs);
         await LadenAsync();
         if (_vorgang is not null)
