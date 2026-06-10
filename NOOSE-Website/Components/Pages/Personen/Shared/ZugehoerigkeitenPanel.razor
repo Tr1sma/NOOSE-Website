@@ -133,11 +133,13 @@
         {
             if (wahl.Typ == nameof(Fraktion))
             {
-                await FraktionService.MitgliedHinzufuegenAsync(wahl.ZielId, new MitgliedEingabe { PersonId = PersonId }, User);
+                await FraktionService.MitgliedHinzufuegenAsync(wahl.ZielId,
+                    new MitgliedEingabe { PersonId = PersonId, Rang = wahl.RangRolle, IstLeitung = wahl.IstLeitung }, User);
             }
             else
             {
-                await GruppeService.MitgliedHinzufuegenAsync(wahl.ZielId, new GruppeMitgliedEingabe { PersonId = PersonId }, User);
+                await GruppeService.MitgliedHinzufuegenAsync(wahl.ZielId,
+                    new GruppeMitgliedEingabe { PersonId = PersonId, Rolle = wahl.RangRolle, IstLeitung = wahl.IstLeitung }, User);
             }
             Snackbar.Add("Zugehörigkeit hinzugefügt.", Severity.Success);
             await AktualisierenAsync();
@@ -156,16 +158,23 @@
         {
             return;
         }
-        if (z.Typ == nameof(Fraktion))
+        try
         {
-            await FraktionService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            if (z.Typ == nameof(Fraktion))
+            {
+                await FraktionService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            }
+            else
+            {
+                await GruppeService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            }
+            Snackbar.Add("Zugehörigkeit entfernt.", Severity.Success);
+            await AktualisierenAsync();
         }
-        else
+        catch (Exception ex)
         {
-            await GruppeService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            Snackbar.Add(ex.Message, Severity.Error);
         }
-        Snackbar.Add("Zugehörigkeit entfernt.", Severity.Success);
-        await AktualisierenAsync();
     }
 
     private static string Route(PersonZugehoerigkeit z)

@@ -26,7 +26,7 @@ public interface IPersonengruppeService
 
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
     Task EinstufungSetzenAsync(string id, Einstufung neu, string? begruendung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
-    Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default);
+    Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default);
 
     /// <summary>Mitglieder der Gruppe inkl. Person; Verschlusssachen-Personen nur für Führung.</summary>
     Task<List<PersonengruppeMitglied>> GetMitgliederAsync(string gruppeId, bool istFuehrung, CancellationToken cancellationToken = default);
@@ -42,6 +42,6 @@ public interface IPersonengruppeService
     /// <summary>Erfassungsfortschritt x/y (x = erfasste Mitglieder mit lebender Akte, y = geschätzte Größe).</summary>
     Task<PersonengruppeFortschritt> GetFortschrittAsync(string gruppeId, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Gruppe und ihrer Mitgliedschaften (für die Akten-Historie).</summary>
-    Task<List<AuditLog>> GetHistorieAsync(string gruppeId, CancellationToken cancellationToken = default);
+    /// <summary>Audit-Einträge der Gruppe und ihrer Mitgliedschaften (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
+    Task<List<AuditLog>> GetHistorieAsync(string gruppeId, bool istFuehrung, CancellationToken cancellationToken = default);
 }

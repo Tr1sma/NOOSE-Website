@@ -66,8 +66,15 @@ else
     private async Task WiederherstellenAsync(Fraktion fraktion)
     {
         var user = (await AuthStateTask).User;
-        await FraktionService.WiederherstellenAsync(fraktion.Id, user);
-        Snackbar.Add($"Fraktion {fraktion.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        try
+        {
+            await FraktionService.WiederherstellenAsync(fraktion.Id, user);
+            Snackbar.Add($"Fraktion {fraktion.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 }

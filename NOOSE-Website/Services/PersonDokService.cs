@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
@@ -15,8 +16,31 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
     public async Task<List<PersonDokAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Eigenständige Sichtbarkeitsprüfung der Eltern-Person (nicht nur auf den Aufrufer verlassen).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         var doks = await db.PersonDoks
             .Where(d => d.PersonId == personId)
+            .OrderByDescending(d => d.Zeitpunkt)
+            .ToListAsync(cancellationToken);
+        return await ZuAnzeigeAsync(db, doks, istFuehrung, cancellationToken);
+    }
+
+    public async Task<List<PersonDokAnzeige>> GetFuerOrgAsync(string orgTyp, string orgId, bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Sichtbarkeit der Organisations-Akte selbst prüfen.
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, orgTyp, orgId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
+        var doks = await db.PersonDoks
+            .Include(d => d.Person)
+            // Person == null → Akte im Papierkorb; Verschlusssache-Personen nur für Führung.
+            .Where(d => d.OrgTyp == orgTyp && d.OrgId == orgId
+                && d.Person != null && (istFuehrung || !d.Person.IstVerschlusssache))
             .OrderByDescending(d => d.Zeitpunkt)
             .ToListAsync(cancellationToken);
         return await ZuAnzeigeAsync(db, doks, istFuehrung, cancellationToken);
@@ -80,9 +104,11 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
     public async Task<PersonDok> ErstellenAsync(string personId, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await db.Personen.AnyAsync(p => p.Id == personId, cancellationToken))
+        var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
+            ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
+        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
         {
-            throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
         return await ErstelleDokAsync(db, personId, eingabe, cancellationToken);
@@ -110,6 +136,11 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             .Include(d => d.Person)
             .FirstOrDefaultAsync(d => d.Id == dokId, cancellationToken)
             ?? throw new InvalidOperationException($"Dok '{dokId}' nicht gefunden.");
+
+        if (dok.Person?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
 
         // Alten Zustand merken, bevor wir überschreiben – die Status-Neuauswertung braucht beides.
         var altAusgang = dok.Ausgang;
@@ -199,8 +230,14 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
                 var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken);
                 if (person is not null)
                 {
-                    person.Lebensstatus = Lebensstatus.Tot;
-                    person.TotBis = LebensstatusLogic.TotBisAb(eingabe.Zeitpunkt);
+                    var neuTotBis = LebensstatusLogic.TotBisAb(eingabe.Zeitpunkt);
+                    // Ein bereits laufendes, späteres Tot-Fenster nicht verkürzen (z. B. wenn nachträglich ein
+                    // älteres Dok erfasst wird) – nur setzen/verlängern.
+                    if (person.TotBis is null || neuTotBis > person.TotBis)
+                    {
+                        person.Lebensstatus = Lebensstatus.Tot;
+                        person.TotBis = neuTotBis;
+                    }
                 }
                 break;
             case MassnahmeAusgang.Spritze:
@@ -218,15 +255,30 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
     public async Task LoeschenAsync(string dokId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var dok = await db.PersonDoks.FirstOrDefaultAsync(d => d.Id == dokId, cancellationToken);
+        var dok = await db.PersonDoks.Include(d => d.Person).FirstOrDefaultAsync(d => d.Id == dokId, cancellationToken);
         if (dok is null)
         {
             return;
         }
-        // Soft-Delete via Interceptor; ein evtl. ausgelöster Status bleibt unverändert (kein Revert).
+        if (dok.Person?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
+        // Hat dieses „Erschossen"-Dok das aktuelle Tot-Fenster gesetzt, beim Löschen den Status zurücknehmen
+        // (sonst bliebe die versehentlich getötete Person für den Rest des Fensters „Tot").
+        if (dok.Person is not null && dok.Ausgang == MassnahmeAusgang.Erschossen
+            && dok.Person.Lebensstatus == Lebensstatus.Tot
+            && dok.Person.TotBis == LebensstatusLogic.TotBisAb(dok.Zeitpunkt))
+        {
+            dok.Person.Lebensstatus = Lebensstatus.Lebend;
+            dok.Person.TotBis = null;
+        }
+
+        // Soft-Delete via Interceptor.
         db.PersonDoks.Remove(dok);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? Leer(string? s) => s.TrimToNull();
 }

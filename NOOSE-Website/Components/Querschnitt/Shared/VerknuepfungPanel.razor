@@ -87,7 +87,7 @@
                         </MudStack>
                         @if (v.Automatisch)
                         {
-                            <MudTooltip Text="Automatisch durch Fraktions-Mitgliedschaft – wird mit der Mitgliedschaft gepflegt.">
+                            <MudTooltip Text="@AutoTooltip(v.Label)">
                                 <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Default" Size="Size.Small" />
                             </MudTooltip>
                         }
@@ -220,6 +220,11 @@
         Snackbar.Add("Verknüpfung gelöscht.", Severity.Success);
         await LadenAsync();
     }
+
+    // Tooltip für automatische Kollegen-Verknüpfungen je nach Quelle (Fraktion vs. Gruppe).
+    private static string AutoTooltip(string? label) => label == KollegenSync.Gruppenkollege
+        ? "Automatisch durch Gruppen-Mitgliedschaft – wird mit der Mitgliedschaft gepflegt."
+        : "Automatisch durch Fraktions-Mitgliedschaft – wird mit der Mitgliedschaft gepflegt.";
 
     private static Color TypFarbe(BeziehungsTyp typ) => typ switch
     {

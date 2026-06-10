@@ -89,7 +89,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 default:
                     return Results.Redirect("/Account/Gesperrt");
             }
-        });
+        }).RequireRateLimiting(LoginRateLimitPolicy);
 
         // 3) Abmelden.
         group.MapPost("/Logout", async (

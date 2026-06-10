@@ -19,6 +19,20 @@ else
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     @log.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(log.AgentName ?? "System")
                 </MudText>
+                @{
+                    var aenderungen = AuditAnzeige.Parse(log.AenderungenJson);
+                }
+                @if (aenderungen.Count > 0)
+                {
+                    <MudStack Spacing="0" Class="mt-1">
+                        @foreach (var a in aenderungen)
+                        {
+                            <MudText Typo="Typo.caption">
+                                <b>@a.Feld:</b> <span class="mud-text-secondary">@a.Alt → @a.Neu</span>
+                            </MudText>
+                        }
+                    </MudStack>
+                }
             </MudTimelineItem>
         }
     </MudTimeline>
@@ -26,13 +40,14 @@ else
 
 @code {
     [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter] public bool IstFuehrung { get; set; }
 
     private bool _laden = true;
     private List<AuditLog> _logs = new();
 
     protected override async Task OnInitializedAsync()
     {
-        _logs = await PersonService.GetHistorieAsync(PersonId);
+        _logs = await PersonService.GetHistorieAsync(PersonId, IstFuehrung);
         _laden = false;
     }
 

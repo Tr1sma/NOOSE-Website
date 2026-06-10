@@ -16,7 +16,7 @@
                 </MudRadioGroup>
                 @if (_modusNeu)
                 {
-                    <MudTextField @bind-Value="_neuerName" Label="Name der neuen Person" Variant="Variant.Outlined"
+                    <MudTextField @bind-Value="_neuerName" Label="Name der neuen Person" Variant="Variant.Outlined" Immediate="true"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonAddAlt1"
                                   HelperText="Es wird automatisch eine neue Akte angelegt (Aktenzeichen wird vergeben)." />
                 }
@@ -59,7 +59,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern" Disabled="@(!KannSpeichern)">
             @(IstBearbeiten ? "Speichern" : "Hinzufügen")
         </MudButton>
     </DialogActions>
@@ -85,6 +85,9 @@
     private string? _rang;
     private bool _istLeitung;
 
+    // Speichern erst möglich, wenn eine Person gewählt (oder ein neuer Name eingegeben) ist – Button sonst deaktiviert.
+    private bool KannSpeichern => IstBearbeiten || (_modusNeu ? !string.IsNullOrWhiteSpace(_neuerName) : _person is not null);
+
     protected override void OnInitialized()
     {
         if (IstBearbeiten)
@@ -104,6 +107,7 @@
     {
         string personId = string.Empty;
         string? neuerName = null;
+        string? anzeigeName = PersonNameVorhanden;
         if (!IstBearbeiten)
         {
             if (_modusNeu)
@@ -113,6 +117,7 @@
                     return;
                 }
                 neuerName = _neuerName.Trim();
+                anzeigeName = neuerName;
             }
             else
             {
@@ -121,12 +126,14 @@
                     return;
                 }
                 personId = _person.Id;
+                anzeigeName = _person.Name;
             }
         }
         MudDialog.Close(DialogResult.Ok(new MitgliedEingabe
         {
             PersonId = personId,
             NeuePersonName = neuerName,
+            PersonName = anzeigeName,
             Rang = _rang,
             IstLeitung = _istLeitung,
         }));

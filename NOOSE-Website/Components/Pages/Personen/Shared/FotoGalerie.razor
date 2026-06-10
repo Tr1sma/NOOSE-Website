@@ -104,8 +104,15 @@
         {
             return;
         }
-        await PersonService.FotoEntfernenAsync(foto.Id, User);
-        Snackbar.Add("Foto gelöscht.", Severity.Success);
-        await Changed.InvokeAsync();
+        try
+        {
+            await PersonService.FotoEntfernenAsync(foto.Id, User);
+            Snackbar.Add("Foto gelöscht.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 }

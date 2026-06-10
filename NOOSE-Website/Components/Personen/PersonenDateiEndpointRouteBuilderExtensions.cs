@@ -38,10 +38,20 @@ public static class PersonenDateiEndpointRouteBuilderExtensions
                 return Results.NotFound();
             }
 
+            // Datei öffnen, bevor protokolliert wird; fehlt sie physisch (z. B. manuell entfernt), sauber 404.
+            Stream stream;
+            try
+            {
+                stream = storage.OeffnenLesen(foto.DateinameGespeichert);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return Results.NotFound();
+            }
+
             await zugriff.LogAnsichtAsync(nameof(PersonFoto), fotoId, cancellationToken);
 
             // Results.File übernimmt und entsorgt den Stream nach dem Senden (kein using!).
-            var stream = storage.OeffnenLesen(foto.DateinameGespeichert);
             return Results.File(stream, foto.ContentType, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.AktiverAgent);

@@ -1,5 +1,34 @@
 # Code-Review NOOSE-Website – Findings (ToDo)
 
+> ## ✅ Umsetzungsstatus (2026-06-10) – Round 2
+>
+> Die Findings wurden abgearbeitet und in mehreren thematischen Commits auf
+> `claude/laughing-wright-guz4jv` gepusht. **62 von 66** Findings sind im Code behoben
+> (alle Bugs, Logikfehler, Sicherheit, funktionalen Inkonsistenzen, UX und Bedienbarkeit).
+>
+> **Bewusst zurückgestellt (4) – reine Code-Quality-Struktur-Refactors:** In dieser Session stand
+> **kein .NET-Compiler** zur Verfügung (das Build-SDK ließ sich wegen der Netzwerk-Policy nicht
+> installieren). Für rein lesbarkeitsorientierte Umbauten **funktionierender, mehrfach genutzter**
+> Bereiche überwiegt ohne Compiler/Tests das Regressionsrisiko den Nutzen. Diese sind ohne
+> Verhaltens-/Sicherheitswirkung und sollten mit grünem Build erledigt werden:
+> - [ ] CQ: `DokDialog`/`DokAnlegenDialog` Duplikat → gemeinsame Feld-Komponente extrahieren.
+> - [ ] CQ: Dreifach-Kopien (Papierkorb-Seiten / Historie-Timelines / Listen-Seiten) → generische Komponenten.
+> - [ ] CQ: `PersonService.GetAbgeleiteteBeziehungenAsync` in Teilschritte zerlegen.
+> - [ ] Inkonsistenz (niedrig): CancellationToken-Konvention – als bewusste Konvention belassen
+>   (Autocomplete-Suchen nutzen das Framework-Token; kurzlebige Lade-Methoden ohne Token).
+>
+> **Teilweise/durch Deployment:** Zeitzonen-Finding (Server-TZ) ist im Code dokumentiert
+> (`DokDialog`); die vollständige Lösung (Browser-TZ via JS-Interop) bzw. `TZ=Europe/Berlin` im
+> Deployment ist ein bewusster späterer Schritt.
+>
+> Neue gemeinsame Bausteine: `Services/Berechtigung`, `Services/Sichtbarkeit`, `Services/StringExtensions`,
+> `Services/AuditAnzeige`, `Services/MitgliedHelfer`, `Infrastructure/Storage/DateiPfadHelfer`,
+> `Components/.../TagFarben`, `GrundDialog`, `OrgDoksPanel`, `DuplikatPruefung`.
+>
+> Die untenstehende Original-Analyse bleibt als Referenz erhalten.
+
+---
+
 Stand: 2026-06-09 · Review über die gesamte Code-Base (Services, Components, Data, Models,
 Authorization, Infrastructure). Es wurde NICHTS am Code geändert – reine Dokumentation.
 

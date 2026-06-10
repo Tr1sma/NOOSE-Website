@@ -14,4 +14,11 @@ public readonly record struct CurrentUserInfo(string? Id, string? Name)
 public interface ICurrentUserService
 {
     Task<CurrentUserInfo> GetAsync();
+
+    /// <summary>
+    /// Synchrone Variante: ermittelt den Agent ausschließlich aus dem <see cref="HttpContext"/> (ohne den
+    /// async AuthenticationStateProvider). Für synchrone Aufrufpfade (z. B. sync SaveChanges im Interceptor),
+    /// damit dort nicht blockierend auf async gewartet wird. Liefert System, wenn kein HttpContext-Nutzer existiert.
+    /// </summary>
+    CurrentUserInfo Get();
 }

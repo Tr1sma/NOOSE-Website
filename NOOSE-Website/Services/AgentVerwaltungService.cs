@@ -162,6 +162,20 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
     public async Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder)
     {
         var agent = await GetOrThrow(agentId);
+
+        // Selbst-Aussperrung und das Entfernen des letzten Admins serverseitig verhindern (nicht nur via UI).
+        if (!istAdmin && agent.IstAdmin)
+        {
+            if (handelnder.GetAgentId() == agentId)
+            {
+                throw new InvalidOperationException("Du kannst dir nicht selbst die Admin-Rechte entziehen.");
+            }
+            if (await db.Users.CountAsync(u => u.IstAdmin) <= 1)
+            {
+                throw new InvalidOperationException("Der letzte verbliebene Admin kann nicht entfernt werden.");
+            }
+        }
+
         agent.IstAdmin = istAdmin;
 
         Audit(agent, AuditAktion.Geaendert, handelnder, istAdmin ? "Admin-Rechte vergeben" : "Admin-Rechte entzogen");
@@ -170,6 +184,12 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public async Task SperrenAsync(string agentId, string grund, ClaimsPrincipal handelnder)
     {
+        // Sich selbst zu sperren würde die eigene Sitzung sofort beenden – das ist fast immer ein Fehlgriff.
+        if (handelnder.GetAgentId() == agentId)
+        {
+            throw new InvalidOperationException("Du kannst dich nicht selbst sperren.");
+        }
+
         var agent = await GetOrThrow(agentId);
         agent.Status = AgentStatus.Gesperrt;
         agent.GesperrtGrund = string.IsNullOrWhiteSpace(grund) ? "Notfall-Sperre" : grund;
@@ -219,10 +239,22 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
     /// </summary>
     private async Task Speichern(Agent agent, bool neuerStamp)
     {
-        await userManager.UpdateAsync(agent);
+        // IdentityResult auswerten – sonst meldet die UI „gespeichert", obwohl das Update fehlschlug
+        // (besonders kritisch beim Kill-Switch). Bei Fehlern als Exception eskalieren.
+        var result = await userManager.UpdateAsync(agent);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Speichern fehlgeschlagen: " + string.Join("; ", result.Errors.Select(e => e.Description)));
+        }
         if (neuerStamp)
         {
-            await userManager.UpdateSecurityStampAsync(agent);
+            var stamp = await userManager.UpdateSecurityStampAsync(agent);
+            if (!stamp.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Sicherheits-Stamp konnte nicht erneuert werden: " + string.Join("; ", stamp.Errors.Select(e => e.Description)));
+            }
         }
     }
 }

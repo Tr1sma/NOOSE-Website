@@ -31,7 +31,12 @@ else
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
-            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <TemplateColumn Title="Name" SortBy="x => x.Name">
+                <CellTemplate>
+                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Mitgliederzahl" Title="Mitglieder" />
             <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
                 <CellTemplate>
@@ -48,6 +53,13 @@ else
             </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Diversity3" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Personengruppen – lege die erste an.</MudText>
+                <MudButton Href="/personengruppen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Gruppe</MudButton>
+            </MudStack>
+        </NoRecordsContent>
         <PagerContent>
             <MudDataGridPager T="GruppeZeile" />
         </PagerContent>
@@ -64,13 +76,15 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var gruppen = await GruppeService.GetListeAsync(user.IstFuehrung());
+        var istFuehrung = user.IstFuehrung();
+        var gruppen = await GruppeService.GetListeAsync(istFuehrung);
         _zeilen = gruppen.Select(g => new GruppeZeile
         {
             Id = g.Id,
             Aktenzeichen = g.Aktenzeichen,
             Name = g.Name,
-            Mitgliederzahl = g.Mitglieder.Count,
+            // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+            Mitgliederzahl = g.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
             Einstufung = g.Einstufung,
             IstVerschlusssache = g.IstVerschlusssache,
             Aktualisiert = (g.GeaendertAm ?? g.ErstelltAm).ToLocalTime(),

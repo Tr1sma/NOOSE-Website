@@ -1,6 +1,7 @@
 @page "/admin/freigaben"
 @attribute [Authorize(Policy = Policies.Fuehrung)]
 @inject IAgentVerwaltungService AgentService
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Freigaben · NOOSE</PageTitle>
@@ -169,29 +170,73 @@ else
     private async Task Freigeben(Agent agent)
     {
         var auswahl = Auswahl(agent.Id);
-        await AgentService.FreigebenAsync(agent.Id, auswahl.Grad, auswahl.Tru, _user);
-        Snackbar.Add($"{AnzeigeName(agent)} als {DienstgradAnzeige.Name(auswahl.Grad)} freigegeben.", Severity.Success);
+        try
+        {
+            await AgentService.FreigebenAsync(agent.Id, auswahl.Grad, auswahl.Tru, _user);
+            Snackbar.Add($"{AnzeigeName(agent)} als {DienstgradAnzeige.Name(auswahl.Grad)} freigegeben.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task Ablehnen(Agent agent)
     {
-        await AgentService.AblehnenAsync(agent.Id, "Registrierung abgelehnt", _user);
-        Snackbar.Add($"{AnzeigeName(agent)} abgelehnt.", Severity.Info);
+        var grund = await GrundDialog.ZeigenAsync(DialogService,
+            $"{AnzeigeName(agent)} ablehnen?",
+            "Das Konto wird abgelehnt (gesperrt). Die Begründung wird protokolliert.",
+            bestaetigenText: "Ablehnen", label: "Begründung (optional)", farbe: Color.Error);
+        if (grund is null)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.AblehnenAsync(agent.Id, string.IsNullOrWhiteSpace(grund) ? "Registrierung abgelehnt" : grund, _user);
+            Snackbar.Add($"{AnzeigeName(agent)} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task NamenGenehmigen(Agent agent)
     {
-        await AgentService.NamensaenderungGenehmigenAsync(agent.Id, _user);
-        Snackbar.Add($"Namensänderung von {AnzeigeName(agent)} genehmigt.", Severity.Success);
+        try
+        {
+            await AgentService.NamensaenderungGenehmigenAsync(agent.Id, _user);
+            Snackbar.Add($"Namensänderung von {AnzeigeName(agent)} genehmigt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task NamenAblehnen(Agent agent)
     {
-        await AgentService.NamensaenderungAblehnenAsync(agent.Id, "Namensänderung abgelehnt", _user);
-        Snackbar.Add($"Namensänderung von {AnzeigeName(agent)} abgelehnt.", Severity.Info);
+        var grund = await GrundDialog.ZeigenAsync(DialogService,
+            $"Namensänderung von {AnzeigeName(agent)} ablehnen?",
+            "Der Antrag wird verworfen. Die Begründung wird protokolliert.",
+            bestaetigenText: "Ablehnen", label: "Begründung (optional)", farbe: Color.Error);
+        if (grund is null)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.NamensaenderungAblehnenAsync(agent.Id, string.IsNullOrWhiteSpace(grund) ? "Namensänderung abgelehnt" : grund, _user);
+            Snackbar.Add($"Namensänderung von {AnzeigeName(agent)} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 

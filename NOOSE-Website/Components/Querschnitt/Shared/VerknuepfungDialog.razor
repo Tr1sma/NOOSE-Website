@@ -4,7 +4,7 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width:340px;">
-            <MudAutocomplete T="Person" Label="Verknüpfte Akte (Person)" @bind-Value="_ziel"
+            <MudAutocomplete T="Person" Label="Verknüpfte Akte (Person)" @bind-Value="_ziel" AutoFocus="true"
                              SearchFunc="@SuchePersonen" ToStringFunc="@(p => p?.Name ?? string.Empty)"
                              Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
                              ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
@@ -24,7 +24,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Verknüpfen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern" Disabled="@(_ziel is null)">Verknüpfen</MudButton>
     </DialogActions>
 </MudDialog>
 

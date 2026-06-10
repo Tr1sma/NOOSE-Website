@@ -48,6 +48,9 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 
     public async Task AktualisierenAsync(string tagId, string name, string? farbe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        // Tags anlegen darf jeder aktive Agent; Umbenennen/Einfärben ist Verwaltung → Führung/Admin.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         name = (name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -68,6 +71,9 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 
     public async Task LoeschenAsync(string tagId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        // Hart-Löschen entfernt das Tag von ALLEN Akten (destruktiv) → Führung/Admin.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var tag = await db.Tags.FirstOrDefaultAsync(t => t.Id == tagId, cancellationToken);
         if (tag is null)
@@ -114,5 +120,5 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? Leer(string? s) => s.TrimToNull();
 }

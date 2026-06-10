@@ -1,5 +1,6 @@
 @* Mitglieder einer Fraktion: Liste (Leitung zuerst), Hinzufügen/Bearbeiten/Entfernen mit Rang + Leitung. *@
 @inject IFraktionService FraktionService
+@inject IPersonService PersonService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -75,6 +76,11 @@
         var ausschluss = _mitglieder.Select(m => m.PersonId).ToList();
         var eingabe = await MitgliedDialog.ZeigenAsync(DialogService, User.IstFuehrung(), Raenge, ausschluss);
         if (eingabe is null)
+        {
+            return;
+        }
+        // Beim Anlegen einer neuen Person vor gleichnamigen Dubletten warnen.
+        if (!await DuplikatPruefung.DarfNeueAkteAnlegenAsync(DialogService, PersonService, eingabe.NeuePersonName, User.IstFuehrung()))
         {
             return;
         }

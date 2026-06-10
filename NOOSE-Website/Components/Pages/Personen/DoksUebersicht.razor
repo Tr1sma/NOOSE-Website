@@ -146,6 +146,13 @@ else
             return;
         }
 
+        // Beim Anlegen einer neuen Akte vor gleichnamigen Dubletten warnen (wie im regulären „Neue Person"-Formular).
+        if (ergebnis.PersonId is null
+            && !await DuplikatPruefung.DarfNeueAkteAnlegenAsync(DialogService, PersonService, ergebnis.NeuerName, _istFuehrung))
+        {
+            return;
+        }
+
         try
         {
             // Die Person, auf die sich eine optionale Mitgliedschaft bezieht (bestehend oder neu angelegt).

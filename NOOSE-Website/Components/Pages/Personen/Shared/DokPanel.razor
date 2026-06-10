@@ -106,13 +106,20 @@
         {
             return;
         }
-        await DokService.ErstellenAsync(PersonId, eingabe, User);
-        Snackbar.Add("Dok gespeichert.", Severity.Success);
-        // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
-        await DokMitgliedschaft.EintragenAsync(FraktionService, GruppeService, PersonService, Snackbar, PersonId, eingabe, User);
-        await LadenAsync();
-        // Der Maßnahme-Ausgang kann den Lebensstatus geändert haben → Eltern neu laden.
-        await PersonChanged.InvokeAsync();
+        try
+        {
+            await DokService.ErstellenAsync(PersonId, eingabe, User);
+            Snackbar.Add("Dok gespeichert.", Severity.Success);
+            // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
+            await DokMitgliedschaft.EintragenAsync(FraktionService, GruppeService, PersonService, Snackbar, PersonId, eingabe, User);
+            await LadenAsync();
+            // Der Maßnahme-Ausgang kann den Lebensstatus geändert haben → Eltern neu laden.
+            await PersonChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async Task LoeschenAsync(PersonDokAnzeige anzeige)
@@ -123,8 +130,17 @@
         {
             return;
         }
-        await DokService.LoeschenAsync(anzeige.Dok.Id, User);
-        Snackbar.Add("Dok gelöscht.", Severity.Success);
-        await LadenAsync();
+        try
+        {
+            await DokService.LoeschenAsync(anzeige.Dok.Id, User);
+            Snackbar.Add("Dok gelöscht.", Severity.Success);
+            await LadenAsync();
+            // Löschen eines „Erschossen"-Doks kann den Lebensstatus zurücksetzen → Eltern neu laden.
+            await PersonChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 }

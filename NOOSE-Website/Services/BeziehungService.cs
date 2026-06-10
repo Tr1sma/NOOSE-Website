@@ -51,6 +51,17 @@ public class BeziehungService(IDbContextFactory<AppDbContext> dbFactory) : IBezi
             throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
         }
 
+        // Dieselbe Beziehung (gleicher Typ) zwischen beiden Personen nicht doppelt anlegen – in beiden
+        // Richtungen geprüft. Andere Beziehungstypen zwischen denselben Personen bleiben erlaubt.
+        var existiert = await db.PersonBeziehungen.AnyAsync(b => b.Typ == typ
+            && ((b.PersonAId == personAId && b.PersonBId == personBId)
+             || (b.PersonAId == personBId && b.PersonBId == personAId)),
+            cancellationToken);
+        if (existiert)
+        {
+            throw new InvalidOperationException("Eine Beziehung dieses Typs besteht bereits zwischen den beiden Personen.");
+        }
+
         db.PersonBeziehungen.Add(new PersonBeziehung
         {
             PersonAId = personAId,

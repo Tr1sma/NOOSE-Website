@@ -40,7 +40,9 @@ else
         </MudItem>
 
         <MudItem xs="12" md="8" lg="9">
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_aktiverTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_gruppe.Ziele))
@@ -72,6 +74,9 @@ else
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <EinstufungPanel Aktuell="_gruppe.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
                 </MudTabPanel>
+                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                    <OrgDoksPanel OrgTyp="@nameof(Personengruppe)" OrgId="@_gruppe.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgBeziehungenPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
@@ -82,7 +87,7 @@ else
                     <KommentarPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <GruppeHistorieTimeline GruppeId="@_gruppe.Id" @key="_historieKey" />
+                    <GruppeHistorieTimeline GruppeId="@_gruppe.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -100,9 +105,18 @@ else
     private ClaimsPrincipal _user = default!;
     private Guid _historieKey = Guid.NewGuid();
 
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _aktiverTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "mitglieder", "agents", "einstufung", "doks",
+        "beziehungen", "quellen", "kommentare", "historie",
+    };
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _aktiverTab = TabUrlState.Read(Nav, _tabs);
         await LadenAsync();
         if (_gruppe is not null)
         {
@@ -112,11 +126,13 @@ else
 
     private async Task LadenAsync()
     {
-        _laden = true;
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
+        // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
         _gruppe = await GruppeService.GetDetailAsync(Id, _user.IstFuehrung());
         if (_gruppe is not null)
         {
-            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(_gruppe.Id);
+            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(_gruppe.Id, _user.IstFuehrung());
             _fortschritt = await GruppeService.GetFortschrittAsync(_gruppe.Id);
         }
         _laden = false;

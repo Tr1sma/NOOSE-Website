@@ -44,7 +44,9 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
     {
         if (eventData.Context is not null)
         {
-            var user = currentUserService.GetAsync().GetAwaiter().GetResult();
+            // Synchroner Pfad: den Agent synchron (HttpContext-only) ermitteln, statt blockierend auf den
+            // async AuthenticationStateProvider zu warten (Deadlock-/Starvation-Risiko).
+            var user = currentUserService.Get();
             _pending.AddOrUpdate(eventData.Context, StampAndCollect(eventData.Context, user));
         }
 
@@ -60,29 +62,51 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
     {
-        WritePendingAsync(eventData.Context, CancellationToken.None).GetAwaiter().GetResult();
+        // Synchroner Pfad: Audit-Einträge ebenfalls synchron schreiben (kein Blocking auf async SaveChanges).
+        WritePending(eventData.Context);
         return base.SavedChanges(eventData, result);
     }
 
     private async Task WritePendingAsync(DbContext? context, CancellationToken cancellationToken)
     {
-        if (context is null || !_pending.TryGetValue(context, out var pending))
+        if (!TryNimmPending(context, out var ctx, out var logs))
         {
             return;
         }
+        ctx.Set<AuditLog>().AddRange(logs);
+        // Erneutes Speichern; löst keine Rekursion aus, da AuditLog weder IAuditable noch ISoftDelete ist.
+        await ctx.SaveChangesAsync(cancellationToken);
+    }
 
-        // Pro Context nur einmal verarbeiten – auch der re-entrante AuditLog-Save unten landet hier
-        // (dann mit leerer Liste, da AuditLog nicht auditierbar ist) und wird so sauber abgeräumt.
+    private void WritePending(DbContext? context)
+    {
+        if (!TryNimmPending(context, out var ctx, out var logs))
+        {
+            return;
+        }
+        ctx.Set<AuditLog>().AddRange(logs);
+        ctx.SaveChanges();
+    }
+
+    /// <summary>
+    /// Entnimmt die ausstehenden Audit-Einträge eines Contexts (einmalig). Pro Context nur einmal verarbeitet –
+    /// auch der re-entrante AuditLog-Save landet hier (dann mit leerer Liste) und wird so sauber abgeräumt.
+    /// </summary>
+    private bool TryNimmPending(DbContext? context, out DbContext ctx, out List<AuditLog> logs)
+    {
+        ctx = context!;
+        logs = new List<AuditLog>();
+        if (context is null || !_pending.TryGetValue(context, out var pending))
+        {
+            return false;
+        }
         _pending.Remove(context);
         if (pending.Count == 0)
         {
-            return;
+            return false;
         }
-
-        var logs = pending.Select(p => p.ToAuditLog()).ToList();
-        context.Set<AuditLog>().AddRange(logs);
-        // Erneutes Speichern; löst keine Rekursion aus, da AuditLog weder IAuditable noch ISoftDelete ist.
-        await context.SaveChangesAsync(cancellationToken);
+        logs = pending.Select(p => p.ToAuditLog()).ToList();
+        return true;
     }
 
     private static List<PendingAudit> StampAndCollect(DbContext context, CurrentUserInfo user)

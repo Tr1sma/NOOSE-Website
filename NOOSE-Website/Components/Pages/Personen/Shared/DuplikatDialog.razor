@@ -5,10 +5,11 @@
             Es gibt bereits Akten mit gleichem Namen oder gleicher Telefonnummer. Bitte prüfe, ob es
             sich um dieselbe Person handelt:
         </MudText>
+        @* Im neuen Tab öffnen, damit das bereits ausgefüllte Anlege-Formular nicht verloren geht. *@
         <MudList T="string" Dense="true">
             @foreach (var p in Treffer)
             {
-                <MudListItem T="string" Icon="@Icons.Material.Filled.Badge" Href="@($"/personen/{p.Id}")">
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Badge" Href="@($"/personen/{p.Id}")" Target="_blank">
                     @p.Name — @p.Aktenzeichen
                 </MudListItem>
             }

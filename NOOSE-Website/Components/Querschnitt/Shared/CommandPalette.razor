@@ -3,6 +3,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject ISearchService SearchService
+@inject Microsoft.Extensions.Logging.ILogger<CommandPalette> Logger
 @implements IAsyncDisposable
 
 <MudDialog @bind-Visible="_open" Options="_options">
@@ -60,11 +61,15 @@
             new("Personengruppen", "Liste", Icons.Material.Filled.Diversity3, "/personengruppen"),
             new("Neue Personengruppe anlegen", null, Icons.Material.Filled.Add, "/personengruppen/neu"),
             new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
-            new("Papierkorb", null, Icons.Material.Filled.Delete, "/personen/papierkorb"),
         };
+        // Papierkörbe und Verwaltung sind Führungs-gated → für Nicht-Führung nicht anbieten (sonst ACCESS DENIED).
         if (_istFuehrung)
         {
-            _befehle.Add(new PaletteItem("Tags verwalten", null, Icons.Material.Filled.Label, "/tags"));
+            _befehle.Add(new PaletteItem("Freigaben", "Posteingang", Icons.Material.Filled.HowToReg, "/admin/freigaben"));
+            _befehle.Add(new PaletteItem("Tags verwalten", null, Icons.Material.Filled.Label, "/admin/tags"));
+            _befehle.Add(new PaletteItem("Papierkorb · Personen", null, Icons.Material.Filled.Delete, "/personen/papierkorb"));
+            _befehle.Add(new PaletteItem("Papierkorb · Fraktionen", null, Icons.Material.Filled.Delete, "/fraktionen/papierkorb"));
+            _befehle.Add(new PaletteItem("Papierkorb · Personengruppen", null, Icons.Material.Filled.Delete, "/personengruppen/papierkorb"));
         }
     }
 
@@ -101,10 +106,10 @@
                 var treffer = await SearchService.SchnellsucheAsync(v, _istFuehrung, 8, token);
                 ergebnis.AddRange(treffer.Select(t => new PaletteItem(t.Name, t.Aktenzeichen, PaletteIcon(t.Kategorie), SuchNavigation.Route(t.Kategorie, t.ZielId))));
             }
-            catch
+            catch (Exception ex)
             {
-                // Schnellsuche-Fehler (z. B. seltene DbContext-Nebenläufigkeit auf dem geteilten Circuit-Context)
-                // nicht eskalieren – dann nur die statischen Befehle anzeigen.
+                // Schnellsuche-Fehler nicht eskalieren (dann nur die statischen Befehle anzeigen), aber loggen.
+                Logger.LogDebug(ex, "Schnellsuche in der Command-Palette fehlgeschlagen.");
             }
         }
         return ergebnis;

@@ -3,6 +3,7 @@
 @inject ISearchService SearchService
 @inject IGespeicherteSucheService GespeicherteSucheService
 @inject ITagService TagService
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
@@ -196,9 +197,9 @@ else
             Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
             return;
         }
-        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen
-        // (geteilter DbContext pro Circuit). Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt –
-        // verhindert den inkonsistenten Zustand „Feld zeigt X, Treffer zeigen Y".
+        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen.
+        // Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt – verhindert den inkonsistenten
+        // Zustand „Feld zeigt X, Treffer zeigen Y" und unnötige Parallel-Abfragen.
         if (_suchtGerade)
         {
             _erneutSuchen = true;
@@ -280,11 +281,19 @@ else
         {
             return;
         }
+        // Das X liegt direkt neben „Suche anwenden" → vor dem Löschen kurz bestätigen (kein versehentlicher Verlust).
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Gespeicherte Suche löschen?",
+            $"„{g.Name}“ wird dauerhaft entfernt.");
+        if (!ok)
+        {
+            return;
+        }
         await GespeicherteSucheService.LoeschenAsync(g.Id, _agentId);
+        Snackbar.Add($"Suche „{g.Name}“ gelöscht.", Severity.Success);
         await GespeicherteLadenAsync();
     }
 
-    private void Oeffnen(SuchTreffer t) => Nav.NavigateTo(SuchNavigation.Route(t.Kategorie, t.ZielId));
+    private void Oeffnen(SuchTreffer t) => Nav.NavigateTo(SuchNavigation.Route(t));
 
     private static string KategorieIcon(string kategorie) => kategorie switch
     {

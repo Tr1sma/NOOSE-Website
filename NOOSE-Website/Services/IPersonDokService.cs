@@ -16,6 +16,12 @@ public interface IPersonDokService
     /// <summary>Alle Doks (übergreifend) inkl. zugehöriger Person und aufgelöster Verknüpfung; respektiert den Verschlusssachen-Filter.</summary>
     Task<List<PersonDokAnzeige>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Doks, die mit einer Organisation (Fraktion/Personengruppe) verknüpft sind (Rück-Verknüpfung).
+    /// <paramref name="orgTyp"/> ist <c>nameof(Fraktion)</c> bzw. <c>nameof(Personengruppe)</c>; Verschlusssache-gefiltert.
+    /// </summary>
+    Task<List<PersonDokAnzeige>> GetFuerOrgAsync(string orgTyp, string orgId, bool istFuehrung, CancellationToken cancellationToken = default);
+
     Task<PersonDok> ErstellenAsync(string personId, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
     /// <summary>

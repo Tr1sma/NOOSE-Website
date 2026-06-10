@@ -43,15 +43,19 @@
             <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.OffeneAntraege)</MudText>
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Verschlusssachen</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.Verschlusssachen)</MudText>
-        </MudPaper>
-    </MudItem>
+    @* Die Anzahl klassifizierter Akten ist selbst eine Verschlusssache → Kachel nur für die Führung. *@
+    @if (_istFuehrung)
+    {
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" />
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Verschlusssachen</MudText>
+                </MudStack>
+                <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.Verschlusssachen)</MudText>
+            </MudPaper>
+        </MudItem>
+    }
 </MudGrid>
 
 <MudPaper Class="pa-4 mt-6" Elevation="2">
@@ -100,14 +104,15 @@
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _laden = true;
+    private bool _istFuehrung;
     private DashboardKennzahlen? _kennzahlen;
     private List<DashboardAenderung> _aenderungen = new();
 
     protected override async Task OnInitializedAsync()
     {
-        var istFuehrung = (await AuthStateTask).User.IstFuehrung();
-        _kennzahlen = await Dashboard.GetKennzahlenAsync(istFuehrung);
-        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(istFuehrung);
+        _istFuehrung = (await AuthStateTask).User.IstFuehrung();
+        _kennzahlen = await Dashboard.GetKennzahlenAsync(_istFuehrung);
+        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung);
         _laden = false;
     }
 

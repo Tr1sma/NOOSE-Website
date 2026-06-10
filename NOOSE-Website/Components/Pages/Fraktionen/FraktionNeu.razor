@@ -12,7 +12,7 @@
 </MudStack>
 
 <MudForm @ref="_form">
-    <FraktionForm Eingabe="_eingabe" ZeigeEinstufung="true" DarfHoechste="_darfHoechste" />
+    <FraktionForm Eingabe="_eingabe" ZeigeEinstufung="true" DarfHoechste="_darfHoechste" IstFuehrung="_istFuehrung" ZeigeMitglieder="true" />
 </MudForm>
 
 <MudStack Row="true" Spacing="2" Class="mt-4">
@@ -27,12 +27,14 @@
     private readonly FraktionEingabe _eingabe = new();
     private ClaimsPrincipal _user = default!;
     private bool _darfHoechste;
+    private bool _istFuehrung;
     private bool _speichert;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _darfHoechste = _user.DarfHoechsteEinstufung();
+        _istFuehrung = _user.IstFuehrung();
     }
 
     private async Task SpeichernAsync()

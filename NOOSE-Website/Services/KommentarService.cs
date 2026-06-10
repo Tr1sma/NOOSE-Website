@@ -13,7 +13,7 @@ public class KommentarService(IDbContextFactory<AppDbContext> dbFactory) : IKomm
     public async Task<List<Kommentar>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await AkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
         {
             return new();
         }
@@ -53,21 +53,12 @@ public class KommentarService(IDbContextFactory<AppDbContext> dbFactory) : IKomm
         {
             return;
         }
+        // Löschen darf der Verfasser selbst oder die Führung – serverseitig erzwingen, nicht nur in der UI.
+        if (!handelnder.IstFuehrung() && kommentar.ErstelltVonId != handelnder.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Diesen Kommentar darf nur der Verfasser oder die Führung löschen.");
+        }
         db.Kommentare.Remove(kommentar); // Soft-Delete via Interceptor
         await db.SaveChangesAsync(cancellationToken);
-    }
-
-    /// <summary>Vgl. <c>QuelleService</c>: Eltern-Sichtbarkeit ohne FK-Navigation prüfen (nur Person in Phase 3).</summary>
-    private static async Task<bool> AkteSichtbarAsync(AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
-    {
-        if (entitaetTyp != nameof(Person))
-        {
-            return true;
-        }
-        var person = await db.Personen
-            .Where(p => p.Id == entitaetId)
-            .Select(p => new { p.IstVerschlusssache })
-            .FirstOrDefaultAsync(cancellationToken);
-        return person is not null && (istFuehrung || !person.IstVerschlusssache);
     }
 }

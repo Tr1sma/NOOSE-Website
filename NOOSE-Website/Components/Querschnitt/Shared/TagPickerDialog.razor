@@ -38,7 +38,7 @@
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                     <MudTextField @bind-Value="_neuName" Placeholder="Name" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
                     <MudSelect T="Color" @bind-Value="_neuFarbe" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;">
-                        @foreach (var c in Farben)
+                        @foreach (var c in TagFarben.Alle)
                         {
                             <MudSelectItem Value="c">@c.ToString()</MudSelectItem>
                         }
@@ -70,12 +70,6 @@
 
     private string _neuName = string.Empty;
     private Color _neuFarbe = Color.Primary;
-
-    private static readonly Color[] Farben =
-    {
-        Color.Default, Color.Primary, Color.Secondary, Color.Tertiary,
-        Color.Info, Color.Success, Color.Warning, Color.Error, Color.Dark,
-    };
 
     protected override async Task OnInitializedAsync()
     {

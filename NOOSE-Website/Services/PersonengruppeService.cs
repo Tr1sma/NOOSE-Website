@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Personen;
@@ -17,9 +18,10 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
     public async Task<List<Personengruppe>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht.
         return await db.Personengruppen
             .Where(g => istFuehrung || !g.IstVerschlusssache)
-            .Include(g => g.Mitglieder)
+            .Include(g => g.Mitglieder).ThenInclude(m => m.Person)
             .OrderByDescending(g => g.GeaendertAm ?? g.ErstelltAm)
             .ToListAsync(cancellationToken);
     }
@@ -154,6 +156,11 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         var gruppe = await db.Personengruppen.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{id}' nicht gefunden.");
 
+        if (gruppe.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
         gruppe.Name = eingabe.Name.Trim();
         gruppe.Beschreibung = Leer(eingabe.Beschreibung);
         gruppe.Ziele = Leer(eingabe.Ziele);
@@ -165,6 +172,8 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var gruppe = await db.Personengruppen.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{id}' nicht gefunden.");
@@ -174,6 +183,8 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
 
     public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var gruppe = await db.Personengruppen.IgnoreQueryFilters()
             .FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
@@ -193,14 +204,23 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         var gruppe = await db.Personengruppen.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{id}' nicht gefunden.");
 
+        if (gruppe.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
         gruppe.Einstufung = neu;
         db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Personengruppe), id, neu, begruendung, handelnder));
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default)
+    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Personengruppe), id, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         return await db.EinstufungVerlauf
             .Where(e => e.EntitaetTyp == nameof(Personengruppe) && e.EntitaetId == id)
             .OrderByDescending(e => e.Zeitpunkt)
@@ -226,9 +246,11 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
     public async Task MitgliedHinzufuegenAsync(string gruppeId, GruppeMitgliedEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await db.Personengruppen.AnyAsync(g => g.Id == gruppeId, cancellationToken))
+        var gruppe = await db.Personengruppen.FirstOrDefaultAsync(g => g.Id == gruppeId, cancellationToken)
+            ?? throw new InvalidOperationException($"Personengruppe '{gruppeId}' nicht gefunden.");
+        if (gruppe.IstVerschlusssache && !handelnder.IstFuehrung())
         {
-            throw new InvalidOperationException($"Personengruppe '{gruppeId}' nicht gefunden.");
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
         var personId = await PersonIdErmittelnAsync(db, eingabe.PersonId, eingabe.NeuePersonName, handelnder, cancellationToken);
@@ -255,25 +277,18 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
     /// Liefert die Personen-Id: bestehende (mit Existenzprüfung) oder – bei nur neuem Namen – eine frisch
     /// angelegte Personen-Akte (committet, eigenes Aktenzeichen).
     /// </summary>
-    private async Task<string> PersonIdErmittelnAsync(AppDbContext db, string? personId, string? neuerName, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(personId) && !string.IsNullOrWhiteSpace(neuerName))
-        {
-            var person = await personService.ErstellenAsync(new PersonEingabe { Name = neuerName.Trim() }, handelnder, cancellationToken);
-            return person.Id;
-        }
-        if (string.IsNullOrWhiteSpace(personId) || !await db.Personen.AnyAsync(p => p.Id == personId, cancellationToken))
-        {
-            throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
-        }
-        return personId;
-    }
+    private Task<string> PersonIdErmittelnAsync(AppDbContext db, string? personId, string? neuerName, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+        => MitgliedHelfer.PersonIdErmittelnAsync(db, personService, personId, neuerName, handelnder, cancellationToken);
 
     public async Task MitgliedAendernAsync(string mitgliedId, string? rolle, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var mitglied = await db.PersonengruppeMitglieder.FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken)
+        var mitglied = await db.PersonengruppeMitglieder.Include(m => m.Personengruppe).FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken)
             ?? throw new InvalidOperationException("Mitgliedschaft nicht gefunden.");
+        if (mitglied.Personengruppe?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
         mitglied.Rolle = Leer(rolle);
         mitglied.IstLeitung = istLeitung;
         await db.SaveChangesAsync(cancellationToken);
@@ -282,10 +297,14 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
     public async Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var mitglied = await db.PersonengruppeMitglieder.FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken);
+        var mitglied = await db.PersonengruppeMitglieder.Include(m => m.Personengruppe).FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken);
         if (mitglied is null)
         {
             return;
+        }
+        if (mitglied.Personengruppe?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         var personId = mitglied.PersonId;
         // Austritt + Kollegen-Verknüpfungen in EINER Transaktion. Soft-Delete (ISoftDelete): der Interceptor setzt
@@ -310,9 +329,11 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
     public async Task AgentZuteilenAsync(string gruppeId, string agentId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await db.Personengruppen.AnyAsync(g => g.Id == gruppeId, cancellationToken))
+        var gruppe = await db.Personengruppen.FirstOrDefaultAsync(g => g.Id == gruppeId, cancellationToken)
+            ?? throw new InvalidOperationException($"Personengruppe '{gruppeId}' nicht gefunden.");
+        if (gruppe.IstVerschlusssache && !handelnder.IstFuehrung())
         {
-            throw new InvalidOperationException($"Personengruppe '{gruppeId}' nicht gefunden.");
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
         {
@@ -334,10 +355,14 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
     public async Task AgentEntfernenAsync(string zuteilungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var zuteilung = await db.PersonengruppeAgenten.FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken);
+        var zuteilung = await db.PersonengruppeAgenten.Include(a => a.Personengruppe).FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken);
         if (zuteilung is null)
         {
             return;
+        }
+        if (zuteilung.Personengruppe?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         db.PersonengruppeAgenten.Remove(zuteilung);
         await db.SaveChangesAsync(cancellationToken);
@@ -358,9 +383,13 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         return new PersonengruppeFortschritt(erfasst, geschaetzt);
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string gruppeId, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistorieAsync(string gruppeId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Personengruppe), gruppeId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         var mitgliedIds = await db.PersonengruppeMitglieder
             .Where(m => m.PersonengruppeId == gruppeId)
             .Select(m => m.Id)
@@ -415,5 +444,5 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         await KollegenSync.SyncAsync(db, personId, KollegenSync.Gruppenkollege, soll, cancellationToken);
     }
 
-    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? Leer(string? s) => s.TrimToNull();
 }

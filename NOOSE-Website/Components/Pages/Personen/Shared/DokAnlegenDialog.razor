@@ -8,7 +8,7 @@
     <DialogContent>
         <MudForm @ref="_form">
             <MudStack Spacing="3">
-                <MudAutocomplete T="Person" Label="Person" @bind-Value="_person" @bind-Text="_personText"
+                <MudAutocomplete T="Person" Label="Person" @bind-Value="_person" @bind-Text="_personText" AutoFocus="true"
                                  SearchFunc="@SuchePersonen" ToStringFunc="@(p => p?.Name ?? string.Empty)"
                                  Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
                                  ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"

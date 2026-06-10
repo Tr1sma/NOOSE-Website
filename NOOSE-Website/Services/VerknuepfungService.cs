@@ -16,7 +16,7 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
     public async Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, VerknuepfungArt? art = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await AkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
         {
             return new();
         }
@@ -41,66 +41,47 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
                     AndereId: istVon ? v.NachId : v.VonId);
         }).ToList();
 
-        // Ziele für Anzeige + Sichtbarkeitsfilter auflösen (Person + Fraktion).
+        // Ziele für Anzeige + Sichtbarkeitsfilter auflösen (Person + Fraktion + Personengruppe) – je Typ
+        // eine Sammelabfrage, dann in EINE Lookup-Map (Typ, Id) → (Bezeichnung, Verschlusssache) zusammenführen.
+        var ziele = new Dictionary<(string Typ, string Id), (string Bezeichnung, bool Verschluss)>();
+
         var personIds = paare.Where(p => p.AndereTyp == nameof(Person)).Select(p => p.AndereId).Distinct().ToList();
-        var personMap = (await db.Personen
-            .Where(p => personIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache })
-            .ToListAsync(cancellationToken)).ToDictionary(p => p.Id);
+        foreach (var x in await db.Personen.Where(p => personIds.Contains(p.Id))
+                     .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Person), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache);
+        }
 
         var fraktionIds = paare.Where(p => p.AndereTyp == nameof(Fraktion)).Select(p => p.AndereId).Distinct().ToList();
-        var fraktionMap = (await db.Fraktionen
-            .Where(f => fraktionIds.Contains(f.Id))
-            .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache })
-            .ToListAsync(cancellationToken)).ToDictionary(f => f.Id);
+        foreach (var x in await db.Fraktionen.Where(f => fraktionIds.Contains(f.Id))
+                     .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Fraktion), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache);
+        }
 
         var gruppenIds = paare.Where(p => p.AndereTyp == nameof(Personengruppe)).Select(p => p.AndereId).Distinct().ToList();
-        var gruppenMap = (await db.Personengruppen
-            .Where(g => gruppenIds.Contains(g.Id))
-            .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache })
-            .ToListAsync(cancellationToken)).ToDictionary(g => g.Id);
+        foreach (var x in await db.Personengruppen.Where(g => gruppenIds.Contains(g.Id))
+                     .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Personengruppe), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache);
+        }
 
+        var bekannteTypen = new[] { nameof(Person), nameof(Fraktion), nameof(Personengruppe) };
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)
         {
-            if (p.AndereTyp == nameof(Person))
+            if (ziele.TryGetValue((p.AndereTyp, p.AndereId), out var info))
             {
-                if (!personMap.TryGetValue(p.AndereId, out var person))
-                {
-                    continue; // Ziel im Papierkorb oder unbekannt → ausblenden.
-                }
-                if (person.IstVerschlusssache && !istFuehrung)
+                // Verschlusssache nur für die Führung sichtbar.
+                if (info.Verschluss && !istFuehrung)
                 {
                     continue;
                 }
-                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
-                    $"{person.Name} ({person.Aktenzeichen})", p.V.Automatisch));
+                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label, info.Bezeichnung, p.V.Automatisch));
             }
-            else if (p.AndereTyp == nameof(Fraktion))
+            else if (bekannteTypen.Contains(p.AndereTyp))
             {
-                if (!fraktionMap.TryGetValue(p.AndereId, out var fraktion))
-                {
-                    continue;
-                }
-                if (fraktion.IstVerschlusssache && !istFuehrung)
-                {
-                    continue;
-                }
-                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
-                    $"{fraktion.Name} ({fraktion.Aktenzeichen})", p.V.Automatisch));
-            }
-            else if (p.AndereTyp == nameof(Personengruppe))
-            {
-                if (!gruppenMap.TryGetValue(p.AndereId, out var gruppe))
-                {
-                    continue;
-                }
-                if (gruppe.IstVerschlusssache && !istFuehrung)
-                {
-                    continue;
-                }
-                ergebnis.Add(new VerknuepfungAnzeige(p.V.Id, p.AndereTyp, p.AndereId, p.V.Label,
-                    $"{gruppe.Name} ({gruppe.Aktenzeichen})", p.V.Automatisch));
+                // Bekannter Aktentyp, aber nicht aufgelöst → Ziel im Papierkorb/unbekannt → ausblenden.
             }
             else
             {
@@ -119,6 +100,17 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Doppelte (aktive) Verknüpfung derselben Art verhindern – in beiden Richtungen. Soft-gelöschte
+        // (Papierkorb) sind durch den globalen Filter ausgenommen und blockieren das Neuanlegen nicht.
+        var existiert = await db.Verknuepfungen.AnyAsync(v => v.Art == art
+            && ((v.VonTyp == vonTyp && v.VonId == vonId && v.NachTyp == nachTyp && v.NachId == nachId)
+             || (v.VonTyp == nachTyp && v.VonId == nachId && v.NachTyp == vonTyp && v.NachId == vonId)),
+            cancellationToken);
+        if (existiert)
+        {
+            throw new InvalidOperationException("Diese Verknüpfung besteht bereits.");
+        }
+
         db.Verknuepfungen.Add(new Verknuepfung
         {
             VonTyp = vonTyp,
@@ -141,35 +133,5 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         }
         db.Verknuepfungen.Remove(v); // Soft-Delete via Interceptor
         await db.SaveChangesAsync(cancellationToken);
-    }
-
-    /// <summary>Eltern-Sichtbarkeit ohne FK-Navigation prüfen (Person + Fraktion); vgl. QuelleService.</summary>
-    private static async Task<bool> AkteSichtbarAsync(AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
-    {
-        if (entitaetTyp == nameof(Person))
-        {
-            var person = await db.Personen
-                .Where(p => p.Id == entitaetId)
-                .Select(p => new { p.IstVerschlusssache })
-                .FirstOrDefaultAsync(cancellationToken);
-            return person is not null && (istFuehrung || !person.IstVerschlusssache);
-        }
-        if (entitaetTyp == nameof(Fraktion))
-        {
-            var fraktion = await db.Fraktionen
-                .Where(f => f.Id == entitaetId)
-                .Select(f => new { f.IstVerschlusssache })
-                .FirstOrDefaultAsync(cancellationToken);
-            return fraktion is not null && (istFuehrung || !fraktion.IstVerschlusssache);
-        }
-        if (entitaetTyp == nameof(Personengruppe))
-        {
-            var gruppe = await db.Personengruppen
-                .Where(g => g.Id == entitaetId)
-                .Select(g => new { g.IstVerschlusssache })
-                .FirstOrDefaultAsync(cancellationToken);
-            return gruppe is not null && (istFuehrung || !gruppe.IstVerschlusssache);
-        }
-        return true;
     }
 }

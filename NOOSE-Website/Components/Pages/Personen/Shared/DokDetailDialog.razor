@@ -91,12 +91,19 @@
         {
             return;
         }
-        await DokService.AktualisierenAsync(Dok.Id, eingabe, User);
-        Snackbar.Add("Dok aktualisiert.", Severity.Success);
-        // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
-        await DokMitgliedschaft.EintragenAsync(FraktionService, GruppeService, PersonService, Snackbar, Dok.PersonId, eingabe, User);
-        // Detail schließen und dem Aufrufer „geändert" melden → Liste neu laden.
-        MudDialog.Close(DialogResult.Ok(true));
+        try
+        {
+            await DokService.AktualisierenAsync(Dok.Id, eingabe, User);
+            Snackbar.Add("Dok aktualisiert.", Severity.Success);
+            // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
+            await DokMitgliedschaft.EintragenAsync(FraktionService, GruppeService, PersonService, Snackbar, Dok.PersonId, eingabe, User);
+            // Detail schließen und dem Aufrufer „geändert" melden → Liste neu laden.
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     /// <summary>
