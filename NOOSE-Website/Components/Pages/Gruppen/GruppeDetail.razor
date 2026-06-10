@@ -23,6 +23,7 @@ else
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personengruppen" aria-label="Zurück" />
         <MudSpacer />
         <FolgenButton EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
+        <AufgabeErstellenButton EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" />
         <MudButton Href="@($"/personengruppen/{_gruppe.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         <AuthorizeView Policy="@Policies.Fuehrung">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>

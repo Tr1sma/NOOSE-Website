@@ -1,0 +1,258 @@
+@page "/aufgaben/{Id}"
+@inject IAufgabeService AufgabeService
+@inject IZugriffsLogService ZugriffsLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_aufgabe?.Titel ?? "Aufgabe") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_aufgabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Aufgabe nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/aufgaben" aria-label="Zurück" />
+        <MudText Typo="Typo.h5">@_aufgabe.Titel</MudText>
+        <MudSpacer />
+        @if (_kannBearbeiten)
+        {
+            <MudButton Href="@($"/aufgaben/{_aufgabe.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+        }
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntitaetTyp="@nameof(Aufgabe)" EntitaetId="@_aufgabe.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Aktenzeichen</MudText>
+                        <MudText Typo="Typo.body1">@_aufgabe.Aktenzeichen</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Status</MudText>
+                        <div><AufgabeStatusChip Status="_aufgabe.Status" /></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Priorität</MudText>
+                        <div><AufgabePrioritaetChip Prioritaet="_aufgabe.Prioritaet" /></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Fälligkeit</MudText>
+                        @if (_aufgabe.Faelligkeit is { } f)
+                        {
+                            <MudText Typo="Typo.body2" Color="@(Ueberfaellig ? Color.Error : Color.Default)">
+                                @f.ToLocalTime().ToString("dd.MM.yyyy")@(Ueberfaellig ? " · überfällig" : "")
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Zugewiesen</MudText>
+                        @if (_zuweisungen.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap" style="gap:.25rem;">
+                                @foreach (var z in _zuweisungen)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">@z.Agent?.Codename</MudChip>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Angelegt</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_aufgabe.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                    </div>
+                    @if (_aufgabe.ErledigtAm is { } erledigt)
+                    {
+                        <div>
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Abgeschlossen</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@erledigt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                        </div>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_aktiverTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="4">
+                        <MudSelect T="AufgabeStatus" Value="_aufgabe.Status" ValueChanged="StatusAendernAsync" Label="Status"
+                                   Variant="Variant.Outlined" Disabled="@(!_kannStatusAendern)" Style="max-width:280px;">
+                            @foreach (var s in AufgabeStatusAnzeige.Alle)
+                            {
+                                <MudSelectItem Value="s">@AufgabeStatusAnzeige.Name(s)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        @if (!_kannStatusAendern)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Nur der Ersteller, zugewiesene Agenten oder die Führung können den Status ändern.
+                            </MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_aufgabe.Beschreibung))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_aufgabe.Beschreibung</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Beschreibung erfasst.</MudText>
+                        }
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Beteiligte" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <AufgabeAgentePanel AufgabeId="@_aufgabe.Id" User="_user" KannVerwalten="_kannBearbeiten" Changed="ZuweisungenAktualisierenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
+                    <AufgabeInhaltPanel AufgabeId="@_aufgabe.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <KommentarPanel EntitaetTyp="@nameof(Aufgabe)" EntitaetId="@_aufgabe.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <QuellenPanel EntitaetTyp="@nameof(Aufgabe)" EntitaetId="@_aufgabe.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
+                    <AufgabeHistorieTimeline AufgabeId="@_aufgabe.Id" @key="_historieKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private Aufgabe? _aufgabe;
+    private List<AufgabeZuweisung> _zuweisungen = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _kannBearbeiten;
+    private bool _binBeteiligt;
+    private Guid _historieKey = Guid.NewGuid();
+    private string? _geladeneId;
+
+    private bool _kannStatusAendern => _kannBearbeiten || _binBeteiligt;
+    private bool Ueberfaellig => _aufgabe?.Faelligkeit is { } f && f.Date < DateTime.Today && AufgabeStatusAnzeige.IstOffen(_aufgabe.Status);
+
+    private int _aktiverTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "beteiligte", "verknuepfungen", "kommentare", "quellen", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _laden = true;
+        _aufgabe = null;
+        _aktiverTab = TabUrlState.Read(Nav, _tabs);
+        await LadenAsync();
+        if (_aufgabe is not null)
+        {
+            await ZugriffsLog.LogAnsichtAsync(nameof(Aufgabe), _aufgabe.Id);
+        }
+    }
+
+    private async Task LadenAsync()
+    {
+        _aufgabe = await AufgabeService.GetDetailAsync(Id);
+        if (_aufgabe is not null)
+        {
+            await ZuweisungenLadenAsync();
+            var meId = _user.GetAgentId();
+            _kannBearbeiten = _user.IstFuehrung() || _aufgabe.ErstelltVonId == meId;
+        }
+        _laden = false;
+    }
+
+    private async Task ZuweisungenLadenAsync()
+    {
+        if (_aufgabe is null)
+        {
+            return;
+        }
+        _zuweisungen = await AufgabeService.GetZuweisungenAsync(_aufgabe.Id);
+        var meId = _user.GetAgentId();
+        _binBeteiligt = meId is not null && _zuweisungen.Any(z => z.AgentId == meId);
+    }
+
+    private async Task ZuweisungenAktualisierenAsync()
+    {
+        await ZuweisungenLadenAsync();
+        _historieKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task StatusAendernAsync(AufgabeStatus neu)
+    {
+        if (_aufgabe is null || neu == _aufgabe.Status)
+        {
+            return;
+        }
+        try
+        {
+            await AufgabeService.StatusSetzenAsync(_aufgabe.Id, neu, _user);
+            Snackbar.Add($"Status: {AufgabeStatusAnzeige.Name(neu)}.", Severity.Success);
+            await LadenAsync();
+            _historieKey = Guid.NewGuid();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoeschenAsync()
+    {
+        if (_aufgabe is null)
+        {
+            return;
+        }
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Aufgabe löschen?",
+            "Die Aufgabe wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await AufgabeService.LoeschenAsync(_aufgabe.Id, _user);
+        Snackbar.Add("Aufgabe in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/aufgaben");
+    }
+}

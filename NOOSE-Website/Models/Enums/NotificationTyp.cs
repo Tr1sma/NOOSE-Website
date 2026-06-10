@@ -19,6 +19,9 @@ public enum NotificationTyp
 
     /// <summary>Eine vom Empfänger beobachtete (gefolgte) Akte wurde geändert (Watchlist).</summary>
     AkteGeaendert = 3,
+
+    /// <summary>Dem Empfänger wurde eine Aufgabe zugewiesen (bzw. eine eigene Aufgabe wurde erledigt).</summary>
+    AufgabeZugewiesen = 4,
 }
 
 /// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
@@ -30,6 +33,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.Erwaehnung => "Erwähnung",
         NotificationTyp.Konto => "Konto",
         NotificationTyp.AkteGeaendert => "Beobachtete Akte geändert",
+        NotificationTyp.AufgabeZugewiesen => "Aufgabe",
         _ => "Benachrichtigung",
     };
 
@@ -40,6 +44,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.Erwaehnung => Icons.Material.Filled.AlternateEmail,
         NotificationTyp.Konto => Icons.Material.Filled.ManageAccounts,
         NotificationTyp.AkteGeaendert => Icons.Material.Filled.Visibility,
+        NotificationTyp.AufgabeZugewiesen => Icons.Material.Filled.AssignmentInd,
         _ => Icons.Material.Filled.Notifications,
     };
 }

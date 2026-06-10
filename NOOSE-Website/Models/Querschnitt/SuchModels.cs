@@ -1,3 +1,4 @@
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -54,6 +55,7 @@ public static class SuchNavigation
         nameof(Operation) => $"/operationen/{zielId}",
         nameof(Taskforce) => $"/taskforces/{zielId}",
         nameof(Vorgang) => $"/vorgaenge/{zielId}",
+        nameof(Aufgabe) => $"/aufgaben/{zielId}",
         _ => $"/personen/{zielId}",
     };
 

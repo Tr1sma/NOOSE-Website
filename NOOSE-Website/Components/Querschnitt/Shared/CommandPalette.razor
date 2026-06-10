@@ -68,6 +68,8 @@
             new("Neue Taskforce anlegen", null, Icons.Material.Filled.Add, "/taskforces/neu"),
             new("Vorgänge", "Liste", Icons.Material.Filled.FolderSpecial, "/vorgaenge"),
             new("Neuen Vorgang anlegen", null, Icons.Material.Filled.Add, "/vorgaenge/neu"),
+            new("Aufgaben", "Team-Board", Icons.Material.Filled.AssignmentTurnedIn, "/aufgaben"),
+            new("Neue Aufgabe anlegen", null, Icons.Material.Filled.Add, "/aufgaben/neu"),
             new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
         };
         // Papierkörbe und Verwaltung sind Führungs-gated → für Nicht-Führung nicht anbieten (sonst ACCESS DENIED).
@@ -82,6 +84,7 @@
             _befehle.Add(new PaletteItem("Papierkorb · Operationen", null, Icons.Material.Filled.Delete, "/operationen/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Taskforces", null, Icons.Material.Filled.Delete, "/taskforces/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Vorgänge", null, Icons.Material.Filled.Delete, "/vorgaenge/papierkorb"));
+            _befehle.Add(new PaletteItem("Papierkorb · Aufgaben", null, Icons.Material.Filled.Delete, "/aufgaben/papierkorb"));
         }
     }
 
@@ -163,6 +166,7 @@
         nameof(Operation) => Icons.Material.Filled.Radar,
         nameof(Taskforce) => Icons.Material.Filled.Groups2,
         nameof(Vorgang) => Icons.Material.Filled.FolderSpecial,
+        nameof(Aufgabe) => Icons.Material.Filled.AssignmentTurnedIn,
         _ => Icons.Material.Filled.Badge,
     };
 

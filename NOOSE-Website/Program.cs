@@ -171,6 +171,8 @@ builder.Services.AddSingleton<NotificationBroadcaster>();
 builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<WatchlistFanout>();
 builder.Services.AddSingleton<WatchlistDispatcher>();
+// Phase 6: Aufgaben/To-Dos & Zuweisungen (Team-Board; Zuweisung/Erledigung → Glocke).
+builder.Services.AddScoped<IAufgabeService, AufgabeService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>

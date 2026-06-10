@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Antraege;
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Benachrichtigungen;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
@@ -69,6 +70,10 @@ public static class WatchlistAkteRollup
             case PersonBeziehung pb: return Zwei((nameof(Person), pb.PersonAId), (nameof(Person), pb.PersonBId));
 
             // ---- Bewusst ignoriert: auditierbar, aber keine folgbare Akte (verhindert Schleifen/Rauschen) ----
+            // Aufgaben laufen über ein eigenes Team-Board (keine Watchlist) → nicht folgbar; ein Verknüpfungs-Edit
+            // Akte↔Aufgabe rollt weiter korrekt auf die andere (folgbare) Seite, die Aufgabe-Seite hat keine Folger.
+            case Aufgabe:
+            case AufgabeZuweisung:
             case Antrag:
             case Tag:
             case Benachrichtigung:

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Antraege;
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Benachrichtigungen;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
@@ -110,6 +111,10 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- Phase 6: Watchlist (gefolgte Akten) ----
     public DbSet<WatchlistEintrag> Watchlisten => Set<WatchlistEintrag>();
+
+    // ---- Phase 6: Aufgaben/To-Dos & Zuweisungen ----
+    public DbSet<Aufgabe> Aufgaben => Set<Aufgabe>();
+    public DbSet<AufgabeZuweisung> AufgabeZuweisungen => Set<AufgabeZuweisung>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -525,6 +530,30 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.VorgangId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
+        });
+
+        // ---- Phase 6: Aufgaben/To-Dos & Zuweisungen ----
+        modelBuilder.Entity<Aufgabe>(b =>
+        {
+            b.Property(a => a.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(a => a.Titel).HasMaxLength(200).IsRequired();
+            b.Property(a => a.Beschreibung).HasMaxLength(4000);
+            b.HasIndex(a => a.Aktenzeichen).IsUnique();
+            b.HasIndex(a => a.Titel);
+            b.HasIndex(a => a.Status);
+            b.HasIndex(a => a.Faelligkeit);
+
+            b.HasMany(a => a.Zuweisungen).WithOne(z => z.Aufgabe!)
+                .HasForeignKey(z => z.AufgabeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AufgabeZuweisung>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(z => z.Agent).WithMany()
+                .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(z => new { z.AufgabeId, z.AgentId }).IsUnique();
+            b.HasIndex(z => z.AgentId);
         });
 
         // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----

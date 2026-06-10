@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -55,12 +56,16 @@ public static class Sichtbarkeit
             nameof(Vorgang) => await db.Vorgaenge
                 .Where(v => v.Id == entitaetId).Select(v => (bool?)v.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
+            // Aufgabe: keine Verschlusssache (Team-Board) – existiert sie, ist sie für alle aktiven Agenten sichtbar.
+            nameof(Aufgabe) => await db.Aufgaben
+                .Where(a => a.Id == entitaetId).Select(a => (bool?)false)
+                .FirstOrDefaultAsync(cancellationToken),
             // Andere Typen besitzen (noch) keine Verschlusssache-Stufe.
             _ => false,
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Taskforce) or nameof(Vorgang)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Taskforce) or nameof(Vorgang) or nameof(Aufgabe)))
         {
             return true;
         }

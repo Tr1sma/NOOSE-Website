@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -374,6 +375,46 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // ---- Aufgaben (Titel/Aktenzeichen/Beschreibung; Team-Board → keine Verschlusssache) ----
+        if (Aktiv(nameof(Aufgabe)))
+        {
+            var q = db.Aufgaben.AsQueryable();
+            if (hatText)
+            {
+                q = q.Where(a => a.Titel.Contains(s!) || a.Aktenzeichen.Contains(s!)
+                    || (a.Beschreibung != null && a.Beschreibung.Contains(s!)));
+            }
+            if (hatTags)
+            {
+                q = q.Where(a => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Aufgabe) && z.EntitaetId == a.Id && tagIds.Contains(z.TagId)));
+            }
+            var treffer = await q.OrderBy(a => a.Titel).Take(MaxProKategorie)
+                .Select(a => new SuchTreffer(nameof(Aufgabe), a.Id, a.Titel, a.Beschreibung ?? string.Empty, a.Aktenzeichen))
+                .ToListAsync(cancellationToken);
+
+            if (FuzzyAktiv(treffer.Count))
+            {
+                var basis = db.Aufgaben.AsQueryable();
+                if (hatTags)
+                {
+                    basis = basis.Where(a => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Aufgabe) && z.EntitaetId == a.Id && tagIds.Contains(z.TagId)));
+                }
+                var roh = await basis.OrderByDescending(a => a.GeaendertAm ?? a.ErstelltAm).Take(FuzzyKandidatenMax)
+                    .Select(a => new { a.Id, a.Titel, a.Aktenzeichen, a.Beschreibung })
+                    .ToListAsync(cancellationToken);
+                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Titel, x.Aktenzeichen, x.Beschreibung ?? string.Empty,
+                    max
+                        ? TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen, x.Beschreibung)
+                        : TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen)));
+                treffer = FuzzyErgaenzen(nameof(Aufgabe), treffer, suchworte, kandidaten);
+            }
+
+            if (treffer.Count > 0)
+            {
+                gruppen.Add(new SuchErgebnisGruppe(nameof(Aufgabe), "Aufgaben", treffer));
+            }
+        }
+
         // Die folgenden Kategorien sind Text-Inhalte → nur bei vorhandenem Suchtext. Im Max-Modus immer aktiv.
         // Wichtig: expliziter Join auf db.Personen (NICHT Include über die soft-delete-gefilterte
         // Pflichtnavigation), sonst greift das fragile Query-Filter-/Pflichtnavigations-Zusammenspiel.
@@ -476,6 +517,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .OrderBy(v => v.Titel).Take(max)
             .Select(v => new SchnellTreffer(nameof(Vorgang), v.Id, v.Titel, v.Aktenzeichen))
             .ToListAsync(cancellationToken);
+        var aufgaben = await db.Aufgaben
+            .Where(a => a.Titel.Contains(s) || a.Aktenzeichen.Contains(s))
+            .OrderBy(a => a.Titel).Take(max)
+            .Select(a => new SchnellTreffer(nameof(Aufgabe), a.Id, a.Titel, a.Aktenzeichen))
+            .ToListAsync(cancellationToken);
 
         // Immer leicht aktive Tippfehler-Toleranz auf Identifikatoren (Name/Titel/Aktenzeichen). Pro
         // Kategorie nur, wenn der Begriff lang genug ist UND noch Platz frei ist (sonst lohnt der Scan nicht).
@@ -531,10 +577,17 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                     .Select(v => new { v.Id, Name = v.Titel, v.Aktenzeichen }).ToListAsync(cancellationToken);
                 vorgaenge = SchnellFuzzy(nameof(Vorgang), vorgaenge, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
             }
+            if (aufgaben.Count < max)
+            {
+                var k = await db.Aufgaben
+                    .OrderBy(a => a.Titel).Take(FuzzyKandidatenMax)
+                    .Select(a => new { a.Id, Name = a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken);
+                aufgaben = SchnellFuzzy(nameof(Aufgabe), aufgaben, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+            }
         }
 
         // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
-        return Mischen(personen, fraktionen, gruppen, parteien, operationen, taskforces, vorgaenge).Take(max).ToList();
+        return Mischen(personen, fraktionen, gruppen, parteien, operationen, taskforces, vorgaenge, aufgaben).Take(max).ToList();
     }
 
     /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
@@ -645,6 +698,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         var operationIds = roh.Where(r => r.EntitaetTyp == nameof(Operation)).Select(r => r.EntitaetId).Distinct().ToList();
         var taskforceIds = roh.Where(r => r.EntitaetTyp == nameof(Taskforce)).Select(r => r.EntitaetId).Distinct().ToList();
         var vorgangIds = roh.Where(r => r.EntitaetTyp == nameof(Vorgang)).Select(r => r.EntitaetId).Distinct().ToList();
+        var aufgabeIds = roh.Where(r => r.EntitaetTyp == nameof(Aufgabe)).Select(r => r.EntitaetId).Distinct().ToList();
 
         // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
         var map = new Dictionary<(string, string), (string Name, string Aktenzeichen, bool Verschluss)>();
@@ -683,6 +737,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Vorgang), x.Id)] = (x.Titel, x.Aktenzeichen, x.IstVerschlusssache);
         }
+        foreach (var x in await db.Aufgaben.Where(a => aufgabeIds.Contains(a.Id))
+                     .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Aufgabe), x.Id)] = (x.Titel, x.Aktenzeichen, false);
+        }
 
         // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
         HashSet<(string, string)>? mitTag = null;
@@ -696,7 +755,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                      || (z.EntitaetTyp == nameof(Partei) && parteiIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Operation) && operationIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Taskforce) && taskforceIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Vorgang) && vorgangIds.Contains(z.EntitaetId))))
+                     || (z.EntitaetTyp == nameof(Vorgang) && vorgangIds.Contains(z.EntitaetId))
+                     || (z.EntitaetTyp == nameof(Aufgabe) && aufgabeIds.Contains(z.EntitaetId))))
                 .Select(z => new { z.EntitaetTyp, z.EntitaetId }).ToListAsync(cancellationToken))
                 .Select(z => (z.EntitaetTyp, z.EntitaetId)).ToHashSet();
         }

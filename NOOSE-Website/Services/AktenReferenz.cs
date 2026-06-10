@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -140,6 +141,17 @@ public static class AktenReferenz
                 .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.IstVerschlusssache }).ToListAsync(ct))
             {
                 map[(nameof(Vorgang), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Vorgang), x.Id));
+            }
+        }
+
+        // Aufgabe: kein Verschlusssache-Konzept (Team-Board) → Verschluss-Flag fest false.
+        var aufgabeIds = OffeneIds(nameof(Aufgabe));
+        if (aufgabeIds.Count > 0)
+        {
+            foreach (var x in await db.Aufgaben.Where(a => aufgabeIds.Contains(a.Id))
+                .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(ct))
+            {
+                map[(nameof(Aufgabe), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", false, SuchNavigation.Route(nameof(Aufgabe), x.Id));
             }
         }
 

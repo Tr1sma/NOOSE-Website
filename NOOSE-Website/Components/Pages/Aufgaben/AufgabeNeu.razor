@@ -1,0 +1,103 @@
+@page "/aufgaben/neu"
+@inject IAufgabeService AufgabeService
+@inject IVerknuepfungService VerknuepfungService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Aufgabe · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/aufgaben" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Aufgabe anlegen</MudText>
+</MudStack>
+
+@if (HatBezug)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.AddLink">
+        Diese Aufgabe wird nach dem Anlegen automatisch mit der gewählten @TypAnzeige(BezugTyp!) verknüpft.
+    </MudAlert>
+}
+
+<MudForm @ref="_form">
+    <AufgabeForm Eingabe="_eingabe" ZeigeZuweisung="true" @bind-AgentIds="_agentIds" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/aufgaben">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "bezugTyp")] public string? BezugTyp { get; set; }
+    [SupplyParameterFromQuery(Name = "bezugId")] public string? BezugId { get; set; }
+
+    private MudForm _form = default!;
+    private readonly AufgabeEingabe _eingabe = new();
+    private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
+    private ClaimsPrincipal _user = default!;
+    private bool _speichert;
+
+    private bool HatBezug => !string.IsNullOrWhiteSpace(BezugTyp) && !string.IsNullOrWhiteSpace(BezugId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_speichert)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            var aufgabe = await AufgabeService.ErstellenAsync(_eingabe, _agentIds.ToList(), _user);
+
+            // Optionaler Akten-Bezug (vom „Aufgabe erstellen"-Button einer Akte vorausgefüllt): verknüpfen.
+            if (HatBezug)
+            {
+                try
+                {
+                    await VerknuepfungService.ErstellenAsync(nameof(Aufgabe), aufgabe.Id, BezugTyp!, BezugId!, null, _user, VerknuepfungArt.Standard);
+                }
+                catch (Exception ex)
+                {
+                    // Die Aufgabe ist angelegt; nur die Verknüpfung scheiterte → hinweisen, nicht abbrechen.
+                    Snackbar.Add($"Aufgabe angelegt, aber die Verknüpfung schlug fehl: {ex.Message}", Severity.Warning);
+                }
+            }
+
+            Snackbar.Add($"Aufgabe {aufgabe.Aktenzeichen} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/aufgaben/{aufgabe.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+
+    private static string TypAnzeige(string typ) => typ switch
+    {
+        nameof(Person) => "Person",
+        nameof(Fraktion) => "Fraktion",
+        nameof(Personengruppe) => "Personengruppe",
+        nameof(Partei) => "Partei",
+        nameof(Operation) => "Operation",
+        nameof(Vorgang) => "Vorgangsakte",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Agent) => "Personalakte",
+        _ => "Akte",
+    };
+}

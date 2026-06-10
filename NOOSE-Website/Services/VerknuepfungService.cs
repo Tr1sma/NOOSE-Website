@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -102,6 +103,14 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(Vorgang), x.Id)] = ($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/vorgaenge/{x.Id}");
         }
 
+        // Aufgabe (Phase 6): kein Verschlusssache-Konzept (Team-Board); Navigation auf die eigene Detailseite.
+        var aufgabeIds = paare.Where(p => p.AndereTyp == nameof(Aufgabe)).Select(p => p.AndereId).Distinct().ToList();
+        foreach (var x in await db.Aufgaben.Where(a => aufgabeIds.Contains(a.Id))
+                     .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Aufgabe), x.Id)] = ($"{x.Titel} ({x.Aktenzeichen})", false, $"/aufgaben/{x.Id}");
+        }
+
         // Agent: kein Verschlusssache-Konzept und keine eigene Detailseite (Href null) – nur Codename.
         var agentIds = paare.Where(p => p.AndereTyp == nameof(Agent)).Select(p => p.AndereId).Distinct().ToList();
         foreach (var x in await db.Users.Where(u => agentIds.Contains(u.Id))
@@ -136,7 +145,7 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         {
             nameof(Person), nameof(Fraktion), nameof(Personengruppe), nameof(Partei),
             nameof(Operation), nameof(Taskforce), nameof(Vorgang), nameof(Agent),
-            nameof(PersonDok), nameof(Observation),
+            nameof(PersonDok), nameof(Observation), nameof(Aufgabe),
         };
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)

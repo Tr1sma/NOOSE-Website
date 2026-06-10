@@ -23,6 +23,7 @@ else
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/taskforces" aria-label="Zurück" />
         <MudSpacer />
         <FolgenButton EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+        <AufgabeErstellenButton EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" />
         <AuthorizeView Policy="@Policies.Fuehrung">
             <MudMenu Label="Genehmigung" StartIcon="@Icons.Material.Filled.Gavel" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                      Variant="Variant.Outlined" Color="Color.Secondary">

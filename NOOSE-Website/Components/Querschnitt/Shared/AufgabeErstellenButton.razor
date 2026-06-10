@@ -1,0 +1,16 @@
+@* Button auf einer Akten-Detailseite: legt eine neue Aufgabe an, die mit dieser Akte vorverknüpft wird
+   (Bezug per Query-Parameter an /aufgaben/neu übergeben). *@
+@inject NavigationManager Nav
+
+<MudTooltip Text="Aufgabe zu dieser Akte anlegen">
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddTask"
+               OnClick="Erstellen">Aufgabe</MudButton>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
+
+    private void Erstellen()
+        => Nav.NavigateTo($"/aufgaben/neu?bezugTyp={Uri.EscapeDataString(EntitaetTyp)}&bezugId={Uri.EscapeDataString(EntitaetId)}");
+}

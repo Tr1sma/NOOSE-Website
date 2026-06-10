@@ -1,0 +1,155 @@
+@page "/aufgaben"
+@inject IAufgabeService AufgabeService
+@inject NavigationManager Nav
+
+<PageTitle>Aufgaben · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Aufgaben</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Fuehrung">
+        <MudButton Href="/aufgaben/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Gemeinsames Team-Board: Aufgaben anlegen, zuweisen und verfolgen. Überfällige Aufgaben sind rot markiert.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="AufgabeZeile" Items="_zeilen" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Oeffnen(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_suche" Placeholder="Suchen (Titel, Aktenzeichen, Agent)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSwitch T="bool" Value="_nurMeine" ValueChanged="NurMeineGewaehlt" Color="Color.Primary" Label="Nur meine" Class="mr-4" />
+            <MudSelect T="AufgabeStatus?" Value="_statusFilter" ValueChanged="StatusGewaehlt" Label="Status" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:200px;">
+                <MudSelectItem T="AufgabeStatus?" Value="@((AufgabeStatus?)null)">Alle</MudSelectItem>
+                @foreach (var s in AufgabeStatusAnzeige.Alle)
+                {
+                    <MudSelectItem T="AufgabeStatus?" Value="@s">@AufgabeStatusAnzeige.Name(s)</MudSelectItem>
+                }
+            </MudSelect>
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
+            <TemplateColumn Title="Titel" SortBy="x => x.Titel">
+                <CellTemplate>
+                    <MudLink Href="@($"/aufgaben/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Titel</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Status" SortBy="x => x.Status">
+                <CellTemplate>
+                    <AufgabeStatusChip Status="context.Item.Status" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Priorität" SortBy="x => x.Prioritaet">
+                <CellTemplate>
+                    <AufgabePrioritaetChip Prioritaet="context.Item.Prioritaet" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Fällig" SortBy="x => x.Faelligkeit ?? DateTime.MaxValue">
+                <CellTemplate>
+                    @if (context.Item.Faelligkeit is { } f)
+                    {
+                        <MudText Typo="Typo.body2" Color="@(Ueberfaellig(context.Item) ? Color.Error : Color.Default)">
+                            @f.ToLocalTime().ToString("dd.MM.yyyy")
+                            @if (Ueberfaellig(context.Item))
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" Class="ml-1" Title="Überfällig" />
+                            }
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Zugewiesen" Sortable="false">
+                <CellTemplate>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @(context.Item.ZugewieseneCodenames.Count == 0 ? "—" : string.Join(", ", context.Item.ZugewieseneCodenames))
+                    </MudText>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.ErstellerCodename" Title="Ersteller" />
+        </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Aufgaben gefunden.</MudText>
+                <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="AufgabeZeile" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _nurMeine;
+    private string _suche = string.Empty;
+    private AufgabeStatus? _statusFilter;
+    private List<AufgabeZeile> _zeilen = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _zeilen = await AufgabeService.GetTeamboardAsync(_nurMeine, _user);
+        _laden = false;
+    }
+
+    private async Task NurMeineGewaehlt(bool wert)
+    {
+        _nurMeine = wert;
+        await LadenAsync();
+    }
+
+    private void StatusGewaehlt(AufgabeStatus? status)
+    {
+        _statusFilter = status;
+        StateHasChanged();
+    }
+
+    private bool Filter(AufgabeZeile z)
+    {
+        if (_statusFilter is not null && z.Status != _statusFilter)
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_suche))
+        {
+            return true;
+        }
+        var s = _suche.Trim();
+        return z.Titel.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Aktenzeichen.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.ZugewieseneCodenames.Any(c => c.Contains(s, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Überfällig: Fälligkeitsdatum vor heute und Aufgabe noch offen.</summary>
+    private static bool Ueberfaellig(AufgabeZeile z)
+        => z.Faelligkeit is { } f && f.Date < DateTime.Today && AufgabeStatusAnzeige.IstOffen(z.Status);
+
+    private void Oeffnen(AufgabeZeile z) => Nav.NavigateTo($"/aufgaben/{z.Id}");
+}
