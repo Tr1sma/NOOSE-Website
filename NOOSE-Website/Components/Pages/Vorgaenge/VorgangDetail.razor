@@ -79,7 +79,8 @@ else
                     <VorgangAgentePanel VorgangId="@_vorgang.Id" User="_user" Changed="FallfuehrerAktualisierenAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-                    <EinstufungPanel Aktuell="_vorgang.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
+                    <EinstufungPanel Aktuell="_vorgang.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
+                                     EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" ZielBezeichnung="@($"{_vorgang.Titel} ({_vorgang.Aktenzeichen})")" />
                 </MudTabPanel>
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />

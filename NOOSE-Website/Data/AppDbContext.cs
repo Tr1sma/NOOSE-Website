@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Antraege;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -98,6 +99,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<AgentDienstgradVerlauf> AgentDienstgradVerlaeufe => Set<AgentDienstgradVerlauf>();
     public DbSet<AgentVermerk> AgentVermerke => Set<AgentVermerk>();
     public DbSet<AgentBefoerderungsantrag> AgentBefoerderungsantraege => Set<AgentBefoerderungsantrag>();
+
+    // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----
+    public DbSet<Antrag> Antraege => Set<Antrag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -513,6 +517,22 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.VorgangId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
+        });
+
+        // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----
+        modelBuilder.Entity<Antrag>(b =>
+        {
+            b.Property(a => a.ZielTyp).HasMaxLength(128);
+            b.Property(a => a.ZielId).HasMaxLength(64);
+            b.Property(a => a.ZielBezeichnung).HasMaxLength(256);
+            b.Property(a => a.Begruendung).HasMaxLength(2000);
+            b.Property(a => a.Entscheidungsnotiz).HasMaxLength(2000);
+            b.Property(a => a.AntragstellerName).HasMaxLength(100);
+            b.Property(a => a.EntscheiderName).HasMaxLength(100);
+            b.Property(a => a.ErstelltVonId).HasMaxLength(64);
+            b.HasIndex(a => new { a.Typ, a.Status });
+            b.HasIndex(a => new { a.ZielTyp, a.ZielId });
+            b.HasIndex(a => a.ErstelltVonId);
         });
 
         // ---- Phase 5c: Taskforces ----

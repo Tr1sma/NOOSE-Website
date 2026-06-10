@@ -155,6 +155,8 @@ builder.Services.AddSingleton<TaskforceChatBroadcaster>();
 builder.Services.AddScoped<IObservationService, ObservationService>();
 // Phase 5e: Personalakte je Agent (Verlauf, Vermerke, Beförderungsanträge).
 builder.Services.AddScoped<IPersonalakteService, PersonalakteService>();
+// Phase 5: generischer Antrags-/Posteingang-Workflow (Hochstufungs-Anträge).
+builder.Services.AddScoped<IAntragService, AntragService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 

@@ -14,7 +14,7 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IDashboardService" />
-public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDashboardService
+public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntragService antragService) : IDashboardService
 {
     public async Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -32,9 +32,12 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         var offeneVorgaenge = await db.Vorgaenge.CountAsync(v => (istFuehrung || !v.IstVerschlusssache)
             && v.Status != VorgangStatus.Abgeschlossen && v.Status != VorgangStatus.Archiviert, cancellationToken);
 
-        // Offene Anträge = ausstehende Registrierungen + offene Namensänderungen + beantragte Taskforces
-        // (alle im Freigabe-Posteingang). Beantragte Verschlusssache-Taskforces nur für die Führung zählen.
-        var offeneAntraege = await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)
+        // Offene Anträge = Hochstufungs-Anträge + ausstehende Registrierungen + offene Namensänderungen
+        // + beantragte Taskforces + Beförderungsanträge (alle im Freigabe-Posteingang). Die Hochstufungs-
+        // Anträge laufen über den VS-gefilterten Dienst (wie NavMenu-Badge + Posteingang), beantragte
+        // Verschlusssache-Taskforces zählen nur für die Führung.
+        var offeneAntraege = await antragService.GetOffeneAnzahlAsync(istFuehrung, cancellationToken)
+            + await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)
             + await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken)
             + await db.Taskforces.CountAsync(t => t.Status == TaskforceStatus.Beantragt && (istFuehrung || !t.IstVerschlusssache), cancellationToken)
             + await db.AgentBefoerderungsantraege.CountAsync(a => a.Status == BefoerderungStatus.Beantragt, cancellationToken);

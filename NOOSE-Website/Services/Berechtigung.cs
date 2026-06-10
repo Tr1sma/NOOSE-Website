@@ -30,4 +30,15 @@ public static class Berechtigung
                 "Über Beförderungen entscheidet nur Deputy Director aufwärts oder ein Admin.");
         }
     }
+
+    /// <summary>Wirft, wenn der Handelnde die höchste Einstufung nicht setzen/entscheiden darf
+    /// (Senior Special Agent+ oder Admin) – u. a. die Entscheidung über Hochstufungs-Anträge.</summary>
+    public static void VerlangeHoechsteEinstufung(ClaimsPrincipal handelnder)
+    {
+        if (!handelnder.DarfHoechsteEinstufung())
+        {
+            throw new UnauthorizedAccessException(
+                "Über Hochstufungen auf „Gesichert staatsgefährdend“ entscheidet nur Senior Special Agent aufwärts oder ein Admin.");
+        }
+    }
 }

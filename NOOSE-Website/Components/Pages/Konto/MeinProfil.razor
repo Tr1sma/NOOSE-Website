@@ -3,6 +3,7 @@
    Supervisory+ (IstFuehrung) wirkt sofort; darunter wird die Änderung als Antrag in den Freigabe-
    Posteingang gelegt. Authentifizierung erbt die App-weite Policy „AktiverAgent" aus _Imports.razor. *@
 @inject IAgentVerwaltungService AgentService
+@inject IAntragService AntragService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
@@ -80,6 +81,31 @@ else
             </MudStack>
         </MudForm>
     </MudPaper>
+
+    @if (_meineAntraege.Count > 0)
+    {
+        <MudPaper Class="pa-6 mt-6" Elevation="2" Style="max-width:640px;">
+            <MudText Typo="Typo.h6" Class="mb-1">Meine Hochstufungs-Anträge</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+                Von dir gestellte Anträge auf die Einstufung „Gesichert staatsgefährdend“.
+            </MudText>
+            <MudStack Spacing="2">
+                @foreach (var a in _meineAntraege)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudChip T="string" Size="Size.Small" Color="@StatusFarbe(a.Status)" Variant="Variant.Filled">@AntragStatusAnzeige.Name(a.Status)</MudChip>
+                        <MudText Typo="Typo.body2">@a.ZielBezeichnung</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(a.Entscheidungsnotiz))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">Notiz: @a.Entscheidungsnotiz</MudText>
+                    }
+                }
+            </MudStack>
+        </MudPaper>
+    }
 }
 
 @code {
@@ -91,6 +117,7 @@ else
     private bool _istFuehrung;
     private ClaimsPrincipal _user = default!;
     private Agent? _agent;
+    private List<Antrag> _meineAntraege = new();
 
     private MudForm _form = default!;
     private string _codename = string.Empty;
@@ -108,8 +135,20 @@ else
         {
             FelderVorbefuellen();
         }
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            _meineAntraege = await AntragService.GetMeineAsync(id);
+        }
         _laden = false;
     }
+
+    private static Color StatusFarbe(AntragStatus status) => status switch
+    {
+        AntragStatus.Beantragt => Color.Info,
+        AntragStatus.Genehmigt => Color.Success,
+        AntragStatus.Abgelehnt => Color.Error,
+        _ => Color.Default,
+    };
 
     // Liegt ein offener Antrag vor, werden dessen Werte vorbefüllt (man bearbeitet den Antrag weiter);
     // sonst die aktuellen Live-Stammdaten.

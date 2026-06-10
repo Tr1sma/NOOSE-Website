@@ -91,7 +91,8 @@ else
                     </MudStack>
                 </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-                    <EinstufungPanel Aktuell="_fraktion.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
+                    <EinstufungPanel Aktuell="_fraktion.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
+                                     EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" ZielBezeichnung="@($"{_fraktion.Name} ({_fraktion.Aktenzeichen})")" />
                 </MudTabPanel>
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDoksPanel OrgTyp="@nameof(Fraktion)" OrgId="@_fraktion.Id" User="_user" />

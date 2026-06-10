@@ -85,7 +85,8 @@ else
                     <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NeuLadenAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-                    <EinstufungPanel Aktuell="_person.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
+                    <EinstufungPanel Aktuell="_person.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
+                                     EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" ZielBezeichnung="@($"{_person.Name} ({_person.Aktenzeichen})")" />
                 </MudTabPanel>
                 <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
                     <FotoGalerie PersonId="@_person.Id" Fotos="_person.Fotos" User="_user" Changed="NeuLadenAsync" />

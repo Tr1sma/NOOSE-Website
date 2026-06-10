@@ -16,7 +16,9 @@
     <MudNavLink Href="/vorgaenge" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderSpecial">Vorgänge</MudNavLink>
     <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
 
-    <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+    @* Den Freigabe-Posteingang erreicht bereits Senior Special Agent+ (entscheidet Hochstufungen);
+       die übrigen Verwaltungs-Links bleiben Führung bzw. Admin vorbehalten. *@
+    <AuthorizeView Policy="@Policies.HoechsteEinstufung" Context="posteingang">
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">VERWALTUNG</MudText>
         <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
@@ -26,16 +28,18 @@
                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_offeneFreigaben</MudChip>
             }
         </MudNavLink>
-        <MudNavLink Href="/admin/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
-            Tags
-        </MudNavLink>
-        <AuthorizeView Policy="@Policies.Admin" Context="adminInner">
-            <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
-                Agenten-Verwaltung
+        <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+            <MudNavLink Href="/admin/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
+                Tags
             </MudNavLink>
-            <MudNavLink Href="/status" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MonitorHeart">
-                System-Status
-            </MudNavLink>
+            <AuthorizeView Policy="@Policies.Admin" Context="adminInner">
+                <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
+                    Agenten-Verwaltung
+                </MudNavLink>
+                <MudNavLink Href="/status" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MonitorHeart">
+                    System-Status
+                </MudNavLink>
+            </AuthorizeView>
         </AuthorizeView>
     </AuthorizeView>
 
@@ -50,16 +54,24 @@
     [Inject] private IAgentVerwaltungService AgentService { get; set; } = default!;
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
     [Inject] private IPersonalakteService PersonalakteService { get; set; } = default!;
+    [Inject] private IAntragService AntragService { get; set; } = default!;
 
     private int _offeneFreigaben;
 
     protected override async Task OnInitializedAsync()
     {
-        // Nur für die Führung relevant – Badge mit der Anzahl offener Registrierungen + Namensänderungen
-        // + Taskforce-Anträge + Beförderungsanträge.
-        if ((await AuthStateTask).User.IstFuehrung())
+        var user = (await AuthStateTask).User;
+
+        // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
+        if (user.DarfHoechsteEinstufung())
         {
-            _offeneFreigaben = (await AgentService.GetAusstehendeAsync()).Count
+            _offeneFreigaben += await AntragService.GetOffeneAnzahlAsync(user.IstFuehrung());
+        }
+
+        // Registrierungen + Namensänderungen + Taskforce- + Beförderungsanträge sind der Führung vorbehalten.
+        if (user.IstFuehrung())
+        {
+            _offeneFreigaben += (await AgentService.GetAusstehendeAsync()).Count
                 + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count
                 + (await TaskforceService.GetBeantragteAsync()).Count
                 + (await PersonalakteService.GetOffeneBefoerderungsantraegeAsync()).Count;

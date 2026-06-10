@@ -79,7 +79,8 @@ else
                     <OperationBeteiligtePanel OperationId="@_operation.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-                    <EinstufungPanel Aktuell="_operation.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
+                    <EinstufungPanel Aktuell="_operation.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
+                                     EntitaetTyp="@nameof(Operation)" EntitaetId="@_operation.Id" ZielBezeichnung="@($"{_operation.Titel} ({_operation.Aktenzeichen})")" />
                 </MudTabPanel>
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Operation)" EntitaetId="@_operation.Id" User="_user" />

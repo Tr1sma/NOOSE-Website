@@ -1,8 +1,11 @@
 @page "/admin/freigaben"
-@attribute [Authorize(Policy = Policies.Fuehrung)]
+@* Posteingang: Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ (Policy HoechsteEinstufung);
+   die vier übrigen Bereiche bleiben der Führung vorbehalten und sind unten gekapselt. *@
+@attribute [Authorize(Policy = Policies.HoechsteEinstufung)]
 @inject IAgentVerwaltungService AgentService
 @inject ITaskforceService TaskforceService
 @inject IPersonalakteService PersonalakteService
+@inject IAntragService AntragService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -13,7 +16,8 @@
     <MudText Typo="Typo.h4">Freigabe-Posteingang</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Neu registrierte Discord-Konten, beantragte Stammdatenänderungen und Taskforce-Anträge warten hier auf Freigabe.
+    Hochstufungs-Anträge sowie – für die Führung – neu registrierte Discord-Konten, beantragte
+    Stammdatenänderungen, Taskforce- und Beförderungsanträge warten hier auf Entscheidung.
 </MudText>
 
 @if (_laden)
@@ -22,6 +26,51 @@
 }
 else
 {
+    <MudText Typo="Typo.h6" Class="mb-2">Hochstufungs-Anträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Anträge auf die Einstufung „Gesichert staatsgefährdend“. Die Entscheidung trifft Senior Special Agent
+        aufwärts bzw. ein Admin; bei Genehmigung wird die Einstufung der Akte gesetzt und im Verlauf protokolliert.
+    </MudText>
+    @if (_offeneHochstufungen.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Hochstufungs-Anträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_offeneHochstufungen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh>Ziel-Akte</MudTh>
+                <MudTh>Gewünscht</MudTh>
+                <MudTh>Begründung</MudTh>
+                <MudTh>Beantragt</MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Ziel-Akte">
+                    <MudLink Href="@SuchNavigation.Route(context.ZielTyp, context.ZielId)" Typo="Typo.body2">@context.ZielBezeichnung</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Gewünscht"><EinstufungBadge Wert="context.ZielEinstufung" /></MudTd>
+                <MudTd DataLabel="Begründung">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Begruendung) ? "—" : context.Begruendung)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.AntragstellerName ?? "—") · @context.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => HochstufungEntscheiden(context, true)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => HochstufungEntscheiden(context, false)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+    <MudDivider Class="my-6" />
+
     <MudText Typo="Typo.h6" Class="mb-2">Registrierungen</MudText>
     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
         Beim Freischalten wird ein Dienstgrad vergeben; danach erhält der Agent beim nächsten Login Zugriff.
@@ -221,6 +270,7 @@ else
             </RowTemplate>
         </MudTable>
     }
+    </AuthorizeView>
 }
 
 @code {
@@ -228,6 +278,8 @@ else
     private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _laden = true;
+    private bool _istFuehrung;
+    private List<Antrag> _offeneHochstufungen = new();
     private List<Agent> _ausstehende = new();
     private List<Agent> _namensaenderungen = new();
     private List<Taskforce> _beantragteTaskforces = new();
@@ -261,17 +313,54 @@ else
     private async Task LadenAsync()
     {
         _laden = true;
-        _ausstehende = await AgentService.GetAusstehendeAsync();
-        _namensaenderungen = await AgentService.GetAusstehendeNamensaenderungenAsync();
-        _beantragteTaskforces = await TaskforceService.GetBeantragteAsync();
-        _offeneBefoerderungen = await PersonalakteService.GetOffeneBefoerderungsantraegeAsync();
-        _agentNamen = (await AgentService.GetAlleAsync())
-            .ToDictionary(a => a.Id, a => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename);
-        foreach (var agent in _ausstehende)
+        _istFuehrung = _user.IstFuehrung();
+
+        // Hochstufungs-Anträge sieht/entscheidet bereits Senior Special Agent+ (breiter als die Führung).
+        _offeneHochstufungen = await AntragService.GetOffeneAsync(_istFuehrung);
+
+        // Die übrigen vier Posteingangs-Bereiche sind der Führung vorbehalten.
+        if (_istFuehrung)
         {
-            _ = Auswahl(agent.Id);
+            _ausstehende = await AgentService.GetAusstehendeAsync();
+            _namensaenderungen = await AgentService.GetAusstehendeNamensaenderungenAsync();
+            _beantragteTaskforces = await TaskforceService.GetBeantragteAsync();
+            _offeneBefoerderungen = await PersonalakteService.GetOffeneBefoerderungsantraegeAsync();
+            _agentNamen = (await AgentService.GetAlleAsync())
+                .ToDictionary(a => a.Id, a => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename);
+            foreach (var agent in _ausstehende)
+            {
+                _ = Auswahl(agent.Id);
+            }
         }
         _laden = false;
+    }
+
+    private async Task HochstufungEntscheiden(Antrag antrag, bool genehmigt)
+    {
+        var notiz = await GrundDialog.ZeigenAsync(DialogService,
+            genehmigt ? $"Hochstufung von {antrag.ZielBezeichnung} genehmigen?" : $"Hochstufung von {antrag.ZielBezeichnung} ablehnen?",
+            genehmigt
+                ? "Die Akte wird auf „Gesichert staatsgefährdend“ eingestuft. Eine Notiz ist optional."
+                : "Der Antrag wird abgelehnt. Eine Notiz ist optional.",
+            bestaetigenText: genehmigt ? "Genehmigen" : "Ablehnen",
+            label: "Notiz (optional)",
+            farbe: genehmigt ? Color.Success : Color.Error);
+        if (notiz is null)
+        {
+            return; // Abgebrochen
+        }
+        try
+        {
+            await AntragService.EntscheidenAsync(antrag.Id, genehmigt, string.IsNullOrWhiteSpace(notiz) ? null : notiz, _user);
+            Snackbar.Add(genehmigt
+                ? $"Hochstufung von {antrag.ZielBezeichnung} genehmigt."
+                : $"Hochstufungs-Antrag von {antrag.ZielBezeichnung} abgelehnt.", genehmigt ? Severity.Success : Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
     }
 
     private async Task Freigeben(Agent agent)

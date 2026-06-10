@@ -79,7 +79,8 @@ else
                     <ParteiAgentePanel ParteiId="@_partei.Id" User="_user" Changed="ErmittlungsleiterAktualisierenAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-                    <EinstufungPanel Aktuell="_partei.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
+                    <EinstufungPanel Aktuell="_partei.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
+                                     EntitaetTyp="@nameof(Partei)" EntitaetId="@_partei.Id" ZielBezeichnung="@($"{_partei.Name} ({_partei.Aktenzeichen})")" />
                 </MudTabPanel>
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDoksPanel OrgTyp="@nameof(Partei)" OrgId="@_partei.Id" User="_user" />
