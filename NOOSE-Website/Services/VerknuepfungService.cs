@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
 
@@ -84,6 +85,14 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(Operation), x.Id)] = ($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/operationen/{x.Id}");
         }
 
+        // Taskforce (Phase 5c): aufgelöst mit Navigation auf die eigene Detailseite.
+        var taskforceIds = paare.Where(p => p.AndereTyp == nameof(Taskforce)).Select(p => p.AndereId).Distinct().ToList();
+        foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
+                     .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Taskforce), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/taskforces/{x.Id}");
+        }
+
         // Agent: kein Verschlusssache-Konzept und keine eigene Detailseite (Href null) – nur Codename.
         var agentIds = paare.Where(p => p.AndereTyp == nameof(Agent)).Select(p => p.AndereId).Distinct().ToList();
         foreach (var x in await db.Users.Where(u => agentIds.Contains(u.Id))
@@ -106,7 +115,7 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         var bekannteTypen = new[]
         {
             nameof(Person), nameof(Fraktion), nameof(Personengruppe), nameof(Partei),
-            nameof(Operation), nameof(Agent), nameof(PersonDok),
+            nameof(Operation), nameof(Taskforce), nameof(Agent), nameof(PersonDok),
         };
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)

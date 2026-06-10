@@ -144,6 +144,7 @@
         DashboardAkteTyp.Fraktion => "Fraktion",
         DashboardAkteTyp.Partei => "Partei",
         DashboardAkteTyp.Operation => "Operation",
+        DashboardAkteTyp.Taskforce => "Taskforce",
         _ => "Personengruppe",
     };
 
@@ -153,6 +154,7 @@
         DashboardAkteTyp.Fraktion => $"/fraktionen/{x.AkteId}",
         DashboardAkteTyp.Partei => $"/parteien/{x.AkteId}",
         DashboardAkteTyp.Operation => $"/operationen/{x.AkteId}",
+        DashboardAkteTyp.Taskforce => $"/taskforces/{x.AkteId}",
         _ => $"/personengruppen/{x.AkteId}",
     };
 

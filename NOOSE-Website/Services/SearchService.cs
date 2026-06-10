@@ -6,6 +6,7 @@ using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
 
@@ -288,6 +289,47 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // ---- Taskforces (Name/Aktenzeichen/Zweck/Bemerkungen) ----
+        if (Aktiv(nameof(Taskforce)))
+        {
+            var q = db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache);
+            if (hatText)
+            {
+                q = q.Where(t => t.Name.Contains(s!) || t.Aktenzeichen.Contains(s!)
+                    || (t.Zweck != null && t.Zweck.Contains(s!))
+                    || (t.Bemerkungen != null && t.Bemerkungen.Contains(s!)));
+            }
+            if (hatTags)
+            {
+                q = q.Where(t => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Taskforce) && z.EntitaetId == t.Id && tagIds.Contains(z.TagId)));
+            }
+            var treffer = await q.OrderBy(t => t.Name).Take(MaxProKategorie)
+                .Select(t => new SuchTreffer(nameof(Taskforce), t.Id, t.Name, t.Zweck ?? string.Empty, t.Aktenzeichen))
+                .ToListAsync(cancellationToken);
+
+            if (FuzzyAktiv(treffer.Count))
+            {
+                var basis = db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache);
+                if (hatTags)
+                {
+                    basis = basis.Where(t => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Taskforce) && z.EntitaetId == t.Id && tagIds.Contains(z.TagId)));
+                }
+                var roh = await basis.OrderByDescending(t => t.GeaendertAm ?? t.ErstelltAm).Take(FuzzyKandidatenMax)
+                    .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.Zweck, t.Bemerkungen })
+                    .ToListAsync(cancellationToken);
+                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Name, x.Aktenzeichen, x.Zweck ?? string.Empty,
+                    max
+                        ? TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen, x.Zweck, x.Bemerkungen)
+                        : TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen)));
+                treffer = FuzzyErgaenzen(nameof(Taskforce), treffer, suchworte, kandidaten);
+            }
+
+            if (treffer.Count > 0)
+            {
+                gruppen.Add(new SuchErgebnisGruppe(nameof(Taskforce), "Taskforces", treffer));
+            }
+        }
+
         // Die folgenden Kategorien sind Text-Inhalte → nur bei vorhandenem Suchtext. Im Max-Modus immer aktiv.
         // Wichtig: expliziter Join auf db.Personen (NICHT Include über die soft-delete-gefilterte
         // Pflichtnavigation), sonst greift das fragile Query-Filter-/Pflichtnavigations-Zusammenspiel.
@@ -380,6 +422,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .OrderBy(o => o.Titel).Take(max)
             .Select(o => new SchnellTreffer(nameof(Operation), o.Id, o.Titel, o.Aktenzeichen))
             .ToListAsync(cancellationToken);
+        var taskforces = await db.Taskforces
+            .Where(t => (istFuehrung || !t.IstVerschlusssache) && (t.Name.Contains(s) || t.Aktenzeichen.Contains(s)))
+            .OrderBy(t => t.Name).Take(max)
+            .Select(t => new SchnellTreffer(nameof(Taskforce), t.Id, t.Name, t.Aktenzeichen))
+            .ToListAsync(cancellationToken);
 
         // Immer leicht aktive Tippfehler-Toleranz auf Identifikatoren (Name/Titel/Aktenzeichen). Pro
         // Kategorie nur, wenn der Begriff lang genug ist UND noch Platz frei ist (sonst lohnt der Scan nicht).
@@ -421,10 +468,17 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                     .Select(o => new { o.Id, Name = o.Titel, o.Aktenzeichen }).ToListAsync(cancellationToken);
                 operationen = SchnellFuzzy(nameof(Operation), operationen, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
             }
+            if (taskforces.Count < max)
+            {
+                var k = await db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache)
+                    .OrderBy(t => t.Name).Take(FuzzyKandidatenMax)
+                    .Select(t => new { t.Id, Name = t.Name, t.Aktenzeichen }).ToListAsync(cancellationToken);
+                taskforces = SchnellFuzzy(nameof(Taskforce), taskforces, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+            }
         }
 
         // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
-        return Mischen(personen, fraktionen, gruppen, parteien, operationen).Take(max).ToList();
+        return Mischen(personen, fraktionen, gruppen, parteien, operationen, taskforces).Take(max).ToList();
     }
 
     /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
@@ -533,6 +587,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         var gruppenIds = roh.Where(r => r.EntitaetTyp == nameof(Personengruppe)).Select(r => r.EntitaetId).Distinct().ToList();
         var parteiIds = roh.Where(r => r.EntitaetTyp == nameof(Partei)).Select(r => r.EntitaetId).Distinct().ToList();
         var operationIds = roh.Where(r => r.EntitaetTyp == nameof(Operation)).Select(r => r.EntitaetId).Distinct().ToList();
+        var taskforceIds = roh.Where(r => r.EntitaetTyp == nameof(Taskforce)).Select(r => r.EntitaetId).Distinct().ToList();
 
         // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
         var map = new Dictionary<(string, string), (string Name, string Aktenzeichen, bool Verschluss)>();
@@ -561,6 +616,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Operation), x.Id)] = (x.Titel, x.Aktenzeichen, x.IstVerschlusssache);
         }
+        foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
+                     .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Taskforce), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+        }
 
         // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
         HashSet<(string, string)>? mitTag = null;
@@ -572,7 +632,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                      || (z.EntitaetTyp == nameof(Fraktion) && fraktionIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Personengruppe) && gruppenIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Partei) && parteiIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Operation) && operationIds.Contains(z.EntitaetId))))
+                     || (z.EntitaetTyp == nameof(Operation) && operationIds.Contains(z.EntitaetId))
+                     || (z.EntitaetTyp == nameof(Taskforce) && taskforceIds.Contains(z.EntitaetId))))
                 .Select(z => new { z.EntitaetTyp, z.EntitaetId }).ToListAsync(cancellationToken))
                 .Select(z => (z.EntitaetTyp, z.EntitaetId)).ToHashSet();
         }

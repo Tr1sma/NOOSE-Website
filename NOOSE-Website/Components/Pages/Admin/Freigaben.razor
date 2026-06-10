@@ -1,6 +1,7 @@
 @page "/admin/freigaben"
 @attribute [Authorize(Policy = Policies.Fuehrung)]
 @inject IAgentVerwaltungService AgentService
+@inject ITaskforceService TaskforceService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -11,7 +12,7 @@
     <MudText Typo="Typo.h4">Freigabe-Posteingang</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Neu registrierte Discord-Konten und beantragte Stammdatenänderungen warten hier auf Freigabe.
+    Neu registrierte Discord-Konten, beantragte Stammdatenänderungen und Taskforce-Anträge warten hier auf Freigabe.
 </MudText>
 
 @if (_laden)
@@ -121,6 +122,55 @@ else
             </RowTemplate>
         </MudTable>
     }
+
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Taskforce-Anträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Beantragte Taskforces warten auf Genehmigung. Beim Genehmigen wird die Einsatzgruppe aktiv; beim Ablehnen wird der Antrag abgelehnt.
+    </MudText>
+    @if (_beantragteTaskforces.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Taskforce-Anträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_beantragteTaskforces" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh>Aktenzeichen</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Geltungsbereich</MudTh>
+                <MudTh>Beantragt</MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Aktenzeichen</MudText></MudTd>
+                <MudTd DataLabel="Name">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudLink Href="@($"/taskforces/{context.Id}")" Typo="Typo.body2">@context.Name</MudLink>
+                        @if (context.IstVerschlusssache)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Geltungsbereich">
+                    <MudText Typo="Typo.caption">@TaskforceGeltungsbereichAnzeige.Name(context.Geltungsbereich)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption">@context.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => TaskforceGenehmigen(context)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => TaskforceAblehnen(context)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
 }
 
 @code {
@@ -130,6 +180,7 @@ else
     private bool _laden = true;
     private List<Agent> _ausstehende = new();
     private List<Agent> _namensaenderungen = new();
+    private List<Taskforce> _beantragteTaskforces = new();
     private ClaimsPrincipal _user = default!;
     private readonly Dictionary<string, Auswahlzustand> _auswahl = new();
 
@@ -160,6 +211,7 @@ else
         _laden = true;
         _ausstehende = await AgentService.GetAusstehendeAsync();
         _namensaenderungen = await AgentService.GetAusstehendeNamensaenderungenAsync();
+        _beantragteTaskforces = await TaskforceService.GetBeantragteAsync();
         foreach (var agent in _ausstehende)
         {
             _ = Auswahl(agent.Id);
@@ -232,6 +284,42 @@ else
         {
             await AgentService.NamensaenderungAblehnenAsync(agent.Id, string.IsNullOrWhiteSpace(grund) ? "Namensänderung abgelehnt" : grund, _user);
             Snackbar.Add($"Namensänderung von {AnzeigeName(agent)} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
+    }
+
+    private async Task TaskforceGenehmigen(Taskforce taskforce)
+    {
+        try
+        {
+            await TaskforceService.GenehmigungSetzenAsync(taskforce.Id, TaskforceStatus.Genehmigt, _user);
+            Snackbar.Add($"Taskforce {taskforce.Aktenzeichen} genehmigt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
+    }
+
+    private async Task TaskforceAblehnen(Taskforce taskforce)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService,
+            $"Taskforce {taskforce.Aktenzeichen} ablehnen?",
+            $"Der Antrag „{taskforce.Name}“ wird abgelehnt. Die Statusänderung wird protokolliert.",
+            "Ablehnen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await TaskforceService.GenehmigungSetzenAsync(taskforce.Id, TaskforceStatus.Abgelehnt, _user);
+            Snackbar.Add($"Taskforce {taskforce.Aktenzeichen} abgelehnt.", Severity.Info);
         }
         catch (Exception ex)
         {

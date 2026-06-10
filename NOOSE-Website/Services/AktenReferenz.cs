@@ -1,0 +1,146 @@
+using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Fraktionen;
+using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Operationen;
+using NOOSE_Website.Data.Entities.Parteien;
+using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Querschnitt;
+
+namespace NOOSE_Website.Services;
+
+/// <summary>
+/// Zentrale Auflösung von Objekt-Verweisen (Typ + Id) zu Anzeigename, Verschlusssache-Flag und Navigations-Href.
+/// Spiegelt die Typ→(Bezeichnung, VS, Href)-Auflösung aus <see cref="VerknuepfungService"/>, ergänzt um
+/// <see cref="Quelle"/> und <see cref="Agent"/>; dient den @-Mentions (siehe MentionService). Liefert das ECHTE
+/// Verschlusssache-Flag – das Ausblenden für Nicht-Führung übernimmt der Aufrufer, damit sensible Namen
+/// serverseitig bleiben (Blazor Server serialisiert verborgene Werte nie zum Client).
+/// </summary>
+public static class AktenReferenz
+{
+    public readonly record struct Aufloesung(string Anzeige, bool Verschluss, string? Href);
+
+    /// <summary>Löst alle angegebenen (Typ, Id)-Verweise in einer Sammelabfrage je Typ auf.</summary>
+    public static async Task<Dictionary<(string Typ, string Id), Aufloesung>> AufloesenAsync(
+        AppDbContext db, IReadOnlyCollection<(string Typ, string Id)> refs, CancellationToken ct = default)
+    {
+        var map = new Dictionary<(string, string), Aufloesung>();
+        if (refs.Count == 0)
+        {
+            return map;
+        }
+
+        await ResolveAktenAsync(db, refs, map, ct);
+
+        // Quellen: Anzeige = Titel; Verschlusssache + Route von der Eltern-Akte abgeleitet.
+        var quelleIds = refs.Where(r => r.Typ == nameof(Quelle)).Select(r => r.Id).Distinct().ToList();
+        if (quelleIds.Count > 0)
+        {
+            var quellen = await db.Quellen.Where(q => quelleIds.Contains(q.Id))
+                .Select(q => new { q.Id, q.Titel, q.Typ, q.Url, q.EntitaetTyp, q.EntitaetId })
+                .ToListAsync(ct);
+            // Eltern-Akten der Quellen auflösen (für VS + Route), falls nicht ohnehin schon aufgelöst.
+            var elternRefs = quellen.Select(q => (q.EntitaetTyp, q.EntitaetId)).Distinct().ToList();
+            await ResolveAktenAsync(db, elternRefs, map, ct);
+            foreach (var q in quellen)
+            {
+                map.TryGetValue((q.EntitaetTyp, q.EntitaetId), out var eltern);
+                var href = q.Typ switch
+                {
+                    QuelleTyp.Upload => $"/dateien/quellen/{q.Id}",
+                    QuelleTyp.Link => string.IsNullOrWhiteSpace(q.Url) ? null : q.Url,
+                    _ => eltern.Href is { } h ? $"{h}?tab=quellen" : null,
+                };
+                map[(nameof(Quelle), q.Id)] = new Aufloesung(
+                    string.IsNullOrWhiteSpace(q.Titel) ? "Quelle" : q.Titel,
+                    eltern.Verschluss, href);
+            }
+        }
+
+        return map;
+    }
+
+    private static async Task ResolveAktenAsync(
+        AppDbContext db, IReadOnlyCollection<(string Typ, string Id)> refs,
+        Dictionary<(string, string), Aufloesung> map, CancellationToken ct)
+    {
+        List<string> OffeneIds(string typ) => refs
+            .Where(r => r.Typ == typ && !map.ContainsKey((typ, r.Id)))
+            .Select(r => r.Id).Distinct().ToList();
+
+        var personIds = OffeneIds(nameof(Person));
+        if (personIds.Count > 0)
+        {
+            foreach (var x in await db.Personen.Where(p => personIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Person), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Person), x.Id));
+            }
+        }
+
+        var fraktionIds = OffeneIds(nameof(Fraktion));
+        if (fraktionIds.Count > 0)
+        {
+            foreach (var x in await db.Fraktionen.Where(f => fraktionIds.Contains(f.Id))
+                .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Fraktion), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Fraktion), x.Id));
+            }
+        }
+
+        var gruppenIds = OffeneIds(nameof(Personengruppe));
+        if (gruppenIds.Count > 0)
+        {
+            foreach (var x in await db.Personengruppen.Where(g => gruppenIds.Contains(g.Id))
+                .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Personengruppe), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Personengruppe), x.Id));
+            }
+        }
+
+        var parteiIds = OffeneIds(nameof(Partei));
+        if (parteiIds.Count > 0)
+        {
+            foreach (var x in await db.Parteien.Where(p => parteiIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Partei), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Partei), x.Id));
+            }
+        }
+
+        var operationIds = OffeneIds(nameof(Operation));
+        if (operationIds.Count > 0)
+        {
+            foreach (var x in await db.Operationen.Where(o => operationIds.Contains(o.Id))
+                .Select(o => new { o.Id, o.Titel, o.Aktenzeichen, o.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Operation), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Operation), x.Id));
+            }
+        }
+
+        var taskforceIds = OffeneIds(nameof(Taskforce));
+        if (taskforceIds.Count > 0)
+        {
+            foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
+                .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Taskforce), x.Id));
+            }
+        }
+
+        // Agent: kein Verschlusssache-Konzept und keine eigene Detailseite (Href null) – nur Codename.
+        var agentIds = OffeneIds(nameof(Agent));
+        if (agentIds.Count > 0)
+        {
+            foreach (var x in await db.Users.Where(u => agentIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.Codename }).ToListAsync(ct))
+            {
+                map[(nameof(Agent), x.Id)] = new(string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannter Agent)" : x.Codename, false, null);
+            }
+        }
+    }
+}

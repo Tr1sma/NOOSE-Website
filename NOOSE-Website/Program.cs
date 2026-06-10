@@ -12,6 +12,7 @@ using NOOSE_Website.Components.Querschnitt;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Services;
@@ -142,6 +143,12 @@ builder.Services.AddScoped<IPersonengruppeService, PersonengruppeService>();
 builder.Services.AddScoped<IParteiService, ParteiService>();
 // Phase 5b: Operationen.
 builder.Services.AddScoped<IOperationService, OperationService>();
+// Phase 5c: Taskforces.
+builder.Services.AddScoped<ITaskforceService, TaskforceService>();
+// Phase 5d: Taskforce-Chat mit @-Verlinkung (Mentions) + Live-Broadcaster.
+builder.Services.AddScoped<ITaskforceChatService, TaskforceChatService>();
+builder.Services.AddScoped<IMentionService, MentionService>();
+builder.Services.AddSingleton<TaskforceChatBroadcaster>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 

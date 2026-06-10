@@ -10,6 +10,7 @@ public enum DashboardAkteTyp
     Personengruppe,
     Partei,
     Operation,
+    Taskforce,
 }
 
 /// <summary>

@@ -1,0 +1,177 @@
+@* Team-Chat einer Taskforce: chronologische Nachrichten (neueste unten), @-Verlinkung von Akten/Quellen/Agenten,
+   Live-Aktualisierung über den Broadcaster. Sichtbarkeit/Schreibrecht erben von der Taskforce (Service-Guard). *@
+@implements IAsyncDisposable
+@inject ITaskforceChatService ChatService
+@inject IMentionService MentionService
+@inject TaskforceChatBroadcaster Broadcaster
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="2" Style="height:60vh;">
+    @* Spaltenumkehr → neueste Nachricht klebt unten (CSS-Autoscroll, kein JS nötig). *@
+    <div style="flex:1 1 auto; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
+        @if (_laden)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            @foreach (var e in _eintraege.AsEnumerable().Reverse())
+            {
+                var eigen = e.Msg.ErstelltVonId == _meineId;
+                <div style="@(eigen ? "align-self:flex-end;" : "align-self:flex-start;")max-width:80%;">
+                    <MudPaper Class="pa-2" Elevation="@(eigen ? 0 : 1)" Outlined="@(!eigen)"
+                              Style="@(eigen ? "background-color:var(--mud-palette-primary-hover);" : "")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.caption"><b>@(string.IsNullOrWhiteSpace(e.Msg.AutorName) ? "Unbekannt" : e.Msg.AutorName)</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· @e.Msg.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                            @if (eigen || _istFuehrung)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => LoeschenAsync(e.Msg))" aria-label="Nachricht zurückziehen" />
+                            }
+                        </MudStack>
+                        <MentionText Segmente="e.Segmente" />
+                    </MudPaper>
+                </div>
+            }
+            @if (_mehrMoeglich)
+            {
+                <div style="align-self:center;">
+                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ExpandLess"
+                               OnClick="AeltereLadenAsync" Disabled="_laedtMehr">Ältere laden</MudButton>
+                </div>
+            }
+            @if (_eintraege.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="align-self:center;">Noch keine Nachrichten – beginne den Chat.</MudText>
+            }
+        }
+    </div>
+
+    <div>
+        <MentionEingabe @bind-Text="_text" IstFuehrung="_istFuehrung"
+                        Placeholder="@Platzhalter" OnSubmit="SendenAsync" />
+        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="SendenAsync" Disabled="@(_sendet || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
+        </MudStack>
+    </div>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private const int Seite = 50;
+    private const string Platzhalter = "Nachricht verfassen … (Verlinken per @, Strg+Enter sendet)";
+    private bool _laden = true;
+    private bool _laedtMehr;
+    private bool _sendet;
+    private bool _mehrMoeglich;
+    private bool _istFuehrung;
+    private string? _meineId;
+    private string _text = string.Empty;
+    private List<Eintrag> _eintraege = new();
+
+    private sealed record Eintrag(TaskforceNachricht Msg, IReadOnlyList<MentionSegment> Segmente);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _istFuehrung = User.IstFuehrung();
+        _meineId = User.GetAgentId();
+        Broadcaster.Geaendert += OnGeaendert;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        var nachrichten = await ChatService.GetNachrichtenAsync(TaskforceId, _istFuehrung, Seite);
+        _mehrMoeglich = nachrichten.Count >= Seite;
+        _eintraege = await ZuEintraegenAsync(nachrichten);
+        _laden = false;
+    }
+
+    private async Task<List<Eintrag>> ZuEintraegenAsync(List<TaskforceNachricht> nachrichten)
+    {
+        var segmente = await MentionService.AufloesenVieleAsync(
+            nachrichten.Select(n => (string?)n.Text).ToList(), _istFuehrung);
+        return nachrichten.Select((n, i) => new Eintrag(n, segmente[i])).ToList();
+    }
+
+    private async Task AeltereLadenAsync()
+    {
+        if (_eintraege.Count == 0 || _laedtMehr)
+        {
+            return;
+        }
+        _laedtMehr = true;
+        var aeltester = _eintraege[0].Msg.ErstelltAm;
+        var weitere = await ChatService.GetNachrichtenAsync(TaskforceId, _istFuehrung, Seite, aeltester);
+        _mehrMoeglich = weitere.Count >= Seite;
+        if (weitere.Count > 0)
+        {
+            var neue = await ZuEintraegenAsync(weitere);
+            _eintraege = neue.Concat(_eintraege).ToList();
+        }
+        _laedtMehr = false;
+    }
+
+    private async Task SendenAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_text) || _sendet)
+        {
+            return;
+        }
+        _sendet = true;
+        try
+        {
+            await ChatService.SendenAsync(TaskforceId, _text, User);
+            _text = string.Empty; // Die Liste aktualisiert der Broadcaster (auch für andere Nutzer).
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _sendet = false;
+    }
+
+    private async Task LoeschenAsync(TaskforceNachricht m)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Nachricht zurückziehen?",
+            "Die Nachricht wird aus dem Chat entfernt.", "Zurückziehen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await ChatService.LoeschenAsync(m.Id, User); // Broadcaster lädt neu.
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    // Live-Signal (auch von anderen Circuits) → in den eigenen Circuit marshallen und neu laden.
+    private void OnGeaendert(string taskforceId)
+    {
+        if (taskforceId != TaskforceId)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () =>
+        {
+            await LadenAsync();
+            StateHasChanged();
+        });
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Broadcaster.Geaendert -= OnGeaendert;
+        return ValueTask.CompletedTask;
+    }
+}

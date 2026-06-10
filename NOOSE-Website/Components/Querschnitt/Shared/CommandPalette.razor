@@ -64,6 +64,8 @@
             new("Neue Partei anlegen", null, Icons.Material.Filled.Add, "/parteien/neu"),
             new("Operationen", "Liste", Icons.Material.Filled.Radar, "/operationen"),
             new("Neue Operation anlegen", null, Icons.Material.Filled.Add, "/operationen/neu"),
+            new("Taskforces", "Liste", Icons.Material.Filled.Groups2, "/taskforces"),
+            new("Neue Taskforce anlegen", null, Icons.Material.Filled.Add, "/taskforces/neu"),
             new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
         };
         // Papierkörbe und Verwaltung sind Führungs-gated → für Nicht-Führung nicht anbieten (sonst ACCESS DENIED).
@@ -76,6 +78,7 @@
             _befehle.Add(new PaletteItem("Papierkorb · Personengruppen", null, Icons.Material.Filled.Delete, "/personengruppen/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Parteien", null, Icons.Material.Filled.Delete, "/parteien/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Operationen", null, Icons.Material.Filled.Delete, "/operationen/papierkorb"));
+            _befehle.Add(new PaletteItem("Papierkorb · Taskforces", null, Icons.Material.Filled.Delete, "/taskforces/papierkorb"));
         }
     }
 
@@ -155,6 +158,7 @@
         nameof(Personengruppe) => Icons.Material.Filled.Diversity3,
         nameof(Partei) => Icons.Material.Filled.AccountBalance,
         nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
         _ => Icons.Material.Filled.Badge,
     };
 

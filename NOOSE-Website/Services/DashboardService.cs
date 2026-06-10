@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Dashboard;
 using NOOSE_Website.Models.Enums;
@@ -26,9 +27,11 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         var parteien = await db.Parteien.CountAsync(p => istFuehrung || !p.IstVerschlusssache, cancellationToken);
         var operationen = await db.Operationen.CountAsync(o => istFuehrung || !o.IstVerschlusssache, cancellationToken);
 
-        // Offene Anträge = ausstehende Registrierungen + offene Namensänderungen (beide im Freigabe-Posteingang).
+        // Offene Anträge = ausstehende Registrierungen + offene Namensänderungen + beantragte Taskforces
+        // (alle im Freigabe-Posteingang). Beantragte Verschlusssache-Taskforces nur für die Führung zählen.
         var offeneAntraege = await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)
-            + await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken);
+            + await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken)
+            + await db.Taskforces.CountAsync(t => t.Status == TaskforceStatus.Beantragt && (istFuehrung || !t.IstVerschlusssache), cancellationToken);
 
         // Anzahl klassifizierter Akten ist selbst eine Verschlusssache → nur für die Führung.
         var verschlusssachen = 0;
@@ -39,7 +42,8 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
                 + await db.Fraktionen.CountAsync(f => f.IstVerschlusssache, cancellationToken)
                 + await db.Personengruppen.CountAsync(g => g.IstVerschlusssache, cancellationToken)
                 + await db.Parteien.CountAsync(p => p.IstVerschlusssache, cancellationToken)
-                + await db.Operationen.CountAsync(o => o.IstVerschlusssache, cancellationToken);
+                + await db.Operationen.CountAsync(o => o.IstVerschlusssache, cancellationToken)
+                + await db.Taskforces.CountAsync(t => t.IstVerschlusssache, cancellationToken);
         }
 
         // Die Org-Kachel bündelt Fraktionen, Personengruppen und Parteien; Operationen sind eine eigene Kachel.
@@ -101,6 +105,11 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
             : await db.OperationAgenten.Where(a => oaIds.Contains(a.Id))
                 .Select(a => new { a.Id, a.OperationId }).ToDictionaryAsync(x => x.Id, x => x.OperationId, cancellationToken);
 
+        var taIds = Ids(roh, nameof(TaskforceAgent));
+        var agentZuTaskforce = taIds.Count == 0 ? new Dictionary<string, string>()
+            : await db.TaskforceAgenten.Where(a => taIds.Contains(a.Id))
+                .Select(a => new { a.Id, a.TaskforceId }).ToDictionaryAsync(x => x.Id, x => x.TaskforceId, cancellationToken);
+
         // Jeden Audit-Eintrag (in Reihenfolge) auf eine Ziel-Akte abbilden – oder verwerfen.
         var ziele = new List<(AuditLog Log, DashboardAkteTyp Typ, string AkteId, string? Detail)>();
         foreach (var log in roh)
@@ -126,6 +135,9 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
                 nameof(Operation) => (DashboardAkteTyp.Operation, log.EntitaetId, null),
                 nameof(OperationAgent) when agentZuOperation.TryGetValue(log.EntitaetId, out var oid)
                     => (DashboardAkteTyp.Operation, oid, "Agent-Zuteilung"),
+                nameof(Taskforce) => (DashboardAkteTyp.Taskforce, log.EntitaetId, null),
+                nameof(TaskforceAgent) when agentZuTaskforce.TryGetValue(log.EntitaetId, out var tid)
+                    => (DashboardAkteTyp.Taskforce, tid, "Agent-Zuteilung"),
                 _ => null,
             };
 
@@ -141,6 +153,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         var gruppeMap = await GruppeInfos(db, ZielIds(ziele, DashboardAkteTyp.Personengruppe), cancellationToken);
         var parteiMap = await ParteiInfos(db, ZielIds(ziele, DashboardAkteTyp.Partei), cancellationToken);
         var operationMap = await OperationInfos(db, ZielIds(ziele, DashboardAkteTyp.Operation), cancellationToken);
+        var taskforceMap = await TaskforceInfos(db, ZielIds(ziele, DashboardAkteTyp.Taskforce), cancellationToken);
 
         var ergebnis = new List<DashboardAenderung>();
         foreach (var (log, typ, akteId, detail) in ziele)
@@ -151,6 +164,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
                 DashboardAkteTyp.Fraktion => fraktionMap.GetValueOrDefault(akteId),
                 DashboardAkteTyp.Partei => parteiMap.GetValueOrDefault(akteId),
                 DashboardAkteTyp.Operation => operationMap.GetValueOrDefault(akteId),
+                DashboardAkteTyp.Taskforce => taskforceMap.GetValueOrDefault(akteId),
                 _ => gruppeMap.GetValueOrDefault(akteId),
             };
 
@@ -208,4 +222,9 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         => ids.Count == 0 ? new()
             : await db.Operationen.IgnoreQueryFilters().Where(o => ids.Contains(o.Id))
                 .ToDictionaryAsync(o => o.Id, o => new AkteInfo(o.Titel, o.Aktenzeichen, o.IstVerschlusssache, o.IstGeloescht), ct);
+
+    private static async Task<Dictionary<string, AkteInfo>> TaskforceInfos(AppDbContext db, List<string> ids, CancellationToken ct)
+        => ids.Count == 0 ? new()
+            : await db.Taskforces.IgnoreQueryFilters().Where(t => ids.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => new AkteInfo(t.Name, t.Aktenzeichen, t.IstVerschlusssache, t.IstGeloescht), ct);
 }

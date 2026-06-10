@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -76,6 +77,13 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Phase 5b: Operationen ----
     public DbSet<Operation> Operationen => Set<Operation>();
     public DbSet<OperationAgent> OperationAgenten => Set<OperationAgent>();
+
+    // ---- Phase 5c: Taskforces ----
+    public DbSet<Taskforce> Taskforces => Set<Taskforce>();
+    public DbSet<TaskforceAgent> TaskforceAgenten => Set<TaskforceAgent>();
+
+    // ---- Phase 5d: Taskforce-Chat ----
+    public DbSet<TaskforceNachricht> TaskforceNachrichten => Set<TaskforceNachricht>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -443,6 +451,42 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.OperationId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
+        });
+
+        // ---- Phase 5c: Taskforces ----
+        modelBuilder.Entity<Taskforce>(b =>
+        {
+            b.Property(t => t.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(t => t.Name).HasMaxLength(200).IsRequired();
+            b.Property(t => t.Zweck).HasMaxLength(4000);
+            b.Property(t => t.Bemerkungen).HasMaxLength(2000);
+            b.HasIndex(t => t.Aktenzeichen).IsUnique();
+            b.HasIndex(t => t.Name);
+            b.HasIndex(t => t.Status);
+            b.HasIndex(t => t.IstVerschlusssache);
+
+            b.HasMany(t => t.Agenten).WithOne(a => a.Taskforce!)
+                .HasForeignKey(a => a.TaskforceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TaskforceAgent>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(a => new { a.TaskforceId, a.AgentId }).IsUnique();
+            b.HasIndex(a => a.AgentId);
+        });
+
+        // ---- Phase 5d: Taskforce-Chat ----
+        modelBuilder.Entity<TaskforceNachricht>(b =>
+        {
+            b.Property(n => n.Text).HasMaxLength(4000).IsRequired();
+            b.Property(n => n.AutorName).HasMaxLength(128);
+            // Chronologisches Laden je Taskforce (jüngste zuerst).
+            b.HasIndex(n => new { n.TaskforceId, n.ErstelltAm });
+            b.HasOne(n => n.Taskforce).WithMany()
+                .HasForeignKey(n => n.TaskforceId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

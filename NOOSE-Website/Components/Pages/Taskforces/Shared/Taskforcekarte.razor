@@ -1,0 +1,64 @@
+@* Identitäts-/Steckkarte der Taskforce: Name, Status, Geltungsbereich, Leitung (Chefermittler/CID-/TRU-Lead). *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.Groups2" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Taskforce.Name</MudText>
+                @if (Taskforce.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Taskforce.Aktenzeichen</MudText>
+        </div>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+            <TaskforceStatusChip Status="Taskforce.Status" />
+            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                @TaskforceGeltungsbereichAnzeige.Name(Taskforce.Geltungsbereich)
+            </MudChip>
+        </MudStack>
+
+        <MudDivider />
+
+        <div>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Leitung</MudText>
+            @if (Leitung.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+            }
+            else
+            {
+                <MudStack Spacing="1" Class="mt-1">
+                    @foreach (var l in Leitung)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.LocalPolice" Color="Color.Warning" Size="Size.Small" />
+                            <MudText Typo="Typo.body2"><b>@l.Codename</b></MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@TaskforceRolleAnzeige.Name(l.Rolle)</MudChip>
+                        </MudStack>
+                    }
+                </MudStack>
+            }
+        </div>
+
+        <MudDivider />
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Zuletzt aktualisiert: @((Taskforce.GeaendertAm ?? Taskforce.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Taskforce Taskforce { get; set; } = default!;
+
+    /// <summary>Leitung der Taskforce (Codename + Rolle) für die prominente Anzeige links in der Steckkarte.</summary>
+    [Parameter] public IReadOnlyList<(string Codename, TaskforceRolle Rolle)> Leitung { get; set; } = Array.Empty<(string, TaskforceRolle)>();
+}
