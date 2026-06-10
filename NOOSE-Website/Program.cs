@@ -38,6 +38,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+// Phase 6: zweiter, unabhängiger Interceptor für die Watchlist (gefolgte Akte geändert → Glocke).
+builder.Services.AddScoped<WatchlistAenderungInterceptor>();
 
 // AutoDetect ermittelt die passende Server-Variante automatisch (lokal MariaDB/XAMPP,
 // Produktion MySQL 8.0). Setzt voraus, dass die DB beim Start erreichbar ist.
@@ -52,7 +54,9 @@ builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 // den Health-Check und das Seeding ab.
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
-           .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>())
+           .AddInterceptors(
+               sp.GetRequiredService<AuditSaveChangesInterceptor>(),
+               sp.GetRequiredService<WatchlistAenderungInterceptor>())
            // Steckbrief-Kinder (Alias/Telefon/…) werden ausschließlich über die – bereits
            // soft-delete-gefilterte – Person geladen. Die EF-Warnung zum Zusammenspiel von
            // Query-Filter und Pflichtnavigation ist daher für unsere Zugriffsmuster unkritisch.
@@ -163,6 +167,10 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 // Phase 6: In-App-Benachrichtigungen (Glocke) + Live-Broadcaster.
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
+// Phase 6: Watchlist (Akten folgen → „gefolgte Akte geändert"). Fan-out entkoppelt über den Singleton-Dispatcher.
+builder.Services.AddScoped<IWatchlistService, WatchlistService>();
+builder.Services.AddScoped<WatchlistFanout>();
+builder.Services.AddSingleton<WatchlistDispatcher>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>

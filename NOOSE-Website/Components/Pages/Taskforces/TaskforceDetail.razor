@@ -22,6 +22,7 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/taskforces" aria-label="Zurück" />
         <MudSpacer />
+        <FolgenButton EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
         <AuthorizeView Policy="@Policies.Fuehrung">
             <MudMenu Label="Genehmigung" StartIcon="@Icons.Material.Filled.Gavel" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                      Variant="Variant.Outlined" Color="Color.Secondary">

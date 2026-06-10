@@ -16,6 +16,9 @@ public enum NotificationTyp
 
     /// <summary>Ein Konto-Ereignis betrifft den Empfänger (Freigabe, Namensänderung genehmigt/abgelehnt).</summary>
     Konto = 2,
+
+    /// <summary>Eine vom Empfänger beobachtete (gefolgte) Akte wurde geändert (Watchlist).</summary>
+    AkteGeaendert = 3,
 }
 
 /// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
@@ -26,6 +29,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.AntragEntschieden => "Antrag entschieden",
         NotificationTyp.Erwaehnung => "Erwähnung",
         NotificationTyp.Konto => "Konto",
+        NotificationTyp.AkteGeaendert => "Beobachtete Akte geändert",
         _ => "Benachrichtigung",
     };
 
@@ -35,6 +39,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.AntragEntschieden => Icons.Material.Filled.Gavel,
         NotificationTyp.Erwaehnung => Icons.Material.Filled.AlternateEmail,
         NotificationTyp.Konto => Icons.Material.Filled.ManageAccounts,
+        NotificationTyp.AkteGeaendert => Icons.Material.Filled.Visibility,
         _ => Icons.Material.Filled.Notifications,
     };
 }

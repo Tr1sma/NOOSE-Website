@@ -13,6 +13,7 @@ using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Vorgaenge;
+using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -106,6 +107,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- Phase 6: In-App-Benachrichtigungen (Glocke) ----
     public DbSet<Benachrichtigung> Benachrichtigungen => Set<Benachrichtigung>();
+
+    // ---- Phase 6: Watchlist (gefolgte Akten) ----
+    public DbSet<WatchlistEintrag> Watchlisten => Set<WatchlistEintrag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -548,6 +552,22 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(n => n.ErstelltVonId).HasMaxLength(64);
             // Schneller Lade-Pfad „(ungelesene) Benachrichtigungen eines Empfängers".
             b.HasIndex(n => new { n.EmpfaengerId, n.GelesenAm });
+        });
+
+        // ---- Phase 6: Watchlist (gefolgte Akten) ----
+        modelBuilder.Entity<WatchlistEintrag>(b =>
+        {
+            b.Property(w => w.AgentId).HasMaxLength(64);
+            b.Property(w => w.EntitaetTyp).HasMaxLength(128);
+            b.Property(w => w.EntitaetId).HasMaxLength(64);
+            b.Property(w => w.ErstelltVonId).HasMaxLength(64);
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne<Agent>().WithMany().HasForeignKey(w => w.AgentId).OnDelete(DeleteBehavior.Restrict);
+            // Schneller Lade-Pfad „Folger einer Akte" (Fan-out) und „meine beobachteten Akten".
+            b.HasIndex(w => new { w.EntitaetTyp, w.EntitaetId });
+            b.HasIndex(w => new { w.AgentId, w.IstGeloescht });
+            // Bewusst KEIN Unique-Index: Entfolgen = Soft-Delete, erneutes Folgen reaktiviert die Zeile
+            // (Aktiv-Eindeutigkeit prüft der WatchlistService per Aktiv-Abfrage – analog FraktionMitglied).
         });
 
         // ---- Phase 5c: Taskforces ----

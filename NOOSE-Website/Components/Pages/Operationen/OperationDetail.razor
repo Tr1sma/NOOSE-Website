@@ -22,6 +22,7 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/operationen" aria-label="Zurück" />
         <MudSpacer />
+        <FolgenButton EntitaetTyp="@nameof(Operation)" EntitaetId="@_operation.Id" User="_user" />
         <MudButton Href="@($"/operationen/{_operation.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         <AuthorizeView Policy="@Policies.Fuehrung">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>

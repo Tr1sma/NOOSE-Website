@@ -17,6 +17,12 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personal" aria-label="Zurück" />
         <MudText Typo="Typo.h5">Personalakte</MudText>
+        @* Folgen nur für die Führung: Personalakten gelten in der Sichtbarkeit als Führungs-Inhalt (Sichtbarkeit(Agent)=istFuehrung). *@
+        @if (_istFuehrung)
+        {
+            <MudSpacer />
+            <FolgenButton EntitaetTyp="@nameof(Agent)" EntitaetId="@_agent.Id" User="_user" />
+        }
     </MudStack>
 
     <MudGrid>
