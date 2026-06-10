@@ -1,5 +1,6 @@
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 
 namespace NOOSE_Website.Models.Querschnitt;
 
@@ -36,6 +37,7 @@ public static class SuchNavigation
     {
         nameof(Fraktion) => $"/fraktionen/{zielId}",
         nameof(Personengruppe) => $"/personengruppen/{zielId}",
+        nameof(Partei) => $"/parteien/{zielId}",
         _ => $"/personen/{zielId}",
     };
 

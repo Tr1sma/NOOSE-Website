@@ -29,7 +29,7 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Fraktionen &amp; Personengruppen</MudText>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Organisationen</MudText>
             </MudStack>
             <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.FraktionenUndGruppen)</MudText>
         </MudPaper>
@@ -129,6 +129,7 @@
     {
         DashboardAkteTyp.Person => "Person",
         DashboardAkteTyp.Fraktion => "Fraktion",
+        DashboardAkteTyp.Partei => "Partei",
         _ => "Personengruppe",
     };
 
@@ -136,6 +137,7 @@
     {
         DashboardAkteTyp.Person => $"/personen/{x.AkteId}",
         DashboardAkteTyp.Fraktion => $"/fraktionen/{x.AkteId}",
+        DashboardAkteTyp.Partei => $"/parteien/{x.AkteId}",
         _ => $"/personengruppen/{x.AkteId}",
     };
 

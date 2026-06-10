@@ -8,6 +8,7 @@ public enum DashboardAkteTyp
     Person,
     Fraktion,
     Personengruppe,
+    Partei,
 }
 
 /// <summary>

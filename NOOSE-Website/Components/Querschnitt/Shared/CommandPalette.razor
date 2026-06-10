@@ -60,6 +60,8 @@
             new("Neue Fraktion anlegen", null, Icons.Material.Filled.Add, "/fraktionen/neu"),
             new("Personengruppen", "Liste", Icons.Material.Filled.Diversity3, "/personengruppen"),
             new("Neue Personengruppe anlegen", null, Icons.Material.Filled.Add, "/personengruppen/neu"),
+            new("Parteien", "Liste", Icons.Material.Filled.AccountBalance, "/parteien"),
+            new("Neue Partei anlegen", null, Icons.Material.Filled.Add, "/parteien/neu"),
             new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
         };
         // Papierkörbe und Verwaltung sind Führungs-gated → für Nicht-Führung nicht anbieten (sonst ACCESS DENIED).
@@ -70,6 +72,7 @@
             _befehle.Add(new PaletteItem("Papierkorb · Personen", null, Icons.Material.Filled.Delete, "/personen/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Fraktionen", null, Icons.Material.Filled.Delete, "/fraktionen/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Personengruppen", null, Icons.Material.Filled.Delete, "/personengruppen/papierkorb"));
+            _befehle.Add(new PaletteItem("Papierkorb · Parteien", null, Icons.Material.Filled.Delete, "/parteien/papierkorb"));
         }
     }
 
@@ -147,6 +150,7 @@
     {
         nameof(Fraktion) => Icons.Material.Filled.Groups,
         nameof(Personengruppe) => Icons.Material.Filled.Diversity3,
+        nameof(Partei) => Icons.Material.Filled.AccountBalance,
         _ => Icons.Material.Filled.Badge,
     };
 

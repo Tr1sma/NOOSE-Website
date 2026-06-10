@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
@@ -64,6 +65,11 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Personengruppe> Personengruppen => Set<Personengruppe>();
     public DbSet<PersonengruppeMitglied> PersonengruppeMitglieder => Set<PersonengruppeMitglied>();
     public DbSet<PersonengruppeAgent> PersonengruppeAgenten => Set<PersonengruppeAgent>();
+
+    // ---- Phase 5a: Parteien ----
+    public DbSet<Partei> Parteien => Set<Partei>();
+    public DbSet<ParteiMitglied> ParteiMitglieder => Set<ParteiMitglied>();
+    public DbSet<ParteiAgent> ParteiAgenten => Set<ParteiAgent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -353,6 +359,44 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.PersonengruppeId, a.AgentId }).IsUnique();
+            b.HasIndex(a => a.AgentId);
+        });
+
+        // ---- Phase 5a: Parteien ----
+        modelBuilder.Entity<Partei>(b =>
+        {
+            b.Property(p => p.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(p => p.Name).HasMaxLength(200).IsRequired();
+            b.Property(p => p.Beschreibung).HasMaxLength(2000);
+            b.Property(p => p.Ziele).HasMaxLength(2000);
+            b.Property(p => p.Bemerkungen).HasMaxLength(2000);
+            b.HasIndex(p => p.Aktenzeichen).IsUnique();
+            b.HasIndex(p => p.Name);
+            b.HasIndex(p => p.IstVerschlusssache);
+
+            b.HasMany(p => p.Mitglieder).WithOne(m => m.Partei!)
+                .HasForeignKey(m => m.ParteiId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Agenten).WithOne(a => a.Partei!)
+                .HasForeignKey(a => a.ParteiId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ParteiMitglied>(b =>
+        {
+            b.Property(m => m.Rolle).HasMaxLength(100);
+            // FK auf Person mit Restrict (Partei cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
+            b.HasOne(m => m.Person).WithMany()
+                .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
+            // Kein Unique-Index: soft-deletebar (Verlauf) + Wiedereintritt; Aktiv-Eindeutigkeit prüft ParteiService.
+            b.HasIndex(m => new { m.ParteiId, m.PersonId });
+            b.HasIndex(m => m.PersonId);
+        });
+
+        modelBuilder.Entity<ParteiAgent>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(a => new { a.ParteiId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 

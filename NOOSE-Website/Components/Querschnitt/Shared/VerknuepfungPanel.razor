@@ -120,15 +120,20 @@
             {
                 var verbuendet = a.Art == VerknuepfungArt.Buendnis;
                 <MudPaper Class="pa-3" Elevation="1">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
-                        <MudIcon Icon="@(verbuendet ? Icons.Material.Filled.Handshake : Icons.Material.Filled.Bolt)"
-                                 Color="@(verbuendet ? Color.Success : Color.Error)" Size="Size.Small" />
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(verbuendet ? Color.Success : Color.Error)">
-                            @(verbuendet ? "Verbündeter" : "Gegner")
-                        </MudChip>
-                        <MudLink Href="@($"/personen/{a.PersonId}")" Typo="Typo.body2"><b>@a.PersonName</b></MudLink>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Aktenzeichen</MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">· über @a.QuelleName ↔ @a.PartnerName</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                            <MudIcon Icon="@(verbuendet ? Icons.Material.Filled.Handshake : Icons.Material.Filled.Bolt)"
+                                     Color="@(verbuendet ? Color.Success : Color.Error)" Size="Size.Small" />
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(verbuendet ? Color.Success : Color.Error)">
+                                @(verbuendet ? "Verbündeter" : "Gegner")
+                            </MudChip>
+                            <MudLink Href="@($"/personen/{a.PersonId}")" Typo="Typo.body2"><b>@a.PersonName</b></MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.Aktenzeichen</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· über @a.QuelleName ↔ @a.PartnerName</MudText>
+                        </MudStack>
+                        <MudTooltip Text="@AbgeleitetTooltip(verbuendet)">
+                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Default" Size="Size.Small" />
+                        </MudTooltip>
                     </MudStack>
                 </MudPaper>
             }
@@ -225,6 +230,11 @@
     private static string AutoTooltip(string? label) => label == KollegenSync.Gruppenkollege
         ? "Automatisch durch Gruppen-Mitgliedschaft – wird mit der Mitgliedschaft gepflegt."
         : "Automatisch durch Fraktions-Mitgliedschaft – wird mit der Mitgliedschaft gepflegt.";
+
+    // Tooltip für abgeleitete Verbündete/Gegner – ergeben sich aus Bündnissen/Konflikten der Organisationen.
+    private static string AbgeleitetTooltip(bool verbuendet) => verbuendet
+        ? "Automatisch durch ein Bündnis der Organisation – wird mit dem Bündnis gepflegt."
+        : "Automatisch durch einen Konflikt der Organisation – wird mit dem Konflikt gepflegt.";
 
     private static Color TypFarbe(BeziehungsTyp typ) => typ switch
     {

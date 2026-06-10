@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 
 namespace NOOSE_Website.Services;
@@ -31,12 +32,15 @@ public static class Sichtbarkeit
             nameof(Personengruppe) => await db.Personengruppen
                 .Where(g => g.Id == entitaetId).Select(g => (bool?)g.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
+            nameof(Partei) => await db.Parteien
+                .Where(p => p.Id == entitaetId).Select(p => (bool?)p.IstVerschlusssache)
+                .FirstOrDefaultAsync(cancellationToken),
             // Andere Typen besitzen (noch) keine Verschlusssache-Stufe.
             _ => false,
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei)))
         {
             return true;
         }

@@ -1,0 +1,41 @@
+@* Identitäts-/Steckkarte der Partei: Name, Einstufung, Mitgliederzahl. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Partei.Name</MudText>
+                @if (Partei.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Partei.Aktenzeichen</MudText>
+        </div>
+
+        <EinstufungBadge Wert="Partei.Einstufung" />
+
+        <MudDivider />
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.subtitle2">Mitglieder</MudText>
+            <MudText Typo="Typo.body2">@Mitgliederzahl</MudText>
+        </MudStack>
+
+        <MudDivider />
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Zuletzt aktualisiert: @((Partei.GeaendertAm ?? Partei.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Partei Partei { get; set; } = default!;
+    [Parameter] public int Mitgliederzahl { get; set; }
+}

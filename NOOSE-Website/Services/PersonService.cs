@@ -4,6 +4,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
@@ -303,7 +304,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return new();
         }
 
-        // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen).
+        // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen + Parteien).
         var meineFraktionen = await db.FraktionMitglieder
             .Where(m => m.PersonId == personId)
             .Join(db.Fraktionen, m => m.FraktionId, f => f.Id, (m, f) => f)
@@ -316,17 +317,27 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .Where(g => istFuehrung || !g.IstVerschlusssache)
             .Select(g => new { g.Id, g.Name })
             .ToListAsync(cancellationToken);
+        var meineParteien = await db.ParteiMitglieder
+            .Where(m => m.PersonId == personId)
+            .Join(db.Parteien, m => m.ParteiId, p => p.Id, (m, p) => p)
+            .Where(p => istFuehrung || !p.IstVerschlusssache)
+            .Select(p => new { p.Id, p.Name })
+            .ToListAsync(cancellationToken);
 
         var orgNamen = new Dictionary<string, string>();
         foreach (var f in meineFraktionen) orgNamen[$"{nameof(Fraktion)}|{f.Id}"] = f.Name;
         foreach (var g in meineGruppen) orgNamen[$"{nameof(Personengruppe)}|{g.Id}"] = g.Name;
+        foreach (var p in meineParteien) orgNamen[$"{nameof(Partei)}|{p.Id}"] = p.Name;
         if (orgNamen.Count == 0)
         {
             return new();
         }
 
         // 2. Bündnis-/Konflikt-Verknüpfungen, an denen eine meiner Organisationen beteiligt ist.
-        var meineOrgIds = meineFraktionen.Select(f => f.Id).Concat(meineGruppen.Select(g => g.Id)).ToList();
+        var meineOrgIds = meineFraktionen.Select(f => f.Id)
+            .Concat(meineGruppen.Select(g => g.Id))
+            .Concat(meineParteien.Select(p => p.Id))
+            .ToList();
         var roh = await db.Verknuepfungen
             .Where(v => (v.Art == VerknuepfungArt.Buendnis || v.Art == VerknuepfungArt.Konflikt)
                      && (meineOrgIds.Contains(v.VonId) || meineOrgIds.Contains(v.NachId)))
@@ -356,24 +367,36 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         // 3. Sichtbare Partner-Organisationen auflösen (Name; Verschlusssache nur für Führung).
         var partnerFraktionIds = partner.Where(p => p.PartnerTyp == nameof(Fraktion)).Select(p => p.PartnerId).Distinct().ToList();
         var partnerGruppenIds = partner.Where(p => p.PartnerTyp == nameof(Personengruppe)).Select(p => p.PartnerId).Distinct().ToList();
+        var partnerParteiIds = partner.Where(p => p.PartnerTyp == nameof(Partei)).Select(p => p.PartnerId).Distinct().ToList();
         var partnerFraktionen = (await db.Fraktionen
             .Where(f => partnerFraktionIds.Contains(f.Id) && (istFuehrung || !f.IstVerschlusssache))
             .Select(f => new { f.Id, f.Name }).ToListAsync(cancellationToken)).ToDictionary(f => f.Id, f => f.Name);
         var partnerGruppen = (await db.Personengruppen
             .Where(g => partnerGruppenIds.Contains(g.Id) && (istFuehrung || !g.IstVerschlusssache))
             .Select(g => new { g.Id, g.Name }).ToListAsync(cancellationToken)).ToDictionary(g => g.Id, g => g.Name);
+        var partnerParteien = (await db.Parteien
+            .Where(p => partnerParteiIds.Contains(p.Id) && (istFuehrung || !p.IstVerschlusssache))
+            .Select(p => new { p.Id, p.Name }).ToListAsync(cancellationToken)).ToDictionary(p => p.Id, p => p.Name);
 
         // 4. Mitglieder der Partner-Organisationen (Person-Ids je Partner).
         var sichtbareFraktionIds = partnerFraktionen.Keys.ToList();
         var sichtbareGruppenIds = partnerGruppen.Keys.ToList();
+        var sichtbareParteiIds = partnerParteien.Keys.ToList();
         var fraktionMitglieder = await db.FraktionMitglieder
             .Where(m => sichtbareFraktionIds.Contains(m.FraktionId))
             .Select(m => new { m.FraktionId, m.PersonId }).ToListAsync(cancellationToken);
         var gruppenMitglieder = await db.PersonengruppeMitglieder
             .Where(m => sichtbareGruppenIds.Contains(m.PersonengruppeId))
             .Select(m => new { m.PersonengruppeId, m.PersonId }).ToListAsync(cancellationToken);
+        var parteiMitglieder = await db.ParteiMitglieder
+            .Where(m => sichtbareParteiIds.Contains(m.ParteiId))
+            .Select(m => new { m.ParteiId, m.PersonId }).ToListAsync(cancellationToken);
         var mitgliederJePartner = fraktionMitglieder.GroupBy(m => m.FraktionId).ToDictionary(g => g.Key, g => g.Select(x => x.PersonId).ToList());
         foreach (var grp in gruppenMitglieder.GroupBy(m => m.PersonengruppeId))
+        {
+            mitgliederJePartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
+        }
+        foreach (var grp in parteiMitglieder.GroupBy(m => m.ParteiId))
         {
             mitgliederJePartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
         }
@@ -382,9 +405,13 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         var kandidaten = new Dictionary<(string PersonId, VerknuepfungArt Art), (string QuelleName, string PartnerName)>();
         foreach (var p in partner)
         {
-            var partnerName = p.PartnerTyp == nameof(Fraktion)
-                ? (partnerFraktionen.TryGetValue(p.PartnerId, out var fn) ? fn : null)
-                : (partnerGruppen.TryGetValue(p.PartnerId, out var gn) ? gn : null);
+            var partnerName = p.PartnerTyp switch
+            {
+                nameof(Fraktion) => partnerFraktionen.TryGetValue(p.PartnerId, out var fn) ? fn : null,
+                nameof(Personengruppe) => partnerGruppen.TryGetValue(p.PartnerId, out var gn) ? gn : null,
+                nameof(Partei) => partnerParteien.TryGetValue(p.PartnerId, out var pn) ? pn : null,
+                _ => null,
+            };
             if (partnerName is null || !mitgliederJePartner.TryGetValue(p.PartnerId, out var mids))
             {
                 continue;

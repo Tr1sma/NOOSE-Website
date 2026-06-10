@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Dashboard;
@@ -21,6 +22,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         var personen = await db.Personen.CountAsync(p => istFuehrung || !p.IstVerschlusssache, cancellationToken);
         var fraktionen = await db.Fraktionen.CountAsync(f => istFuehrung || !f.IstVerschlusssache, cancellationToken);
         var gruppen = await db.Personengruppen.CountAsync(g => istFuehrung || !g.IstVerschlusssache, cancellationToken);
+        var parteien = await db.Parteien.CountAsync(p => istFuehrung || !p.IstVerschlusssache, cancellationToken);
 
         // Offene Anträge = ausstehende Registrierungen + offene Namensänderungen (beide im Freigabe-Posteingang).
         var offeneAntraege = await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)
@@ -33,10 +35,12 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
             verschlusssachen =
                   await db.Personen.CountAsync(p => p.IstVerschlusssache, cancellationToken)
                 + await db.Fraktionen.CountAsync(f => f.IstVerschlusssache, cancellationToken)
-                + await db.Personengruppen.CountAsync(g => g.IstVerschlusssache, cancellationToken);
+                + await db.Personengruppen.CountAsync(g => g.IstVerschlusssache, cancellationToken)
+                + await db.Parteien.CountAsync(p => p.IstVerschlusssache, cancellationToken);
         }
 
-        return new DashboardKennzahlen(personen, fraktionen + gruppen, offeneAntraege, verschlusssachen);
+        // Die Org-Kachel bündelt Fraktionen, Personengruppen und Parteien.
+        return new DashboardKennzahlen(personen, fraktionen + gruppen + parteien, offeneAntraege, verschlusssachen);
     }
 
     public async Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, int max = 8, CancellationToken cancellationToken = default)
@@ -79,6 +83,16 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
             : await db.PersonengruppeAgenten.Where(a => paIds.Contains(a.Id))
                 .Select(a => new { a.Id, a.PersonengruppeId }).ToDictionaryAsync(x => x.Id, x => x.PersonengruppeId, cancellationToken);
 
+        var pmParteiIds = Ids(roh, nameof(ParteiMitglied));
+        var mitgliedZuPartei = pmParteiIds.Count == 0 ? new Dictionary<string, string>()
+            : await db.ParteiMitglieder.IgnoreQueryFilters().Where(m => pmParteiIds.Contains(m.Id))
+                .Select(m => new { m.Id, m.ParteiId }).ToDictionaryAsync(x => x.Id, x => x.ParteiId, cancellationToken);
+
+        var paParteiIds = Ids(roh, nameof(ParteiAgent));
+        var agentZuPartei = paParteiIds.Count == 0 ? new Dictionary<string, string>()
+            : await db.ParteiAgenten.Where(a => paParteiIds.Contains(a.Id))
+                .Select(a => new { a.Id, a.ParteiId }).ToDictionaryAsync(x => x.Id, x => x.ParteiId, cancellationToken);
+
         // Jeden Audit-Eintrag (in Reihenfolge) auf eine Ziel-Akte abbilden – oder verwerfen.
         var ziele = new List<(AuditLog Log, DashboardAkteTyp Typ, string AkteId, string? Detail)>();
         foreach (var log in roh)
@@ -96,6 +110,11 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
                     => (DashboardAkteTyp.Personengruppe, gid, "Mitglied"),
                 nameof(PersonengruppeAgent) when agentZuGruppe.TryGetValue(log.EntitaetId, out var gid2)
                     => (DashboardAkteTyp.Personengruppe, gid2, "Agent-Zuteilung"),
+                nameof(Partei) => (DashboardAkteTyp.Partei, log.EntitaetId, null),
+                nameof(ParteiMitglied) when mitgliedZuPartei.TryGetValue(log.EntitaetId, out var prid)
+                    => (DashboardAkteTyp.Partei, prid, "Mitglied"),
+                nameof(ParteiAgent) when agentZuPartei.TryGetValue(log.EntitaetId, out var prid2)
+                    => (DashboardAkteTyp.Partei, prid2, "Agent-Zuteilung"),
                 _ => null,
             };
 
@@ -109,6 +128,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         var personMap = await PersonInfos(db, ZielIds(ziele, DashboardAkteTyp.Person), cancellationToken);
         var fraktionMap = await FraktionInfos(db, ZielIds(ziele, DashboardAkteTyp.Fraktion), cancellationToken);
         var gruppeMap = await GruppeInfos(db, ZielIds(ziele, DashboardAkteTyp.Personengruppe), cancellationToken);
+        var parteiMap = await ParteiInfos(db, ZielIds(ziele, DashboardAkteTyp.Partei), cancellationToken);
 
         var ergebnis = new List<DashboardAenderung>();
         foreach (var (log, typ, akteId, detail) in ziele)
@@ -117,6 +137,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
             {
                 DashboardAkteTyp.Person => personMap.GetValueOrDefault(akteId),
                 DashboardAkteTyp.Fraktion => fraktionMap.GetValueOrDefault(akteId),
+                DashboardAkteTyp.Partei => parteiMap.GetValueOrDefault(akteId),
                 _ => gruppeMap.GetValueOrDefault(akteId),
             };
 
@@ -164,4 +185,9 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         => ids.Count == 0 ? new()
             : await db.Personengruppen.IgnoreQueryFilters().Where(g => ids.Contains(g.Id))
                 .ToDictionaryAsync(g => g.Id, g => new AkteInfo(g.Name, g.Aktenzeichen, g.IstVerschlusssache, g.IstGeloescht), ct);
+
+    private static async Task<Dictionary<string, AkteInfo>> ParteiInfos(AppDbContext db, List<string> ids, CancellationToken ct)
+        => ids.Count == 0 ? new()
+            : await db.Parteien.IgnoreQueryFilters().Where(p => ids.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => new AkteInfo(p.Name, p.Aktenzeichen, p.IstVerschlusssache, p.IstGeloescht), ct);
 }

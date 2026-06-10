@@ -14,7 +14,7 @@
     <MudText Typo="Typo.h4">Globale Suche</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Durchsucht Personen, Fraktionen, Personengruppen, Doks, Quellen und Kommentare. Verschlusssachen erscheinen nur für die Führung.
+    Durchsucht Personen, Fraktionen, Personengruppen, Parteien, Doks, Quellen und Kommentare. Verschlusssachen erscheinen nur für die Führung.
 </MudText>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
@@ -32,6 +32,7 @@
             <MudCheckBox T="bool" @bind-Value="_katPerson" Label="Personen" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katFraktion" Label="Fraktionen" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katGruppe" Label="Personengruppen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katPartei" Label="Parteien" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katDok" Label="Doks" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katQuelle" Label="Quellen" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katKommentar" Label="Kommentare" Dense="true" />
@@ -118,7 +119,7 @@ else
     private bool _istFuehrung;
 
     private string _text = string.Empty;
-    private bool _katPerson = true, _katFraktion = true, _katGruppe = true, _katDok = true, _katQuelle = true, _katKommentar = true;
+    private bool _katPerson = true, _katFraktion = true, _katGruppe = true, _katPartei = true, _katDok = true, _katQuelle = true, _katKommentar = true;
     private IReadOnlyCollection<string> _tagAuswahl = new HashSet<string>();
     private string _speichernName = string.Empty;
 
@@ -177,6 +178,7 @@ else
         if (_katPerson) kategorien.Add(nameof(Person));
         if (_katFraktion) kategorien.Add(nameof(Fraktion));
         if (_katGruppe) kategorien.Add(nameof(Personengruppe));
+        if (_katPartei) kategorien.Add(nameof(Partei));
         if (_katDok) kategorien.Add(nameof(PersonDok));
         if (_katQuelle) kategorien.Add(nameof(Quelle));
         if (_katKommentar) kategorien.Add(nameof(Kommentar));
@@ -184,15 +186,15 @@ else
         return new SuchKriterien
         {
             Text = _text,
-            // Alle sechs aktiv → leere Liste (= alle), sonst die gewählte Teilmenge.
-            Kategorien = kategorien.Count == 6 ? new() : kategorien,
+            // Alle sieben aktiv → leere Liste (= alle), sonst die gewählte Teilmenge.
+            Kategorien = kategorien.Count == 7 ? new() : kategorien,
             TagIds = _tagAuswahl.ToList(),
         };
     }
 
     private async Task SuchenAsync()
     {
-        if (!_katPerson && !_katFraktion && !_katGruppe && !_katDok && !_katQuelle && !_katKommentar)
+        if (!_katPerson && !_katFraktion && !_katGruppe && !_katPartei && !_katDok && !_katQuelle && !_katKommentar)
         {
             Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
             return;
@@ -267,6 +269,7 @@ else
         _katPerson = katSet is null || katSet.Contains(nameof(Person));
         _katFraktion = katSet is null || katSet.Contains(nameof(Fraktion));
         _katGruppe = katSet is null || katSet.Contains(nameof(Personengruppe));
+        _katPartei = katSet is null || katSet.Contains(nameof(Partei));
         _katDok = katSet is null || katSet.Contains(nameof(PersonDok));
         _katQuelle = katSet is null || katSet.Contains(nameof(Quelle));
         _katKommentar = katSet is null || katSet.Contains(nameof(Kommentar));
@@ -300,6 +303,7 @@ else
         nameof(Person) => Icons.Material.Filled.Badge,
         nameof(Fraktion) => Icons.Material.Filled.Groups,
         nameof(Personengruppe) => Icons.Material.Filled.Diversity3,
+        nameof(Partei) => Icons.Material.Filled.AccountBalance,
         nameof(PersonDok) => Icons.Material.Filled.Description,
         nameof(Quelle) => Icons.Material.Filled.AttachFile,
         nameof(Kommentar) => Icons.Material.Filled.Comment,

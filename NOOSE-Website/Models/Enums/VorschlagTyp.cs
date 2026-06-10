@@ -13,4 +13,6 @@ public enum VorschlagTyp
     Lagerbestand = 3,
     // Phase 4: Art der Fraktion (Gang/Mafia/…) – Einzelwert mit Vorschlägen.
     Art = 4,
+    // Phase 5a: Rolle eines Partei-Mitglieds (Vorsitz/Sprecher/…) – Einzelwert mit Vorschlägen.
+    Parteirolle = 5,
 }

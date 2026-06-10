@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Models.Querschnitt;
@@ -101,6 +102,30 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // ---- Parteien (Name/Aktenzeichen/Beschreibung/Ziele/Bemerkungen; auch reiner Tag-Filter) ----
+        if (Aktiv(nameof(Partei)))
+        {
+            var q = db.Parteien.Where(p => istFuehrung || !p.IstVerschlusssache);
+            if (hatText)
+            {
+                q = q.Where(p => p.Name.Contains(s!) || p.Aktenzeichen.Contains(s!)
+                    || (p.Beschreibung != null && p.Beschreibung.Contains(s!))
+                    || (p.Ziele != null && p.Ziele.Contains(s!))
+                    || (p.Bemerkungen != null && p.Bemerkungen.Contains(s!)));
+            }
+            if (hatTags)
+            {
+                q = q.Where(p => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Partei) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)));
+            }
+            var treffer = await q.OrderBy(p => p.Name).Take(MaxProKategorie)
+                .Select(p => new SuchTreffer(nameof(Partei), p.Id, p.Name, p.Beschreibung ?? string.Empty, p.Aktenzeichen))
+                .ToListAsync(cancellationToken);
+            if (treffer.Count > 0)
+            {
+                gruppen.Add(new SuchErgebnisGruppe(nameof(Partei), "Parteien", treffer));
+            }
+        }
+
         // Die folgenden Kategorien sind Text-Inhalte → nur bei vorhandenem Suchtext.
         // Wichtig: expliziter Join auf db.Personen (NICHT Include über die soft-delete-gefilterte
         // Pflichtnavigation), sonst greift das fragile Query-Filter-/Pflichtnavigations-Zusammenspiel.
@@ -182,12 +207,17 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .OrderBy(g => g.Name).Take(max)
             .Select(g => new SchnellTreffer(nameof(Personengruppe), g.Id, g.Name, g.Aktenzeichen))
             .ToListAsync(cancellationToken);
+        var parteien = await db.Parteien
+            .Where(p => (istFuehrung || !p.IstVerschlusssache) && (p.Name.Contains(s) || p.Aktenzeichen.Contains(s)))
+            .OrderBy(p => p.Name).Take(max)
+            .Select(p => new SchnellTreffer(nameof(Partei), p.Id, p.Name, p.Aktenzeichen))
+            .ToListAsync(cancellationToken);
 
         // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
-        return Mischen(personen, fraktionen, gruppen).Take(max).ToList();
+        return Mischen(personen, fraktionen, gruppen, parteien).Take(max).ToList();
     }
 
-    /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, P, F, G, …) für eine faire Verteilung.</summary>
+    /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
     private static IEnumerable<SchnellTreffer> Mischen(params List<SchnellTreffer>[] listen)
     {
         for (var index = 0; ; index++)
@@ -227,6 +257,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         var personIds = roh.Where(r => r.EntitaetTyp == nameof(Person)).Select(r => r.EntitaetId).Distinct().ToList();
         var fraktionIds = roh.Where(r => r.EntitaetTyp == nameof(Fraktion)).Select(r => r.EntitaetId).Distinct().ToList();
         var gruppenIds = roh.Where(r => r.EntitaetTyp == nameof(Personengruppe)).Select(r => r.EntitaetId).Distinct().ToList();
+        var parteiIds = roh.Where(r => r.EntitaetTyp == nameof(Partei)).Select(r => r.EntitaetId).Distinct().ToList();
 
         // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
         var map = new Dictionary<(string, string), (string Name, string Aktenzeichen, bool Verschluss)>();
@@ -245,6 +276,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Personengruppe), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
         }
+        foreach (var x in await db.Parteien.Where(p => parteiIds.Contains(p.Id))
+                     .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Partei), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+        }
 
         // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
         HashSet<(string, string)>? mitTag = null;
@@ -254,7 +290,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 .Where(z => tagIds.Contains(z.TagId)
                     && ((z.EntitaetTyp == nameof(Person) && personIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Fraktion) && fraktionIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Personengruppe) && gruppenIds.Contains(z.EntitaetId))))
+                     || (z.EntitaetTyp == nameof(Personengruppe) && gruppenIds.Contains(z.EntitaetId))
+                     || (z.EntitaetTyp == nameof(Partei) && parteiIds.Contains(z.EntitaetId))))
                 .Select(z => new { z.EntitaetTyp, z.EntitaetId }).ToListAsync(cancellationToken))
                 .Select(z => (z.EntitaetTyp, z.EntitaetId)).ToHashSet();
         }

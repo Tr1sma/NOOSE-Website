@@ -85,9 +85,15 @@
         var alle = _listen.Values.SelectMany(l => l).ToList();
         var fraktionAus = alle.Where(v => v.AndereTyp == nameof(Fraktion)).Select(v => v.AndereId).ToList();
         var gruppenAus = alle.Where(v => v.AndereTyp == nameof(Personengruppe)).Select(v => v.AndereId).ToList();
-        if (EntitaetTyp == nameof(Fraktion)) fraktionAus.Add(EntitaetId); else gruppenAus.Add(EntitaetId);
+        var parteiAus = alle.Where(v => v.AndereTyp == nameof(Partei)).Select(v => v.AndereId).ToList();
+        switch (EntitaetTyp)
+        {
+            case nameof(Fraktion): fraktionAus.Add(EntitaetId); break;
+            case nameof(Personengruppe): gruppenAus.Add(EntitaetId); break;
+            case nameof(Partei): parteiAus.Add(EntitaetId); break;
+        }
 
-        var wahl = await OrgBeziehungDialog.ZeigenAsync(DialogService, s.Bezeichnung, User.IstFuehrung(), fraktionAus, gruppenAus);
+        var wahl = await OrgBeziehungDialog.ZeigenAsync(DialogService, s.Bezeichnung, User.IstFuehrung(), fraktionAus, gruppenAus, parteiAus);
         if (wahl is null)
         {
             return;

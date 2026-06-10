@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Models.Enums;
@@ -66,7 +67,14 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(Personengruppe), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache);
         }
 
-        var bekannteTypen = new[] { nameof(Person), nameof(Fraktion), nameof(Personengruppe) };
+        var parteiIds = paare.Where(p => p.AndereTyp == nameof(Partei)).Select(p => p.AndereId).Distinct().ToList();
+        foreach (var x in await db.Parteien.Where(p => parteiIds.Contains(p.Id))
+                     .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Partei), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache);
+        }
+
+        var bekannteTypen = new[] { nameof(Person), nameof(Fraktion), nameof(Personengruppe), nameof(Partei) };
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)
         {

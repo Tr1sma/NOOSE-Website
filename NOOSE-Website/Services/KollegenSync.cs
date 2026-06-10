@@ -7,13 +7,14 @@ namespace NOOSE_Website.Services;
 
 /// <summary>
 /// Gemeinsame Pflege der automatischen „Kollegen"-Verknüpfungen zwischen Personen (Fraktion → „Fraktionskollege",
-/// Personengruppe → „Gruppenkollege"). Jede Variante wird über ihr eigenes <c>Label</c> getrennt verwaltet,
-/// damit sich Fraktions- und Gruppen-Links nicht gegenseitig löschen.
+/// Personengruppe → „Gruppenkollege", Partei → „Parteikollege"). Jede Variante wird über ihr eigenes <c>Label</c>
+/// getrennt verwaltet, damit sich die Links der verschiedenen Organisationsarten nicht gegenseitig löschen.
 /// </summary>
 public static class KollegenSync
 {
     public const string Fraktionskollege = "Fraktionskollege";
     public const string Gruppenkollege = "Gruppenkollege";
+    public const string Parteikollege = "Parteikollege";
 
     /// <summary>
     /// Gleicht die automatischen Verknüpfungen mit dem Label <paramref name="label"/> für die Person
