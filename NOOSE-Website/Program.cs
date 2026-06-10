@@ -75,7 +75,8 @@ builder.Services.AddIdentityCore<Agent>(options =>
 // NOOSE-Claims (Dienstgrad/Status/TRU/Admin) ins Cookie schreiben.
 builder.Services.AddScoped<IUserClaimsPrincipalFactory<Agent>, AgentClaimsPrincipalFactory>();
 
-// Kill-Switch: SecurityStamp wird oft revalidiert → Sperre greift praktisch sofort.
+// Kill-Switch: SecurityStamp wird oft revalidiert → Sperre greift praktisch sofort. Identisch zum
+// RevalidationInterval des IdentityRevalidatingAuthenticationStateProvider (30 s) → Worst-Case-Latenz ~30 s.
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     options.ValidationInterval = TimeSpan.FromSeconds(30));
 

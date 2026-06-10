@@ -196,9 +196,9 @@ else
             Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
             return;
         }
-        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen
-        // (geteilter DbContext pro Circuit). Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt –
-        // verhindert den inkonsistenten Zustand „Feld zeigt X, Treffer zeigen Y".
+        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen.
+        // Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt – verhindert den inkonsistenten
+        // Zustand „Feld zeigt X, Treffer zeigen Y" und unnötige Parallel-Abfragen.
         if (_suchtGerade)
         {
             _erneutSuchen = true;

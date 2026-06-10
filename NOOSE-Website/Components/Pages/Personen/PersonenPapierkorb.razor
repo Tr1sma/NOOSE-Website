@@ -70,8 +70,15 @@ else
     private async Task WiederherstellenAsync(Person person)
     {
         var user = (await AuthStateTask).User;
-        await PersonService.WiederherstellenAsync(person.Id, user);
-        Snackbar.Add($"Akte {person.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        try
+        {
+            await PersonService.WiederherstellenAsync(person.Id, user);
+            Snackbar.Add($"Akte {person.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 }

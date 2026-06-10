@@ -20,8 +20,9 @@ internal sealed class IdentityRevalidatingAuthenticationStateProvider(
     IOptions<IdentityOptions> options)
     : RevalidatingServerAuthenticationStateProvider(loggerFactory)
 {
-    // Kurzes Intervall, damit eine Notfall-Sperre praktisch sofort greift.
-    protected override TimeSpan RevalidationInterval => TimeSpan.FromMinutes(1);
+    // Kurzes Intervall, damit eine Notfall-Sperre praktisch sofort greift. Bewusst identisch zum
+    // SecurityStampValidator-Intervall (Program.cs, 30 s) → einheitliche Worst-Case-Latenz von ~30 s.
+    protected override TimeSpan RevalidationInterval => TimeSpan.FromSeconds(30);
 
     protected override async Task<bool> ValidateAuthenticationStateAsync(
         AuthenticationState authenticationState, CancellationToken cancellationToken)

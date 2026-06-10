@@ -66,8 +66,15 @@ else
     private async Task WiederherstellenAsync(Personengruppe gruppe)
     {
         var user = (await AuthStateTask).User;
-        await GruppeService.WiederherstellenAsync(gruppe.Id, user);
-        Snackbar.Add($"Personengruppe {gruppe.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        try
+        {
+            await GruppeService.WiederherstellenAsync(gruppe.Id, user);
+            Snackbar.Add($"Personengruppe {gruppe.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 }

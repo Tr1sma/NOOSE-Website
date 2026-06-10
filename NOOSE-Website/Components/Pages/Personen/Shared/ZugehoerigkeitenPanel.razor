@@ -156,16 +156,23 @@
         {
             return;
         }
-        if (z.Typ == nameof(Fraktion))
+        try
         {
-            await FraktionService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            if (z.Typ == nameof(Fraktion))
+            {
+                await FraktionService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            }
+            else
+            {
+                await GruppeService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            }
+            Snackbar.Add("Zugehörigkeit entfernt.", Severity.Success);
+            await AktualisierenAsync();
         }
-        else
+        catch (Exception ex)
         {
-            await GruppeService.MitgliedEntfernenAsync(z.MitgliedId, User);
+            Snackbar.Add(ex.Message, Severity.Error);
         }
-        Snackbar.Add("Zugehörigkeit entfernt.", Severity.Success);
-        await AktualisierenAsync();
     }
 
     private static string Route(PersonZugehoerigkeit z)
