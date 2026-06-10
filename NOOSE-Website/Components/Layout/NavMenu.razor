@@ -14,7 +14,8 @@
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">VERWALTUNG</MudText>
         <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
-            Freigaben@if (_offeneFreigaben > 0)
+            Freigaben
+            @if (_offeneFreigaben > 0)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_offeneFreigaben</MudChip>
             }
