@@ -27,8 +27,8 @@ public interface IFraktionService
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
     Task EinstufungSetzenAsync(string id, Einstufung neu, string? begruendung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
-    /// <summary>Append-only Einstufungs-Verlauf der Fraktion (neueste zuerst).</summary>
-    Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default);
+    /// <summary>Append-only Einstufungs-Verlauf der Fraktion (neueste zuerst; Verschlusssache-gefiltert).</summary>
+    Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default);
 
     /// <summary>Mitglieder der Fraktion inkl. Person; Verschlusssachen-Personen nur für Führung.</summary>
     Task<List<FraktionMitglied>> GetMitgliederAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default);
@@ -36,6 +36,6 @@ public interface IFraktionService
     Task MitgliedAendernAsync(string mitgliedId, string? rang, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
     Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Fraktion und ihrer Mitgliedschaften (für die Akten-Historie).</summary>
-    Task<List<AuditLog>> GetHistorieAsync(string fraktionId, CancellationToken cancellationToken = default);
+    /// <summary>Audit-Einträge der Fraktion und ihrer Mitgliedschaften (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
+    Task<List<AuditLog>> GetHistorieAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default);
 }

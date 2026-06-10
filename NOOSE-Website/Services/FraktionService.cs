@@ -18,9 +18,11 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
     public async Task<List<Fraktion>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht
+        // (gelöschte/Verschlusssache-Personen werden dort wie hier ausgeblendet).
         return await db.Fraktionen
             .Where(f => istFuehrung || !f.IstVerschlusssache)
-            .Include(f => f.Mitglieder)
+            .Include(f => f.Mitglieder).ThenInclude(m => m.Person)
             .OrderByDescending(f => f.GeaendertAm ?? f.ErstelltAm)
             .ToListAsync(cancellationToken);
     }
@@ -115,6 +117,11 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
 
+        if (fraktion.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
         fraktion.Name = eingabe.Name.Trim();
         fraktion.Art = Leer(eingabe.Art);
         fraktion.Funk = Leer(eingabe.Funk);
@@ -138,6 +145,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var fraktion = await db.Fraktionen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
@@ -148,6 +157,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
 
     public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var fraktion = await db.Fraktionen.IgnoreQueryFilters()
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
@@ -167,14 +178,23 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         var fraktion = await db.Fraktionen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
 
+        if (fraktion.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
         fraktion.Einstufung = neu;
         db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Fraktion), id, neu, begruendung, handelnder));
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, CancellationToken cancellationToken = default)
+    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Fraktion), id, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         return await db.EinstufungVerlauf
             .Where(e => e.EntitaetTyp == nameof(Fraktion) && e.EntitaetId == id)
             .OrderByDescending(e => e.Zeitpunkt)
@@ -201,9 +221,11 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
     public async Task MitgliedHinzufuegenAsync(string fraktionId, MitgliedEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await db.Fraktionen.AnyAsync(f => f.Id == fraktionId, cancellationToken))
+        var fraktion = await db.Fraktionen.FirstOrDefaultAsync(f => f.Id == fraktionId, cancellationToken)
+            ?? throw new InvalidOperationException($"Fraktion '{fraktionId}' nicht gefunden.");
+        if (fraktion.IstVerschlusssache && !handelnder.IstFuehrung())
         {
-            throw new InvalidOperationException($"Fraktion '{fraktionId}' nicht gefunden.");
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
         var personId = await PersonIdErmittelnAsync(db, eingabe.PersonId, eingabe.NeuePersonName, handelnder, cancellationToken);
@@ -248,8 +270,12 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
     public async Task MitgliedAendernAsync(string mitgliedId, string? rang, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var mitglied = await db.FraktionMitglieder.FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken)
+        var mitglied = await db.FraktionMitglieder.Include(m => m.Fraktion).FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken)
             ?? throw new InvalidOperationException("Mitgliedschaft nicht gefunden.");
+        if (mitglied.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
         mitglied.Rang = Leer(rang);
         mitglied.IstLeitung = istLeitung;
         await db.SaveChangesAsync(cancellationToken);
@@ -258,10 +284,14 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
     public async Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var mitglied = await db.FraktionMitglieder.FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken);
+        var mitglied = await db.FraktionMitglieder.Include(m => m.Fraktion).FirstOrDefaultAsync(m => m.Id == mitgliedId, cancellationToken);
         if (mitglied is null)
         {
             return;
+        }
+        if (mitglied.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         var personId = mitglied.PersonId;
         // Austritt + Kollegen-Verknüpfungen nachführen in EINER Transaktion (kein Zwischenzustand).
@@ -275,9 +305,13 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         await tx.CommitAsync(cancellationToken);
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string fraktionId, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistorieAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Fraktion), fraktionId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
         var mitgliedIds = await db.FraktionMitglieder
             .Where(m => m.FraktionId == fraktionId)
             .Select(m => m.Id)
@@ -372,5 +406,5 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         await KollegenSync.SyncAsync(db, personId, KollegenSync.Fraktionskollege, soll, cancellationToken);
     }
 
-    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? Leer(string? s) => s.TrimToNull();
 }

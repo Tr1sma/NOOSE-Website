@@ -82,7 +82,7 @@ else
                     <KommentarPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <GruppeHistorieTimeline GruppeId="@_gruppe.Id" @key="_historieKey" />
+                    <GruppeHistorieTimeline GruppeId="@_gruppe.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -116,7 +116,7 @@ else
         _gruppe = await GruppeService.GetDetailAsync(Id, _user.IstFuehrung());
         if (_gruppe is not null)
         {
-            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(_gruppe.Id);
+            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(_gruppe.Id, _user.IstFuehrung());
             _fortschritt = await GruppeService.GetFortschrittAsync(_gruppe.Id);
         }
         _laden = false;

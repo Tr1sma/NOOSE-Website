@@ -64,13 +64,15 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var gruppen = await GruppeService.GetListeAsync(user.IstFuehrung());
+        var istFuehrung = user.IstFuehrung();
+        var gruppen = await GruppeService.GetListeAsync(istFuehrung);
         _zeilen = gruppen.Select(g => new GruppeZeile
         {
             Id = g.Id,
             Aktenzeichen = g.Aktenzeichen,
             Name = g.Name,
-            Mitgliederzahl = g.Mitglieder.Count,
+            // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+            Mitgliederzahl = g.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
             Einstufung = g.Einstufung,
             IstVerschlusssache = g.IstVerschlusssache,
             Aktualisiert = (g.GeaendertAm ?? g.ErstelltAm).ToLocalTime(),

@@ -65,14 +65,16 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var fraktionen = await FraktionService.GetListeAsync(user.IstFuehrung());
+        var istFuehrung = user.IstFuehrung();
+        var fraktionen = await FraktionService.GetListeAsync(istFuehrung);
         _zeilen = fraktionen.Select(f => new FraktionZeile
         {
             Id = f.Id,
             Aktenzeichen = f.Aktenzeichen,
             Name = f.Name,
             Art = f.Art ?? "—",
-            Mitgliederzahl = f.Mitglieder.Count,
+            // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+            Mitgliederzahl = f.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
             Einstufung = f.Einstufung,
             IstVerschlusssache = f.IstVerschlusssache,
             Aktualisiert = (f.GeaendertAm ?? f.ErstelltAm).ToLocalTime(),

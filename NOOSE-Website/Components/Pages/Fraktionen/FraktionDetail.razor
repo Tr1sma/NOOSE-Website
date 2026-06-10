@@ -98,7 +98,7 @@ else
                     <KommentarPanel EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <FraktionHistorieTimeline FraktionId="@_fraktion.Id" @key="_historieKey" />
+                    <FraktionHistorieTimeline FraktionId="@_fraktion.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -134,7 +134,7 @@ else
         if (_fraktion is not null)
         {
             _raenge = _fraktion.Raenge.OrderBy(r => r.Reihenfolge).Select(r => r.Bezeichnung).ToList();
-            _einstufungVerlauf = await FraktionService.GetEinstufungVerlaufAsync(_fraktion.Id);
+            _einstufungVerlauf = await FraktionService.GetEinstufungVerlaufAsync(_fraktion.Id, _user.IstFuehrung());
             _mitgliederzahl = (await FraktionService.GetMitgliederAsync(_fraktion.Id, _user.IstFuehrung())).Count;
         }
         _laden = false;
