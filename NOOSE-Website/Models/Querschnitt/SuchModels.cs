@@ -16,11 +16,12 @@ public class SuchKriterien
 }
 
 /// <summary>
-/// Ein einzelner Suchtreffer. <see cref="Kategorie"/> ist der CLR-Typname der Trefferquelle;
-/// <see cref="ZielId"/> + Kategorie bestimmen die Zielroute (siehe <see cref="SuchNavigation"/>).
-/// Bei Doks/Quellen/Kommentaren verweist <see cref="ZielId"/> auf die zugehörige Person.
+/// Ein einzelner Suchtreffer. <see cref="Kategorie"/> ist der CLR-Typname der Trefferquelle (für die
+/// Gruppierung). <see cref="ZielId"/> verweist auf die anzuspringende Akte; <see cref="ZielTyp"/> ist deren
+/// Aktentyp (Person/Fraktion/Personengruppe) – bei Doks/Quellen/Kommentaren der Eltern-Akten-Typ. Ist
+/// <see cref="ZielTyp"/> null, dient die Kategorie als Zieltyp (siehe <see cref="SuchNavigation"/>).
 /// </summary>
-public record SuchTreffer(string Kategorie, string ZielId, string Titel, string Schnipsel, string Aktenzeichen);
+public record SuchTreffer(string Kategorie, string ZielId, string Titel, string Schnipsel, string Aktenzeichen, string? ZielTyp = null);
 
 /// <summary>Treffer einer Kategorie gebündelt (für die kategorisierte Ergebnisanzeige).</summary>
 public record SuchErgebnisGruppe(string Kategorie, string Anzeige, List<SuchTreffer> Treffer);
@@ -28,13 +29,16 @@ public record SuchErgebnisGruppe(string Kategorie, string Anzeige, List<SuchTref
 /// <summary>Kompakter Treffer für die Command-Palette (Schnellzugriff).</summary>
 public record SchnellTreffer(string Kategorie, string ZielId, string Name, string Aktenzeichen);
 
-/// <summary>Zielroute eines Treffers je Kategorie. Doks/Quellen/Kommentare verweisen auf die Person-Akte.</summary>
+/// <summary>Zielroute eines Treffers. Doks/Quellen/Kommentare verweisen auf ihre Eltern-Akte (Person/Fraktion/Gruppe).</summary>
 public static class SuchNavigation
 {
-    public static string Route(string kategorie, string zielId) => kategorie switch
+    public static string Route(string aktenTyp, string zielId) => aktenTyp switch
     {
         nameof(Fraktion) => $"/fraktionen/{zielId}",
         nameof(Personengruppe) => $"/personengruppen/{zielId}",
         _ => $"/personen/{zielId}",
     };
+
+    /// <summary>Route eines Treffers: nutzt den expliziten Zieltyp, sonst die Kategorie.</summary>
+    public static string Route(SuchTreffer treffer) => Route(treffer.ZielTyp ?? treffer.Kategorie, treffer.ZielId);
 }

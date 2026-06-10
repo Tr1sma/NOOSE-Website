@@ -15,9 +15,9 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
     public async Task<List<Quelle>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Verschlusssache-Schutz: bei Personen-Akten die Sichtbarkeit der Eltern-Akte prüfen
-        // (keine FK-Navigation bei polymorphen Assoziationen → expliziter Lookup).
-        if (!await AkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        // Verschlusssache-Schutz: Sichtbarkeit der Eltern-Akte prüfen (Person/Fraktion/Gruppe – keine
+        // FK-Navigation bei polymorphen Assoziationen → zentraler Sichtbarkeits-Helfer).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
         {
             return new();
         }
@@ -52,7 +52,13 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
                 {
                     throw new InvalidOperationException("Bei einer Link-Quelle ist eine URL erforderlich.");
                 }
-                quelle.Url = eingabe.Url.Trim();
+                var url = eingabe.Url.Trim();
+                // Nur http(s) zulassen – verhindert z. B. javascript:-Links (stored-XSS-Vektor in der Anzeige).
+                if (!IstSichereUrl(url))
+                {
+                    throw new InvalidOperationException("Bitte eine gültige http(s)-URL angeben.");
+                }
+                quelle.Url = url;
                 break;
 
             case QuelleTyp.Intern:
@@ -68,6 +74,11 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
                 if (eingabe.DateiInhalt is null || eingabe.DateiInhalt.Length == 0)
                 {
                     throw new InvalidOperationException("Es wurde keine Datei ausgewählt.");
+                }
+                // Größenlimit serverseitig erzwingen (nicht nur in der UI).
+                if (eingabe.DateiInhalt.Length > storage.MaxBytes)
+                {
+                    throw new InvalidOperationException($"Datei zu groß (max. {storage.MaxBytes / (1024 * 1024)} MB).");
                 }
                 if (!storage.IstErlaubterTyp(eingabe.ContentType ?? string.Empty))
                 {
@@ -115,31 +126,15 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
         {
             return null;
         }
-        return await AkteSichtbarAsync(db, quelle.EntitaetTyp, quelle.EntitaetId, istFuehrung, cancellationToken)
+        return await Sichtbarkeit.IstAkteSichtbarAsync(db, quelle.EntitaetTyp, quelle.EntitaetId, istFuehrung, cancellationToken)
             ? quelle
             : null;
     }
 
-    /// <summary>
-    /// Prüft, ob die Eltern-Akte für den Aufrufer sichtbar ist. In Phase 3 nur Personen-Akten relevant:
-    /// im Papierkorb → für alle „nicht vorhanden"; Verschlusssache → nur Führung. Andere Typen (später)
-    /// gelten vorerst als sichtbar.
-    /// </summary>
-    private static async Task<bool> AkteSichtbarAsync(AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken)
-    {
-        if (entitaetTyp != nameof(Person))
-        {
-            return true;
-        }
+    /// <summary>Lässt nur absolute http(s)-URLs zu (Schutz vor javascript:/data:-Links in der Anzeige).</summary>
+    private static bool IstSichereUrl(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri)
+           && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
-        var person = await db.Personen
-            .Where(p => p.Id == entitaetId)
-            .Select(p => new { p.IstVerschlusssache })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        // null = Akte gelöscht (Query-Filter) oder unbekannt → wie nicht vorhanden behandeln.
-        return person is not null && (istFuehrung || !person.IstVerschlusssache);
-    }
-
-    private static string? Leer(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static string? Leer(string? s) => s.TrimToNull();
 }

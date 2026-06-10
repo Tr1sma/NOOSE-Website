@@ -62,7 +62,9 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hatText)
             {
                 q = q.Where(f => f.Name.Contains(s!) || f.Aktenzeichen.Contains(s!)
-                    || (f.Art != null && f.Art.Contains(s!)));
+                    || (f.Art != null && f.Art.Contains(s!))
+                    || (f.Beschreibung != null && f.Beschreibung.Contains(s!))
+                    || (f.Ziele != null && f.Ziele.Contains(s!)));
             }
             if (hatTags)
             {
@@ -123,17 +125,15 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (hatText && Aktiv(nameof(Quelle)))
         {
-            var treffer = await (
-                from quelle in db.Quellen
-                where quelle.EntitaetTyp == nameof(Person)
-                    && (quelle.Titel.Contains(s!) || (quelle.Beschreibung != null && quelle.Beschreibung.Contains(s!)))
-                join p in db.Personen on quelle.EntitaetId equals p.Id
-                where (istFuehrung || !p.IstVerschlusssache)
-                    && (!hatTags || db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Person) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)))
-                orderby quelle.ErstelltAm descending
-                select new SuchTreffer(nameof(Quelle), p.Id, p.Name, quelle.Titel, p.Aktenzeichen))
-                .Take(MaxProKategorie)
+            // Quellen aller Akten-Eltern (Person/Fraktion/Gruppe) durchsuchen; Eltern + Sichtbarkeit/Tags
+            // anschließend zentral auflösen, damit der Treffer auf die richtige Akte verlinkt.
+            var roh = await db.Quellen
+                .Where(quelle => quelle.Titel.Contains(s!) || (quelle.Beschreibung != null && quelle.Beschreibung.Contains(s!)))
+                .OrderByDescending(quelle => quelle.ErstelltAm)
+                .Select(quelle => new RohTreffer(quelle.EntitaetTyp, quelle.EntitaetId, quelle.Titel))
+                .Take(MaxProKategorie * 4)
                 .ToListAsync(cancellationToken);
+            var treffer = await AkteElternTrefferAsync(db, nameof(Quelle), roh, istFuehrung, hatTags, tagIds, cancellationToken);
             if (treffer.Count > 0)
             {
                 gruppen.Add(new SuchErgebnisGruppe(nameof(Quelle), "Quellen", treffer));
@@ -142,16 +142,13 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (hatText && Aktiv(nameof(Kommentar)))
         {
-            var treffer = await (
-                from kommentar in db.Kommentare
-                where kommentar.EntitaetTyp == nameof(Person) && kommentar.Text.Contains(s!)
-                join p in db.Personen on kommentar.EntitaetId equals p.Id
-                where (istFuehrung || !p.IstVerschlusssache)
-                    && (!hatTags || db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Person) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)))
-                orderby kommentar.ErstelltAm descending
-                select new SuchTreffer(nameof(Kommentar), p.Id, p.Name, kommentar.Text, p.Aktenzeichen))
-                .Take(MaxProKategorie)
+            var roh = await db.Kommentare
+                .Where(kommentar => kommentar.Text.Contains(s!))
+                .OrderByDescending(kommentar => kommentar.ErstelltAm)
+                .Select(kommentar => new RohTreffer(kommentar.EntitaetTyp, kommentar.EntitaetId, kommentar.Text))
+                .Take(MaxProKategorie * 4)
                 .ToListAsync(cancellationToken);
+            var treffer = await AkteElternTrefferAsync(db, nameof(Kommentar), roh, istFuehrung, hatTags, tagIds, cancellationToken);
             if (treffer.Count > 0)
             {
                 gruppen.Add(new SuchErgebnisGruppe(nameof(Kommentar), "Kommentare", treffer));
@@ -209,5 +206,80 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 yield break;
             }
         }
+    }
+
+    /// <summary>Roh-Treffer eines polymorphen Inhalts (Quelle/Kommentar): Eltern-Typ/-Id + Anzeige-Schnipsel.</summary>
+    private sealed record RohTreffer(string EntitaetTyp, string EntitaetId, string Schnipsel);
+
+    /// <summary>
+    /// Löst Roh-Treffer (Quellen/Kommentare) auf ihre Eltern-Akte auf: Name/Aktenzeichen je Typ
+    /// (Person/Fraktion/Personengruppe), filtert Verschlusssachen (außer Führung) und – falls gefordert –
+    /// nach Tags der Eltern-Akte. Reihenfolge der Roh-Treffer bleibt erhalten; auf <see cref="MaxProKategorie"/> gekürzt.
+    /// </summary>
+    private static async Task<List<SuchTreffer>> AkteElternTrefferAsync(
+        AppDbContext db, string kategorie, List<RohTreffer> roh, bool istFuehrung, bool hatTags, List<string> tagIds, CancellationToken cancellationToken)
+    {
+        if (roh.Count == 0)
+        {
+            return new();
+        }
+
+        var personIds = roh.Where(r => r.EntitaetTyp == nameof(Person)).Select(r => r.EntitaetId).Distinct().ToList();
+        var fraktionIds = roh.Where(r => r.EntitaetTyp == nameof(Fraktion)).Select(r => r.EntitaetId).Distinct().ToList();
+        var gruppenIds = roh.Where(r => r.EntitaetTyp == nameof(Personengruppe)).Select(r => r.EntitaetId).Distinct().ToList();
+
+        // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
+        var map = new Dictionary<(string, string), (string Name, string Aktenzeichen, bool Verschluss)>();
+        foreach (var x in await db.Personen.Where(p => personIds.Contains(p.Id))
+                     .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Person), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+        }
+        foreach (var x in await db.Fraktionen.Where(f => fraktionIds.Contains(f.Id))
+                     .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Fraktion), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+        }
+        foreach (var x in await db.Personengruppen.Where(g => gruppenIds.Contains(g.Id))
+                     .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Personengruppe), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+        }
+
+        // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
+        HashSet<(string, string)>? mitTag = null;
+        if (hatTags)
+        {
+            mitTag = (await db.TagZuordnungen
+                .Where(z => tagIds.Contains(z.TagId)
+                    && ((z.EntitaetTyp == nameof(Person) && personIds.Contains(z.EntitaetId))
+                     || (z.EntitaetTyp == nameof(Fraktion) && fraktionIds.Contains(z.EntitaetId))
+                     || (z.EntitaetTyp == nameof(Personengruppe) && gruppenIds.Contains(z.EntitaetId))))
+                .Select(z => new { z.EntitaetTyp, z.EntitaetId }).ToListAsync(cancellationToken))
+                .Select(z => (z.EntitaetTyp, z.EntitaetId)).ToHashSet();
+        }
+
+        var ergebnis = new List<SuchTreffer>();
+        foreach (var r in roh)
+        {
+            if (!map.TryGetValue((r.EntitaetTyp, r.EntitaetId), out var info))
+            {
+                continue; // Eltern-Akte gelöscht/unbekannt → ausblenden.
+            }
+            if (info.Verschluss && !istFuehrung)
+            {
+                continue;
+            }
+            if (hatTags && (mitTag is null || !mitTag.Contains((r.EntitaetTyp, r.EntitaetId))))
+            {
+                continue;
+            }
+            ergebnis.Add(new SuchTreffer(kategorie, r.EntitaetId, info.Name, r.Schnipsel, info.Aktenzeichen, r.EntitaetTyp));
+            if (ergebnis.Count >= MaxProKategorie)
+            {
+                break;
+            }
+        }
+        return ergebnis;
     }
 }
