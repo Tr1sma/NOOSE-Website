@@ -5,7 +5,9 @@
         <MudForm @ref="_form">
             <MudStack Spacing="3">
                 <MudTextField @bind-Value="_name" Label="Tag-Name" Variant="Variant.Outlined"
-                              Required="true" RequiredError="Name ist erforderlich" />
+                              Required="true" RequiredError="Name ist erforderlich"
+                              AutoFocus="true" Immediate="true"
+                              OnKeyDown="@(async e => { if (e.Key == "Enter") await Speichern(); })" />
                 <MudSelect T="Color" Label="Farbe" @bind-Value="_farbe" Variant="Variant.Outlined">
                     @foreach (var c in TagFarben.Alle)
                     {

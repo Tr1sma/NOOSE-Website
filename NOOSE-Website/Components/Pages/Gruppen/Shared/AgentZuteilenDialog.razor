@@ -4,7 +4,7 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width:360px;">
-            <MudAutocomplete T="Agent" Label="Agent" @bind-Value="_agent"
+            <MudAutocomplete T="Agent" Label="Agent" @bind-Value="_agent" AutoFocus="true"
                              SearchFunc="@SucheAgenten" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"
                              Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
                              ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
@@ -26,7 +26,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Zuteilen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern" Disabled="@(_agent is null)">Zuteilen</MudButton>
     </DialogActions>
 </MudDialog>
 

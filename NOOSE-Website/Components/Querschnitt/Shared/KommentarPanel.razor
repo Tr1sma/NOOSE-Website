@@ -7,8 +7,9 @@
     <MudText Typo="Typo.subtitle1">Kommentare (@_kommentare.Count)</MudText>
 
     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
-        <MudTextField @bind-Value="_neuerText" Placeholder="Vermerk hinzufügen …" Lines="2"
-                      Variant="Variant.Outlined" Immediate="true" Class="flex-grow-1" />
+        <MudTextField @bind-Value="_neuerText" Placeholder="Vermerk hinzufügen … (Strg+Enter sendet)" Lines="2"
+                      Variant="Variant.Outlined" Immediate="true" Class="flex-grow-1"
+                      OnKeyDown="@(async e => { if (e.Key == "Enter" && e.CtrlKey) await HinzufuegenAsync(); })" />
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                    OnClick="HinzufuegenAsync" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_neuerText))">
             Kommentieren

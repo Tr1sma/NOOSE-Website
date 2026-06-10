@@ -10,7 +10,7 @@
                 <MudRadio T="string" Value="@nameof(Personengruppe)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
             </MudRadioGroup>
 
-            <MudAutocomplete T="AkteTreffer" Label="@(IstFraktion ? "Fraktion" : "Personengruppe")"
+            <MudAutocomplete T="AkteTreffer" Label="@(IstFraktion ? "Fraktion" : "Personengruppe")" AutoFocus="true"
                              @bind-Value="_ziel" SearchFunc="@Suchen" ToStringFunc="@(a => a?.Name ?? string.Empty)"
                              Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
                              ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
@@ -31,7 +31,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Hinzufügen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern" Disabled="@(_ziel is null)">Hinzufügen</MudButton>
     </DialogActions>
 </MudDialog>
 
