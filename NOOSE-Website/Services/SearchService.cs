@@ -7,6 +7,7 @@ using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
 
@@ -330,6 +331,49 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // ---- Vorgänge/Fälle (Titel/Aktenzeichen/Typ/Beschreibung/Zusammenfassung/Abschlussvermerk) ----
+        if (Aktiv(nameof(Vorgang)))
+        {
+            var q = db.Vorgaenge.Where(v => istFuehrung || !v.IstVerschlusssache);
+            if (hatText)
+            {
+                q = q.Where(v => v.Titel.Contains(s!) || v.Aktenzeichen.Contains(s!)
+                    || (v.Typ != null && v.Typ.Contains(s!))
+                    || (v.Beschreibung != null && v.Beschreibung.Contains(s!))
+                    || (v.Zusammenfassung != null && v.Zusammenfassung.Contains(s!))
+                    || (v.Abschlussvermerk != null && v.Abschlussvermerk.Contains(s!)));
+            }
+            if (hatTags)
+            {
+                q = q.Where(v => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Vorgang) && z.EntitaetId == v.Id && tagIds.Contains(z.TagId)));
+            }
+            var treffer = await q.OrderBy(v => v.Titel).Take(MaxProKategorie)
+                .Select(v => new SuchTreffer(nameof(Vorgang), v.Id, v.Titel, v.Beschreibung ?? v.Typ ?? string.Empty, v.Aktenzeichen))
+                .ToListAsync(cancellationToken);
+
+            if (FuzzyAktiv(treffer.Count))
+            {
+                var basis = db.Vorgaenge.Where(v => istFuehrung || !v.IstVerschlusssache);
+                if (hatTags)
+                {
+                    basis = basis.Where(v => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Vorgang) && z.EntitaetId == v.Id && tagIds.Contains(z.TagId)));
+                }
+                var roh = await basis.OrderByDescending(v => v.GeaendertAm ?? v.ErstelltAm).Take(FuzzyKandidatenMax)
+                    .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.Typ, v.Beschreibung, v.Zusammenfassung, v.Abschlussvermerk })
+                    .ToListAsync(cancellationToken);
+                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Titel, x.Aktenzeichen, x.Beschreibung ?? x.Typ ?? string.Empty,
+                    max
+                        ? TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen, x.Typ, x.Beschreibung, x.Zusammenfassung, x.Abschlussvermerk)
+                        : TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen)));
+                treffer = FuzzyErgaenzen(nameof(Vorgang), treffer, suchworte, kandidaten);
+            }
+
+            if (treffer.Count > 0)
+            {
+                gruppen.Add(new SuchErgebnisGruppe(nameof(Vorgang), "Vorgänge", treffer));
+            }
+        }
+
         // Die folgenden Kategorien sind Text-Inhalte → nur bei vorhandenem Suchtext. Im Max-Modus immer aktiv.
         // Wichtig: expliziter Join auf db.Personen (NICHT Include über die soft-delete-gefilterte
         // Pflichtnavigation), sonst greift das fragile Query-Filter-/Pflichtnavigations-Zusammenspiel.
@@ -427,6 +471,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .OrderBy(t => t.Name).Take(max)
             .Select(t => new SchnellTreffer(nameof(Taskforce), t.Id, t.Name, t.Aktenzeichen))
             .ToListAsync(cancellationToken);
+        var vorgaenge = await db.Vorgaenge
+            .Where(v => (istFuehrung || !v.IstVerschlusssache) && (v.Titel.Contains(s) || v.Aktenzeichen.Contains(s)))
+            .OrderBy(v => v.Titel).Take(max)
+            .Select(v => new SchnellTreffer(nameof(Vorgang), v.Id, v.Titel, v.Aktenzeichen))
+            .ToListAsync(cancellationToken);
 
         // Immer leicht aktive Tippfehler-Toleranz auf Identifikatoren (Name/Titel/Aktenzeichen). Pro
         // Kategorie nur, wenn der Begriff lang genug ist UND noch Platz frei ist (sonst lohnt der Scan nicht).
@@ -475,10 +524,17 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                     .Select(t => new { t.Id, Name = t.Name, t.Aktenzeichen }).ToListAsync(cancellationToken);
                 taskforces = SchnellFuzzy(nameof(Taskforce), taskforces, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
             }
+            if (vorgaenge.Count < max)
+            {
+                var k = await db.Vorgaenge.Where(v => istFuehrung || !v.IstVerschlusssache)
+                    .OrderBy(v => v.Titel).Take(FuzzyKandidatenMax)
+                    .Select(v => new { v.Id, Name = v.Titel, v.Aktenzeichen }).ToListAsync(cancellationToken);
+                vorgaenge = SchnellFuzzy(nameof(Vorgang), vorgaenge, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+            }
         }
 
         // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
-        return Mischen(personen, fraktionen, gruppen, parteien, operationen, taskforces).Take(max).ToList();
+        return Mischen(personen, fraktionen, gruppen, parteien, operationen, taskforces, vorgaenge).Take(max).ToList();
     }
 
     /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
@@ -588,6 +644,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         var parteiIds = roh.Where(r => r.EntitaetTyp == nameof(Partei)).Select(r => r.EntitaetId).Distinct().ToList();
         var operationIds = roh.Where(r => r.EntitaetTyp == nameof(Operation)).Select(r => r.EntitaetId).Distinct().ToList();
         var taskforceIds = roh.Where(r => r.EntitaetTyp == nameof(Taskforce)).Select(r => r.EntitaetId).Distinct().ToList();
+        var vorgangIds = roh.Where(r => r.EntitaetTyp == nameof(Vorgang)).Select(r => r.EntitaetId).Distinct().ToList();
 
         // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
         var map = new Dictionary<(string, string), (string Name, string Aktenzeichen, bool Verschluss)>();
@@ -621,6 +678,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Taskforce), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
         }
+        foreach (var x in await db.Vorgaenge.Where(v => vorgangIds.Contains(v.Id))
+                     .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            map[(nameof(Vorgang), x.Id)] = (x.Titel, x.Aktenzeichen, x.IstVerschlusssache);
+        }
 
         // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
         HashSet<(string, string)>? mitTag = null;
@@ -633,7 +695,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                      || (z.EntitaetTyp == nameof(Personengruppe) && gruppenIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Partei) && parteiIds.Contains(z.EntitaetId))
                      || (z.EntitaetTyp == nameof(Operation) && operationIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Taskforce) && taskforceIds.Contains(z.EntitaetId))))
+                     || (z.EntitaetTyp == nameof(Taskforce) && taskforceIds.Contains(z.EntitaetId))
+                     || (z.EntitaetTyp == nameof(Vorgang) && vorgangIds.Contains(z.EntitaetId))))
                 .Select(z => new { z.EntitaetTyp, z.EntitaetId }).ToListAsync(cancellationToken))
                 .Select(z => (z.EntitaetTyp, z.EntitaetId)).ToHashSet();
         }

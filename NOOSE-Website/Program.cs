@@ -143,12 +143,18 @@ builder.Services.AddScoped<IPersonengruppeService, PersonengruppeService>();
 builder.Services.AddScoped<IParteiService, ParteiService>();
 // Phase 5b: Operationen.
 builder.Services.AddScoped<IOperationService, OperationService>();
+// Phase 5: Vorgangs-/Fallakten (bündeln Personen/Operationen/Observationen/Doks).
+builder.Services.AddScoped<IVorgangService, VorgangService>();
 // Phase 5c: Taskforces.
 builder.Services.AddScoped<ITaskforceService, TaskforceService>();
 // Phase 5d: Taskforce-Chat mit @-Verlinkung (Mentions) + Live-Broadcaster.
 builder.Services.AddScoped<ITaskforceChatService, TaskforceChatService>();
 builder.Services.AddScoped<IMentionService, MentionService>();
 builder.Services.AddSingleton<TaskforceChatBroadcaster>();
+// Phase 5: Observationen (Überwachungseinträge an Personen).
+builder.Services.AddScoped<IObservationService, ObservationService>();
+// Phase 5e: Personalakte je Agent (Verlauf, Vermerke, Beförderungsanträge).
+builder.Services.AddScoped<IPersonalakteService, PersonalakteService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 

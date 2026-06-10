@@ -971,6 +971,152 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("ParteiMitglieder");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personal.AgentBefoerderungsantrag", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AntragstellerName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Begruendung")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<string>("EntscheiderName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Entscheidungsnotiz")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<DateTime?>("EntschiedenAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ZielDienstgrad")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("AgentId", "Status");
+
+                    b.ToTable("AgentBefoerderungsantraege");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personal.AgentDienstgradVerlauf", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AkteurName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<int?>("Alt")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Grund")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("Neu")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Zeitpunkt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Zeitpunkt");
+
+                    b.ToTable("AgentDienstgradVerlaeufe");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personal.AgentVermerk", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("Art")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AutorName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Art");
+
+                    b.ToTable("AgentVermerke");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.AktenzeichenZaehler", b =>
                 {
                     b.Property<string>("Praefix")
@@ -1030,6 +1176,78 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("EntitaetTyp", "EntitaetId");
 
                     b.ToTable("EinstufungVerlauf");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.Observation", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("Beginn")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("BeobachtenderAgentId")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Beobachtung")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<DateTime?>("Ende")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Ergebnis")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("OrgId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("OrgTyp")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<string>("Ort")
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<string>("PersonId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Beginn");
+
+                    b.HasIndex("BeobachtenderAgentId");
+
+                    b.HasIndex("PersonId");
+
+                    b.HasIndex("OrgTyp", "OrgId");
+
+                    b.ToTable("Observationen");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.Person", b =>
@@ -1844,6 +2062,122 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("TaskforceNachrichten");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Vorgaenge.Vorgang", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("AbgeschlossenAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Abschlussvermerk")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<string>("Aktenzeichen")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("Beschreibung")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<int>("Einstufung")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstVerschlusssache")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Titel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Typ")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Zusammenfassung")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Aktenzeichen")
+                        .IsUnique();
+
+                    b.HasIndex("IstVerschlusssache");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Titel");
+
+                    b.ToTable("Vorgaenge");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Vorgaenge.VorgangAgent", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstFallfuehrer")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("VorgangId")
+                        .IsRequired()
+                        .HasColumnType("varchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.HasIndex("VorgangId", "AgentId")
+                        .IsUnique();
+
+                    b.ToTable("VorgangAgenten");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Infrastructure.Audit.AuditLog", b =>
                 {
                     b.Property<long>("Id")
@@ -2141,6 +2475,51 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Person");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personal.AgentBefoerderungsantrag", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personal.AgentDienstgradVerlauf", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personal.AgentVermerk", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.Observation", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "BeobachtenderAgent")
+                        .WithMany()
+                        .HasForeignKey("BeobachtenderAgentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Personen.Person", "Person")
+                        .WithMany("Observationen")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BeobachtenderAgent");
+
+                    b.Navigation("Person");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.PersonAlias", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Personen.Person", "Person")
@@ -2287,6 +2666,25 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Taskforce");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Vorgaenge.VorgangAgent", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Vorgaenge.Vorgang", "Vorgang")
+                        .WithMany("Agenten")
+                        .HasForeignKey("VorgangId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+
+                    b.Navigation("Vorgang");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", b =>
                 {
                     b.Navigation("Agenten");
@@ -2329,6 +2727,8 @@ namespace NOOSE_Website.Data.Migrations
 
                     b.Navigation("Fotos");
 
+                    b.Navigation("Observationen");
+
                     b.Navigation("Orte");
 
                     b.Navigation("Telefonnummern");
@@ -2337,6 +2737,11 @@ namespace NOOSE_Website.Data.Migrations
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Taskforces.Taskforce", b =>
+                {
+                    b.Navigation("Agenten");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Vorgaenge.Vorgang", b =>
                 {
                     b.Navigation("Agenten");
                 });

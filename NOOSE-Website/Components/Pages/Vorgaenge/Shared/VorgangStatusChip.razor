@@ -1,0 +1,30 @@
+@* Farbiger Status-Chip eines Vorgangs (Offen/In Bearbeitung/Ruht/Abgeschlossen/Archiviert). Zentralisiert
+   Beschriftung und Farbgebung für Karte, Liste und Detailseite. *@
+<MudChip T="string" Size="@Size" Variant="Variant.Filled" Color="@Farbe(Status)" Icon="@Symbol(Status)">
+    @VorgangStatusAnzeige.Name(Status)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public VorgangStatus Status { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private static Color Farbe(VorgangStatus status) => status switch
+    {
+        VorgangStatus.Offen => Color.Info,
+        VorgangStatus.InBearbeitung => Color.Warning,
+        VorgangStatus.Ruht => Color.Default,
+        VorgangStatus.Abgeschlossen => Color.Success,
+        VorgangStatus.Archiviert => Color.Dark,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(VorgangStatus status) => status switch
+    {
+        VorgangStatus.Offen => Icons.Material.Filled.FolderOpen,
+        VorgangStatus.InBearbeitung => Icons.Material.Filled.Autorenew,
+        VorgangStatus.Ruht => Icons.Material.Filled.Pause,
+        VorgangStatus.Abgeschlossen => Icons.Material.Filled.CheckCircle,
+        VorgangStatus.Archiviert => Icons.Material.Filled.Inventory2,
+        _ => Icons.Material.Filled.HelpOutline,
+    };
+}

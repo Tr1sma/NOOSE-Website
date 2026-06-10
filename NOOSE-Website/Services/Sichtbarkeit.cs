@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Vorgaenge;
 
 namespace NOOSE_Website.Services;
 
@@ -23,6 +25,13 @@ public static class Sichtbarkeit
     public static async Task<bool> IstAkteSichtbarAsync(
         AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
+        // Personalakten-Kommentarbereich (EntitaetTyp = Agent) ist nur für die Führung/Admin lesbar+nutzbar
+        // (Phase 5e): die übrige Personalakte ist offen, dieser interne Notiz-Bereich nicht.
+        if (entitaetTyp == nameof(Agent))
+        {
+            return istFuehrung;
+        }
+
         bool? verschluss = entitaetTyp switch
         {
             nameof(Person) => await db.Personen
@@ -43,12 +52,15 @@ public static class Sichtbarkeit
             nameof(Taskforce) => await db.Taskforces
                 .Where(t => t.Id == entitaetId).Select(t => (bool?)t.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
+            nameof(Vorgang) => await db.Vorgaenge
+                .Where(v => v.Id == entitaetId).Select(v => (bool?)v.IstVerschlusssache)
+                .FirstOrDefaultAsync(cancellationToken),
             // Andere Typen besitzen (noch) keine Verschlusssache-Stufe.
             _ => false,
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Taskforce)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Taskforce) or nameof(Vorgang)))
         {
             return true;
         }

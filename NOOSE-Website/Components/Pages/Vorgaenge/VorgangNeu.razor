@@ -1,0 +1,61 @@
+@page "/vorgaenge/neu"
+@inject IVorgangService VorgangService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neuer Vorgang · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/vorgaenge" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neuen Vorgang anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <VorgangForm Eingabe="_eingabe" ZeigeEinstufung="true" DarfHoechste="_darfHoechste" IstFuehrung="_istFuehrung" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/vorgaenge">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly VorgangEingabe _eingabe = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _darfHoechste;
+    private bool _istFuehrung;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _darfHoechste = _user.DarfHoechsteEinstufung();
+        _istFuehrung = _user.IstFuehrung();
+    }
+
+    private async Task SpeichernAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            var vorgang = await VorgangService.ErstellenAsync(_eingabe, _user);
+            Snackbar.Add($"Vorgang {vorgang.Aktenzeichen} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/vorgaenge/{vorgang.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

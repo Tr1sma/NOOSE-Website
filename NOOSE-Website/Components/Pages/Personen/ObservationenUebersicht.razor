@@ -1,0 +1,123 @@
+@page "/observationen"
+@inject IObservationService ObservationService
+@inject IDialogService DialogService
+
+<PageTitle>Observationen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Observationen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Übergreifende Liste aller Überwachungs-/Observationseinträge. Angelegt werden Observationen direkt in der
+    jeweiligen Personenakte (Tab „Überwachung").
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable T="ObservationAnzeige" Items="_eintraege" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
+              Filter="Filter" RowClass="cursor-pointer" OnRowClick="@(args => Oeffnen(args.Item))">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_suche" Placeholder="Suchen (Person, Aktenzeichen, Ort)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Person</MudTh>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Beginn</MudTh>
+            <MudTh>Ende</MudTh>
+            <MudTh>Agent</MudTh>
+            <MudTh>Ort</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Person">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">@context.Obs.Person?.Name</MudText>
+                    @if (context.Obs.Person?.IstVerschlusssache == true)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Obs.Person?.Aktenzeichen</MudText>
+            </MudTd>
+            <MudTd DataLabel="Beginn">
+                <MudText Typo="Typo.body2">@context.Obs.Beginn.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Ende">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @(context.Obs.Ende is { } ende ? ende.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Agent">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.AgentCodename ?? "—")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Ort">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary"
+                         Style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    @(string.IsNullOrWhiteSpace(context.Obs.Ort) ? "—" : context.Obs.Ort)
+                </MudText>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Observationen erfasst.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string _suche = string.Empty;
+    private List<ObservationAnzeige> _eintraege = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _istFuehrung;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _eintraege = await ObservationService.GetAlleAsync(_istFuehrung);
+        _laden = false;
+    }
+
+    private bool Filter(ObservationAnzeige anzeige)
+    {
+        if (string.IsNullOrWhiteSpace(_suche))
+        {
+            return true;
+        }
+        var s = _suche.Trim();
+        var obs = anzeige.Obs;
+        return (obs.Person?.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (obs.Person?.Aktenzeichen?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (obs.Ort?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (anzeige.AgentCodename?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    // Klick auf eine Zeile öffnet die Observation als Detail-Dialog (lesen + bearbeiten, mit „Zur Akte"-Sprung).
+    private async Task Oeffnen(ObservationAnzeige? anzeige)
+    {
+        if (anzeige is null)
+        {
+            return;
+        }
+        var geaendert = await ObservationDetailDialog.ZeigenAsync(DialogService, anzeige, _user, zeigeZurAkte: true);
+        if (geaendert)
+        {
+            await LadenAsync();
+        }
+    }
+}

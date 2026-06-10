@@ -20,4 +20,14 @@ public static class Berechtigung
                 "Diese Aktion ist der Führung (ab Supervisory Special Agent) oder Admins vorbehalten.");
         }
     }
+
+    /// <summary>Wirft, wenn der Handelnde Beförderungen nicht entscheiden darf (Deputy Director+ oder Admin).</summary>
+    public static void VerlangeBefoerderungEntscheiden(ClaimsPrincipal handelnder)
+    {
+        if (!handelnder.DarfBefoerderungEntscheiden())
+        {
+            throw new UnauthorizedAccessException(
+                "Über Beförderungen entscheidet nur Deputy Director aufwärts oder ein Admin.");
+        }
+    }
 }

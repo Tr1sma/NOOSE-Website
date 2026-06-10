@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
 
@@ -129,6 +130,16 @@ public static class AktenReferenz
                 .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(ct))
             {
                 map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Taskforce), x.Id));
+            }
+        }
+
+        var vorgangIds = OffeneIds(nameof(Vorgang));
+        if (vorgangIds.Count > 0)
+        {
+            foreach (var x in await db.Vorgaenge.Where(v => vorgangIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Vorgang), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Vorgang), x.Id));
             }
         }
 

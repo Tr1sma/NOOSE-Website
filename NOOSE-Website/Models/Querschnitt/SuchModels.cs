@@ -3,6 +3,7 @@ using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Vorgaenge;
 
 namespace NOOSE_Website.Models.Querschnitt;
 
@@ -52,6 +53,7 @@ public static class SuchNavigation
         nameof(Partei) => $"/parteien/{zielId}",
         nameof(Operation) => $"/operationen/{zielId}",
         nameof(Taskforce) => $"/taskforces/{zielId}",
+        nameof(Vorgang) => $"/vorgaenge/{zielId}",
         _ => $"/personen/{zielId}",
     };
 

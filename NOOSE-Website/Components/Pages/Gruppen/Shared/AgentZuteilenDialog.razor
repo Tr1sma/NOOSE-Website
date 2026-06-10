@@ -26,7 +26,7 @@
             @if (DarfErmittlungsleiterSetzen)
             {
                 <MudCheckBox @bind-Value="_alsErmittlungsleiter" Color="Color.Primary" Dense="true"
-                             Label="Als Ermittlungsleiter zuteilen" />
+                             Label="@LeitungLabel" />
             }
         </MudStack>
     </DialogContent>
@@ -48,6 +48,9 @@
     /// <summary>Nur die Führung darf das Ermittlungsleiter-Flag vergeben; steuert die Sichtbarkeit der Checkbox.
     /// Vom Aufrufer über <c>User.IstFuehrung()</c> setzen.</summary>
     [Parameter] public bool DarfErmittlungsleiterSetzen { get; set; }
+
+    /// <summary>Beschriftung der Leitungs-Checkbox (modulabhängig, z. B. „Als Fallführer zuteilen").</summary>
+    [Parameter] public string LeitungLabel { get; set; } = "Als Ermittlungsleiter zuteilen";
 
     private Agent? _agent;
     private bool _alsErmittlungsleiter;
@@ -85,7 +88,7 @@
 
     /// <summary>Zeigt den Dialog; liefert die Auswahl oder null bei Abbruch.</summary>
     public static async Task<Wahl?> ZeigenAsync(IDialogService dialog, IReadOnlyList<string> ausschlussAgentIds,
-        bool darfKlarname, bool darfErmittlungsleiterSetzen)
+        bool darfKlarname, bool darfErmittlungsleiterSetzen, string? leitungLabel = null)
     {
         var parameters = new DialogParameters<AgentZuteilenDialog>
         {
@@ -93,6 +96,10 @@
             { x => x.DarfKlarname, darfKlarname },
             { x => x.DarfErmittlungsleiterSetzen, darfErmittlungsleiterSetzen },
         };
+        if (leitungLabel is not null)
+        {
+            parameters.Add(x => x.LeitungLabel, leitungLabel);
+        }
         var referenz = await dialog.ShowAsync<AgentZuteilenDialog>("Agent zuteilen", parameters);
         var ergebnis = await referenz.Result;
         return ergebnis is { Canceled: false, Data: Wahl wahl } ? wahl : null;

@@ -47,6 +47,15 @@
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Color="Color.Primary" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Vorgänge</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.OffeneVorgaenge)</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Warning" />
                 <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Anträge</MudText>
             </MudStack>
@@ -145,6 +154,7 @@
         DashboardAkteTyp.Partei => "Partei",
         DashboardAkteTyp.Operation => "Operation",
         DashboardAkteTyp.Taskforce => "Taskforce",
+        DashboardAkteTyp.Vorgang => "Vorgang",
         _ => "Personengruppe",
     };
 
@@ -155,6 +165,7 @@
         DashboardAkteTyp.Partei => $"/parteien/{x.AkteId}",
         DashboardAkteTyp.Operation => $"/operationen/{x.AkteId}",
         DashboardAkteTyp.Taskforce => $"/taskforces/{x.AkteId}",
+        DashboardAkteTyp.Vorgang => $"/vorgaenge/{x.AkteId}",
         _ => $"/personengruppen/{x.AkteId}",
     };
 

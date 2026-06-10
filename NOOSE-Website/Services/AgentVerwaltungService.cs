@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Personal;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 
@@ -34,6 +35,7 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
     public async Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, ClaimsPrincipal handelnder)
     {
         var agent = await GetOrThrow(agentId);
+        var altRang = agent.Dienstgrad;
         agent.Status = AgentStatus.Aktiv;
         agent.Dienstgrad = dienstgrad;
         agent.IstTRU = istTRU;
@@ -41,6 +43,7 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         agent.FreigegebenVonId = handelnder.GetAgentId();
         agent.GesperrtGrund = null;
 
+        VerlaufEintragHinzufuegen(agent.Id, altRang, dienstgrad, handelnder, "Erstmalige Freigabe");
         Audit(agent, AuditAktion.Geaendert, handelnder,
             $"Freigegeben als {dienstgrad}{(istTRU ? " (TRU)" : "")}");
         await Speichern(agent, neuerStamp: true);
@@ -146,8 +149,51 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         var alt = agent.Dienstgrad;
         agent.Dienstgrad = dienstgrad;
 
+        if (alt != dienstgrad)
+        {
+            VerlaufEintragHinzufuegen(agent.Id, alt, dienstgrad, handelnder, "Rangänderung");
+        }
         Audit(agent, AuditAktion.Geaendert, handelnder, $"Dienstgrad {alt?.ToString() ?? "—"} → {dienstgrad}");
         await Speichern(agent, neuerStamp: true);
+    }
+
+    public async Task BefoerderungEntscheidenAsync(string antragId, bool genehmigt, string? notiz, ClaimsPrincipal handelnder)
+    {
+        Berechtigung.VerlangeBefoerderungEntscheiden(handelnder);
+
+        var antrag = await db.AgentBefoerderungsantraege.FirstOrDefaultAsync(a => a.Id == antragId)
+            ?? throw new InvalidOperationException($"Beförderungsantrag '{antragId}' nicht gefunden.");
+        if (antrag.Status != BefoerderungStatus.Beantragt)
+        {
+            throw new InvalidOperationException("Über diesen Antrag wurde bereits entschieden.");
+        }
+
+        antrag.Status = genehmigt ? BefoerderungStatus.Genehmigt : BefoerderungStatus.Abgelehnt;
+        antrag.EntscheiderName = handelnder.GetCodename();
+        antrag.EntschiedenAm = DateTime.UtcNow;
+        antrag.Entscheidungsnotiz = string.IsNullOrWhiteSpace(notiz) ? null : notiz.Trim();
+
+        var agent = await GetOrThrow(antrag.AgentId);
+        if (genehmigt)
+        {
+            var alt = agent.Dienstgrad;
+            agent.Dienstgrad = antrag.ZielDienstgrad;
+            if (alt != antrag.ZielDienstgrad)
+            {
+                VerlaufEintragHinzufuegen(agent.Id, alt, antrag.ZielDienstgrad, handelnder, "Beförderung");
+            }
+            Audit(agent, AuditAktion.Geaendert, handelnder,
+                $"Beförderung genehmigt: {alt?.ToString() ?? "—"} → {antrag.ZielDienstgrad}");
+            // Speichern persistiert Agent + Antrag + Verlauf + Audit im geteilten Context und erneuert den Stamp.
+            await Speichern(agent, neuerStamp: true);
+        }
+        else
+        {
+            Audit(agent, AuditAktion.Geaendert, handelnder,
+                $"Beförderungsantrag abgelehnt (Ziel: {antrag.ZielDienstgrad})");
+            // Kein Agent-Update → nur den Antrag (+ Audit) im geteilten Context speichern.
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder)
@@ -219,6 +265,18 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         agent.AusstehendeDienstnummer = null;
         agent.NamensaenderungBeantragtAm = null;
     }
+
+    // Schreibt einen Dienstgrad-Verlaufseintrag in den geteilten Context (wird mit Speichern/SaveChanges persistiert).
+    private void VerlaufEintragHinzufuegen(string agentId, Dienstgrad? alt, Dienstgrad neu, ClaimsPrincipal handelnder, string grund)
+        => db.AgentDienstgradVerlaeufe.Add(new AgentDienstgradVerlauf
+        {
+            AgentId = agentId,
+            Alt = alt,
+            Neu = neu,
+            Zeitpunkt = DateTime.UtcNow,
+            AkteurName = handelnder.GetCodename(),
+            Grund = grund,
+        });
 
     private void Audit(Agent ziel, AuditAktion aktion, ClaimsPrincipal handelnder, string hinweis)
         => db.AuditLogs.Add(new AuditLog

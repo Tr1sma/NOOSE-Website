@@ -81,6 +81,9 @@ else
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <DokPanel PersonId="@_person.Id" User="_user" PersonChanged="NeuLadenAsync" />
                 </MudTabPanel>
+                <MudTabPanel Text="Überwachung" Icon="@Icons.Material.Filled.Visibility">
+                    <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NeuLadenAsync" />
+                </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <EinstufungPanel Aktuell="_person.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
                 </MudTabPanel>
@@ -123,7 +126,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "steckbrief", "doks", "einstufung", "fotos", "quellen",
+        "steckbrief", "doks", "ueberwachung", "einstufung", "fotos", "quellen",
         "verknuepfungen", "zugehoerigkeit", "kommentare", "historie",
     };
 

@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = Policies.Fuehrung)]
 @inject IAgentVerwaltungService AgentService
 @inject ITaskforceService TaskforceService
+@inject IPersonalakteService PersonalakteService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -171,6 +172,55 @@ else
             </RowTemplate>
         </MudTable>
     }
+
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Beförderungsanträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Beantragte Beförderungen. Die Entscheidung trifft Deputy Director aufwärts bzw. ein Admin; bei Genehmigung
+        wird der Rang gesetzt und der betroffene Agent muss sich neu anmelden.
+    </MudText>
+    @if (_offeneBefoerderungen.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Beförderungsanträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_offeneBefoerderungen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh>Agent</MudTh>
+                <MudTh>Ziel-Dienstgrad</MudTh>
+                <MudTh>Begründung</MudTh>
+                <MudTh>Beantragt</MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Agent">
+                    <MudLink Href="@($"/personal/{context.AgentId}")" Typo="Typo.body2">@AgentName(context.AgentId)</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Ziel-Dienstgrad"><MudText Typo="Typo.body2">@DienstgradAnzeige.Name(context.ZielDienstgrad)</MudText></MudTd>
+                <MudTd DataLabel="Begründung"><MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Begruendung) ? "—" : context.Begruendung)</MudText></MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.AntragstellerName ?? "—") · @context.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <AuthorizeView Policy="@Policies.BefoerderungEntscheiden" Context="auth">
+                        <Authorized>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                       StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                                       OnClick="() => BefoerderungEntscheiden(context, true)">Genehmigen</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                       StartIcon="@Icons.Material.Filled.Close"
+                                       OnClick="() => BefoerderungEntscheiden(context, false)">Ablehnen</MudButton>
+                        </Authorized>
+                        <NotAuthorized>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Entscheidung: Deputy Director+/Admin</MudText>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
 }
 
 @code {
@@ -181,6 +231,8 @@ else
     private List<Agent> _ausstehende = new();
     private List<Agent> _namensaenderungen = new();
     private List<Taskforce> _beantragteTaskforces = new();
+    private List<AgentBefoerderungsantrag> _offeneBefoerderungen = new();
+    private Dictionary<string, string> _agentNamen = new();
     private ClaimsPrincipal _user = default!;
     private readonly Dictionary<string, Auswahlzustand> _auswahl = new();
 
@@ -212,6 +264,9 @@ else
         _ausstehende = await AgentService.GetAusstehendeAsync();
         _namensaenderungen = await AgentService.GetAusstehendeNamensaenderungenAsync();
         _beantragteTaskforces = await TaskforceService.GetBeantragteAsync();
+        _offeneBefoerderungen = await PersonalakteService.GetOffeneBefoerderungsantraegeAsync();
+        _agentNamen = (await AgentService.GetAlleAsync())
+            .ToDictionary(a => a.Id, a => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename);
         foreach (var agent in _ausstehende)
         {
             _ = Auswahl(agent.Id);
@@ -320,6 +375,24 @@ else
         {
             await TaskforceService.GenehmigungSetzenAsync(taskforce.Id, TaskforceStatus.Abgelehnt, _user);
             Snackbar.Add($"Taskforce {taskforce.Aktenzeichen} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
+    }
+
+    private string AgentName(string agentId) => _agentNamen.GetValueOrDefault(agentId) ?? "Agent";
+
+    private async Task BefoerderungEntscheiden(AgentBefoerderungsantrag antrag, bool genehmigt)
+    {
+        try
+        {
+            await AgentService.BefoerderungEntscheidenAsync(antrag.Id, genehmigt, null, _user);
+            Snackbar.Add(genehmigt
+                ? $"Beförderung von {AgentName(antrag.AgentId)} genehmigt."
+                : $"Beförderungsantrag von {AgentName(antrag.AgentId)} abgelehnt.", genehmigt ? Severity.Success : Severity.Info);
         }
         catch (Exception ex)
         {

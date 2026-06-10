@@ -33,6 +33,11 @@ public class KommentarService(IDbContextFactory<AppDbContext> dbFactory) : IKomm
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Schreiben nur, wenn die Eltern-Akte für den Aufrufer sichtbar ist (VS-/Agent-Gate serverseitig erzwingen).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.IstFuehrung(), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
         var kommentar = new Kommentar
         {
             EntitaetTyp = entitaetTyp,

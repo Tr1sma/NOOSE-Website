@@ -1,0 +1,76 @@
+@* Identitäts-/Steckkarte des Vorgangs: Titel, Status, Typ, Einstufung, Fallführer, Abschluss-Zeitpunkt. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Vorgang.Titel</MudText>
+                @if (Vorgang.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Vorgang.Aktenzeichen</MudText>
+        </div>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+            <VorgangStatusChip Status="Vorgang.Status" />
+            @if (!string.IsNullOrWhiteSpace(Vorgang.Typ))
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@Vorgang.Typ</MudChip>
+            }
+        </MudStack>
+
+        <EinstufungBadge Wert="Vorgang.Einstufung" />
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.LocalPolice" Color="Color.Warning" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2">Fallführer</MudText>
+            </MudStack>
+            @if (Fallfuehrer.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">— nicht zugewiesen</MudText>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @foreach (var name in Fallfuehrer)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                 Icon="@Icons.Material.Filled.LocalPolice">@name</MudChip>
+                    }
+                </MudStack>
+            }
+        </div>
+
+        <MudDivider />
+
+        @if (Vorgang.AbgeschlossenAm is not null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                <MudText Typo="Typo.body2">Abgeschlossen: @Vorgang.AbgeschlossenAm.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudStack>
+        }
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Eröffnet: @Vorgang.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+        </MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Zuletzt aktualisiert: @((Vorgang.GeaendertAm ?? Vorgang.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Vorgang Vorgang { get; set; } = default!;
+
+    /// <summary>Codenames der Fallführer (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> Fallfuehrer { get; set; } = Array.Empty<string>();
+}

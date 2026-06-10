@@ -11,6 +11,7 @@ public enum DashboardAkteTyp
     Partei,
     Operation,
     Taskforce,
+    Vorgang,
 }
 
 /// <summary>
@@ -21,6 +22,7 @@ public record DashboardKennzahlen(
     int Personen,
     int FraktionenUndGruppen,
     int Operationen,
+    int OffeneVorgaenge,
     int OffeneAntraege,
     int Verschlusssachen);
 

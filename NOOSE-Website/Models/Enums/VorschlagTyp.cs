@@ -17,4 +17,6 @@ public enum VorschlagTyp
     Parteirolle = 5,
     // Phase 5b: Typ/Kategorie einer Operation (Razzia/Observation/Infiltration/…) – Einzelwert mit Vorschlägen.
     Operationstyp = 6,
+    // Phase 5: Typ/Kategorie einer Vorgangs-/Fallakte (Ermittlung/Überwachung/Anschlag/…) – Einzelwert mit Vorschlägen.
+    Vorgangstyp = 7,
 }

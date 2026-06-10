@@ -57,4 +57,8 @@ public static class AgentPrincipalExtensions
     /// <summary>Darf „Gesichert staatsgefährdend" direkt setzen = Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
     public static bool DarfHoechsteEinstufung(this ClaimsPrincipal user)
         => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SeniorSpecialAgent;
+
+    /// <summary>Darf Beförderungen entscheiden = Dienstgrad ≥ Deputy Director oder Admin (entspricht <c>Policies.BefoerderungEntscheiden</c>).</summary>
+    public static bool DarfBefoerderungEntscheiden(this ClaimsPrincipal user)
+        => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.DeputyDirector;
 }

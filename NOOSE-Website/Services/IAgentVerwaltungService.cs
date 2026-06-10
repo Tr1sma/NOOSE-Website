@@ -42,6 +42,11 @@ public interface IAgentVerwaltungService
     Task NamensaenderungAblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder);
 
     Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder);
+
+    /// <summary>Entscheidet über einen Beförderungsantrag (Deputy Director+/Admin). Bei Genehmigung wird der
+    /// Rang gesetzt, im Dienstgrad-Verlauf protokolliert und der SecurityStamp erneuert.</summary>
+    Task BefoerderungEntscheidenAsync(string antragId, bool genehmigt, string? notiz, ClaimsPrincipal handelnder);
+
     Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder);
     Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder);
 

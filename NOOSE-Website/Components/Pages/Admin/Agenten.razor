@@ -65,6 +65,10 @@ else
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudTooltip Text="Personalakte">
+                        <MudIconButton Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Default"
+                                       Href="@($"/personal/{context.Id}")" aria-label="Personalakte öffnen" />
+                    </MudTooltip>
                     <MudTooltip Text="Stammdaten bearbeiten">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
                                        OnClick="() => Bearbeiten(context)" aria-label="Stammdaten bearbeiten" />

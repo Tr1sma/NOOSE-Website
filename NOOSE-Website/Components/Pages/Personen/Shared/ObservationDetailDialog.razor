@@ -1,0 +1,126 @@
+@* Detailansicht einer Observation (lesen + bearbeiten). Öffnet sich per Klick aus der Übersicht und der Akte. *@
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject IObservationService ObservationService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2">
+                <b>@Obs.Beginn.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                @if (Obs.Ende is { } ende)
+                {
+                    <span> – @ende.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                }
+            </MudText>
+            @if (Obs.Person is not null)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Person: @Obs.Person.Name (@Obs.Person.Aktenzeichen)
+                </MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(AgentCodename))
+            {
+                <MudText Typo="Typo.body2"><b>Beobachtender Agent:</b> @AgentCodename</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Obs.Ort))
+            {
+                <MudText Typo="Typo.body2"><b>Ort:</b> @Obs.Ort</MudText>
+            }
+            @* Verknüpfte Fraktion/Gruppe als Link. *@
+            @if (OrgRoute is not null)
+            {
+                <MudText Typo="Typo.body2"><b>Verknüpft:</b> <MudLink Href="@OrgRoute">@OrgName</MudLink></MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Obs.Beobachtung))
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle2">Beobachtung</MudText>
+                    <MudText Typo="Typo.body2">@Obs.Beobachtung</MudText>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Obs.Ergebnis))
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle2">Ergebnis / Folgerung</MudText>
+                    <MudText Typo="Typo.body2">@Obs.Ergebnis</MudText>
+                </div>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.Edit" OnClick="BearbeitenAsync">Bearbeiten</MudButton>
+        @if (ZeigeZurAkte)
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.Badge" OnClick="ZurAkte">Zur Akte</MudButton>
+        }
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Schliessen">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Observation Obs { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public bool ZeigeZurAkte { get; set; } = true;
+
+    [Parameter] public string? AgentCodename { get; set; }
+
+    @* Aufgelöste Anzeigedaten der verknüpften Org (Verschlusssache-gefiltert); null → keine Verknüpfung. *@
+    [Parameter] public string? OrgName { get; set; }
+    [Parameter] public string? OrgAktenzeichen { get; set; }
+    [Parameter] public string? OrgRoute { get; set; }
+
+    private void Schliessen() => MudDialog.Close();
+
+    private void ZurAkte()
+    {
+        MudDialog.Close();
+        Nav.NavigateTo($"/personen/{Obs.PersonId}");
+    }
+
+    private async Task BearbeitenAsync()
+    {
+        var eingabe = await ObservationDialog.ZeigenZumBearbeitenAsync(DialogService, Obs, User.IstFuehrung(), OrgName, OrgAktenzeichen);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await ObservationService.AktualisierenAsync(Obs.Id, eingabe, User);
+            Snackbar.Add("Observation aktualisiert.", Severity.Success);
+            // Detail schließen und dem Aufrufer „geändert" melden → Liste neu laden.
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Zeigt die Observations-Detailansicht an und liefert true, wenn der Eintrag darin bearbeitet wurde
+    /// (damit der Aufrufer seine Liste neu laden kann).
+    /// </summary>
+    public static async Task<bool> ZeigenAsync(IDialogService dialog, ObservationAnzeige anzeige, ClaimsPrincipal user, bool zeigeZurAkte = true)
+    {
+        var obs = anzeige.Obs;
+        var parameters = new DialogParameters<ObservationDetailDialog>
+        {
+            { x => x.Obs, obs },
+            { x => x.User, user },
+            { x => x.ZeigeZurAkte, zeigeZurAkte },
+            { x => x.AgentCodename, anzeige.AgentCodename },
+            { x => x.OrgName, anzeige.OrgName },
+            { x => x.OrgAktenzeichen, anzeige.OrgAktenzeichen },
+            { x => x.OrgRoute, anzeige.OrgRoute },
+        };
+        var titel = obs.Person is not null ? $"Observation · {obs.Person.Name}" : "Observation";
+        var referenz = await dialog.ShowAsync<ObservationDetailDialog>(titel, parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: bool geaendert } && geaendert;
+    }
+}

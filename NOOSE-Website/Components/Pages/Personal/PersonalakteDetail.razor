@@ -1,0 +1,91 @@
+@page "/personal/{AgentId}"
+@inject IAgentVerwaltungService AgentService
+@inject NavigationManager Nav
+
+<PageTitle>@(_agent?.Codename ?? "Personalakte") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_agent is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Agent nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personal" aria-label="Zurück" />
+        <MudText Typo="Typo.h5">Personalakte</MudText>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <AgentSteckkarte Agent="_agent" DarfKlarname="_darfKlarname" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_aktiverTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
+                <MudTabPanel Text="Dienstgrad-Verlauf" Icon="@Icons.Material.Filled.TrendingUp">
+                    <DienstgradVerlaufPanel AgentId="@_agent.Id" @key="_reloadKey" />
+                </MudTabPanel>
+                <MudTabPanel Text="Belobigungen" Icon="@Icons.Material.Filled.EmojiEvents">
+                    <VermerkePanel AgentId="@_agent.Id" Art="AgentVermerkArt.Belobigung" />
+                </MudTabPanel>
+                <MudTabPanel Text="Disziplinarisches" Icon="@Icons.Material.Filled.Gavel">
+                    <VermerkePanel AgentId="@_agent.Id" Art="AgentVermerkArt.Disziplinarisch" />
+                </MudTabPanel>
+                <MudTabPanel Text="Beförderungen" Icon="@Icons.Material.Filled.MilitaryTech">
+                    <BefoerderungPanel Agent="_agent" Changed="NachEntscheidungAsync" />
+                </MudTabPanel>
+                @if (_istFuehrung)
+                {
+                    <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                        <KommentarPanel EntitaetTyp="@nameof(Agent)" EntitaetId="@_agent.Id" User="_user" />
+                    </MudTabPanel>
+                }
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string AgentId { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _istFuehrung;
+    private bool _darfKlarname;
+    private Agent? _agent;
+    private ClaimsPrincipal _user = default!;
+    private Guid _reloadKey = Guid.NewGuid();
+
+    private int _aktiverTab;
+    // Reihenfolge muss den MudTabPanels entsprechen; der Kommentare-Tab existiert nur für die Führung.
+    private string[] _tabs = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        _darfKlarname = _user.DarfKlarnameSehen();
+        _tabs = _istFuehrung
+            ? new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "kommentare" }
+            : new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen" };
+        _aktiverTab = TabUrlState.Read(Nav, _tabs);
+        _agent = await AgentService.FindAsync(AgentId);
+        _laden = false;
+    }
+
+    private async Task NachEntscheidungAsync()
+    {
+        // Eine genehmigte Beförderung ändert den Rang → Agent + Verlauf neu laden.
+        _agent = await AgentService.FindAsync(AgentId);
+        _reloadKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,190 @@
+@page "/vorgaenge/{Id}"
+@inject IVorgangService VorgangService
+@inject IZugriffsLogService ZugriffsLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_vorgang?.Titel ?? "Vorgang") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_vorgang is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Vorgang nicht gefunden oder nicht zugänglich (ggf. Verschlusssache).
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/vorgaenge" aria-label="Zurück" />
+        <MudSpacer />
+        <MudButton Href="@($"/vorgaenge/{_vorgang.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        <AuthorizeView Policy="@Policies.Fuehrung">
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <Vorgangskarte Vorgang="_vorgang" Fallfuehrer="_fallfuehrer" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_aktiverTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="3">
+                        @if (!string.IsNullOrWhiteSpace(_vorgang.Beschreibung))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Sachverhalt / Beschreibung</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_vorgang.Beschreibung</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_vorgang.Zusammenfassung))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Aktueller Stand</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_vorgang.Zusammenfassung</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_vorgang.Abschlussvermerk))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Abschlussvermerk</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_vorgang.Abschlussvermerk</MudText>
+                            </div>
+                        }
+                        @if (string.IsNullOrWhiteSpace(_vorgang.Beschreibung) && string.IsNullOrWhiteSpace(_vorgang.Zusammenfassung) && string.IsNullOrWhiteSpace(_vorgang.Abschlussvermerk))
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
+                        }
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Inhalt" Icon="@Icons.Material.Filled.Hub">
+                    <VorgangInhaltPanel VorgangId="@_vorgang.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <VorgangAgentePanel VorgangId="@_vorgang.Id" User="_user" Changed="FallfuehrerAktualisierenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                    <EinstufungPanel Aktuell="_vorgang.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <QuellenPanel EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <KommentarPanel EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
+                    <VorgangHistorieTimeline VorgangId="@_vorgang.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private Vorgang? _vorgang;
+    private List<string> _fallfuehrer = new();
+    private List<EinstufungVerlauf> _einstufungVerlauf = new();
+    private ClaimsPrincipal _user = default!;
+    private Guid _historieKey = Guid.NewGuid();
+
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _aktiverTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "inhalt", "agents", "einstufung",
+        "quellen", "kommentare", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _aktiverTab = TabUrlState.Read(Nav, _tabs);
+        await LadenAsync();
+        if (_vorgang is not null)
+        {
+            await ZugriffsLog.LogAnsichtAsync(nameof(Vorgang), _vorgang.Id);
+        }
+    }
+
+    private async Task LadenAsync()
+    {
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
+        _vorgang = await VorgangService.GetDetailAsync(Id, _user.IstFuehrung());
+        if (_vorgang is not null)
+        {
+            _einstufungVerlauf = await VorgangService.GetEinstufungVerlaufAsync(_vorgang.Id, _user.IstFuehrung());
+            await FallfuehrerLadenAsync();
+        }
+        _laden = false;
+    }
+
+    private async Task FallfuehrerLadenAsync()
+    {
+        if (_vorgang is null)
+        {
+            return;
+        }
+        var ff = await VorgangService.GetFallfuehrerAsync(_vorgang.Id);
+        _fallfuehrer = ff.Select(a => a.Agent?.Codename ?? "?").ToList();
+    }
+
+    private async Task FallfuehrerAktualisierenAsync()
+    {
+        await FallfuehrerLadenAsync();
+        StateHasChanged();
+    }
+
+    private async Task NeuLadenAsync()
+    {
+        await LadenAsync();
+        _historieKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task EinstufungSetzenAsync((Einstufung Neu, string? Begruendung) eingabe)
+    {
+        if (_vorgang is null)
+        {
+            return;
+        }
+        await VorgangService.EinstufungSetzenAsync(_vorgang.Id, eingabe.Neu, eingabe.Begruendung, _user);
+        await NeuLadenAsync();
+    }
+
+    private async Task LoeschenAsync()
+    {
+        if (_vorgang is null)
+        {
+            return;
+        }
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Vorgang löschen?",
+            "Der Vorgang wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await VorgangService.LoeschenAsync(_vorgang.Id, _user);
+        Snackbar.Add("Vorgang in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/vorgaenge");
+    }
+}

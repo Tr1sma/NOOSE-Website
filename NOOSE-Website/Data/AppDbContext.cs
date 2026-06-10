@@ -6,9 +6,11 @@ using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
+using NOOSE_Website.Data.Entities.Personal;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -78,12 +80,24 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Operation> Operationen => Set<Operation>();
     public DbSet<OperationAgent> OperationAgenten => Set<OperationAgent>();
 
+    // ---- Phase 5: Vorgangs-/Fallakten ----
+    public DbSet<Vorgang> Vorgaenge => Set<Vorgang>();
+    public DbSet<VorgangAgent> VorgangAgenten => Set<VorgangAgent>();
+
     // ---- Phase 5c: Taskforces ----
     public DbSet<Taskforce> Taskforces => Set<Taskforce>();
     public DbSet<TaskforceAgent> TaskforceAgenten => Set<TaskforceAgent>();
 
     // ---- Phase 5d: Taskforce-Chat ----
     public DbSet<TaskforceNachricht> TaskforceNachrichten => Set<TaskforceNachricht>();
+
+    // ---- Phase 5: Observationen (Überwachungseinträge an Personen) ----
+    public DbSet<Observation> Observationen => Set<Observation>();
+
+    // ---- Phase 5e: Personalakte je Agent ----
+    public DbSet<AgentDienstgradVerlauf> AgentDienstgradVerlaeufe => Set<AgentDienstgradVerlauf>();
+    public DbSet<AgentVermerk> AgentVermerke => Set<AgentVermerk>();
+    public DbSet<AgentBefoerderungsantrag> AgentBefoerderungsantraege => Set<AgentBefoerderungsantrag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -143,6 +157,8 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(p => p.Doks).WithOne(d => d.Person!)
                 .HasForeignKey(d => d.PersonId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(p => p.Observationen).WithOne(o => o.Person!)
+                .HasForeignKey(o => o.PersonId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PersonAlias>(b => b.Property(a => a.Aliasname).HasMaxLength(200));
@@ -198,6 +214,25 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(d => d.OrgId).HasMaxLength(64);
             b.HasIndex(d => d.PersonId);
             b.HasIndex(d => new { d.OrgTyp, d.OrgId });
+        });
+
+        // Observation (Überwachungseintrag an einer Person) – Kind der Person wie PersonDok.
+        modelBuilder.Entity<Observation>(b =>
+        {
+            b.Property(o => o.Ort).HasMaxLength(300);
+            b.Property(o => o.Beobachtung).HasMaxLength(4000);
+            b.Property(o => o.Ergebnis).HasMaxLength(4000);
+            // Lose Verknüpfung zu Fraktion/Personengruppe (kein FK – analog EntitaetTyp/EntitaetId).
+            b.Property(o => o.OrgTyp).HasMaxLength(128);
+            b.Property(o => o.OrgId).HasMaxLength(64);
+            b.HasIndex(o => o.PersonId);
+            b.HasIndex(o => o.Beginn);
+            b.HasIndex(o => new { o.OrgTyp, o.OrgId });
+            // FK auf den beobachtenden Identity-Agent: SetNull, damit ein gelöschter Agent die Observation
+            // nicht mitlöscht (die Beziehung zur Person ist im Person-Block mit Cascade konfiguriert).
+            b.HasOne(o => o.BeobachtenderAgent).WithMany()
+                .HasForeignKey(o => o.BeobachtenderAgentId).OnDelete(DeleteBehavior.SetNull);
+            b.HasIndex(o => o.BeobachtenderAgentId);
         });
 
         modelBuilder.Entity<AktenzeichenZaehler>(b =>
@@ -453,6 +488,33 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => a.AgentId);
         });
 
+        // ---- Phase 5: Vorgangs-/Fallakten ----
+        modelBuilder.Entity<Vorgang>(b =>
+        {
+            b.Property(v => v.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(v => v.Titel).HasMaxLength(200).IsRequired();
+            b.Property(v => v.Typ).HasMaxLength(100);
+            b.Property(v => v.Beschreibung).HasMaxLength(4000);
+            b.Property(v => v.Zusammenfassung).HasMaxLength(4000);
+            b.Property(v => v.Abschlussvermerk).HasMaxLength(4000);
+            b.HasIndex(v => v.Aktenzeichen).IsUnique();
+            b.HasIndex(v => v.Titel);
+            b.HasIndex(v => v.Status);
+            b.HasIndex(v => v.IstVerschlusssache);
+
+            b.HasMany(v => v.Agenten).WithOne(a => a.Vorgang!)
+                .HasForeignKey(a => a.VorgangId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VorgangAgent>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(a => new { a.VorgangId, a.AgentId }).IsUnique();
+            b.HasIndex(a => a.AgentId);
+        });
+
         // ---- Phase 5c: Taskforces ----
         modelBuilder.Entity<Taskforce>(b =>
         {
@@ -487,6 +549,37 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(n => new { n.TaskforceId, n.ErstelltAm });
             b.HasOne(n => n.Taskforce).WithMany()
                 .HasForeignKey(n => n.TaskforceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---- Phase 5e: Personalakte je Agent (Kind-Daten an AgentId; FK auf Identity-Agent = Restrict) ----
+        modelBuilder.Entity<AgentDienstgradVerlauf>(b =>
+        {
+            b.Property(v => v.AkteurName).HasMaxLength(128);
+            b.Property(v => v.Grund).HasMaxLength(500);
+            b.HasIndex(v => new { v.AgentId, v.Zeitpunkt });
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(v => v.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentVermerk>(b =>
+        {
+            b.Property(v => v.Text).HasMaxLength(4000).IsRequired();
+            b.Property(v => v.AutorName).HasMaxLength(128);
+            b.HasIndex(v => new { v.AgentId, v.Art });
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(v => v.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentBefoerderungsantrag>(b =>
+        {
+            b.Property(a => a.Begruendung).HasMaxLength(2000);
+            b.Property(a => a.AntragstellerName).HasMaxLength(128);
+            b.Property(a => a.EntscheiderName).HasMaxLength(128);
+            b.Property(a => a.Entscheidungsnotiz).HasMaxLength(2000);
+            b.HasIndex(a => new { a.AgentId, a.Status });
+            b.HasIndex(a => a.Status);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

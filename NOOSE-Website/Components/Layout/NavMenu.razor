@@ -1,16 +1,19 @@
 <MudNavMenu Color="Color.Primary" Bordered="true">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.SpaceDashboard">Dashboard</MudNavLink>
     <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
+    <MudNavLink Href="/personal" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Personal</MudNavLink>
 
     <MudDivider Class="my-2" />
     <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">AKTEN</MudText>
     <MudNavLink Href="/personen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Badge">Personen-Akten</MudNavLink>
     <MudNavLink Href="/doks" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Description">Personen-Doks</MudNavLink>
+    <MudNavLink Href="/observationen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Visibility">Observationen</MudNavLink>
     <MudNavLink Href="/fraktionen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups">Fraktionen</MudNavLink>
     <MudNavLink Href="/personengruppen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Diversity3">Personengruppen</MudNavLink>
     <MudNavLink Href="/parteien" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalance">Parteien</MudNavLink>
     <MudNavLink Href="/operationen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Radar">Operationen</MudNavLink>
     <MudNavLink Href="/taskforces" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups2">Taskforces</MudNavLink>
+    <MudNavLink Href="/vorgaenge" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderSpecial">Vorgänge</MudNavLink>
     <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
 
     <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
@@ -46,17 +49,20 @@
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
     [Inject] private IAgentVerwaltungService AgentService { get; set; } = default!;
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
+    [Inject] private IPersonalakteService PersonalakteService { get; set; } = default!;
 
     private int _offeneFreigaben;
 
     protected override async Task OnInitializedAsync()
     {
-        // Nur für die Führung relevant – Badge mit der Anzahl offener Registrierungen + Namensänderungen + Taskforce-Anträge.
+        // Nur für die Führung relevant – Badge mit der Anzahl offener Registrierungen + Namensänderungen
+        // + Taskforce-Anträge + Beförderungsanträge.
         if ((await AuthStateTask).User.IstFuehrung())
         {
             _offeneFreigaben = (await AgentService.GetAusstehendeAsync()).Count
                 + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count
-                + (await TaskforceService.GetBeantragteAsync()).Count;
+                + (await TaskforceService.GetBeantragteAsync()).Count
+                + (await PersonalakteService.GetOffeneBefoerderungsantraegeAsync()).Count;
         }
     }
 }

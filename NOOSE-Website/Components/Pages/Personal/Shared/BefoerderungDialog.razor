@@ -1,0 +1,49 @@
+@* Dialog: Beförderung für einen Agent beantragen (Ziel-Dienstgrad + Begründung). *@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:360px;">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Beförderungsantrag für <b>@Codename</b> (aktuell: @DienstgradAnzeige.Name(Aktuell)).</MudText>
+            <MudSelect T="Dienstgrad" @bind-Value="_ziel" Label="Ziel-Dienstgrad" Variant="Variant.Outlined">
+                @foreach (var d in DienstgradAnzeige.Alle)
+                {
+                    <MudSelectItem Value="d">@DienstgradAnzeige.Name(d)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_begruendung" Label="Begründung" Lines="3" Variant="Variant.Outlined"
+                          HelperText="Wird im Posteingang für die Entscheidung angezeigt." />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Speichern">Beantragen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Codename { get; set; } = string.Empty;
+    [Parameter] public Dienstgrad Aktuell { get; set; } = Dienstgrad.JuniorAgent;
+
+    private Dienstgrad _ziel;
+    private string? _begruendung;
+
+    protected override void OnInitialized() => _ziel = Aktuell;
+
+    private void Speichern() => MudDialog.Close(DialogResult.Ok(new Wahl(_ziel, _begruendung)));
+    private void Abbrechen() => MudDialog.Cancel();
+
+    public record Wahl(Dienstgrad ZielDienstgrad, string? Begruendung);
+
+    public static async Task<Wahl?> ZeigenAsync(IDialogService dialog, string codename, Dienstgrad aktuell)
+    {
+        var parameters = new DialogParameters<BefoerderungDialog>
+        {
+            { x => x.Codename, codename },
+            { x => x.Aktuell, aktuell },
+        };
+        var referenz = await dialog.ShowAsync<BefoerderungDialog>("Beförderung beantragen", parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: Wahl wahl } ? wahl : null;
+    }
+}

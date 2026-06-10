@@ -9,6 +9,7 @@ using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
 
@@ -93,6 +94,14 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(Taskforce), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/taskforces/{x.Id}");
         }
 
+        // Vorgang (Phase 5): aufgelöst mit Navigation auf die eigene Detailseite.
+        var vorgangIds = paare.Where(p => p.AndereTyp == nameof(Vorgang)).Select(p => p.AndereId).Distinct().ToList();
+        foreach (var x in await db.Vorgaenge.Where(v => vorgangIds.Contains(v.Id))
+                     .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.IstVerschlusssache }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Vorgang), x.Id)] = ($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/vorgaenge/{x.Id}");
+        }
+
         // Agent: kein Verschlusssache-Konzept und keine eigene Detailseite (Href null) – nur Codename.
         var agentIds = paare.Where(p => p.AndereTyp == nameof(Agent)).Select(p => p.AndereId).Distinct().ToList();
         foreach (var x in await db.Users.Where(u => agentIds.Contains(u.Id))
@@ -112,10 +121,22 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(PersonDok), x.Id)] = ($"Dok – {x.PersonName} ({x.Zeitpunkt.ToLocalTime():dd.MM.yyyy})", x.IstVerschlusssache, $"/personen/{x.PersonId}?tab=doks");
         }
 
+        // Observation (Phase 5): erbt Sichtbarkeit von seiner Person (Join auf Personen → Soft-Delete/
+        // Verschlusssache greifen automatisch); Navigation auf die Personen-Akte, Observationen-Tab.
+        var observationIds = paare.Where(p => p.AndereTyp == nameof(Observation)).Select(p => p.AndereId).Distinct().ToList();
+        foreach (var x in await db.Observationen.Where(o => observationIds.Contains(o.Id))
+                     .Join(db.Personen, o => o.PersonId, p => p.Id,
+                           (o, p) => new { o.Id, o.Beginn, PersonId = p.Id, PersonName = p.Name, p.IstVerschlusssache })
+                     .ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Observation), x.Id)] = ($"Observation – {x.PersonName} ({x.Beginn.ToLocalTime():dd.MM.yyyy})", x.IstVerschlusssache, $"/personen/{x.PersonId}?tab=ueberwachung");
+        }
+
         var bekannteTypen = new[]
         {
             nameof(Person), nameof(Fraktion), nameof(Personengruppe), nameof(Partei),
-            nameof(Operation), nameof(Taskforce), nameof(Agent), nameof(PersonDok),
+            nameof(Operation), nameof(Taskforce), nameof(Vorgang), nameof(Agent),
+            nameof(PersonDok), nameof(Observation),
         };
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)
