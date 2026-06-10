@@ -26,6 +26,9 @@ public class FraktionEingabe
     public List<RangEingabe> Raenge { get; set; } = new();
     public List<BestandEingabe> Waffenbestand { get; set; } = new();
     public List<BestandEingabe> Lagerbestand { get; set; } = new();
+
+    /// <summary>Mitglieder, die bereits beim Anlegen erfasst werden (auf der Detailseite weiter pflegbar).</summary>
+    public List<MitgliedEingabe> Mitglieder { get; set; } = new();
 }
 
 /// <summary>Ein Rang-Eintrag im Bearbeiten-Formular (Bezeichnung; Sortierung folgt der Reihenfolge in der Liste).</summary>
@@ -52,6 +55,9 @@ public class MitgliedEingabe
     public string PersonId { get; set; } = string.Empty;
     public string? Rang { get; set; }
     public bool IstLeitung { get; set; }
+
+    /// <summary>Nur für die Anzeige im Anlege-Formular; vom Dienst ignoriert.</summary>
+    public string? PersonName { get; set; }
 
     /// <summary>
     /// Ist <see cref="PersonId"/> leer und dies gesetzt, wird beim Hinzufügen automatisch eine neue

@@ -102,6 +102,63 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
 
         db.Fraktionen.Add(fraktion);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Im Anlege-Formular erfasste Mitglieder übernehmen (bestehende Personen + automatisch angelegte neue
+        // Akten, dedupliziert) und anschließend die Fraktionskollegen-Verknüpfungen aufbauen – analog zur Gruppe.
+        if (eingabe.Mitglieder.Count > 0)
+        {
+            var bestehendeIds = eingabe.Mitglieder
+                .Select(m => m.PersonId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct()
+                .ToList();
+            var existierend = bestehendeIds.Count == 0
+                ? new HashSet<string>()
+                : (await db.Personen.Where(p => bestehendeIds.Contains(p.Id)).Select(p => p.Id)
+                    .ToListAsync(cancellationToken)).ToHashSet();
+
+            var hinzugefuegt = new List<string>();
+            var gesehen = new HashSet<string>();
+            var gesehenNeueNamen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in eingabe.Mitglieder)
+            {
+                string? pid = null;
+                if (!string.IsNullOrWhiteSpace(m.PersonId) && existierend.Contains(m.PersonId))
+                {
+                    pid = m.PersonId;
+                }
+                else if (string.IsNullOrWhiteSpace(m.PersonId) && !string.IsNullOrWhiteSpace(m.NeuePersonName))
+                {
+                    if (!gesehenNeueNamen.Add(m.NeuePersonName.Trim()))
+                    {
+                        continue;
+                    }
+                    var person = await personService.ErstellenAsync(new PersonEingabe { Name = m.NeuePersonName.Trim() }, handelnder, cancellationToken);
+                    pid = person.Id;
+                }
+                if (pid is null || !gesehen.Add(pid))
+                {
+                    continue;
+                }
+                db.FraktionMitglieder.Add(new FraktionMitglied
+                {
+                    FraktionId = fraktion.Id,
+                    PersonId = pid,
+                    Rang = Leer(m.Rang),
+                    IstLeitung = m.IstLeitung,
+                });
+                hinzugefuegt.Add(pid);
+            }
+            if (hinzugefuegt.Count > 0)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                foreach (var pid in hinzugefuegt)
+                {
+                    await FraktionskollegenSyncAsync(db, pid, cancellationToken);
+                }
+            }
+        }
+
         await tx.CommitAsync(cancellationToken);
         return fraktion;
     }

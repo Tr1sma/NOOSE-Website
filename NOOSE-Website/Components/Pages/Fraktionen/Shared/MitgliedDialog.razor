@@ -107,6 +107,7 @@
     {
         string personId = string.Empty;
         string? neuerName = null;
+        string? anzeigeName = PersonNameVorhanden;
         if (!IstBearbeiten)
         {
             if (_modusNeu)
@@ -116,6 +117,7 @@
                     return;
                 }
                 neuerName = _neuerName.Trim();
+                anzeigeName = neuerName;
             }
             else
             {
@@ -124,12 +126,14 @@
                     return;
                 }
                 personId = _person.Id;
+                anzeigeName = _person.Name;
             }
         }
         MudDialog.Close(DialogResult.Ok(new MitgliedEingabe
         {
             PersonId = personId,
             NeuePersonName = neuerName,
+            PersonName = anzeigeName,
             Rang = _rang,
             IstLeitung = _istLeitung,
         }));
