@@ -14,7 +14,7 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IAntragService" />
-public class AntragService(IDbContextFactory<AppDbContext> dbFactory) : IAntragService
+public class AntragService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : IAntragService
 {
     public async Task<bool> HatOffenenAntragAsync(string zielTyp, string zielId, CancellationToken cancellationToken = default)
     {
@@ -140,6 +140,16 @@ public class AntragService(IDbContextFactory<AppDbContext> dbFactory) : IAntragS
 
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+
+        // Phase 6: den Antragsteller über die Entscheidung benachrichtigen (best-effort, eigener Context –
+        // darf die bereits committete Entscheidung nicht stören).
+        try
+        {
+            await notifications.BenachrichtigeAsync(antrag.ErstelltVonId, NotificationTyp.AntragEntschieden,
+                genehmigt ? "Dein Hochstufungs-Antrag wurde genehmigt." : "Dein Hochstufungs-Antrag wurde abgelehnt.",
+                "/profil", cancellationToken);
+        }
+        catch { /* Benachrichtigung ist nachrangig. */ }
     }
 
     /// <summary>Setzt die Einstufung der polymorphen Ziel-Akte. Liefert false, wenn die Akte nicht (mehr) existiert.</summary>

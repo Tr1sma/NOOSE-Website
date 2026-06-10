@@ -14,6 +14,7 @@ using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
+using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Services;
 
@@ -159,6 +160,9 @@ builder.Services.AddScoped<IPersonalakteService, PersonalakteService>();
 builder.Services.AddScoped<IAntragService, AntragService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+// Phase 6: In-App-Benachrichtigungen (Glocke) + Live-Broadcaster.
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddSingleton<NotificationBroadcaster>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>

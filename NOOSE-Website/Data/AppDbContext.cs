@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Antraege;
+using NOOSE_Website.Data.Entities.Benachrichtigungen;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
@@ -102,6 +103,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----
     public DbSet<Antrag> Antraege => Set<Antrag>();
+
+    // ---- Phase 6: In-App-Benachrichtigungen (Glocke) ----
+    public DbSet<Benachrichtigung> Benachrichtigungen => Set<Benachrichtigung>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -533,6 +537,17 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => new { a.Typ, a.Status });
             b.HasIndex(a => new { a.ZielTyp, a.ZielId });
             b.HasIndex(a => a.ErstelltVonId);
+        });
+
+        // ---- Phase 6: In-App-Benachrichtigungen (Glocke) ----
+        modelBuilder.Entity<Benachrichtigung>(b =>
+        {
+            b.Property(n => n.EmpfaengerId).HasMaxLength(64);
+            b.Property(n => n.Titel).HasMaxLength(300);
+            b.Property(n => n.Href).HasMaxLength(512);
+            b.Property(n => n.ErstelltVonId).HasMaxLength(64);
+            // Schneller Lade-Pfad „(ungelesene) Benachrichtigungen eines Empfängers".
+            b.HasIndex(n => new { n.EmpfaengerId, n.GelesenAm });
         });
 
         // ---- Phase 5c: Taskforces ----

@@ -17,7 +17,7 @@ namespace NOOSE_Website.Services;
 // werden in EINEM Kontext gesammelt und über UserManager.UpdateAsync gespeichert – ein eigener
 // Factory-Context würde den hier vorgemerkten AuditLog nicht mitspeichern. Die Admin-Seiten lösen keine
 // parallelen Kontextzugriffe aus, daher ist der geteilte scoped Context hier unkritisch.
-public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext db) : IAgentVerwaltungService
+public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext db, INotificationService notifications) : IAgentVerwaltungService
 {
     public Task<List<Agent>> GetAusstehendeAsync(CancellationToken cancellationToken = default)
         => db.Users.Where(a => a.Status == AgentStatus.Ausstehend)
@@ -47,6 +47,11 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         Audit(agent, AuditAktion.Geaendert, handelnder,
             $"Freigegeben als {dienstgrad}{(istTRU ? " (TRU)" : "")}");
         await Speichern(agent, neuerStamp: true);
+
+        // Phase 6: den freigegebenen Agenten benachrichtigen (erscheint beim nächsten Login – der neue
+        // SecurityStamp beendet die bisherige Sitzung). Best-effort, eigener Context im Dienst.
+        try { await notifications.BenachrichtigeAsync(agent.Id, NotificationTyp.Konto, "Dein Account wurde freigegeben.", "/"); }
+        catch { /* Benachrichtigung ist nachrangig. */ }
     }
 
     public async Task AblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder)
@@ -123,6 +128,9 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         Audit(agent, AuditAktion.Geaendert, handelnder, $"Namensänderung genehmigt (Codename: {agent.Codename})");
         // Neuer Stamp: der betroffene Agent erhält beim nächsten Login frische Claims (neuer Codename in Navbar).
         await Speichern(agent, neuerStamp: true);
+
+        try { await notifications.BenachrichtigeAsync(agent.Id, NotificationTyp.Konto, "Deine Namensänderung wurde genehmigt.", "/profil"); }
+        catch { /* Benachrichtigung ist nachrangig. */ }
     }
 
     public async Task NamensaenderungAblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder)
@@ -141,6 +149,9 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
             $"Namensänderung abgelehnt (beantragter Codename: {beantragterCodename}): {hinweis}");
         // Kein neuer Stamp: die Live-Identität wurde nicht verändert.
         await Speichern(agent, neuerStamp: false);
+
+        try { await notifications.BenachrichtigeAsync(agent.Id, NotificationTyp.Konto, "Deine Namensänderung wurde abgelehnt.", "/profil"); }
+        catch { /* Benachrichtigung ist nachrangig. */ }
     }
 
     public async Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder)

@@ -8,7 +8,8 @@ using NOOSE_Website.Infrastructure.Chat;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ITaskforceChatService" />
-public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, TaskforceChatBroadcaster broadcaster) : ITaskforceChatService
+public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, TaskforceChatBroadcaster broadcaster,
+    INotificationService notifications) : ITaskforceChatService
 {
     public async Task<List<TaskforceNachricht>> GetNachrichtenAsync(string taskforceId, bool istFuehrung, int limit = 100, DateTime? aelterAls = null, CancellationToken cancellationToken = default)
     {
@@ -57,6 +58,16 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Melde(taskforceId);
+
+        // Phase 6: erwähnte Agenten benachrichtigen (best-effort, Verschlusssache-gefiltert im Dienst).
+        try
+        {
+            var wer = string.IsNullOrWhiteSpace(handelnder.GetCodename()) ? "Ein Agent" : handelnder.GetCodename();
+            await notifications.BenachrichtigeErwaehnteAsync(inhalt, $"{wer} hat dich im Taskforce-Chat erwähnt.",
+                $"/taskforces/{taskforceId}", nameof(Taskforce), taskforceId, handelnder, cancellationToken);
+        }
+        catch { /* Benachrichtigung ist nachrangig. */ }
+
         return nachricht;
     }
 

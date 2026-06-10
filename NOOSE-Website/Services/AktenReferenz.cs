@@ -143,14 +143,16 @@ public static class AktenReferenz
             }
         }
 
-        // Agent: kein Verschlusssache-Konzept und keine eigene Detailseite (Href null) – nur Codename.
+        // Agent: kein Verschlusssache-Konzept; Verweis auf die Personalakte (/personal/{id}, für jeden aktiven
+        // Agenten zugänglich) – nur der Codename als Anzeigename (Klarname bleibt verborgen).
         var agentIds = OffeneIds(nameof(Agent));
         if (agentIds.Count > 0)
         {
             foreach (var x in await db.Users.Where(u => agentIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.Codename }).ToListAsync(ct))
             {
-                map[(nameof(Agent), x.Id)] = new(string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannter Agent)" : x.Codename, false, null);
+                map[(nameof(Agent), x.Id)] = new(string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannter Agent)" : x.Codename,
+                    false, $"/personal/{x.Id}");
             }
         }
     }

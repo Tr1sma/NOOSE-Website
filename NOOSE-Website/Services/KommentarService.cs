@@ -4,11 +4,12 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Models.Querschnitt;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IKommentarService" />
-public class KommentarService(IDbContextFactory<AppDbContext> dbFactory) : IKommentarService
+public class KommentarService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : IKommentarService
 {
     public async Task<List<Kommentar>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -47,6 +48,16 @@ public class KommentarService(IDbContextFactory<AppDbContext> dbFactory) : IKomm
         };
         db.Kommentare.Add(kommentar);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Phase 6: erwähnte Agenten benachrichtigen (best-effort, Verschlusssache-gefiltert im Dienst).
+        try
+        {
+            var wer = string.IsNullOrWhiteSpace(handelnder.GetCodename()) ? "Ein Agent" : handelnder.GetCodename();
+            await notifications.BenachrichtigeErwaehnteAsync(text, $"{wer} hat dich in einem Vermerk erwähnt.",
+                SuchNavigation.Route(entitaetTyp, entitaetId), entitaetTyp, entitaetId, handelnder, cancellationToken);
+        }
+        catch { /* Benachrichtigung ist nachrangig. */ }
+
         return kommentar;
     }
 
