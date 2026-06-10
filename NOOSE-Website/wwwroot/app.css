@@ -83,7 +83,7 @@ html, body {
 .aufgaben-spalte-body {
     /* Feste Höhe für etwa 4 Aufgaben-Karten; danach scrollt die Spalte in sich selbst,
        statt die ganze Seite zu verlängern. Über die Variable je nach Kartenhöhe justierbar. */
-    --aufgaben-karten-hoehe: 7rem;
+    --aufgaben-karten-hoehe: 6.25rem;
     height: calc(4 * var(--aufgaben-karten-hoehe) + 3 * .6rem + 1.2rem);
     overflow-y: auto;
     padding: .6rem;
