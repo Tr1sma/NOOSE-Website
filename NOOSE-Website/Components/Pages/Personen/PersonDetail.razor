@@ -45,7 +45,9 @@ else
 
         @* Rechts: die bestehenden Inhalte als Tabs. *@
         <MudItem xs="12" md="8" lg="9">
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_aktiverTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
                 <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
                     @{
                         var hatSteckbrief = !string.IsNullOrWhiteSpace(_person.Beschreibung)
@@ -117,9 +119,18 @@ else
     private Timer? _timer;
     private Guid _historieKey = Guid.NewGuid();
 
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _aktiverTab;
+    private static readonly string[] _tabs =
+    {
+        "steckbrief", "doks", "einstufung", "fotos", "quellen",
+        "verknuepfungen", "zugehoerigkeit", "kommentare", "historie",
+    };
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _aktiverTab = TabUrlState.Read(Nav, _tabs);
         await LadenAsync();
         if (_person is not null)
         {
@@ -131,7 +142,9 @@ else
 
     private async Task LadenAsync()
     {
-        _laden = true;
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
+        // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
         _person = await PersonService.GetDetailAsync(Id, _user.IstFuehrung());
         _einstufungVerlauf = _person is null
             ? new()
