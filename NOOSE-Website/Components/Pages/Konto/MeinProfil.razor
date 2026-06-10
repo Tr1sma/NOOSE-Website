@@ -4,6 +4,7 @@
    Posteingang gelegt. Authentifizierung erbt die App-weite Policy „AktiverAgent" aus _Imports.razor. *@
 @inject IAgentVerwaltungService AgentService
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>Mein Profil · NOOSE</PageTitle>
 
@@ -57,6 +58,7 @@ else
                 </MudAlert>
 
                 <MudTextField @bind-Value="_klarname" Label="Klarname (echter Name)" Variant="Variant.Outlined"
+                              AutoFocus="true"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.VisibilityOff"
                               HelperText="Nur für die Führungsebene sichtbar – wird rangniedrigeren Nutzern nie angezeigt." />
 
@@ -141,13 +143,14 @@ else
             if (_istFuehrung)
             {
                 await AgentService.StammdatenAendernAsync(_agent.Id, _klarname, _codename.Trim(), _dienstnummer, _user);
-                Snackbar.Add("Stammdaten aktualisiert. Bitte melde dich neu an, damit der neue Name überall erscheint.", Severity.Success);
+                // Der erneuerte SecurityStamp invalidiert die aktuelle Sitzung. Kontrolliert zur Neuanmeldung
+                // leiten, statt den Nutzer kurz darauf vom Kill-Switch überraschend trennen zu lassen.
+                Nav.NavigateTo("/Account/Login", forceLoad: true);
+                return;
             }
-            else
-            {
-                await AgentService.NamensaenderungBeantragenAsync(_agent.Id, _klarname, _codename.Trim(), _dienstnummer, _user);
-                Snackbar.Add("Antrag eingereicht. Die Änderung greift nach Freigabe durch die Führung.", Severity.Success);
-            }
+
+            await AgentService.NamensaenderungBeantragenAsync(_agent.Id, _klarname, _codename.Trim(), _dienstnummer, _user);
+            Snackbar.Add("Antrag eingereicht. Die Änderung greift nach Freigabe durch die Führung.", Severity.Success);
 
             // Frisch laden, damit der Status-Banner stimmt.
             _agent = await AgentService.FindAsync(_agent.Id);

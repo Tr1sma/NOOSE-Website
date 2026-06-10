@@ -136,40 +136,84 @@ else
             return;
         }
         var user = (await AuthStateTask).User;
-        await AgentService.RangAendernAsync(agent.Id, grad, user);
-        Snackbar.Add($"{AnzeigeName(agent)}: Dienstgrad auf {DienstgradAnzeige.Name(grad)} gesetzt.", Severity.Success);
+        try
+        {
+            await AgentService.RangAendernAsync(agent.Id, grad, user);
+            Snackbar.Add($"{AnzeigeName(agent)}: Dienstgrad auf {DienstgradAnzeige.Name(grad)} gesetzt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task TruSetzen(Agent agent, bool wert)
     {
         var user = (await AuthStateTask).User;
-        await AgentService.TruSetzenAsync(agent.Id, wert, user);
-        Snackbar.Add($"{AnzeigeName(agent)}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
+        try
+        {
+            await AgentService.TruSetzenAsync(agent.Id, wert, user);
+            Snackbar.Add($"{AnzeigeName(agent)}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task AdminSetzen(Agent agent, bool wert)
     {
         var user = (await AuthStateTask).User;
-        await AgentService.AdminSetzenAsync(agent.Id, wert, user);
-        Snackbar.Add($"{AnzeigeName(agent)}: Admin-Rechte {(wert ? "vergeben" : "entzogen")}.", Severity.Success);
+        try
+        {
+            await AgentService.AdminSetzenAsync(agent.Id, wert, user);
+            Snackbar.Add($"{AnzeigeName(agent)}: Admin-Rechte {(wert ? "vergeben" : "entzogen")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task Sperren(Agent agent)
     {
+        // Destruktive Aktion (beendet alle Sitzungen sofort) → Bestätigung + optionale Begründung einholen.
+        var grund = await GrundDialog.ZeigenAsync(DialogService,
+            $"{AnzeigeName(agent)} sperren?",
+            "Die Sperre beendet alle laufenden Sitzungen des Agents sofort (Kill-Switch).",
+            bestaetigenText: "Sperren", label: "Begründung (optional)", farbe: Color.Error);
+        if (grund is null)
+        {
+            return;
+        }
         var user = (await AuthStateTask).User;
-        await AgentService.SperrenAsync(agent.Id, "Notfall-Sperre durch Admin", user);
-        Snackbar.Add($"{AnzeigeName(agent)} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
+        try
+        {
+            await AgentService.SperrenAsync(agent.Id, string.IsNullOrWhiteSpace(grund) ? "Notfall-Sperre durch Admin" : grund, user);
+            Snackbar.Add($"{AnzeigeName(agent)} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 
     private async Task Entsperren(Agent agent)
     {
         var user = (await AuthStateTask).User;
-        await AgentService.EntsperrenAsync(agent.Id, user);
-        Snackbar.Add($"{AnzeigeName(agent)} entsperrt.", Severity.Success);
+        try
+        {
+            await AgentService.EntsperrenAsync(agent.Id, user);
+            Snackbar.Add($"{AnzeigeName(agent)} entsperrt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
         await LadenAsync();
     }
 

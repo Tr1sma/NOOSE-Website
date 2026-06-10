@@ -1,0 +1,65 @@
+@* Bestätigungs-Dialog mit Begründungs-Eingabe (z. B. Sperren, Ablehnen). Liefert den eingegebenen
+   Grund zurück (oder null bei Abbruch). Mit AutoFocus auf dem Begründungsfeld. *@
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrWhiteSpace(Text))
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">@Text</MudText>
+        }
+        <MudTextField @bind-Value="_grund" Label="@Label" Lines="2" Variant="Variant.Outlined"
+                      AutoFocus="true" Immediate="true"
+                      Required="@PflichtGrund" RequiredError="Bitte eine Begründung angeben." />
+        @if (_fehler)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error">Bitte eine Begründung angeben.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="@Farbe" Variant="Variant.Filled" OnClick="Bestaetigen">@BestaetigenText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Titel { get; set; } = "Bestätigen";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string Label { get; set; } = "Begründung";
+    [Parameter] public string BestaetigenText { get; set; } = "Bestätigen";
+    [Parameter] public bool PflichtGrund { get; set; }
+    [Parameter] public Color Farbe { get; set; } = Color.Primary;
+
+    private string _grund = string.Empty;
+    private bool _fehler;
+
+    private void Bestaetigen()
+    {
+        if (PflichtGrund && string.IsNullOrWhiteSpace(_grund))
+        {
+            _fehler = true;
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(_grund.Trim()));
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog; liefert den eingegebenen Grund oder null bei Abbruch.</summary>
+    public static async Task<string?> ZeigenAsync(IDialogService dialog, string titel, string? text,
+        string bestaetigenText = "Bestätigen", string label = "Begründung", bool pflichtGrund = false, Color farbe = Color.Primary)
+    {
+        var parameters = new DialogParameters<GrundDialog>
+        {
+            { x => x.Titel, titel },
+            { x => x.Text, text },
+            { x => x.Label, label },
+            { x => x.BestaetigenText, bestaetigenText },
+            { x => x.PflichtGrund, pflichtGrund },
+            { x => x.Farbe, farbe },
+        };
+        var referenz = await dialog.ShowAsync<GrundDialog>(titel, parameters);
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: string grund } ? grund : null;
+    }
+}
