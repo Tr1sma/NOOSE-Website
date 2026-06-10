@@ -310,19 +310,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
     /// Liefert die Personen-Id: entweder die übergebene bestehende (mit Existenzprüfung) oder – wenn nur ein
     /// neuer Name angegeben ist – eine frisch angelegte Personen-Akte (committet, eigenes Aktenzeichen).
     /// </summary>
-    private async Task<string> PersonIdErmittelnAsync(AppDbContext db, string? personId, string? neuerName, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(personId) && !string.IsNullOrWhiteSpace(neuerName))
-        {
-            var person = await personService.ErstellenAsync(new PersonEingabe { Name = neuerName.Trim() }, handelnder, cancellationToken);
-            return person.Id;
-        }
-        if (string.IsNullOrWhiteSpace(personId) || !await db.Personen.AnyAsync(p => p.Id == personId, cancellationToken))
-        {
-            throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
-        }
-        return personId;
-    }
+    private Task<string> PersonIdErmittelnAsync(AppDbContext db, string? personId, string? neuerName, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+        => MitgliedHelfer.PersonIdErmittelnAsync(db, personService, personId, neuerName, handelnder, cancellationToken);
 
     public async Task MitgliedAendernAsync(string mitgliedId, string? rang, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {

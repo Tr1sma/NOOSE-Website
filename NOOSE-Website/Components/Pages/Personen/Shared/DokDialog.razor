@@ -167,7 +167,11 @@
         }
         var datum = (_datum ?? DateTime.Now).Date;
         var zeit = _zeit ?? TimeSpan.Zero;
-        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen.
+        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen. ACHTUNG: In Blazor Server ist
+        // „Local" die SERVER-Zeitzone, nicht die des Browsers. Damit RP-Zeiten (Erfassung via DokDialog,
+        // Anzeige via ToLocalTime) stimmen und das 20-Min-Tot-Fenster korrekt liegt, muss der VPS in der
+        // Zeitzone der Nutzer laufen (Deployment: TZ=Europe/Berlin). Eine browserunabhängige Lösung
+        // erforderte die Browser-Zeitzone per JS-Interop (bewusst späterer Schritt).
         _eingabe.Zeitpunkt = DateTime.SpecifyKind(datum + zeit, DateTimeKind.Local).ToUniversalTime();
         if (_orgVerborgen)
         {

@@ -45,16 +45,7 @@ public class FileStorageService : IFileStorageService
     }
 
     /// <summary>Lässt nur blanke Dateinamen zu und kombiniert sie sicher mit dem Basispfad.</summary>
-    private string SichererPfad(string dateiname)
-    {
-        if (string.IsNullOrWhiteSpace(dateiname)
-            || dateiname.Contains('/') || dateiname.Contains('\\') || dateiname.Contains("..")
-            || Path.GetFileName(dateiname) != dateiname)
-        {
-            throw new InvalidOperationException($"Ungültiger Dateiname: '{dateiname}'.");
-        }
-        return Path.Combine(_basisPfad, dateiname);
-    }
+    private string SichererPfad(string dateiname) => DateiPfadHelfer.SichererPfad(_basisPfad, dateiname);
 
     private static string EndungFuer(string contentType) => contentType.ToLowerInvariant() switch
     {

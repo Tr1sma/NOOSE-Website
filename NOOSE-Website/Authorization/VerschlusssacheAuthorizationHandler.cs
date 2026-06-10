@@ -3,9 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 namespace NOOSE_Website.Authorization;
 
 /// <summary>
-/// Stub-Handler für <see cref="VerschlusssacheRequirement"/>: lässt in Phase 1 Führung/Admin
-/// durch. Ab der Akten-Phase wird hier zusätzlich die konkrete Akte als Ressource geprüft
-/// (markiert als Verschlusssache? Agent ausdrücklich zugewiesen?).
+/// Handler für <see cref="VerschlusssacheRequirement"/>: lässt Führung/Admin durch.
+/// <para>
+/// Ist-Zustand: Die eigentliche Verschlusssachen-Durchsetzung erfolgt seit den Akten-Phasen serverseitig in
+/// der Service-Schicht (zentral über <c>Sichtbarkeit.IstAkteSichtbarAsync</c> und die VS-Guards der
+/// schreibenden Methoden) – nicht über diese derzeit ungenutzte Policy. Sie ist als künftiges,
+/// ressourcenbasiertes UI-Gate vorgesehen (konkrete Akte als Resource: als Verschlusssache markiert? Agent
+/// ausdrücklich zugewiesen?), sobald ein Zuweisungs-Datenmodell existiert.
+/// </para>
 /// </summary>
 public class VerschlusssacheAuthorizationHandler : AuthorizationHandler<VerschlusssacheRequirement>
 {
