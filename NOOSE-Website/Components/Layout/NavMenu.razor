@@ -14,7 +14,10 @@
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">VERWALTUNG</MudText>
         <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
-            Freigaben
+            Freigaben@if (_offeneFreigaben > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_offeneFreigaben</MudChip>
+            }
         </MudNavLink>
         <MudNavLink Href="/admin/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
             Tags
@@ -34,3 +37,20 @@
 
     <MudNavLink Icon="@Icons.Material.Filled.Hub" Disabled="true">Beziehungsgraph</MudNavLink>
 </MudNavMenu>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [Inject] private IAgentVerwaltungService AgentService { get; set; } = default!;
+
+    private int _offeneFreigaben;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Nur für die Führung relevant – Badge mit der Anzahl offener Registrierungen + Namensänderungen.
+        if ((await AuthStateTask).User.IstFuehrung())
+        {
+            _offeneFreigaben = (await AgentService.GetAusstehendeAsync()).Count
+                + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count;
+        }
+    }
+}

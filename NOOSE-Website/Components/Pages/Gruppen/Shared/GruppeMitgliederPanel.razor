@@ -1,5 +1,6 @@
 @* Mitglieder einer Personengruppe: Liste (Leitung zuerst), Hinzufügen/Bearbeiten/Entfernen mit Rolle + Leitung. *@
 @inject IPersonengruppeService GruppeService
+@inject IPersonService PersonService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -73,6 +74,11 @@
         var ausschluss = _mitglieder.Select(m => m.PersonId).ToList();
         var eingabe = await GruppeMitgliedDialog.ZeigenAsync(DialogService, User.IstFuehrung(), ausschluss);
         if (eingabe is null)
+        {
+            return;
+        }
+        // Beim Anlegen einer neuen Person vor gleichnamigen Dubletten warnen.
+        if (!await DuplikatPruefung.DarfNeueAkteAnlegenAsync(DialogService, PersonService, eingabe.NeuePersonName, User.IstFuehrung()))
         {
             return;
         }
