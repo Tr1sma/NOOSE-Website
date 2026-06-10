@@ -4,6 +4,7 @@
 
 <PageTitle>Dashboard · NOOSE</PageTitle>
 
+<div class="dashboard-seite">
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
     <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
     <MudText Typo="Typo.h4">Lagezentrum</MudText>
@@ -83,6 +84,7 @@
     }
     else
     {
+        <div class="dashboard-verlauf-liste">
         <MudTimeline TimelinePosition="TimelinePosition.Start" Class="mt-2">
             @foreach (var x in _aenderungen)
             {
@@ -106,8 +108,10 @@
                 </MudTimelineItem>
             }
         </MudTimeline>
+        </div>
     }
 </MudPaper>
+</div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
@@ -121,7 +125,7 @@
     {
         _istFuehrung = (await AuthStateTask).User.IstFuehrung();
         _kennzahlen = await Dashboard.GetKennzahlenAsync(_istFuehrung);
-        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung);
+        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung, 50);
         _laden = false;
     }
 

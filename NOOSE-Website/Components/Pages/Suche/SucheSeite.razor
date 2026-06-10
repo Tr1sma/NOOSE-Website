@@ -15,7 +15,7 @@
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
     Durchsucht Personen, Fraktionen, Personengruppen, Parteien, Operationen, Doks, Quellen und Kommentare. Verschlusssachen erscheinen nur für die Führung.
-    <b>Ähnliche Treffer</b> tolerieren Tippfehler; der <b>Max-Modus</b> durchsucht zusätzlich alle Nebenfelder (inkl. Person-Steckbrief) und bezieht Doks/Quellen/Kommentare immer mit ein.
+    Die <b>Smart-Suche</b> toleriert Tippfehler; der <b>Deep-Scan</b> durchsucht zusätzlich alle Nebenfelder (inkl. Person-Steckbrief) und bezieht Doks/Quellen/Kommentare immer mit ein.
 </MudText>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
@@ -50,13 +50,15 @@
 
         <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Modus:</MudText>
-            <MudCheckBox T="bool" @bind-Value="_fuzzy" Label="Ähnliche Treffer (Tippfehler-Toleranz)" Dense="true"
-                         Color="Color.Primary" />
-            <MudCheckBox T="bool" @bind-Value="_maxModus" @bind-Value:after="MaxNachtrag" Label="Max-Modus (alle Felder & Inhalte)" Dense="true"
-                         Color="Color.Secondary" />
+            <MudTooltip Text="Findet Treffer auch bei Tippfehlern (Levenshtein-Algorithmus).">
+                <MudCheckBox T="bool" @bind-Value="_fuzzy" Label="Smart-Suche" Dense="true" Color="Color.Primary" />
+            </MudTooltip>
+            <MudTooltip Text="Durchsucht alle Felder inkl. Person-Steckbrief sowie Doks/Quellen/Kommentare – toleranter, aber langsamer.">
+                <MudCheckBox T="bool" @bind-Value="_maxModus" @bind-Value:after="MaxNachtrag" Label="Deep-Scan" Dense="true" Color="Color.Secondary" />
+            </MudTooltip>
             @if (_maxModus)
             {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Doks/Quellen/Kommentare sind im Max-Modus immer aktiv.</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Doks/Quellen/Kommentare sind im Deep-Scan immer aktiv.</MudText>
             }
         </MudStack>
 
