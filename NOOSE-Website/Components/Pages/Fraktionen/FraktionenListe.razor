@@ -31,7 +31,12 @@ else
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
-            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <TemplateColumn Title="Name" SortBy="x => x.Name">
+                <CellTemplate>
+                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    <MudLink Href="@($"/fraktionen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Art" Title="Art" />
             <PropertyColumn Property="x => x.Mitgliederzahl" Title="Mitglieder" />
             <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
@@ -49,6 +54,13 @@ else
             </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Fraktionen erfasst – lege die erste an.</MudText>
+                <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
+            </MudStack>
+        </NoRecordsContent>
         <PagerContent>
             <MudDataGridPager T="FraktionZeile" />
         </PagerContent>

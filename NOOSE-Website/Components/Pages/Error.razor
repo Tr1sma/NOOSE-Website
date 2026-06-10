@@ -1,30 +1,31 @@
 ﻿@page "/Error"
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
+@layout MainLayout
 @using System.Diagnostics
 
 <PageTitle>Fehler · NOOSE</PageTitle>
 
-<h1 class="text-danger">Fehler.</h1>
-<h2 class="text-danger">Bei der Verarbeitung deiner Anfrage ist ein Fehler aufgetreten.</h2>
-
-@if (ShowRequestId)
-{
-    <p>
-        <strong>Anfrage-ID:</strong> <code>@RequestId</code>
-    </p>
-}
-
-<h3>Entwicklungsmodus</h3>
-<p>
-    Im <strong>Development</strong>-Umfeld werden ausführlichere Informationen zum aufgetretenen Fehler angezeigt.
-</p>
-<p>
-    <strong>Das Development-Umfeld sollte für bereitgestellte Anwendungen nicht aktiviert werden.</strong>
-    Es kann dazu führen, dass sensible Informationen aus Ausnahmen für Endnutzer sichtbar werden.
-    Zum lokalen Debuggen das <strong>Development</strong>-Umfeld aktivieren, indem die Umgebungsvariable
-    <strong>ASPNETCORE_ENVIRONMENT</strong> auf <strong>Development</strong> gesetzt und die App neu gestartet wird.
-</p>
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudPaper Class="pa-8" Elevation="2">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Filled.ReportProblem" Color="Color.Error" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Align="Align.Center">Ein Fehler ist aufgetreten</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" Align="Align.Center">
+                Bei der Verarbeitung deiner Anfrage ist etwas schiefgelaufen. Bitte versuche es erneut –
+                besteht das Problem weiter, wende dich an die NOOSE-Administration.
+            </MudText>
+            @if (ShowRequestId)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary" Align="Align.Center">
+                    Anfrage-ID: <code>@RequestId</code>
+                </MudText>
+            }
+            <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Home">Zum Dashboard</MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
 
 @code{
     [CascadingParameter]

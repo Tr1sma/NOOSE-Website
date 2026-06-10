@@ -30,6 +30,12 @@
             <div>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
                            OnClick="SetzenAsync" Disabled="@(_neu == Aktuell)">Einstufung speichern</MudButton>
+                @if (_neu == Aktuell)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                        Wähle oben eine andere Einstufung, um sie zu speichern.
+                    </MudText>
+                }
             </div>
         </MudStack>
     </MudPaper>
