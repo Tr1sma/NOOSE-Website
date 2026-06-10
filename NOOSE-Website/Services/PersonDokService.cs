@@ -28,6 +28,24 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         return await ZuAnzeigeAsync(db, doks, istFuehrung, cancellationToken);
     }
 
+    public async Task<List<PersonDokAnzeige>> GetFuerOrgAsync(string orgTyp, string orgId, bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Sichtbarkeit der Organisations-Akte selbst prüfen.
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, orgTyp, orgId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
+        var doks = await db.PersonDoks
+            .Include(d => d.Person)
+            // Person == null → Akte im Papierkorb; Verschlusssache-Personen nur für Führung.
+            .Where(d => d.OrgTyp == orgTyp && d.OrgId == orgId
+                && d.Person != null && (istFuehrung || !d.Person.IstVerschlusssache))
+            .OrderByDescending(d => d.Zeitpunkt)
+            .ToListAsync(cancellationToken);
+        return await ZuAnzeigeAsync(db, doks, istFuehrung, cancellationToken);
+    }
+
     public async Task<List<PersonDokAnzeige>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

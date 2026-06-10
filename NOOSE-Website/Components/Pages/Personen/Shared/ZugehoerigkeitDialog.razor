@@ -24,6 +24,12 @@
                     </MudStack>
                 </ItemTemplate>
             </MudAutocomplete>
+
+            @* Rang/Rolle + Leitung direkt hier setzbar – spart den Umweg über die Org-Akte. *@
+            <MudTextField @bind-Value="_rangRolle" Label="@(IstFraktion ? "Rang (optional)" : "Rolle (optional)")"
+                          Variant="Variant.Outlined" />
+            <MudSwitch T="bool" @bind-Value="_istLeitung" Color="Color.Primary"
+                       Label="@(IstFraktion ? "Gehört zur Leaderschaft" : "Gehört zur Leitung")" />
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -47,6 +53,8 @@
     }
     private bool IstFraktion => _typ == nameof(Fraktion);
     private AkteTreffer? _ziel;
+    private string? _rangRolle;
+    private bool _istLeitung;
 
     private async Task<IEnumerable<AkteTreffer>> Suchen(string value, CancellationToken token)
     {
@@ -67,13 +75,14 @@
         {
             return;
         }
-        MudDialog.Close(DialogResult.Ok(new ZugehoerigkeitWahl(_typ, _ziel.Id)));
+        MudDialog.Close(DialogResult.Ok(new ZugehoerigkeitWahl(_typ, _ziel.Id,
+            string.IsNullOrWhiteSpace(_rangRolle) ? null : _rangRolle.Trim(), _istLeitung)));
     }
 
     private void Abbrechen() => MudDialog.Cancel();
 
     public record AkteTreffer(string Id, string Name, string Aktenzeichen);
-    public record ZugehoerigkeitWahl(string Typ, string ZielId);
+    public record ZugehoerigkeitWahl(string Typ, string ZielId, string? RangRolle = null, bool IstLeitung = false);
 
     public static async Task<ZugehoerigkeitWahl?> ZeigenAsync(IDialogService dialog, bool istFuehrung,
         IReadOnlyList<string> ausschlussFraktionIds, IReadOnlyList<string> ausschlussGruppenIds)

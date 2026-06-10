@@ -133,11 +133,13 @@
         {
             if (wahl.Typ == nameof(Fraktion))
             {
-                await FraktionService.MitgliedHinzufuegenAsync(wahl.ZielId, new MitgliedEingabe { PersonId = PersonId }, User);
+                await FraktionService.MitgliedHinzufuegenAsync(wahl.ZielId,
+                    new MitgliedEingabe { PersonId = PersonId, Rang = wahl.RangRolle, IstLeitung = wahl.IstLeitung }, User);
             }
             else
             {
-                await GruppeService.MitgliedHinzufuegenAsync(wahl.ZielId, new GruppeMitgliedEingabe { PersonId = PersonId }, User);
+                await GruppeService.MitgliedHinzufuegenAsync(wahl.ZielId,
+                    new GruppeMitgliedEingabe { PersonId = PersonId, Rolle = wahl.RangRolle, IstLeitung = wahl.IstLeitung }, User);
             }
             Snackbar.Add("Zugehörigkeit hinzugefügt.", Severity.Success);
             await AktualisierenAsync();

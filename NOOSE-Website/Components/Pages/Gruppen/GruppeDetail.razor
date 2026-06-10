@@ -72,6 +72,9 @@ else
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <EinstufungPanel Aktuell="_gruppe.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
                 </MudTabPanel>
+                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                    <OrgDoksPanel OrgTyp="@nameof(Personengruppe)" OrgId="@_gruppe.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgBeziehungenPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
