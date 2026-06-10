@@ -39,16 +39,26 @@ public interface IAufgabeService
 
     /// <summary>Audit-Einträge der Aufgabe inkl. Zuweisungen/Verknüpfungen (für die Akten-Historie).</summary>
     Task<List<AuditLog>> GetHistorieAsync(string aufgabeId, CancellationToken cancellationToken = default);
+
+    /// <summary>Öffentlicher Anzeigename einer Bezugs-Akte (für den vorausgefüllten Bezug beim Anlegen), sofern für den Aufrufer sichtbar; sonst null. Nie Klarname.</summary>
+    Task<string?> BezugAnzeigeAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Listenzeile für das Aufgaben-Team-Board (öffentliche Codenamen, nie Klarname).</summary>
-public sealed record AufgabeZeile(
-    string Id,
-    string Aktenzeichen,
-    string Titel,
-    AufgabeStatus Status,
-    AufgabePrioritaet Prioritaet,
-    DateTime? Faelligkeit,
-    DateTime? ErledigtAm,
-    string? ErstellerCodename,
-    IReadOnlyList<string> ZugewieseneCodenames);
+/// <summary>
+/// Listenzeile/Karte für das Aufgaben-Team-Board (öffentliche Codenamen, nie Klarname).
+/// Klasse (nicht Record), damit das Kanban-Board den <see cref="Status"/> beim Drag&amp;Drop optimistisch
+/// umsetzen kann. <see cref="DarfStatusAendern"/> spiegelt das Server-Gate (Ersteller/Zugewiesener/Führung).
+/// </summary>
+public sealed class AufgabeZeile
+{
+    public string Id { get; set; } = string.Empty;
+    public string Aktenzeichen { get; set; } = string.Empty;
+    public string Titel { get; set; } = string.Empty;
+    public AufgabeStatus Status { get; set; }
+    public AufgabePrioritaet Prioritaet { get; set; }
+    public DateTime? Faelligkeit { get; set; }
+    public DateTime? ErledigtAm { get; set; }
+    public string? ErstellerCodename { get; set; }
+    public IReadOnlyList<string> ZugewieseneCodenames { get; set; } = Array.Empty<string>();
+    public bool DarfStatusAendern { get; set; }
+}

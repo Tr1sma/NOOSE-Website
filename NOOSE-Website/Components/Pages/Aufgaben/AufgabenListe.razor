@@ -1,20 +1,21 @@
 @page "/aufgaben"
 @inject IAufgabeService AufgabeService
 @inject NavigationManager Nav
+@inject ISnackbar Snackbar
 
 <PageTitle>Aufgaben · NOOSE</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
     <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Aufgaben</MudText>
+    <MudText Typo="Typo.h4">Aufgaben-Board</MudText>
     <MudSpacer />
     <AuthorizeView Policy="@Policies.Fuehrung">
         <MudButton Href="/aufgaben/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
     <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
 </MudStack>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Gemeinsames Team-Board: Aufgaben anlegen, zuweisen und verfolgen. Überfällige Aufgaben sind rot markiert.
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Gemeinsames Team-Board: Karten per Drag &amp; Drop zwischen den Spalten verschieben, um den Status zu ändern.
 </MudText>
 
 @if (_laden)
@@ -23,77 +24,97 @@
 }
 else
 {
-    <MudDataGrid T="AufgabeZeile" Items="_zeilen" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
-                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Oeffnen(args.Item))" Dense="true">
-        <ToolBarContent>
-            <MudTextField @bind-Value="_suche" Placeholder="Suchen (Titel, Aktenzeichen, Agent)…" Immediate="true"
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
-            <MudSpacer />
-            <MudSwitch T="bool" Value="_nurMeine" ValueChanged="NurMeineGewaehlt" Color="Color.Primary" Label="Nur meine" Class="mr-4" />
-            <MudSelect T="AufgabeStatus?" Value="_statusFilter" ValueChanged="StatusGewaehlt" Label="Status" Dense="true"
-                       Clearable="true" Variant="Variant.Outlined" Style="max-width:200px;">
-                <MudSelectItem T="AufgabeStatus?" Value="@((AufgabeStatus?)null)">Alle</MudSelectItem>
+    @* Filterzeile *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4 flex-wrap">
+        <MudTextField T="string" Value="_suche" ValueChanged="SucheGeaendert" Placeholder="Suchen (Titel, Aktenzeichen, Agent)…"
+                      Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="max-width:360px;" />
+        <MudSpacer />
+        <MudSwitch T="bool" Value="_nurMeine" ValueChanged="NurMeineGewaehlt" Color="Color.Primary" Label="Nur meine" />
+        <MudSelect T="AufgabePrioritaet?" Value="_prioFilter" ValueChanged="PrioGewaehlt" Label="Priorität" Dense="true"
+                   Clearable="true" Variant="Variant.Outlined" Style="max-width:200px;">
+            <MudSelectItem T="AufgabePrioritaet?" Value="@((AufgabePrioritaet?)null)">Alle</MudSelectItem>
+            @foreach (var p in AufgabePrioritaetAnzeige.Alle)
+            {
+                <MudSelectItem T="AufgabePrioritaet?" Value="@p">@AufgabePrioritaetAnzeige.Name(p)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
+
+    @* Kennzahl-Kacheln *@
+    <MudGrid Class="mb-4">
+        @foreach (var s in AufgabeStatusAnzeige.Alle)
+        {
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-3" Elevation="2">
+                    <MudText Typo="Typo.h5">@Anzahl(s)</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@AufgabeStatusAnzeige.Name(s)</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="2">
+                <MudText Typo="Typo.h5" Color="@(AnzahlUeberfaellig > 0 ? Color.Error : Color.Default)">@AnzahlUeberfaellig</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Überfällig</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudDropContainer T="AufgabeZeile" @ref="_container" Items="_alle"
+                      ItemsSelector="@((item, zone) => item.Status.ToString() == zone && Passt(item))"
+                      ItemDropped="ItemAbgelegtAsync"
+                      CanDrop="@((item, zone) => item.DarfStatusAendern)"
+                      ApplyDropClassesOnDragStarted="true"
+                      CanDropClass="aufgaben-dropzone-aktiv" NoDropClass="aufgaben-dropzone-gesperrt">
+        <ChildContent>
+            <div class="aufgaben-board">
                 @foreach (var s in AufgabeStatusAnzeige.Alle)
                 {
-                    <MudSelectItem T="AufgabeStatus?" Value="@s">@AufgabeStatusAnzeige.Name(s)</MudSelectItem>
+                    <div class="aufgaben-spalte">
+                        <div class="aufgaben-spalte-kopf" style="@($"background-color:{Farbe(s)};")">
+                            <MudIcon Icon="@Symbol(s)" Size="Size.Small" />
+                            <span>@AufgabeStatusAnzeige.Name(s)</span>
+                            <MudSpacer />
+                            <span>(@Anzahl(s))</span>
+                        </div>
+                        <MudDropZone T="AufgabeZeile" Identifier="@s.ToString()" Class="aufgaben-spalte-body" />
+                    </div>
                 }
-            </MudSelect>
-        </ToolBarContent>
-        <Columns>
-            <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
-            <TemplateColumn Title="Titel" SortBy="x => x.Titel">
-                <CellTemplate>
-                    <MudLink Href="@($"/aufgaben/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Titel</MudLink>
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Status" SortBy="x => x.Status">
-                <CellTemplate>
-                    <AufgabeStatusChip Status="context.Item.Status" />
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Priorität" SortBy="x => x.Prioritaet">
-                <CellTemplate>
-                    <AufgabePrioritaetChip Prioritaet="context.Item.Prioritaet" />
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Fällig" SortBy="x => x.Faelligkeit ?? DateTime.MaxValue">
-                <CellTemplate>
-                    @if (context.Item.Faelligkeit is { } f)
+            </div>
+        </ChildContent>
+        <ItemRenderer>
+            @* Karte ist gleichzeitig ziehbar (Drag&Drop) UND klickbar. Navigation MUSS per @onclick (programmatisch)
+               erfolgen – ein <a href> (MudLink) würde vom Drag-Container per preventDefault geschluckt; ein
+               Blazor-@onclick-Handler feuert hingegen weiterhin. *@
+            <MudPaper Class="aufgaben-karte pa-3" Elevation="2" @onclick="@(() => Oeffnen(context))">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">@context.Titel</MudText>
+                        <AufgabePrioritaetChip Prioritaet="context.Prioritaet" />
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Aktenzeichen</MudText>
+                    @if (context.Faelligkeit is { } f)
                     {
-                        <MudText Typo="Typo.body2" Color="@(Ueberfaellig(context.Item) ? Color.Error : Color.Default)">
-                            @f.ToLocalTime().ToString("dd.MM.yyyy")
-                            @if (Ueberfaellig(context.Item))
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Color="@(Ueberfaellig(context) ? Color.Error : Color.Default)" />
+                            <MudText Typo="Typo.caption" Color="@(Ueberfaellig(context) ? Color.Error : Color.Default)">
+                                @f.ToLocalTime().ToString("dd.MM.yyyy")@(Ueberfaellig(context) ? " · überfällig" : "")
+                            </MudText>
+                        </MudStack>
+                    }
+                    @if (context.ZugewieseneCodenames.Count > 0)
+                    {
+                        <div class="d-flex flex-wrap" style="gap:.25rem;">
+                            @foreach (var c in context.ZugewieseneCodenames)
                             {
-                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" Class="ml-1" Title="Überfällig" />
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">@c</MudChip>
                             }
-                        </MudText>
+                        </div>
                     }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
-                    }
-                </CellTemplate>
-            </TemplateColumn>
-            <TemplateColumn Title="Zugewiesen" Sortable="false">
-                <CellTemplate>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        @(context.Item.ZugewieseneCodenames.Count == 0 ? "—" : string.Join(", ", context.Item.ZugewieseneCodenames))
-                    </MudText>
-                </CellTemplate>
-            </TemplateColumn>
-            <PropertyColumn Property="x => x.ErstellerCodename" Title="Ersteller" />
-        </Columns>
-        <NoRecordsContent>
-            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
-                <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Default" Size="Size.Large" />
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Aufgaben gefunden.</MudText>
-                <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
-            </MudStack>
-        </NoRecordsContent>
-        <PagerContent>
-            <MudDataGridPager T="AufgabeZeile" />
-        </PagerContent>
-    </MudDataGrid>
+                </MudStack>
+            </MudPaper>
+        </ItemRenderer>
+    </MudDropContainer>
 }
 
 @code {
@@ -102,9 +123,10 @@ else
     private bool _laden = true;
     private bool _nurMeine;
     private string _suche = string.Empty;
-    private AufgabeStatus? _statusFilter;
-    private List<AufgabeZeile> _zeilen = new();
+    private AufgabePrioritaet? _prioFilter;
+    private List<AufgabeZeile> _alle = new();
     private ClaimsPrincipal _user = default!;
+    private MudDropContainer<AufgabeZeile>? _container;
 
     protected override async Task OnInitializedAsync()
     {
@@ -115,8 +137,9 @@ else
     private async Task LadenAsync()
     {
         _laden = true;
-        _zeilen = await AufgabeService.GetTeamboardAsync(_nurMeine, _user);
+        _alle = await AufgabeService.GetTeamboardAsync(_nurMeine, _user);
         _laden = false;
+        _container?.Refresh();
     }
 
     private async Task NurMeineGewaehlt(bool wert)
@@ -125,15 +148,22 @@ else
         await LadenAsync();
     }
 
-    private void StatusGewaehlt(AufgabeStatus? status)
+    private void SucheGeaendert(string wert)
     {
-        _statusFilter = status;
-        StateHasChanged();
+        _suche = wert ?? string.Empty;
+        _container?.Refresh();
     }
 
-    private bool Filter(AufgabeZeile z)
+    private void PrioGewaehlt(AufgabePrioritaet? prio)
     {
-        if (_statusFilter is not null && z.Status != _statusFilter)
+        _prioFilter = prio;
+        _container?.Refresh();
+    }
+
+    /// <summary>Client-Filter (Suchtext + Priorität); der „nur meine"-Filter läuft serverseitig.</summary>
+    private bool Passt(AufgabeZeile z)
+    {
+        if (_prioFilter is not null && z.Prioritaet != _prioFilter)
         {
             return false;
         }
@@ -147,9 +177,51 @@ else
             || z.ZugewieseneCodenames.Any(c => c.Contains(s, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Überfällig: Fälligkeitsdatum vor heute und Aufgabe noch offen.</summary>
+    private int Anzahl(AufgabeStatus s) => _alle.Count(z => z.Status == s && Passt(z));
+    private int AnzahlUeberfaellig => _alle.Count(z => Passt(z) && Ueberfaellig(z));
+
     private static bool Ueberfaellig(AufgabeZeile z)
         => z.Faelligkeit is { } f && f.Date < DateTime.Today && AufgabeStatusAnzeige.IstOffen(z.Status);
 
+    private async Task ItemAbgelegtAsync(MudItemDropInfo<AufgabeZeile> info)
+    {
+        var item = info.Item;
+        if (item is null || !Enum.TryParse<AufgabeStatus>(info.DropzoneIdentifier, out var ziel) || item.Status == ziel)
+        {
+            return;
+        }
+        var alt = item.Status;
+        item.Status = ziel; // optimistisch: Karte sofort in der Zielspalte
+        _container?.Refresh();
+        try
+        {
+            await AufgabeService.StatusSetzenAsync(item.Id, ziel, _user);
+        }
+        catch (Exception ex)
+        {
+            item.Status = alt; // zurückrollen
+            _container?.Refresh();
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
     private void Oeffnen(AufgabeZeile z) => Nav.NavigateTo($"/aufgaben/{z.Id}");
+
+    private static string Farbe(AufgabeStatus s) => s switch
+    {
+        AufgabeStatus.Offen => "var(--mud-palette-info)",
+        AufgabeStatus.InBearbeitung => "var(--mud-palette-warning)",
+        AufgabeStatus.Erledigt => "var(--mud-palette-success)",
+        AufgabeStatus.Abgebrochen => "var(--mud-palette-dark)",
+        _ => "var(--mud-palette-surface)",
+    };
+
+    private static string Symbol(AufgabeStatus s) => s switch
+    {
+        AufgabeStatus.Offen => Icons.Material.Filled.RadioButtonUnchecked,
+        AufgabeStatus.InBearbeitung => Icons.Material.Filled.Autorenew,
+        AufgabeStatus.Erledigt => Icons.Material.Filled.CheckCircle,
+        AufgabeStatus.Abgebrochen => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline,
+    };
 }

@@ -23,6 +23,7 @@ public class AufgabeService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var meId = handelnder.GetAgentId();
+        var istFuehrung = handelnder.IstFuehrung();
         var query = db.Aufgaben.AsQueryable();
         if (nurMeine && !string.IsNullOrEmpty(meId))
         {
@@ -48,11 +49,15 @@ public class AufgabeService(
         // Zuweisungen flach über WHERE FK IN; Codename per Referenz-Join (kein LATERAL).
         var zuweisungen = await db.AufgabeZuweisungen
             .Where(z => ids.Contains(z.AufgabeId))
-            .Select(z => new { z.AufgabeId, Codename = z.Agent!.Codename })
+            .Select(z => new { z.AufgabeId, z.AgentId, Codename = z.Agent!.Codename })
             .ToListAsync(cancellationToken);
         var zugewieseneJeAufgabe = zuweisungen
             .GroupBy(z => z.AufgabeId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Codename).OrderBy(c => c).ToList());
+        // Wer ist mir zugewiesen? (für die Status-Ändern-Berechtigung des Kanban-Boards)
+        var meineZuweisungen = string.IsNullOrEmpty(meId)
+            ? new HashSet<string>()
+            : zuweisungen.Where(z => z.AgentId == meId).Select(z => z.AufgabeId).ToHashSet();
 
         // Ersteller-Codenamen einsammeln (Codename ist öffentlich, nie Klarname).
         var erstellerIds = rows.Select(r => r.ErstelltVonId).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
@@ -61,11 +66,20 @@ public class AufgabeService(
             .Select(u => new { u.Id, u.Codename })
             .ToDictionaryAsync(u => u.Id, u => u.Codename, cancellationToken);
 
-        return rows.Select(r => new AufgabeZeile(
-            r.Id, r.Aktenzeichen, r.Titel, r.Status, r.Prioritaet, r.Faelligkeit, r.ErledigtAm,
-            r.ErstelltVonId is not null && erstellerNamen.TryGetValue(r.ErstelltVonId, out var name) ? name : null,
-            zugewieseneJeAufgabe.TryGetValue(r.Id, out var liste) ? liste : new List<string>()))
-            .ToList();
+        return rows.Select(r => new AufgabeZeile
+        {
+            Id = r.Id,
+            Aktenzeichen = r.Aktenzeichen,
+            Titel = r.Titel,
+            Status = r.Status,
+            Prioritaet = r.Prioritaet,
+            Faelligkeit = r.Faelligkeit,
+            ErledigtAm = r.ErledigtAm,
+            ErstellerCodename = r.ErstelltVonId is not null && erstellerNamen.TryGetValue(r.ErstelltVonId, out var name) ? name : null,
+            ZugewieseneCodenames = zugewieseneJeAufgabe.TryGetValue(r.Id, out var liste) ? liste : new List<string>(),
+            // Status ändern dürfen Führung, Ersteller oder zugewiesene Agenten (spiegelt StatusSetzenAsync).
+            DarfStatusAendern = istFuehrung || r.ErstelltVonId == meId || meineZuweisungen.Contains(r.Id),
+        }).ToList();
     }
 
     public async Task<Aufgabe?> GetDetailAsync(string id, CancellationToken cancellationToken = default)
@@ -289,6 +303,23 @@ public class AufgabeService(
             .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
             .OrderByDescending(a => a.Zeitpunkt)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<string?> BezugAnzeigeAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(entitaetTyp) || string.IsNullOrWhiteSpace(entitaetId))
+        {
+            return null;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Nur anzeigen, was der Aufrufer sehen darf (Verschlusssache/Papierkorb/Personalakte-Gate).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.IstFuehrung(), cancellationToken))
+        {
+            return null;
+        }
+        var map = await AktenReferenz.AufloesenAsync(db, new[] { (entitaetTyp, entitaetId) }, cancellationToken);
+        return map.TryGetValue((entitaetTyp, entitaetId), out var a) ? a.Anzeige : null;
     }
 
     // ---- Helfer ----

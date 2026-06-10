@@ -7,6 +7,9 @@ public class VerknuepfungEingabe
     public string ZielTyp { get; set; } = "Person";
     public string ZielId { get; set; } = string.Empty;
     public string? Label { get; set; }
+
+    /// <summary>Nur-UI: lesbarer Anzeigename des Ziels (vom Picker gesetzt, nicht persistiert).</summary>
+    public string? Anzeige { get; set; }
 }
 
 /// <summary>Aufbereitete Verknüpfung aus Sicht einer Akte: die jeweils „andere Seite" samt Bezeichnung.</summary>

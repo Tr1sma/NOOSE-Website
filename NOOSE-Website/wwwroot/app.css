@@ -46,3 +46,68 @@ html, body {
     color: #D29922;
     font-weight: 600;
 }
+
+/* ---- Aufgaben-Kanban-Board ---- */
+.aufgaben-board {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    overflow-x: auto;
+    padding-bottom: .5rem;
+}
+
+.aufgaben-spalte {
+    flex: 1 1 0;
+    min-width: 270px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    overflow: hidden;
+}
+
+.aufgaben-spalte-kopf {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .7rem 1rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+    .aufgaben-spalte-kopf .mud-icon-root {
+        color: #fff;
+    }
+
+.aufgaben-spalte-body {
+    /* Feste Höhe für etwa 4 Aufgaben-Karten; danach scrollt die Spalte in sich selbst,
+       statt die ganze Seite zu verlängern. Über die Variable je nach Kartenhöhe justierbar. */
+    --aufgaben-karten-hoehe: 7rem;
+    height: calc(4 * var(--aufgaben-karten-hoehe) + 3 * .6rem + 1.2rem);
+    overflow-y: auto;
+    padding: .6rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    transition: background-color .15s ease;
+}
+
+.aufgaben-karte {
+    cursor: grab;
+}
+
+    .aufgaben-karte:active {
+        cursor: grabbing;
+    }
+
+/* Drag-Visuals (MudDropContainer ApplyDropClassesOnDragStarted) */
+.aufgaben-dropzone-aktiv {
+    background-color: rgba(57, 211, 233, 0.08);
+    outline: 2px dashed var(--mud-palette-primary);
+    outline-offset: -6px;
+}
+
+.aufgaben-dropzone-gesperrt {
+    background-color: rgba(244, 67, 54, 0.06);
+}

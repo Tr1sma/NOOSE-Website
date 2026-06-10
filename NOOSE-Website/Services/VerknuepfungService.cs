@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Aufgaben;
@@ -180,6 +181,18 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // Härtung: nicht manuell auf ein Ziel verlinken, das der Handelnde nicht sehen darf (Verschlusssache).
+        // Die Picker (VerknuepfungDialog) zeigen ohnehin nur sichtbare Ziele – das hier schließt geschmiedete
+        // Direktaufrufe. Nur die VS-fähigen Aktentypen prüfen; Agent/PersonDok/Observation/Aufgabe bleiben
+        // unverändert verlinkbar (deren Sichtbarkeit regelt der jeweilige Anzeige-/Lesepfad).
+        if (nachTyp is nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei)
+                or nameof(Operation) or nameof(Taskforce) or nameof(Vorgang)
+            && !await Sichtbarkeit.IstAkteSichtbarAsync(db, nachTyp, nachId, handelnder.IstFuehrung(), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");
+        }
+
         // Doppelte (aktive) Verknüpfung derselben Art verhindern – in beiden Richtungen. Soft-gelöschte
         // (Papierkorb) sind durch den globalen Filter ausgenommen und blockieren das Neuanlegen nicht.
         var existiert = await db.Verknuepfungen.AnyAsync(v => v.Art == art

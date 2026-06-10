@@ -373,6 +373,22 @@
     private static string ObsText(ObservationAnzeige? o)
         => o is null ? string.Empty : $"{o.Obs.Person?.Name} – {o.Obs.Beginn.ToLocalTime():dd.MM.yyyy}";
 
+    private string? AktuelleAnzeige => _zielTyp switch
+    {
+        nameof(Person) => _person?.Name,
+        nameof(Fraktion) => _fraktion?.Name,
+        nameof(Personengruppe) => _gruppe?.Name,
+        nameof(Partei) => _partei?.Name,
+        nameof(Operation) => _operation?.Titel,
+        nameof(Taskforce) => _taskforce?.Name,
+        nameof(Vorgang) => _vorgang?.Titel,
+        nameof(Aufgabe) => _aufgabe?.Titel,
+        nameof(Agent) => _agent?.Codename,
+        nameof(PersonDok) => DokText(_dok),
+        nameof(Observation) => ObsText(_observation),
+        _ => null,
+    };
+
     private void Speichern()
     {
         var id = AktuelleZielId;
@@ -380,7 +396,7 @@
         {
             return;
         }
-        MudDialog.Close(DialogResult.Ok(new VerknuepfungEingabe { ZielTyp = _zielTyp, ZielId = id, Label = _label }));
+        MudDialog.Close(DialogResult.Ok(new VerknuepfungEingabe { ZielTyp = _zielTyp, ZielId = id, Label = _label, Anzeige = AktuelleAnzeige }));
     }
 
     private void Abbrechen() => MudDialog.Cancel();
