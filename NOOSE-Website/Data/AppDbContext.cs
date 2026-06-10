@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
@@ -60,6 +61,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FraktionWaffenbestand> FraktionWaffenbestaende => Set<FraktionWaffenbestand>();
     public DbSet<FraktionLagerbestand> FraktionLagerbestaende => Set<FraktionLagerbestand>();
     public DbSet<FraktionMitglied> FraktionMitglieder => Set<FraktionMitglied>();
+    public DbSet<FraktionAgent> FraktionAgenten => Set<FraktionAgent>();
 
     // ---- Phase 4b: Personengruppen ----
     public DbSet<Personengruppe> Personengruppen => Set<Personengruppe>();
@@ -70,6 +72,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Partei> Parteien => Set<Partei>();
     public DbSet<ParteiMitglied> ParteiMitglieder => Set<ParteiMitglied>();
     public DbSet<ParteiAgent> ParteiAgenten => Set<ParteiAgent>();
+
+    // ---- Phase 5b: Operationen ----
+    public DbSet<Operation> Operationen => Set<Operation>();
+    public DbSet<OperationAgent> OperationAgenten => Set<OperationAgent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -296,6 +302,17 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(l => l.FraktionId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(f => f.Mitglieder).WithOne(m => m.Fraktion!)
                 .HasForeignKey(m => m.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Agenten).WithOne(a => a.Fraktion!)
+                .HasForeignKey(a => a.FraktionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FraktionAgent>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(a => new { a.FraktionId, a.AgentId }).IsUnique();
+            b.HasIndex(a => a.AgentId);
         });
 
         modelBuilder.Entity<FraktionRang>(b =>
@@ -397,6 +414,34 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.ParteiId, a.AgentId }).IsUnique();
+            b.HasIndex(a => a.AgentId);
+        });
+
+        // ---- Phase 5b: Operationen ----
+        modelBuilder.Entity<Operation>(b =>
+        {
+            b.Property(o => o.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(o => o.Titel).HasMaxLength(200).IsRequired();
+            b.Property(o => o.Typ).HasMaxLength(100);
+            b.Property(o => o.Ort).HasMaxLength(200);
+            b.Property(o => o.Ablauf).HasMaxLength(4000);
+            b.Property(o => o.Ergebnis).HasMaxLength(4000);
+            b.Property(o => o.Bemerkungen).HasMaxLength(2000);
+            b.HasIndex(o => o.Aktenzeichen).IsUnique();
+            b.HasIndex(o => o.Titel);
+            b.HasIndex(o => o.Status);
+            b.HasIndex(o => o.IstVerschlusssache);
+
+            b.HasMany(o => o.Agenten).WithOne(a => a.Operation!)
+                .HasForeignKey(a => a.OperationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperationAgent>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(a => new { a.OperationId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 

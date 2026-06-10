@@ -1,5 +1,6 @@
 using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
+using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
 
 namespace NOOSE_Website.Models.Querschnitt;
@@ -7,13 +8,23 @@ namespace NOOSE_Website.Models.Querschnitt;
 /// <summary>
 /// Kriterien einer globalen Suche. <see cref="Kategorien"/> enthält die CLR-Typnamen der zu
 /// durchsuchenden Akten (leer = alle). <see cref="TagIds"/> schränkt auf Akten mit mindestens einem
-/// dieser Tags ein. Wird für gespeicherte Suchen als JSON abgelegt.
+/// dieser Tags ein. Wird für gespeicherte Suchen als JSON abgelegt (neue Flags sind abwärtskompatibel:
+/// fehlen sie im JSON, gelten sie als false).
 /// </summary>
 public class SuchKriterien
 {
     public string? Text { get; set; }
     public List<string> Kategorien { get; set; } = new();
     public List<string> TagIds { get; set; } = new();
+
+    /// <summary>Tippfehler-Toleranz: ergänzt die exakte Suche um ähnliche Treffer (Levenshtein, in-memory).</summary>
+    public bool Fuzzy { get; set; }
+
+    /// <summary>
+    /// Max-Modus: durchsucht zusätzlich alle Nebenfelder (inkl. Person-Steckbrief) exakt, erzwingt
+    /// Doks/Quellen/Kommentare und weitet die Tippfehler-Toleranz wortweise auf die Inhaltsfelder aus.
+    /// </summary>
+    public bool MaxModus { get; set; }
 }
 
 /// <summary>
@@ -38,6 +49,7 @@ public static class SuchNavigation
         nameof(Fraktion) => $"/fraktionen/{zielId}",
         nameof(Personengruppe) => $"/personengruppen/{zielId}",
         nameof(Partei) => $"/parteien/{zielId}",
+        nameof(Operation) => $"/operationen/{zielId}",
         _ => $"/personen/{zielId}",
     };
 

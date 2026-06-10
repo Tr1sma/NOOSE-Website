@@ -20,6 +20,8 @@
 
         <EinstufungBadge Wert="Partei.Einstufung" />
 
+        <ErmittlungsleiterAnzeige Namen="Ermittlungsleiter" />
+
         <MudDivider />
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -38,4 +40,7 @@
 @code {
     [Parameter, EditorRequired] public Partei Partei { get; set; } = default!;
     [Parameter] public int Mitgliederzahl { get; set; }
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> Ermittlungsleiter { get; set; } = Array.Empty<string>();
 }

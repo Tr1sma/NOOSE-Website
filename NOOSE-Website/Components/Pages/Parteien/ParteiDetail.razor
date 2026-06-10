@@ -35,7 +35,7 @@ else
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <Parteikarte Partei="_partei" Mitgliederzahl="_mitgliederzahl" />
+                <Parteikarte Partei="_partei" Mitgliederzahl="_mitgliederzahl" Ermittlungsleiter="_ermittlungsleiter" />
             </div>
         </MudItem>
 
@@ -76,7 +76,7 @@ else
                     <ParteiMitgliederPanel ParteiId="@_partei.Id" User="_user" Changed="MitgliederGeaendertAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
-                    <ParteiAgentePanel ParteiId="@_partei.Id" User="_user" />
+                    <ParteiAgentePanel ParteiId="@_partei.Id" User="_user" Changed="ErmittlungsleiterAktualisierenAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <EinstufungPanel Aktuell="_partei.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync" />
@@ -108,6 +108,7 @@ else
     private bool _laden = true;
     private Partei? _partei;
     private int _mitgliederzahl;
+    private List<string> _ermittlungsleiter = new();
     private List<EinstufungVerlauf> _einstufungVerlauf = new();
     private ClaimsPrincipal _user = default!;
     private Guid _historieKey = Guid.NewGuid();
@@ -141,8 +142,25 @@ else
         {
             _einstufungVerlauf = await ParteiService.GetEinstufungVerlaufAsync(_partei.Id, _user.IstFuehrung());
             _mitgliederzahl = (await ParteiService.GetMitgliederAsync(_partei.Id, _user.IstFuehrung())).Count;
+            await ErmittlungsleiterLadenAsync();
         }
         _laden = false;
+    }
+
+    private async Task ErmittlungsleiterLadenAsync()
+    {
+        if (_partei is null)
+        {
+            return;
+        }
+        var el = await ParteiService.GetErmittlungsleiterAsync(_partei.Id);
+        _ermittlungsleiter = el.Select(a => a.Agent?.Codename ?? "?").ToList();
+    }
+
+    private async Task ErmittlungsleiterAktualisierenAsync()
+    {
+        await ErmittlungsleiterLadenAsync();
+        StateHasChanged();
     }
 
     private async Task NeuLadenAsync()

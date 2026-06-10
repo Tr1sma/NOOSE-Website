@@ -8,6 +8,10 @@ public class PersonengruppeEingabe
     public string Name { get; set; } = string.Empty;
     public string? Beschreibung { get; set; }
     public string? Ziele { get; set; }
+
+    /// <summary>Kategorie der Gruppen-Akte (Persönlichkeit/Gruppierung/Person of Interest).</summary>
+    public GruppenArt Art { get; set; } = GruppenArt.Gruppierung;
+
     public Einstufung Einstufung { get; set; } = Einstufung.Unbekannt;
     public string? EinstufungBegruendung { get; set; }
     public int? GeschaetzteMitgliederzahl { get; set; }

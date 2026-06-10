@@ -12,6 +12,15 @@
                          Variant="Variant.Outlined" Min="0" HelperText="Für den Erfassungsfortschritt (x/y)" Clearable="true" />
     </MudItem>
 
+    <MudItem xs="12" md="6">
+        <MudSelect T="GruppenArt" @bind-Value="Eingabe.Art" Label="Kategorie" Variant="Variant.Outlined">
+            @foreach (var a in GruppenArtAnzeige.Alle)
+            {
+                <MudSelectItem Value="a">@GruppenArtAnzeige.Name(a)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+
     @if (ZeigeEinstufung)
     {
         <MudItem xs="12" md="6">

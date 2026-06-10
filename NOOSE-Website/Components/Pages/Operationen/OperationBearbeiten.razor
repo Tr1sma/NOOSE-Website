@@ -1,0 +1,100 @@
+@page "/operationen/{Id}/bearbeiten"
+@inject IOperationService OperationService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Operation bearbeiten · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_eingabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Operation nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/operationen/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Operation bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <OperationForm Eingabe="_eingabe" ZeigeEinstufung="false" IstFuehrung="_istFuehrung" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/operationen/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private OperationEingabe? _eingabe;
+    private ClaimsPrincipal _user = default!;
+    private bool _istFuehrung;
+    private bool _laden = true;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        var o = await OperationService.GetDetailAsync(Id, _istFuehrung);
+        if (o is not null)
+        {
+            _eingabe = new OperationEingabe
+            {
+                Titel = o.Titel,
+                Typ = o.Typ,
+                Status = o.Status,
+                Ort = o.Ort,
+                Beginn = o.Beginn,
+                Ende = o.Ende,
+                Ablauf = o.Ablauf,
+                Ergebnis = o.Ergebnis,
+                Bemerkungen = o.Bemerkungen,
+                Einstufung = o.Einstufung,
+                IstVerschlusssache = o.IstVerschlusssache,
+            };
+        }
+        _laden = false;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_eingabe is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            await OperationService.AktualisierenAsync(Id, _eingabe, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/operationen/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

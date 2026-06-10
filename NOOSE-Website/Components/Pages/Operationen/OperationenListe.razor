@@ -1,0 +1,148 @@
+@page "/operationen"
+@inject IOperationService OperationService
+@inject NavigationManager Nav
+
+<PageTitle>Operationen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Operationen</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Fuehrung">
+        <MudButton Href="/operationen/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <MudButton Href="/operationen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Operation</MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Einsätze und Einsatzberichte mit Zeitraum, Ablauf, Ergebnis, beteiligten Agents und Einstufung.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="OperationZeile" Items="_zeilen" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Oeffnen(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_suche" Placeholder="Suchen (Titel, Aktenzeichen, Typ)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="OperationStatus?" Value="_statusFilter" ValueChanged="StatusGewaehlt" Label="Status" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:220px;">
+                <MudSelectItem T="OperationStatus?" Value="@((OperationStatus?)null)">Alle</MudSelectItem>
+                @foreach (var s in OperationStatusAnzeige.Alle)
+                {
+                    <MudSelectItem T="OperationStatus?" Value="@s">@OperationStatusAnzeige.Name(s)</MudSelectItem>
+                }
+            </MudSelect>
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
+            <TemplateColumn Title="Titel" SortBy="x => x.Titel">
+                <CellTemplate>
+                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    <MudLink Href="@($"/operationen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Titel</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Typ" Title="Typ" />
+            <TemplateColumn Title="Status" SortBy="x => x.Status">
+                <CellTemplate>
+                    <OperationStatusChip Status="context.Item.Status" />
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Beginn" Title="Beginn" Format="dd.MM.yyyy" />
+            <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
+                <CellTemplate>
+                    <EinstufungBadge Wert="context.Item.Einstufung" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Verschluss" Sortable="false">
+                <CellTemplate>
+                    @if (context.Item.IstVerschlusssache)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
+        </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Operationen – lege die erste an.</MudText>
+                <MudButton Href="/operationen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Operation</MudButton>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="OperationZeile" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string _suche = string.Empty;
+    private OperationStatus? _statusFilter;
+    private List<OperationZeile> _zeilen = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var istFuehrung = user.IstFuehrung();
+        var operationen = await OperationService.GetListeAsync(istFuehrung);
+        _zeilen = operationen.Select(o => new OperationZeile
+        {
+            Id = o.Id,
+            Aktenzeichen = o.Aktenzeichen,
+            Titel = o.Titel,
+            Typ = o.Typ ?? string.Empty,
+            Status = o.Status,
+            Beginn = o.Beginn?.ToLocalTime(),
+            Einstufung = o.Einstufung,
+            IstVerschlusssache = o.IstVerschlusssache,
+            Aktualisiert = (o.GeaendertAm ?? o.ErstelltAm).ToLocalTime(),
+        }).ToList();
+        _laden = false;
+    }
+
+    private void StatusGewaehlt(OperationStatus? status)
+    {
+        _statusFilter = status;
+        StateHasChanged();
+    }
+
+    private bool Filter(OperationZeile z)
+    {
+        if (_statusFilter is not null && z.Status != _statusFilter)
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_suche))
+        {
+            return true;
+        }
+        var s = _suche.Trim();
+        return z.Titel.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Aktenzeichen.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Typ.Contains(s, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Oeffnen(OperationZeile z) => Nav.NavigateTo($"/operationen/{z.Id}");
+
+    private sealed class OperationZeile
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Aktenzeichen { get; set; } = string.Empty;
+        public string Titel { get; set; } = string.Empty;
+        public string Typ { get; set; } = string.Empty;
+        public OperationStatus Status { get; set; }
+        public DateTime? Beginn { get; set; }
+        public Einstufung Einstufung { get; set; }
+        public bool IstVerschlusssache { get; set; }
+        public DateTime Aktualisiert { get; set; }
+    }
+}

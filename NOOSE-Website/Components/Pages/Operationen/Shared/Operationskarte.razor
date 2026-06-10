@@ -1,0 +1,79 @@
+@* Identitäts-/Steckkarte der Operation: Titel, Status, Typ, Zeitraum, Ort, Einstufung, Ermittlungsleiter. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.Radar" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Operation.Titel</MudText>
+                @if (Operation.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Operation.Aktenzeichen</MudText>
+        </div>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+            <OperationStatusChip Status="Operation.Status" />
+            @if (!string.IsNullOrWhiteSpace(Operation.Typ))
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@Operation.Typ</MudChip>
+            }
+        </MudStack>
+
+        <EinstufungBadge Wert="Operation.Einstufung" />
+
+        <ErmittlungsleiterAnzeige Namen="Ermittlungsleiter" />
+
+        <MudDivider />
+
+        @if (Operation.Beginn is not null || Operation.Ende is not null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Default" />
+                <MudText Typo="Typo.body2">@Zeitraum</MudText>
+            </MudStack>
+        }
+        @if (!string.IsNullOrWhiteSpace(Operation.Ort))
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" Color="Color.Default" />
+                <MudText Typo="Typo.body2">@Operation.Ort</MudText>
+            </MudStack>
+        }
+
+        <MudDivider />
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Zuletzt aktualisiert: @((Operation.GeaendertAm ?? Operation.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Operation Operation { get; set; } = default!;
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> Ermittlungsleiter { get; set; } = Array.Empty<string>();
+
+    private string Zeitraum
+    {
+        get
+        {
+            var von = Operation.Beginn?.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+            var bis = Operation.Ende?.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+            return (von, bis) switch
+            {
+                (not null, not null) => $"{von} – {bis}",
+                (not null, null) => $"ab {von}",
+                (null, not null) => $"bis {bis}",
+                _ => "—",
+            };
+        }
+    }
+}

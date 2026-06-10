@@ -1,0 +1,80 @@
+@page "/operationen/papierkorb"
+@attribute [Authorize(Policy = Policies.Fuehrung)]
+@inject IOperationService OperationService
+@inject ISnackbar Snackbar
+
+<PageTitle>Papierkorb – Operationen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/operationen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Papierkorb – Operationen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Gelöschte Operationen. Die Führung kann sie wiederherstellen; sie erscheinen dann wieder in der Liste.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_operationen.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Der Papierkorb ist leer.</MudAlert>
+}
+else
+{
+    <MudTable Items="_operationen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Titel</MudTh>
+            <MudTh>Gelöscht am</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.body2">@context.Aktenzeichen</MudText></MudTd>
+            <MudTd DataLabel="Titel"><MudText Typo="Typo.body2">@context.Titel</MudText></MudTd>
+            <MudTd DataLabel="Gelöscht am">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.GeloeschtAm?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Restore"
+                           OnClick="@(() => WiederherstellenAsync(context))">Wiederherstellen</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<Operation> _operationen = new();
+
+    protected override Task OnInitializedAsync() => LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _operationen = await OperationService.GetPapierkorbAsync();
+        _laden = false;
+    }
+
+    private async Task WiederherstellenAsync(Operation operation)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await OperationService.WiederherstellenAsync(operation.Id, user);
+            Snackbar.Add($"Operation {operation.Aktenzeichen} wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
+    }
+}

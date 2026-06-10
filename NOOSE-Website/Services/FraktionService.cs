@@ -159,6 +159,19 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             }
         }
 
+        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        var erstellerId = handelnder.GetAgentId();
+        if (erstellerId is not null)
+        {
+            db.FraktionAgenten.Add(new FraktionAgent
+            {
+                FraktionId = fraktion.Id,
+                AgentId = erstellerId,
+                IstErmittlungsleiter = true,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         await tx.CommitAsync(cancellationToken);
         return fraktion;
     }
@@ -351,6 +364,106 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         await tx.CommitAsync(cancellationToken);
     }
 
+    public async Task<List<FraktionAgent>> GetAgentenAsync(string fraktionId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.FraktionAgenten
+            .Where(a => a.FraktionId == fraktionId)
+            .Include(a => a.Agent)
+            .OrderByDescending(a => a.IstErmittlungsleiter)
+            .ThenBy(a => a.Agent!.Codename)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<FraktionAgent>> GetErmittlungsleiterAsync(string fraktionId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.FraktionAgenten
+            .Where(a => a.FraktionId == fraktionId && a.IstErmittlungsleiter)
+            .Include(a => a.Agent)
+            .OrderBy(a => a.Agent!.Codename)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AgentZuteilenAsync(string fraktionId, string agentId, bool alsErmittlungsleiter, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var fraktion = await db.Fraktionen.FirstOrDefaultAsync(f => f.Id == fraktionId, cancellationToken)
+            ?? throw new InvalidOperationException($"Fraktion '{fraktionId}' nicht gefunden.");
+        if (fraktion.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+        await VerlangeFuehrungOderELAsync(db, fraktionId, handelnder, cancellationToken);
+        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        if (alsErmittlungsleiter)
+        {
+            Berechtigung.VerlangeFuehrung(handelnder);
+        }
+        if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
+        {
+            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
+        }
+        if (await db.FraktionAgenten.AnyAsync(a => a.FraktionId == fraktionId && a.AgentId == agentId, cancellationToken))
+        {
+            throw new InvalidOperationException("Dieser Agent ist der Fraktion bereits zugeteilt.");
+        }
+
+        db.FraktionAgenten.Add(new FraktionAgent
+        {
+            FraktionId = fraktionId,
+            AgentId = agentId,
+            IstErmittlungsleiter = alsErmittlungsleiter,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AgentEntfernenAsync(string zuteilungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var zuteilung = await db.FraktionAgenten.Include(a => a.Fraktion).FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken);
+        if (zuteilung is null)
+        {
+            return;
+        }
+        if (zuteilung.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+        await VerlangeFuehrungOderELAsync(db, zuteilung.FraktionId, handelnder, cancellationToken);
+        db.FraktionAgenten.Remove(zuteilung);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ErmittlungsleiterSetzenAsync(string zuteilungId, bool ist, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var zuteilung = await db.FraktionAgenten.FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken)
+            ?? throw new InvalidOperationException("Zuteilung nicht gefunden.");
+        zuteilung.IstErmittlungsleiter = ist;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Fraktion ist.</summary>
+    private static async Task VerlangeFuehrungOderELAsync(AppDbContext db, string fraktionId, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    {
+        if (handelnder.IstFuehrung())
+        {
+            return;
+        }
+        var agentId = handelnder.GetAgentId();
+        var istEL = agentId is not null && await db.FraktionAgenten
+            .AnyAsync(a => a.FraktionId == fraktionId && a.AgentId == agentId && a.IstErmittlungsleiter, cancellationToken);
+        if (!istEL)
+        {
+            throw new UnauthorizedAccessException(
+                "Agents zuteilen oder entfernen dürfen nur die Führung oder ein Ermittlungsleiter dieser Akte.");
+        }
+    }
+
     public async Task<List<AuditLog>> GetHistorieAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -361,6 +474,10 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         var mitgliedIds = await db.FraktionMitglieder
             .Where(m => m.FraktionId == fraktionId)
             .Select(m => m.Id)
+            .ToListAsync(cancellationToken);
+        var agentZuteilungIds = await db.FraktionAgenten
+            .Where(a => a.FraktionId == fraktionId)
+            .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
         // Manuelle Beziehungen (Konflikte/Bündnisse), die diese Fraktion als Quelle oder Ziel berühren –
@@ -374,8 +491,9 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .ToListAsync(cancellationToken);
 
         var ids = new HashSet<string>(mitgliedIds) { fraktionId };
+        ids.UnionWith(agentZuteilungIds);
         ids.UnionWith(beziehungIds);
-        var typen = new[] { nameof(Fraktion), nameof(FraktionMitglied), nameof(Verknuepfung) };
+        var typen = new[] { nameof(Fraktion), nameof(FraktionMitglied), nameof(FraktionAgent), nameof(Verknuepfung) };
 
         return await db.AuditLogs
             .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))

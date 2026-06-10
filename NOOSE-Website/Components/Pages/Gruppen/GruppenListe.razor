@@ -28,6 +28,14 @@ else
         <ToolBarContent>
             <MudTextField @bind-Value="_suche" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="GruppenArt?" @bind-Value="_artFilter" Clearable="true" Dense="true" Margin="Margin.Dense"
+                       Label="Kategorie" Variant="Variant.Outlined" Class="mt-0" Style="max-width:240px;">
+                @foreach (var a in GruppenArtAnzeige.Alle)
+                {
+                    <MudSelectItem T="GruppenArt?" Value="@((GruppenArt?)a)">@GruppenArtAnzeige.Name(a)</MudSelectItem>
+                }
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
@@ -35,6 +43,11 @@ else
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
                     <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Kategorie" SortBy="x => x.Art">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">@GruppenArtAnzeige.Name(context.Item.Art)</MudChip>
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.Mitgliederzahl" Title="Mitglieder" />
@@ -71,6 +84,7 @@ else
 
     private bool _laden = true;
     private string _suche = string.Empty;
+    private GruppenArt? _artFilter;
     private List<GruppeZeile> _zeilen = new();
 
     protected override async Task OnInitializedAsync()
@@ -85,6 +99,7 @@ else
             Name = g.Name,
             // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
             Mitgliederzahl = g.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
+            Art = g.Art,
             Einstufung = g.Einstufung,
             IstVerschlusssache = g.IstVerschlusssache,
             Aktualisiert = (g.GeaendertAm ?? g.ErstelltAm).ToLocalTime(),
@@ -94,6 +109,10 @@ else
 
     private bool Filter(GruppeZeile z)
     {
+        if (_artFilter is not null && z.Art != _artFilter)
+        {
+            return false;
+        }
         if (string.IsNullOrWhiteSpace(_suche))
         {
             return true;
@@ -111,6 +130,7 @@ else
         public string Aktenzeichen { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public int Mitgliederzahl { get; set; }
+        public GruppenArt Art { get; set; }
         public Einstufung Einstufung { get; set; }
         public bool IstVerschlusssache { get; set; }
         public DateTime Aktualisiert { get; set; }

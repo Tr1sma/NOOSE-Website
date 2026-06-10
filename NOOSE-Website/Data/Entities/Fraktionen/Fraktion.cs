@@ -49,6 +49,7 @@ public class Fraktion : IAuditable, ISoftDelete
     public List<FraktionWaffenbestand> Waffenbestand { get; set; } = new();
     public List<FraktionLagerbestand> Lagerbestand { get; set; } = new();
     public List<FraktionMitglied> Mitglieder { get; set; } = new();
+    public List<FraktionAgent> Agenten { get; set; } = new();
 
     // ---- IAuditable ----
     public DateTime ErstelltAm { get; set; }

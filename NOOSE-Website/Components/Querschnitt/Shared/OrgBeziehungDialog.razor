@@ -1,12 +1,18 @@
-@* Dialog zum Anlegen eines Konflikts/Bündnisses zwischen Organisationen: Ziel (Fraktion, Personengruppe oder Partei) + Notiz. *@
+@* Dialog zum Anlegen einer Beziehung zu einer anderen Akte: Ziel (Fraktion, Personengruppe, Partei und –
+   bei PersonenErlauben, z. B. für Operationen – auch Person) + Notiz. *@
 @inject IFraktionService FraktionService
 @inject IPersonengruppeService GruppeService
 @inject IParteiService ParteiService
+@inject IPersonService PersonService
 
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width:380px;">
             <MudRadioGroup T="string" @bind-Value="Typ">
+                @if (PersonenErlauben)
+                {
+                    <MudRadio T="string" Value="@nameof(Person)" Color="Color.Primary" Dense="true">Person</MudRadio>
+                }
                 <MudRadio T="string" Value="@nameof(Fraktion)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
                 <MudRadio T="string" Value="@nameof(Personengruppe)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
                 <MudRadio T="string" Value="@nameof(Partei)" Color="Color.Primary" Dense="true">Partei</MudRadio>
@@ -17,7 +23,7 @@
                              Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
                              ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
                              Adornment="Adornment.Start" AdornmentIcon="@ZielIcon"
-                             HelperText="Organisation auswählen.">
+                             HelperText="@(PersonenErlauben ? "Beteiligte Akte auswählen." : "Organisation auswählen.")">
                 <ItemTemplate Context="a">
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                         <MudIcon Icon="@ZielIcon" Size="Size.Small" Color="Color.Primary" />
@@ -46,6 +52,10 @@
     [Parameter] public IReadOnlyList<string> AusschlussFraktionIds { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> AusschlussGruppenIds { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> AusschlussParteiIds { get; set; } = Array.Empty<string>();
+    [Parameter] public IReadOnlyList<string> AusschlussPersonIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Erlaubt zusätzlich Personen als Ziel (z. B. Beteiligte einer Operation). Standard: nur Organisationen.</summary>
+    [Parameter] public bool PersonenErlauben { get; set; }
 
     private string _typ = nameof(Fraktion);
     private string Typ
@@ -56,8 +66,18 @@
     private AkteTreffer? _ziel;
     private string? _notiz;
 
+    protected override void OnInitialized()
+    {
+        // Bei erlaubten Personen ist „Person" die häufigste Wahl (z. B. Operations-Beteiligte) → vorbelegen.
+        if (PersonenErlauben)
+        {
+            _typ = nameof(Person);
+        }
+    }
+
     private string ZielLabel => _typ switch
     {
+        nameof(Person) => "Person",
         nameof(Personengruppe) => "Personengruppe",
         nameof(Partei) => "Partei",
         _ => "Fraktion",
@@ -65,19 +85,26 @@
 
     private string ZielIcon => _typ switch
     {
+        nameof(Person) => Icons.Material.Filled.Badge,
         nameof(Personengruppe) => Icons.Material.Filled.Diversity3,
         nameof(Partei) => Icons.Material.Filled.AccountBalance,
         _ => Icons.Material.Filled.Groups,
     };
 
-    private string NotizPlaceholder => Bezeichnung == "Bündnis"
-        ? "z. B. Waffenbruderschaft, Nichtangriffspakt"
-        : "z. B. Revierkonflikt, langjährige Feindschaft";
+    private string NotizPlaceholder => PersonenErlauben
+        ? "z. B. Zielperson, Zeuge, beteiligte Bande"
+        : Bezeichnung == "Bündnis"
+            ? "z. B. Waffenbruderschaft, Nichtangriffspakt"
+            : "z. B. Revierkonflikt, langjährige Feindschaft";
 
     private async Task<IEnumerable<AkteTreffer>> Suchen(string value, CancellationToken token)
     {
         switch (_typ)
         {
+            case nameof(Person):
+                var personen = await PersonService.SucheAsync(value, IstFuehrung, 20, token);
+                return personen.Where(p => !AusschlussPersonIds.Contains(p.Id))
+                    .Select(p => new AkteTreffer(p.Id, p.Name, p.Aktenzeichen));
             case nameof(Personengruppe):
                 var gruppen = await GruppeService.SucheAsync(value, IstFuehrung, 20, token);
                 return gruppen.Where(g => !AusschlussGruppenIds.Contains(g.Id))
@@ -109,7 +136,8 @@
     public record OrgBeziehungWahl(string ZielTyp, string ZielId, string? Notiz);
 
     public static async Task<OrgBeziehungWahl?> ZeigenAsync(IDialogService dialog, string bezeichnung, bool istFuehrung,
-        IReadOnlyList<string> ausschlussFraktionIds, IReadOnlyList<string> ausschlussGruppenIds, IReadOnlyList<string> ausschlussParteiIds)
+        IReadOnlyList<string> ausschlussFraktionIds, IReadOnlyList<string> ausschlussGruppenIds, IReadOnlyList<string> ausschlussParteiIds,
+        IReadOnlyList<string>? ausschlussPersonIds = null, bool personenErlauben = false)
     {
         var parameters = new DialogParameters<OrgBeziehungDialog>
         {
@@ -118,6 +146,8 @@
             { x => x.AusschlussFraktionIds, ausschlussFraktionIds },
             { x => x.AusschlussGruppenIds, ausschlussGruppenIds },
             { x => x.AusschlussParteiIds, ausschlussParteiIds },
+            { x => x.AusschlussPersonIds, ausschlussPersonIds ?? Array.Empty<string>() },
+            { x => x.PersonenErlauben, personenErlauben },
         };
         var referenz = await dialog.ShowAsync<OrgBeziehungDialog>($"{bezeichnung} hinzufügen", parameters);
         var ergebnis = await referenz.Result;

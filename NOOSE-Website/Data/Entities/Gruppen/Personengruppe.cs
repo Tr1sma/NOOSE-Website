@@ -20,6 +20,9 @@ public class Personengruppe : IAuditable, ISoftDelete
     public string? Beschreibung { get; set; }
     public string? Ziele { get; set; }
 
+    /// <summary>Kategorie der Gruppen-Akte (Persönlichkeit/Gruppierung/Person of Interest); Default Gruppierung.</summary>
+    public GruppenArt Art { get; set; } = GruppenArt.Gruppierung;
+
     public Einstufung Einstufung { get; set; } = Einstufung.Unbekannt;
 
     /// <summary>Geschätzte Gesamtgröße der Gruppe (= y im Erfassungsfortschritt x/y); optional.</summary>

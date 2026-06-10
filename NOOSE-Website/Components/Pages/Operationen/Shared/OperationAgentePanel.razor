@@ -1,0 +1,147 @@
+@* Der Operation zugeteilte (beteiligte) NOOSE-Agents: Liste + Zuteilen/Entfernen + Ermittlungsleiter-Markierung.
+   Hinweis: Komponentenname bewusst „OperationAgentePanel" (nicht „AgentePanel"), um eine Tag-Auflösungs-
+   Kollision mit den gleichnamigen Komponenten anderer Module zu vermeiden (alle Shared-Ordner sind global @using). *@
+@inject IOperationService OperationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Beteiligte Agents (@_agenten.Count)</MudText>
+        @if (_kannVerwalten)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="ZuteilenAsync">
+                Agent zuteilen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_agenten.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Agents beteiligt.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _agenten)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@(a.IstErmittlungsleiter ? Icons.Material.Filled.LocalPolice : Icons.Material.Filled.Person)"
+                                 Color="@(a.IstErmittlungsleiter ? Color.Warning : Color.Primary)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@DienstgradAnzeige.Name(a.Agent?.Dienstgrad)</MudChip>
+                        @if (a.IstErmittlungsleiter)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.LocalPolice">Ermittlungsleiter</MudChip>
+                        }
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        @if (_istFuehrung)
+                        {
+                            <MudIconButton Icon="@(a.IstErmittlungsleiter ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                           Color="@(a.IstErmittlungsleiter ? Color.Warning : Color.Default)" Size="Size.Small"
+                                           OnClick="@(() => ErmittlungsleiterUmschaltenAsync(a))"
+                                           aria-label="@(a.IstErmittlungsleiter ? "Ermittlungsleiter-Markierung entfernen" : "Als Ermittlungsleiter markieren")" />
+                        }
+                        @if (_kannVerwalten)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => EntfernenAsync(a))" aria-label="Agent entfernen" />
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string OperationId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Wird nach jeder Änderung der Zuteilungen/Ermittlungsleiter ausgelöst (Steckkarte aktualisieren).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _laden = true;
+    private bool _istFuehrung;
+    private bool _kannVerwalten;
+    private List<OperationAgent> _agenten = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _istFuehrung = User.IstFuehrung();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _agenten = await OperationService.GetAgentenAsync(OperationId);
+        // Verwalten (zuteilen/entfernen) darf die Führung oder ein Ermittlungsleiter dieser Akte.
+        var meineId = User.GetAgentId();
+        _kannVerwalten = _istFuehrung || _agenten.Any(a => a.AgentId == meineId && a.IstErmittlungsleiter);
+        _laden = false;
+    }
+
+    private async Task ZuteilenAsync()
+    {
+        var ausschluss = _agenten.Select(a => a.AgentId).ToList();
+        var wahl = await AgentZuteilenDialog.ZeigenAsync(DialogService, ausschluss, User.DarfKlarnameSehen(), _istFuehrung);
+        if (wahl is null)
+        {
+            return;
+        }
+        try
+        {
+            await OperationService.AgentZuteilenAsync(OperationId, wahl.AgentId, wahl.AlsErmittlungsleiter, User);
+            Snackbar.Add("Agent zugeteilt.", Severity.Success);
+            await LadenAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ErmittlungsleiterUmschaltenAsync(OperationAgent a)
+    {
+        try
+        {
+            await OperationService.ErmittlungsleiterSetzenAsync(a.Id, !a.IstErmittlungsleiter, User);
+            Snackbar.Add(a.IstErmittlungsleiter ? "Ermittlungsleiter-Markierung entfernt." : "Als Ermittlungsleiter markiert.", Severity.Success);
+            await LadenAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EntfernenAsync(OperationAgent a)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Zuteilung aufheben?",
+            $"„{a.Agent?.Codename}“ wird der Operation nicht mehr zugeteilt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await OperationService.AgentEntfernenAsync(a.Id, User);
+            Snackbar.Add("Zuteilung aufgehoben.", Severity.Success);
+            await LadenAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

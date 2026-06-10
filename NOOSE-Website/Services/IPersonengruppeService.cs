@@ -34,10 +34,20 @@ public interface IPersonengruppeService
     Task MitgliedAendernAsync(string mitgliedId, string? rolle, bool istLeitung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
     Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
-    /// <summary>Der Gruppe zugeteilte NOOSE-Agents (inkl. Agent-Daten).</summary>
+    /// <summary>Der Gruppe zugeteilte NOOSE-Agents (inkl. Agent-Daten; Ermittlungsleiter zuerst).</summary>
     Task<List<PersonengruppeAgent>> GetAgentenAsync(string gruppeId, CancellationToken cancellationToken = default);
-    Task AgentZuteilenAsync(string gruppeId, string agentId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Die als Ermittlungsleiter markierten Zuteilungen der Gruppe (inkl. Agent-Daten).</summary>
+    Task<List<PersonengruppeAgent>> GetErmittlungsleiterAsync(string gruppeId, CancellationToken cancellationToken = default);
+
+    /// <summary>Agent zuteilen. Erlaubt für Führung oder Ermittlungsleiter der Akte; <paramref name="alsErmittlungsleiter"/> nur durch die Führung.</summary>
+    Task AgentZuteilenAsync(string gruppeId, string agentId, bool alsErmittlungsleiter, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Zuteilung aufheben. Erlaubt für Führung oder Ermittlungsleiter der Akte.</summary>
     Task AgentEntfernenAsync(string zuteilungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Ermittlungsleiter-Markierung einer Zuteilung setzen/entfernen – nur Führung.</summary>
+    Task ErmittlungsleiterSetzenAsync(string zuteilungId, bool ist, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
     /// <summary>Erfassungsfortschritt x/y (x = erfasste Mitglieder mit lebender Akte, y = geschätzte Größe).</summary>
     Task<PersonengruppeFortschritt> GetFortschrittAsync(string gruppeId, CancellationToken cancellationToken = default);

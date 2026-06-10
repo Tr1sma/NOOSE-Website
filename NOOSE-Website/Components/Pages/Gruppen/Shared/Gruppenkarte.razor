@@ -18,7 +18,14 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Gruppe.Aktenzeichen</MudText>
         </div>
 
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled"
+                 Icon="@ArtIcon(Gruppe.Art)" Class="align-self-start">
+            @GruppenArtAnzeige.Name(Gruppe.Art)
+        </MudChip>
+
         <EinstufungBadge Wert="Gruppe.Einstufung" />
+
+        <ErmittlungsleiterAnzeige Namen="Ermittlungsleiter" />
 
         <MudDivider />
 
@@ -52,6 +59,9 @@
     [Parameter, EditorRequired] public Personengruppe Gruppe { get; set; } = default!;
     [Parameter, EditorRequired] public PersonengruppeFortschritt Fortschritt { get; set; } = default!;
 
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> Ermittlungsleiter { get; set; } = Array.Empty<string>();
+
     private double Prozent()
     {
         if (Fortschritt.Geschaetzt is not > 0)
@@ -61,4 +71,11 @@
         var p = (double)Fortschritt.Erfasst / Fortschritt.Geschaetzt.Value * 100;
         return Math.Clamp(p, 0, 100);
     }
+
+    private static string ArtIcon(GruppenArt art) => art switch
+    {
+        GruppenArt.Persoenlichkeit => Icons.Material.Filled.Star,
+        GruppenArt.PersonOfInterest => Icons.Material.Filled.PersonSearch,
+        _ => Icons.Material.Filled.Diversity3,
+    };
 }

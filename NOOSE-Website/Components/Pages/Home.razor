@@ -37,6 +37,15 @@
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Primary" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Operationen</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.Operationen)</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Warning" />
                 <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Anträge</MudText>
             </MudStack>
@@ -130,6 +139,7 @@
         DashboardAkteTyp.Person => "Person",
         DashboardAkteTyp.Fraktion => "Fraktion",
         DashboardAkteTyp.Partei => "Partei",
+        DashboardAkteTyp.Operation => "Operation",
         _ => "Personengruppe",
     };
 
@@ -138,6 +148,7 @@
         DashboardAkteTyp.Person => $"/personen/{x.AkteId}",
         DashboardAkteTyp.Fraktion => $"/fraktionen/{x.AkteId}",
         DashboardAkteTyp.Partei => $"/parteien/{x.AkteId}",
+        DashboardAkteTyp.Operation => $"/operationen/{x.AkteId}",
         _ => $"/personengruppen/{x.AkteId}",
     };
 

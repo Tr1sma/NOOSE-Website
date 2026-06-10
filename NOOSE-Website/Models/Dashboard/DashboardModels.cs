@@ -9,15 +9,17 @@ public enum DashboardAkteTyp
     Fraktion,
     Personengruppe,
     Partei,
+    Operation,
 }
 
 /// <summary>
-/// Die vier Kennzahl-Kacheln des Lagezentrums. Alle Zahlen sind aus Sicht des aufrufenden Agents
+/// Die Kennzahl-Kacheln des Lagezentrums. Alle Zahlen sind aus Sicht des aufrufenden Agents
 /// berechnet (Verschlusssachen-Filter), damit sie zu den jeweiligen Listenansichten passen.
 /// </summary>
 public record DashboardKennzahlen(
     int Personen,
     int FraktionenUndGruppen,
+    int Operationen,
     int OffeneAntraege,
     int Verschlusssachen);
 

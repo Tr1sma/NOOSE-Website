@@ -32,6 +32,8 @@
             }
         </MudStack>
 
+        <ErmittlungsleiterAnzeige Namen="Ermittlungsleiter" />
+
         <MudDivider />
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -52,6 +54,9 @@
 @code {
     [Parameter, EditorRequired] public Fraktion Fraktion { get; set; } = default!;
     [Parameter] public int Mitgliederzahl { get; set; }
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> Ermittlungsleiter { get; set; } = Array.Empty<string>();
 
     private string BannerStyle()
     {

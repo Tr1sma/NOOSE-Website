@@ -35,7 +35,7 @@ else
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <Fraktionskarte Fraktion="_fraktion" Mitgliederzahl="_mitgliederzahl" />
+                <Fraktionskarte Fraktion="_fraktion" Mitgliederzahl="_mitgliederzahl" Ermittlungsleiter="_ermittlungsleiter" />
             </div>
         </MudItem>
 
@@ -81,6 +81,9 @@ else
                 <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Groups">
                     <MitgliederPanel FraktionId="@_fraktion.Id" User="_user" Raenge="_raenge" Changed="MitgliederGeaendertAsync" />
                 </MudTabPanel>
+                <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <FraktionAgentePanel FraktionId="@_fraktion.Id" User="_user" Changed="ErmittlungsleiterAktualisierenAsync" />
+                </MudTabPanel>
                 <MudTabPanel Text="Bestände" Icon="@Icons.Material.Filled.Inventory2">
                     <MudStack Spacing="3">
                         <SteckbriefListe Titel="Waffenbestand" Werte="BestandTexte(_fraktion.Waffenbestand.Select(w => (w.Bezeichnung, w.Menge)))" />
@@ -117,6 +120,7 @@ else
     private bool _laden = true;
     private Fraktion? _fraktion;
     private int _mitgliederzahl;
+    private List<string> _ermittlungsleiter = new();
     private List<string> _raenge = new();
     private List<EinstufungVerlauf> _einstufungVerlauf = new();
     private ClaimsPrincipal _user = default!;
@@ -126,7 +130,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "stammdaten", "mitglieder", "bestaende", "einstufung", "doks",
+        "stammdaten", "mitglieder", "agents", "bestaende", "einstufung", "doks",
         "beziehungen", "quellen", "kommentare", "historie",
     };
 
@@ -152,8 +156,25 @@ else
             _raenge = _fraktion.Raenge.OrderBy(r => r.Reihenfolge).Select(r => r.Bezeichnung).ToList();
             _einstufungVerlauf = await FraktionService.GetEinstufungVerlaufAsync(_fraktion.Id, _user.IstFuehrung());
             _mitgliederzahl = (await FraktionService.GetMitgliederAsync(_fraktion.Id, _user.IstFuehrung())).Count;
+            await ErmittlungsleiterLadenAsync();
         }
         _laden = false;
+    }
+
+    private async Task ErmittlungsleiterLadenAsync()
+    {
+        if (_fraktion is null)
+        {
+            return;
+        }
+        var el = await FraktionService.GetErmittlungsleiterAsync(_fraktion.Id);
+        _ermittlungsleiter = el.Select(a => a.Agent?.Codename ?? "?").ToList();
+    }
+
+    private async Task ErmittlungsleiterAktualisierenAsync()
+    {
+        await ErmittlungsleiterLadenAsync();
+        StateHasChanged();
     }
 
     private async Task NeuLadenAsync()

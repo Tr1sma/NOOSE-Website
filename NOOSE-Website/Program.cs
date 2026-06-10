@@ -140,6 +140,8 @@ builder.Services.AddScoped<IFraktionService, FraktionService>();
 builder.Services.AddScoped<IPersonengruppeService, PersonengruppeService>();
 // Phase 5a: Parteien.
 builder.Services.AddScoped<IParteiService, ParteiService>();
+// Phase 5b: Operationen.
+builder.Services.AddScoped<IOperationService, OperationService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 

@@ -76,6 +76,7 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             Name = eingabe.Name.Trim(),
             Beschreibung = Leer(eingabe.Beschreibung),
             Ziele = Leer(eingabe.Ziele),
+            Art = eingabe.Art,
             Einstufung = eingabe.Einstufung,
             GeschaetzteMitgliederzahl = eingabe.GeschaetzteMitgliederzahl,
             IstVerschlusssache = eingabe.IstVerschlusssache,
@@ -146,6 +147,19 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
             }
         }
 
+        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        var erstellerId = handelnder.GetAgentId();
+        if (erstellerId is not null)
+        {
+            db.PersonengruppeAgenten.Add(new PersonengruppeAgent
+            {
+                PersonengruppeId = gruppe.Id,
+                AgentId = erstellerId,
+                IstErmittlungsleiter = true,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         await tx.CommitAsync(cancellationToken);
         return gruppe;
     }
@@ -164,6 +178,7 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         gruppe.Name = eingabe.Name.Trim();
         gruppe.Beschreibung = Leer(eingabe.Beschreibung);
         gruppe.Ziele = Leer(eingabe.Ziele);
+        gruppe.Art = eingabe.Art;
         gruppe.GeschaetzteMitgliederzahl = eingabe.GeschaetzteMitgliederzahl;
         gruppe.IstVerschlusssache = eingabe.IstVerschlusssache;
 
@@ -322,11 +337,22 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         return await db.PersonengruppeAgenten
             .Where(a => a.PersonengruppeId == gruppeId)
             .Include(a => a.Agent)
+            .OrderByDescending(a => a.IstErmittlungsleiter)
+            .ThenBy(a => a.Agent!.Codename)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<PersonengruppeAgent>> GetErmittlungsleiterAsync(string gruppeId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.PersonengruppeAgenten
+            .Where(a => a.PersonengruppeId == gruppeId && a.IstErmittlungsleiter)
+            .Include(a => a.Agent)
             .OrderBy(a => a.Agent!.Codename)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task AgentZuteilenAsync(string gruppeId, string agentId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task AgentZuteilenAsync(string gruppeId, string agentId, bool alsErmittlungsleiter, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var gruppe = await db.Personengruppen.FirstOrDefaultAsync(g => g.Id == gruppeId, cancellationToken)
@@ -334,6 +360,12 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         if (gruppe.IstVerschlusssache && !handelnder.IstFuehrung())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+        await VerlangeFuehrungOderELAsync(db, gruppeId, handelnder, cancellationToken);
+        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        if (alsErmittlungsleiter)
+        {
+            Berechtigung.VerlangeFuehrung(handelnder);
         }
         if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
         {
@@ -348,6 +380,7 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         {
             PersonengruppeId = gruppeId,
             AgentId = agentId,
+            IstErmittlungsleiter = alsErmittlungsleiter,
         });
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -364,8 +397,38 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
+        await VerlangeFuehrungOderELAsync(db, zuteilung.PersonengruppeId, handelnder, cancellationToken);
         db.PersonengruppeAgenten.Remove(zuteilung);
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ErmittlungsleiterSetzenAsync(string zuteilungId, bool ist, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var zuteilung = await db.PersonengruppeAgenten.FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken)
+            ?? throw new InvalidOperationException("Zuteilung nicht gefunden.");
+        zuteilung.IstErmittlungsleiter = ist;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Gruppe ist.</summary>
+    private static async Task VerlangeFuehrungOderELAsync(AppDbContext db, string gruppeId, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    {
+        if (handelnder.IstFuehrung())
+        {
+            return;
+        }
+        var agentId = handelnder.GetAgentId();
+        var istEL = agentId is not null && await db.PersonengruppeAgenten
+            .AnyAsync(a => a.PersonengruppeId == gruppeId && a.AgentId == agentId && a.IstErmittlungsleiter, cancellationToken);
+        if (!istEL)
+        {
+            throw new UnauthorizedAccessException(
+                "Agents zuteilen oder entfernen dürfen nur die Führung oder ein Ermittlungsleiter dieser Akte.");
+        }
     }
 
     public async Task<PersonengruppeFortschritt> GetFortschrittAsync(string gruppeId, CancellationToken cancellationToken = default)

@@ -147,6 +147,19 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
             }
         }
 
+        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        var erstellerId = handelnder.GetAgentId();
+        if (erstellerId is not null)
+        {
+            db.ParteiAgenten.Add(new ParteiAgent
+            {
+                ParteiId = partei.Id,
+                AgentId = erstellerId,
+                IstErmittlungsleiter = true,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         await tx.CommitAsync(cancellationToken);
         return partei;
     }
@@ -325,11 +338,22 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         return await db.ParteiAgenten
             .Where(a => a.ParteiId == parteiId)
             .Include(a => a.Agent)
+            .OrderByDescending(a => a.IstErmittlungsleiter)
+            .ThenBy(a => a.Agent!.Codename)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<ParteiAgent>> GetErmittlungsleiterAsync(string parteiId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.ParteiAgenten
+            .Where(a => a.ParteiId == parteiId && a.IstErmittlungsleiter)
+            .Include(a => a.Agent)
             .OrderBy(a => a.Agent!.Codename)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task AgentZuteilenAsync(string parteiId, string agentId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task AgentZuteilenAsync(string parteiId, string agentId, bool alsErmittlungsleiter, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var partei = await db.Parteien.FirstOrDefaultAsync(p => p.Id == parteiId, cancellationToken)
@@ -337,6 +361,12 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         if (partei.IstVerschlusssache && !handelnder.IstFuehrung())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+        await VerlangeFuehrungOderELAsync(db, parteiId, handelnder, cancellationToken);
+        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        if (alsErmittlungsleiter)
+        {
+            Berechtigung.VerlangeFuehrung(handelnder);
         }
         if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
         {
@@ -351,6 +381,7 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         {
             ParteiId = parteiId,
             AgentId = agentId,
+            IstErmittlungsleiter = alsErmittlungsleiter,
         });
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -367,8 +398,38 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
+        await VerlangeFuehrungOderELAsync(db, zuteilung.ParteiId, handelnder, cancellationToken);
         db.ParteiAgenten.Remove(zuteilung);
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ErmittlungsleiterSetzenAsync(string zuteilungId, bool ist, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        Berechtigung.VerlangeFuehrung(handelnder);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var zuteilung = await db.ParteiAgenten.FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken)
+            ?? throw new InvalidOperationException("Zuteilung nicht gefunden.");
+        zuteilung.IstErmittlungsleiter = ist;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Partei ist.</summary>
+    private static async Task VerlangeFuehrungOderELAsync(AppDbContext db, string parteiId, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    {
+        if (handelnder.IstFuehrung())
+        {
+            return;
+        }
+        var agentId = handelnder.GetAgentId();
+        var istEL = agentId is not null && await db.ParteiAgenten
+            .AnyAsync(a => a.ParteiId == parteiId && a.AgentId == agentId && a.IstErmittlungsleiter, cancellationToken);
+        if (!istEL)
+        {
+            throw new UnauthorizedAccessException(
+                "Agents zuteilen oder entfernen dürfen nur die Führung oder ein Ermittlungsleiter dieser Akte.");
+        }
     }
 
     public async Task<List<AuditLog>> GetHistorieAsync(string parteiId, bool istFuehrung, CancellationToken cancellationToken = default)

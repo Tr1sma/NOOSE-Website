@@ -17,6 +17,9 @@ public class ParteiAgent : IAuditable
     public string AgentId { get; set; } = string.Empty;
     public Agent? Agent { get; set; }
 
+    /// <summary>Markiert diesen zugeteilten Agent als Ermittlungsleiter der Akte (mehrere je Akte möglich).</summary>
+    public bool IstErmittlungsleiter { get; set; }
+
     // ---- IAuditable ----
     public DateTime ErstelltAm { get; set; }
     public string? ErstelltVonId { get; set; }
