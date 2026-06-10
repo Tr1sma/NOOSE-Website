@@ -100,7 +100,16 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         db.Quellen.Add(quelle);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch when (quelle.Typ == QuelleTyp.Upload && quelle.DateinameGespeichert is not null)
+        {
+            // DB-Insert fehlgeschlagen → bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
+            storage.Loeschen(quelle.DateinameGespeichert);
+            throw;
+        }
         return quelle;
     }
 

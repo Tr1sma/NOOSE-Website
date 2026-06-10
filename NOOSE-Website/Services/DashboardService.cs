@@ -22,7 +22,9 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
         var fraktionen = await db.Fraktionen.CountAsync(f => istFuehrung || !f.IstVerschlusssache, cancellationToken);
         var gruppen = await db.Personengruppen.CountAsync(g => istFuehrung || !g.IstVerschlusssache, cancellationToken);
 
-        var offeneAntraege = await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken);
+        // Offene Anträge = ausstehende Registrierungen + offene Namensänderungen (beide im Freigabe-Posteingang).
+        var offeneAntraege = await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)
+            + await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken);
 
         // Anzahl klassifizierter Akten ist selbst eine Verschlusssache → nur für die Führung.
         var verschlusssachen = 0;
@@ -60,14 +62,16 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory) : IDash
             : await db.PersonDoks.IgnoreQueryFilters().Where(d => dokIds.Contains(d.Id))
                 .Select(d => new { d.Id, d.PersonId }).ToDictionaryAsync(x => x.Id, x => x.PersonId, cancellationToken);
 
+        // IgnoreQueryFilters: ein Austritt ist ein Soft-Delete der Mitgliedschaft – ohne dies fiele die Zeile
+        // aus dem Lookup und das „Mitglied entfernt"-Ereignis ließe sich nie auf eine Akte abbilden.
         var fmIds = Ids(roh, nameof(FraktionMitglied));
         var mitgliedZuFraktion = fmIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.FraktionMitglieder.Where(m => fmIds.Contains(m.Id))
+            : await db.FraktionMitglieder.IgnoreQueryFilters().Where(m => fmIds.Contains(m.Id))
                 .Select(m => new { m.Id, m.FraktionId }).ToDictionaryAsync(x => x.Id, x => x.FraktionId, cancellationToken);
 
         var pmIds = Ids(roh, nameof(PersonengruppeMitglied));
         var mitgliedZuGruppe = pmIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.PersonengruppeMitglieder.Where(m => pmIds.Contains(m.Id))
+            : await db.PersonengruppeMitglieder.IgnoreQueryFilters().Where(m => pmIds.Contains(m.Id))
                 .Select(m => new { m.Id, m.PersonengruppeId }).ToDictionaryAsync(x => x.Id, x => x.PersonengruppeId, cancellationToken);
 
         var paIds = Ids(roh, nameof(PersonengruppeAgent));

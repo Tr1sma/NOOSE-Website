@@ -33,10 +33,20 @@ public static class QuellenDateiEndpointRouteBuilderExtensions
                 return Results.NotFound();
             }
 
+            // Datei öffnen, bevor protokolliert wird; fehlt sie physisch, sauber 404 statt 500.
+            Stream stream;
+            try
+            {
+                stream = storage.OeffnenLesen(quelle.DateinameGespeichert);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return Results.NotFound();
+            }
+
             await zugriff.LogAnsichtAsync(nameof(Quelle), quelleId, cancellationToken);
 
             // Results.File übernimmt und entsorgt den Stream nach dem Senden (kein using!).
-            var stream = storage.OeffnenLesen(quelle.DateinameGespeichert);
             return Results.File(stream, quelle.ContentType ?? "application/octet-stream",
                 quelle.OriginalName, enableRangeProcessing: true);
         })

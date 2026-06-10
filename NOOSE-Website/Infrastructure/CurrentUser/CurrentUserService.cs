@@ -12,6 +12,12 @@ namespace NOOSE_Website.Infrastructure.CurrentUser;
 public class CurrentUserService(IHttpContextAccessor httpContextAccessor, IServiceProvider serviceProvider)
     : ICurrentUserService
 {
+    public CurrentUserInfo Get()
+    {
+        var httpUser = httpContextAccessor.HttpContext?.User;
+        return httpUser?.Identity?.IsAuthenticated == true ? Build(httpUser) : CurrentUserInfo.System;
+    }
+
     public async Task<CurrentUserInfo> GetAsync()
     {
         var httpUser = httpContextAccessor.HttpContext?.User;
