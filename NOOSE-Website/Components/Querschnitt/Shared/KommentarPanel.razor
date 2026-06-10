@@ -1,49 +1,54 @@
-@* Kommentare/Vermerke einer Akte: neueste zuerst, Inline-Verfassen, Löschen (eigene oder Führung). *@
+@* Kommentare/Vermerke einer Akte: neueste zuerst, Inline-Verfassen mit @-Verlinkung (Akten/Quellen/Agenten),
+   aufgelöste Verweise in der Anzeige, Löschen (eigene oder Führung). *@
 @inject IKommentarService KommentarService
+@inject IMentionService MentionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudText Typo="Typo.subtitle1">Kommentare (@_kommentare.Count)</MudText>
+    <MudText Typo="Typo.subtitle1">Kommentare (@_eintraege.Count)</MudText>
 
-    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
-        <MudTextField @bind-Value="_neuerText" Placeholder="Vermerk hinzufügen … (Strg+Enter sendet)" Lines="2"
-                      Variant="Variant.Outlined" Immediate="true" Class="flex-grow-1"
-                      OnKeyDown="@(async e => { if (e.Key == "Enter" && e.CtrlKey) await HinzufuegenAsync(); })" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
-                   OnClick="HinzufuegenAsync" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_neuerText))">
-            Kommentieren
-        </MudButton>
+    <MudStack Spacing="2">
+        <MentionEingabe @bind-Text="_neuerText" IstFuehrung="_istFuehrung"
+                        Placeholder="@Platzhalter" OnSubmit="HinzufuegenAsync" />
+        <MudStack Row="true" Justify="Justify.FlexEnd">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="HinzufuegenAsync" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_neuerText))">
+                Kommentieren
+            </MudButton>
+        </MudStack>
     </MudStack>
 
     @if (_laden)
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
-    else if (_kommentare.Count == 0)
+    else if (_eintraege.Count == 0)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Kommentare.</MudText>
     }
     else
     {
-        @foreach (var k in _kommentare)
+        @foreach (var e in _eintraege)
         {
             <MudPaper Class="pa-3" Elevation="1">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Size="Size.Small" Color="Color.Default" />
-                        <MudText Typo="Typo.body2"><b>@(string.IsNullOrWhiteSpace(k.AutorName) ? "Unbekannt" : k.AutorName)</b></MudText>
+                        <MudText Typo="Typo.body2"><b>@(string.IsNullOrWhiteSpace(e.K.AutorName) ? "Unbekannt" : e.K.AutorName)</b></MudText>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            · @k.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            · @e.K.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                         </MudText>
                     </MudStack>
-                    @if (DarfLoeschen(k))
+                    @if (DarfLoeschen(e.K))
                     {
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => LoeschenAsync(k))" aria-label="Kommentar löschen" />
+                                       OnClick="@(() => LoeschenAsync(e.K))" aria-label="Kommentar löschen" />
                     }
                 </MudStack>
-                <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@k.Text</MudText>
+                <div class="mt-1">
+                    <MentionText Segmente="e.Segmente" />
+                </div>
             </MudPaper>
         }
     }
@@ -54,17 +59,29 @@
     [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
+    private const string Platzhalter = "Vermerk hinzufügen … (Verlinken per @, Strg+Enter sendet)";
     private bool _laden = true;
     private bool _speichert;
+    private bool _istFuehrung;
     private string _neuerText = string.Empty;
-    private List<Kommentar> _kommentare = new();
+    private List<Eintrag> _eintraege = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    private sealed record Eintrag(Kommentar K, IReadOnlyList<MentionSegment> Segmente);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _istFuehrung = User.IstFuehrung();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {
         _laden = true;
-        _kommentare = await KommentarService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, User.IstFuehrung());
+        var kommentare = await KommentarService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, _istFuehrung);
+        // Alle Kommentar-Texte in EINER Sammelabfrage auflösen (@-Tokens → anzeigefertige Segmente, VS-/Klarname-gefiltert).
+        var segmente = await MentionService.AufloesenVieleAsync(
+            kommentare.Select(k => (string?)k.Text).ToList(), _istFuehrung);
+        _eintraege = kommentare.Select((k, i) => new Eintrag(k, segmente[i])).ToList();
         _laden = false;
     }
 
@@ -107,5 +124,5 @@
 
     // Löschen darf der Verfasser selbst oder die Führung.
     private bool DarfLoeschen(Kommentar k)
-        => User.IstFuehrung() || (k.ErstelltVonId is not null && k.ErstelltVonId == User.GetAgentId());
+        => _istFuehrung || (k.ErstelltVonId is not null && k.ErstelltVonId == User.GetAgentId());
 }
