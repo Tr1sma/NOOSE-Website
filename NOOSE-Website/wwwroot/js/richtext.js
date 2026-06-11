@@ -1,51 +1,31 @@
-// NOOSE WYSIWYG-Interop für den RichTextEditor (Quill 2.x + quill-table-better, selbst gehostet unter /lib/quill).
-// Quill 2, das Tabellen-Modul und deren CSS werden bei Bedarf nachgeladen (nur auf Editor-Seiten), damit andere
-// Seiten nicht belastet werden. WICHTIG: quill.js MUSS vor quill-table-better.js geladen sein – das Modul liest
-// window.Quill bereits beim Laden (UMD: QuillTableBetter = factory(window.Quill)).
+// NOOSE WYSIWYG-Interop für den RichTextEditor (Quill 1.3.7, selbst gehostet unter /lib/quill).
+// Quill + dessen CSS werden bei Bedarf nachgeladen (nur auf Editor-Seiten), damit andere Seiten
+// nicht belastet werden. Die UMD-Variante setzt window.Quill.
 
-let ladePromise = null;
-
-function ladeSkript(src) {
-    return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Skript konnte nicht geladen werden: ' + src));
-        document.head.appendChild(s);
-    });
-}
-
-function ladeCss(href, marker) {
-    if (document.querySelector('link[' + marker + ']')) {
-        return;
-    }
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
-    link.setAttribute(marker, '');
-    document.head.appendChild(link);
-}
+let quillLadenPromise = null;
 
 function ladeQuill() {
-    if (window.Quill && window.QuillTableBetter) {
+    if (window.Quill) {
         return Promise.resolve();
     }
-    if (ladePromise) {
-        return ladePromise;
+    if (quillLadenPromise) {
+        return quillLadenPromise;
     }
-    ladePromise = (async () => {
-        ladeCss('lib/quill/quill.snow.css', 'data-quill-css');
-        ladeCss('lib/quill/quill-table-better.css', 'data-quill-table-css');
-        if (!window.Quill) {
-            await ladeSkript('lib/quill/quill.js');
+    quillLadenPromise = new Promise((resolve, reject) => {
+        if (!document.querySelector('link[data-quill-css]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'lib/quill/quill.snow.css';
+            link.setAttribute('data-quill-css', '');
+            document.head.appendChild(link);
         }
-        if (!window.QuillTableBetter) {
-            await ladeSkript('lib/quill/quill-table-better.js'); // liest window.Quill beim Laden
-        }
-        // Tabellen-Modul registrieren (true = vorhandene Registrierung überschreiben).
-        window.Quill.register({ 'modules/table-better': window.QuillTableBetter }, true);
-    })();
-    return ladePromise;
+        const script = document.createElement('script');
+        script.src = 'lib/quill/quill.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Quill konnte nicht geladen werden.'));
+        document.head.appendChild(script);
+    });
+    return quillLadenPromise;
 }
 
 export async function initRichText(element, dotnetRef, initialHtml) {
@@ -57,7 +37,6 @@ export async function initRichText(element, dotnetRef, initialHtml) {
         theme: 'snow',
         placeholder: 'Dokument verfassen…',
         modules: {
-            table: false, // eingebautes (rudimentäres) Tabellen-Modul aus – quill-table-better übernimmt.
             toolbar: [
                 [{ header: [1, 2, 3, false] }],
                 ['bold', 'italic', 'underline', 'strike'],
@@ -65,16 +44,7 @@ export async function initRichText(element, dotnetRef, initialHtml) {
                 ['blockquote', 'code-block'],
                 [{ color: [] }, { background: [] }],
                 ['link', 'clean'],
-                ['table-better'],
             ],
-            'table-better': {
-                language: 'de_DE',
-                menus: ['column', 'row', 'merge', 'table', 'cell', 'wrap', 'copy', 'delete'],
-                toolbarTable: true,
-            },
-            keyboard: {
-                bindings: window.QuillTableBetter.keyboardBindings, // korrekte Tabellen-Navigation
-            },
         },
     });
 
@@ -87,8 +57,7 @@ export async function initRichText(element, dotnetRef, initialHtml) {
         if (timer) {
             clearTimeout(timer);
         }
-        // Entprellt an .NET zurückmelden (statt einer Interop-Runde je Tastenanschlag). Leichtgewichtig –
-        // ohne die Tabellen-Hilfs-UI zu entfernen (das passiert erst beim endgültigen Lesen via getHtml).
+        // Entprellt an .NET zurückmelden (statt einer Interop-Runde je Tastenanschlag).
         timer = setTimeout(() => {
             dotnetRef.invokeMethodAsync('OnHtmlChanged', leseHtml(editor));
         }, 300);
@@ -97,29 +66,9 @@ export async function initRichText(element, dotnetRef, initialHtml) {
     element.__nooseQuill = editor;
 }
 
-// True, wenn der Editor faktisch leer ist. Achtung: eine Tabelle mit leeren Zellen hat leeren getText() –
-// daher zusätzlich auf eine vorhandene Tabelle prüfen, sonst ginge sie als „leer" verloren.
-function istLeer(editor) {
-    return editor.getText().trim().length === 0 && !editor.root.querySelector('table');
-}
-
-// Laufende (entprellte) Änderungsmeldung: semantisches HTML, ohne die Tabellen-UI zu stören.
+// Liefert leeren String, wenn der Editor faktisch leer ist (Quill speichert sonst "<p><br></p>").
 function leseHtml(editor) {
-    return istLeer(editor) ? '' : editor.getSemanticHTML();
-}
-
-// Endgültiges Lesen fürs Speichern: zuerst die Tabellen-Hilfs-/Toolbar-Elemente entfernen, dann sauberes
-// semantisches HTML (echte <ul>/<table>-Struktur statt Quills interner data-list-/Temp-Elemente).
-function leseHtmlFinal(editor) {
-    try {
-        const tabelle = editor.getModule('table-better');
-        if (tabelle) {
-            tabelle.deleteTableTemporary();
-        }
-    } catch (e) {
-        // Kein Tabellen-Modul / keine aktive Tabelle – ignorieren.
-    }
-    return istLeer(editor) ? '' : editor.getSemanticHTML();
+    return editor.getText().trim().length === 0 ? '' : editor.root.innerHTML;
 }
 
 export function setHtml(element, html) {
@@ -135,7 +84,7 @@ export function setHtml(element, html) {
 
 export function getHtml(element) {
     const editor = element && element.__nooseQuill;
-    return editor ? leseHtmlFinal(editor) : '';
+    return editor ? leseHtml(editor) : '';
 }
 
 export function destroyRichText(element) {
