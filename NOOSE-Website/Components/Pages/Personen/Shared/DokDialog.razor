@@ -1,10 +1,25 @@
 @* Formular-Dialog zum Anlegen eines Personen-Doks. Liefert eine PersonDokEingabe zurück. *@
 @inject IFraktionService FraktionService
 @inject IPersonengruppeService GruppeService
+@inject IDokVorlageService VorlageService
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form">
             <MudStack Spacing="3">
+                @if (!IstBearbeiten && _vorlagen.Count > 0)
+                {
+                    <MudSelect T="DokVorlage" Label="Vorlage übernehmen (optional)" Value="_gewaehlteVorlage"
+                               ValueChanged="VorlageAnwenden" Variant="Variant.Outlined" Clearable="true"
+                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
+                               ToStringFunc="@(v => v?.Name ?? string.Empty)"
+                               HelperText="Füllt die Felder mit den Vorgaben der Vorlage vor – frei editierbar.">
+                        @foreach (var v in _vorlagen)
+                        {
+                            <MudSelectItem Value="v">@v.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudDivider />
+                }
                 <MudGrid>
                     <MudItem xs="7">
                         <MudDatePicker Label="Datum der Maßnahme" @bind-Date="_datum" Required="true"
@@ -116,6 +131,10 @@
     // dann bleibt sie unverändert erhalten, statt durch das leere Picker-Feld gelöscht zu werden.
     private bool _orgVerborgen;
 
+    // Vorlagen-Picker (nur im Anlegen-Modus): aktive Vorlagen + aktuell gewählte.
+    private List<DokVorlage> _vorlagen = new();
+    private DokVorlage? _gewaehlteVorlage;
+
     private async Task<IEnumerable<ZugehoerigkeitDialog.AkteTreffer>> Suchen(string value, CancellationToken token)
     {
         if (IstFraktion)
@@ -127,10 +146,12 @@
         return gruppen.Select(g => new ZugehoerigkeitDialog.AkteTreffer(g.Id, g.Name, g.Aktenzeichen));
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         if (Vorhanden is null)
         {
+            // Anlegen-Modus: aktive Vorlagen für den Picker laden.
+            _vorlagen = await VorlageService.GetAktiveAsync();
             return;
         }
         // Edit-Modus: Felder sowie Datum/Uhrzeit (in Ortszeit) aus den vorhandenen Werten übernehmen.
@@ -156,6 +177,22 @@
                 _orgVerborgen = true;
             }
         }
+    }
+
+    /// <summary>Übernimmt die Vorgaben der gewählten Vorlage in das Formular (frei editierbar).
+    /// Zeitpunkt und Org-Verknüpfung bleiben unberührt (instanzspezifisch).</summary>
+    private void VorlageAnwenden(DokVorlage? vorlage)
+    {
+        _gewaehlteVorlage = vorlage;
+        if (vorlage is null)
+        {
+            return;
+        }
+        _eingabe.Grund = vorlage.StandardGrund;
+        _eingabe.Fraktion = vorlage.StandardFraktion;
+        _eingabe.ErhalteneInformationen = vorlage.StandardErhalteneInformationen;
+        _eingabe.Wahrheitsserum = vorlage.StandardWahrheitsserum;
+        _eingabe.Ausgang = vorlage.StandardAusgang;
     }
 
     private async Task Speichern()

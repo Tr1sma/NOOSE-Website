@@ -121,6 +121,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Ankuendigung> Ankuendigungen => Set<Ankuendigung>();
     public DbSet<AnkuendigungQuittierung> AnkuendigungQuittierungen => Set<AnkuendigungQuittierung>();
 
+    // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
+    public DbSet<DokVorlage> DokVorlagen => Set<DokVorlage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -289,6 +292,21 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(t => t.Name).HasMaxLength(60).IsRequired();
             b.Property(t => t.Farbe).HasMaxLength(32);
             b.HasIndex(t => t.Name).IsUnique();
+        });
+
+        // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
+        modelBuilder.Entity<DokVorlage>(b =>
+        {
+            b.Property(v => v.Name).HasMaxLength(120).IsRequired();
+            b.Property(v => v.Beschreibung).HasMaxLength(500);
+            b.Property(v => v.StandardGrund).HasMaxLength(2000);
+            b.Property(v => v.StandardFraktion).HasMaxLength(200);
+            b.Property(v => v.StandardErhalteneInformationen).HasMaxLength(4000);
+            // Kein Unique-Index: Soft-Delete würde sonst die Wieder-Anlage eines gelöschten Namens
+            // blockieren (gelöschte Zeile belegt den Namen). Eindeutigkeit wird in DokVorlageService
+            // geprüft (respektiert den Soft-Delete-Filter).
+            b.HasIndex(v => v.Name);
+            b.HasIndex(v => v.IstAktiv);
         });
 
         modelBuilder.Entity<TagZuordnung>(b =>

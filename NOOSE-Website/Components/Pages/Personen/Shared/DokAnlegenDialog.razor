@@ -3,11 +3,26 @@
 @inject IPersonService PersonService
 @inject IFraktionService FraktionService
 @inject IPersonengruppeService GruppeService
+@inject IDokVorlageService VorlageService
 
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form">
             <MudStack Spacing="3">
+                @if (_vorlagen.Count > 0)
+                {
+                    <MudSelect T="DokVorlage" Label="Vorlage übernehmen (optional)" Value="_gewaehlteVorlage"
+                               ValueChanged="VorlageAnwenden" Variant="Variant.Outlined" Clearable="true"
+                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
+                               ToStringFunc="@(v => v?.Name ?? string.Empty)"
+                               HelperText="Füllt die Dok-Felder mit den Vorgaben der Vorlage vor – frei editierbar.">
+                        @foreach (var v in _vorlagen)
+                        {
+                            <MudSelectItem Value="v">@v.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudDivider />
+                }
                 <MudAutocomplete T="Person" Label="Person" @bind-Value="_person" @bind-Text="_personText" AutoFocus="true"
                                  SearchFunc="@SuchePersonen" ToStringFunc="@(p => p?.Name ?? string.Empty)"
                                  Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
@@ -125,6 +140,30 @@
     private bool IstFraktion => _orgTyp == nameof(Fraktion);
     private ZugehoerigkeitDialog.AkteTreffer? _ziel;
     private bool _alsMitglied;
+
+    // Vorlagen-Picker: aktive Vorlagen + aktuell gewählte.
+    private List<DokVorlage> _vorlagen = new();
+    private DokVorlage? _gewaehlteVorlage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _vorlagen = await VorlageService.GetAktiveAsync();
+    }
+
+    /// <summary>Übernimmt die Vorgaben der gewählten Vorlage in das Formular (frei editierbar).</summary>
+    private void VorlageAnwenden(DokVorlage? vorlage)
+    {
+        _gewaehlteVorlage = vorlage;
+        if (vorlage is null)
+        {
+            return;
+        }
+        _eingabe.Grund = vorlage.StandardGrund;
+        _eingabe.Fraktion = vorlage.StandardFraktion;
+        _eingabe.ErhalteneInformationen = vorlage.StandardErhalteneInformationen;
+        _eingabe.Wahrheitsserum = vorlage.StandardWahrheitsserum;
+        _eingabe.Ausgang = vorlage.StandardAusgang;
+    }
 
     private async Task<IEnumerable<ZugehoerigkeitDialog.AkteTreffer>> Suchen(string value, CancellationToken token)
     {
