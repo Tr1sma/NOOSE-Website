@@ -90,6 +90,9 @@ else
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <KommentarPanel EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />
                 </MudTabPanel>
+                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                    <CustomFelderPanel EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
                     <VorgangHistorieTimeline VorgangId="@_vorgang.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
                 </MudTabPanel>
@@ -115,7 +118,7 @@ else
     private static readonly string[] _tabs =
     {
         "stammdaten", "inhalt", "agents", "einstufung",
-        "quellen", "kommentare", "historie",
+        "quellen", "kommentare", "zusatzfelder", "historie",
     };
 
     protected override async Task OnInitializedAsync()

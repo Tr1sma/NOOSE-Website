@@ -121,6 +121,17 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Ankuendigung> Ankuendigungen => Set<Ankuendigung>();
     public DbSet<AnkuendigungQuittierung> AnkuendigungQuittierungen => Set<AnkuendigungQuittierung>();
 
+    // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
+    public DbSet<DokVorlage> DokVorlagen => Set<DokVorlage>();
+
+    // ---- Phase 7: konfigurierbare Custom-Felder je Aktentyp ----
+    public DbSet<CustomFeldDefinition> CustomFeldDefinitionen => Set<CustomFeldDefinition>();
+    public DbSet<CustomFeldWert> CustomFeldWerte => Set<CustomFeldWert>();
+
+    // ---- Phase 7: Dokumenten-Bibliothek (WYSIWYG-Dokumente) + Dokument-Vorlagen ----
+    public DbSet<Dokument> Dokumente => Set<Dokument>();
+    public DbSet<DokumentVorlage> DokumentVorlagen => Set<DokumentVorlage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -289,6 +300,67 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(t => t.Name).HasMaxLength(60).IsRequired();
             b.Property(t => t.Farbe).HasMaxLength(32);
             b.HasIndex(t => t.Name).IsUnique();
+        });
+
+        // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
+        modelBuilder.Entity<DokVorlage>(b =>
+        {
+            b.Property(v => v.Name).HasMaxLength(120).IsRequired();
+            b.Property(v => v.Beschreibung).HasMaxLength(500);
+            b.Property(v => v.StandardGrund).HasMaxLength(2000);
+            b.Property(v => v.StandardFraktion).HasMaxLength(200);
+            b.Property(v => v.StandardErhalteneInformationen).HasMaxLength(4000);
+            // Kein Unique-Index: Soft-Delete würde sonst die Wieder-Anlage eines gelöschten Namens
+            // blockieren (gelöschte Zeile belegt den Namen). Eindeutigkeit wird in DokVorlageService
+            // geprüft (respektiert den Soft-Delete-Filter).
+            b.HasIndex(v => v.Name);
+            b.HasIndex(v => v.IstAktiv);
+        });
+
+        // ---- Phase 7: konfigurierbare Custom-Felder je Aktentyp ----
+        modelBuilder.Entity<CustomFeldDefinition>(b =>
+        {
+            b.Property(d => d.EntitaetTyp).HasMaxLength(128).IsRequired();
+            b.Property(d => d.Name).HasMaxLength(120).IsRequired();
+            b.Property(d => d.Optionen).HasMaxLength(2000);
+            // Kein Unique-Index (Soft-Delete würde Wieder-Anlage blockieren); Eindeutigkeit je
+            // Aktentyp prüft CustomFeldDefinitionService (respektiert den Soft-Delete-Filter).
+            b.HasIndex(d => new { d.EntitaetTyp, d.IstAktiv });
+        });
+
+        modelBuilder.Entity<CustomFeldWert>(b =>
+        {
+            b.Property(w => w.CustomFeldDefinitionId).HasMaxLength(64).IsRequired();
+            b.Property(w => w.EntitaetTyp).HasMaxLength(128).IsRequired();
+            b.Property(w => w.EntitaetId).HasMaxLength(64).IsRequired();
+            b.Property(w => w.Wert).HasColumnType("longtext");
+            b.HasIndex(w => new { w.EntitaetTyp, w.EntitaetId });
+            // Ein Wert je Feld je Akte.
+            b.HasIndex(w => new { w.CustomFeldDefinitionId, w.EntitaetTyp, w.EntitaetId }).IsUnique();
+        });
+
+        // ---- Phase 7: Dokumenten-Bibliothek + Dokument-Vorlagen ----
+        modelBuilder.Entity<Dokument>(b =>
+        {
+            b.Property(d => d.Titel).HasMaxLength(300).IsRequired();
+            b.Property(d => d.Kategorie).HasMaxLength(120);
+            // Formatierter HTML-Body kann beliebig lang werden → longtext (wie CustomFeldWert.Wert).
+            b.Property(d => d.InhaltHtml).HasColumnType("longtext");
+            b.HasIndex(d => d.Titel);
+            b.HasIndex(d => d.Kategorie);
+            b.HasIndex(d => d.IstVerschlusssache);
+        });
+
+        modelBuilder.Entity<DokumentVorlage>(b =>
+        {
+            b.Property(v => v.Name).HasMaxLength(120).IsRequired();
+            b.Property(v => v.Beschreibung).HasMaxLength(500);
+            b.Property(v => v.Kategorie).HasMaxLength(120);
+            b.Property(v => v.InhaltHtml).HasColumnType("longtext");
+            // Kein Unique-Index (Soft-Delete würde die Wieder-Anlage eines gelöschten Namens blockieren);
+            // Eindeutigkeit prüft DokumentVorlageService (respektiert den Soft-Delete-Filter).
+            b.HasIndex(v => v.Name);
+            b.HasIndex(v => v.IstAktiv);
         });
 
         modelBuilder.Entity<TagZuordnung>(b =>

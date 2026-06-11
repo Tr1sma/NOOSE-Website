@@ -2,6 +2,7 @@
    Bei Upload wird die Datei sofort in den Speicher gepuffert (kein Browser-Stream über die Dialog-Dauer). *@
 @inject IQuellenStorageService Storage
 @inject IPersonService PersonService
+@inject IDokumentService DokumentService
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -30,6 +31,32 @@
                     case QuelleTyp.Freitext:
                         <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Inhalt" Lines="5" Variant="Variant.Outlined"
                                       Required="true" RequiredError="Bitte einen Text eingeben" />
+                        break;
+
+                    case QuelleTyp.Dokument:
+                        <MudAutocomplete T="DokumentListeItem" Label="Vorhandenes Dokument" Value="_gewaehltesDokument"
+                                         ValueChanged="DokumentGewaehlt" SearchFunc="@SucheDokumente"
+                                         ToStringFunc="@(d => d?.Titel ?? string.Empty)"
+                                         Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                         ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Article"
+                                         HelperText="Dokument aus der Bibliothek auswählen – oder unten ein neues erstellen.">
+                            <ItemTemplate Context="d">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Small" Color="Color.Primary" />
+                                    <MudText Typo="Typo.body2">@d.Titel</MudText>
+                                    @if (!string.IsNullOrWhiteSpace(d.Kategorie))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@d.Kategorie</MudText>
+                                    }
+                                </MudStack>
+                            </ItemTemplate>
+                        </MudAutocomplete>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="NeuesDokument">
+                            Neues Dokument erstellen
+                        </MudButton>
+                        <MudTextField @bind-Value="_eingabe.Beschreibung" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
                         break;
 
                     case QuelleTyp.Intern:
@@ -89,10 +116,31 @@
     private MudForm _form = default!;
     private readonly QuelleEingabe _eingabe = new();
     private Person? _zielPerson;
+    private DokumentListeItem? _gewaehltesDokument;
     private string? _dateiName;
 
     private async Task<IEnumerable<Person>> SuchePersonen(string value, CancellationToken token)
         => await PersonService.SucheAsync(value, IstFuehrung, 20, token);
+
+    private async Task<IEnumerable<DokumentListeItem>> SucheDokumente(string value, CancellationToken token)
+        => await DokumentService.SucheAsync(value, IstFuehrung, 20, token);
+
+    private void DokumentGewaehlt(DokumentListeItem? dokument)
+    {
+        _gewaehltesDokument = dokument;
+        // Titel der Quelle mit dem Dokumenttitel vorbelegen (erfüllt zugleich die Titel-Pflicht).
+        if (dokument is not null && string.IsNullOrWhiteSpace(_eingabe.Titel))
+        {
+            _eingabe.Titel = dokument.Titel;
+        }
+    }
+
+    // Schließt den Dialog mit dem Signal „neues Dokument erstellen"; das Quellen-Panel navigiert zum Editor.
+    private void NeuesDokument()
+    {
+        _eingabe.NeuesDokumentErstellen = true;
+        MudDialog.Close(DialogResult.Ok(_eingabe));
+    }
 
     private async Task DateiGewaehlt(IBrowserFile? datei)
     {
@@ -155,6 +203,19 @@
             case QuelleTyp.Upload when _eingabe.DateiInhalt is null:
                 Snackbar.Add("Bitte eine Datei auswählen.", Severity.Warning);
                 return;
+            case QuelleTyp.Dokument:
+                if (_gewaehltesDokument is null)
+                {
+                    Snackbar.Add("Bitte ein Dokument auswählen oder ein neues erstellen.", Severity.Warning);
+                    return;
+                }
+                _eingabe.ZielTyp = nameof(Dokument);
+                _eingabe.ZielId = _gewaehltesDokument.Id;
+                if (string.IsNullOrWhiteSpace(_eingabe.Titel))
+                {
+                    _eingabe.Titel = _gewaehltesDokument.Titel;
+                }
+                break;
         }
 
         MudDialog.Close(DialogResult.Ok(_eingabe));

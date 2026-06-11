@@ -1,0 +1,13 @@
+@* Alt-Routen der Dok-Vorlagen: leiten auf die gebündelte Vorlagen-Verwaltung (/admin/vorlagen) weiter.
+   Die eigentliche Verwaltung lebt jetzt in der Komponente DokVorlagenVerwaltung (als Reiter). *@
+@page "/admin/dok-vorlagen"
+@page "/dok-vorlagen"
+@attribute [Authorize(Policy = Policies.Fuehrung)]
+@inject NavigationManager Nav
+
+<PageTitle>Vorlagen · NOOSE</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+        => Nav.NavigateTo("/admin/vorlagen?tab=dok-vorlagen", replace: true);
+}

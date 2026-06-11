@@ -3,6 +3,7 @@ using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Gruppen;
 using NOOSE_Website.Data.Entities.Operationen;
 using NOOSE_Website.Data.Entities.Parteien;
+using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Vorgaenge;
 
@@ -56,6 +57,7 @@ public static class SuchNavigation
         nameof(Taskforce) => $"/taskforces/{zielId}",
         nameof(Vorgang) => $"/vorgaenge/{zielId}",
         nameof(Aufgabe) => $"/aufgaben/{zielId}",
+        nameof(Dokument) => $"/dokumente/{zielId}",
         _ => $"/personen/{zielId}",
     };
 

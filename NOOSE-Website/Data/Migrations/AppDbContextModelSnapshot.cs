@@ -1479,6 +1479,74 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("AktenzeichenZaehler");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.DokVorlage", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Beschreibung")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstAktiv")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<int>("Sortierung")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StandardAusgang")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StandardErhalteneInformationen")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<string>("StandardFraktion")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("StandardGrund")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<bool>("StandardWahrheitsserum")
+                        .HasColumnType("tinyint(1)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IstAktiv");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("DokVorlagen");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Personen.EinstufungVerlauf", b =>
                 {
                     b.Property<string>("Id")
@@ -1956,6 +2024,221 @@ namespace NOOSE_Website.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("SteckbriefVorschlaege");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.CustomFeldDefinition", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("EntitaetTyp")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("FeldTyp")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstAktiv")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("Optionen")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
+
+                    b.Property<bool>("Pflicht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("Reihenfolge")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntitaetTyp", "IstAktiv");
+
+                    b.ToTable("CustomFeldDefinitionen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.CustomFeldWert", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CustomFeldDefinitionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("EntitaetId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("EntitaetTyp")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Wert")
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntitaetTyp", "EntitaetId");
+
+                    b.HasIndex("CustomFeldDefinitionId", "EntitaetTyp", "EntitaetId")
+                        .IsUnique();
+
+                    b.ToTable("CustomFeldWerte");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.Dokument", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("InhaltHtml")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstVerschlusssache")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Kategorie")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("Titel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IstVerschlusssache");
+
+                    b.HasIndex("Kategorie");
+
+                    b.HasIndex("Titel");
+
+                    b.ToTable("Dokumente");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.DokumentVorlage", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Beschreibung")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("InhaltHtml")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<bool>("IstAktiv")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Kategorie")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<int>("Sortierung")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IstAktiv");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("DokumentVorlagen");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.GespeicherteSuche", b =>

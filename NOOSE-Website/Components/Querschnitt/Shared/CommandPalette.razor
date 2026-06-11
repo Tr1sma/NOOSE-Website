@@ -70,6 +70,8 @@
             new("Neuen Vorgang anlegen", null, Icons.Material.Filled.Add, "/vorgaenge/neu"),
             new("Aufgaben", "Team-Board", Icons.Material.Filled.AssignmentTurnedIn, "/aufgaben"),
             new("Neue Aufgabe anlegen", null, Icons.Material.Filled.Add, "/aufgaben/neu"),
+            new("Dokumente", "Bibliothek", Icons.Material.Filled.MenuBook, "/dokumente"),
+            new("Neues Dokument erstellen", null, Icons.Material.Filled.Add, "/dokumente/neu"),
             new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
         };
         // Papierkörbe und Verwaltung sind Führungs-gated → für Nicht-Führung nicht anbieten (sonst ACCESS DENIED).
@@ -77,6 +79,7 @@
         {
             _befehle.Add(new PaletteItem("Freigaben", "Posteingang", Icons.Material.Filled.HowToReg, "/admin/freigaben"));
             _befehle.Add(new PaletteItem("Tags verwalten", null, Icons.Material.Filled.Label, "/admin/tags"));
+            _befehle.Add(new PaletteItem("Vorlagen verwalten", null, Icons.Material.Filled.Dvr, "/admin/vorlagen"));
             _befehle.Add(new PaletteItem("Papierkorb · Personen", null, Icons.Material.Filled.Delete, "/personen/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Fraktionen", null, Icons.Material.Filled.Delete, "/fraktionen/papierkorb"));
             _befehle.Add(new PaletteItem("Papierkorb · Personengruppen", null, Icons.Material.Filled.Delete, "/personengruppen/papierkorb"));

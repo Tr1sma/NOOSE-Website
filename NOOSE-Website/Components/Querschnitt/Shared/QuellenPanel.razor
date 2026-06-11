@@ -1,6 +1,7 @@
 @* Quellen-/Anhang-Liste einer Akte: Upload/Link/interne Verknüpfung/Freitext anhängen und entfernen. *@
 @inject IQuelleService QuelleService
 @inject IDialogService DialogService
+@inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
@@ -51,6 +52,11 @@
                     case QuelleTyp.Freitext:
                         <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@q.Beschreibung</MudText>
                         break;
+                    case QuelleTyp.Dokument when q.ZielId is not null:
+                        <MudLink Href="@($"/dokumente/{q.ZielId}")" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />Dokument öffnen
+                        </MudLink>
+                        break;
                 }
 
                 @if (q.Typ != QuelleTyp.Freitext && !string.IsNullOrWhiteSpace(q.Beschreibung))
@@ -90,6 +96,15 @@
         {
             return;
         }
+
+        // Sonderfall „Neues Dokument erstellen": zum Volltext-Editor wechseln; das Dokument wird beim
+        // Speichern automatisch als Quelle an diese Akte gehängt (attach=1).
+        if (eingabe.NeuesDokumentErstellen)
+        {
+            Nav.NavigateTo($"/dokumente/neu?entitaetTyp={Uri.EscapeDataString(EntitaetTyp)}&entitaetId={Uri.EscapeDataString(EntitaetId)}&attach=1");
+            return;
+        }
+
         try
         {
             await QuelleService.ErstellenAsync(EntitaetTyp, EntitaetId, eingabe, User);
@@ -121,6 +136,7 @@
         QuelleTyp.Link => Icons.Material.Filled.Link,
         QuelleTyp.Intern => Icons.Material.Filled.AccountTree,
         QuelleTyp.Freitext => Icons.Material.Filled.Notes,
+        QuelleTyp.Dokument => Icons.Material.Filled.Article,
         _ => Icons.Material.Filled.Description,
     };
 }

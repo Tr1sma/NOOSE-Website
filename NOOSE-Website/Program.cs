@@ -130,10 +130,19 @@ builder.Services.AddScoped<IAktenzeichenService, AktenzeichenService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDokService, PersonDokService>();
 builder.Services.AddScoped<ISteckbriefVorschlagService, SteckbriefVorschlagService>();
+// Phase 7: admin-definierte Dok-Vorlagen (Erfassungsmasken).
+builder.Services.AddScoped<IDokVorlageService, DokVorlageService>();
+// Phase 7: Dokumenten-Bibliothek (WYSIWYG-Dokumente) + Dokument-Vorlagen + Platzhalter-Ersetzung.
+builder.Services.AddScoped<IDokumentService, DokumentService>();
+builder.Services.AddScoped<IDokumentVorlageService, DokumentVorlageService>();
+builder.Services.AddScoped<IPlatzhalterService, PlatzhalterService>();
 // Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
 builder.Services.AddScoped<IQuelleService, QuelleService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IKommentarService, KommentarService>();
+// Phase 7: konfigurierbare Custom-Felder je Aktentyp (Admin).
+builder.Services.AddScoped<ICustomFeldDefinitionService, CustomFeldDefinitionService>();
+builder.Services.AddScoped<ICustomFeldWertService, CustomFeldWertService>();
 // Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
 builder.Services.AddScoped<IVerknuepfungService, VerknuepfungService>();
 builder.Services.AddScoped<IBeziehungService, BeziehungService>();

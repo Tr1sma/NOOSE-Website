@@ -111,3 +111,109 @@ html, body {
 .aufgaben-dropzone-gesperrt {
     background-color: rgba(244, 67, 54, 0.06);
 }
+
+/* ---- WYSIWYG-Editor (Quill) im dunklen NOOSE-Theme ---- */
+.ql-toolbar.ql-snow,
+.ql-container.ql-snow {
+    border-color: var(--mud-palette-lines-default);
+}
+
+.ql-toolbar.ql-snow {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    background-color: var(--mud-palette-background-grey);
+}
+
+.ql-container.ql-snow {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    background-color: var(--mud-palette-surface);
+}
+
+.ql-editor {
+    min-height: 340px;
+    color: var(--mud-palette-text-primary);
+    font-family: Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 0.95rem;
+}
+
+    .ql-editor.ql-blank::before {
+        color: var(--mud-palette-text-secondary);
+        font-style: normal;
+    }
+
+/* Toolbar-Symbole/Labels im Dunkeln sichtbar machen. */
+.ql-snow .ql-stroke {
+    stroke: var(--mud-palette-text-secondary);
+}
+
+.ql-snow .ql-fill {
+    fill: var(--mud-palette-text-secondary);
+}
+
+.ql-snow .ql-picker {
+    color: var(--mud-palette-text-secondary);
+}
+
+.ql-snow.ql-toolbar button:hover .ql-stroke,
+.ql-snow.ql-toolbar button.ql-active .ql-stroke,
+.ql-snow .ql-picker-label:hover .ql-stroke {
+    stroke: var(--mud-palette-primary);
+}
+
+.ql-snow.ql-toolbar button:hover .ql-fill,
+.ql-snow.ql-toolbar button.ql-active .ql-fill {
+    fill: var(--mud-palette-primary);
+}
+
+.ql-snow .ql-picker-options {
+    background-color: var(--mud-palette-surface);
+    border-color: var(--mud-palette-lines-default) !important;
+}
+
+/* ---- Gerendertes Dokument-HTML (Viewer/Vorschau) ---- */
+.dokument-html {
+    color: var(--mud-palette-text-primary);
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+    .dokument-html h1 {
+        font-size: 1.6rem;
+    }
+
+    .dokument-html h2 {
+        font-size: 1.35rem;
+    }
+
+    .dokument-html h3 {
+        font-size: 1.15rem;
+    }
+
+    .dokument-html a {
+        color: var(--mud-palette-primary);
+    }
+
+    .dokument-html blockquote {
+        border-left: 3px solid var(--mud-palette-lines-default);
+        margin-left: 0;
+        padding-left: 1rem;
+        color: var(--mud-palette-text-secondary);
+    }
+
+    .dokument-html pre {
+        background-color: var(--mud-palette-background-grey);
+        padding: .75rem 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+    }
+
+    .dokument-html ul,
+    .dokument-html ol {
+        padding-left: 1.5rem;
+    }
+
+    .dokument-html img {
+        max-width: 100%;
+    }

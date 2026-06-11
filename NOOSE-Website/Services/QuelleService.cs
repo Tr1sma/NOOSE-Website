@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
@@ -95,6 +96,28 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
 
             case QuelleTyp.Freitext:
                 // Inhalt steckt in der Beschreibung – nichts weiter nötig.
+                break;
+
+            case QuelleTyp.Dokument:
+                if (string.IsNullOrWhiteSpace(eingabe.ZielId))
+                {
+                    throw new InvalidOperationException("Bei einer Dokument-Quelle ist ein Ziel-Dokument erforderlich.");
+                }
+                // Existenz + Sichtbarkeit des referenzierten Dokuments prüfen (kein Verweis auf VS-Dokumente
+                // für Nicht-Führung; kein Existenz-Leak).
+                await using (var pruefDb = await dbFactory.CreateDbContextAsync(cancellationToken))
+                {
+                    var vsFlag = await pruefDb.Dokumente
+                        .Where(d => d.Id == eingabe.ZielId)
+                        .Select(d => (bool?)d.IstVerschlusssache)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (vsFlag is null || (vsFlag == true && !handelnder.IstFuehrung()))
+                    {
+                        throw new InvalidOperationException("Das gewählte Dokument wurde nicht gefunden.");
+                    }
+                }
+                quelle.ZielTyp = nameof(Dokument);
+                quelle.ZielId = eingabe.ZielId;
                 break;
         }
 
