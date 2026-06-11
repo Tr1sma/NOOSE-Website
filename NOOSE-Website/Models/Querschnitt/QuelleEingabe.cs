@@ -19,9 +19,15 @@ public class QuelleEingabe
     /// <summary>Ziel-URL bei <see cref="QuelleTyp.Link"/>.</summary>
     public string? Url { get; set; }
 
-    // Interne Verknüpfung (QuelleTyp.Intern).
+    // Interne Verknüpfung (QuelleTyp.Intern) bzw. Dokument-Verweis (QuelleTyp.Dokument).
     public string? ZielTyp { get; set; }
     public string? ZielId { get; set; }
+
+    /// <summary>
+    /// Nur im Dialog verwendet (nicht persistiert): signalisiert, dass statt eines vorhandenen Dokuments
+    /// ein neues im Volltext-Editor erstellt werden soll. Das Quellen-Panel navigiert dann zum Editor.
+    /// </summary>
+    public bool NeuesDokumentErstellen { get; set; }
 
     // Upload (QuelleTyp.Upload).
     public byte[]? DateiInhalt { get; set; }

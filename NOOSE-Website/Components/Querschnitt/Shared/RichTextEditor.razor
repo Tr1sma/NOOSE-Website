@@ -1,0 +1,76 @@
+@* Wiederverwendbarer WYSIWYG-Editor (Quill). Der HTML-Inhalt wird über @bind-Value gehalten; der
+   endgültige Inhalt sollte beim Speichern mit GetHtmlAsync() frisch aus dem Editor gelesen werden. *@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div @ref="_element" class="noose-rte"></div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private ElementReference _element;
+    private IJSObjectReference? _modul;
+    private DotNetObjectReference<RichTextEditor>? _ref;
+    private bool _bereit;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        // JS-Interop erst nach dem ersten Render verfügbar (Interactive Server).
+        _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js");
+        _ref = DotNetObjectReference.Create(this);
+        await _modul.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty);
+        _bereit = true;
+    }
+
+    [JSInvokable]
+    public async Task OnHtmlChanged(string html)
+    {
+        Value = html;
+        if (ValueChanged.HasDelegate)
+        {
+            await ValueChanged.InvokeAsync(html);
+        }
+    }
+
+    /// <summary>Setzt den Editor-Inhalt (z. B. beim Anwenden einer Vorlage).</summary>
+    public async Task SetHtmlAsync(string html)
+    {
+        if (_modul is not null && _bereit)
+        {
+            await _modul.InvokeVoidAsync("setHtml", _element, html ?? string.Empty);
+            Value = html;
+        }
+    }
+
+    /// <summary>Liest den aktuellen HTML-Inhalt frisch aus dem Editor (verlässlich für das Speichern).</summary>
+    public async Task<string> GetHtmlAsync()
+    {
+        if (_modul is not null && _bereit)
+        {
+            Value = await _modul.InvokeAsync<string>("getHtml", _element);
+        }
+        return Value ?? string.Empty;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_modul is not null)
+            {
+                await _modul.InvokeVoidAsync("destroyRichText", _element);
+                await _modul.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit bereits getrennt – nichts zu tun.
+        }
+        _ref?.Dispose();
+    }
+}

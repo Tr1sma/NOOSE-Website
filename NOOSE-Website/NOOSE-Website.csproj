@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <!-- UI -->
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
     <PackageReference Include="MudBlazor" Version="9.5.0" />
 
     <!-- Datenbank: MySQL 8.0 / MariaDB via Pomelo (EF Core 9, laeuft auf .NET 10) -->

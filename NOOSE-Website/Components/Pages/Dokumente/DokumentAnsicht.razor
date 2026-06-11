@@ -1,0 +1,145 @@
+@* Read-only-Viewer eines Bibliotheks-Dokuments. Rendert den bereinigten HTML-Body und zeigt, an welche
+   Akten das Dokument angehängt ist. *@
+@page "/dokumente/{Id}"
+@inject IDokumentService DokumentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_dokument?.Titel ?? "Dokument") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_dokument is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dokument nicht gefunden oder nicht zugänglich.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/dokumente" aria-label="Zurück zur Bibliothek" />
+        <MudIcon Icon="@Icons.Material.Filled.Article" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@_dokument.Titel</MudText>
+        @if (_dokument.IstVerschlusssache)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Lock" Variant="Variant.Outlined">Verschlusssache</MudChip>
+        }
+        <MudSpacer />
+        @if (_darfLoeschen)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+        }
+        <MudButton Href="@($"/dokumente/{_dokument.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="8" lg="9">
+            <MudPaper Class="pa-6" Elevation="2">
+                @* InhaltHtml wurde beim Speichern serverseitig bereinigt → sicher als MarkupString. *@
+                <div class="dokument-html">@((MarkupString)_dokument.InhaltHtml)</div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4" lg="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Details</MudText>
+                @if (!string.IsNullOrWhiteSpace(_dokument.Kategorie))
+                {
+                    <MudText Typo="Typo.body2"><b>Kategorie:</b> @_dokument.Kategorie</MudText>
+                }
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                    Erstellt: @_dokument.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                </MudText>
+                @if (_dokument.GeaendertAm is { } g)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                        Geändert: @g.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                }
+
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Angehängt an (@_anhaenge.Count)</MudText>
+                @if (_anhaenge.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch an keine Akte angehängt.</MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="1">
+                        @foreach (var a in _anhaenge)
+                        {
+                            @if (a.Href is not null)
+                            {
+                                <MudLink Href="@a.Href" Typo="Typo.body2">
+                                    <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />@a.Anzeige
+                                </MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2">@a.Anzeige</MudText>
+                            }
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private Dokument? _dokument;
+    private List<DokumentAnhang> _anhaenge = new();
+    private bool _darfLoeschen;
+    private ClaimsPrincipal _user = default!;
+    private string? _geladeneId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _user = (await AuthStateTask).User;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        var istFuehrung = _user.IstFuehrung();
+        _dokument = await DokumentService.GetAsync(Id, istFuehrung);
+        if (_dokument is not null)
+        {
+            _anhaenge = await DokumentService.GetAnhaengeAsync(Id, istFuehrung);
+            _darfLoeschen = istFuehrung
+                || (_dokument.ErstelltVonId is not null && _dokument.ErstelltVonId == _user.GetAgentId());
+        }
+        _laden = false;
+    }
+
+    private async Task LoeschenAsync()
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Dokument löschen?",
+            $"„{_dokument!.Titel}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await DokumentService.LoeschenAsync(Id, _user);
+            Snackbar.Add("Dokument gelöscht.", Severity.Success);
+            Nav.NavigateTo("/dokumente");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

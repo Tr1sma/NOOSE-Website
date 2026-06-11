@@ -155,6 +155,19 @@ public static class AktenReferenz
             }
         }
 
+        // Bibliotheks-Dokument: Anzeige = Titel, echtes Verschlusssache-Flag, Route auf den Viewer.
+        var dokumentIds = OffeneIds(nameof(Dokument));
+        if (dokumentIds.Count > 0)
+        {
+            foreach (var x in await db.Dokumente.Where(d => dokumentIds.Contains(d.Id))
+                .Select(d => new { d.Id, d.Titel, d.IstVerschlusssache }).ToListAsync(ct))
+            {
+                map[(nameof(Dokument), x.Id)] = new(
+                    string.IsNullOrWhiteSpace(x.Titel) ? "Dokument" : x.Titel,
+                    x.IstVerschlusssache, SuchNavigation.Route(nameof(Dokument), x.Id));
+            }
+        }
+
         // Agent: kein Verschlusssache-Konzept; Verweis auf die Personalakte (/personal/{id}, für jeden aktiven
         // Agenten zugänglich) – nur der Codename als Anzeigename (Klarname bleibt verborgen).
         var agentIds = OffeneIds(nameof(Agent));

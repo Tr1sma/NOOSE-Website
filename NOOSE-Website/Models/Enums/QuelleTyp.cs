@@ -14,6 +14,9 @@ public enum QuelleTyp
 
     /// <summary>Reiner Freitext-Vermerk.</summary>
     Freitext = 3,
+
+    /// <summary>Verweis auf ein Bibliotheks-Dokument (Ziel über <c>ZielTyp</c>/<c>ZielId</c>).</summary>
+    Dokument = 4,
 }
 
 /// <summary>Anzeigetexte für den Quellen-Typ (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
@@ -25,6 +28,7 @@ public static class QuelleTypAnzeige
         QuelleTyp.Link => "Web-Link",
         QuelleTyp.Intern => "Interne Verknüpfung",
         QuelleTyp.Freitext => "Freitext",
+        QuelleTyp.Dokument => "Dokument",
         _ => "—",
     };
 
@@ -34,5 +38,6 @@ public static class QuelleTypAnzeige
         QuelleTyp.Link,
         QuelleTyp.Intern,
         QuelleTyp.Freitext,
+        QuelleTyp.Dokument,
     };
 }

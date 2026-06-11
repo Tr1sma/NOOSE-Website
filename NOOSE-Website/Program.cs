@@ -132,6 +132,10 @@ builder.Services.AddScoped<IPersonDokService, PersonDokService>();
 builder.Services.AddScoped<ISteckbriefVorschlagService, SteckbriefVorschlagService>();
 // Phase 7: admin-definierte Dok-Vorlagen (Erfassungsmasken).
 builder.Services.AddScoped<IDokVorlageService, DokVorlageService>();
+// Phase 7: Dokumenten-Bibliothek (WYSIWYG-Dokumente) + Dokument-Vorlagen + Platzhalter-Ersetzung.
+builder.Services.AddScoped<IDokumentService, DokumentService>();
+builder.Services.AddScoped<IDokumentVorlageService, DokumentVorlageService>();
+builder.Services.AddScoped<IPlatzhalterService, PlatzhalterService>();
 // Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
 builder.Services.AddScoped<IQuelleService, QuelleService>();
 builder.Services.AddScoped<ITagService, TagService>();

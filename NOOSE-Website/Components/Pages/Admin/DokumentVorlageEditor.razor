@@ -1,0 +1,158 @@
+@* Volltext-Editor für eine Dokument-Vorlage (HTML-Body mit Platzhaltern). Nur Führung. *@
+@page "/admin/vorlagen/dokument-vorlage/neu"
+@page "/admin/vorlagen/dokument-vorlage/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.Fuehrung)]
+@inject IDokumentVorlageService VorlageService
+@inject IPlatzhalterService Platzhalter
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_bearbeiten ? "Vorlage bearbeiten" : "Neue Dokument-Vorlage") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_bearbeiten && !_gefunden)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Vorlage nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="Abbrechen" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Dvr" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(_bearbeiten ? "Dokument-Vorlage bearbeiten" : "Neue Dokument-Vorlage")</MudText>
+        <MudSpacer />
+        <MudButton OnClick="Abbrechen" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
+        <MudButton OnClick="SpeichernAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_speichert">Speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudGrid>
+                <MudItem xs="12" md="7">
+                    <MudTextField @bind-Value="_name" Label="Name der Vorlage" Variant="Variant.Outlined" Required="true"
+                                  RequiredError="Name ist erforderlich" AutoFocus="true" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudTextField @bind-Value="_kategorie" Label="Kategorie (optional)" Variant="Variant.Outlined"
+                                  Placeholder="z. B. SOP, Formular, Vermerk" />
+                </MudItem>
+            </MudGrid>
+            <MudTextField @bind-Value="_beschreibung" Label="Beschreibung (optional)" Lines="2" Variant="Variant.Outlined" />
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudSwitch @bind-Value="_istAktiv" Color="Color.Primary" Label="Aktiv (im Picker auswählbar)" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="_sortierung" Label="Sortierung" Variant="Variant.Outlined" Min="0" />
+                </MudItem>
+            </MudGrid>
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                <MudText Typo="Typo.body2" Class="mb-1">Verfügbare Platzhalter (beim Anlegen eines Dokuments automatisch ersetzt):</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                    @foreach (var (token, beschreibung) in Platzhalter.VerfuegbarePlatzhalter)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Title="@beschreibung">@token</MudChip>
+                    }
+                </MudStack>
+            </MudAlert>
+
+            <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
+            <RichTextEditor @ref="_editor" Value="@_inhaltHtml" />
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+
+    private RichTextEditor _editor = default!;
+    private ClaimsPrincipal _user = default!;
+
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _bearbeiten;
+    private bool _gefunden;
+    private bool _speichert;
+
+    private string _name = string.Empty;
+    private string? _beschreibung;
+    private string? _kategorie;
+    private bool _istAktiv = true;
+    private int _sortierung;
+    private string? _inhaltHtml;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _bearbeiten = !string.IsNullOrEmpty(Id);
+
+        if (_bearbeiten)
+        {
+            var vorlage = await VorlageService.GetAsync(Id!);
+            if (vorlage is not null)
+            {
+                _gefunden = true;
+                _name = vorlage.Name;
+                _beschreibung = vorlage.Beschreibung;
+                _kategorie = vorlage.Kategorie;
+                _istAktiv = vorlage.IstAktiv;
+                _sortierung = vorlage.Sortierung;
+                _inhaltHtml = vorlage.InhaltHtml;
+            }
+        }
+
+        _laden = false;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        var name = _name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Snackbar.Add("Bitte einen Namen angeben.", Severity.Warning);
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            var html = await _editor.GetHtmlAsync();
+            var eingabe = new DokumentVorlageEingabe
+            {
+                Name = name,
+                Beschreibung = _beschreibung,
+                Kategorie = _kategorie,
+                InhaltHtml = html,
+                IstAktiv = _istAktiv,
+                Sortierung = _sortierung,
+            };
+
+            if (_bearbeiten)
+            {
+                await VorlageService.AktualisierenAsync(Id!, eingabe, _user);
+            }
+            else
+            {
+                await VorlageService.ErstellenAsync(eingabe, _user);
+            }
+
+            Snackbar.Add("Vorlage gespeichert.", Severity.Success);
+            Nav.NavigateTo("/admin/vorlagen?tab=dokument-vorlagen");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _speichert = false;
+        }
+    }
+
+    private void Abbrechen() => Nav.NavigateTo("/admin/vorlagen?tab=dokument-vorlagen");
+}
