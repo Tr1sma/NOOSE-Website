@@ -33,7 +33,7 @@ public class CustomFeldDefinitionService(IDbContextFactory<AppDbContext> dbFacto
 
     public async Task<CustomFeldDefinition> ErstellenAsync(CustomFeldDefinitionEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeAdmin(handelnder);
+        Berechtigung.VerlangeFuehrung(handelnder);
 
         var (name, entitaetTyp) = Validieren(eingabe);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -51,7 +51,7 @@ public class CustomFeldDefinitionService(IDbContextFactory<AppDbContext> dbFacto
 
     public async Task AktualisierenAsync(string id, CustomFeldDefinitionEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeAdmin(handelnder);
+        Berechtigung.VerlangeFuehrung(handelnder);
 
         var (name, entitaetTyp) = Validieren(eingabe);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -70,7 +70,7 @@ public class CustomFeldDefinitionService(IDbContextFactory<AppDbContext> dbFacto
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeAdmin(handelnder);
+        Berechtigung.VerlangeFuehrung(handelnder);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var definition = await db.CustomFeldDefinitionen.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);

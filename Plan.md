@@ -128,7 +128,8 @@
 | Beförderung vorschlagen / entscheiden | Vorschlag ab Supervisory · Entscheidung Deputy Director+/Admin |
 | Broadcast/Rundnachricht senden | Führung / Admin |
 | Basisdaten/Lookups & Vorlagen verwalten | Führung / Admin |
-| Theming, Wartungsmodus, Custom-Felder, Systemverwaltung | Admin |
+| Custom-Felder (Definitionen) verwalten | Führung / Admin |
+| Theming, Wartungsmodus, Systemverwaltung | Admin |
 
 **Partner (DoJ/LSPD/LSMD – Phase 9):** eigene Rollen, **nur Lesezugriff** auf als „für Partner freigegeben" markierte Inhalte.
 
