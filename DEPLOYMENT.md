@@ -24,6 +24,7 @@ Browser ──HTTPS──> nginx (Port 443, TLS via Let's Encrypt)
 | App-Verzeichnis | `/var/www/noose` |
 | systemd-Dienst | `noose` |
 | Secrets/Env | `/etc/noose/noose.env` (chmod 600, nur root) |
+| Zeitzone | `Europe/Berlin` (via `TZ` in `/etc/noose/noose.env`) — **zwingend**, sonst alle Zeiten 2 h zu früh |
 | Datenbank | lokale **MariaDB**, DB `noose`, User `noose@localhost` / `noose@127.0.0.1` |
 | nginx-Site | `/etc/nginx/sites-available/noose` |
 | TLS | Let's Encrypt (certbot, erneuert sich automatisch) |
@@ -167,6 +168,10 @@ EXIT;
 ```ini
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://127.0.0.1:5000
+# Zeitzone des App-Prozesses. ZWINGEND: In Blazor Server nutzt .ToLocalTime() die
+# Server-Zeitzone. Ohne dies läuft der Server in UTC und alle Zeiten sind 2 h zu früh
+# (über Mitternacht sogar der falsche Tag). Nach Änderung: systemctl restart noose.
+TZ=Europe/Berlin
 ConnectionStrings__ProductionConnection=Server=127.0.0.1;Port=3306;Database=noose;User ID=noose;Password=DEIN_DB_PASSWORT;SslMode=None;
 Authentication__Discord__ClientId=DEINE_DISCORD_CLIENT_ID
 Authentication__Discord__ClientSecret=DEIN_DISCORD_CLIENT_SECRET
@@ -320,5 +325,6 @@ jobs:
 | **certbot scheitert mit IPv6-Adresse / `204`** | Alter `AAAA`-Eintrag zeigt auf STRATO-Parkserver. AAAA löschen (oder auf Server-IPv6 setzen), bis `getent ahosts noose.info` nur die `195.20.225.12` zeigt, dann certbot erneut. |
 | **`Failed to determine the https port for redirect`** (Log) | Harmlos. Tritt nur bei direkten http-Anfragen an Kestrel auf; über nginx+TLS verschwindet die Warnung. |
 | **Login: „invalid redirect_uri"** | Im Discord Developer Portal `https://noose.info/signin-discord` als Redirect eintragen. |
+| **Zeiten 2 h zu früh / falscher Tag** | Server läuft in UTC. In Blazor Server nutzt `.ToLocalTime()` die Server-Zeitzone. `TZ=Europe/Berlin` in `/etc/noose/noose.env` ergänzen, dann `systemctl restart noose` (Neustart nötig — `TimeZoneInfo.Local` ist pro Prozess gecacht). |
 | **502 Bad Gateway** | App läuft nicht → `systemctl status noose` + `journalctl -u noose -e`. |
 | **Nutzer nach jedem Deploy ausgeloggt** | Data-Protection-Schlüssel weg → `App_Data` darf beim Deploy **nicht** gelöscht werden (das Skript behält es). |
