@@ -38,6 +38,12 @@ public class Agent : IdentityUser
     /// <summary>Technische Systemrolle (Auftraggeber). Unabhängig vom Dienstgrad.</summary>
     public bool IstAdmin { get; set; }
 
+    /// <summary>FiveM-Server-Teamleitung (Aufsicht). Reiner Sichtbarkeits-Marker: verleiht KEINE Rechte und greift
+    /// NICHT in die Dienstgrad-Hierarchie ein. Vollzugriff entsteht ausschließlich über den separat gesetzten
+    /// <see cref="IstAdmin"/>-Haken. TeamLeitungen sind im gesamten RP-Betrieb unsichtbar (nirgends auswählbar,
+    /// erwähnbar oder gelistet) und nur in der Agenten-Verwaltung sichtbar.</summary>
+    public bool IstTeamLeitung { get; set; }
+
     /// <summary>Account-Lebenszyklus (Ausstehend/Aktiv/Gesperrt).</summary>
     public AgentStatus Status { get; set; } = AgentStatus.Ausstehend;
 

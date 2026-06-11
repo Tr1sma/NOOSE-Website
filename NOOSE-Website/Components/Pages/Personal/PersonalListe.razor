@@ -73,7 +73,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         _darfKlarname = (await AuthStateTask).User.DarfKlarnameSehen();
-        _agenten = await AgentService.GetAlleAsync();
+        // TeamLeitungen (FiveM-Aufsicht) sind im RP-Betrieb unsichtbar – aus dem Personalroster ausblenden.
+        _agenten = (await AgentService.GetAlleAsync()).Where(a => !a.IstTeamLeitung).ToList();
         _laden = false;
     }
 

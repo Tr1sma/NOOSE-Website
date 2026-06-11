@@ -134,9 +134,8 @@
     protected override async Task OnInitializedAsync()
     {
         _darfKlarname = IstFuehrung;
-        // Aktive Agents für die Auswahl laden (analog AgentZuteilenDialog).
-        var alle = await AgentService.GetAlleAsync();
-        _alleAgenten = alle.Where(a => a.Status == AgentStatus.Aktiv).ToList();
+        // Auswählbare Agents laden (aktiv, ohne TeamLeitung-Marker; analog AgentZuteilenDialog).
+        _alleAgenten = await AgentService.GetAuswaehlbareAsync();
 
         if (Vorhanden is null)
         {

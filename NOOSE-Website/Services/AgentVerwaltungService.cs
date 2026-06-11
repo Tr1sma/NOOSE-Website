@@ -19,18 +19,30 @@ namespace NOOSE_Website.Services;
 // parallelen Kontextzugriffe aus, daher ist der geteilte scoped Context hier unkritisch.
 public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext db, INotificationService notifications) : IAgentVerwaltungService
 {
+    // Reine Lese-/Anzeige-Queries laufen bewusst mit AsNoTracking: Dieser Dienst nutzt einen
+    // langlebigen, geteilten scoped AppDbContext (Blazor-Circuit). Würden Anzeige-Queries tracken,
+    // gäbe EF bei späteren Abfragen über die Identity-Map eine bereits getrackte, VERALTETE Instanz
+    // zurück (Beispiel: ein Agent wird hier geladen, als er noch keinen Antrag hat; stellt er später
+    // eine Namensänderung, matcht die WHERE-Query zwar gegen die Live-DB, liefert aber die veraltete
+    // In-Memory-Instanz). AsNoTracking materialisiert immer den aktuellen DB-Stand.
     public Task<List<Agent>> GetAusstehendeAsync(CancellationToken cancellationToken = default)
-        => db.Users.Where(a => a.Status == AgentStatus.Ausstehend)
+        => db.Users.AsNoTracking().Where(a => a.Status == AgentStatus.Ausstehend)
             .OrderBy(a => a.RegistriertAm)
             .ToListAsync(cancellationToken);
 
     public Task<List<Agent>> GetAlleAsync(CancellationToken cancellationToken = default)
-        => db.Users.OrderByDescending(a => a.Status == AgentStatus.Ausstehend)
+        => db.Users.AsNoTracking().OrderByDescending(a => a.Status == AgentStatus.Ausstehend)
             .ThenBy(a => a.Codename)
             .ToListAsync(cancellationToken);
 
+    public Task<List<Agent>> GetAuswaehlbareAsync(CancellationToken cancellationToken = default)
+        => db.Users.AsNoTracking()
+            .Where(a => a.Status == AgentStatus.Aktiv && !a.IstTeamLeitung)
+            .OrderBy(a => a.Codename)
+            .ToListAsync(cancellationToken);
+
     public Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default)
-        => db.Users.FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
+        => db.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
 
     public async Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, ClaimsPrincipal handelnder)
     {
@@ -107,7 +119,7 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
     }
 
     public Task<List<Agent>> GetAusstehendeNamensaenderungenAsync(CancellationToken cancellationToken = default)
-        => db.Users.Where(a => a.NamensaenderungBeantragtAm != null)
+        => db.Users.AsNoTracking().Where(a => a.NamensaenderungBeantragtAm != null)
             .OrderBy(a => a.NamensaenderungBeantragtAm)
             .ToListAsync(cancellationToken);
 
@@ -216,6 +228,18 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         await Speichern(agent, neuerStamp: true);
     }
 
+    public async Task TeamLeitungSetzenAsync(string agentId, bool istTeamLeitung, ClaimsPrincipal handelnder)
+    {
+        var agent = await GetOrThrow(agentId);
+        agent.IstTeamLeitung = istTeamLeitung;
+
+        Audit(agent, AuditAktion.Geaendert, handelnder,
+            istTeamLeitung ? "Als TeamLeitung markiert" : "TeamLeitung-Markierung entfernt");
+        // Bewusst KEIN neuer SecurityStamp: Der Marker steht in keinem Claim und verändert nichts an der eigenen
+        // Sitzung des Betroffenen – er steuert nur, ob ANDERE den Agenten in Auswahl-/Erwähnungslisten sehen.
+        await Speichern(agent, neuerStamp: false);
+    }
+
     public async Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder)
     {
         var agent = await GetOrThrow(agentId);
@@ -265,9 +289,17 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         await Speichern(agent, neuerStamp: true);
     }
 
+    // Lädt den Agenten für eine Mutation. Da der geteilte Context (Blazor-Circuit) langlebig ist und
+    // evtl. noch eine getrackte Instanz aus einer früheren Operation hält, wird der Datensatz frisch
+    // aus der DB nachgeladen (ReloadAsync) – sonst entschiede eine Mutation evtl. auf veraltetem Stand
+    // (z. B. „kein Namensänderungs-Antrag", obwohl in der DB längst einer vorliegt).
     private async Task<Agent> GetOrThrow(string agentId)
-        => await db.Users.FirstOrDefaultAsync(a => a.Id == agentId)
-           ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
+    {
+        var agent = await db.Users.FirstOrDefaultAsync(a => a.Id == agentId)
+            ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
+        await db.Entry(agent).ReloadAsync();
+        return agent;
+    }
 
     private static void PendingNamensaenderungLeeren(Agent agent)
     {

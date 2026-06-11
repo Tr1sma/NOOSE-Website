@@ -11,8 +11,9 @@
     <MudText Typo="Typo.h4">Agenten-Verwaltung</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Dienstgrade vergeben, TRU- und Admin-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
-    alle laufenden Sitzungen des Agents sofort (Kill-Switch).
+    Dienstgrade vergeben, TRU-, TeamLeitung- und Admin-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
+    alle laufenden Sitzungen des Agents sofort (Kill-Switch). TeamLeitungen (FiveM-Aufsicht) sind im RP-Betrieb
+    überall ausgeblendet und nur hier sichtbar – Vollzugriff erst durch den Admin-Haken.
 </MudText>
 
 @if (_laden)
@@ -27,6 +28,7 @@ else
             <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>TRU</MudTh>
+            <MudTh>TeamLeitung</MudTh>
             <MudTh>Admin</MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
@@ -38,6 +40,10 @@ else
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@KlarnameDienstnummer(context)</MudText>
                 }
                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@(context.DiscordUsername ?? context.DiscordId)</MudText>
+                @if (context.IstTeamLeitung)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Class="mt-1">TeamLeitung</MudChip>
+                }
             </MudTd>
             <MudTd DataLabel="Dienstgrad">
                 <MudSelect T="Dienstgrad" Value="@(context.Dienstgrad ?? Dienstgrad.JuniorAgent)"
@@ -58,6 +64,9 @@ else
             </MudTd>
             <MudTd DataLabel="TRU">
                 <MudSwitch T="bool" Value="context.IstTRU" ValueChanged="@(v => TruSetzen(context, v))" Color="Color.Primary" />
+            </MudTd>
+            <MudTd DataLabel="TeamLeitung">
+                <MudSwitch T="bool" Value="context.IstTeamLeitung" ValueChanged="@(v => TeamLeitungSetzen(context, v))" Color="Color.Tertiary" />
             </MudTd>
             <MudTd DataLabel="Admin">
                 <MudSwitch T="bool" Value="context.IstAdmin" ValueChanged="@(v => AdminSetzen(context, v))"
@@ -159,6 +168,21 @@ else
         {
             await AgentService.TruSetzenAsync(agent.Id, wert, user);
             Snackbar.Add($"{AnzeigeName(agent)}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
+    }
+
+    private async Task TeamLeitungSetzen(Agent agent, bool wert)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.TeamLeitungSetzenAsync(agent.Id, wert, user);
+            Snackbar.Add($"{AnzeigeName(agent)}: TeamLeitung {(wert ? "markiert" : "entfernt")}.", Severity.Success);
         }
         catch (Exception ex)
         {

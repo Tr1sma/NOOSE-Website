@@ -14,6 +14,11 @@ public interface IAgentVerwaltungService
 {
     Task<List<Agent>> GetAusstehendeAsync(CancellationToken cancellationToken = default);
     Task<List<Agent>> GetAlleAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Für Auswahl-/Zuteilungs-/Erwähnungslisten: nur aktive Agenten OHNE TeamLeitung-Marker
+    /// (sortiert nach Codename). TeamLeitungen sollen im RP-Betrieb nirgends auswählbar oder erwähnbar sein.</summary>
+    Task<List<Agent>> GetAuswaehlbareAsync(CancellationToken cancellationToken = default);
+
     Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default);
 
     /// <summary>Ausstehenden Account freischalten und Rang/TRU vergeben → Status Aktiv.</summary>
@@ -49,6 +54,10 @@ public interface IAgentVerwaltungService
 
     Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder);
     Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder);
+
+    /// <summary>Markiert/entmarkiert einen Agenten als FiveM-Teamleitung. Reiner Sichtbarkeits-Marker –
+    /// vergibt keine Rechte; Vollzugriff wird separat über <see cref="AdminSetzenAsync"/> gesetzt.</summary>
+    Task TeamLeitungSetzenAsync(string agentId, bool istTeamLeitung, ClaimsPrincipal handelnder);
 
     /// <summary>Notfall-Sperre: Status Gesperrt + alle Sitzungen sofort beenden (Kill-Switch).</summary>
     Task SperrenAsync(string agentId, string grund, ClaimsPrincipal handelnder);

@@ -16,10 +16,14 @@
     .\deploy.ps1 -SkipPublish
         Nutzt den vorhandenen .\publish-Ordner (kein erneutes dotnet publish).
 
+.EXAMPLE
+    .\deploy.ps1 -NoPause
+        Ohne "Enter zum Schließen" am Ende (für Terminal-/CI-Nutzung).
+
 .NOTES
-    Voraussetzung: .NET SDK + ssh/scp/tar (in Windows 11 enthalten).
-    Ohne SSH-Key fragt scp/ssh je einmal nach dem Server-Passwort.
-    Passwortlosen Deploy einrichten: siehe DEPLOYMENT.md ("SSH-Key").
+    Am besten aus einer bereits offenen PowerShell starten. Bei "Run with PowerShell" /
+    Doppelklick hält das Skript das Fenster am Ende offen, damit Ausgabe & Fehler lesbar bleiben.
+    Ohne SSH-Key fragt scp/ssh je einmal nach dem Server-Passwort (siehe DEPLOYMENT.md -> SSH-Key).
 #>
 
 [CmdletBinding()]
@@ -27,14 +31,12 @@ param(
     [string]$Server  = "root@195.20.225.12",
     [string]$AppDir  = "/var/www/noose",
     [string]$Service = "noose",
-    [switch]$SkipPublish
+    [switch]$SkipPublish,
+    [switch]$NoPause
 )
 
 $ErrorActionPreference = "Stop"
-
-$project = Join-Path $PSScriptRoot "NOOSE-Website\NOOSE-Website.csproj"
-$publish = Join-Path $PSScriptRoot "publish"
-$tarball = Join-Path $PSScriptRoot "noose-publish.tgz"
+$exitCode = 0
 
 function Invoke-Step {
     param([string]$Label, [scriptblock]$Action)
@@ -43,38 +45,68 @@ function Invoke-Step {
     if ($LASTEXITCODE -ne 0) { throw "Schritt fehlgeschlagen: $Label (Exit $LASTEXITCODE)" }
 }
 
-# 1) Release veröffentlichen
-if (-not $SkipPublish) {
-    Invoke-Step "Veröffentliche Release" { dotnet publish $project -c Release -o $publish --nologo }
-} else {
-    Write-Host "==> Überspringe Publish (-SkipPublish)" -ForegroundColor DarkYellow
+try {
+    $project = Join-Path $PSScriptRoot "NOOSE-Website\NOOSE-Website.csproj"
+    $publish = Join-Path $PSScriptRoot "publish"
+    $tarball = Join-Path $PSScriptRoot "noose-publish.tgz"
+
+    if (-not (Test-Path $project)) {
+        throw "Projekt nicht gefunden: $project. Liegt deploy.ps1 wirklich im Repo-Root?"
+    }
+
+    # 1) Release veröffentlichen
+    if (-not $SkipPublish) {
+        Invoke-Step "Veröffentliche Release" { dotnet publish $project -c Release -o $publish --nologo }
+    } else {
+        Write-Host "==> Überspringe Publish (-SkipPublish)" -ForegroundColor DarkYellow
+    }
+    if (-not (Test-Path (Join-Path $publish "NOOSE-Website.dll"))) {
+        throw "publish-Ordner unvollständig: $publish (NOOSE-Website.dll fehlt). Läuft evtl. noch eine Dev-Instanz und sperrt bin/?"
+    }
+
+    # 2) Mit tar packen — zuverlässig; Compress-Archive hat schon 0-Byte-Dateien erzeugt.
+    if (Test-Path $tarball) { Remove-Item $tarball -Force }
+    Invoke-Step "Packe Artefakt (tar)" { tar -czf $tarball -C $publish . }
+
+    # 3) Auf den Server kopieren
+    Invoke-Step "Lade auf Server hoch" { scp $tarball "${Server}:/tmp/noose-publish.tgz" }
+
+    # 4) Auf dem Server ausrollen: Dienst stoppen, Dateien tauschen (App_Data behalten),
+    #    Rechte setzen, Dienst starten, kurz warten, Health prüfen. Alles per && -> fail-fast.
+    $remote = "systemctl stop $Service" +
+              " && find $AppDir -mindepth 1 -maxdepth 1 ! -name App_Data -exec rm -rf {} +" +
+              " && tar -xzf /tmp/noose-publish.tgz -C $AppDir" +
+              " && chown -R www-data:www-data $AppDir" +
+              " && systemctl start $Service" +
+              " && rm -f /tmp/noose-publish.tgz" +
+              " && sleep 6" +
+              " && curl -s -o /dev/null -w 'Health-Check: HTTP %{http_code}\n' http://127.0.0.1:5000/health"
+    Invoke-Step "Rolle auf dem Server aus" { ssh $Server $remote }
+
+    # 5) Lokales Artefakt aufräumen
+    Remove-Item $tarball -Force -ErrorAction SilentlyContinue
+
+    Write-Host ""
+    Write-Host "Fertig. https://noose.info ist aktualisiert." -ForegroundColor Green
+    Write-Host "Im Browser ggf. mit Strg+F5 hart neu laden (Asset-Cache)." -ForegroundColor Green
 }
-if (-not (Test-Path (Join-Path $publish "NOOSE-Website.dll"))) {
-    throw "publish-Ordner unvollständig: $publish (NOOSE-Website.dll fehlt)."
+catch {
+    $exitCode = 1
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Red
+    Write-Host "  DEPLOY FEHLGESCHLAGEN" -ForegroundColor Red
+    Write-Host "============================================" -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    if ($_.ScriptStackTrace) {
+        Write-Host ""
+        Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
+    }
+}
+finally {
+    if (-not $NoPause) {
+        Write-Host ""
+        $null = Read-Host "Enter drücken zum Schließen"
+    }
 }
 
-# 2) Mit tar packen — zuverlässig; Compress-Archive hat schon 0-Byte-Dateien erzeugt.
-if (Test-Path $tarball) { Remove-Item $tarball -Force }
-Invoke-Step "Packe Artefakt (tar)" { tar -czf $tarball -C $publish . }
-
-# 3) Auf den Server kopieren
-Invoke-Step "Lade auf Server hoch" { scp $tarball "${Server}:/tmp/noose-publish.tgz" }
-
-# 4) Auf dem Server ausrollen: Dienst stoppen, Dateien tauschen (App_Data behalten),
-#    Rechte setzen, Dienst starten, kurz warten, Health prüfen. Alles per && -> fail-fast.
-$remote = "systemctl stop $Service" +
-          " && find $AppDir -mindepth 1 -maxdepth 1 ! -name App_Data -exec rm -rf {} +" +
-          " && tar -xzf /tmp/noose-publish.tgz -C $AppDir" +
-          " && chown -R www-data:www-data $AppDir" +
-          " && systemctl start $Service" +
-          " && rm -f /tmp/noose-publish.tgz" +
-          " && sleep 6" +
-          " && curl -s -o /dev/null -w 'Health-Check: HTTP %{http_code}\n' http://127.0.0.1:5000/health"
-Invoke-Step "Rolle auf dem Server aus" { ssh $Server $remote }
-
-# 5) Lokales Artefakt aufräumen
-Remove-Item $tarball -Force -ErrorAction SilentlyContinue
-
-Write-Host ""
-Write-Host "Fertig. https://noose.info ist aktualisiert." -ForegroundColor Green
-Write-Host "Im Browser ggf. mit Strg+F5 hart neu laden (Asset-Cache)." -ForegroundColor Green
+exit $exitCode

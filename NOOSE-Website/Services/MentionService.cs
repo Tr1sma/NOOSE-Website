@@ -110,7 +110,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         // 2) Agenten – Codename (Klarname nur für die Führung, sonst wäre die Suche ein Orakel auf das Geheimfeld).
         var darfKlarname = istFuehrung; // DarfKlarnameSehen() == IstFuehrung()
         var agenten = await db.Users
-            .Where(u => u.Status == AgentStatus.Aktiv
+            .Where(u => u.Status == AgentStatus.Aktiv && !u.IstTeamLeitung
                 && (u.Codename.Contains(s) || (darfKlarname && u.Klarname != null && u.Klarname.Contains(s))))
             .OrderBy(u => u.Codename).Take(KandidatenProGruppe)
             .Select(u => new { u.Id, u.Codename, u.Klarname }).ToListAsync(cancellationToken);

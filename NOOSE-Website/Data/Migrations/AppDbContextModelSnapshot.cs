@@ -226,6 +226,9 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<bool>("IstTRU")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<bool>("IstTeamLeitung")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("Klarname")
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)");

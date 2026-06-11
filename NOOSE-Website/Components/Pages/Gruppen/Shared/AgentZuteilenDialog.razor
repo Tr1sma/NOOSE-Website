@@ -58,8 +58,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var alle = await AgentService.GetAlleAsync();
-        _alle = alle.Where(a => a.Status == AgentStatus.Aktiv && !AusschlussAgentIds.Contains(a.Id)).ToList();
+        // GetAuswaehlbareAsync liefert nur aktive Agenten ohne TeamLeitung-Marker; hier zusätzlich bereits
+        // zugeteilte Agenten ausschließen.
+        var auswaehlbar = await AgentService.GetAuswaehlbareAsync();
+        _alle = auswaehlbar.Where(a => !AusschlussAgentIds.Contains(a.Id)).ToList();
     }
 
     private Task<IEnumerable<Agent>> SucheAgenten(string value, CancellationToken token)

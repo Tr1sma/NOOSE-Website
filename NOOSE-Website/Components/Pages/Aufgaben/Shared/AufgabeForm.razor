@@ -68,10 +68,8 @@
     {
         if (ZeigeZuweisung)
         {
-            _agenten = (await AgentService.GetAlleAsync())
-                .Where(a => a.Status == AgentStatus.Aktiv)
-                .OrderBy(a => a.Codename)
-                .ToList();
+            // GetAuswaehlbareAsync: nur aktive Agenten ohne TeamLeitung-Marker, bereits nach Codename sortiert.
+            _agenten = await AgentService.GetAuswaehlbareAsync();
         }
     }
 
