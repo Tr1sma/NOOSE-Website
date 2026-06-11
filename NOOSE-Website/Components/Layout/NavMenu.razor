@@ -1,3 +1,5 @@
+@implements IDisposable
+
 <MudNavMenu Color="Color.Primary" Bordered="true">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.SpaceDashboard">Dashboard</MudNavLink>
     <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
@@ -75,30 +77,87 @@
     [Inject] private IPersonalakteService PersonalakteService { get; set; } = default!;
     [Inject] private IAntragService AntragService { get; set; } = default!;
     [Inject] private IAnkuendigungService BrettService { get; set; } = default!;
+    [Inject] private FreigabenBroadcaster FreigabenBroadcaster { get; set; } = default!;
+    [Inject] private QuittierungBroadcaster QuittierungBroadcaster { get; set; } = default!;
 
+    private ClaimsPrincipal? _user;
     private int _offeneFreigaben;
     private int _offeneQuittierungen;
 
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthStateTask).User;
+        _user = (await AuthStateTask).User;
 
-        // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
-        _offeneQuittierungen = await BrettService.GetOffeneQuittierungenAnzahlAsync(user);
+        // Beide Badges melden sich nach einer Aktion über ihren Broadcaster → live neu zählen. Ohne diese Abos
+        // blieben die Zahlen bis zum nächsten kompletten Seiten-Reload eingefroren.
+        FreigabenBroadcaster.Geaendert += OnFreigabenGeaendert;
+        QuittierungBroadcaster.Geaendert += OnQuittierungGeaendert;
+        await LadeFreigabenAsync();
+        await LadeQuittierungenAsync();
+    }
+
+    // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
+    private async Task LadeQuittierungenAsync()
+    {
+        if (_user is null)
+        {
+            return;
+        }
+        _offeneQuittierungen = await BrettService.GetOffeneQuittierungenAnzahlAsync(_user);
+    }
+
+    // Summiert die offenen Posteingangs-Vorgänge (dieselben Quellen wie die Freigaben-Seite). Wird beim Start und
+    // nach jedem Broadcaster-Signal aufgerufen; setzt den Wert jedes Mal frisch (kein +=).
+    private async Task LadeFreigabenAsync()
+    {
+        if (_user is null)
+        {
+            return;
+        }
+        var offen = 0;
 
         // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
-        if (user.DarfHoechsteEinstufung())
+        if (_user.DarfHoechsteEinstufung())
         {
-            _offeneFreigaben += await AntragService.GetOffeneAnzahlAsync(user.IstFuehrung());
+            offen += await AntragService.GetOffeneAnzahlAsync(_user.IstFuehrung());
         }
 
         // Registrierungen + Namensänderungen + Taskforce- + Beförderungsanträge sind der Führung vorbehalten.
-        if (user.IstFuehrung())
+        if (_user.IstFuehrung())
         {
-            _offeneFreigaben += (await AgentService.GetAusstehendeAsync()).Count
+            offen += (await AgentService.GetAusstehendeAsync()).Count
                 + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count
                 + (await TaskforceService.GetBeantragteAsync()).Count
                 + (await PersonalakteService.GetOffeneBefoerderungsantraegeAsync()).Count;
         }
+        _offeneFreigaben = offen;
+    }
+
+    // Live-Signal (aus der Freigaben-Seite desselben Circuits) → in den Circuit marshallen und neu zählen.
+    private void OnFreigabenGeaendert()
+        => _ = InvokeAsync(async () =>
+        {
+            await LadeFreigabenAsync();
+            StateHasChanged();
+        });
+
+    // Live-Signal nach einer Quittierung – nur für die eigene Agent-Id in den eigenen Circuit marshallen.
+    private void OnQuittierungGeaendert(string agentId)
+    {
+        if (agentId != _user?.GetAgentId())
+        {
+            return;
+        }
+        _ = InvokeAsync(async () =>
+        {
+            await LadeQuittierungenAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        FreigabenBroadcaster.Geaendert -= OnFreigabenGeaendert;
+        QuittierungBroadcaster.Geaendert -= OnQuittierungGeaendert;
     }
 }

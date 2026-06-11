@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Ankuendigungen;
+using NOOSE_Website.Infrastructure.Ankuendigungen;
 using NOOSE_Website.Models.Ankuendigungen;
 using NOOSE_Website.Models.Enums;
 
@@ -12,7 +13,8 @@ namespace NOOSE_Website.Services;
 public class AnkuendigungService(
     IDbContextFactory<AppDbContext> dbFactory,
     IAktenzeichenService aktenzeichen,
-    INotificationService notifications) : IAnkuendigungService
+    INotificationService notifications,
+    QuittierungBroadcaster quittierungBroadcaster) : IAnkuendigungService
 {
     public async Task<List<AnkuendigungZeile>> GetBrettAsync(ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
@@ -321,6 +323,10 @@ public class AnkuendigungService(
         }
         zeile.QuittiertAm = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+
+        // Den eigenen NavMenu-Badge des Quittierenden live neu zählen lassen (sonst bliebe er bis zum
+        // nächsten kompletten Seiten-Reload eingefroren).
+        quittierungBroadcaster.Melde(meId);
     }
 
     public async Task<int> GetOffeneQuittierungenAnzahlAsync(ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)

@@ -45,6 +45,23 @@ function Invoke-Step {
     if ($LASTEXITCODE -ne 0) { throw "Schritt fehlgeschlagen: $Label (Exit $LASTEXITCODE)" }
 }
 
+# Findet ssh/scp robust – PATH-unabhängig und auch aus einem 32-bit-PowerShell heraus, wo
+# C:\Windows\System32 per WOW64 auf SysWOW64 umgeleitet wird und die 64-bit-OpenSSH-Exe dort fehlt.
+function Resolve-Exe {
+    param([string]$Name)
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $candidates = @(
+        (Join-Path $env:WINDIR "System32\OpenSSH\$Name.exe"),   # 64-bit-Prozess
+        (Join-Path $env:WINDIR "Sysnative\OpenSSH\$Name.exe"),  # aus 32-bit-Prozess -> echtes System32
+        (Join-Path $env:ProgramFiles "Git\usr\bin\$Name.exe")   # Git for Windows als Fallback
+    )
+    foreach ($p in $candidates) {
+        if ($p -and (Test-Path $p)) { return $p }
+    }
+    throw "$Name nicht gefunden. Tipp: deploy.ps1 in der normalen (64-bit) Windows PowerShell starten, oder OpenSSH-Client installieren (Einstellungen > Apps > Optionale Features > 'OpenSSH-Client')."
+}
+
 try {
     $project = Join-Path $PSScriptRoot "NOOSE-Website\NOOSE-Website.csproj"
     $publish = Join-Path $PSScriptRoot "publish"
@@ -53,6 +70,10 @@ try {
     if (-not (Test-Path $project)) {
         throw "Projekt nicht gefunden: $project. Liegt deploy.ps1 wirklich im Repo-Root?"
     }
+
+    # ssh/scp vorab auf vollen Pfad auflösen (PATH-unabhängig).
+    $scp = Resolve-Exe 'scp'
+    $ssh = Resolve-Exe 'ssh'
 
     # 1) Release veröffentlichen
     if (-not $SkipPublish) {
@@ -69,7 +90,7 @@ try {
     Invoke-Step "Packe Artefakt (tar)" { tar -czf $tarball -C $publish . }
 
     # 3) Auf den Server kopieren
-    Invoke-Step "Lade auf Server hoch" { scp $tarball "${Server}:/tmp/noose-publish.tgz" }
+    Invoke-Step "Lade auf Server hoch" { & $scp $tarball "${Server}:/tmp/noose-publish.tgz" }
 
     # 4) Auf dem Server ausrollen: Dienst stoppen, Dateien tauschen (App_Data behalten),
     #    Rechte setzen, Dienst starten, kurz warten, Health prüfen. Alles per && -> fail-fast.
@@ -81,7 +102,7 @@ try {
               " && rm -f /tmp/noose-publish.tgz" +
               " && sleep 6" +
               " && curl -s -o /dev/null -w 'Health-Check: HTTP %{http_code}\n' http://127.0.0.1:5000/health"
-    Invoke-Step "Rolle auf dem Server aus" { ssh $Server $remote }
+    Invoke-Step "Rolle auf dem Server aus" { & $ssh $Server $remote }
 
     # 5) Lokales Artefakt aufräumen
     Remove-Item $tarball -Force -ErrorAction SilentlyContinue

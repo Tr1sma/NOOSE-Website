@@ -8,6 +8,7 @@
 @inject IAntragService AntragService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject FreigabenBroadcaster FreigabenBroadcaster
 
 <PageTitle>Freigaben · NOOSE</PageTitle>
 
@@ -333,6 +334,9 @@ else
             }
         }
         _laden = false;
+
+        // Nach jeder Entscheidung (alle Aktionen rufen LadenAsync auf) den NavMenu-Badge live neu zählen lassen.
+        FreigabenBroadcaster.Melde();
     }
 
     private async Task HochstufungEntscheiden(Antrag antrag, bool genehmigt)

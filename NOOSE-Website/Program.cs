@@ -14,9 +14,11 @@ using NOOSE_Website.Components.Personen;
 using NOOSE_Website.Components.Querschnitt;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Infrastructure.Ankuendigungen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
+using NOOSE_Website.Infrastructure.Freigaben;
 using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Wiedervorlagen;
@@ -215,6 +217,10 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 // Phase 6: In-App-Benachrichtigungen (Glocke) + Live-Broadcaster.
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
+// Live-Aktualisierung des „Freigaben"-Badges in der NavMenu nach jeder Posteingangs-Entscheidung.
+builder.Services.AddSingleton<FreigabenBroadcaster>();
+// Live-Aktualisierung des „Schwarzes Brett"-Badges (offene Quittierungen) nach einer Quittierung.
+builder.Services.AddSingleton<QuittierungBroadcaster>();
 // Phase 6: Watchlist (Akten folgen → „gefolgte Akte geändert"). Fan-out entkoppelt über den Singleton-Dispatcher.
 builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<WatchlistFanout>();
