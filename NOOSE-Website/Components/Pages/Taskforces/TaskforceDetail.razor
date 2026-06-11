@@ -97,7 +97,7 @@ else
                     <CustomFelderPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <TaskforceHistorieTimeline TaskforceId="@_taskforce.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
+                    <TaskforceHistorieTimeline TaskforceId="@_taskforce.Id" DarfAlles="_user.DarfAlleTaskforcesSehen()" MeId="_user.GetAgentId()" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -152,7 +152,7 @@ else
     {
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
-        _taskforce = await TaskforceService.GetDetailAsync(Id, _user.IstFuehrung());
+        _taskforce = await TaskforceService.GetDetailAsync(Id, _user.DarfAlleTaskforcesSehen(), _user.GetAgentId());
         if (_taskforce is not null)
         {
             await LeitungLadenAsync();

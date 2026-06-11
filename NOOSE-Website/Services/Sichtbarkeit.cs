@@ -23,15 +23,23 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public static class Sichtbarkeit
 {
-    /// <summary>True, wenn die Eltern-Akte für den Aufrufer sichtbar ist (existiert + VS-Regel erfüllt).</summary>
+    /// <summary>True, wenn die Eltern-Akte für den Aufrufer sichtbar ist (existiert + VS-Regel erfüllt).
+    /// <paramref name="meId"/> wird nur für Taskforces gebraucht (Mitgliedschafts-Sichtbarkeit) – für alle
+    /// übrigen Typen ist es ohne Belang.</summary>
     public static async Task<bool> IstAkteSichtbarAsync(
-        AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
+        AppDbContext db, string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default, string? meId = null)
     {
         // Personalakten-Kommentarbereich (EntitaetTyp = Agent) ist nur für die Führung/Admin lesbar+nutzbar
         // (Phase 5e): die übrige Personalakte ist offen, dieser interne Notiz-Bereich nicht.
         if (entitaetTyp == nameof(Agent))
         {
             return istFuehrung;
+        }
+
+        // Taskforce: Sichtbar nur für Führung/Admin oder zugeteilte Mitglieder (NICHT mehr nur Verschlusssache).
+        if (entitaetTyp == nameof(Taskforce))
+        {
+            return await TaskforceSichtbarkeit.IstSichtbarAsync(db, entitaetId, istFuehrung, meId, cancellationToken);
         }
 
         bool? verschluss = entitaetTyp switch
@@ -51,9 +59,7 @@ public static class Sichtbarkeit
             nameof(Operation) => await db.Operationen
                 .Where(o => o.Id == entitaetId).Select(o => (bool?)o.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
-            nameof(Taskforce) => await db.Taskforces
-                .Where(t => t.Id == entitaetId).Select(t => (bool?)t.IstVerschlusssache)
-                .FirstOrDefaultAsync(cancellationToken),
+            // Taskforce wird oben separat behandelt (Mitgliedschaft statt nur Verschlusssache).
             nameof(Vorgang) => await db.Vorgaenge
                 .Where(v => v.Id == entitaetId).Select(v => (bool?)v.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
@@ -70,7 +76,7 @@ public static class Sichtbarkeit
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Taskforce) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument)))
         {
             return true;
         }

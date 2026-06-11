@@ -24,6 +24,25 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.Admin, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IstAdmin()))
+            // Schreibrecht / Nur-Lese-Aufsicht: steuern Mutations-Controls bzw. den Nur-Lese-Banner.
+            .AddPolicy(Policies.Schreibrecht, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.DarfSchreiben()))
+            .AddPolicy(Policies.NurLeseModus, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IstNurLeser()))
+            // Seiten-Zugang: lassen zusätzlich die Nur-Lese-Aufsicht zum reinen Lesen zu. Bewusst als
+            // RequireAssertion (kein DienstgradRequirement), damit der DienstgradAuthorizationHandler – und
+            // damit die an die Rang-Policies gebundenen Button-AuthorizeViews – unberührt bleibt.
+            .AddPolicy(Policies.FuehrungSeite, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IstFuehrung() || ctx.User.IstNurLeser()))
+            .AddPolicy(Policies.HoechsteEinstufungSeite, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.DarfHoechsteEinstufung() || ctx.User.IstNurLeser()))
+            .AddPolicy(Policies.AdminSeite, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IstAdmin() || ctx.User.IstNurLeser()))
             .AddPolicy(Policies.HoechsteEinstufung, p => p
                 .RequireAuthenticatedUser()
                 .AddRequirements(new DienstgradRequirement(Dienstgrad.SeniorSpecialAgent)))

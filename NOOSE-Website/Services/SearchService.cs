@@ -22,7 +22,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
     /// <summary>Obergrenze der in-memory geprüften Fuzzy-Kandidaten je Kategorie (Schutz vor Last bei großen Datenmengen).</summary>
     private const int FuzzyKandidatenMax = 2000;
 
-    public async Task<List<SuchErgebnisGruppe>> SuchenAsync(SuchKriterien kriterien, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<SuchErgebnisGruppe>> SuchenAsync(SuchKriterien kriterien, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
@@ -294,7 +294,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         // ---- Taskforces (Name/Aktenzeichen/Zweck/Bemerkungen) ----
         if (Aktiv(nameof(Taskforce)))
         {
-            var q = db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache);
+            var q = db.Taskforces.NurSichtbare(db, istFuehrung, meId);
             if (hatText)
             {
                 q = q.Where(t => t.Name.Contains(s!) || t.Aktenzeichen.Contains(s!)
@@ -311,7 +311,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
             if (FuzzyAktiv(treffer.Count))
             {
-                var basis = db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache);
+                var basis = db.Taskforces.NurSichtbare(db, istFuehrung, meId);
                 if (hatTags)
                 {
                     basis = basis.Where(t => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Taskforce) && z.EntitaetId == t.Id && tagIds.Contains(z.TagId)));
@@ -473,7 +473,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         return gruppen;
     }
 
-    public async Task<List<SchnellTreffer>> SchnellsucheAsync(string text, bool istFuehrung, int max = 8, CancellationToken cancellationToken = default)
+    public async Task<List<SchnellTreffer>> SchnellsucheAsync(string text, bool istFuehrung, string? meId, int max = 8, CancellationToken cancellationToken = default)
     {
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
@@ -507,8 +507,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .OrderBy(o => o.Titel).Take(max)
             .Select(o => new SchnellTreffer(nameof(Operation), o.Id, o.Titel, o.Aktenzeichen))
             .ToListAsync(cancellationToken);
-        var taskforces = await db.Taskforces
-            .Where(t => (istFuehrung || !t.IstVerschlusssache) && (t.Name.Contains(s) || t.Aktenzeichen.Contains(s)))
+        var taskforces = await db.Taskforces.NurSichtbare(db, istFuehrung, meId)
+            .Where(t => t.Name.Contains(s) || t.Aktenzeichen.Contains(s))
             .OrderBy(t => t.Name).Take(max)
             .Select(t => new SchnellTreffer(nameof(Taskforce), t.Id, t.Name, t.Aktenzeichen))
             .ToListAsync(cancellationToken);
@@ -565,7 +565,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
             if (taskforces.Count < max)
             {
-                var k = await db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache)
+                var k = await db.Taskforces.NurSichtbare(db, istFuehrung, meId)
                     .OrderBy(t => t.Name).Take(FuzzyKandidatenMax)
                     .Select(t => new { t.Id, Name = t.Name, t.Aktenzeichen }).ToListAsync(cancellationToken);
                 taskforces = SchnellFuzzy(nameof(Taskforce), taskforces, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);

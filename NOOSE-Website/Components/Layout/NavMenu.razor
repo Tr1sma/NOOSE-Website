@@ -29,8 +29,9 @@
     <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
 
     @* Den Freigabe-Posteingang erreicht bereits Senior Special Agent+ (entscheidet Hochstufungen);
-       die übrigen Verwaltungs-Links bleiben Führung bzw. Admin vorbehalten. *@
-    <AuthorizeView Policy="@Policies.HoechsteEinstufung" Context="posteingang">
+       die übrigen Verwaltungs-Links bleiben Führung bzw. Admin vorbehalten. Die *Seite-Policies lassen
+       zusätzlich die Nur-Lese-Aufsicht (TeamLeitung ohne Admin) zum reinen Lesen herein. *@
+    <AuthorizeView Policy="@Policies.HoechsteEinstufungSeite" Context="posteingang">
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">VERWALTUNG</MudText>
         <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
@@ -40,7 +41,7 @@
                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_offeneFreigaben</MudChip>
             }
         </MudNavLink>
-        <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+        <AuthorizeView Policy="@Policies.FuehrungSeite" Context="fuehrung">
             <MudNavLink Href="/admin/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
                 Tags
             </MudNavLink>
@@ -53,10 +54,10 @@
             <MudNavLink Href="/admin/aktualitaet" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Timelapse">
                 Aktualität
             </MudNavLink>
-            <AuthorizeView Policy="@Policies.Admin" Context="adminInner">
-                <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
-                    Agenten-Verwaltung
-                </MudNavLink>
+            <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
+                Agenten-Verwaltung
+            </MudNavLink>
+            <AuthorizeView Policy="@Policies.AdminSeite" Context="adminInner">
                 <MudNavLink Href="/status" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MonitorHeart">
                     System-Status
                 </MudNavLink>
@@ -79,6 +80,7 @@
     [Inject] private IAnkuendigungService BrettService { get; set; } = default!;
     [Inject] private FreigabenBroadcaster FreigabenBroadcaster { get; set; } = default!;
     [Inject] private QuittierungBroadcaster QuittierungBroadcaster { get; set; } = default!;
+    [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
     private ClaimsPrincipal? _user;
     private int _offeneFreigaben;
@@ -97,13 +99,22 @@
     }
 
     // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
+    // Defensiv: Die Badges sind dekorativ – ein DB-Fehler hier darf weder das Prerender (→ generische
+    // Fehlerseite) noch den Circuit (Broadcaster-Handler) reißen. Im Fehlerfall bleibt der Zähler stehen.
     private async Task LadeQuittierungenAsync()
     {
         if (_user is null)
         {
             return;
         }
-        _offeneQuittierungen = await BrettService.GetOffeneQuittierungenAnzahlAsync(_user);
+        try
+        {
+            _offeneQuittierungen = await BrettService.GetOffeneQuittierungenAnzahlAsync(_user);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Quittierungs-Badge konnte nicht geladen werden.");
+        }
     }
 
     // Summiert die offenen Posteingangs-Vorgänge (dieselben Quellen wie die Freigaben-Seite). Wird beim Start und
@@ -114,23 +125,31 @@
         {
             return;
         }
-        var offen = 0;
-
-        // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
-        if (_user.DarfHoechsteEinstufung())
+        try
         {
-            offen += await AntragService.GetOffeneAnzahlAsync(_user.IstFuehrung());
-        }
+            var offen = 0;
 
-        // Registrierungen + Namensänderungen + Taskforce- + Beförderungsanträge sind der Führung vorbehalten.
-        if (_user.IstFuehrung())
-        {
-            offen += (await AgentService.GetAusstehendeAsync()).Count
-                + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count
-                + (await TaskforceService.GetBeantragteAsync()).Count
-                + (await PersonalakteService.GetOffeneBefoerderungsantraegeAsync()).Count;
+            // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
+            if (_user.DarfHoechsteEinstufung())
+            {
+                offen += await AntragService.GetOffeneAnzahlAsync(_user.IstFuehrung());
+            }
+
+            // Registrierungen + Namensänderungen + Taskforce- + Beförderungsanträge sind der Führung vorbehalten.
+            if (_user.IstFuehrung())
+            {
+                offen += (await AgentService.GetAusstehendeAsync()).Count
+                    + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count
+                    + (await TaskforceService.GetBeantragteAsync()).Count
+                    + (await PersonalakteService.GetOffeneBefoerderungsantraegeAsync()).Count;
+            }
+            _offeneFreigaben = offen;
         }
-        _offeneFreigaben = offen;
+        catch (Exception ex)
+        {
+            // Defensiv (s. LadeQuittierungenAsync): dekorativer Zähler, Fehler nie eskalieren.
+            Logger.LogWarning(ex, "Freigaben-Badge konnte nicht geladen werden.");
+        }
     }
 
     // Live-Signal (aus der Freigaben-Seite desselben Circuits) → in den Circuit marshallen und neu zählen.

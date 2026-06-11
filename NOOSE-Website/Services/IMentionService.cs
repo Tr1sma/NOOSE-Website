@@ -15,6 +15,7 @@ public interface IMentionService
     /// <summary>Löst mehrere Texte in EINER Sammelabfrage auf (z. B. eine ganze Chat-Liste) – Reihenfolge bleibt erhalten.</summary>
     Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> AufloesenVieleAsync(IReadOnlyList<string?> texte, bool istFuehrung, CancellationToken cancellationToken = default);
 
-    /// <summary>Suchvorschläge für den @-Picker: Akten (alle Typen) + Quellen + Agenten (Verschlusssache-gefiltert).</summary>
-    Task<List<MentionTreffer>> KandidatenAsync(string? text, bool istFuehrung, CancellationToken cancellationToken = default);
+    /// <summary>Suchvorschläge für den @-Picker: Akten (alle Typen) + Quellen + Agenten. Verschlusssache-gefiltert;
+    /// Taskforces nur, wenn der Aufrufer zugeteilt ist (oder alle sehen darf) – daher <paramref name="meId"/>.</summary>
+    Task<List<MentionTreffer>> KandidatenAsync(string? text, bool istFuehrung, string? meId, CancellationToken cancellationToken = default);
 }

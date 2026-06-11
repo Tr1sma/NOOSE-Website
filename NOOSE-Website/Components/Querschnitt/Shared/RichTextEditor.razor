@@ -1,8 +1,18 @@
 @* Wiederverwendbarer WYSIWYG-Editor (Quill). Der HTML-Inhalt wird über @bind-Value gehalten; der
-   endgültige Inhalt sollte beim Speichern mit GetHtmlAsync() frisch aus dem Editor gelesen werden. *@
+   endgültige Inhalt sollte beim Speichern mit GetHtmlAsync() frisch aus dem Editor gelesen werden.
+   Alle JS-Interop-Aufrufe sind abgesichert: Ein JS-Fehler (z. B. gecachtes/fehlendes Editor-Modul)
+   darf NIE den Blazor-Circuit abreißen – stattdessen erscheint eine Fehlermeldung mit Reload-Hinweis. *@
 @inject IJSRuntime JS
+@inject Microsoft.Extensions.Logging.ILogger<RichTextEditor> Logger
 @implements IAsyncDisposable
 
+@if (_ladeFehler)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-2">
+        Der Editor konnte nicht geladen werden. Bitte die Seite mit Strg+F5 neu laden –
+        besteht das Problem weiter, wende dich an die NOOSE-Administration.
+    </MudAlert>
+}
 <div @ref="_element" class="noose-rte"></div>
 
 @code {
@@ -13,6 +23,7 @@
     private IJSObjectReference? _modul;
     private DotNetObjectReference<RichTextEditor>? _ref;
     private bool _bereit;
+    private bool _ladeFehler;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -20,11 +31,30 @@
         {
             return;
         }
-        // JS-Interop erst nach dem ersten Render verfügbar (Interactive Server).
-        _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js");
-        _ref = DotNetObjectReference.Create(this);
-        await _modul.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty);
-        _bereit = true;
+        try
+        {
+            // JS-Interop erst nach dem ersten Render verfügbar (Interactive Server).
+            // ?v=2 ist ein Cache-Buster: dynamische import()-Pfade laufen NICHT durch das Asset-
+            // Fingerprinting (@Assets/ImportMap) – Browser mit einer alten gecachten Modul-Version
+            // (Quill-2-Zwischenstand) würden sonst auf nicht mehr existierende Dateien zeigen.
+            // Bei künftigen Änderungen an richtext.js die Versionsnummer hochzählen!
+            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=2");
+            _ref = DotNetObjectReference.Create(this);
+            await _modul.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty);
+            _bereit = true;
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit bereits getrennt (Navigation/Reload mitten im Init) – nichts zu tun.
+        }
+        catch (Exception ex)
+        {
+            // Unbehandelte Ausnahmen in OnAfterRenderAsync reißen den GANZEN Circuit ab (Reconnect-
+            // Schleife für den Nutzer). Stattdessen: loggen und eine Fehlermeldung anzeigen.
+            Logger.LogWarning(ex, "WYSIWYG-Editor konnte nicht initialisiert werden (JS-Interop).");
+            _ladeFehler = true;
+            StateHasChanged();
+        }
     }
 
     [JSInvokable]
@@ -37,22 +67,48 @@
         }
     }
 
-    /// <summary>Setzt den Editor-Inhalt (z. B. beim Anwenden einer Vorlage).</summary>
+    /// <summary>Setzt den Editor-Inhalt (z. B. beim Anwenden einer Vorlage). Bei JS-Fehlern no-op
+    /// (geloggt) – die Aufrufer sind teils ValueChanged-Handler ohne eigenes try/catch.</summary>
     public async Task SetHtmlAsync(string html)
     {
-        if (_modul is not null && _bereit)
+        if (_modul is null || !_bereit)
+        {
+            return;
+        }
+        try
         {
             await _modul.InvokeVoidAsync("setHtml", _element, html ?? string.Empty);
             Value = html;
         }
+        catch (JSDisconnectedException)
+        {
+            // Circuit bereits getrennt – nichts zu tun.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "WYSIWYG-Editor: SetHtml fehlgeschlagen (JS-Interop).");
+        }
     }
 
-    /// <summary>Liest den aktuellen HTML-Inhalt frisch aus dem Editor (verlässlich für das Speichern).</summary>
+    /// <summary>Liest den aktuellen HTML-Inhalt frisch aus dem Editor (verlässlich für das Speichern).
+    /// Bei JS-Fehlern wird der letzte über OnHtmlChanged gemeldete Stand zurückgegeben (entprellter
+    /// Zwischenstand) – besser als ein Circuit-Abriss beim Speichern.</summary>
     public async Task<string> GetHtmlAsync()
     {
         if (_modul is not null && _bereit)
         {
-            Value = await _modul.InvokeAsync<string>("getHtml", _element);
+            try
+            {
+                Value = await _modul.InvokeAsync<string>("getHtml", _element);
+            }
+            catch (JSDisconnectedException)
+            {
+                // Circuit bereits getrennt – letzter bekannter Stand genügt.
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "WYSIWYG-Editor: GetHtml fehlgeschlagen (JS-Interop) – letzter bekannter Stand wird verwendet.");
+            }
         }
         return Value ?? string.Empty;
     }
@@ -70,6 +126,10 @@
         catch (JSDisconnectedException)
         {
             // Circuit bereits getrennt – nichts zu tun.
+        }
+        catch (Exception)
+        {
+            // Aufräum-Fehler beim Dispose sind folgenlos – nie eskalieren.
         }
         _ref?.Dispose();
     }

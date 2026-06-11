@@ -1,5 +1,5 @@
 @page "/admin/agenten"
-@attribute [Authorize(Policy = Policies.Admin)]
+@attribute [Authorize(Policy = Policies.FuehrungSeite)]
 @inject IAgentVerwaltungService AgentService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -11,9 +11,10 @@
     <MudText Typo="Typo.h4">Agenten-Verwaltung</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Dienstgrade vergeben, TRU-, TeamLeitung- und Admin-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
+    Dienstgrade vergeben, TRU- und TeamLeitung-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
     alle laufenden Sitzungen des Agents sofort (Kill-Switch). TeamLeitungen (FiveM-Aufsicht) sind im RP-Betrieb
-    überall ausgeblendet und nur hier sichtbar – Vollzugriff erst durch den Admin-Haken.
+    überall ausgeblendet und nur hier sichtbar – Vollzugriff erst durch den Admin-Haken. Das Setzen des
+    Admin-Hakens selbst ist ausschließlich Admins vorbehalten; die Führung kann ihn nur einsehen.
 </MudText>
 
 @if (_laden)
@@ -69,8 +70,10 @@ else
                 <MudSwitch T="bool" Value="context.IstTeamLeitung" ValueChanged="@(v => TeamLeitungSetzen(context, v))" Color="Color.Tertiary" />
             </MudTd>
             <MudTd DataLabel="Admin">
-                <MudSwitch T="bool" Value="context.IstAdmin" ValueChanged="@(v => AdminSetzen(context, v))"
-                           Color="Color.Secondary" Disabled="@(context.Id == _meineId)" />
+                <MudTooltip Text="@AdminSchalterHinweis(context)" Disabled="@(_binAdmin && context.Id != _meineId)">
+                    <MudSwitch T="bool" Value="context.IstAdmin" ValueChanged="@(v => AdminSetzen(context, v))"
+                               Color="Color.Secondary" Disabled="@(!_binAdmin || context.Id == _meineId)" />
+                </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
@@ -108,10 +111,13 @@ else
     private bool _laden = true;
     private List<Agent> _agenten = new();
     private string? _meineId;
+    private bool _binAdmin;
 
     protected override async Task OnInitializedAsync()
     {
-        _meineId = (await AuthStateTask).User.GetAgentId();
+        var user = (await AuthStateTask).User;
+        _meineId = user.GetAgentId();
+        _binAdmin = user.IstAdmin();
         await LadenAsync();
     }
 
@@ -220,7 +226,7 @@ else
         var user = (await AuthStateTask).User;
         try
         {
-            await AgentService.SperrenAsync(agent.Id, string.IsNullOrWhiteSpace(grund) ? "Notfall-Sperre durch Admin" : grund, user);
+            await AgentService.SperrenAsync(agent.Id, string.IsNullOrWhiteSpace(grund) ? "Notfall-Sperre durch Führung/Admin" : grund, user);
             Snackbar.Add($"{AnzeigeName(agent)} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
         }
         catch (Exception ex)
@@ -243,6 +249,16 @@ else
             Snackbar.Add(ex.Message, Severity.Error);
         }
         await LadenAsync();
+    }
+
+    // Erklärt, warum der Admin-Schalter gesperrt ist. Bei freigeschaltetem Schalter ist der Tooltip ausgeblendet.
+    private string AdminSchalterHinweis(Agent agent)
+    {
+        if (!_binAdmin)
+        {
+            return "Nur Admins können Admin-Rechte vergeben oder entziehen.";
+        }
+        return agent.Id == _meineId ? "Du kannst deine eigenen Admin-Rechte hier nicht ändern." : string.Empty;
     }
 
     private static string AnzeigeName(Agent agent)

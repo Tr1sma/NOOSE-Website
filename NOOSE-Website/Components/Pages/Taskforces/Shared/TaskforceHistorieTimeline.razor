@@ -40,14 +40,17 @@ else
 
 @code {
     [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
-    [Parameter] public bool IstFuehrung { get; set; }
+    /// <summary>Der Betrachter darf ALLE Taskforces sehen (Führung/Admin/Aufsicht) – sonst nur zugeteilte.</summary>
+    [Parameter] public bool DarfAlles { get; set; }
+    /// <summary>Agent-Id des Betrachters – für die Mitgliedschafts-Sichtbarkeit (Historie nur für Zugeteilte/Führung).</summary>
+    [Parameter] public string? MeId { get; set; }
 
     private bool _laden = true;
     private List<AuditLog> _logs = new();
 
     protected override async Task OnInitializedAsync()
     {
-        _logs = await TaskforceService.GetHistorieAsync(TaskforceId, IstFuehrung);
+        _logs = await TaskforceService.GetHistorieAsync(TaskforceId, DarfAlles, MeId);
         _laden = false;
     }
 

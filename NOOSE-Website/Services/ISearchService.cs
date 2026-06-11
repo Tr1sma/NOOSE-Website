@@ -11,8 +11,10 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface ISearchService
 {
-    Task<List<SuchErgebnisGruppe>> SuchenAsync(SuchKriterien kriterien, bool istFuehrung, CancellationToken cancellationToken = default);
+    // meId = Agent-Id des Suchenden; nötig für die Taskforce-Mitgliedschafts-Sichtbarkeit (Nicht-Führung sieht nur
+    // zugeteilte Taskforces). Für alle übrigen Akten-Typen weiterhin nur Verschlusssache-gefiltert via istFuehrung.
+    Task<List<SuchErgebnisGruppe>> SuchenAsync(SuchKriterien kriterien, bool istFuehrung, string? meId, CancellationToken cancellationToken = default);
 
     /// <summary>Schnelle Personensuche für die Command-Palette/Topbar (mit immer leicht aktiver Tippfehler-Toleranz).</summary>
-    Task<List<SchnellTreffer>> SchnellsucheAsync(string text, bool istFuehrung, int max = 8, CancellationToken cancellationToken = default);
+    Task<List<SchnellTreffer>> SchnellsucheAsync(string text, bool istFuehrung, string? meId, int max = 8, CancellationToken cancellationToken = default);
 }

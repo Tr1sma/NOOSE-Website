@@ -15,10 +15,12 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface ITaskforceService
 {
-    Task<List<Taskforce>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default);
-    Task<Taskforce?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default);
+    // darfAlles = der Aufrufer darf ALLE Taskforces sehen (Führung/Admin, ClaimsPrincipal.IstFuehrung()).
+    // meId = Agent-Id des Aufrufers; sonst sind nur die Taskforces sichtbar, denen er zugeteilt ist.
+    Task<List<Taskforce>> GetListeAsync(bool darfAlles, string? meId, CancellationToken cancellationToken = default);
+    Task<Taskforce?> GetDetailAsync(string id, bool darfAlles, string? meId, CancellationToken cancellationToken = default);
     Task<List<Taskforce>> GetPapierkorbAsync(CancellationToken cancellationToken = default);
-    Task<List<Taskforce>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default);
+    Task<List<Taskforce>> SucheAsync(string? suchtext, bool darfAlles, string? meId, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Beantragte Taskforces (Status = Beantragt) für den Führungs-Freigabe-Posteingang, älteste zuerst.</summary>
     Task<List<Taskforce>> GetBeantragteAsync(CancellationToken cancellationToken = default);
@@ -46,6 +48,6 @@ public interface ITaskforceService
     /// <summary>Rolle einer Zuteilung setzen (Mitglied/Chefermittler/CID-Lead/TRU-Lead) – nur Führung.</summary>
     Task RolleSetzenAsync(string zuteilungId, TaskforceRolle rolle, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Taskforce und ihrer Zuteilungen/Beziehungen (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
-    Task<List<AuditLog>> GetHistorieAsync(string taskforceId, bool istFuehrung, CancellationToken cancellationToken = default);
+    /// <summary>Audit-Einträge der Taskforce und ihrer Zuteilungen/Beziehungen (für die Akten-Historie; nur sichtbar, wenn zugeteilt oder Führung).</summary>
+    Task<List<AuditLog>> GetHistorieAsync(string taskforceId, bool darfAlles, string? meId, CancellationToken cancellationToken = default);
 }

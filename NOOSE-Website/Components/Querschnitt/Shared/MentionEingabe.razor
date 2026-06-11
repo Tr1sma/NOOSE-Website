@@ -55,6 +55,18 @@
     /// <summary>Wird bei Ctrl+Enter ausgelöst (Senden).</summary>
     [Parameter] public EventCallback OnSubmit { get; set; }
 
+    // Agent-Id des Betrachters – für die Taskforce-Mitgliedschafts-Sichtbarkeit im @-Picker.
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+    private string? _meId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            _meId = (await AuthStateTask).User.GetAgentId();
+        }
+    }
+
     private string _text = string.Empty;
     private bool _pickerOffen;
     private List<MentionTreffer> _kandidaten = new();
@@ -90,7 +102,7 @@
             _kandidaten = new();
             return;
         }
-        _kandidaten = await MentionService.KandidatenAsync(m.Groups[1].Value, IstFuehrung);
+        _kandidaten = await MentionService.KandidatenAsync(m.Groups[1].Value, IstFuehrung, _meId);
         _pickerOffen = _kandidaten.Count > 0;
     }
 

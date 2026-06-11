@@ -13,20 +13,26 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="ITaskforceService" />
 public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen) : ITaskforceService
 {
-    public async Task<List<Taskforce>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> GetListeAsync(bool darfAlles, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Taskforces
-            .Where(t => istFuehrung || !t.IstVerschlusssache)
+            .NurSichtbare(db, darfAlles, meId)
             .OrderByDescending(t => t.GeaendertAm ?? t.ErstelltAm)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Taskforce?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<Taskforce?> GetDetailAsync(string id, bool darfAlles, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
-        if (taskforce is null || (taskforce.IstVerschlusssache && !istFuehrung))
+        if (taskforce is null)
+        {
+            return null;
+        }
+        // Sichtbar nur für Führung/Admin oder zugeteilte Agenten (Verschlusssache ist damit subsumiert).
+        if (!darfAlles
+            && !(meId is not null && await db.TaskforceAgenten.AnyAsync(a => a.TaskforceId == id && a.AgentId == meId, cancellationToken)))
         {
             return null;
         }
@@ -42,10 +48,10 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Taskforce>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> SucheAsync(string? suchtext, bool darfAlles, string? meId, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Taskforces.Where(t => istFuehrung || !t.IstVerschlusssache);
+        var query = db.Taskforces.NurSichtbare(db, darfAlles, meId);
 
         var s = suchtext?.Trim();
         if (!string.IsNullOrEmpty(s))
@@ -262,10 +268,10 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
         }
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string taskforceId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistorieAsync(string taskforceId, bool darfAlles, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Taskforce), taskforceId, istFuehrung, cancellationToken))
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Taskforce), taskforceId, darfAlles, cancellationToken, meId))
         {
             return new();
         }

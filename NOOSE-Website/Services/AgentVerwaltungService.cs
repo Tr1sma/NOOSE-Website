@@ -12,37 +12,52 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IAgentVerwaltungService" />
-// Bewusste Ausnahme von der DbContext-Factory: Dieser Dienst arbeitet eng mit dem UserManager zusammen,
-// dessen Identity-Store denselben scoped AppDbContext nutzt. Agent-Änderung und der zugehörige AuditLog
-// werden in EINEM Kontext gesammelt und über UserManager.UpdateAsync gespeichert – ein eigener
-// Factory-Context würde den hier vorgemerkten AuditLog nicht mitspeichern. Die Admin-Seiten lösen keine
-// parallelen Kontextzugriffe aus, daher ist der geteilte scoped Context hier unkritisch.
-public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext db, INotificationService notifications) : IAgentVerwaltungService
+// SCHREIBEN: Bewusste Ausnahme von der DbContext-Factory – dieser Dienst arbeitet eng mit dem UserManager
+// zusammen, dessen Identity-Store denselben scoped AppDbContext nutzt. Agent-Änderung und der zugehörige
+// AuditLog werden in EINEM Kontext gesammelt und über UserManager.UpdateAsync gespeichert – ein eigener
+// Factory-Context würde den hier vorgemerkten AuditLog nicht mitspeichern.
+// LESEN: läuft dagegen über per-Operation-Factory-Kontexte. Grund: Die NavMenu (Layout, Freigaben-Badge)
+// und die gerouteten Seiten (PersonalListe/Freigaben/Agenten) initialisieren PARALLEL und riefen zuvor
+// Lese-Methoden auf demselben scoped Context auf → race-abhängig „A second operation was started on this
+// context instance" → während des Prerenders unbehandelt → generische Fehlerseite beim Neuladen.
+public class AgentVerwaltungService(
+    UserManager<Agent> userManager,
+    AppDbContext db,
+    IDbContextFactory<AppDbContext> dbFactory,
+    INotificationService notifications) : IAgentVerwaltungService
 {
-    // Reine Lese-/Anzeige-Queries laufen bewusst mit AsNoTracking: Dieser Dienst nutzt einen
-    // langlebigen, geteilten scoped AppDbContext (Blazor-Circuit). Würden Anzeige-Queries tracken,
-    // gäbe EF bei späteren Abfragen über die Identity-Map eine bereits getrackte, VERALTETE Instanz
-    // zurück (Beispiel: ein Agent wird hier geladen, als er noch keinen Antrag hat; stellt er später
-    // eine Namensänderung, matcht die WHERE-Query zwar gegen die Live-DB, liefert aber die veraltete
-    // In-Memory-Instanz). AsNoTracking materialisiert immer den aktuellen DB-Stand.
-    public Task<List<Agent>> GetAusstehendeAsync(CancellationToken cancellationToken = default)
-        => db.Users.AsNoTracking().Where(a => a.Status == AgentStatus.Ausstehend)
+    // Lese-/Anzeige-Queries: eigener kurzlebiger Factory-Context je Aufruf (parallel-sicher, s. o.).
+    // AsNoTracking bleibt: reine Anzeige-Daten brauchen kein Change-Tracking.
+    public async Task<List<Agent>> GetAusstehendeAsync(CancellationToken cancellationToken = default)
+    {
+        await using var leseDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await leseDb.Users.AsNoTracking().Where(a => a.Status == AgentStatus.Ausstehend)
             .OrderBy(a => a.RegistriertAm)
             .ToListAsync(cancellationToken);
+    }
 
-    public Task<List<Agent>> GetAlleAsync(CancellationToken cancellationToken = default)
-        => db.Users.AsNoTracking().OrderByDescending(a => a.Status == AgentStatus.Ausstehend)
+    public async Task<List<Agent>> GetAlleAsync(CancellationToken cancellationToken = default)
+    {
+        await using var leseDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await leseDb.Users.AsNoTracking().OrderByDescending(a => a.Status == AgentStatus.Ausstehend)
             .ThenBy(a => a.Codename)
             .ToListAsync(cancellationToken);
+    }
 
-    public Task<List<Agent>> GetAuswaehlbareAsync(CancellationToken cancellationToken = default)
-        => db.Users.AsNoTracking()
+    public async Task<List<Agent>> GetAuswaehlbareAsync(CancellationToken cancellationToken = default)
+    {
+        await using var leseDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await leseDb.Users.AsNoTracking()
             .Where(a => a.Status == AgentStatus.Aktiv && !a.IstTeamLeitung)
             .OrderBy(a => a.Codename)
             .ToListAsync(cancellationToken);
+    }
 
-    public Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default)
-        => db.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
+    public async Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default)
+    {
+        await using var leseDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await leseDb.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
+    }
 
     public async Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, ClaimsPrincipal handelnder)
     {
@@ -118,10 +133,13 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
         await Speichern(agent, neuerStamp: false);
     }
 
-    public Task<List<Agent>> GetAusstehendeNamensaenderungenAsync(CancellationToken cancellationToken = default)
-        => db.Users.AsNoTracking().Where(a => a.NamensaenderungBeantragtAm != null)
+    public async Task<List<Agent>> GetAusstehendeNamensaenderungenAsync(CancellationToken cancellationToken = default)
+    {
+        await using var leseDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await leseDb.Users.AsNoTracking().Where(a => a.NamensaenderungBeantragtAm != null)
             .OrderBy(a => a.NamensaenderungBeantragtAm)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task NamensaenderungGenehmigenAsync(string agentId, ClaimsPrincipal handelnder)
     {
@@ -168,6 +186,8 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public async Task RangAendernAsync(string agentId, Dienstgrad dienstgrad, ClaimsPrincipal handelnder)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         var agent = await GetOrThrow(agentId);
         var alt = agent.Dienstgrad;
         agent.Dienstgrad = dienstgrad;
@@ -221,6 +241,8 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public async Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         var agent = await GetOrThrow(agentId);
         agent.IstTRU = istTRU;
 
@@ -230,18 +252,26 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public async Task TeamLeitungSetzenAsync(string agentId, bool istTeamLeitung, ClaimsPrincipal handelnder)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+        Berechtigung.VerlangeSchreibrecht(handelnder);
+
         var agent = await GetOrThrow(agentId);
         agent.IstTeamLeitung = istTeamLeitung;
 
         Audit(agent, AuditAktion.Geaendert, handelnder,
             istTeamLeitung ? "Als TeamLeitung markiert" : "TeamLeitung-Markierung entfernt");
-        // Bewusst KEIN neuer SecurityStamp: Der Marker steht in keinem Claim und verändert nichts an der eigenen
-        // Sitzung des Betroffenen – er steuert nur, ob ANDERE den Agenten in Auswahl-/Erwähnungslisten sehen.
-        await Speichern(agent, neuerStamp: false);
+        // Neuer SecurityStamp: TeamLeitung ist jetzt ein Claim (steuert die Nur-Lese-Aufsichtsrolle). Die
+        // Stamp-Rotation beendet die Sitzungen des Betroffenen, damit der geänderte Claim – und damit der
+        // Lese-/Schreibumfang – beim nächsten Login wirksam wird.
+        await Speichern(agent, neuerStamp: true);
     }
 
     public async Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder)
     {
+        // Admin-Rechte vergeben/entziehen ist ausschließlich Admins vorbehalten – die Führung erreicht diese
+        // Seite zwar, darf aber niemanden zum Admin machen. Harte serverseitige Garantie (nicht nur via UI).
+        Berechtigung.VerlangeAdmin(handelnder);
+
         var agent = await GetOrThrow(agentId);
 
         // Selbst-Aussperrung und das Entfernen des letzten Admins serverseitig verhindern (nicht nur via UI).
@@ -265,6 +295,8 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public async Task SperrenAsync(string agentId, string grund, ClaimsPrincipal handelnder)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         // Sich selbst zu sperren würde die eigene Sitzung sofort beenden – das ist fast immer ein Fehlgriff.
         if (handelnder.GetAgentId() == agentId)
         {
@@ -281,6 +313,8 @@ public class AgentVerwaltungService(UserManager<Agent> userManager, AppDbContext
 
     public async Task EntsperrenAsync(string agentId, ClaimsPrincipal handelnder)
     {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
         var agent = await GetOrThrow(agentId);
         agent.Status = AgentStatus.Aktiv;
         agent.GesperrtGrund = null;

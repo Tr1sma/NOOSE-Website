@@ -254,7 +254,7 @@ else
             do
             {
                 _erneutSuchen = false;
-                _gruppen = await SearchService.SuchenAsync(BaueKriterien(), _istFuehrung);
+                _gruppen = await SearchService.SuchenAsync(BaueKriterien(), _istFuehrung, _agentId);
                 _gesucht = true;
             }
             while (_erneutSuchen);

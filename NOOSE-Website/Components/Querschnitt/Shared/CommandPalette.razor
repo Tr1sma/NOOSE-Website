@@ -41,6 +41,7 @@
 
     private bool _open;
     private bool _istFuehrung;
+    private string? _meId;
     private MudAutocomplete<PaletteItem> _auto = default!;
     private IJSObjectReference? _modul;
     private DotNetObjectReference<CommandPalette>? _ref;
@@ -51,6 +52,7 @@
     {
         var user = (await AuthStateTask).User;
         _istFuehrung = user.IstFuehrung();
+        _meId = user.GetAgentId();
         _befehle = new List<PaletteItem>
         {
             new("Personen-Akten", "Liste", Icons.Material.Filled.Badge, "/personen"),
@@ -121,7 +123,7 @@
         {
             try
             {
-                var treffer = await SearchService.SchnellsucheAsync(v, _istFuehrung, 8, token);
+                var treffer = await SearchService.SchnellsucheAsync(v, _istFuehrung, _meId, 8, token);
                 ergebnis.AddRange(treffer.Select(t => new PaletteItem(t.Name, t.Aktenzeichen, PaletteIcon(t.Kategorie), SuchNavigation.Route(t.Kategorie, t.ZielId))));
             }
             catch (Exception ex)

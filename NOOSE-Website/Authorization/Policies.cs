@@ -15,6 +15,24 @@ public static class Policies
     /// <summary>Technische Systemrolle.</summary>
     public const string Admin = "Admin";
 
+    /// <summary>Darf überhaupt schreiben (alle außer der Nur-Lese-Aufsicht = TeamLeitung ohne Admin). Für
+    /// <c>AuthorizeView</c> um Mutations-Controls (Anlegen/Bearbeiten/Speichern).</summary>
+    public const string Schreibrecht = "Schreibrecht";
+
+    /// <summary>Nur-Lese-Aufsicht aktiv (TeamLeitung ohne Admin). Für den globalen Nur-Lese-Hinweis-Banner.</summary>
+    public const string NurLeseModus = "NurLeseModus";
+
+    /// <summary>Seiten-Zugang Führungsbereich: Führung ODER Nur-Lese-Aufsicht (öffnet die Seite read-only,
+    /// ohne Schreib-Buttons – diese bleiben an <see cref="Fuehrung"/> gebunden).</summary>
+    public const string FuehrungSeite = "FuehrungSeite";
+
+    /// <summary>Seiten-Zugang „höchste Einstufung"-Bereich (Freigaben): wie <see cref="HoechsteEinstufung"/>
+    /// plus Nur-Lese-Aufsicht.</summary>
+    public const string HoechsteEinstufungSeite = "HoechsteEinstufungSeite";
+
+    /// <summary>Seiten-Zugang Admin-Bereich: Admin ODER Nur-Lese-Aufsicht (öffnet die Seite read-only).</summary>
+    public const string AdminSeite = "AdminSeite";
+
     /// <summary>"Gesichert staatsgefährdend" direkt setzen: Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
     public const string HoechsteEinstufung = "HoechsteEinstufung";
 

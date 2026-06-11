@@ -1,5 +1,5 @@
 @page "/status"
-@attribute [Authorize(Policy = Policies.Admin)]
+@attribute [Authorize(Policy = Policies.AdminSeite)]
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHostEnvironment Env

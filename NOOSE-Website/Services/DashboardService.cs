@@ -17,7 +17,7 @@ namespace NOOSE_Website.Services;
 public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntragService antragService,
     IAktualitaetService aktualitaet) : IDashboardService
 {
-    public async Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
@@ -40,7 +40,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
         var offeneAntraege = await antragService.GetOffeneAnzahlAsync(istFuehrung, cancellationToken)
             + await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)
             + await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken)
-            + await db.Taskforces.CountAsync(t => t.Status == TaskforceStatus.Beantragt && (istFuehrung || !t.IstVerschlusssache), cancellationToken)
+            + await db.Taskforces.NurSichtbare(db, istFuehrung, meId).CountAsync(t => t.Status == TaskforceStatus.Beantragt, cancellationToken)
             + await db.AgentBefoerderungsantraege.CountAsync(a => a.Status == BefoerderungStatus.Beantragt, cancellationToken);
 
         // Anzahl klassifizierter Akten ist selbst eine Verschlusssache → nur für die Führung.
@@ -75,14 +75,14 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
             + await db.Personengruppen.CountAsync(g => (istFuehrung || !g.IstVerschlusssache) && (g.GeaendertAm ?? g.ErstelltAm) < sG, cancellationToken)
             + await db.Parteien.CountAsync(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < sPt, cancellationToken)
             + await db.Operationen.CountAsync(o => (istFuehrung || !o.IstVerschlusssache) && (o.GeaendertAm ?? o.ErstelltAm) < sO, cancellationToken)
-            + await db.Taskforces.CountAsync(t => (istFuehrung || !t.IstVerschlusssache) && (t.GeaendertAm ?? t.ErstelltAm) < sT, cancellationToken)
+            + await db.Taskforces.NurSichtbare(db, istFuehrung, meId).CountAsync(t => (t.GeaendertAm ?? t.ErstelltAm) < sT, cancellationToken)
             + await db.Vorgaenge.CountAsync(v => (istFuehrung || !v.IstVerschlusssache) && (v.GeaendertAm ?? v.ErstelltAm) < sV, cancellationToken);
 
         // Die Org-Kachel bündelt Fraktionen, Personengruppen und Parteien; Operationen sind eine eigene Kachel.
         return new DashboardKennzahlen(personen, fraktionen + gruppen + parteien, operationen, offeneVorgaenge, offeneAntraege, verschlusssachen, veralteteAkten);
     }
 
-    public async Task<List<DashboardVeralteteAkte>> GetAktualisierungsbedarfAsync(bool istFuehrung, int max = 30,
+    public async Task<List<DashboardVeralteteAkte>> GetAktualisierungsbedarfAsync(bool istFuehrung, string? meId, int max = 30,
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -155,8 +155,8 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
 
         var (wT, vT) = schwellen[nameof(Taskforce)];
         var cutT = jetzt.AddDays(-wT);
-        foreach (var x in await db.Taskforces
-            .Where(t => (istFuehrung || !t.IstVerschlusssache) && (t.GeaendertAm ?? t.ErstelltAm) < cutT)
+        foreach (var x in await db.Taskforces.NurSichtbare(db, istFuehrung, meId)
+            .Where(t => (t.GeaendertAm ?? t.ErstelltAm) < cutT)
             .OrderBy(t => t.GeaendertAm ?? t.ErstelltAm)
             .Select(t => new { t.Id, t.Name, t.Aktenzeichen, Referenz = t.GeaendertAm ?? t.ErstelltAm })
             .Take(max).ToListAsync(cancellationToken))
@@ -199,7 +199,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
             f.Name, f.Aktenzeichen, $"/fraktionen/{f.Id}", GefaehrdungsStufeLogic.Aus(f.BedrohungsScore))).ToList();
     }
 
-    public async Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
@@ -250,7 +250,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
             new("Hochstufung", await antragService.GetOffeneAnzahlAsync(istFuehrung, cancellationToken)),
             new("Registrierung", await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)),
             new("Namensänderung", await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken)),
-            new("Taskforce", await db.Taskforces.CountAsync(t => t.Status == TaskforceStatus.Beantragt && (istFuehrung || !t.IstVerschlusssache), cancellationToken)),
+            new("Taskforce", await db.Taskforces.NurSichtbare(db, istFuehrung, meId).CountAsync(t => t.Status == TaskforceStatus.Beantragt, cancellationToken)),
             new("Beförderung", await db.AgentBefoerderungsantraege.CountAsync(a => a.Status == BefoerderungStatus.Beantragt, cancellationToken)),
         };
 

@@ -16,6 +16,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Ankuendigungen;
 using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Authorization;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Freigaben;
@@ -71,6 +72,8 @@ var (connectionString, serverVersion) = DatabaseConnectionResolver.Resolve(
     builder.Configuration, startupLoggerFactory.CreateLogger("NOOSE.Datenbank"));
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+// Zuerst: harte Schreibsperre für die Nur-Lese-Aufsicht (TeamLeitung ohne Admin).
+builder.Services.AddScoped<ReadOnlyBarrierInterceptor>();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 // Phase 6: zweiter, unabhängiger Interceptor für die Watchlist (gefolgte Akte geändert → Glocke).
 builder.Services.AddScoped<WatchlistAenderungInterceptor>();
@@ -90,6 +93,7 @@ builder.Services.AddScoped<WatchlistAenderungInterceptor>();
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, serverVersion)
            .AddInterceptors(
+               sp.GetRequiredService<ReadOnlyBarrierInterceptor>(),
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
                sp.GetRequiredService<WatchlistAenderungInterceptor>())
            // Steckbrief-Kinder (Alias/Telefon/…) werden ausschließlich über die – bereits

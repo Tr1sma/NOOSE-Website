@@ -1,7 +1,7 @@
 @* Zentrale Vorlagen-Verwaltung mit Reitern. Bündelt Dok-Vorlagen (Erfassungsmasken) und
    Dokument-Vorlagen (HTML-Body) – erweiterbar um weitere Vorlagen-Typen. Nur Führung. *@
 @page "/admin/vorlagen"
-@attribute [Authorize(Policy = Policies.Fuehrung)]
+@attribute [Authorize(Policy = Policies.FuehrungSeite)]
 @inject NavigationManager Nav
 
 <PageTitle>Vorlagen · NOOSE</PageTitle>

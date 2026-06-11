@@ -1,9 +1,9 @@
 namespace NOOSE_Website.Infrastructure.CurrentUser;
 
-/// <summary>Aktuell handelnder Agent (Id + Codename), oder System bei Hintergrundaktionen.</summary>
-public readonly record struct CurrentUserInfo(string? Id, string? Name)
+/// <summary>Aktuell handelnder Agent (Id + Codename + Nur-Lese-Aufsicht), oder System bei Hintergrundaktionen.</summary>
+public readonly record struct CurrentUserInfo(string? Id, string? Name, bool IstNurLeser)
 {
-    public static readonly CurrentUserInfo System = new(null, "System");
+    public static readonly CurrentUserInfo System = new(null, "System", false);
 }
 
 /// <summary>

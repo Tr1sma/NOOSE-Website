@@ -21,6 +21,21 @@ public static class Berechtigung
         }
     }
 
+    /// <summary>
+    /// Wirft, wenn der Handelnde keine Schreibrechte hat (Nur-Lese-Aufsicht = TeamLeitung ohne Admin).
+    /// Ergänzt die zentrale EF-Schreibsperre (<c>ReadOnlyBarrierInterceptor</c>) dort, wo Schreibpfade den
+    /// SaveChanges-Interceptor umgehen (Roh-SQL/Bulk wie <c>ExecuteUpdate</c>) oder wo ein hochrangiger
+    /// Nur-Leser sonst einen rang-basierten Guard (<see cref="VerlangeFuehrung"/>) bestehen würde.
+    /// </summary>
+    public static void VerlangeSchreibrecht(ClaimsPrincipal handelnder)
+    {
+        if (handelnder.IstNurLeser())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in der Aufsichtsrolle nicht möglich.");
+        }
+    }
+
     /// <summary>Wirft, wenn der Handelnde kein Admin ist (technische Systemverwaltung: Custom-Felder,
     /// Theming, Wartungsmodus – Plan.md §6).</summary>
     public static void VerlangeAdmin(ClaimsPrincipal handelnder)

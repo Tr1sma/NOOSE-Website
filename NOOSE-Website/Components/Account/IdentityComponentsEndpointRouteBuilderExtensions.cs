@@ -76,6 +76,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             else
             {
                 await AktualisiereStammdatenAsync(userManager, agent, info);
+                await StelleBootstrapAdminSicherAsync(userManager, agent, configuration, logger);
             }
 
             // Status-Gate: ausschließlich aktive Agenten erhalten eine Sitzung.
@@ -106,6 +107,29 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     private static IResult RedirectZurLoginSeite(string fehler)
         => Results.Redirect($"/Account/Login?fehler={Uri.EscapeDataString(fehler)}");
 
+    /// <summary>
+    /// Liest alle Bootstrap-Admin-Discord-IDs aus der Konfiguration. Berücksichtigt sowohl den
+    /// Einzelwert <c>Bootstrap:AdminDiscordId</c> (z. B. aus User Secrets) als auch die Liste
+    /// <c>Bootstrap:AdminDiscordIds</c>. Diese Agenten werden beim ersten Login direkt als
+    /// aktiver Admin angelegt.
+    /// </summary>
+    private static HashSet<string> LeseBootstrapAdminIds(IConfiguration configuration)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+
+        var einzel = configuration["Bootstrap:AdminDiscordId"];
+        if (!string.IsNullOrWhiteSpace(einzel))
+            ids.Add(einzel.Trim());
+
+        foreach (var id in configuration.GetSection("Bootstrap:AdminDiscordIds").Get<string[]>() ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(id))
+                ids.Add(id.Trim());
+        }
+
+        return ids;
+    }
+
     private static async Task<Agent?> ErstelleAgentAsync(
         UserManager<Agent> userManager, ExternalLoginInfo info, IConfiguration configuration, ILogger logger)
     {
@@ -113,9 +137,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
         var email = info.Principal.FindFirstValue(ClaimTypes.Email);
 
-        var bootstrapId = configuration["Bootstrap:AdminDiscordId"];
-        var istBootstrapAdmin = !string.IsNullOrWhiteSpace(bootstrapId)
-                                && string.Equals(bootstrapId.Trim(), discordId, StringComparison.Ordinal);
+        var istBootstrapAdmin = LeseBootstrapAdminIds(configuration).Contains(discordId);
 
         var agent = new Agent
         {
@@ -174,6 +196,34 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         {
             await userManager.UpdateAsync(agent);
         }
+    }
+
+    /// <summary>
+    /// Befördert einen bereits registrierten Agenten zum aktiven Admin, falls seine Discord-ID
+    /// als Bootstrap-Admin hinterlegt ist. So greift die Standard-Admin-Liste auch dann, wenn
+    /// der Agent sich schon vor dem Eintrag registriert hatte (sonst bliebe er „Ausstehend").
+    /// Ein bereits vergebener Dienstgrad bleibt erhalten.
+    /// </summary>
+    private static async Task StelleBootstrapAdminSicherAsync(
+        UserManager<Agent> userManager, Agent agent, IConfiguration configuration, ILogger logger)
+    {
+        if (agent.DiscordId is null || !LeseBootstrapAdminIds(configuration).Contains(agent.DiscordId))
+            return;
+
+        if (agent is { IstAdmin: true, Status: AgentStatus.Aktiv })
+            return;
+
+        agent.IstAdmin = true;
+        agent.Status = AgentStatus.Aktiv;
+        agent.FreigegebenAm ??= DateTime.UtcNow;
+        agent.Dienstgrad ??= Dienstgrad.Director;
+
+        var update = await userManager.UpdateAsync(agent);
+        if (update.Succeeded)
+            logger.LogInformation("Bootstrap-Admin befördert: {DiscordId}.", agent.DiscordId);
+        else
+            logger.LogError("Bootstrap-Admin-Beförderung fehlgeschlagen ({DiscordId}): {Fehler}",
+                agent.DiscordId, string.Join("; ", update.Errors.Select(e => e.Description)));
     }
 
     private static string? ExtrahiereAvatarUrl(ClaimsPrincipal principal)

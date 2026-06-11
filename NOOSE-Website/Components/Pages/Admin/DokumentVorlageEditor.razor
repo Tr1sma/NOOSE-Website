@@ -1,7 +1,7 @@
 @* Volltext-Editor für eine Dokument-Vorlage (HTML-Body mit Platzhaltern). Nur Führung. *@
 @page "/admin/vorlagen/dokument-vorlage/neu"
 @page "/admin/vorlagen/dokument-vorlage/{Id}/bearbeiten"
-@attribute [Authorize(Policy = Policies.Fuehrung)]
+@attribute [Authorize(Policy = Policies.FuehrungSeite)]
 @inject IDokumentVorlageService VorlageService
 @inject IPlatzhalterService Platzhalter
 @inject ISnackbar Snackbar

@@ -226,10 +226,25 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     [Parameter] public bool IstFuehrung { get; set; }
     /// <summary>Diese Person (die aktuelle Akte) wird aus der Personen-Auswahl ausgeschlossen.</summary>
     [Parameter] public string? AusschlussPersonId { get; set; }
+
+    // Betrachter-Kontext für die Taskforce-Mitgliedschafts-Sichtbarkeit in SucheTaskforces.
+    private string? _meId;
+    private bool _darfAlleTf;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var user = (await AuthStateTask).User;
+            _meId = user.GetAgentId();
+            _darfAlleTf = user.DarfAlleTaskforcesSehen();
+        }
+    }
 
     private record TypOption(string Wert, string Anzeige);
     private static readonly TypOption[] _typen =
@@ -321,7 +336,7 @@
         => await OperationService.SucheAsync(value, IstFuehrung, 20, token);
 
     private async Task<IEnumerable<Taskforce>> SucheTaskforces(string value, CancellationToken token)
-        => await TaskforceService.SucheAsync(value, IstFuehrung, 20, token);
+        => await TaskforceService.SucheAsync(value, _darfAlleTf, _meId, 20, token);
 
     private async Task<IEnumerable<Vorgang>> SucheVorgaenge(string value, CancellationToken token)
         => await VorgangService.SucheAsync(value, IstFuehrung, 20, token);

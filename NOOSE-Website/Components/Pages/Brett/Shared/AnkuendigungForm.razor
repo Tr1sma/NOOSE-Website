@@ -92,8 +92,9 @@
     {
         if (ZeigeBroadcastOptionen)
         {
-            // Sichtbare Taskforces als Ziel-Auswahl (Führung sieht auch Verschlusssachen).
-            _taskforces = await TaskforceService.GetListeAsync(IstFuehrung);
+            // Taskforce-Ziel-Auswahl. ZeigeBroadcastOptionen ist der Führung vorbehalten → darfAlles (IstFuehrung)
+            // ist hier immer true und liefert ALLE Taskforces; meId ist daher ohne Belang (null).
+            _taskforces = await TaskforceService.GetListeAsync(IstFuehrung, null);
         }
     }
 }

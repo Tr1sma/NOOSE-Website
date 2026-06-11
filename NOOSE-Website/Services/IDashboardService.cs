@@ -9,14 +9,16 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IDashboardService
 {
+    // meId = Agent-Id des Betrachters; nötig für die Taskforce-Mitgliedschafts-Sichtbarkeit (Nicht-Führung sieht
+    // nur zugeteilte Taskforces in den Kennzahlen/Listen). Übrige Akten-Typen weiterhin VS-gefiltert via istFuehrung.
     /// <summary>Kennzahlen für die vier Kacheln (Personen, Fraktionen &amp; Personengruppen, offene Anträge, Verschlusssachen).</summary>
-    Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, string? meId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Akten mit Aktualisierungsbedarf (Ampel gelb oder rot, älteste zuerst) – damit man sieht, was mal wieder
     /// aktualisiert werden sollte. VS-gefiltert; auf <paramref name="max"/> Einträge begrenzt.
     /// </summary>
-    Task<List<DashboardVeralteteAkte>> GetAktualisierungsbedarfAsync(bool istFuehrung, int max = 30, CancellationToken cancellationToken = default);
+    Task<List<DashboardVeralteteAkte>> GetAktualisierungsbedarfAsync(bool istFuehrung, string? meId, int max = 30, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Die Fraktionen als echte Liste, nach Gefährdungsstufe absteigend sortiert (gefährlichste zuerst). VS-gefiltert.
@@ -35,5 +37,5 @@ public interface IDashboardService
     /// Gefährdung und offene Anträge nach Art. Alle Zählungen sind VS-gefiltert (für Nicht-Führung nur
     /// nicht-klassifizierte Akten), damit kein Verschlusssachen-Bestand durchsickert.
     /// </summary>
-    Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, string? meId, CancellationToken cancellationToken = default);
 }

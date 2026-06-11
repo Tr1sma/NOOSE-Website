@@ -105,6 +105,9 @@ public class DokumentService(IDbContextFactory<AppDbContext> dbFactory) : IDokum
     {
         // Anpinnen ist Bibliotheks-Kuratierung → der Führung vorbehalten (betrifft die Ansicht aller).
         Berechtigung.VerlangeFuehrung(handelnder);
+        // ExecuteUpdate umgeht den SaveChanges-Interceptor → Nur-Lese-Sperre hier explizit durchsetzen
+        // (ein hochrangiger Nur-Leser bestünde sonst den VerlangeFuehrung-Guard).
+        Berechtigung.VerlangeSchreibrecht(handelnder);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Bewusst per ExecuteUpdate statt Laden+SaveChanges: setzt nur das Flag, ohne über den Audit-

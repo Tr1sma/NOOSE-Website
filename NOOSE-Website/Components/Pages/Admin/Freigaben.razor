@@ -1,7 +1,7 @@
 @page "/admin/freigaben"
 @* Posteingang: Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ (Policy HoechsteEinstufung);
    die vier übrigen Bereiche bleiben der Führung vorbehalten und sind unten gekapselt. *@
-@attribute [Authorize(Policy = Policies.HoechsteEinstufung)]
+@attribute [Authorize(Policy = Policies.HoechsteEinstufungSeite)]
 @inject IAgentVerwaltungService AgentService
 @inject ITaskforceService TaskforceService
 @inject IPersonalakteService PersonalakteService

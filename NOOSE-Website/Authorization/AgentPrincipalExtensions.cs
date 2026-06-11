@@ -44,15 +44,47 @@ public static class AgentPrincipalExtensions
     public static bool IstTRU(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IstTRU), "true", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>TeamLeitung-Marker (FiveM-Aufsicht) aus dem Claim. Für sich genommen keine Rolle – erst in
+    /// Kombination mit dem fehlenden Admin-Haken ergibt sich die Nur-Lese-Aufsicht (<see cref="IstNurLeser"/>).</summary>
+    public static bool IstTeamLeitung(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IstTeamLeitung), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Globale Nur-Lese-Aufsicht = TeamLeitung OHNE Admin. Darf alles lesen (inkl. aller Seiten und
+    /// Verschlusssachen, siehe <see cref="DarfVerschlusssacheLesen"/>), aber NICHTS schreiben
+    /// (<see cref="DarfSchreiben"/>) und KEINE Klarnamen sehen (<see cref="DarfKlarnameSehen"/>).
+    /// Ein TeamLeiter MIT Admin-Haken ist kein Nur-Leser und behält vollen Zugriff.
+    /// </summary>
+    public static bool IstNurLeser(this ClaimsPrincipal user)
+        => user.IstTeamLeitung() && !user.IstAdmin();
+
+    /// <summary>Darf überhaupt Daten schreiben/ändern. Nur-Leser (Aufsicht) dürfen das nie. Einzige Quelle
+    /// der Schreib-Sichtbarkeitsregel für die UI – Mutations-Controls hierüber aus-/einblenden.</summary>
+    public static bool DarfSchreiben(this ClaimsPrincipal user) => !user.IstNurLeser();
+
     /// <summary>Führung = Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
     public static bool IstFuehrung(this ClaimsPrincipal user)
         => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SupervisorySpecialAgent;
 
     /// <summary>
-    /// Darf den (sonst verborgenen) Klarnamen sehen = Führungsebene oder Admin. Einzige Quelle der
-    /// Klarname-Sichtbarkeitsregel – überall hierüber prüfen, statt Dienstgrad/Admin einzeln abzufragen.
+    /// Darf Verschlusssachen-Inhalte LESEN = Führung oder Nur-Lese-Aufsicht. Ausschließlich für Lese-Gates
+    /// (Sichtbarkeit von VS-Akten) verwenden – NIE für Schreiben oder Klarname-Sicht (die Aufsicht darf VS
+    /// sehen, aber keine Klarnamen).
     /// </summary>
-    public static bool DarfKlarnameSehen(this ClaimsPrincipal user) => user.IstFuehrung();
+    public static bool DarfVerschlusssacheLesen(this ClaimsPrincipal user)
+        => user.IstFuehrung() || user.IstNurLeser();
+
+    /// <summary>Darf ALLE Taskforces sehen (auch ohne Zuteilung) = Führung/Admin oder Nur-Lese-Aufsicht. Sonst
+    /// sieht ein Agent nur die Taskforces, denen er zugeteilt ist. Einzige Quelle dieser Regel.</summary>
+    public static bool DarfAlleTaskforcesSehen(this ClaimsPrincipal user)
+        => user.IstFuehrung() || user.IstNurLeser();
+
+    /// <summary>
+    /// Darf den (sonst verborgenen) Klarnamen sehen = Führungsebene oder Admin, ABER nie die Nur-Lese-Aufsicht.
+    /// Einzige Quelle der Klarname-Sichtbarkeitsregel – überall hierüber prüfen, statt Dienstgrad/Admin einzeln
+    /// abzufragen. Nur-Leser sehen trotz „alles lesen" bewusst keine Klarnamen (auch bei hohem Dienstgrad).
+    /// </summary>
+    public static bool DarfKlarnameSehen(this ClaimsPrincipal user) => user.IstFuehrung() && !user.IstNurLeser();
 
     /// <summary>Darf „Gesichert staatsgefährdend" direkt setzen = Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
     public static bool DarfHoechsteEinstufung(this ClaimsPrincipal user)

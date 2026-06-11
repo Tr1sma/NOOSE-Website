@@ -91,7 +91,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         return segmente;
     }
 
-    public async Task<List<MentionTreffer>> KandidatenAsync(string? text, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<MentionTreffer>> KandidatenAsync(string? text, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
@@ -101,8 +101,9 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         var treffer = new List<MentionTreffer>();
 
-        // 1) Akten (Person/Fraktion/Gruppe/Partei/Operation/Taskforce) über die Schnellsuche – bereits VS-gefiltert.
-        var akten = await search.SchnellsucheAsync(s, istFuehrung, 8, cancellationToken);
+        // 1) Akten (Person/Fraktion/Gruppe/Partei/Operation/Taskforce) über die Schnellsuche – VS-gefiltert;
+        //    Taskforces zusätzlich Mitgliedschafts-gefiltert (meId).
+        var akten = await search.SchnellsucheAsync(s, istFuehrung, meId, 8, cancellationToken);
         treffer.AddRange(akten.Select(a => new MentionTreffer(a.Kategorie, a.ZielId, a.Name, a.Aktenzeichen)));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

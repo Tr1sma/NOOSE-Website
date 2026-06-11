@@ -92,8 +92,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var istFuehrung = user.IstFuehrung();
-        var taskforces = await TaskforceService.GetListeAsync(istFuehrung);
+        // Nur zugeteilte Taskforces; Führung/Admin sehen alle.
+        var taskforces = await TaskforceService.GetListeAsync(user.DarfAlleTaskforcesSehen(), user.GetAgentId());
         var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Taskforce));
         var jetzt = DateTime.UtcNow;
         _zeilen = taskforces.Select(t =>
