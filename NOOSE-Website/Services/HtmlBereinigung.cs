@@ -31,19 +31,37 @@ public static class HtmlBereinigung
         {
             "p", "br", "span", "b", "strong", "i", "em", "u", "s",
             "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a",
+            // Tabellen (Quill „table-better"): rein strukturell, keine Script-Vektoren.
+            "table", "thead", "tbody", "tfoot", "tr", "td", "th", "colgroup", "col", "caption",
         })
         {
             s.AllowedTags.Add(tag);
         }
 
         s.AllowedAttributes.Clear();
-        foreach (var attr in new[] { "href", "target", "rel", "class", "style" })
+        foreach (var attr in new[]
+        {
+            "href", "target", "rel", "class", "style",
+            // Tabellen-Layout-Attribute.
+            "colspan", "rowspan", "span", "width", "height",
+        })
         {
             s.AllowedAttributes.Add(attr);
         }
+        // Das Tabellen-Modul hängt seinen Zustand an data-*-Attribute (z. B. data-row) → zulassen,
+        // damit Tabellen beim erneuten Laden in den Editor korrekt rekonstruiert werden. data-* kann
+        // kein Skript ausführen, ist also sicher.
+        s.AllowDataAttributes = true;
 
         s.AllowedCssProperties.Clear();
-        foreach (var prop in new[] { "color", "background-color", "text-align" })
+        foreach (var prop in new[]
+        {
+            "color", "background-color", "text-align",
+            // Tabellen-Darstellung (Rahmen, Größen, Zell-Innenabstand, vertikale Ausrichtung).
+            "width", "height", "min-width", "max-width", "vertical-align", "padding",
+            "border", "border-top", "border-right", "border-bottom", "border-left",
+            "border-color", "border-style", "border-width", "border-collapse",
+        })
         {
             s.AllowedCssProperties.Add(prop);
         }

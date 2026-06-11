@@ -24,6 +24,10 @@ public class Dokument : IAuditable, ISoftDelete
     /// <summary>Verschlusssache: nur für die Führung sichtbar (Bibliothek/Viewer/Auswahl filtern entsprechend).</summary>
     public bool IstVerschlusssache { get; set; }
 
+    /// <summary>Angepinnt: erscheint in der Bibliothek in einem abgesetzten Block ganz oben. Globale, von der
+    /// Führung kuratierte Markierung (kein „zuletzt bearbeitet"-Bezug). Steuert nur die Anzeige-Reihenfolge.</summary>
+    public bool Angepinnt { get; set; }
+
     // ---- IAuditable ----
     public DateTime ErstelltAm { get; set; }
     public string? ErstelltVonId { get; set; }

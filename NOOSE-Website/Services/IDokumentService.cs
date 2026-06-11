@@ -23,6 +23,9 @@ public interface IDokumentService
 
     Task AktualisierenAsync(string id, DokumentEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
+    /// <summary>Setzt/entfernt die „Angepinnt"-Markierung (erscheint oben in der Bibliothek). Nur Führung.</summary>
+    Task AnpinnenSetzenAsync(string id, bool angepinnt, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
     /// <summary>Soft-Delete (Papierkorb). Nur Ersteller oder Führung.</summary>
     Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 

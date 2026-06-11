@@ -217,3 +217,24 @@ html, body {
     .dokument-html img {
         max-width: 100%;
     }
+
+    /* Tabellen (Quill „table-better") im Read-only-Viewer mit sichtbaren Rahmen rendern.
+       Inline-Styles des Editors (Rahmenfarbe/Breite) überschreiben diese Vorgaben bei Bedarf. */
+    .dokument-html table {
+        border-collapse: collapse;
+        margin: .5rem 0;
+        max-width: 100%;
+    }
+
+    .dokument-html th,
+    .dokument-html td {
+        border: 1px solid var(--mud-palette-lines-default);
+        padding: 6px 10px;
+        vertical-align: top;
+    }
+
+    .dokument-html th {
+        background-color: var(--mud-palette-background-grey);
+        font-weight: 600;
+        text-align: left;
+    }

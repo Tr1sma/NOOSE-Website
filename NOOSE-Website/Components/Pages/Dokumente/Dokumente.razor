@@ -2,6 +2,7 @@
 @page "/dokumente"
 @inject IDokumentService DokumentService
 @inject NavigationManager Nav
+@inject ISnackbar Snackbar
 
 <PageTitle>Dokumente · NOOSE</PageTitle>
 
@@ -22,6 +23,41 @@
 }
 else
 {
+    @if (_angepinnt.Count > 0)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.PushPin" Color="Color.Primary" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2">Angepinnt</MudText>
+            </MudStack>
+            <MudStack Spacing="1">
+                @foreach (var p in _angepinnt)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Article" Color="Color.Default" Size="Size.Small" />
+                        <MudLink Href="@($"/dokumente/{p.Id}")">@p.Titel</MudLink>
+                        @if (!string.IsNullOrWhiteSpace(p.Kategorie))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.Kategorie</MudText>
+                        }
+                        @if (p.IstVerschlusssache)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                        }
+                        <MudSpacer />
+                        @if (_istFuehrung)
+                        {
+                            <MudTooltip Text="Lösen">
+                                <MudIconButton Icon="@Icons.Material.Filled.PushPin" Color="Color.Primary" Size="Size.Small"
+                                               OnClick="() => PinSetzen(p, false)" aria-label="Anpinnen lösen" />
+                            </MudTooltip>
+                        }
+                    </MudStack>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
     <MudDataGrid T="DokumentListeItem" Items="_zeilen" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
                  QuickFilter="Filter" Elevation="2" RowClick="@(args => Oeffnen(args.Item))" Dense="true">
         <ToolBarContent>
@@ -29,6 +65,21 @@ else
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
         </ToolBarContent>
         <Columns>
+            @if (_istFuehrung)
+            {
+                <TemplateColumn Title="" Sortable="false">
+                    <CellTemplate>
+                        @* span stoppt die Klick-Propagation, damit der Pin-Klick nicht zusätzlich die Zeile öffnet. *@
+                        <span @onclick:stopPropagation="true">
+                            <MudTooltip Text="Anpinnen">
+                                <MudIconButton Icon="@Icons.Material.Outlined.PushPin" Color="Color.Default" Size="Size.Small"
+                                               OnClick="@(() => PinSetzen(context.Item, true))"
+                                               aria-label="Dokument anpinnen" />
+                            </MudTooltip>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            }
             <TemplateColumn Title="Titel" SortBy="x => x.Titel">
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet im neuen Tab; tastatur-/screenreader-erreichbar. *@
@@ -67,14 +118,38 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _laden = true;
+    private bool _istFuehrung;
     private string _suche = string.Empty;
-    private List<DokumentListeItem> _zeilen = new();
+    private ClaimsPrincipal _user = default!;
+    private List<DokumentListeItem> _zeilen = new();      // Nicht angepinnte – im Grid darunter.
+    private List<DokumentListeItem> _angepinnt = new();   // Angepinnte – im Block oben.
 
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthStateTask).User;
-        _zeilen = await DokumentService.GetListeAsync(user.IstFuehrung());
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        var alle = await DokumentService.GetListeAsync(_istFuehrung);
+        _angepinnt = alle.Where(d => d.Angepinnt).ToList();
+        _zeilen = alle.Where(d => !d.Angepinnt).ToList();
         _laden = false;
+    }
+
+    private async Task PinSetzen(DokumentListeItem item, bool angepinnt)
+    {
+        try
+        {
+            await DokumentService.AnpinnenSetzenAsync(item.Id, angepinnt, _user);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private bool Filter(DokumentListeItem z)

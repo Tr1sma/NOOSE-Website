@@ -16,8 +16,10 @@ public class DokumentService(IDbContextFactory<AppDbContext> dbFactory) : IDokum
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Dokumente
             .Where(d => istFuehrung || !d.IstVerschlusssache)
-            .OrderByDescending(d => d.GeaendertAm ?? d.ErstelltAm)
-            .Select(d => new DokumentListeItem(d.Id, d.Titel, d.Kategorie, d.IstVerschlusssache, d.GeaendertAm ?? d.ErstelltAm))
+            // Angepinnte zuerst, danach die zuletzt geänderten. Die Seite trennt beide Gruppen optisch.
+            .OrderByDescending(d => d.Angepinnt)
+            .ThenByDescending(d => d.GeaendertAm ?? d.ErstelltAm)
+            .Select(d => new DokumentListeItem(d.Id, d.Titel, d.Kategorie, d.IstVerschlusssache, d.GeaendertAm ?? d.ErstelltAm, d.Angepinnt))
             .ToListAsync(cancellationToken);
     }
 
@@ -35,7 +37,7 @@ public class DokumentService(IDbContextFactory<AppDbContext> dbFactory) : IDokum
         return await query
             .OrderByDescending(d => d.GeaendertAm ?? d.ErstelltAm)
             .Take(max)
-            .Select(d => new DokumentListeItem(d.Id, d.Titel, d.Kategorie, d.IstVerschlusssache, d.GeaendertAm ?? d.ErstelltAm))
+            .Select(d => new DokumentListeItem(d.Id, d.Titel, d.Kategorie, d.IstVerschlusssache, d.GeaendertAm ?? d.ErstelltAm, d.Angepinnt))
             .ToListAsync(cancellationToken);
     }
 
@@ -97,6 +99,24 @@ public class DokumentService(IDbContextFactory<AppDbContext> dbFactory) : IDokum
         dokument.InhaltHtml = HtmlBereinigung.Bereinige(eingabe.InhaltHtml);
         dokument.IstVerschlusssache = eingabe.IstVerschlusssache;
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AnpinnenSetzenAsync(string id, bool angepinnt, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        // Anpinnen ist Bibliotheks-Kuratierung → der Führung vorbehalten (betrifft die Ansicht aller).
+        Berechtigung.VerlangeFuehrung(handelnder);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Bewusst per ExecuteUpdate statt Laden+SaveChanges: setzt nur das Flag, ohne über den Audit-
+        // Interceptor GeaendertAm/GeaendertVonId zu verändern (Anpinnen ist keine inhaltliche Bearbeitung).
+        // Der Soft-Delete-Query-Filter greift weiterhin → Papierkorb-Dokumente werden nicht angefasst.
+        var betroffen = await db.Dokumente
+            .Where(d => d.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Angepinnt, angepinnt), cancellationToken);
+        if (betroffen == 0)
+        {
+            throw new InvalidOperationException("Dokument nicht gefunden.");
+        }
     }
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)

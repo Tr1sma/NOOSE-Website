@@ -26,7 +26,17 @@ else
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Lock" Variant="Variant.Outlined">Verschlusssache</MudChip>
         }
+        @if (_dokument.Angepinnt)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.PushPin" Variant="Variant.Outlined">Angepinnt</MudChip>
+        }
         <MudSpacer />
+        @if (_istFuehrung)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                       StartIcon="@(_dokument.Angepinnt ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                       OnClick="PinUmschaltenAsync">@(_dokument.Angepinnt ? "Lösen" : "Anpinnen")</MudButton>
+        }
         @if (_darfLoeschen)
         {
             <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
@@ -95,6 +105,7 @@ else
     private Dokument? _dokument;
     private List<DokumentAnhang> _anhaenge = new();
     private bool _darfLoeschen;
+    private bool _istFuehrung;
     private ClaimsPrincipal _user = default!;
     private string? _geladeneId;
 
@@ -112,15 +123,34 @@ else
     private async Task LadenAsync()
     {
         _laden = true;
-        var istFuehrung = _user.IstFuehrung();
-        _dokument = await DokumentService.GetAsync(Id, istFuehrung);
+        _istFuehrung = _user.IstFuehrung();
+        _dokument = await DokumentService.GetAsync(Id, _istFuehrung);
         if (_dokument is not null)
         {
-            _anhaenge = await DokumentService.GetAnhaengeAsync(Id, istFuehrung);
-            _darfLoeschen = istFuehrung
+            _anhaenge = await DokumentService.GetAnhaengeAsync(Id, _istFuehrung);
+            _darfLoeschen = _istFuehrung
                 || (_dokument.ErstelltVonId is not null && _dokument.ErstelltVonId == _user.GetAgentId());
         }
         _laden = false;
+    }
+
+    private async Task PinUmschaltenAsync()
+    {
+        if (_dokument is null)
+        {
+            return;
+        }
+        try
+        {
+            var neu = !_dokument.Angepinnt;
+            await DokumentService.AnpinnenSetzenAsync(_dokument.Id, neu, _user);
+            _dokument.Angepinnt = neu;
+            Snackbar.Add(neu ? "Dokument angepinnt." : "Anpinnen gelöst.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async Task LoeschenAsync()
