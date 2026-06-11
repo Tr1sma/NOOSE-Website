@@ -26,6 +26,22 @@ public record DashboardKennzahlen(
     int OffeneAntraege,
     int Verschlusssachen);
 
+/// <summary>Ein einzelnes Segment einer Dashboard-Verteilung (eine Kategorie + ihre Anzahl).</summary>
+/// <param name="Bezeichnung">Anzeigetext der Kategorie (z. B. „Verdachtsfall").</param>
+/// <param name="Anzahl">Anzahl der Akten in dieser Kategorie (bereits VS-gefiltert).</param>
+public record VerteilungSegment(string Bezeichnung, int Anzahl);
+
+/// <summary>
+/// Die vier Verteilungs-Diagramme des Lagezentrums (§248). Alle Zahlen sind aus Sicht des aufrufenden
+/// Agents berechnet (Verschlusssachen-Filter), passend zu den Kennzahl-Kacheln. Die Segment-Reihenfolge ist
+/// deterministisch (Enum-Reihenfolge bzw. feste Antrags-Arten), damit die UI je Diagramm stabile Farben zuordnen kann.
+/// </summary>
+public record DashboardVerteilungen(
+    IReadOnlyList<VerteilungSegment> FaelleNachEinstufung,
+    IReadOnlyList<VerteilungSegment> MassnahmeAusgaenge,
+    IReadOnlyList<VerteilungSegment> FraktionenNachGefaehrdung,
+    IReadOnlyList<VerteilungSegment> OffeneAntraegeNachArt);
+
 /// <summary>
 /// Ein Eintrag des Aktivitäts-Feeds „Letzte Änderungen". Aus einem Audit-Eintrag aufgelöst und auf die
 /// zugehörige Eltern-Akte (Person/Fraktion/Personengruppe) hochgerollt – inkl. Anzeigename und Link.

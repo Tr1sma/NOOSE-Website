@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Ankuendigungen;
 using NOOSE_Website.Data.Entities.Antraege;
 using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Benachrichtigungen;
@@ -74,6 +75,10 @@ public static class WatchlistAkteRollup
             // Akte↔Aufgabe rollt weiter korrekt auf die andere (folgbare) Seite, die Aufgabe-Seite hat keine Folger.
             case Aufgabe:
             case AufgabeZuweisung:
+            // Ankündigungen/Broadcasts laufen über das Schwarze Brett (eigene Sichtbarkeit) + die Glocke,
+            // sind aber keine folgbare Akte → nicht in die Watchlist hochrollen.
+            case Ankuendigung:
+            case AnkuendigungQuittierung:
             case Antrag:
             case Tag:
             case Benachrichtigung:

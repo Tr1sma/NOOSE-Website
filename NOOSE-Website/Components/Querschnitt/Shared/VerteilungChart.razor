@@ -1,0 +1,45 @@
+@* Wiederverwendbares Verteilungs-Diagramm fürs Lagezentrum (§248): rendert eine (Bezeichnung, Anzahl)-Liste
+   als Donut in NOOSE-Farben. Sind alle Werte 0 (oder keine Segmente vorhanden), erscheint ein dezenter Hinweis
+   statt eines leeren Rings (MudChart würde sonst eine NaN-Geometrie zeichnen). MudBlazor 9.5: Pie/Donut nehmen
+   die Daten als ChartSeries (über die AsChartDataSet()-Erweiterung) plus ChartLabels. *@
+@using NOOSE_Website.Models.Dashboard
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">@Titel</MudText>
+    @if (_leer)
+    {
+        <div class="d-flex align-center justify-center" style="min-height:300px;">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Daten</MudText>
+        </div>
+    }
+    else
+    {
+        <MudChart ChartType="ChartType.Donut" ChartSeries="@(_daten.AsChartDataSet())" ChartLabels="@_etiketten"
+                  ChartOptions="@_optionen" Width="100%" Height="300px" />
+    }
+</MudPaper>
+
+@code {
+    /// <summary>Überschrift der Karte (z. B. „Fälle nach Einstufung").</summary>
+    [Parameter, EditorRequired] public string Titel { get; set; } = string.Empty;
+
+    /// <summary>Die Segmente (Kategorie + Anzahl) in fester Reihenfolge.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<VerteilungSegment> Segmente { get; set; } = Array.Empty<VerteilungSegment>();
+
+    /// <summary>Hex-Farben je Segment, in derselben Reihenfolge wie <see cref="Segmente"/>.</summary>
+    [Parameter, EditorRequired] public string[] Farben { get; set; } = Array.Empty<string>();
+
+    private bool _leer = true;
+    private double[] _daten = Array.Empty<double>();
+    private string[] _etiketten = Array.Empty<string>();
+    private ChartOptions _optionen = new();
+
+    protected override void OnParametersSet()
+    {
+        _leer = Segmente.Count == 0 || Segmente.All(s => s.Anzahl == 0);
+        _daten = Segmente.Select(s => (double)s.Anzahl).ToArray();
+        // Anzahl direkt ins Etikett → die Legende ist auch ohne Tooltip selbsterklärend.
+        _etiketten = Segmente.Select(s => $"{s.Bezeichnung} ({s.Anzahl})").ToArray();
+        _optionen = new ChartOptions { ChartPalette = Farben, ShowLegend = true };
+    }
+}

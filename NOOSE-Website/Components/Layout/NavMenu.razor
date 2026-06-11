@@ -3,6 +3,13 @@
     <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
     <MudNavLink Href="/watchlist" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Star">Beobachtete Akten</MudNavLink>
     <MudNavLink Href="/personal" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Personal</MudNavLink>
+    <MudNavLink Href="/brett" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Campaign">
+        Schwarzes Brett
+        @if (_offeneQuittierungen > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_offeneQuittierungen</MudChip>
+        }
+    </MudNavLink>
 
     <MudDivider Class="my-2" />
     <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">AKTEN</MudText>
@@ -57,12 +64,17 @@
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
     [Inject] private IPersonalakteService PersonalakteService { get; set; } = default!;
     [Inject] private IAntragService AntragService { get; set; } = default!;
+    [Inject] private IAnkuendigungService BrettService { get; set; } = default!;
 
     private int _offeneFreigaben;
+    private int _offeneQuittierungen;
 
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
+
+        // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
+        _offeneQuittierungen = await BrettService.GetOffeneQuittierungenAnzahlAsync(user);
 
         // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
         if (user.DarfHoechsteEinstufung())

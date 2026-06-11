@@ -18,4 +18,11 @@ public interface IDashboardService
     /// ihre Akte hochgerollt; Verschlusssachen erscheinen nur für die Führung.
     /// </summary>
     Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, int max = 8, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Die vier Verteilungs-Diagramme (§248): Fälle nach Einstufung, Maßnahme-Ausgänge, Fraktionen nach
+    /// Gefährdung und offene Anträge nach Art. Alle Zählungen sind VS-gefiltert (für Nicht-Führung nur
+    /// nicht-klassifizierte Akten), damit kein Verschlusssachen-Bestand durchsickert.
+    /// </summary>
+    Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, CancellationToken cancellationToken = default);
 }

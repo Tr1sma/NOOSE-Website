@@ -1,14 +1,6 @@
-/* Dashboard: füllt auf großen Screens den sichtbaren Bereich und scrollt selbst NICHT –
-   nur der Verlauf-Kasten („Letzte Änderungen") scrollt intern.
-   ~112px ≈ AppBar (60px) + Container-Polster oben/unten (je 24px) + etwas Reserve.
-   Unterhalb von md (Tablet/Handy) bleibt der normale Fluss erhalten (darf scrollen),
-   damit auf kleinen Schirmen nichts abgeschnitten wird. */
-@media (min-width: 960px) {
-    .dashboard-seite {
-        max-height: calc(100dvh - 112px);
-        overflow: hidden;
-    }
-}
+/* Dashboard: Die Seite darf normal scrollen – seit den Verteilungs-Diagrammen (§248) passt der Inhalt
+   (Kacheln + vier Charts + Verlauf) nicht mehr garantiert in einen Bildschirm. Der Verlauf-Kasten
+   („Letzte Änderungen") bleibt zusätzlich intern begrenzt, damit er nicht beliebig lang wird. */
 
 /* „Letzte Änderungen": zeigt rund fünf Einträge; alles Weitere ist im Kasten scrollbar. */
 .dashboard-verlauf-liste {

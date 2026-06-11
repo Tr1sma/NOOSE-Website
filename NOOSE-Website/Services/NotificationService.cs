@@ -89,6 +89,38 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         }
     }
 
+    public async Task BenachrichtigeVieleAsync(IReadOnlyCollection<string> empfaengerIds, NotificationTyp typ,
+        string titel, string? href, string? ausloeserId, CancellationToken cancellationToken = default)
+    {
+        // Auslöser ausschließen, jede Empfänger-Id nur einmal, Leeres verwerfen.
+        var ziele = empfaengerIds
+            .Where(id => !string.IsNullOrWhiteSpace(id) && id != ausloeserId)
+            .Distinct()
+            .ToList();
+        if (ziele.Count == 0)
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        foreach (var id in ziele)
+        {
+            db.Benachrichtigungen.Add(new Benachrichtigung
+            {
+                EmpfaengerId = id,
+                Typ = typ,
+                Titel = titel,
+                Href = href,
+            });
+        }
+        await db.SaveChangesAsync(cancellationToken);
+
+        foreach (var id in ziele)
+        {
+            broadcaster.Melde(id);
+        }
+    }
+
     public async Task<List<Benachrichtigung>> GetEigeneAsync(ClaimsPrincipal handelnder, int max = 20, CancellationToken cancellationToken = default)
     {
         // Empfänger ist IMMER der Aufrufer selbst – die Id aus dem Principal ableiten, nie als Parameter

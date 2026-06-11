@@ -22,6 +22,9 @@ public enum NotificationTyp
 
     /// <summary>Dem Empfänger wurde eine Aufgabe zugewiesen (bzw. eine eigene Aufgabe wurde erledigt).</summary>
     AufgabeZugewiesen = 4,
+
+    /// <summary>Eine an den Empfänger gerichtete Ankündigung/Behörden-Broadcast wurde veröffentlicht.</summary>
+    Ankuendigung = 5,
 }
 
 /// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
@@ -34,6 +37,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.Konto => "Konto",
         NotificationTyp.AkteGeaendert => "Beobachtete Akte geändert",
         NotificationTyp.AufgabeZugewiesen => "Aufgabe",
+        NotificationTyp.Ankuendigung => "Ankündigung",
         _ => "Benachrichtigung",
     };
 
@@ -45,6 +49,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.Konto => Icons.Material.Filled.ManageAccounts,
         NotificationTyp.AkteGeaendert => Icons.Material.Filled.Visibility,
         NotificationTyp.AufgabeZugewiesen => Icons.Material.Filled.AssignmentInd,
+        NotificationTyp.Ankuendigung => Icons.Material.Filled.Campaign,
         _ => Icons.Material.Filled.Notifications,
     };
 }

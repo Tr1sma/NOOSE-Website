@@ -24,6 +24,14 @@ public interface INotificationService
     Task BenachrichtigeErwaehnteAsync(string? text, string titel, string? href, string zielTyp, string zielId,
         ClaimsPrincipal ausloeser, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Legt dieselbe Benachrichtigung für viele Empfänger an (Broadcast/Rundnachricht). Der Auslöser
+    /// (<paramref name="ausloeserId"/>) wird ausgeschlossen, Empfänger-Ids werden dedupliziert; leere Liste = no-op.
+    /// Ein Batch-Insert in einem Context, danach je Empfänger ein Live-Signal.
+    /// </summary>
+    Task BenachrichtigeVieleAsync(IReadOnlyCollection<string> empfaengerIds, NotificationTyp typ, string titel,
+        string? href, string? ausloeserId, CancellationToken cancellationToken = default);
+
     /// <summary>Die eigenen neuesten Benachrichtigungen des Aufrufers (für die Glocke), neueste zuerst.</summary>
     Task<List<Benachrichtigung>> GetEigeneAsync(ClaimsPrincipal handelnder, int max = 20, CancellationToken cancellationToken = default);
 

@@ -1,0 +1,166 @@
+@page "/brett/{Id}"
+@inject IAnkuendigungService BrettService
+@inject IMentionService MentionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_detail?.Zeile.Titel ?? "Ankündigung") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_detail is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Ankündigung nicht gefunden oder für dich nicht sichtbar.
+        <MudButton Href="/brett" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zum Brett</MudButton>
+    </MudAlert>
+}
+else
+{
+    var z = _detail.Zeile;
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/brett" aria-label="Zurück" />
+        @if (z.Wichtig)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" />
+        }
+        <MudText Typo="Typo.h5">@z.Titel</MudText>
+        @if (z.AlsBroadcast)
+        {
+            <MudTooltip Text="Als Broadcast in die Glocke gesendet">
+                <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" />
+            </MudTooltip>
+        }
+        <MudSpacer />
+        @if (z.DarfVerwalten)
+        {
+            <MudButton Href="@($"/brett/{z.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+        }
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="@(ZeigeQuittierungsPanel ? 8 : 12)">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                        <AnkuendigungZielgruppeChip Zielgruppe="z.Zielgruppe" Anzeige="@z.ZielAnzeige" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @z.Aktenzeichen · @z.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(z.ErstellerCodename ?? "System")
+                        </MudText>
+                    </MudStack>
+
+                    @if (!string.IsNullOrWhiteSpace(z.Inhalt))
+                    {
+                        <MentionText Segmente="_segmente" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein Inhalt erfasst.</MudText>
+                    }
+
+                    @if (z.QuittierungVerlangt)
+                    {
+                        @if (z.MussQuittieren)
+                        {
+                            <div>
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.DoneOutline" OnClick="QuittierenAsync">Kenntnis nehmen</MudButton>
+                            </div>
+                        }
+                        else if (z.SchonQuittiert)
+                        {
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">Du hast diese Ankündigung quittiert.</MudAlert>
+                        }
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        @if (ZeigeQuittierungsPanel)
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <QuittierungPanel Quittierungen="_detail.Quittierungen" />
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private AnkuendigungAnsicht? _detail;
+    private IReadOnlyList<MentionSegment> _segmente = Array.Empty<MentionSegment>();
+    private ClaimsPrincipal _user = default!;
+    private bool _istFuehrung;
+    private string? _geladeneId;
+
+    private bool ZeigeQuittierungsPanel => _detail is { Zeile.DarfVerwalten: true, Zeile.QuittierungVerlangt: true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _laden = true;
+        _detail = null;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _detail = await BrettService.GetDetailAsync(Id, _user);
+        _segmente = _detail is null || string.IsNullOrWhiteSpace(_detail.Zeile.Inhalt)
+            ? Array.Empty<MentionSegment>()
+            : await MentionService.AufloesenAsync(_detail.Zeile.Inhalt, _istFuehrung);
+        _laden = false;
+    }
+
+    private async Task QuittierenAsync()
+    {
+        try
+        {
+            await BrettService.QuittierenAsync(Id, _user);
+            Snackbar.Add("Kenntnis genommen.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoeschenAsync()
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Ankündigung löschen?",
+            "Die Ankündigung wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await BrettService.LoeschenAsync(Id, _user);
+            Snackbar.Add("Ankündigung in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/brett");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

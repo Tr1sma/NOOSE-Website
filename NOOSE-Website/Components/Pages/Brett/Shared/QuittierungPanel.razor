@@ -1,0 +1,41 @@
+@* Quittierungsliste einer Ankündigung – nur für Verwalter (Führung/Verfasser). Zeigt „X von Y" und je Empfänger
+   den Status (offen/quittiert mit Zeitpunkt). Codenamen, nie Klarnamen. *@
+
+<MudStack Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.FactCheck" Color="Color.Primary" />
+        <MudText Typo="Typo.subtitle1">Quittierungen</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_quittiert von @Quittierungen.Count quittiert</MudText>
+    </MudStack>
+
+    @if (Quittierungen.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein quittierungspflichtiger Empfänger.</MudText>
+    }
+    else
+    {
+        <MudList T="string" Dense="true">
+            @foreach (var q in Quittierungen)
+            {
+                <MudListItem T="string"
+                             Icon="@(q.QuittiertAm is null ? Icons.Material.Filled.RadioButtonUnchecked : Icons.Material.Filled.CheckCircle)"
+                             IconColor="@(q.QuittiertAm is null ? Color.Default : Color.Success)">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body2">@q.Codename</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @(q.QuittiertAm is { } z ? z.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "offen")
+                        </MudText>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<QuittierungZeile> Quittierungen { get; set; } = Array.Empty<QuittierungZeile>();
+
+    private int _quittiert => Quittierungen.Count(q => q.QuittiertAm is not null);
+}

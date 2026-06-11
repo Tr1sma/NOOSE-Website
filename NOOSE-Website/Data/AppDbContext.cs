@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Antraege;
+using NOOSE_Website.Data.Entities.Ankuendigungen;
 using NOOSE_Website.Data.Entities.Aufgaben;
 using NOOSE_Website.Data.Entities.Benachrichtigungen;
 using NOOSE_Website.Data.Entities.Fraktionen;
@@ -115,6 +116,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Phase 6: Aufgaben/To-Dos & Zuweisungen ----
     public DbSet<Aufgabe> Aufgaben => Set<Aufgabe>();
     public DbSet<AufgabeZuweisung> AufgabeZuweisungen => Set<AufgabeZuweisung>();
+
+    // ---- Phase 6: News/Schwarzes Brett + Behörden-Broadcast ----
+    public DbSet<Ankuendigung> Ankuendigungen => Set<Ankuendigung>();
+    public DbSet<AnkuendigungQuittierung> AnkuendigungQuittierungen => Set<AnkuendigungQuittierung>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -554,6 +559,31 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(z => new { z.AufgabeId, z.AgentId }).IsUnique();
             b.HasIndex(z => z.AgentId);
+        });
+
+        // ---- Phase 6: News/Schwarzes Brett + Behörden-Broadcast ----
+        modelBuilder.Entity<Ankuendigung>(b =>
+        {
+            b.Property(a => a.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(a => a.Titel).HasMaxLength(200).IsRequired();
+            b.Property(a => a.ZielId).HasMaxLength(64);
+            // Inhalt bewusst ohne HasMaxLength (longtext) – trägt @{Typ:Id}-Erwähnungstokens.
+            b.HasIndex(a => a.Aktenzeichen).IsUnique();
+            // Brett-Sortierung (Wichtig zuerst, dann neueste) und Zielgruppen-Filter.
+            b.HasIndex(a => new { a.Wichtig, a.ErstelltAm });
+            b.HasIndex(a => a.Zielgruppe);
+
+            b.HasMany(a => a.Quittierungen).WithOne(q => q.Ankuendigung!)
+                .HasForeignKey(q => q.AnkuendigungId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AnkuendigungQuittierung>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(q => q.Agent).WithMany()
+                .HasForeignKey(q => q.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(q => new { q.AnkuendigungId, q.AgentId }).IsUnique();
+            b.HasIndex(q => new { q.AgentId, q.QuittiertAm });
         });
 
         // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----

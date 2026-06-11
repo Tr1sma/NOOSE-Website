@@ -77,6 +77,31 @@
     }
 </MudGrid>
 
+@* Verteilungen (§248): vier Diagramme über den aktuellen Bestand. Aus Sicht des Agents VS-gefiltert
+   (genau wie die Kennzahl-Kacheln), damit kein Verschlusssachen-Bestand aus den Diagrammen ablesbar ist. *@
+<MudText Typo="Typo.h6" Class="mt-6 mb-2">Verteilungen</MudText>
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_verteilungen is { } v)
+{
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <VerteilungChart Titel="Fälle nach Einstufung" Segmente="@v.FaelleNachEinstufung" Farben="_farbenEinstufung" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <VerteilungChart Titel="Maßnahme-Ausgänge" Segmente="@v.MassnahmeAusgaenge" Farben="_farbenAusgang" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <VerteilungChart Titel="Fraktionen nach Gefährdung" Segmente="@v.FraktionenNachGefaehrdung" Farben="_farbenGefaehrdung" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <VerteilungChart Titel="Offene Anträge nach Art" Segmente="@v.OffeneAntraegeNachArt" Farben="_farbenAntraege" />
+        </MudItem>
+    </MudGrid>
+}
+
 <MudPaper Class="pa-4 mt-6" Elevation="2">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
         <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" />
@@ -128,12 +153,20 @@
     private bool _laden = true;
     private bool _istFuehrung;
     private DashboardKennzahlen? _kennzahlen;
+    private DashboardVerteilungen? _verteilungen;
     private List<DashboardAenderung> _aenderungen = new();
+
+    // NOOSE-Farben je Diagramm – Reihenfolge identisch zur Segment-Reihenfolge im DashboardService.
+    private static readonly string[] _farbenEinstufung = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };          // Unbekannt · Prüffall · Verdachtsfall · Gesichert staatsgefährdend
+    private static readonly string[] _farbenAusgang = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };             // Läuft noch · Offiziell entlassen · Amnestie-Spritze · Erschossen
+    private static readonly string[] _farbenGefaehrdung = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" }; // Keine · Niedrig · Mittel · Hoch · Kritisch
+    private static readonly string[] _farbenAntraege = { "#22D3EE", "#3FB950", "#7C8CF8", "#D29922", "#F85149" };  // Hochstufung · Registrierung · Namensänderung · Taskforce · Beförderung
 
     protected override async Task OnInitializedAsync()
     {
         _istFuehrung = (await AuthStateTask).User.IstFuehrung();
         _kennzahlen = await Dashboard.GetKennzahlenAsync(_istFuehrung);
+        _verteilungen = await Dashboard.GetVerteilungenAsync(_istFuehrung);
         _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung, 50);
         _laden = false;
     }

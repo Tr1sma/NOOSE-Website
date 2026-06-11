@@ -60,6 +60,64 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
         return new DashboardKennzahlen(personen, fraktionen + gruppen + parteien, operationen, offeneVorgaenge, offeneAntraege, verschlusssachen);
     }
 
+    public async Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // Alle vier Verteilungen sind – wie die Kennzahl-Kacheln – VS-gefiltert: Nicht-Führung zählt nur
+        // nicht-klassifizierte Akten, damit aus den Diagrammen kein Verschlusssachen-Bestand ablesbar ist.
+
+        // 1) Fälle (Vorgänge) nach Einstufung. Alle Enum-Werte werden gefüllt (fehlende = 0 → stabile Legende).
+        var einstufungZaehlung = (await db.Vorgaenge
+                .Where(v => istFuehrung || !v.IstVerschlusssache)
+                .GroupBy(v => v.Einstufung)
+                .Select(g => new { Wert = g.Key, Anzahl = g.Count() })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(x => x.Wert, x => x.Anzahl);
+        var faelleNachEinstufung = EinstufungAnzeige.Alle
+            .Select(e => new VerteilungSegment(EinstufungAnzeige.Name(e), einstufungZaehlung.GetValueOrDefault(e)))
+            .ToList();
+
+        // 2) Maßnahme-Ausgänge der Personen-Doks. VS-Filter über die Eltern-Person (Referenz-Navigation →
+        //    INNER JOIN, dessen Soft-Delete-Filter zugleich Doks gelöschter Personen ausblendet).
+        var ausgangZaehlung = (await db.PersonDoks
+                .Where(d => istFuehrung || !d.Person!.IstVerschlusssache)
+                .GroupBy(d => d.Ausgang)
+                .Select(g => new { Wert = g.Key, Anzahl = g.Count() })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(x => x.Wert, x => x.Anzahl);
+        var massnahmeAusgaenge = MassnahmeAusgangAnzeige.Alle
+            .Select(a => new VerteilungSegment(MassnahmeAusgangAnzeige.Name(a), ausgangZaehlung.GetValueOrDefault(a)))
+            .ToList();
+
+        // 3) Fraktionen nach Gefährdung – on-read aus dem (Phase-8-)Bedrohungs-Score abgeleitet. Da der Score
+        //    aktuell für alle Fraktionen null ist, landen vorerst alle in „Keine". Bucketing in-memory (kleine
+        //    Menge, vermeidet eine CASE-Übersetzung).
+        var scores = await db.Fraktionen
+            .Where(f => istFuehrung || !f.IstVerschlusssache)
+            .Select(f => f.BedrohungsScore)
+            .ToListAsync(cancellationToken);
+        var gefaehrdungZaehlung = scores
+            .GroupBy(GefaehrdungsStufeLogic.Aus)
+            .ToDictionary(g => g.Key, g => g.Count());
+        var fraktionenNachGefaehrdung = GefaehrdungsStufeLogic.Alle
+            .Select(s => new VerteilungSegment(GefaehrdungsStufeLogic.Name(s), gefaehrdungZaehlung.GetValueOrDefault(s)))
+            .ToList();
+
+        // 4) Offene Anträge nach Art – exakt dieselben fünf Teilzähler wie die KPI-Kachel „Offene Anträge"
+        //    (GetKennzahlenAsync), nur einzeln ausgewiesen; die Summe entspricht damit der Kachel.
+        var offeneAntraegeNachArt = new List<VerteilungSegment>
+        {
+            new("Hochstufung", await antragService.GetOffeneAnzahlAsync(istFuehrung, cancellationToken)),
+            new("Registrierung", await db.Users.CountAsync(a => a.Status == AgentStatus.Ausstehend, cancellationToken)),
+            new("Namensänderung", await db.Users.CountAsync(a => a.NamensaenderungBeantragtAm != null, cancellationToken)),
+            new("Taskforce", await db.Taskforces.CountAsync(t => t.Status == TaskforceStatus.Beantragt && (istFuehrung || !t.IstVerschlusssache), cancellationToken)),
+            new("Beförderung", await db.AgentBefoerderungsantraege.CountAsync(a => a.Status == BefoerderungStatus.Beantragt, cancellationToken)),
+        };
+
+        return new DashboardVerteilungen(faelleNachEinstufung, massnahmeAusgaenge, fraktionenNachGefaehrdung, offeneAntraegeNachArt);
+    }
+
     public async Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, int max = 8, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
