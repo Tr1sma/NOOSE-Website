@@ -1,5 +1,6 @@
 @page "/taskforces"
 @inject ITaskforceService TaskforceService
+@inject IAktualitaetService Aktualitaet
 @inject NavigationManager Nav
 
 <PageTitle>Taskforces · NOOSE</PageTitle>
@@ -60,6 +61,11 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+                <CellTemplate>
+                    <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
         <NoRecordsContent>
@@ -88,15 +94,23 @@ else
         var user = (await AuthStateTask).User;
         var istFuehrung = user.IstFuehrung();
         var taskforces = await TaskforceService.GetListeAsync(istFuehrung);
-        _zeilen = taskforces.Select(t => new TaskforceZeile
+        var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Taskforce));
+        var jetzt = DateTime.UtcNow;
+        _zeilen = taskforces.Select(t =>
         {
-            Id = t.Id,
-            Aktenzeichen = t.Aktenzeichen,
-            Name = t.Name,
-            Geltungsbereich = TaskforceGeltungsbereichAnzeige.Name(t.Geltungsbereich),
-            Status = t.Status,
-            IstVerschlusssache = t.IstVerschlusssache,
-            Aktualisiert = (t.GeaendertAm ?? t.ErstelltAm).ToLocalTime(),
+            var referenzUtc = t.GeaendertAm ?? t.ErstelltAm;
+            return new TaskforceZeile
+            {
+                Id = t.Id,
+                Aktenzeichen = t.Aktenzeichen,
+                Name = t.Name,
+                Geltungsbereich = TaskforceGeltungsbereichAnzeige.Name(t.Geltungsbereich),
+                Status = t.Status,
+                IstVerschlusssache = t.IstVerschlusssache,
+                AktualisiertUtc = referenzUtc,
+                Aktualisiert = referenzUtc.ToLocalTime(),
+                Stufe = AktualitaetsBewertung.Stufe(warnungTage, veraltetTage, referenzUtc, jetzt),
+            };
         }).ToList();
         _laden = false;
     }
@@ -132,6 +146,8 @@ else
         public string Geltungsbereich { get; set; } = string.Empty;
         public TaskforceStatus Status { get; set; }
         public bool IstVerschlusssache { get; set; }
+        public DateTime AktualisiertUtc { get; set; }
         public DateTime Aktualisiert { get; set; }
+        public AktualitaetsStufe Stufe { get; set; }
     }
 }

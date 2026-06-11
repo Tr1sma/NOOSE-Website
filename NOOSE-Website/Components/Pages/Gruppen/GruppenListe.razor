@@ -1,5 +1,6 @@
 @page "/personengruppen"
 @inject IPersonengruppeService GruppeService
+@inject IAktualitaetService Aktualitaet
 @inject NavigationManager Nav
 
 <PageTitle>Personengruppen · NOOSE</PageTitle>
@@ -64,6 +65,11 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+                <CellTemplate>
+                    <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
         <NoRecordsContent>
@@ -92,17 +98,25 @@ else
         var user = (await AuthStateTask).User;
         var istFuehrung = user.IstFuehrung();
         var gruppen = await GruppeService.GetListeAsync(istFuehrung);
-        _zeilen = gruppen.Select(g => new GruppeZeile
+        var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Personengruppe));
+        var jetzt = DateTime.UtcNow;
+        _zeilen = gruppen.Select(g =>
         {
-            Id = g.Id,
-            Aktenzeichen = g.Aktenzeichen,
-            Name = g.Name,
-            // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
-            Mitgliederzahl = g.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
-            Art = g.Art,
-            Einstufung = g.Einstufung,
-            IstVerschlusssache = g.IstVerschlusssache,
-            Aktualisiert = (g.GeaendertAm ?? g.ErstelltAm).ToLocalTime(),
+            var referenzUtc = g.GeaendertAm ?? g.ErstelltAm;
+            return new GruppeZeile
+            {
+                Id = g.Id,
+                Aktenzeichen = g.Aktenzeichen,
+                Name = g.Name,
+                // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+                Mitgliederzahl = g.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
+                Art = g.Art,
+                Einstufung = g.Einstufung,
+                IstVerschlusssache = g.IstVerschlusssache,
+                AktualisiertUtc = referenzUtc,
+                Aktualisiert = referenzUtc.ToLocalTime(),
+                Stufe = AktualitaetsBewertung.Stufe(warnungTage, veraltetTage, referenzUtc, jetzt),
+            };
         }).ToList();
         _laden = false;
     }
@@ -133,6 +147,8 @@ else
         public GruppenArt Art { get; set; }
         public Einstufung Einstufung { get; set; }
         public bool IstVerschlusssache { get; set; }
+        public DateTime AktualisiertUtc { get; set; }
         public DateTime Aktualisiert { get; set; }
+        public AktualitaetsStufe Stufe { get; set; }
     }
 }

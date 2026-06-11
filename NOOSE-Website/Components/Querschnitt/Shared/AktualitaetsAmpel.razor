@@ -1,0 +1,51 @@
+@* Aktualitäts-Ampel einer Akte: farbiger Punkt (grün/gelb/rot) je nach Alter der letzten Änderung.
+   Zwei Nutzungsarten:
+   • Listen geben die bereits berechnete Stufe direkt (kein DB-Treffer je Zeile).
+   • Detailkarten geben Aktentyp + UTC-Referenzdatum; die Stufe wird über den (gecachten) Dienst ermittelt. *@
+@inject IAktualitaetService Aktualitaet
+
+<MudTooltip Text="@TooltipText">
+    <MudIcon Icon="@Icons.Material.Filled.Circle" Color="@AktualitaetsStufeAnzeige.Farbe(_stufe)" Size="Size" />
+</MudTooltip>
+
+@code {
+    /// <summary>Modus A: bereits berechnete Stufe (Listen berechnen sie einmalig je Laden).</summary>
+    [Parameter] public AktualitaetsStufe? Stufe { get; set; }
+
+    /// <summary>Modus B: Aktentyp (z. B. <c>nameof(Person)</c>) zur Selbstberechnung der Stufe.</summary>
+    [Parameter] public string? AktenTyp { get; set; }
+
+    /// <summary>Referenzdatum in UTC (<c>GeaendertAm ?? ErstelltAm</c>) – für Selbstberechnung und Tooltip.</summary>
+    [Parameter] public DateTime? ReferenzdatumUtc { get; set; }
+
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private AktualitaetsStufe _stufe;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Stufe is { } vorgegeben)
+        {
+            _stufe = vorgegeben;
+        }
+        else if (!string.IsNullOrEmpty(AktenTyp) && ReferenzdatumUtc is { } d)
+        {
+            _stufe = await Aktualitaet.BewertenAsync(AktenTyp, d);
+        }
+    }
+
+    private string TooltipText
+    {
+        get
+        {
+            var name = AktualitaetsStufeAnzeige.Name(_stufe);
+            if (ReferenzdatumUtc is not { } d)
+            {
+                return name;
+            }
+            var tage = (int)Math.Floor((DateTime.UtcNow - d).TotalDays);
+            var alter = tage <= 0 ? "heute" : tage == 1 ? "vor 1 Tag" : $"vor {tage} Tagen";
+            return $"{name} · zuletzt aktualisiert {alter}";
+        }
+    }
+}

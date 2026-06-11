@@ -1,5 +1,6 @@
 @page "/vorgaenge"
 @inject IVorgangService VorgangService
+@inject IAktualitaetService Aktualitaet
 @inject NavigationManager Nav
 
 <PageTitle>Vorgänge · NOOSE</PageTitle>
@@ -65,6 +66,11 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+                <CellTemplate>
+                    <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
         <NoRecordsContent>
@@ -93,16 +99,24 @@ else
         var user = (await AuthStateTask).User;
         var istFuehrung = user.IstFuehrung();
         var vorgaenge = await VorgangService.GetListeAsync(istFuehrung);
-        _zeilen = vorgaenge.Select(v => new VorgangZeile
+        var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Vorgang));
+        var jetzt = DateTime.UtcNow;
+        _zeilen = vorgaenge.Select(v =>
         {
-            Id = v.Id,
-            Aktenzeichen = v.Aktenzeichen,
-            Titel = v.Titel,
-            Typ = v.Typ ?? string.Empty,
-            Status = v.Status,
-            Einstufung = v.Einstufung,
-            IstVerschlusssache = v.IstVerschlusssache,
-            Aktualisiert = (v.GeaendertAm ?? v.ErstelltAm).ToLocalTime(),
+            var referenzUtc = v.GeaendertAm ?? v.ErstelltAm;
+            return new VorgangZeile
+            {
+                Id = v.Id,
+                Aktenzeichen = v.Aktenzeichen,
+                Titel = v.Titel,
+                Typ = v.Typ ?? string.Empty,
+                Status = v.Status,
+                Einstufung = v.Einstufung,
+                IstVerschlusssache = v.IstVerschlusssache,
+                AktualisiertUtc = referenzUtc,
+                Aktualisiert = referenzUtc.ToLocalTime(),
+                Stufe = AktualitaetsBewertung.Stufe(warnungTage, veraltetTage, referenzUtc, jetzt),
+            };
         }).ToList();
         _laden = false;
     }
@@ -140,6 +154,8 @@ else
         public VorgangStatus Status { get; set; }
         public Einstufung Einstufung { get; set; }
         public bool IstVerschlusssache { get; set; }
+        public DateTime AktualisiertUtc { get; set; }
         public DateTime Aktualisiert { get; set; }
+        public AktualitaetsStufe Stufe { get; set; }
     }
 }

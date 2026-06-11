@@ -132,6 +132,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Dokument> Dokumente => Set<Dokument>();
     public DbSet<DokumentVorlage> DokumentVorlagen => Set<DokumentVorlage>();
 
+    // ---- Phase 7: Aktualitäts-Ampel (Schwellwerte je Aktentyp) + Wiedervorlagen ----
+    public DbSet<AktualitaetsSchwelle> AktualitaetsSchwellen => Set<AktualitaetsSchwelle>();
+    public DbSet<Wiedervorlage> Wiedervorlagen => Set<Wiedervorlage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -361,6 +365,31 @@ public class AppDbContext : IdentityDbContext<Agent>
             // Eindeutigkeit prüft DokumentVorlageService (respektiert den Soft-Delete-Filter).
             b.HasIndex(v => v.Name);
             b.HasIndex(v => v.IstAktiv);
+        });
+
+        // ---- Phase 7: Aktualitäts-Ampel + Wiedervorlagen ----
+        modelBuilder.Entity<AktualitaetsSchwelle>(b =>
+        {
+            // Eine Konfig-Zeile je Aktentyp (z. B. nameof(Person)) → Aktentyp ist der Primärschlüssel.
+            b.HasKey(s => s.AktenTyp);
+            b.Property(s => s.AktenTyp).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<Wiedervorlage>(b =>
+        {
+            b.Property(w => w.EntitaetTyp).HasMaxLength(128);
+            b.Property(w => w.EntitaetId).HasMaxLength(64);
+            b.Property(w => w.Notiz).HasMaxLength(500);
+            b.Property(w => w.ZustaendigerAgentId).HasMaxLength(64);
+            b.Property(w => w.ErledigtVonId).HasMaxLength(64);
+            // Schneller Lade-Pfad „alle Wiedervorlagen einer Akte".
+            b.HasIndex(w => new { w.EntitaetTyp, w.EntitaetId });
+            // Job-Query: offene, fällige, noch nicht gemeldete Wiedervorlagen.
+            b.HasIndex(w => new { w.FaelligAm, w.Erledigt, w.BenachrichtigtAm });
+            // FK auf den zuständigen Identity-Agent: SetNull, damit ein gelöschter Agent die Wiedervorlage
+            // nicht mitlöscht (Feld ist nullable).
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(w => w.ZustaendigerAgentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<TagZuordnung>(b =>

@@ -36,9 +36,12 @@
 
         <MudDivider />
 
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Zuletzt aktualisiert: @((Fraktion.GeaendertAm ?? Fraktion.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <AktualitaetsAmpel AktenTyp="@nameof(Fraktion)" ReferenzdatumUtc="@(Fraktion.GeaendertAm ?? Fraktion.ErstelltAm)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Fraktion.GeaendertAm ?? Fraktion.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
         <MudStack Row="true" Spacing="4" Class="flex-wrap">
             @foreach (var (wert, label) in Kennzahlen())
             {

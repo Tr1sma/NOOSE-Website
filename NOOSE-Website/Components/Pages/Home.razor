@@ -1,6 +1,8 @@
 @page "/"
 @using NOOSE_Website.Models.Dashboard
 @inject IDashboardService Dashboard
+@inject IWiedervorlageService WiedervorlageService
+@inject NavigationManager Nav
 
 <PageTitle>Dashboard · NOOSE</PageTitle>
 
@@ -75,10 +77,28 @@
             </MudPaper>
         </MudItem>
     }
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Timelapse" Color="Color.Warning" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Veraltete Akten</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">@Zahl(k => k.VeralteteAkten)</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Color="Color.Info" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Fällige Wiedervorlagen</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">@(_laden ? "…" : _meineFaelligen.Count.ToString())</MudText>
+        </MudPaper>
+    </MudItem>
 </MudGrid>
 
-@* Verteilungen (§248): vier Diagramme über den aktuellen Bestand. Aus Sicht des Agents VS-gefiltert
-   (genau wie die Kennzahl-Kacheln), damit kein Verschlusssachen-Bestand aus den Diagrammen ablesbar ist. *@
+@* Obere Reihe: die beiden Bestandsdiagramme kompakt in einer halb breiten Kachel, daneben die echte
+   Fraktionsliste nach Gefährdung (VS-gefiltert). *@
 <MudText Typo="Typo.h6" Class="mt-6 mb-2">Verteilungen</MudText>
 @if (_laden)
 {
@@ -87,64 +107,165 @@
 else if (_verteilungen is { } v)
 {
     <MudGrid>
-        <MudItem xs="12" md="6">
-            <VerteilungChart Titel="Fälle nach Einstufung" Segmente="@v.FaelleNachEinstufung" Farben="_farbenEinstufung" />
+        <MudItem xs="12" md="6" Class="d-flex">
+            <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
+                <MudGrid>
+                    <MudItem xs="12" sm="6" Class="d-flex">
+                        <VerteilungChart Bare="true" Height="170px" Titel="Fälle nach Einstufung" Segmente="@v.FaelleNachEinstufung" Farben="_farbenEinstufung" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" Class="d-flex">
+                        <VerteilungChart Bare="true" Height="170px" Titel="Maßnahme-Ausgänge" Segmente="@v.MassnahmeAusgaenge" Farben="_farbenAusgang" />
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
         </MudItem>
-        <MudItem xs="12" md="6">
-            <VerteilungChart Titel="Maßnahme-Ausgänge" Segmente="@v.MassnahmeAusgaenge" Farben="_farbenAusgang" />
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <VerteilungChart Titel="Fraktionen nach Gefährdung" Segmente="@v.FraktionenNachGefaehrdung" Farben="_farbenGefaehrdung" />
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <VerteilungChart Titel="Offene Anträge nach Art" Segmente="@v.OffeneAntraegeNachArt" Farben="_farbenAntraege" />
+        <MudItem xs="12" md="6" Class="d-flex">
+            <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-2">Fraktionen nach Gefährdung</MudText>
+                @if (_fraktionenGefaehrdung.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Fraktionen erfasst.</MudText>
+                }
+                else
+                {
+                    <div class="dashboard-fraktionsliste">
+                        <MudList T="string" Dense="true">
+                            @foreach (var f in _fraktionenGefaehrdung)
+                            {
+                                <MudListItem T="string" OnClick="@(() => OeffneAkte(f.Href))" Style="cursor:pointer;">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <span style="@($"display:inline-block;width:12px;height:12px;border-radius:50%;background:{GefaehrdungFarbe(f.Stufe)};flex:none;")"></span>
+                                            <div>
+                                                <MudText Typo="Typo.body2"><b>@f.Name</b></MudText>
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.Aktenzeichen</MudText>
+                                            </div>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@GefaehrdungsStufeLogic.Name(f.Stufe)</MudText>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </div>
+                }
+            </MudPaper>
         </MudItem>
     </MudGrid>
 }
 
-<MudPaper Class="pa-4 mt-6" Elevation="2">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
-        <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" />
-        <MudText Typo="Typo.h6">Letzte Änderungen</MudText>
-    </MudStack>
-
-    @if (_laden)
-    {
-        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-    }
-    else if (_aenderungen.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Änderungen erfasst.</MudText>
-    }
-    else
-    {
-        <div class="dashboard-verlauf-liste">
-        <MudTimeline TimelinePosition="TimelinePosition.Start" Class="mt-2">
-            @foreach (var x in _aenderungen)
+@if (!_laden && _meineFaelligen.Count > 0)
+{
+    <MudPaper Class="pa-4 mt-6" Elevation="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Color="Color.Info" />
+            <MudText Typo="Typo.h6">Meine fälligen Wiedervorlagen</MudText>
+        </MudStack>
+        <MudList T="string" Dense="true">
+            @foreach (var w in _meineFaelligen)
             {
-                <MudTimelineItem Color="@Farbe(x.Aktion)" Size="Size.Small">
-                    <MudText Typo="Typo.body2">
-                        <b>@TypLabel(x.AkteTyp)</b>
-                        @if (x.AkteGeloescht)
-                        {
-                            <span>»@x.AkteName«</span>
-                            <span class="mud-text-secondary"> (im Papierkorb)</span>
-                        }
-                        else
-                        {
-                            <MudLink Href="@Link(x)">»@x.AkteName«</MudLink>
-                        }
-                        <span class="mud-text-secondary"> · @AktionText(x)</span>
-                    </MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        @x.Aktenzeichen · @x.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(x.AgentName ?? "System")
-                    </MudText>
-                </MudTimelineItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.EventBusy" IconColor="Color.Error"
+                             OnClick="@(() => OeffneAkte(w.Href))" Style="@(w.Href is null ? null : "cursor:pointer;")">
+                    <MudText Typo="Typo.body2"><b>@w.Anzeige</b> · fällig @w.FaelligAm.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                    @if (!string.IsNullOrWhiteSpace(w.Notiz))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@w.Notiz</MudText>
+                    }
+                </MudListItem>
             }
-        </MudTimeline>
-        </div>
-    }
-</MudPaper>
+        </MudList>
+    </MudPaper>
+}
+
+@* Untere Reihe: Aktualisierungsbedarf, Offene Anträge nach Art und Letzte Änderungen – gleich hoch und in sich scrollbar. *@
+@if (!_laden && _verteilungen is { } va)
+{
+    <MudGrid Class="mt-1">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:28rem;display:flex;flex-direction:column;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudIcon Icon="@Icons.Material.Filled.Timelapse" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6">Aktualisierungsbedarf</MudText>
+                </MudStack>
+                @if (_aktualisierungsbedarf.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Alles aktuell – kein Aktualisierungsbedarf.</MudText>
+                }
+                else
+                {
+                    <div class="dashboard-spalte-body">
+                        <MudList T="string" Dense="true">
+                            @foreach (var a in _aktualisierungsbedarf)
+                            {
+                                <MudListItem T="string" OnClick="@(() => OeffneAkte(a.Href))" Style="cursor:pointer;">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <AktualitaetsAmpel Stufe="a.Stufe" ReferenzdatumUtc="a.ReferenzUtc" />
+                                        <div>
+                                            <MudText Typo="Typo.body2"><b>@TypLabel(a.Typ)</b> »@a.Name«</MudText>
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                @a.Aktenzeichen · zuletzt @a.ReferenzUtc.ToLocalTime().ToString("dd.MM.yyyy")
+                                            </MudText>
+                                        </div>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                        @if (_aktualisierungsbedarf.Count >= 30)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">… weitere vorhanden (älteste 30 angezeigt).</MudText>
+                        }
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:28rem;display:flex;flex-direction:column;">
+                <div class="dashboard-spalte-body d-flex flex-column justify-center">
+                    <VerteilungChart Bare="true" Height="240px" Titel="Offene Anträge nach Art" Segmente="@va.OffeneAntraegeNachArt" Farben="_farbenAntraege" />
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:28rem;display:flex;flex-direction:column;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Letzte Änderungen</MudText>
+                </MudStack>
+                @if (_aenderungen.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Änderungen erfasst.</MudText>
+                }
+                else
+                {
+                    <div class="dashboard-spalte-body">
+                        <MudTimeline TimelinePosition="TimelinePosition.Start" Class="mt-2">
+                            @foreach (var x in _aenderungen)
+                            {
+                                <MudTimelineItem Color="@Farbe(x.Aktion)" Size="Size.Small">
+                                    <MudText Typo="Typo.body2">
+                                        <b>@TypLabel(x.AkteTyp)</b>
+                                        @if (x.AkteGeloescht)
+                                        {
+                                            <span>»@x.AkteName«</span>
+                                            <span class="mud-text-secondary"> (im Papierkorb)</span>
+                                        }
+                                        else
+                                        {
+                                            <MudLink Href="@Link(x)">»@x.AkteName«</MudLink>
+                                        }
+                                        <span class="mud-text-secondary"> · @AktionText(x)</span>
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @x.Aktenzeichen · @x.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(x.AgentName ?? "System")
+                                    </MudText>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
 </div>
 
 @code {
@@ -155,6 +276,9 @@ else if (_verteilungen is { } v)
     private DashboardKennzahlen? _kennzahlen;
     private DashboardVerteilungen? _verteilungen;
     private List<DashboardAenderung> _aenderungen = new();
+    private List<WiedervorlageDashboardItem> _meineFaelligen = new();
+    private List<DashboardVeralteteAkte> _aktualisierungsbedarf = new();
+    private List<DashboardFraktionGefaehrdung> _fraktionenGefaehrdung = new();
 
     // NOOSE-Farben je Diagramm – Reihenfolge identisch zur Segment-Reihenfolge im DashboardService.
     private static readonly string[] _farbenEinstufung = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };          // Unbekannt · Prüffall · Verdachtsfall · Gesichert staatsgefährdend
@@ -164,11 +288,30 @@ else if (_verteilungen is { } v)
 
     protected override async Task OnInitializedAsync()
     {
-        _istFuehrung = (await AuthStateTask).User.IstFuehrung();
+        var user = (await AuthStateTask).User;
+        _istFuehrung = user.IstFuehrung();
         _kennzahlen = await Dashboard.GetKennzahlenAsync(_istFuehrung);
         _verteilungen = await Dashboard.GetVerteilungenAsync(_istFuehrung);
         _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung, 50);
+        _meineFaelligen = await WiedervorlageService.GetMeineFaelligenAsync(user);
+        _aktualisierungsbedarf = await Dashboard.GetAktualisierungsbedarfAsync(_istFuehrung);
+        _fraktionenGefaehrdung = await Dashboard.GetFraktionenNachGefaehrdungAsync(_istFuehrung);
         _laden = false;
+    }
+
+    // Ampelfarbe je Gefährdungsstufe – identisch zur Diagramm-Palette (Keine→Kritisch).
+    private string GefaehrdungFarbe(GefaehrdungsStufe stufe)
+    {
+        var i = (int)stufe;
+        return i >= 0 && i < _farbenGefaehrdung.Length ? _farbenGefaehrdung[i] : "#9BA8B8";
+    }
+
+    private void OeffneAkte(string? href)
+    {
+        if (!string.IsNullOrEmpty(href))
+        {
+            Nav.NavigateTo(href);
+        }
     }
 
     private string Zahl(Func<DashboardKennzahlen, int> auswahl)

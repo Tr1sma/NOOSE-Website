@@ -1,5 +1,6 @@
 @page "/operationen"
 @inject IOperationService OperationService
+@inject IAktualitaetService Aktualitaet
 @inject NavigationManager Nav
 
 <PageTitle>Operationen · NOOSE</PageTitle>
@@ -66,6 +67,11 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+                <CellTemplate>
+                    <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
         <NoRecordsContent>
@@ -94,17 +100,25 @@ else
         var user = (await AuthStateTask).User;
         var istFuehrung = user.IstFuehrung();
         var operationen = await OperationService.GetListeAsync(istFuehrung);
-        _zeilen = operationen.Select(o => new OperationZeile
+        var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Operation));
+        var jetzt = DateTime.UtcNow;
+        _zeilen = operationen.Select(o =>
         {
-            Id = o.Id,
-            Aktenzeichen = o.Aktenzeichen,
-            Titel = o.Titel,
-            Typ = o.Typ ?? string.Empty,
-            Status = o.Status,
-            Beginn = o.Beginn?.ToLocalTime(),
-            Einstufung = o.Einstufung,
-            IstVerschlusssache = o.IstVerschlusssache,
-            Aktualisiert = (o.GeaendertAm ?? o.ErstelltAm).ToLocalTime(),
+            var referenzUtc = o.GeaendertAm ?? o.ErstelltAm;
+            return new OperationZeile
+            {
+                Id = o.Id,
+                Aktenzeichen = o.Aktenzeichen,
+                Titel = o.Titel,
+                Typ = o.Typ ?? string.Empty,
+                Status = o.Status,
+                Beginn = o.Beginn?.ToLocalTime(),
+                Einstufung = o.Einstufung,
+                IstVerschlusssache = o.IstVerschlusssache,
+                AktualisiertUtc = referenzUtc,
+                Aktualisiert = referenzUtc.ToLocalTime(),
+                Stufe = AktualitaetsBewertung.Stufe(warnungTage, veraltetTage, referenzUtc, jetzt),
+            };
         }).ToList();
         _laden = false;
     }
@@ -143,6 +157,8 @@ else
         public DateTime? Beginn { get; set; }
         public Einstufung Einstufung { get; set; }
         public bool IstVerschlusssache { get; set; }
+        public DateTime AktualisiertUtc { get; set; }
         public DateTime Aktualisiert { get; set; }
+        public AktualitaetsStufe Stufe { get; set; }
     }
 }

@@ -25,6 +25,9 @@ public enum NotificationTyp
 
     /// <summary>Eine an den Empfänger gerichtete Ankündigung/Behörden-Broadcast wurde veröffentlicht.</summary>
     Ankuendigung = 5,
+
+    /// <summary>Eine Wiedervorlage an einer Akte ist fällig (Empfänger = Zuständiger oder Folger der Akte).</summary>
+    Wiedervorlage = 6,
 }
 
 /// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
@@ -38,6 +41,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.AkteGeaendert => "Beobachtete Akte geändert",
         NotificationTyp.AufgabeZugewiesen => "Aufgabe",
         NotificationTyp.Ankuendigung => "Ankündigung",
+        NotificationTyp.Wiedervorlage => "Wiedervorlage fällig",
         _ => "Benachrichtigung",
     };
 
@@ -50,6 +54,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.AkteGeaendert => Icons.Material.Filled.Visibility,
         NotificationTyp.AufgabeZugewiesen => Icons.Material.Filled.AssignmentInd,
         NotificationTyp.Ankuendigung => Icons.Material.Filled.Campaign,
+        NotificationTyp.Wiedervorlage => Icons.Material.Filled.EventRepeat,
         _ => Icons.Material.Filled.Notifications,
     };
 }

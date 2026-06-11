@@ -86,6 +86,9 @@ else
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
+                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                    <WiedervorlagePanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <KommentarPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
@@ -118,7 +121,7 @@ else
     private static readonly string[] _tabs =
     {
         "stammdaten", "mitglieder", "agents", "einstufung", "doks",
-        "beziehungen", "quellen", "kommentare", "zusatzfelder", "historie",
+        "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 
     protected override async Task OnInitializedAsync()

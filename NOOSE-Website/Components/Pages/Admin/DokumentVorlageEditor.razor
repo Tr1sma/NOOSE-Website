@@ -55,7 +55,9 @@ else
                 <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
                     @foreach (var (token, beschreibung) in Platzhalter.VerfuegbarePlatzhalter)
                     {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Title="@beschreibung">@token</MudChip>
+                        <MudTooltip Text="@beschreibung">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@token</MudChip>
+                        </MudTooltip>
                     }
                 </MudStack>
             </MudAlert>

@@ -14,7 +14,8 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IDashboardService" />
-public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntragService antragService) : IDashboardService
+public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntragService antragService,
+    IAktualitaetService aktualitaet) : IDashboardService
 {
     public async Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -56,8 +57,146 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
                 + await db.Vorgaenge.CountAsync(v => v.IstVerschlusssache, cancellationToken);
         }
 
+        // Veraltete Akten: je Aktentyp ab dem konfigurierten „rot"-Schwellwert ohne Änderung. Referenzdatum ist
+        // GeaendertAm ?? ErstelltAm (COALESCE in SQL). VS-gefiltert wie die übrigen Kennzahlen.
+        var schwellen = await aktualitaet.GetSchwellenAsync(cancellationToken);
+        var jetzt = DateTime.UtcNow;
+        DateTime Stichtag(string typ) => jetzt.AddDays(-schwellen[typ].VeraltetTage);
+        var sP = Stichtag(nameof(Person));
+        var sF = Stichtag(nameof(Fraktion));
+        var sG = Stichtag(nameof(Personengruppe));
+        var sPt = Stichtag(nameof(Partei));
+        var sO = Stichtag(nameof(Operation));
+        var sT = Stichtag(nameof(Taskforce));
+        var sV = Stichtag(nameof(Vorgang));
+        var veralteteAkten =
+              await db.Personen.CountAsync(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < sP, cancellationToken)
+            + await db.Fraktionen.CountAsync(f => (istFuehrung || !f.IstVerschlusssache) && (f.GeaendertAm ?? f.ErstelltAm) < sF, cancellationToken)
+            + await db.Personengruppen.CountAsync(g => (istFuehrung || !g.IstVerschlusssache) && (g.GeaendertAm ?? g.ErstelltAm) < sG, cancellationToken)
+            + await db.Parteien.CountAsync(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < sPt, cancellationToken)
+            + await db.Operationen.CountAsync(o => (istFuehrung || !o.IstVerschlusssache) && (o.GeaendertAm ?? o.ErstelltAm) < sO, cancellationToken)
+            + await db.Taskforces.CountAsync(t => (istFuehrung || !t.IstVerschlusssache) && (t.GeaendertAm ?? t.ErstelltAm) < sT, cancellationToken)
+            + await db.Vorgaenge.CountAsync(v => (istFuehrung || !v.IstVerschlusssache) && (v.GeaendertAm ?? v.ErstelltAm) < sV, cancellationToken);
+
         // Die Org-Kachel bündelt Fraktionen, Personengruppen und Parteien; Operationen sind eine eigene Kachel.
-        return new DashboardKennzahlen(personen, fraktionen + gruppen + parteien, operationen, offeneVorgaenge, offeneAntraege, verschlusssachen);
+        return new DashboardKennzahlen(personen, fraktionen + gruppen + parteien, operationen, offeneVorgaenge, offeneAntraege, verschlusssachen, veralteteAkten);
+    }
+
+    public async Task<List<DashboardVeralteteAkte>> GetAktualisierungsbedarfAsync(bool istFuehrung, int max = 30,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var schwellen = await aktualitaet.GetSchwellenAsync(cancellationToken);
+        var jetzt = DateTime.UtcNow;
+        var ergebnis = new List<DashboardVeralteteAkte>();
+
+        // Aktualisierungsbedarf beginnt ab dem „gelb"-Schwellwert (Warnung); die genaue Stufe (gelb/rot) berechnet
+        // AktualitaetsBewertung. Referenzdatum = GeaendertAm ?? ErstelltAm. Je Typ die ältesten N laden (VS-gefiltert),
+        // am Ende global nach Alter sortiert und auf max gekappt.
+        var (wP, vP) = schwellen[nameof(Person)];
+        var cutP = jetzt.AddDays(-wP);
+        foreach (var x in await db.Personen
+            .Where(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < cutP)
+            .OrderBy(p => p.GeaendertAm ?? p.ErstelltAm)
+            .Select(p => new { p.Id, p.Name, p.Aktenzeichen, Referenz = p.GeaendertAm ?? p.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Person, x.Name, x.Aktenzeichen, $"/personen/{x.Id}",
+                AktualitaetsBewertung.Stufe(wP, vP, x.Referenz, jetzt), x.Referenz));
+        }
+
+        var (wF, vF) = schwellen[nameof(Fraktion)];
+        var cutF = jetzt.AddDays(-wF);
+        foreach (var x in await db.Fraktionen
+            .Where(f => (istFuehrung || !f.IstVerschlusssache) && (f.GeaendertAm ?? f.ErstelltAm) < cutF)
+            .OrderBy(f => f.GeaendertAm ?? f.ErstelltAm)
+            .Select(f => new { f.Id, f.Name, f.Aktenzeichen, Referenz = f.GeaendertAm ?? f.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Fraktion, x.Name, x.Aktenzeichen, $"/fraktionen/{x.Id}",
+                AktualitaetsBewertung.Stufe(wF, vF, x.Referenz, jetzt), x.Referenz));
+        }
+
+        var (wG, vG) = schwellen[nameof(Personengruppe)];
+        var cutG = jetzt.AddDays(-wG);
+        foreach (var x in await db.Personengruppen
+            .Where(g => (istFuehrung || !g.IstVerschlusssache) && (g.GeaendertAm ?? g.ErstelltAm) < cutG)
+            .OrderBy(g => g.GeaendertAm ?? g.ErstelltAm)
+            .Select(g => new { g.Id, g.Name, g.Aktenzeichen, Referenz = g.GeaendertAm ?? g.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Personengruppe, x.Name, x.Aktenzeichen, $"/personengruppen/{x.Id}",
+                AktualitaetsBewertung.Stufe(wG, vG, x.Referenz, jetzt), x.Referenz));
+        }
+
+        var (wPt, vPt) = schwellen[nameof(Partei)];
+        var cutPt = jetzt.AddDays(-wPt);
+        foreach (var x in await db.Parteien
+            .Where(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < cutPt)
+            .OrderBy(p => p.GeaendertAm ?? p.ErstelltAm)
+            .Select(p => new { p.Id, p.Name, p.Aktenzeichen, Referenz = p.GeaendertAm ?? p.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Partei, x.Name, x.Aktenzeichen, $"/parteien/{x.Id}",
+                AktualitaetsBewertung.Stufe(wPt, vPt, x.Referenz, jetzt), x.Referenz));
+        }
+
+        var (wO, vO) = schwellen[nameof(Operation)];
+        var cutO = jetzt.AddDays(-wO);
+        foreach (var x in await db.Operationen
+            .Where(o => (istFuehrung || !o.IstVerschlusssache) && (o.GeaendertAm ?? o.ErstelltAm) < cutO)
+            .OrderBy(o => o.GeaendertAm ?? o.ErstelltAm)
+            .Select(o => new { o.Id, Name = o.Titel, o.Aktenzeichen, Referenz = o.GeaendertAm ?? o.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Operation, x.Name, x.Aktenzeichen, $"/operationen/{x.Id}",
+                AktualitaetsBewertung.Stufe(wO, vO, x.Referenz, jetzt), x.Referenz));
+        }
+
+        var (wT, vT) = schwellen[nameof(Taskforce)];
+        var cutT = jetzt.AddDays(-wT);
+        foreach (var x in await db.Taskforces
+            .Where(t => (istFuehrung || !t.IstVerschlusssache) && (t.GeaendertAm ?? t.ErstelltAm) < cutT)
+            .OrderBy(t => t.GeaendertAm ?? t.ErstelltAm)
+            .Select(t => new { t.Id, t.Name, t.Aktenzeichen, Referenz = t.GeaendertAm ?? t.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Taskforce, x.Name, x.Aktenzeichen, $"/taskforces/{x.Id}",
+                AktualitaetsBewertung.Stufe(wT, vT, x.Referenz, jetzt), x.Referenz));
+        }
+
+        var (wV, vV) = schwellen[nameof(Vorgang)];
+        var cutV = jetzt.AddDays(-wV);
+        foreach (var x in await db.Vorgaenge
+            .Where(v => (istFuehrung || !v.IstVerschlusssache) && (v.GeaendertAm ?? v.ErstelltAm) < cutV)
+            .OrderBy(v => v.GeaendertAm ?? v.ErstelltAm)
+            .Select(v => new { v.Id, Name = v.Titel, v.Aktenzeichen, Referenz = v.GeaendertAm ?? v.ErstelltAm })
+            .Take(max).ToListAsync(cancellationToken))
+        {
+            ergebnis.Add(new DashboardVeralteteAkte(DashboardAkteTyp.Vorgang, x.Name, x.Aktenzeichen, $"/vorgaenge/{x.Id}",
+                AktualitaetsBewertung.Stufe(wV, vV, x.Referenz, jetzt), x.Referenz));
+        }
+
+        // Älteste zuerst (höchster Aktualisierungsbedarf oben), dann global kappen.
+        return ergebnis.OrderBy(e => e.ReferenzUtc).Take(max).ToList();
+    }
+
+    public async Task<List<DashboardFraktionGefaehrdung>> GetFraktionenNachGefaehrdungAsync(bool istFuehrung,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // Echte Fraktionsliste (nicht aggregiert), gefährlichste zuerst. Gefährdungsstufe on-read aus dem
+        // (Phase-8-)Bedrohungs-Score abgeleitet; ohne Score → „Keine" (sortiert ans Ende). VS-gefiltert.
+        var rows = await db.Fraktionen
+            .Where(f => istFuehrung || !f.IstVerschlusssache)
+            .OrderByDescending(f => f.BedrohungsScore ?? 0)
+            .ThenBy(f => f.Name)
+            .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.BedrohungsScore })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(f => new DashboardFraktionGefaehrdung(
+            f.Name, f.Aktenzeichen, $"/fraktionen/{f.Id}", GefaehrdungsStufeLogic.Aus(f.BedrohungsScore))).ToList();
     }
 
     public async Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, CancellationToken cancellationToken = default)

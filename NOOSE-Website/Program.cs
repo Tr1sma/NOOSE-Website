@@ -1,4 +1,7 @@
+using System.Net;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +19,7 @@ using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Storage;
+using NOOSE_Website.Infrastructure.Wiedervorlagen;
 using NOOSE_Website.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,23 +30,52 @@ builder.Services.AddMudServices();
 // HttpContext-Zugriff (vom CurrentUserService / Audit genutzt).
 builder.Services.AddHttpContextAccessor();
 
+// Reverse-Proxy (nginx terminiert TLS auf dem Server): die X-Forwarded-*-Header übernehmen,
+// damit die App das echte Schema (https) und die Client-IP kennt. Ohne das erzeugt der
+// Discord-OAuth-Flow http://-Redirect-URIs und die Auth-Cookies werden nicht als „secure" gesetzt.
+// Es wird nur dem lokalen nginx (Loopback) vertraut – Kestrel lauscht ausschließlich auf 127.0.0.1.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownProxies.Add(IPAddress.Loopback);
+    options.KnownProxies.Add(IPAddress.IPv6Loopback);
+});
+
+// Data-Protection-Schlüssel (verschlüsseln Auth-Cookies & Antiforgery-Tokens) dauerhaft ablegen.
+// Ohne persistente Schlüssel erzeugt die App bei jedem Start neue → alle Nutzer würden bei jedem
+// Neustart/Deploy ausgeloggt und Formulare/Logins schlagen fehl. Ablage unter App_Data/keys
+// (muss für den Dienst-Benutzer www-data schreibbar sein).
+var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("NOOSE-Website");
+
 // Datei-Upload-Konfiguration (Foto-Galerie der Personen-Akten).
 builder.Services.Configure<FileUploadOptions>(builder.Configuration.GetSection("FileUpload"));
 
 // Datenbank (MySQL 8.0 / MariaDB via Pomelo / EF Core) inkl. Audit-Interceptor.
-// Verbindungs-String kommt aus den User Secrets (lokal) bzw. Umgebungsvariablen (Server),
+// Verbindungs-Strings kommen aus den User Secrets (lokal) bzw. Umgebungsvariablen (Server),
 // niemals aus appsettings.json/Code.
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException(
-        "Connection-String 'DefaultConnection' fehlt. Bitte per 'dotnet user-secrets set' hinterlegen.");
+//
+// Auswahl-Logik (siehe DatabaseConnectionResolver): zuerst wird die Produktiv-DB
+// (ConnectionStrings:ProductionConnection) probiert; ist sie nicht erreichbar – z. B. weil die
+// App lokal läuft und der Hosting-MySQL von außen gesperrt ist –, wird automatisch auf die lokale
+// DB (ConnectionStrings:DefaultConnection) zurückgefallen. Der Connection-String muss dadurch nie
+// zwischen Entwicklung und Server umgestellt werden.
+using var startupLoggerFactory = LoggerFactory.Create(lb =>
+    lb.AddConfiguration(builder.Configuration.GetSection("Logging")).AddConsole());
+var (connectionString, serverVersion) = DatabaseConnectionResolver.Resolve(
+    builder.Configuration, startupLoggerFactory.CreateLogger("NOOSE.Datenbank"));
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 // Phase 6: zweiter, unabhängiger Interceptor für die Watchlist (gefolgte Akte geändert → Glocke).
 builder.Services.AddScoped<WatchlistAenderungInterceptor>();
 
-// AutoDetect ermittelt die passende Server-Variante automatisch (lokal MariaDB/XAMPP,
-// Produktion MySQL 8.0). Setzt voraus, dass die DB beim Start erreichbar ist.
+// Die Server-Version (lokal MariaDB/XAMPP, Produktion MySQL 8.0) wurde bereits beim Auflösen der
+// Verbindung ermittelt (DatabaseConnectionResolver) und hier wiederverwendet – spart eine zweite
+// Verbindung beim Start.
 //
 // Factory statt scoped DbContext: In Blazor Server lebt ein scoped Context den gesamten Circuit lang
 // und wird von Seite, Kind-Komponenten und Diensten geteilt. Gleichzeitige Zugriffe (parallele
@@ -53,7 +86,7 @@ builder.Services.AddScoped<WatchlistAenderungInterceptor>();
 // AppDbContext zusätzlich als scoped Service – das deckt Identity (AddEntityFrameworkStores),
 // den Health-Check und das Seeding ab.
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
+    options.UseMySql(connectionString, serverVersion)
            .AddInterceptors(
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
                sp.GetRequiredService<WatchlistAenderungInterceptor>())
@@ -136,6 +169,12 @@ builder.Services.AddScoped<IDokVorlageService, DokVorlageService>();
 builder.Services.AddScoped<IDokumentService, DokumentService>();
 builder.Services.AddScoped<IDokumentVorlageService, DokumentVorlageService>();
 builder.Services.AddScoped<IPlatzhalterService, PlatzhalterService>();
+// Phase 7: Aktualitäts-Ampel (Schwellwerte je Aktentyp, gecacht) + Wiedervorlagen (terminierte Erinnerungen).
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IAktualitaetService, AktualitaetService>();
+builder.Services.AddScoped<IWiedervorlageService, WiedervorlageService>();
+// Wiederkehrender Fälligkeits-Check der Wiedervorlagen → Benachrichtigung an Zuständige + Follower.
+builder.Services.AddHostedService<WiedervorlageFaelligkeitsDienst>();
 // Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
 builder.Services.AddScoped<IQuelleService, QuelleService>();
 builder.Services.AddScoped<ITagService, TagService>();
@@ -203,6 +242,10 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
+// Muss VOR allem anderen laufen, damit nachfolgende Middleware (HTTPS-Redirect, Auth, Cookies)
+// bereits das vom nginx weitergereichte Schema/Client-IP sieht.
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -226,10 +269,16 @@ app.MapNooseAccountEndpoints();
 app.MapNoosePersonenDateiEndpoints();
 app.MapNooseQuellenDateiEndpoints();
 
-// Seeding: technische "Admin"-Rolle sicherstellen (für spätere Nutzung; Admin-Rechte laufen
-// aktuell über das IstAdmin-Flag des Agents).
+// Start-up: ausstehende EF-Migrationen anwenden und die technische "Admin"-Rolle sicherstellen.
 using (var scope = app.Services.CreateScope())
 {
+    // Schema automatisch auf den neuesten Stand bringen. Greift auf die beim Start gewählte DB
+    // (Produktiv auf dem Server, lokal zu Hause) und legt beim ersten Deploy das gesamte Schema
+    // in der noch leeren Produktiv-DB an – kein manuelles 'dotnet ef database update' gegen Produktiv nötig.
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+
+    // Admin-Rolle anlegen (für spätere Nutzung; Admin-Rechte laufen aktuell über das IstAdmin-Flag des Agents).
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     if (!await roleManager.RoleExistsAsync("Admin"))
     {

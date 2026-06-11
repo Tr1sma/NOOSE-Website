@@ -13,6 +13,17 @@ public interface IDashboardService
     Task<DashboardKennzahlen> GetKennzahlenAsync(bool istFuehrung, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Akten mit Aktualisierungsbedarf (Ampel gelb oder rot, älteste zuerst) – damit man sieht, was mal wieder
+    /// aktualisiert werden sollte. VS-gefiltert; auf <paramref name="max"/> Einträge begrenzt.
+    /// </summary>
+    Task<List<DashboardVeralteteAkte>> GetAktualisierungsbedarfAsync(bool istFuehrung, int max = 30, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Die Fraktionen als echte Liste, nach Gefährdungsstufe absteigend sortiert (gefährlichste zuerst). VS-gefiltert.
+    /// </summary>
+    Task<List<DashboardFraktionGefaehrdung>> GetFraktionenNachGefaehrdungAsync(bool istFuehrung, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Die jüngsten Änderungen über alle Akten hinweg (neueste zuerst), aufgelöst auf die jeweilige
     /// Eltern-Akte inkl. Anzeigename. Kind-Änderungen (Doks, Mitglieder, Agent-Zuteilungen) werden auf
     /// ihre Akte hochgerollt; Verschlusssachen erscheinen nur für die Führung.

@@ -60,9 +60,12 @@
         <MudDivider />
 
         @* Meta + Kennzahlen aus den bereits geladenen Daten *@
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Zuletzt aktualisiert: @((Person.GeaendertAm ?? Person.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <AktualitaetsAmpel AktenTyp="@nameof(Person)" ReferenzdatumUtc="@(Person.GeaendertAm ?? Person.ErstelltAm)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Person.GeaendertAm ?? Person.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
         <MudStack Row="true" Spacing="4" Class="flex-wrap">
             @foreach (var (wert, label) in Kennzahlen())
             {

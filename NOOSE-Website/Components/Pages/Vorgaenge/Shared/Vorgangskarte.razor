@@ -62,9 +62,12 @@
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
             Eröffnet: @Vorgang.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
         </MudText>
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Zuletzt aktualisiert: @((Vorgang.GeaendertAm ?? Vorgang.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <AktualitaetsAmpel AktenTyp="@nameof(Vorgang)" ReferenzdatumUtc="@(Vorgang.GeaendertAm ?? Vorgang.ErstelltAm)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Vorgang.GeaendertAm ?? Vorgang.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
     </MudStack>
 </MudPaper>
 

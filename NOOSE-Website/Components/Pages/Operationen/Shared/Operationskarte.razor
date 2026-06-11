@@ -49,9 +49,12 @@
 
         <MudDivider />
 
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            Zuletzt aktualisiert: @((Operation.GeaendertAm ?? Operation.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <AktualitaetsAmpel AktenTyp="@nameof(Operation)" ReferenzdatumUtc="@(Operation.GeaendertAm ?? Operation.ErstelltAm)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Operation.GeaendertAm ?? Operation.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
     </MudStack>
 </MudPaper>
 

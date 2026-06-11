@@ -266,7 +266,7 @@
 **Ziel:** Effizienz, Datenqualität und Anpassbarkeit.
 - [x] **Dok-Vorlagen/Templates** (admin-definierte Erfassungsmasken) – setzt eure „Vorgaben" um.
 - [x] **Konfigurierbare Custom-Felder** je Aktentyp (Admin, ohne Code).
-- [ ] **Aktualitäts-Ampel + Wiedervorlage** (veraltete Akten markieren + Erinnerung, im Dashboard/Benachrichtigungen).
+- [x] **Aktualitäts-Ampel + Wiedervorlage** (Ampel grün/gelb/rot je Aktentyp – Schwellwerte im Admin unter `/admin/aktualitaet`; terminierte Wiedervorlagen je Akte mit Hintergrund-Job → Benachrichtigung an Zuständigen + Follower; veraltete Akten + fällige Wiedervorlagen im Dashboard).
 - [ ] **Quick-Add** Schnellerfassung.
 - [ ] **Duplikat-Zusammenführen (Merge)** zweier Personenakten (inkl. Verknüpfungen/Doks).
 - [ ] **Dokumenten-/Datei-Bibliothek** (zentrale, durchsuchbare Ablage: Formulare, SOPs, Vorlagen).

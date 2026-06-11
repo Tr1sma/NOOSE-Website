@@ -1,0 +1,175 @@
+@* Wiedervorlagen einer Akte: terminierte Erinnerungen anlegen, abhaken, bearbeiten, löschen. *@
+@inject IWiedervorlageService WiedervorlageService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Wiedervorlagen (@_offene.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.EventRepeat" OnClick="NeuAsync">
+            Wiedervorlage planen
+        </MudButton>
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        @if (_offene.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine offenen Wiedervorlagen.</MudText>
+        }
+        else
+        {
+            @foreach (var w in _offene)
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@(w.Ueberfaellig ? Icons.Material.Filled.EventBusy : Icons.Material.Filled.Event)"
+                                     Color="@(w.Ueberfaellig ? Color.Error : Color.Primary)" Size="Size.Small" />
+                            <MudText Typo="Typo.body2"><b>@w.FaelligAm.ToLocalTime().ToString("dd.MM.yyyy")</b></MudText>
+                            @if (w.Ueberfaellig)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">überfällig</MudChip>
+                            }
+                        </MudStack>
+                        @if (w.DarfBearbeiten)
+                        {
+                            <MudStack Row="true" Spacing="0">
+                                <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                                               OnClick="@(() => ErledigenAsync(w))" aria-label="Als erledigt markieren" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
+                                               OnClick="@(() => BearbeitenAsync(w))" aria-label="Bearbeiten" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => LoeschenAsync(w))" aria-label="Löschen" />
+                            </MudStack>
+                        }
+                    </MudStack>
+
+                    @if (!string.IsNullOrWhiteSpace(w.Notiz))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@w.Notiz</MudText>
+                    }
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                        Zuständig: @(w.ZustaendigerCodename ?? "—")
+                    </MudText>
+                </MudPaper>
+            }
+        }
+
+        @if (_erledigte.Count > 0)
+        {
+            <MudExpansionPanels Elevation="0" Dense="true">
+                <MudExpansionPanel Text="@($"Erledigt ({_erledigte.Count})")">
+                    <MudStack Spacing="2">
+                        @foreach (var w in _erledigte)
+                        {
+                            <MudPaper Class="pa-3" Elevation="0" Style="opacity:.75;">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                        <MudText Typo="Typo.body2">@w.FaelligAm.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                                        @if (w.ErledigtAm is { } erledigt)
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">erledigt @erledigt.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                                        }
+                                    </MudStack>
+                                    @if (w.DarfBearbeiten)
+                                    {
+                                        <MudStack Row="true" Spacing="0">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Undo" Color="Color.Default" Size="Size.Small"
+                                                           OnClick="@(() => WiedereroeffnenAsync(w))" aria-label="Wieder öffnen" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                                           OnClick="@(() => LoeschenAsync(w))" aria-label="Löschen" />
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                                @if (!string.IsNullOrWhiteSpace(w.Notiz))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@w.Notiz</MudText>
+                                }
+                            </MudPaper>
+                        }
+                    </MudStack>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<WiedervorlageItem> _offene = new();
+    private List<WiedervorlageItem> _erledigte = new();
+
+    protected override async Task OnInitializedAsync() => await LadenAsync();
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        var alle = await WiedervorlageService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, User);
+        _offene = alle.Where(w => !w.Erledigt).ToList();
+        _erledigte = alle.Where(w => w.Erledigt).ToList();
+        _laden = false;
+    }
+
+    private async Task NeuAsync()
+    {
+        var eingabe = await WiedervorlageDialog.ZeigenAsync(DialogService, User.DarfKlarnameSehen());
+        if (eingabe is null)
+        {
+            return;
+        }
+        await AusfuehrenAsync(() => WiedervorlageService.ErstellenAsync(EntitaetTyp, EntitaetId, eingabe, User),
+            "Wiedervorlage geplant.");
+    }
+
+    private async Task BearbeitenAsync(WiedervorlageItem w)
+    {
+        var eingabe = await WiedervorlageDialog.ZeigenAsync(DialogService, User.DarfKlarnameSehen(),
+            "Wiedervorlage bearbeiten", w.FaelligAm, w.Notiz, w.ZustaendigerAgentId);
+        if (eingabe is null)
+        {
+            return;
+        }
+        await AusfuehrenAsync(() => WiedervorlageService.AktualisierenAsync(w.Id, eingabe, User), "Wiedervorlage aktualisiert.");
+    }
+
+    private Task ErledigenAsync(WiedervorlageItem w)
+        => AusfuehrenAsync(() => WiedervorlageService.ErledigenAsync(w.Id, User), "Als erledigt markiert.");
+
+    private Task WiedereroeffnenAsync(WiedervorlageItem w)
+        => AusfuehrenAsync(() => WiedervorlageService.WiedereroeffnenAsync(w.Id, User), "Wieder geöffnet.");
+
+    private async Task LoeschenAsync(WiedervorlageItem w)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Wiedervorlage löschen?",
+            "Die Wiedervorlage wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await AusfuehrenAsync(() => WiedervorlageService.LoeschenAsync(w.Id, User), "Wiedervorlage gelöscht.");
+    }
+
+    private async Task AusfuehrenAsync(Func<Task> aktion, string erfolg)
+    {
+        try
+        {
+            await aktion();
+            Snackbar.Add(erfolg, Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

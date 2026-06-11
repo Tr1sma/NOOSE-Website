@@ -24,7 +24,30 @@ public record DashboardKennzahlen(
     int Operationen,
     int OffeneVorgaenge,
     int OffeneAntraege,
-    int Verschlusssachen);
+    int Verschlusssachen,
+    int VeralteteAkten);
+
+/// <summary>
+/// Eine Akte mit Aktualisierungsbedarf (Ampel gelb/rot) für die Dashboard-Liste „was muss aktualisiert werden".
+/// Aus Sicht des Aufrufers Verschlusssache-/Papierkorb-gefiltert.
+/// </summary>
+public record DashboardVeralteteAkte(
+    DashboardAkteTyp Typ,
+    string Name,
+    string Aktenzeichen,
+    string Href,
+    AktualitaetsStufe Stufe,
+    DateTime ReferenzUtc);
+
+/// <summary>
+/// Eine Fraktion mit ihrer Gefährdungsstufe für die Dashboard-Liste „Fraktionen nach Gefährdung" (echte Liste,
+/// nicht aggregiert). Aus Sicht des Aufrufers VS-/Papierkorb-gefiltert; nach Gefährdung absteigend sortiert.
+/// </summary>
+public record DashboardFraktionGefaehrdung(
+    string Name,
+    string Aktenzeichen,
+    string Href,
+    GefaehrdungsStufe Stufe);
 
 /// <summary>Ein einzelnes Segment einer Dashboard-Verteilung (eine Kategorie + ihre Anzahl).</summary>
 /// <param name="Bezeichnung">Anzeigetext der Kategorie (z. B. „Verdachtsfall").</param>

@@ -1,5 +1,6 @@
 @page "/personen"
 @inject IPersonService PersonService
+@inject IAktualitaetService Aktualitaet
 @inject NavigationManager Nav
 
 <PageTitle>Personen-Akten · NOOSE</PageTitle>
@@ -57,6 +58,11 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+                <CellTemplate>
+                    <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
+                </CellTemplate>
+            </TemplateColumn>
             <PropertyColumn Property="x => x.Aktualisiert" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
         <NoRecordsContent>
@@ -83,19 +89,26 @@ else
     {
         var user = (await AuthStateTask).User;
         var personen = await PersonService.GetListeAsync(user.IstFuehrung());
+        var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Person));
         var jetzt = DateTime.UtcNow;
-        _zeilen = personen.Select(p => new PersonZeile
+        _zeilen = personen.Select(p =>
         {
-            Id = p.Id,
-            Aktenzeichen = p.Aktenzeichen,
-            Name = p.Name,
-            Aliase = string.Join(", ", p.Aliase.Select(a => a.Aliasname)),
-            LebensstatusRoh = p.Lebensstatus,
-            TotBis = p.TotBis,
-            EffektiverLebensstatus = LebensstatusAnzeige.Name(LebensstatusLogic.Effektiv(p.Lebensstatus, p.TotBis, jetzt)),
-            Einstufung = p.Einstufung,
-            IstVerschlusssache = p.IstVerschlusssache,
-            Aktualisiert = (p.GeaendertAm ?? p.ErstelltAm).ToLocalTime(),
+            var referenzUtc = p.GeaendertAm ?? p.ErstelltAm;
+            return new PersonZeile
+            {
+                Id = p.Id,
+                Aktenzeichen = p.Aktenzeichen,
+                Name = p.Name,
+                Aliase = string.Join(", ", p.Aliase.Select(a => a.Aliasname)),
+                LebensstatusRoh = p.Lebensstatus,
+                TotBis = p.TotBis,
+                EffektiverLebensstatus = LebensstatusAnzeige.Name(LebensstatusLogic.Effektiv(p.Lebensstatus, p.TotBis, jetzt)),
+                Einstufung = p.Einstufung,
+                IstVerschlusssache = p.IstVerschlusssache,
+                AktualisiertUtc = referenzUtc,
+                Aktualisiert = referenzUtc.ToLocalTime(),
+                Stufe = AktualitaetsBewertung.Stufe(warnungTage, veraltetTage, referenzUtc, jetzt),
+            };
         }).ToList();
         _laden = false;
     }
@@ -125,6 +138,8 @@ else
         public string EffektiverLebensstatus { get; set; } = string.Empty;
         public Einstufung Einstufung { get; set; }
         public bool IstVerschlusssache { get; set; }
+        public DateTime AktualisiertUtc { get; set; }
         public DateTime Aktualisiert { get; set; }
+        public AktualitaetsStufe Stufe { get; set; }
     }
 }

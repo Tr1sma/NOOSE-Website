@@ -96,6 +96,9 @@ else
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                    <WiedervorlagePanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <VerknuepfungPanel PersonId="@_person.Id" User="_user" />
                 </MudTabPanel>
@@ -133,7 +136,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "steckbrief", "doks", "ueberwachung", "einstufung", "fotos", "quellen",
+        "steckbrief", "doks", "ueberwachung", "einstufung", "fotos", "quellen", "wiedervorlagen",
         "verknuepfungen", "zugehoerigkeit", "kommentare", "zusatzfelder", "historie",
     };
 

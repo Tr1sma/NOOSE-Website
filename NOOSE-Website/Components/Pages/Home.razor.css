@@ -1,9 +1,17 @@
 /* Dashboard: Die Seite darf normal scrollen – seit den Verteilungs-Diagrammen (§248) passt der Inhalt
-   (Kacheln + vier Charts + Verlauf) nicht mehr garantiert in einen Bildschirm. Der Verlauf-Kasten
-   („Letzte Änderungen") bleibt zusätzlich intern begrenzt, damit er nicht beliebig lang wird. */
+   (Kacheln + Charts + Listen + Verlauf) nicht mehr garantiert in einen Bildschirm. Die untere Reihe
+   (Aktualisierungsbedarf / Offene Anträge / Letzte Änderungen) hat eine feste Höhe (inline auf der Kachel,
+   da Scoped-CSS nicht auf MudPaper greift) und scrollt intern. */
 
-/* „Letzte Änderungen": zeigt rund fünf Einträge; alles Weitere ist im Kasten scrollbar. */
-.dashboard-verlauf-liste {
+/* In sich scrollbarer Körper einer gleich hohen Spalte: Kopf bleibt stehen, der Körper scrollt. */
+.dashboard-spalte-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* „Fraktionen nach Gefährdung": echte Liste, intern begrenzt, damit sie nicht beliebig lang wird. */
+.dashboard-fraktionsliste {
     max-height: 22rem;
     overflow-y: auto;
 }
