@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NOOSE_Website.Data;
 
@@ -11,9 +12,11 @@ using NOOSE_Website.Data;
 namespace NOOSE_Website.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611215000_Phase11_FraktionFotosUndMitgliederzahl")]
+    partial class Phase11_FraktionFotosUndMitgliederzahl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -518,9 +521,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("GeloeschtVonId")
                         .HasColumnType("longtext");
 
-                    b.Property<bool>("IstEingeschraenkt")
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<bool>("IstGeloescht")
                         .HasColumnType("tinyint(1)");
 
@@ -541,8 +541,6 @@ namespace NOOSE_Website.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("Faelligkeit");
-
-                    b.HasIndex("IstEingeschraenkt");
 
                     b.HasIndex("Status");
 
@@ -771,65 +769,6 @@ namespace NOOSE_Website.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("FraktionAgenten");
-                });
-
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionAktivitaet", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("Art")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("Beschreibung")
-                        .HasMaxLength(4000)
-                        .HasColumnType("varchar(4000)");
-
-                    b.Property<DateTime>("ErstelltAm")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("ErstelltVonId")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("FraktionId")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<DateTime?>("GeaendertAm")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("GeaendertVonId")
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime?>("GeloeschtAm")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("GeloeschtVonId")
-                        .HasColumnType("longtext");
-
-                    b.Property<bool>("IstGeloescht")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<string>("Ort")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<string>("Titel")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<DateTime>("Zeitpunkt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Art");
-
-                    b.HasIndex("FraktionId");
-
-                    b.ToTable("FraktionAktivitaeten");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionDrogenroute", b =>
@@ -3290,17 +3229,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Fraktion");
                 });
 
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionAktivitaet", b =>
-                {
-                    b.HasOne("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", "Fraktion")
-                        .WithMany("Aktivitaeten")
-                        .HasForeignKey("FraktionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Fraktion");
-                });
-
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.FraktionDrogenroute", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", "Fraktion")
@@ -3710,8 +3638,6 @@ namespace NOOSE_Website.Data.Migrations
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Fraktionen.Fraktion", b =>
                 {
                     b.Navigation("Agenten");
-
-                    b.Navigation("Aktivitaeten");
 
                     b.Navigation("Drogenrouten");
 

@@ -10,4 +10,7 @@ public class AufgabeEingabe
     public AufgabeStatus Status { get; set; } = AufgabeStatus.Offen;
     public AufgabePrioritaet Prioritaet { get; set; } = AufgabePrioritaet.Normal;
     public DateTime? Faelligkeit { get; set; }
+
+    /// <summary>Eingeschränkt: nur zugeteilte Agenten, der Ersteller und die Aufsicht (Führung/Admin/Teamleitung) sehen die Aufgabe.</summary>
+    public bool IstEingeschraenkt { get; set; }
 }

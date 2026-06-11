@@ -30,6 +30,11 @@
                        Clearable="true" Editable="true" />
     </MudItem>
 
+    <MudItem xs="12">
+        <MudSwitch T="bool" @bind-Value="Eingabe.IstEingeschraenkt" Color="Color.Warning"
+                   Label="Eingeschränkt (nur zugeteilte Agents, Ersteller und die Leitung sehen die Aufgabe)" />
+    </MudItem>
+
     @if (ZeigeZuweisung)
     {
         <MudItem xs="12">

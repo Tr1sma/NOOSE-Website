@@ -47,6 +47,9 @@ public class Fraktion : IAuditable, ISoftDelete
     /// <summary>Staatsfraktion: kann nicht „veraltet" werden (Aktualitäts-Ampel bleibt dauerhaft „Aktuell").</summary>
     public bool IstStaatsfraktion { get; set; }
 
+    /// <summary>Geschätzte Gesamtgröße der Fraktion (= y im Erfassungsfortschritt x/y); optional. Wie bei der Personengruppe.</summary>
+    public int? GeschaetzteMitgliederzahl { get; set; }
+
     // ---- Kind-Tabellen ----
     public List<FraktionRang> Raenge { get; set; } = new();
     public List<FraktionWaffenbestand> Waffenbestand { get; set; } = new();
@@ -54,6 +57,12 @@ public class Fraktion : IAuditable, ISoftDelete
     public List<FraktionDrogenroute> Drogenrouten { get; set; } = new();
     public List<FraktionMitglied> Mitglieder { get; set; } = new();
     public List<FraktionAgent> Agenten { get; set; } = new();
+
+    /// <summary>Fotos der Fraktion; eines kann als Titelbild markiert sein (<see cref="FraktionFoto.IstTitelbild"/>).</summary>
+    public List<FraktionFoto> Fotos { get; set; } = new();
+
+    /// <summary>Aktivitäten/Aktionen der Fraktion für den Zeitstrahl (z. B. Raub, Geiselnahme).</summary>
+    public List<FraktionAktivitaet> Aktivitaeten { get; set; } = new();
 
     // ---- IAuditable ----
     public DateTime ErstelltAm { get; set; }

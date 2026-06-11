@@ -24,7 +24,8 @@ public class AufgabeService(
 
         var meId = handelnder.GetAgentId();
         var istFuehrung = handelnder.IstFuehrung();
-        var query = db.Aufgaben.AsQueryable();
+        // Eingeschränkte Aufgaben nur für Beteiligte (Ersteller/Zugeteilte) bzw. die Aufsicht.
+        var query = db.Aufgaben.NurSichtbare(db, handelnder.DarfVerschlusssacheLesen(), meId);
         if (nurMeine && !string.IsNullOrEmpty(meId))
         {
             // „Meine" = selbst angelegt ODER zugewiesen (korreliertes EXISTS – auf MySQL/MariaDB zulässig).
@@ -83,10 +84,13 @@ public class AufgabeService(
         }).ToList();
     }
 
-    public async Task<Aufgabe?> GetDetailAsync(string id, CancellationToken cancellationToken = default)
+    public async Task<Aufgabe?> GetDetailAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Aufgaben.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+        // Eingeschränkte Aufgaben sind nur für Beteiligte/Aufsicht zugänglich (null = „nicht gefunden/zugänglich").
+        return await db.Aufgaben
+            .NurSichtbare(db, handelnder.DarfVerschlusssacheLesen(), handelnder.GetAgentId())
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
     public async Task<List<Aufgabe>> GetPapierkorbAsync(CancellationToken cancellationToken = default)
@@ -98,10 +102,11 @@ public class AufgabeService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Aufgabe>> SucheAsync(string? suchtext, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Aufgabe>> SucheAsync(string? suchtext, bool darfAlles, string? meId, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Aufgaben.AsQueryable();
+        // Eingeschränkte Aufgaben tauchen im Picker nur für Beteiligte/Aufsicht auf.
+        var query = db.Aufgaben.NurSichtbare(db, darfAlles, meId);
 
         var s = suchtext?.Trim();
         if (!string.IsNullOrEmpty(s))
@@ -129,6 +134,7 @@ public class AufgabeService(
             Status = eingabe.Status,
             Prioritaet = eingabe.Prioritaet,
             Faelligkeit = eingabe.Faelligkeit,
+            IstEingeschraenkt = eingabe.IstEingeschraenkt,
             ErledigtAm = AufgabeStatusAnzeige.IstAbgeschlossen(eingabe.Status) ? DateTime.UtcNow : null,
         };
         db.Aufgaben.Add(aufgabe);
@@ -176,6 +182,7 @@ public class AufgabeService(
         aufgabe.Beschreibung = eingabe.Beschreibung.TrimToNull();
         aufgabe.Prioritaet = eingabe.Prioritaet;
         aufgabe.Faelligkeit = eingabe.Faelligkeit;
+        aufgabe.IstEingeschraenkt = eingabe.IstEingeschraenkt;
         SetzeStatus(aufgabe, eingabe.Status);
         await db.SaveChangesAsync(cancellationToken);
 

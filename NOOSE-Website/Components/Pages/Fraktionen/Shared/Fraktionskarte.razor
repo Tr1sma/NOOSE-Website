@@ -1,10 +1,18 @@
 @* Identitäts-/Steckkarte der Fraktions-Akte: Name, Erkennungsfarbe, Einstufung und Kerndaten auf einen Blick. *@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
-        @* Farb-Banner in der Erkennungsfarbe (falls gesetzt), sonst neutraler Platzhalter. *@
-        <div style="@BannerStyle()" class="rounded d-flex align-center justify-center">
-            <MudIcon Icon="@Icons.Material.Filled.Groups" Style="font-size:3rem;color:#fff;opacity:.85;" />
-        </div>
+        @* Titelbild (falls markiert), sonst Farb-Banner in der Erkennungsfarbe bzw. neutraler Platzhalter. *@
+        @if (!string.IsNullOrEmpty(TitelbildFotoId))
+        {
+            <MudImage Src="@($"/dateien/fraktionen/foto/{TitelbildFotoId}")" Alt="Titelbild"
+                      Height="120" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+        }
+        else
+        {
+            <div style="@BannerStyle()" class="rounded d-flex align-center justify-center">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Style="font-size:3rem;color:#fff;opacity:.85;" />
+            </div>
+        }
 
         <div>
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -48,6 +56,19 @@
                 Zuletzt aktualisiert: @((Fraktion.GeaendertAm ?? Fraktion.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
             </MudText>
         </MudStack>
+
+        @* Erfassungsfortschritt erfasst/geschätzt – nur wenn eine geschätzte Gesamtgröße hinterlegt ist (wie bei der Personengruppe). *@
+        @if (Fraktion.GeschaetzteMitgliederzahl is > 0)
+        {
+            <div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle2">Erfassungsfortschritt</MudText>
+                    <MudText Typo="Typo.body2">@Mitgliederzahl / @Fraktion.GeschaetzteMitgliederzahl</MudText>
+                </MudStack>
+                <MudProgressLinear Color="Color.Primary" Value="@Prozent()" Class="mt-1" Rounded="true" Size="Size.Medium" />
+            </div>
+        }
+
         <MudStack Row="true" Spacing="4" Class="flex-wrap">
             @foreach (var (wert, label) in Kennzahlen())
             {
@@ -64,8 +85,21 @@
     [Parameter, EditorRequired] public Fraktion Fraktion { get; set; } = default!;
     [Parameter] public int Mitgliederzahl { get; set; }
 
+    /// <summary>Id des als Titelbild markierten Fotos (ersetzt den Farb-Banner); null = kein Titelbild.</summary>
+    [Parameter] public string? TitelbildFotoId { get; set; }
+
     /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
     [Parameter] public IReadOnlyList<string> Ermittlungsleiter { get; set; } = Array.Empty<string>();
+
+    private double Prozent()
+    {
+        if (Fraktion.GeschaetzteMitgliederzahl is not > 0)
+        {
+            return 0;
+        }
+        var p = (double)Mitgliederzahl / Fraktion.GeschaetzteMitgliederzahl.Value * 100;
+        return Math.Clamp(p, 0, 100);
+    }
 
     private string BannerStyle()
     {

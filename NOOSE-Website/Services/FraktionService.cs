@@ -6,6 +6,7 @@ using NOOSE_Website.Data.Entities.Fraktionen;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Fraktionen;
 using NOOSE_Website.Models.Personen;
@@ -13,7 +14,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IFraktionService" />
-public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService) : IFraktionService
+public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService, IFraktionFotoStorageService fotoStorage) : IFraktionService
 {
     public async Task<List<Fraktion>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -23,6 +24,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         return await db.Fraktionen
             .Where(f => istFuehrung || !f.IstVerschlusssache)
             .Include(f => f.Mitglieder).ThenInclude(m => m.Person)
+            .Include(f => f.Fotos)
             .OrderByDescending(f => f.GeaendertAm ?? f.ErstelltAm)
             .ToListAsync(cancellationToken);
     }
@@ -35,6 +37,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .Include(f => f.Waffenbestand)
             .Include(f => f.Lagerbestand)
             .Include(f => f.Drogenrouten)
+            .Include(f => f.Fotos)
             .AsSplitQuery()
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
 
@@ -93,6 +96,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             Einstufung = eingabe.Einstufung,
             IstVerschlusssache = eingabe.IstVerschlusssache,
             IstStaatsfraktion = eingabe.IstStaatsfraktion,
+            GeschaetzteMitgliederzahl = eingabe.GeschaetzteMitgliederzahl,
         };
         KinderMappen(fraktion, eingabe);
         await VorschlaegeVormerkenAsync(db, fraktion, cancellationToken);
@@ -206,6 +210,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         fraktion.Beschreibung = Leer(eingabe.Beschreibung);
         fraktion.IstVerschlusssache = eingabe.IstVerschlusssache;
         fraktion.IstStaatsfraktion = eingabe.IstStaatsfraktion;
+        fraktion.GeschaetzteMitgliederzahl = eingabe.GeschaetzteMitgliederzahl;
 
         // Strukturierte Listen vollständig ersetzen (Mitglieder bleiben unangetastet – eigene Endpunkte).
         db.FraktionRaenge.RemoveRange(fraktion.Raenge);
@@ -504,6 +509,211 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
             .OrderByDescending(a => a.Zeitpunkt)
             .ToListAsync(cancellationToken);
+    }
+
+    // ---- Aktivitäten (Zeitstrahl) ----
+
+    public async Task<List<FraktionAktivitaet>> GetAktivitaetenAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Defense in depth: an Aktivitäten einer Verschlusssache-Fraktion kommt nur die Führung.
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Fraktion), fraktionId, istFuehrung, cancellationToken))
+        {
+            return new();
+        }
+        return await db.FraktionAktivitaeten
+            .Where(a => a.FraktionId == fraktionId)
+            .OrderByDescending(a => a.Zeitpunkt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task AktivitaetHinzufuegenAsync(string fraktionId, AktivitaetEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        var titel = eingabe.Titel?.Trim();
+        if (string.IsNullOrWhiteSpace(titel))
+        {
+            throw new InvalidOperationException("Ein Titel ist erforderlich.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var fraktion = await db.Fraktionen.FirstOrDefaultAsync(f => f.Id == fraktionId, cancellationToken)
+            ?? throw new InvalidOperationException($"Fraktion '{fraktionId}' nicht gefunden.");
+        if (fraktion.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
+        db.FraktionAktivitaeten.Add(new FraktionAktivitaet
+        {
+            FraktionId = fraktionId,
+            Titel = titel,
+            Art = Leer(eingabe.Art),
+            // Vom Nutzer gewählter Zeitpunkt (lokal erfasst) → als UTC speichern (App-Konvention, vgl. Wiedervorlagen).
+            Zeitpunkt = eingabe.Zeitpunkt.ToUniversalTime(),
+            Beschreibung = Leer(eingabe.Beschreibung),
+            Ort = Leer(eingabe.Ort),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AktivitaetAendernAsync(string aktivitaetId, AktivitaetEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        var titel = eingabe.Titel?.Trim();
+        if (string.IsNullOrWhiteSpace(titel))
+        {
+            throw new InvalidOperationException("Ein Titel ist erforderlich.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var aktivitaet = await db.FraktionAktivitaeten.Include(a => a.Fraktion).FirstOrDefaultAsync(a => a.Id == aktivitaetId, cancellationToken)
+            ?? throw new InvalidOperationException("Aktivität nicht gefunden.");
+        if (aktivitaet.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
+        aktivitaet.Titel = titel;
+        aktivitaet.Art = Leer(eingabe.Art);
+        aktivitaet.Zeitpunkt = eingabe.Zeitpunkt.ToUniversalTime();
+        aktivitaet.Beschreibung = Leer(eingabe.Beschreibung);
+        aktivitaet.Ort = Leer(eingabe.Ort);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AktivitaetEntfernenAsync(string aktivitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var aktivitaet = await db.FraktionAktivitaeten.Include(a => a.Fraktion).FirstOrDefaultAsync(a => a.Id == aktivitaetId, cancellationToken);
+        if (aktivitaet is null)
+        {
+            return;
+        }
+        if (aktivitaet.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+        // Soft-Delete via Interceptor (bleibt als Verlaufseintrag im Papierkorb).
+        db.FraktionAktivitaeten.Remove(aktivitaet);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<string>> GetAktivitaetArtenAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Distinct über alle (nicht gelöschten – globaler Filter) Aktivitäten, damit gängige Arten überall als Vorschlag auftauchen.
+        return await db.FraktionAktivitaeten
+            .Where(a => a.Art != null && a.Art != "")
+            .Select(a => a.Art!)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(cancellationToken);
+    }
+
+    // ---- Fotos (Galerie + Titelbild) ----
+
+    public async Task<List<FraktionFoto>> GetFotosAsync(string fraktionId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Titelbild zuerst, danach nach Aufnahmezeitpunkt.
+        return await db.FraktionFotos
+            .Where(f => f.FraktionId == fraktionId)
+            .OrderByDescending(f => f.IstTitelbild)
+            .ThenBy(f => f.ErstelltAm)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<FraktionFoto?> GetFotoMitFraktionAsync(string fotoId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.FraktionFotos.Include(f => f.Fraktion).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
+    }
+
+    public async Task<FraktionFoto> FotoHinzufuegenAsync(string fraktionId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        if (!fotoStorage.IstErlaubterTyp(contentType))
+        {
+            throw new InvalidOperationException($"Dateityp '{contentType}' ist nicht erlaubt.");
+        }
+        // Größenlimit serverseitig erzwingen (nicht nur in der UI) – verhindert Disk-Filling über andere Pfade.
+        if (groesse > fotoStorage.MaxBytes)
+        {
+            throw new InvalidOperationException($"Datei zu groß (max. {fotoStorage.MaxBytes / (1024 * 1024)} MB).");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Existenz + Verschlusssache-Sichtbarkeit der Akte prüfen, BEVOR eine Datei geschrieben wird.
+        var fraktion = await db.Fraktionen.FirstOrDefaultAsync(f => f.Id == fraktionId, cancellationToken)
+            ?? throw new InvalidOperationException($"Fraktion '{fraktionId}' nicht gefunden.");
+        if (fraktion.IstVerschlusssache && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
+        // Das erste Foto der Fraktion wird automatisch Titelbild (Steckkarte zeigt sofort ein Bild).
+        var istErstes = !await db.FraktionFotos.AnyAsync(f => f.FraktionId == fraktionId, cancellationToken);
+
+        var dateiname = await fotoStorage.SpeichernAsync(inhalt, contentType, cancellationToken);
+        var foto = new FraktionFoto
+        {
+            FraktionId = fraktionId,
+            DateinameGespeichert = dateiname,
+            OriginalName = originalName,
+            ContentType = contentType,
+            GroesseBytes = groesse,
+            IstTitelbild = istErstes,
+            ErstelltAm = DateTime.UtcNow,
+            ErstelltVonId = handelnder.GetAgentId(),
+        };
+        db.FraktionFotos.Add(foto);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // Schlägt der DB-Insert fehl, die bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
+            fotoStorage.Loeschen(dateiname);
+            throw;
+        }
+        return foto;
+    }
+
+    public async Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var foto = await db.FraktionFotos.Include(f => f.Fraktion).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
+        if (foto is null)
+        {
+            return;
+        }
+        if (foto.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+        // Erst den DB-Datensatz entfernen (Quelle der Wahrheit), dann die Datei löschen. So bleibt
+        // bei einem Speicherfehler kein verwaister Datensatz zurück, der auf eine fehlende Datei zeigt.
+        db.FraktionFotos.Remove(foto);
+        await db.SaveChangesAsync(cancellationToken);
+        fotoStorage.Loeschen(foto.DateinameGespeichert);
+    }
+
+    public async Task AlsTitelbildSetzenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var foto = await db.FraktionFotos.Include(f => f.Fraktion).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken)
+            ?? throw new InvalidOperationException($"Foto '{fotoId}' nicht gefunden.");
+        if (foto.Fraktion?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+        }
+
+        // Genau ein Titelbild je Fraktion: alle Geschwister-Fotos zurücksetzen, dieses markieren (eine SaveChanges = atomar).
+        var geschwister = await db.FraktionFotos.Where(f => f.FraktionId == foto.FraktionId).ToListAsync(cancellationToken);
+        foreach (var g in geschwister)
+        {
+            g.IstTitelbild = g.Id == fotoId;
+        }
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     // ---- Helfer ----

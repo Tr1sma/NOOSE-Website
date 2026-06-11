@@ -232,9 +232,10 @@
     /// <summary>Diese Person (die aktuelle Akte) wird aus der Personen-Auswahl ausgeschlossen.</summary>
     [Parameter] public string? AusschlussPersonId { get; set; }
 
-    // Betrachter-Kontext für die Taskforce-Mitgliedschafts-Sichtbarkeit in SucheTaskforces.
+    // Betrachter-Kontext für die Sichtbarkeit in den Suchen (Taskforce-Mitgliedschaft, eingeschränkte Aufgaben).
     private string? _meId;
     private bool _darfAlleTf;
+    private bool _darfVs;
 
     protected override async Task OnInitializedAsync()
     {
@@ -243,6 +244,7 @@
             var user = (await AuthStateTask).User;
             _meId = user.GetAgentId();
             _darfAlleTf = user.DarfAlleTaskforcesSehen();
+            _darfVs = user.DarfVerschlusssacheLesen();
         }
     }
 
@@ -342,7 +344,7 @@
         => await VorgangService.SucheAsync(value, IstFuehrung, 20, token);
 
     private async Task<IEnumerable<Aufgabe>> SucheAufgaben(string value, CancellationToken token)
-        => await AufgabeService.SucheAsync(value, 20, token);
+        => await AufgabeService.SucheAsync(value, _darfVs, _meId, 20, token);
 
     private Task<IEnumerable<Agent>> SucheAgenten(string value, CancellationToken token)
     {

@@ -273,7 +273,7 @@
 - [ ] **Gesetzbuch/Rechtsgrundlagen-Modul** (Paragrafen, verknüpfbar mit Fällen/Doks).
 - [ ] **Theming/Logo-Upload** im Admin (Farben/Wappen ohne Code ändern).
 - [ ] **Wartungsmodus + Ankündigungsbanner**.
-- [ ] **PDF-/Druck-Export** einer Akte.
+- [ ] **PDF-/Druck-Export** von allem.
 - [ ] **Basisdaten-/Lookup-Adminbereich** (Fraktionsliste, Dienstgrade, Einstufungen, Maßnahme-Ausgänge, Beziehungstypen, Geltungsbereiche, Tags, Vorlagen).
 
 **Abnahme:** Vorlage + Custom-Feld anlegen und nutzen; alte Akte wird als „evtl. veraltet" geflaggt + Erinnerung; Quick-Add in Sekunden; zwei Doppel-Akten zusammenführen; Datei in Bibliothek ablegen & finden; Gesetz mit Fall verknüpfen; Logo/Theme im Admin ändern; Wartungsmodus testen; Akte als PDF exportieren.

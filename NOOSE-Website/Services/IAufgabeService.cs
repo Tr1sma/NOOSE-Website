@@ -15,9 +15,11 @@ public interface IAufgabeService
 {
     /// <summary>Team-Board: alle Aufgaben, optional nur eigene (Ersteller ODER zugewiesen). Neueste zuerst.</summary>
     Task<List<AufgabeZeile>> GetTeamboardAsync(bool nurMeine, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
-    Task<Aufgabe?> GetDetailAsync(string id, CancellationToken cancellationToken = default);
+    /// <summary>Lädt eine Aufgabe – liefert null, wenn sie eingeschränkt und für den Aufrufer nicht sichtbar ist.</summary>
+    Task<Aufgabe?> GetDetailAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
     Task<List<Aufgabe>> GetPapierkorbAsync(CancellationToken cancellationToken = default);
-    Task<List<Aufgabe>> SucheAsync(string? suchtext, int max = 20, CancellationToken cancellationToken = default);
+    /// <summary>Aufgaben-Suche für Picker; eingeschränkte Aufgaben nur für Beteiligte/Aufsicht (<paramref name="darfAlles"/> = DarfVerschlusssacheLesen).</summary>
+    Task<List<Aufgabe>> SucheAsync(string? suchtext, bool darfAlles, string? meId, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Legt eine Aufgabe an, weist sie den angegebenen aktiven Agenten zu und benachrichtigt diese (außer den Ersteller).</summary>
     Task<Aufgabe> ErstellenAsync(AufgabeEingabe eingabe, IReadOnlyList<string> agentIds, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);

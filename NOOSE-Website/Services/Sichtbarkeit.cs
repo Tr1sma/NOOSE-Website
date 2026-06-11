@@ -50,6 +50,12 @@ public static class Sichtbarkeit
             nameof(Fraktion) => await db.Fraktionen
                 .Where(f => f.Id == entitaetId).Select(f => (bool?)f.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
+            // Fraktions-Aktivität erbt die Sichtbarkeit ihrer Eltern-Fraktion (schützt die an die Aktivität
+            // gehängten Quellen/Anhänge). Existiert die Aktivität oder die Fraktion nicht (Papierkorb), liefert
+            // die Navigation null → unsichtbar.
+            nameof(FraktionAktivitaet) => await db.FraktionAktivitaeten
+                .Where(a => a.Id == entitaetId).Select(a => (bool?)a.Fraktion!.IstVerschlusssache)
+                .FirstOrDefaultAsync(cancellationToken),
             nameof(Personengruppe) => await db.Personengruppen
                 .Where(g => g.Id == entitaetId).Select(g => (bool?)g.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
@@ -76,7 +82,7 @@ public static class Sichtbarkeit
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(FraktionAktivitaet) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument)))
         {
             return true;
         }

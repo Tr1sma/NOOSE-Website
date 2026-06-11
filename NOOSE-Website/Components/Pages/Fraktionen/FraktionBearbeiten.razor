@@ -83,6 +83,7 @@ else
                 Einstufung = f.Einstufung,
                 IstVerschlusssache = f.IstVerschlusssache,
                 IstStaatsfraktion = f.IstStaatsfraktion,
+                GeschaetzteMitgliederzahl = f.GeschaetzteMitgliederzahl,
                 Raenge = f.Raenge.OrderBy(r => r.Reihenfolge).Select(r => new RangEingabe { Bezeichnung = r.Bezeichnung }).ToList(),
                 Waffenbestand = f.Waffenbestand.Select(w => new BestandEingabe { Bezeichnung = w.Bezeichnung, Menge = w.Menge }).ToList(),
                 Lagerbestand = f.Lagerbestand.Select(l => new BestandEingabe { Bezeichnung = l.Bezeichnung, Menge = l.Menge }).ToList(),

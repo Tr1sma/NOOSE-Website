@@ -29,6 +29,11 @@
         <MudTextField @bind-Value="Eingabe.Ausstellungszeiten" Label="Ausstellungszeiten" Variant="Variant.Outlined" />
     </MudItem>
 
+    <MudItem xs="12" md="4">
+        <MudNumericField @bind-Value="Eingabe.GeschaetzteMitgliederzahl" Label="Geschätzte Mitgliederzahl"
+                         Variant="Variant.Outlined" Min="0" HelperText="Für den Erfassungsfortschritt (x/y)" Clearable="true" />
+    </MudItem>
+
     <MudItem xs="12" md="6">
         <MudColorPicker Label="Erkennungsfarbe (optional)" Value="_farbe" ValueChanged="FarbeGesetzt"
                         Variant="Variant.Outlined" Placeholder="z. B. #1E88E5" Clearable="true" />

@@ -53,4 +53,38 @@ public interface IFraktionService
 
     /// <summary>Audit-Einträge der Fraktion und ihrer Mitgliedschaften (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
     Task<List<AuditLog>> GetHistorieAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default);
+
+    // ---- Aktivitäten (Zeitstrahl) ----
+
+    /// <summary>Aktivitäten der Fraktion für den Zeitstrahl (neueste zuerst). Verschlusssache nur für Führung.</summary>
+    Task<List<FraktionAktivitaet>> GetAktivitaetenAsync(string fraktionId, bool istFuehrung, CancellationToken cancellationToken = default);
+
+    /// <summary>Aktivität hinzufügen (Titel-Pflicht, Verschlusssache-Gate über die Eltern-Fraktion).</summary>
+    Task AktivitaetHinzufuegenAsync(string fraktionId, AktivitaetEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Aktivität ändern (Verschlusssache-Gate über die Eltern-Fraktion).</summary>
+    Task AktivitaetAendernAsync(string aktivitaetId, AktivitaetEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Aktivität entfernen (Soft-Delete; Verschlusssache-Gate über die Eltern-Fraktion).</summary>
+    Task AktivitaetEntfernenAsync(string aktivitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Bereits genutzte Aktivitäts-Arten (für die Freitext-mit-Vorschlägen-Auswahl im Dialog).</summary>
+    Task<List<string>> GetAktivitaetArtenAsync(CancellationToken cancellationToken = default);
+
+    // ---- Fotos (Galerie + Titelbild) ----
+
+    /// <summary>Fotos der Fraktion (Titelbild zuerst, dann nach Aufnahmezeitpunkt). Für die Galerie auf der Detailseite.</summary>
+    Task<List<FraktionFoto>> GetFotosAsync(string fraktionId, CancellationToken cancellationToken = default);
+
+    /// <summary>Ein Foto inkl. Fraktion (für den geschützten Auslieferungs-Endpoint).</summary>
+    Task<FraktionFoto?> GetFotoMitFraktionAsync(string fotoId, CancellationToken cancellationToken = default);
+
+    /// <summary>Foto hinzufügen (Typ/Größe serverseitig geprüft). Das erste Foto wird automatisch Titelbild.</summary>
+    Task<FraktionFoto> FotoHinzufuegenAsync(string fraktionId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Foto entfernen (DB-Datensatz zuerst, dann Datei).</summary>
+    Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+
+    /// <summary>Das angegebene Foto als Titelbild markieren; alle anderen Fotos der Fraktion verlieren die Markierung.</summary>
+    Task AlsTitelbildSetzenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 }

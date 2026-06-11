@@ -38,7 +38,7 @@
             // Fingerprinting (@Assets/ImportMap) – Browser mit einer alten gecachten Modul-Version
             // (Quill-2-Zwischenstand) würden sonst auf nicht mehr existierende Dateien zeigen.
             // Bei künftigen Änderungen an richtext.js die Versionsnummer hochzählen!
-            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=3");
+            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=4");
             _ref = DotNetObjectReference.Create(this);
             await _modul.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty);
             _bereit = true;

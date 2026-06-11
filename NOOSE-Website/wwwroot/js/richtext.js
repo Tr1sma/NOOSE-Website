@@ -83,8 +83,13 @@ export async function initRichText(element, dotnetRef, initialHtml) {
     ];
     const module = {};
     if (tableHandler) {
-        // Eigene Toolbar-Gruppe mit dem Tabellen-Werkzeug (Raster-Picker des Moduls).
-        toolbarGruppen.push([tableHandler.toolName]);
+        // Eigene Toolbar-Gruppe mit dem Tabellen-Werkzeug. WICHTIG: als SELECT konfigurieren
+        // ({ table: [] }) – NICHT als einfacher Button ([toolName]). Nur für ein <select> baut das
+        // Snow-Theme einen echten Picker mit Label + ausklappbarem .ql-picker-options; genau dort
+        // hinein hängt das Modul sein Auswahl-Raster (buildCustomSelect appended nur bei tagName
+        // 'select' in .ql-picker-options, sonst direkt in den Button). Als Button läge das 8x8-Raster
+        // sonst DAUERHAFT sichtbar in der Toolbar – und ohne Tabellen-Icon.
+        toolbarGruppen.push([{ [tableHandler.toolName]: [] }]);
         module[tableHandler.moduleName] = {
             fullWidth: false,
             customButton: 'Eigene Größe',

@@ -22,6 +22,12 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/aufgaben" aria-label="Zurück" />
         <MudText Typo="Typo.h5">@_aufgabe.Titel</MudText>
+        @if (_aufgabe.IstEingeschraenkt)
+        {
+            <MudTooltip Text="Nur zugeteilte Agents, Ersteller und die Leitung sehen diese Aufgabe.">
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">Eingeschränkt</MudChip>
+            </MudTooltip>
+        }
         <MudSpacer />
         @if (_kannBearbeiten)
         {
@@ -194,7 +200,7 @@ else
 
     private async Task LadenAsync()
     {
-        _aufgabe = await AufgabeService.GetDetailAsync(Id);
+        _aufgabe = await AufgabeService.GetDetailAsync(Id, _user);
         if (_aufgabe is not null)
         {
             await ZuweisungenLadenAsync();

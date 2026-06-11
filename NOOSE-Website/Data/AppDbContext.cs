@@ -71,6 +71,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FraktionDrogenroute> FraktionDrogenrouten => Set<FraktionDrogenroute>();
     public DbSet<FraktionMitglied> FraktionMitglieder => Set<FraktionMitglied>();
     public DbSet<FraktionAgent> FraktionAgenten => Set<FraktionAgent>();
+    public DbSet<FraktionFoto> FraktionFotos => Set<FraktionFoto>();
+    public DbSet<FraktionAktivitaet> FraktionAktivitaeten => Set<FraktionAktivitaet>();
 
     // ---- Phase 4b: Personengruppen ----
     public DbSet<Personengruppe> Personengruppen => Set<Personengruppe>();
@@ -473,6 +475,31 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(m => m.FraktionId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(f => f.Agenten).WithOne(a => a.Fraktion!)
                 .HasForeignKey(a => a.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Fotos).WithOne(x => x.Fraktion!)
+                .HasForeignKey(x => x.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Aktivitaeten).WithOne(a => a.Fraktion!)
+                .HasForeignKey(a => a.FraktionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FraktionAktivitaet>(b =>
+        {
+            b.Property(a => a.Titel).HasMaxLength(200).IsRequired();
+            b.Property(a => a.Art).HasMaxLength(100);
+            b.Property(a => a.Ort).HasMaxLength(200);
+            b.Property(a => a.Beschreibung).HasMaxLength(4000);
+            b.HasIndex(a => a.FraktionId);
+            // Index auf Art für die Vorschlags-Abfrage (Distinct über vorhandene Arten).
+            b.HasIndex(a => a.Art);
+        });
+
+        modelBuilder.Entity<FraktionFoto>(b =>
+        {
+            // Spiegelt die PersonFoto-Konfiguration (Metadaten; Datei liegt außerhalb wwwroot).
+            b.Property(f => f.DateinameGespeichert).HasMaxLength(128);
+            b.Property(f => f.OriginalName).HasMaxLength(260);
+            b.Property(f => f.ContentType).HasMaxLength(100);
+            b.Property(f => f.ErstelltVonId).HasMaxLength(64);
+            b.HasIndex(f => f.FraktionId);
         });
 
         modelBuilder.Entity<FraktionAgent>(b =>
@@ -656,6 +683,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => a.Titel);
             b.HasIndex(a => a.Status);
             b.HasIndex(a => a.Faelligkeit);
+            b.HasIndex(a => a.IstEingeschraenkt);
 
             b.HasMany(a => a.Zuweisungen).WithOne(z => z.Aufgabe!)
                 .HasForeignKey(z => z.AufgabeId).OnDelete(DeleteBehavior.Cascade);

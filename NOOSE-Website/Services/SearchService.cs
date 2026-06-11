@@ -375,10 +375,10 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Aufgaben (Titel/Aktenzeichen/Beschreibung; Team-Board → keine Verschlusssache) ----
+        // ---- Aufgaben (Titel/Aktenzeichen/Beschreibung; eingeschränkte nur für Beteiligte/Aufsicht) ----
         if (Aktiv(nameof(Aufgabe)))
         {
-            var q = db.Aufgaben.AsQueryable();
+            var q = db.Aufgaben.NurSichtbare(db, istFuehrung, meId);
             if (hatText)
             {
                 q = q.Where(a => a.Titel.Contains(s!) || a.Aktenzeichen.Contains(s!)
@@ -394,7 +394,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
             if (FuzzyAktiv(treffer.Count))
             {
-                var basis = db.Aufgaben.AsQueryable();
+                var basis = db.Aufgaben.NurSichtbare(db, istFuehrung, meId);
                 if (hatTags)
                 {
                     basis = basis.Where(a => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Aufgabe) && z.EntitaetId == a.Id && tagIds.Contains(z.TagId)));
@@ -448,7 +448,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 .Select(quelle => new RohTreffer(quelle.EntitaetTyp, quelle.EntitaetId, quelle.Titel))
                 .Take(MaxProKategorie * 4)
                 .ToListAsync(cancellationToken);
-            var treffer = await AkteElternTrefferAsync(db, nameof(Quelle), roh, istFuehrung, hatTags, tagIds, cancellationToken);
+            var treffer = await AkteElternTrefferAsync(db, nameof(Quelle), roh, istFuehrung, meId, hatTags, tagIds, cancellationToken);
             if (treffer.Count > 0)
             {
                 gruppen.Add(new SuchErgebnisGruppe(nameof(Quelle), "Quellen", treffer));
@@ -463,7 +463,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 .Select(kommentar => new RohTreffer(kommentar.EntitaetTyp, kommentar.EntitaetId, kommentar.Text))
                 .Take(MaxProKategorie * 4)
                 .ToListAsync(cancellationToken);
-            var treffer = await AkteElternTrefferAsync(db, nameof(Kommentar), roh, istFuehrung, hatTags, tagIds, cancellationToken);
+            var treffer = await AkteElternTrefferAsync(db, nameof(Kommentar), roh, istFuehrung, meId, hatTags, tagIds, cancellationToken);
             if (treffer.Count > 0)
             {
                 gruppen.Add(new SuchErgebnisGruppe(nameof(Kommentar), "Kommentare", treffer));
@@ -517,7 +517,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .OrderBy(v => v.Titel).Take(max)
             .Select(v => new SchnellTreffer(nameof(Vorgang), v.Id, v.Titel, v.Aktenzeichen))
             .ToListAsync(cancellationToken);
-        var aufgaben = await db.Aufgaben
+        var aufgaben = await db.Aufgaben.NurSichtbare(db, istFuehrung, meId)
             .Where(a => a.Titel.Contains(s) || a.Aktenzeichen.Contains(s))
             .OrderBy(a => a.Titel).Take(max)
             .Select(a => new SchnellTreffer(nameof(Aufgabe), a.Id, a.Titel, a.Aktenzeichen))
@@ -579,7 +579,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
             if (aufgaben.Count < max)
             {
-                var k = await db.Aufgaben
+                var k = await db.Aufgaben.NurSichtbare(db, istFuehrung, meId)
                     .OrderBy(a => a.Titel).Take(FuzzyKandidatenMax)
                     .Select(a => new { a.Id, Name = a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken);
                 aufgaben = SchnellFuzzy(nameof(Aufgabe), aufgaben, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
@@ -684,7 +684,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
     /// nach Tags der Eltern-Akte. Reihenfolge der Roh-Treffer bleibt erhalten; auf <see cref="MaxProKategorie"/> gekürzt.
     /// </summary>
     private static async Task<List<SuchTreffer>> AkteElternTrefferAsync(
-        AppDbContext db, string kategorie, List<RohTreffer> roh, bool istFuehrung, bool hatTags, List<string> tagIds, CancellationToken cancellationToken)
+        AppDbContext db, string kategorie, List<RohTreffer> roh, bool istFuehrung, string? meId, bool hatTags, List<string> tagIds, CancellationToken cancellationToken)
     {
         if (roh.Count == 0)
         {
@@ -737,7 +737,9 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Vorgang), x.Id)] = (x.Titel, x.Aktenzeichen, x.IstVerschlusssache);
         }
-        foreach (var x in await db.Aufgaben.Where(a => aufgabeIds.Contains(a.Id))
+        // Eingeschränkte Aufgaben nur für Beteiligte/Aufsicht in die Map aufnehmen – sonst werden Treffer auf
+        // Kommentaren/Quellen einer eingeschränkten Aufgabe unten (fehlt in der Map → continue) ausgeblendet.
+        foreach (var x in await db.Aufgaben.NurSichtbare(db, istFuehrung, meId).Where(a => aufgabeIds.Contains(a.Id))
                      .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken))
         {
             map[(nameof(Aufgabe), x.Id)] = (x.Titel, x.Aktenzeichen, false);

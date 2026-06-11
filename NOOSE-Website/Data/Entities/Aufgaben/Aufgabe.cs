@@ -32,6 +32,12 @@ public class Aufgabe : IAuditable, ISoftDelete
     /// <summary>Zeitpunkt des Abschlusses – gesetzt, sobald der Status auf Erledigt/Abgebrochen wechselt.</summary>
     public DateTime? ErledigtAm { get; set; }
 
+    /// <summary>
+    /// Eingeschränkt: nur zugeteilte Agenten, der Ersteller sowie die Aufsicht (Führung/Admin/Teamleitung,
+    /// d. h. <c>DarfVerschlusssacheLesen()</c>) sehen die Aufgabe. Nicht gesetzt = für alle sichtbar (Team-Board).
+    /// </summary>
+    public bool IstEingeschraenkt { get; set; }
+
     // ---- Kind-Tabellen ----
     public List<AufgabeZuweisung> Zuweisungen { get; set; } = new();
 

@@ -36,8 +36,20 @@ else
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
             <TemplateColumn Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
-                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
-                    <MudLink Href="@($"/fraktionen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @* Titelbild als kleines Vorschaubild (falls markiert), sonst neutraler Platzhalter. *@
+                        @if (!string.IsNullOrEmpty(context.Item.TitelbildFotoId))
+                        {
+                            <MudImage Src="@($"/dateien/fraktionen/foto/{context.Item.TitelbildFotoId}")" Alt="Titelbild"
+                                      Height="28" Width="28" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Default" Size="Size.Small" />
+                        }
+                        @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                        <MudLink Href="@($"/fraktionen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    </MudStack>
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.Art" Title="Art" />
@@ -102,6 +114,7 @@ else
                 Art = f.Art ?? "—",
                 // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
                 Mitgliederzahl = f.Mitglieder.Count(m => m.Person is not null && (darfVsLesen || !m.Person.IstVerschlusssache)),
+                TitelbildFotoId = f.Fotos.FirstOrDefault(x => x.IstTitelbild)?.Id,
                 Einstufung = f.Einstufung,
                 IstVerschlusssache = f.IstVerschlusssache,
                 AktualisiertUtc = referenzUtc,
@@ -134,6 +147,7 @@ else
         public string Name { get; set; } = string.Empty;
         public string Art { get; set; } = string.Empty;
         public int Mitgliederzahl { get; set; }
+        public string? TitelbildFotoId { get; set; }
         public Einstufung Einstufung { get; set; }
         public bool IstVerschlusssache { get; set; }
         public DateTime AktualisiertUtc { get; set; }

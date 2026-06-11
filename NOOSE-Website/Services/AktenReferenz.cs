@@ -163,14 +163,21 @@ public static class AktenReferenz
             }
         }
 
-        // Aufgabe: kein Verschlusssache-Konzept (Team-Board) → Verschluss-Flag fest false.
+        // Aufgabe: kein Verschlusssache-Konzept (Team-Board), ABER „eingeschränkte" Aufgaben sind nur für
+        // Beteiligte (Ersteller/Zugeteilte) bzw. die Aufsicht sichtbar. darfAlleTaskforces trägt hier denselben
+        // „Aufsicht darf alles"-Wert (DarfAlleTaskforcesSehen == DarfVerschlusssacheLesen); nicht sichtbare
+        // Aufgaben bleiben unaufgelöst → Aufrufer zeigen sie als „(nicht verfügbar)"/gar nicht. Verschluss fest false.
         var aufgabeIds = OffeneIds(nameof(Aufgabe));
         if (aufgabeIds.Count > 0)
         {
-            foreach (var x in await db.Aufgaben.Where(a => aufgabeIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(ct))
+            var sichtbar = await AufgabeSichtbarkeit.SichtbareIdsAsync(db, aufgabeIds, darfAlleTaskforces, meId, ct);
+            if (sichtbar.Count > 0)
             {
-                map[(nameof(Aufgabe), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", false, SuchNavigation.Route(nameof(Aufgabe), x.Id));
+                foreach (var x in await db.Aufgaben.Where(a => sichtbar.Contains(a.Id))
+                    .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(ct))
+                {
+                    map[(nameof(Aufgabe), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", false, SuchNavigation.Route(nameof(Aufgabe), x.Id));
+                }
             }
         }
 

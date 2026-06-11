@@ -26,6 +26,9 @@ public class FraktionEingabe
     /// <summary>Staatsfraktion: kann nicht „veraltet" werden (Aktualitäts-Ampel bleibt dauerhaft „Aktuell").</summary>
     public bool IstStaatsfraktion { get; set; }
 
+    /// <summary>Geschätzte Gesamtgröße der Fraktion (= y im Erfassungsfortschritt x/y); optional.</summary>
+    public int? GeschaetzteMitgliederzahl { get; set; }
+
     public List<RangEingabe> Raenge { get; set; } = new();
     public List<BestandEingabe> Waffenbestand { get; set; } = new();
     public List<BestandEingabe> Lagerbestand { get; set; } = new();

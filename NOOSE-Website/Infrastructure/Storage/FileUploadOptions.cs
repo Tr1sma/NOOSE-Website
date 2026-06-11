@@ -6,6 +6,9 @@ public class FileUploadOptions
     /// <summary>Zielordner relativ zum ContentRoot (außerhalb von wwwroot) oder absoluter Pfad.</summary>
     public string PersonenPfad { get; set; } = "App_Data/uploads/personen";
 
+    /// <summary>Zielordner für Fraktions-Fotos (eigener Bereich, sonst gleiche Bild-Regeln wie Personen).</summary>
+    public string FraktionenPfad { get; set; } = "App_Data/uploads/fraktionen";
+
     /// <summary>Maximale Dateigröße in Bytes (Standard 10 MB).</summary>
     public long MaxBytes { get; set; } = 10 * 1024 * 1024;
 

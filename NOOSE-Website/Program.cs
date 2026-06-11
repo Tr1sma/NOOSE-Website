@@ -10,6 +10,7 @@ using MudBlazor.Services;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Components;
 using NOOSE_Website.Components.Account;
+using NOOSE_Website.Components.Fraktionen;
 using NOOSE_Website.Components.Personen;
 using NOOSE_Website.Components.Querschnitt;
 using NOOSE_Website.Data;
@@ -164,6 +165,7 @@ builder.Services.AddScoped<IAgentVerwaltungService, AgentVerwaltungService>();
 builder.Services.AddScoped<IZugriffsLogService, ZugriffsLogService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IQuellenStorageService, QuellenStorageService>();
+builder.Services.AddScoped<IFraktionFotoStorageService, FraktionFotoStorageService>();
 // Gemeinsame Aktenzeichen-Vergabe (Person/Fraktion/Gruppe).
 builder.Services.AddScoped<IAktenzeichenService, AktenzeichenService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
@@ -287,6 +289,7 @@ app.MapRazorComponents<App>()
 app.MapNooseAccountEndpoints();
 app.MapNoosePersonenDateiEndpoints();
 app.MapNooseQuellenDateiEndpoints();
+app.MapNooseFraktionenDateiEndpoints();
 
 // Start-up: ausstehende EF-Migrationen anwenden und die technische "Admin"-Rolle sicherstellen.
 using (var scope = app.Services.CreateScope())

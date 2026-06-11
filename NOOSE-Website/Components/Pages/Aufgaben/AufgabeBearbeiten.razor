@@ -70,7 +70,7 @@ else
         _laden = true;
         _eingabe = null;
         _keinZugriff = false;
-        var a = await AufgabeService.GetDetailAsync(Id);
+        var a = await AufgabeService.GetDetailAsync(Id, _user);
         if (a is not null)
         {
             // Bearbeiten ist Ersteller/Führung vorbehalten – serverseitig in AktualisierenAsync erzwungen, hier
@@ -88,6 +88,7 @@ else
                     Status = a.Status,
                     Prioritaet = a.Prioritaet,
                     Faelligkeit = a.Faelligkeit,
+                    IstEingeschraenkt = a.IstEingeschraenkt,
                 };
             }
         }

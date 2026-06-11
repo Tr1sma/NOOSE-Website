@@ -39,7 +39,8 @@ else
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <Fraktionskarte Fraktion="_fraktion" Mitgliederzahl="_mitgliederzahl" Ermittlungsleiter="_ermittlungsleiter" />
+                <Fraktionskarte Fraktion="_fraktion" Mitgliederzahl="_mitgliederzahl" Ermittlungsleiter="_ermittlungsleiter"
+                                TitelbildFotoId="@(_fraktion.Fotos.FirstOrDefault(x => x.IstTitelbild)?.Id)" />
             </div>
         </MudItem>
 
@@ -95,6 +96,12 @@ else
                         <SteckbriefListe Titel="Drogenrouten" Werte="BestandTexte(_fraktion.Drogenrouten.Select(d => (d.Bezeichnung, d.Notiz)))" />
                     </MudStack>
                 </MudTabPanel>
+                <MudTabPanel Text="Aktivitäten" Icon="@Icons.Material.Filled.Timeline">
+                    <AktivitaetenPanel FraktionId="@_fraktion.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    <FraktionFotoGalerie FraktionId="@_fraktion.Id" User="_user" Changed="FotosGeaendertAsync" />
+                </MudTabPanel>
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <EinstufungPanel Aktuell="_fraktion.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
                                      EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" ZielBezeichnung="@($"{_fraktion.Name} ({_fraktion.Aktenzeichen})")" />
@@ -143,7 +150,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "stammdaten", "mitglieder", "agents", "bestaende", "einstufung", "doks",
+        "stammdaten", "mitglieder", "agents", "bestaende", "aktivitaeten", "fotos", "einstufung", "doks",
         "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 
@@ -218,6 +225,16 @@ else
         if (_fraktion is not null)
         {
             _mitgliederzahl = (await FraktionService.GetMitgliederAsync(_fraktion.Id, _user.DarfVerschlusssacheLesen())).Count;
+            StateHasChanged();
+        }
+    }
+
+    private async Task FotosGeaendertAsync()
+    {
+        if (_fraktion is not null)
+        {
+            // Fotos der Akte neu laden, damit der Steckkarten-Banner das (ggf. neue) Titelbild zeigt.
+            _fraktion.Fotos = await FraktionService.GetFotosAsync(_fraktion.Id);
             StateHasChanged();
         }
     }
