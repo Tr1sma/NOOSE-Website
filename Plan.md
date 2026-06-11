@@ -243,15 +243,23 @@
 
 **Abnahme:** Junior stellt Hochstufungs-Antrag → Senior genehmigt im Posteingang; Taskforce/Beförderung brauchen Führungs-Genehmigung; Fall mit mehreren Personen/Operationen anlegen; Observation erfassen.
 
-### Phase 6 – Dashboard, Statistiken, Aufgaben & Benachrichtigungen
+### Phase 6 – Dashboard, Statistiken, Aufgaben & Benachrichtigungen  ✅ ABGESCHLOSSEN
 **Ziel:** Überblick, Zusammenarbeit und „schöne Stats".
-- [ ] **Dashboard**: Kennzahlen (Fälle nach Einstufung, Maßnahme-Ausgänge, Fraktionen nach Gefährdung, offene Anträge), Charts, „zuletzt bearbeitet", Schnellsuche, **Aktivitäts-Feed**.
-- [ ] **Aufgaben/To-Dos & Zuweisungen** (mit Fälligkeit/Erinnerung, eigene „Meine Aufgaben"-Ansicht).
-- [ ] **Watchlist** (Akten folgen) + **In-App-Benachrichtigungen** (Glocke: Antrag entschieden, gefolgte Akte geändert, Taskforce-/Aufgaben-Zuteilung).
-- [ ] **@-Erwähnungen** in Kommentaren/Vermerken + Benachrichtigung.
-- [ ] **News/Schwarzes Brett** + **Behörden-Broadcast** (gezielte Rundnachricht der Führung an alle/eine Gruppe, optionale Quittierung).
+- [x] **Dashboard**: Kennzahlen (Fälle nach Einstufung, Maßnahme-Ausgänge, Fraktionen nach Gefährdung, offene Anträge), Charts, „zuletzt bearbeitet", Schnellsuche, **Aktivitäts-Feed**.
+- [x] **Aufgaben/To-Dos & Zuweisungen** (mit Fälligkeit/Erinnerung, eigene „Meine Aufgaben"-Ansicht).
+- [x] **Watchlist** (Akten folgen) + **In-App-Benachrichtigungen** (Glocke: Antrag entschieden, gefolgte Akte geändert, Taskforce-/Aufgaben-Zuteilung).
+- [x] **@-Erwähnungen** in Kommentaren/Vermerken + Benachrichtigung.
+- [x] **News/Schwarzes Brett** + **Behörden-Broadcast** (gezielte Rundnachricht der Führung an alle/eine Gruppe, optionale Quittierung).
 
 **Abnahme:** Dashboard zeigt korrekte Live-Zahlen & Diagramme; Aufgabe zuweisen → erscheint beim Empfänger + Benachrichtigung; einer Akte folgen → Änderung erzeugt Benachrichtigung; @-Erwähnung benachrichtigt; News/Broadcast erreicht Zielgruppe.
+
+> **Verifiziert:** Alle fünf Bausteine sind implementiert und in `Program.cs` registriert.
+> Dashboard (`Components/Pages/Home.razor`, `Services/DashboardService.cs`, `Models/Dashboard/`).
+> Aufgaben (`Data/Entities/Aufgaben/`, `Services/AufgabeService.cs`, `Components/Pages/Aufgaben/` inkl. Kanban + „Nur meine").
+> Watchlist + Benachrichtigungen (`Data/Entities/Watchlist/`, `Data/Entities/Benachrichtigungen/`, `Services/WatchlistService.cs`, `Services/NotificationService.cs`, Glocke `Components/Layout/BenachrichtigungGlocke.razor`, Live-Updates via `NotificationBroadcaster`/`WatchlistAenderungInterceptor`).
+> @-Erwähnungen (`Services/MentionService.cs`/`MentionParser.cs`, VS-gefiltert).
+> Brett + Broadcast (`Data/Entities/Ankuendigungen/`, `Services/AnkuendigungService.cs`, `Components/Pages/Brett/` inkl. Zielgruppe + optionaler Quittierung).
+> Migrationen: `Phase6_Benachrichtigungen`, `Phase6_Watchlist`, `Phase6_Aufgaben`, `Phase6_Ankuendigungen`.
 
 ### Phase 7 – Vorlagen, Admin, Wissensbasis & Komfort
 **Ziel:** Effizienz, Datenqualität und Anpassbarkeit.
