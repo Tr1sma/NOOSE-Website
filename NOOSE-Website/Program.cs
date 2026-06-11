@@ -248,7 +248,16 @@ builder.Services.AddRateLimiter(options =>
 
 // Blazor (Interactive Server).
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options =>
+    {
+        // Default ist 32 KB. Der WYSIWYG-Editor (RichTextEditor) schickt den KOMPLETTEN HTML-Inhalt
+        // ueber SignalR (laufend beim Tippen via OnHtmlChanged und beim Speichern via getHtml). Lange
+        // Dokumente (~30 KB+) sprengen sonst das Limit -> Circuit-Abriss -> leerer Speichervorgang.
+        // Inhalt ist serverseitig sanitisierter Text (keine eingebetteten Bilder); 5 MB ist grosszuegig
+        // und bleibt zugleich eine sinnvolle DoS-Grenze.
+        options.MaximumReceiveMessageSize = 5 * 1024 * 1024;
+    });
 
 var app = builder.Build();
 

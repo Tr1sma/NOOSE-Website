@@ -23,9 +23,15 @@ public class FraktionEingabe
     public string? EinstufungBegruendung { get; set; }
     public bool IstVerschlusssache { get; set; }
 
+    /// <summary>Staatsfraktion: kann nicht „veraltet" werden (Aktualitäts-Ampel bleibt dauerhaft „Aktuell").</summary>
+    public bool IstStaatsfraktion { get; set; }
+
     public List<RangEingabe> Raenge { get; set; } = new();
     public List<BestandEingabe> Waffenbestand { get; set; } = new();
     public List<BestandEingabe> Lagerbestand { get; set; } = new();
+
+    /// <summary>Drogenrouten als generisches Mehrfachfeld; das Zusatzfeld (<see cref="BestandEingabe.Menge"/>) trägt hier die Notiz.</summary>
+    public List<BestandEingabe> Drogenrouten { get; set; } = new();
 
     /// <summary>Mitglieder, die bereits beim Anlegen erfasst werden (auf der Detailseite weiter pflegbar).</summary>
     public List<MitgliedEingabe> Mitglieder { get; set; } = new();

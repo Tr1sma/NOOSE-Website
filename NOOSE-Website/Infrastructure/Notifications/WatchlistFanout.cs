@@ -20,6 +20,8 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
 
         // Anzeigename (öffentlich, NIE Klarname) + Href je Akte in einer Sammelabfrage. Akten im Papierkorb bzw.
         // unbekannte Verweise lösen sich NICHT auf → werden übersprungen (bewusst keine „gelöscht"-Meldung).
+        // Hier (Hintergrund, viele Empfänger) ALLE Taskforce-Namen auflösen (Standard); die Mitgliedschaftsprüfung
+        // erfolgt pro Folger unten über IstAkteSichtbarAsync mit dessen Id.
         var aufgeloest = await AktenReferenz.AufloesenAsync(db, akten, cancellationToken);
 
         foreach (var (typ, id) in akten.Distinct())
@@ -69,9 +71,10 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 {
                     continue;
                 }
-                // Verschlusssache-/Personalakte-Schutz aus Sicht des EMPFÄNGERS (kein Leck an Nicht-Berechtigte).
+                // Verschlusssache-/Personalakte-/Taskforce-Schutz aus Sicht des EMPFÄNGERS (kein Leck an
+                // Nicht-Berechtigte). Bei Taskforces zählt die Mitgliedschaft → die Folger-Id (f.Id) mitgeben.
                 var istFuehrung = f.IstAdmin || f.Dienstgrad is >= Dienstgrad.SupervisorySpecialAgent;
-                if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, typ, id, istFuehrung, cancellationToken))
+                if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, typ, id, istFuehrung, cancellationToken, f.Id))
                 {
                     continue;
                 }

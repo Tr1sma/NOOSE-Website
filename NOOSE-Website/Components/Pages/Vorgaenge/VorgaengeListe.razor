@@ -12,7 +12,9 @@
     <AuthorizeView Policy="@Policies.Fuehrung">
         <MudButton Href="/vorgaenge/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
-    <MudButton Href="/vorgaenge/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neuer Vorgang</MudButton>
+    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <MudButton Href="/vorgaenge/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neuer Vorgang</MudButton>
+    </AuthorizeView>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Vorgangs-/Fallakten: bündeln Personen, Operationen, Observationen und Doks zu einem Ermittlungs-Vorgang mit eigenem Status.
@@ -77,7 +79,9 @@ else
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
                 <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Color="Color.Default" Size="Size.Large" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Vorgänge – lege den ersten an.</MudText>
-                <MudButton Href="/vorgaenge/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neuer Vorgang</MudButton>
+                <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                    <MudButton Href="/vorgaenge/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neuer Vorgang</MudButton>
+                </AuthorizeView>
             </MudStack>
         </NoRecordsContent>
         <PagerContent>
@@ -97,8 +101,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var istFuehrung = user.IstFuehrung();
-        var vorgaenge = await VorgangService.GetListeAsync(istFuehrung);
+        var vorgaenge = await VorgangService.GetListeAsync(user.DarfVerschlusssacheLesen());
         var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Vorgang));
         var jetzt = DateTime.UtcNow;
         _zeilen = vorgaenge.Select(v =>

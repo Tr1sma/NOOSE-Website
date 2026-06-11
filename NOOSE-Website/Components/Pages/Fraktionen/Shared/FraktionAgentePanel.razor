@@ -41,7 +41,7 @@
                         }
                     </MudStack>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
-                        @if (_istFuehrung)
+                        @if (_darfSchreiben && _istFuehrung)
                         {
                             <MudIconButton Icon="@(a.IstErmittlungsleiter ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
                                            Color="@(a.IstErmittlungsleiter ? Color.Warning : Color.Default)" Size="Size.Small"
@@ -68,12 +68,14 @@
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private bool _istFuehrung;
     private bool _kannVerwalten;
     private List<FraktionAgent> _agenten = new();
 
     protected override async Task OnInitializedAsync()
     {
+        _darfSchreiben = User.DarfSchreiben();
         _istFuehrung = User.IstFuehrung();
         await LadenAsync();
     }
@@ -85,6 +87,8 @@
         // Verwalten (zuteilen/entfernen) darf die Führung oder ein Ermittlungsleiter dieser Akte.
         var meineId = User.GetAgentId();
         _kannVerwalten = _istFuehrung || _agenten.Any(a => a.AgentId == meineId && a.IstErmittlungsleiter);
+        // Schreibgeschuetzte Aufsichtsrolle: keine Mutations-Steuerelemente anzeigen.
+        _kannVerwalten = _kannVerwalten && _darfSchreiben;
         _laden = false;
     }
 

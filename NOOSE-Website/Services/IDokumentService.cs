@@ -29,6 +29,7 @@ public interface IDokumentService
     /// <summary>Soft-Delete (Papierkorb). Nur Ersteller oder Führung.</summary>
     Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
 
-    /// <summary>Akten, an die dieses Dokument als Quelle angehängt ist (für die „Angehängt an"-Anzeige).</summary>
-    Task<List<DokumentAnhang>> GetAnhaengeAsync(string dokumentId, bool istFuehrung, CancellationToken cancellationToken = default);
+    /// <summary>Akten, an die dieses Dokument als Quelle angehängt ist (für die „Angehängt an"-Anzeige).
+    /// <paramref name="meId"/> = Agent-Id des Betrachters (fremde Taskforces werden ausgeblendet).</summary>
+    Task<List<DokumentAnhang>> GetAnhaengeAsync(string dokumentId, bool istFuehrung, string? meId, CancellationToken cancellationToken = default);
 }

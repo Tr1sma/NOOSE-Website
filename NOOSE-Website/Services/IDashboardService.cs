@@ -30,7 +30,7 @@ public interface IDashboardService
     /// Eltern-Akte inkl. Anzeigename. Kind-Änderungen (Doks, Mitglieder, Agent-Zuteilungen) werden auf
     /// ihre Akte hochgerollt; Verschlusssachen erscheinen nur für die Führung.
     /// </summary>
-    Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, int max = 8, CancellationToken cancellationToken = default);
+    Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, string? meId, int max = 8, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Die vier Verteilungs-Diagramme (§248): Fälle nach Einstufung, Maßnahme-Ausgänge, Fraktionen nach

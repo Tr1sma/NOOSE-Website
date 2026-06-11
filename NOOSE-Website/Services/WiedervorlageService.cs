@@ -18,7 +18,8 @@ public class WiedervorlageService(IDbContextFactory<AppDbContext> dbFactory) : I
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         // Wiedervorlagen einer Akte nur zeigen, wenn der Aufrufer die Akte sehen darf (VS/Papierkorb-Gate).
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.IstFuehrung(), cancellationToken))
+        // Lese-Gate: die Nur-Lese-Aufsicht darf VS-Akten einsehen (DarfVerschlusssacheLesen).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.DarfVerschlusssacheLesen(), cancellationToken))
         {
             return new();
         }
@@ -58,7 +59,8 @@ public class WiedervorlageService(IDbContextFactory<AppDbContext> dbFactory) : I
             Erledigt: r.Erledigt,
             ErledigtAm: r.ErledigtAm,
             Ueberfaellig: !r.Erledigt && r.FaelligAm <= jetzt,
-            DarfBearbeiten: istFuehrung || r.ErstelltVonId == meId || r.ZustaendigerAgentId == meId)).ToList();
+            // Nur-Leser (Aufsicht) dürfen nichts bearbeiten – auch nicht eigene/zugewiesene Wiedervorlagen.
+            DarfBearbeiten: handelnder.DarfSchreiben() && (istFuehrung || r.ErstelltVonId == meId || r.ZustaendigerAgentId == meId))).ToList();
     }
 
     public async Task ErstellenAsync(string entitaetTyp, string entitaetId, WiedervorlageEingabe eingabe,
@@ -174,9 +176,12 @@ public class WiedervorlageService(IDbContextFactory<AppDbContext> dbFactory) : I
         }
 
         // Akten-Namen + Href in einer Sammelabfrage; aus Sicht des Aufrufers VS-/Papierkorb-gefiltert.
-        var istFuehrung = handelnder.IstFuehrung();
+        // Lese-Gate: die Nur-Lese-Aufsicht darf VS-Akten einsehen.
+        var istFuehrung = handelnder.DarfVerschlusssacheLesen();
         var refs = rows.Select(r => (r.EntitaetTyp, r.EntitaetId)).Distinct().ToList();
-        var aufgeloest = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken);
+        // Taskforces nur auflösen, wenn der Aufrufer zugeteilt ist (oder alle sehen darf) – meId mitgeben.
+        var aufgeloest = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken,
+            darfAlleTaskforces: handelnder.DarfAlleTaskforcesSehen(), meId: meId);
 
         var ergebnis = new List<WiedervorlageDashboardItem>();
         foreach (var r in rows)

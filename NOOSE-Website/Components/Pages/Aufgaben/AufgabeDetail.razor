@@ -25,7 +25,9 @@ else
         <MudSpacer />
         @if (_kannBearbeiten)
         {
-            <MudButton Href="@($"/aufgaben/{_aufgabe.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                <MudButton Href="@($"/aufgaben/{_aufgabe.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            </AuthorizeView>
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
         }
     </MudStack>

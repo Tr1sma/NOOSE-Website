@@ -12,7 +12,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 {
     private const int KandidatenProGruppe = 5;
 
-    public async Task<IReadOnlyList<MentionSegment>> AufloesenAsync(string? text, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MentionSegment>> AufloesenAsync(string? text, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -26,11 +26,12 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         var refs = tokens.Select(t => (t.Typ, t.Id)).Distinct().ToList();
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var map = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken);
+        // Fremde Taskforces gar nicht erst auflösen → erscheinen als „(nicht verfügbar)"-Chip.
+        var map = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken, darfAlleTaskforces: istFuehrung, meId: meId);
         return Segmentieren(text, tokens, map, istFuehrung);
     }
 
-    public async Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> AufloesenVieleAsync(IReadOnlyList<string?> texte, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> AufloesenVieleAsync(IReadOnlyList<string?> texte, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         // Alle Tokens aller Texte einmal sammeln und in EINER Sammelabfrage auflösen.
         var tokenProText = texte.Select(MentionParser.Parse).ToList();
@@ -44,7 +45,8 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         else
         {
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            map = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken);
+            // Fremde Taskforces gar nicht erst auflösen (s. AufloesenAsync).
+            map = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken, darfAlleTaskforces: istFuehrung, meId: meId);
         }
 
         var ergebnis = new List<IReadOnlyList<MentionSegment>>(texte.Count);
@@ -91,7 +93,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         return segmente;
     }
 
-    public async Task<List<MentionTreffer>> KandidatenAsync(string? text, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<MentionTreffer>> KandidatenAsync(string? text, bool darfVerschlusssacheLesen, bool darfKlarname, string? meId, CancellationToken cancellationToken = default)
     {
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
@@ -103,13 +105,13 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         // 1) Akten (Person/Fraktion/Gruppe/Partei/Operation/Taskforce) über die Schnellsuche – VS-gefiltert;
         //    Taskforces zusätzlich Mitgliedschafts-gefiltert (meId).
-        var akten = await search.SchnellsucheAsync(s, istFuehrung, meId, 8, cancellationToken);
+        var akten = await search.SchnellsucheAsync(s, darfVerschlusssacheLesen, meId, 8, cancellationToken);
         treffer.AddRange(akten.Select(a => new MentionTreffer(a.Kategorie, a.ZielId, a.Name, a.Aktenzeichen)));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // 2) Agenten – Codename (Klarname nur für die Führung, sonst wäre die Suche ein Orakel auf das Geheimfeld).
-        var darfKlarname = istFuehrung; // DarfKlarnameSehen() == IstFuehrung()
+        // 2) Agenten – Codename (Klarname nur für die Führung; die Nur-Lese-Aufsicht sieht ihn NICHT, auch wenn
+        //    sie VS lesen darf). darfKlarname kommt daher getrennt vom VS-Lese-Flag herein.
         var agenten = await db.Users
             .Where(u => u.Status == AgentStatus.Aktiv && !u.IstTeamLeitung
                 && (u.Codename.Contains(s) || (darfKlarname && u.Klarname != null && u.Klarname.Contains(s))))
@@ -130,7 +132,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             var anzahl = 0;
             foreach (var q in quellenRoh)
             {
-                if (!elternMap.TryGetValue((q.EntitaetTyp, q.EntitaetId), out var e) || (e.Verschluss && !istFuehrung))
+                if (!elternMap.TryGetValue((q.EntitaetTyp, q.EntitaetId), out var e) || (e.Verschluss && !darfVerschlusssacheLesen))
                 {
                     continue; // Eltern-Akte fehlt/Papierkorb oder Verschlusssache ohne Berechtigung.
                 }

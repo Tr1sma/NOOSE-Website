@@ -2,13 +2,17 @@
 @inject IWatchlistService WatchlistService
 @inject ISnackbar Snackbar
 
-<MudButton Variant="@(_gefolgt ? Variant.Filled : Variant.Outlined)"
-           Color="@(_gefolgt ? Color.Warning : Color.Default)"
-           StartIcon="@(_gefolgt ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
-           OnClick="UmschaltenAsync" Disabled="_busy"
-           aria-label="@(_gefolgt ? "Nicht mehr folgen" : "Dieser Akte folgen")">
-    @(_gefolgt ? "Beobachtet" : "Folgen")
-</MudButton>
+@* Folgen ist eine Mutation (Watchlist) → für die Nur-Lese-Aufsicht ausblenden. *@
+@if (_darfSchreiben)
+{
+    <MudButton Variant="@(_gefolgt ? Variant.Filled : Variant.Outlined)"
+               Color="@(_gefolgt ? Color.Warning : Color.Default)"
+               StartIcon="@(_gefolgt ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
+               OnClick="UmschaltenAsync" Disabled="_busy"
+               aria-label="@(_gefolgt ? "Nicht mehr folgen" : "Dieser Akte folgen")">
+        @(_gefolgt ? "Beobachtet" : "Folgen")
+    </MudButton>
+}
 
 @code {
     [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
@@ -17,11 +21,17 @@
 
     private bool _gefolgt;
     private bool _busy;
+    private bool _darfSchreiben;
     private string? _geladen;
 
     // Wird mit der Detailseite bei /…/{A} → /…/{B} wiederverwendet → auf Typ+Id-Wechsel reagieren (Projekt-Lifecycle).
     protected override async Task OnParametersSetAsync()
     {
+        _darfSchreiben = User.DarfSchreiben();
+        if (!_darfSchreiben)
+        {
+            return;
+        }
         var schluessel = $"{EntitaetTyp}:{EntitaetId}";
         if (_geladen == schluessel)
         {

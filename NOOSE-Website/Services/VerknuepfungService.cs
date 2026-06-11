@@ -20,10 +20,11 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IVerknuepfungService" />
 public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IVerknuepfungService
 {
-    public async Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, VerknuepfungArt? art = null, CancellationToken cancellationToken = default)
+    public async Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, string? meId, VerknuepfungArt? art = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        // meId für die Taskforce-Mitgliedschafts-Sichtbarkeit (sowohl der Akte selbst als auch verknüpfter Taskforces).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken, meId))
         {
             return new();
         }
@@ -88,9 +89,11 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(Operation), x.Id)] = ($"{x.Titel} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/operationen/{x.Id}");
         }
 
-        // Taskforce (Phase 5c): aufgelöst mit Navigation auf die eigene Detailseite.
+        // Taskforce (Phase 5c): nur die für den Betrachter sichtbaren (zugeteilt oder darf alle) auflösen –
+        // fremde Taskforces bleiben unaufgelöst und werden so aus der Beziehungs-Anzeige ausgeblendet.
         var taskforceIds = paare.Where(p => p.AndereTyp == nameof(Taskforce)).Select(p => p.AndereId).Distinct().ToList();
-        foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
+        var sichtbareTf = await TaskforceSichtbarkeit.SichtbareIdsAsync(db, taskforceIds, istFuehrung, meId, cancellationToken);
+        foreach (var x in await db.Taskforces.Where(t => sichtbareTf.Contains(t.Id))
                      .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(cancellationToken))
         {
             ziele[(nameof(Taskforce), x.Id)] = ($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, $"/taskforces/{x.Id}");

@@ -134,7 +134,7 @@ else
 
     private ClaimsPrincipal _user = default!;
     private string? _agentId;
-    private bool _istFuehrung;
+    private bool _darfVsLesen;
 
     private string _text = string.Empty;
     private bool _katPerson = true, _katFraktion = true, _katGruppe = true, _katPartei = true, _katOperation = true, _katTaskforce = true, _katVorgang = true, _katDok = true, _katQuelle = true, _katKommentar = true;
@@ -157,7 +157,7 @@ else
     {
         _user = (await AuthStateTask).User;
         _agentId = _user.GetAgentId();
-        _istFuehrung = _user.IstFuehrung();
+        _darfVsLesen = _user.DarfVerschlusssacheLesen();
         _tags = await TagService.GetAlleAsync();
         await GespeicherteLadenAsync();
     }
@@ -254,7 +254,7 @@ else
             do
             {
                 _erneutSuchen = false;
-                _gruppen = await SearchService.SuchenAsync(BaueKriterien(), _istFuehrung, _agentId);
+                _gruppen = await SearchService.SuchenAsync(BaueKriterien(), _darfVsLesen, _agentId);
                 _gesucht = true;
             }
             while (_erneutSuchen);

@@ -8,16 +8,20 @@
 <MudStack Spacing="3">
     <MudText Typo="Typo.subtitle1">Kommentare (@_eintraege.Count)</MudText>
 
-    <MudStack Spacing="2">
-        <MentionEingabe @bind-Text="_neuerText" IstFuehrung="_istFuehrung"
-                        Placeholder="@Platzhalter" OnSubmit="HinzufuegenAsync" />
-        <MudStack Row="true" Justify="Justify.FlexEnd">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
-                       OnClick="HinzufuegenAsync" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_neuerText))">
-                Kommentieren
-            </MudButton>
+    @if (_darfSchreiben)
+    {
+        <MudStack Spacing="2">
+            <MentionEingabe @bind-Text="_neuerText" IstFuehrung="_istFuehrung"
+                            DarfVerschlusssacheLesen="_darfVsLesen" DarfKlarname="_darfKlarname"
+                            Placeholder="@Platzhalter" OnSubmit="HinzufuegenAsync" />
+            <MudStack Row="true" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="HinzufuegenAsync" Disabled="@(_speichert || string.IsNullOrWhiteSpace(_neuerText))">
+                    Kommentieren
+                </MudButton>
+            </MudStack>
         </MudStack>
-    </MudStack>
+    }
 
     @if (_laden)
     {
@@ -40,7 +44,7 @@
                             · @e.K.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                         </MudText>
                     </MudStack>
-                    @if (DarfLoeschen(e.K))
+                    @if (_darfSchreiben && DarfLoeschen(e.K))
                     {
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                        OnClick="@(() => LoeschenAsync(e.K))" aria-label="Kommentar löschen" />
@@ -63,6 +67,9 @@
     private bool _laden = true;
     private bool _speichert;
     private bool _istFuehrung;
+    private bool _darfVsLesen;
+    private bool _darfKlarname;
+    private bool _darfSchreiben;
     private string _neuerText = string.Empty;
     private List<Eintrag> _eintraege = new();
 
@@ -71,16 +78,19 @@
     protected override async Task OnInitializedAsync()
     {
         _istFuehrung = User.IstFuehrung();
+        _darfVsLesen = User.DarfVerschlusssacheLesen();
+        _darfKlarname = User.DarfKlarnameSehen();
+        _darfSchreiben = User.DarfSchreiben();
         await LadenAsync();
     }
 
     private async Task LadenAsync()
     {
         _laden = true;
-        var kommentare = await KommentarService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, _istFuehrung);
+        var kommentare = await KommentarService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, _darfVsLesen);
         // Alle Kommentar-Texte in EINER Sammelabfrage auflösen (@-Tokens → anzeigefertige Segmente, VS-/Klarname-gefiltert).
         var segmente = await MentionService.AufloesenVieleAsync(
-            kommentare.Select(k => (string?)k.Text).ToList(), _istFuehrung);
+            kommentare.Select(k => (string?)k.Text).ToList(), _darfVsLesen, User.GetAgentId());
         _eintraege = kommentare.Select((k, i) => new Eintrag(k, segmente[i])).ToList();
         _laden = false;
     }

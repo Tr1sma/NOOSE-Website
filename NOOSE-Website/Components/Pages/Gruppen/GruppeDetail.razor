@@ -24,7 +24,9 @@ else
         <MudSpacer />
         <FolgenButton EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
         <AufgabeErstellenButton EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" />
-        <MudButton Href="@($"/personengruppen/{_gruppe.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+            <MudButton Href="@($"/personengruppen/{_gruppe.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.Fuehrung">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
         </AuthorizeView>
@@ -96,7 +98,7 @@ else
                     <CustomFelderPanel EntitaetTyp="@nameof(Personengruppe)" EntitaetId="@_gruppe.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <GruppeHistorieTimeline GruppeId="@_gruppe.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
+                    <GruppeHistorieTimeline GruppeId="@_gruppe.Id" IstFuehrung="_user.DarfVerschlusssacheLesen()" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -155,10 +157,11 @@ else
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
         // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
-        _gruppe = await GruppeService.GetDetailAsync(Id, _user.IstFuehrung());
+        var darfVsLesen = _user.DarfVerschlusssacheLesen();
+        _gruppe = await GruppeService.GetDetailAsync(Id, darfVsLesen);
         if (_gruppe is not null)
         {
-            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(_gruppe.Id, _user.IstFuehrung());
+            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(_gruppe.Id, darfVsLesen);
             _fortschritt = await GruppeService.GetFortschrittAsync(_gruppe.Id);
             await ErmittlungsleiterLadenAsync();
         }

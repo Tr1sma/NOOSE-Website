@@ -7,9 +7,12 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Mitglieder (@_mitglieder.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="HinzufuegenAsync">
-            Mitglied hinzufügen
-        </MudButton>
+        @if (_darfSchreiben)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="HinzufuegenAsync">
+                Mitglied hinzufügen
+            </MudButton>
+        }
     </MudStack>
 
     @if (_laden)
@@ -39,12 +42,15 @@
                             <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@m.Rolle</MudChip>
                         }
                     </MudStack>
-                    <MudStack Row="true" Spacing="0">
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
-                                       OnClick="@(() => BearbeitenAsync(m))" aria-label="Mitgliedschaft bearbeiten" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => EntfernenAsync(m))" aria-label="Mitglied entfernen" />
-                    </MudStack>
+                    @if (_darfSchreiben)
+                    {
+                        <MudStack Row="true" Spacing="0">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
+                                           OnClick="@(() => BearbeitenAsync(m))" aria-label="Mitgliedschaft bearbeiten" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => EntfernenAsync(m))" aria-label="Mitglied entfernen" />
+                        </MudStack>
+                    }
                 </MudStack>
             </MudPaper>
         }
@@ -58,9 +64,14 @@
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private List<PersonengruppeMitglied> _mitglieder = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {

@@ -41,7 +41,9 @@ else
         {
             <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
         }
-        <MudButton Href="@($"/dokumente/{_dokument.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+            <MudButton Href="@($"/dokumente/{_dokument.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
     </MudStack>
 
     <MudGrid>
@@ -127,7 +129,7 @@ else
         _dokument = await DokumentService.GetAsync(Id, _istFuehrung);
         if (_dokument is not null)
         {
-            _anhaenge = await DokumentService.GetAnhaengeAsync(Id, _istFuehrung);
+            _anhaenge = await DokumentService.GetAnhaengeAsync(Id, _istFuehrung, _user.GetAgentId());
             _darfLoeschen = _istFuehrung
                 || (_dokument.ErstelltVonId is not null && _dokument.ErstelltVonId == _user.GetAgentId());
         }

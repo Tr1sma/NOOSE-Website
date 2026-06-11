@@ -37,8 +37,10 @@ else
         <MudSpacer />
         @if (z.DarfVerwalten)
         {
-            <MudButton Href="@($"/brett/{z.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
-            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+            <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                <MudButton Href="@($"/brett/{z.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+                <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+            </AuthorizeView>
         }
     </MudStack>
 
@@ -66,9 +68,11 @@ else
                     {
                         @if (z.MussQuittieren)
                         {
-                            <div>
-                                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.DoneOutline" OnClick="QuittierenAsync">Kenntnis nehmen</MudButton>
-                            </div>
+                            <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                                <div>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.DoneOutline" OnClick="QuittierenAsync">Kenntnis nehmen</MudButton>
+                                </div>
+                            </AuthorizeView>
                         }
                         else if (z.SchonQuittiert)
                         {
@@ -98,7 +102,6 @@ else
     private AnkuendigungAnsicht? _detail;
     private IReadOnlyList<MentionSegment> _segmente = Array.Empty<MentionSegment>();
     private ClaimsPrincipal _user = default!;
-    private bool _istFuehrung;
     private string? _geladeneId;
 
     private bool ZeigeQuittierungsPanel => _detail is { Zeile.DarfVerwalten: true, Zeile.QuittierungVerlangt: true };
@@ -106,7 +109,6 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        _istFuehrung = _user.IstFuehrung();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -126,7 +128,7 @@ else
         _detail = await BrettService.GetDetailAsync(Id, _user);
         _segmente = _detail is null || string.IsNullOrWhiteSpace(_detail.Zeile.Inhalt)
             ? Array.Empty<MentionSegment>()
-            : await MentionService.AufloesenAsync(_detail.Zeile.Inhalt, _istFuehrung);
+            : await MentionService.AufloesenAsync(_detail.Zeile.Inhalt, _user.DarfVerschlusssacheLesen(), _user.GetAgentId());
         _laden = false;
     }
 

@@ -13,8 +13,11 @@
     {
         <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Tags</MudText>
     }
-    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
-             Icon="@Icons.Material.Filled.Edit" OnClick="VerwaltenAsync">Tags …</MudChip>
+    @if (_darfSchreiben)
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                 Icon="@Icons.Material.Filled.Edit" OnClick="VerwaltenAsync">Tags …</MudChip>
+    }
 </MudStack>
 
 @code {
@@ -23,8 +26,13 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private List<Tag> _tags = new();
+    private bool _darfSchreiben;
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync() => _tags = await TagService.GetFuerAkteAsync(EntitaetTyp, EntitaetId);
 

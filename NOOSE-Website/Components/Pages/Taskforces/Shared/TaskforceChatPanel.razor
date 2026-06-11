@@ -25,7 +25,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudText Typo="Typo.caption"><b>@(string.IsNullOrWhiteSpace(e.Msg.AutorName) ? "Unbekannt" : e.Msg.AutorName)</b></MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">· @e.Msg.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
-                            @if (eigen || _istFuehrung)
+                            @if (_darfSchreiben && (eigen || _istFuehrung))
                             {
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                OnClick="@(() => LoeschenAsync(e.Msg))" aria-label="Nachricht zurückziehen" />
@@ -49,14 +49,18 @@
         }
     </div>
 
-    <div>
-        <MentionEingabe @bind-Text="_text" IstFuehrung="_istFuehrung"
-                        Placeholder="@Platzhalter" OnSubmit="SendenAsync" />
-        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
-                       OnClick="SendenAsync" Disabled="@(_sendet || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
-        </MudStack>
-    </div>
+    @if (_darfSchreiben)
+    {
+        <div>
+            <MentionEingabe @bind-Text="_text" IstFuehrung="_istFuehrung"
+                            DarfVerschlusssacheLesen="_darfVsLesen" DarfKlarname="_darfKlarname"
+                            Placeholder="@Platzhalter" OnSubmit="SendenAsync" />
+            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="SendenAsync" Disabled="@(_sendet || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
+            </MudStack>
+        </div>
+    }
 </MudStack>
 
 @code {
@@ -70,6 +74,9 @@
     private bool _sendet;
     private bool _mehrMoeglich;
     private bool _istFuehrung;
+    private bool _darfVsLesen;
+    private bool _darfKlarname;
+    private bool _darfSchreiben;
     private string? _meineId;
     private string _text = string.Empty;
     private List<Eintrag> _eintraege = new();
@@ -79,6 +86,9 @@
     protected override async Task OnInitializedAsync()
     {
         _istFuehrung = User.IstFuehrung();
+        _darfVsLesen = User.DarfVerschlusssacheLesen();
+        _darfKlarname = User.DarfKlarnameSehen();
+        _darfSchreiben = User.DarfSchreiben();
         _meineId = User.GetAgentId();
         Broadcaster.Geaendert += OnGeaendert;
         await LadenAsync();
@@ -87,7 +97,7 @@
     private async Task LadenAsync()
     {
         _laden = true;
-        var nachrichten = await ChatService.GetNachrichtenAsync(TaskforceId, _istFuehrung, Seite);
+        var nachrichten = await ChatService.GetNachrichtenAsync(TaskforceId, _darfVsLesen, Seite);
         _mehrMoeglich = nachrichten.Count >= Seite;
         _eintraege = await ZuEintraegenAsync(nachrichten);
         _laden = false;
@@ -96,7 +106,7 @@
     private async Task<List<Eintrag>> ZuEintraegenAsync(List<TaskforceNachricht> nachrichten)
     {
         var segmente = await MentionService.AufloesenVieleAsync(
-            nachrichten.Select(n => (string?)n.Text).ToList(), _istFuehrung);
+            nachrichten.Select(n => (string?)n.Text).ToList(), _darfVsLesen, _meineId);
         return nachrichten.Select((n, i) => new Eintrag(n, segmente[i])).ToList();
     }
 
@@ -108,7 +118,7 @@
         }
         _laedtMehr = true;
         var aeltester = _eintraege[0].Msg.ErstelltAm;
-        var weitere = await ChatService.GetNachrichtenAsync(TaskforceId, _istFuehrung, Seite, aeltester);
+        var weitere = await ChatService.GetNachrichtenAsync(TaskforceId, _darfVsLesen, Seite, aeltester);
         _mehrMoeglich = weitere.Count >= Seite;
         if (weitere.Count > 0)
         {

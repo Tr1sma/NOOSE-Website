@@ -66,7 +66,7 @@ else
         _geladeneId = Id;
         _laden = true;
         _eingabe = null;
-        var o = await OperationService.GetDetailAsync(Id, _istFuehrung);
+        var o = await OperationService.GetDetailAsync(Id, _user.DarfVerschlusssacheLesen());
         if (o is not null)
         {
             _eingabe = new OperationEingabe

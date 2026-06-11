@@ -12,8 +12,9 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IVerknuepfungService
 {
-    /// <summary>Verknüpfungen einer Akte; mit <paramref name="art"/> auf eine Beziehungsart eingeschränkt (null = alle).</summary>
-    Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, VerknuepfungArt? art = null, CancellationToken cancellationToken = default);
+    /// <summary>Verknüpfungen einer Akte; mit <paramref name="art"/> auf eine Beziehungsart eingeschränkt (null = alle).
+    /// <paramref name="meId"/> = Agent-Id des Betrachters (verknüpfte fremde Taskforces werden ausgeblendet).</summary>
+    Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, string? meId, VerknuepfungArt? art = null, CancellationToken cancellationToken = default);
 
     Task ErstellenAsync(string vonTyp, string vonId, string nachTyp, string nachId, string? label, ClaimsPrincipal handelnder, VerknuepfungArt art = VerknuepfungArt.Standard, CancellationToken cancellationToken = default);
 

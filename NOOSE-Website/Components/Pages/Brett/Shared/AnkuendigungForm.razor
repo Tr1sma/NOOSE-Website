@@ -11,7 +11,8 @@
 
     <MudItem xs="12">
         <MudText Typo="Typo.subtitle2" Class="mb-1">Inhalt</MudText>
-        <MentionEingabe @bind-Text="_inhalt" IstFuehrung="IstFuehrung" Placeholder="@Platzhalter" />
+        <MentionEingabe @bind-Text="_inhalt" IstFuehrung="IstFuehrung"
+                        DarfVerschlusssacheLesen="IstFuehrung" DarfKlarname="IstFuehrung" Placeholder="@Platzhalter" />
     </MudItem>
 
     <MudItem xs="12">

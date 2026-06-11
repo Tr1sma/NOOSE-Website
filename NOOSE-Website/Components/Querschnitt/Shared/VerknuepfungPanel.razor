@@ -12,9 +12,12 @@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_manuell.Count)</MudText>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="NeueVerknuepfungAsync">
-                Verknüpfung hinzufügen
-            </MudButton>
+            @if (_darfSchreiben)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="NeueVerknuepfungAsync">
+                    Verknüpfung hinzufügen
+                </MudButton>
+            }
         </MudStack>
 
         @if (_laden)
@@ -47,8 +50,11 @@
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@v.Label</MudChip>
                             }
                         </MudStack>
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => VerknuepfungEntfernenAsync(v))" aria-label="Verknüpfung löschen" />
+                        @if (_darfSchreiben)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => VerknuepfungEntfernenAsync(v))" aria-label="Verknüpfung löschen" />
+                        }
                     </MudStack>
                 </MudPaper>
             }
@@ -61,9 +67,12 @@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudText Typo="Typo.subtitle1">Beziehungen (@(_beziehungen.Count + _kollegen.Count))</MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeueBeziehungAsync">
-                Beziehung hinzufügen
-            </MudButton>
+            @if (_darfSchreiben)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeueBeziehungAsync">
+                    Beziehung hinzufügen
+                </MudButton>
+            }
         </MudStack>
 
         @if (_laden)
@@ -88,8 +97,11 @@
                             </MudLink>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@b.AnderePersonAktenzeichen</MudText>
                         </MudStack>
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => BeziehungEntfernenAsync(b))" aria-label="Beziehung löschen" />
+                        @if (_darfSchreiben)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => BeziehungEntfernenAsync(b))" aria-label="Beziehung löschen" />
+                        }
                     </MudStack>
                     @if (!string.IsNullOrWhiteSpace(b.Notiz))
                     {
@@ -167,12 +179,17 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private List<BeziehungAnzeige> _beziehungen = new();
     private List<VerknuepfungAnzeige> _manuell = new();
     private List<VerknuepfungAnzeige> _kollegen = new();
     private List<AbgeleiteteBeziehung> _abgeleitete = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {
@@ -181,7 +198,7 @@
         _beziehungen = await BeziehungService.GetFuerPersonAsync(PersonId, istFuehrung);
         // Standard-Verknüpfungen aufteilen: automatische Kollegen wandern zu den Beziehungen,
         // manuell angelegte bleiben unter „Verknüpfte Akten".
-        var standard = await VerknuepfungService.GetFuerAkteAsync(nameof(Person), PersonId, istFuehrung, VerknuepfungArt.Standard);
+        var standard = await VerknuepfungService.GetFuerAkteAsync(nameof(Person), PersonId, istFuehrung, User.GetAgentId(), VerknuepfungArt.Standard);
         _manuell = standard.Where(v => !v.Automatisch).ToList();
         _kollegen = standard.Where(v => v.Automatisch).ToList();
         _abgeleitete = await PersonService.GetAbgeleiteteBeziehungenAsync(PersonId, istFuehrung);

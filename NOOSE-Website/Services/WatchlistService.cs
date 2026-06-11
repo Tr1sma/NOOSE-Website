@@ -117,7 +117,8 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
         {
             return new();
         }
-        var istFuehrung = handelnder.IstFuehrung();
+        // Lese-Gate: die Nur-Lese-Aufsicht darf gefolgte VS-Akten einsehen (DarfVerschlusssacheLesen).
+        var istFuehrung = handelnder.DarfVerschlusssacheLesen();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var eintraege = await db.Watchlisten
@@ -131,7 +132,9 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
         }
 
         var refs = eintraege.Select(e => (e.EntitaetTyp, e.EntitaetId)).Distinct().ToList();
-        var aufgeloest = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken);
+        // Gefolgte Taskforces nur auflösen, wenn der Aufrufer zugeteilt ist (oder alle sehen darf).
+        var aufgeloest = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken,
+            darfAlleTaskforces: handelnder.DarfAlleTaskforcesSehen(), meId: agentId);
 
         var ergebnis = new List<GefolgteAkte>(eintraege.Count);
         foreach (var e in eintraege)

@@ -26,9 +26,19 @@ public static class AktenReferenz
 {
     public readonly record struct Aufloesung(string Anzeige, bool Verschluss, string? Href);
 
-    /// <summary>Löst alle angegebenen (Typ, Id)-Verweise in einer Sammelabfrage je Typ auf.</summary>
+    /// <summary>Löst alle angegebenen (Typ, Id)-Verweise in einer Sammelabfrage je Typ auf.
+    /// Taskforces werden NUR aufgelöst, wenn der Betrachter sie sehen darf (<paramref name="darfAlleTaskforces"/>
+    /// = Führung/Admin/Aufsicht, sonst muss er via <paramref name="meId"/> zugeteilt sein); nicht sichtbare
+    /// Taskforce-Verweise fehlen im Ergebnis (Aufrufer zeigen sie dann als „(nicht verfügbar)"/gar nicht).
+    /// Hintergrund-Fan-out-Dienste, die für viele Empfänger EINMAL auflösen, übergeben
+    /// (darfAlleTaskforces: true, meId: null) und filtern die Zustellung separat pro Empfänger.</summary>
+    // Standard (darfAlleTaskforces: true) = ALLE Taskforces auflösen (bisheriges Verhalten). Betrachter-bezogene
+    // Aufrufer MÜSSEN den echten Kontext (darfAlleTaskforces=DarfAlleTaskforcesSehen, meId) übergeben, damit fremde
+    // Taskforces gar nicht erst aufgelöst werden. Hintergrund-Fan-out (viele Empfänger) bleibt beim Standard und
+    // filtert pro Empfänger separat (IstAkteSichtbarAsync mit Empfänger-Id).
     public static async Task<Dictionary<(string Typ, string Id), Aufloesung>> AufloesenAsync(
-        AppDbContext db, IReadOnlyCollection<(string Typ, string Id)> refs, CancellationToken ct = default)
+        AppDbContext db, IReadOnlyCollection<(string Typ, string Id)> refs, CancellationToken ct = default,
+        bool darfAlleTaskforces = true, string? meId = null)
     {
         var map = new Dictionary<(string, string), Aufloesung>();
         if (refs.Count == 0)
@@ -36,7 +46,7 @@ public static class AktenReferenz
             return map;
         }
 
-        await ResolveAktenAsync(db, refs, map, ct);
+        await ResolveAktenAsync(db, refs, map, darfAlleTaskforces, meId, ct);
 
         // Quellen: Anzeige = Titel; Verschlusssache + Route von der Eltern-Akte abgeleitet.
         var quelleIds = refs.Where(r => r.Typ == nameof(Quelle)).Select(r => r.Id).Distinct().ToList();
@@ -47,7 +57,7 @@ public static class AktenReferenz
                 .ToListAsync(ct);
             // Eltern-Akten der Quellen auflösen (für VS + Route), falls nicht ohnehin schon aufgelöst.
             var elternRefs = quellen.Select(q => (q.EntitaetTyp, q.EntitaetId)).Distinct().ToList();
-            await ResolveAktenAsync(db, elternRefs, map, ct);
+            await ResolveAktenAsync(db, elternRefs, map, darfAlleTaskforces, meId, ct);
             foreach (var q in quellen)
             {
                 map.TryGetValue((q.EntitaetTyp, q.EntitaetId), out var eltern);
@@ -68,7 +78,7 @@ public static class AktenReferenz
 
     private static async Task ResolveAktenAsync(
         AppDbContext db, IReadOnlyCollection<(string Typ, string Id)> refs,
-        Dictionary<(string, string), Aufloesung> map, CancellationToken ct)
+        Dictionary<(string, string), Aufloesung> map, bool darfAlleTaskforces, string? meId, CancellationToken ct)
     {
         List<string> OffeneIds(string typ) => refs
             .Where(r => r.Typ == typ && !map.ContainsKey((typ, r.Id)))
@@ -127,10 +137,19 @@ public static class AktenReferenz
         var taskforceIds = OffeneIds(nameof(Taskforce));
         if (taskforceIds.Count > 0)
         {
-            foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
-                .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(ct))
+            // Nur die für den Betrachter sichtbaren Taskforces auflösen (zugeteilt oder darf alle sehen);
+            // die übrigen bleiben unaufgelöst → Aufrufer zeigen sie als „(nicht verfügbar)"/gar nicht.
+            var sichtbar = await TaskforceSichtbarkeit.SichtbareIdsAsync(db, taskforceIds, darfAlleTaskforces, meId, ct);
+            if (sichtbar.Count > 0)
             {
-                map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", x.IstVerschlusssache, SuchNavigation.Route(nameof(Taskforce), x.Id));
+                foreach (var x in await db.Taskforces.Where(t => sichtbar.Contains(t.Id))
+                    .Select(t => new { t.Id, t.Name, t.Aktenzeichen }).ToListAsync(ct))
+                {
+                    // Verschluss bewusst false: Die Mitgliedschaft hat die Sichtbarkeit bereits entschieden (nicht
+                    // sichtbare Taskforces sind gar nicht in `sichtbar`). So verbergen nachgelagerte VS-Prüfungen
+                    // der Aufrufer einem zugeteilten Mitglied NICHT fälschlich den Namen seiner VS-Taskforce.
+                    map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.Aktenzeichen})", false, SuchNavigation.Route(nameof(Taskforce), x.Id));
+                }
             }
         }
 

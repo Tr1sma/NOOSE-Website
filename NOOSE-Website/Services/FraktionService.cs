@@ -34,6 +34,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .Include(f => f.Raenge)
             .Include(f => f.Waffenbestand)
             .Include(f => f.Lagerbestand)
+            .Include(f => f.Drogenrouten)
             .AsSplitQuery()
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
 
@@ -91,6 +92,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             Beschreibung = Leer(eingabe.Beschreibung),
             Einstufung = eingabe.Einstufung,
             IstVerschlusssache = eingabe.IstVerschlusssache,
+            IstStaatsfraktion = eingabe.IstStaatsfraktion,
         };
         KinderMappen(fraktion, eingabe);
         await VorschlaegeVormerkenAsync(db, fraktion, cancellationToken);
@@ -183,6 +185,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .Include(f => f.Raenge)
             .Include(f => f.Waffenbestand)
             .Include(f => f.Lagerbestand)
+            .Include(f => f.Drogenrouten)
             .AsSplitQuery()
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
@@ -202,11 +205,13 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         fraktion.Ziele = Leer(eingabe.Ziele);
         fraktion.Beschreibung = Leer(eingabe.Beschreibung);
         fraktion.IstVerschlusssache = eingabe.IstVerschlusssache;
+        fraktion.IstStaatsfraktion = eingabe.IstStaatsfraktion;
 
         // Strukturierte Listen vollständig ersetzen (Mitglieder bleiben unangetastet – eigene Endpunkte).
         db.FraktionRaenge.RemoveRange(fraktion.Raenge);
         db.FraktionWaffenbestaende.RemoveRange(fraktion.Waffenbestand);
         db.FraktionLagerbestaende.RemoveRange(fraktion.Lagerbestand);
+        db.FraktionDrogenrouten.RemoveRange(fraktion.Drogenrouten);
         KinderMappen(fraktion, eingabe);
         await VorschlaegeVormerkenAsync(db, fraktion, cancellationToken);
 
@@ -517,6 +522,11 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             .Where(l => !string.IsNullOrWhiteSpace(l.Bezeichnung))
             .Select(l => new FraktionLagerbestand { FraktionId = fraktion.Id, Bezeichnung = l.Bezeichnung.Trim(), Menge = Leer(l.Menge) })
             .ToList();
+        // Drogenrouten teilen das generische BestandEingabe; dessen Menge-/Zusatzfeld trägt hier die Notiz.
+        fraktion.Drogenrouten = eingabe.Drogenrouten
+            .Where(d => !string.IsNullOrWhiteSpace(d.Bezeichnung))
+            .Select(d => new FraktionDrogenroute { FraktionId = fraktion.Id, Bezeichnung = d.Bezeichnung.Trim(), Notiz = Leer(d.Menge) })
+            .ToList();
     }
 
     /// <summary>
@@ -535,6 +545,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         }
         await vorschlag.VormerkenAsync(db, VorschlagTyp.Waffe, fraktion.Waffenbestand.Select(w => w.Bezeichnung), cancellationToken);
         await vorschlag.VormerkenAsync(db, VorschlagTyp.Lagerbestand, fraktion.Lagerbestand.Select(l => l.Bezeichnung), cancellationToken);
+        await vorschlag.VormerkenAsync(db, VorschlagTyp.Drogenroute, fraktion.Drogenrouten.Select(d => d.Bezeichnung), cancellationToken);
     }
 
     /// <summary>

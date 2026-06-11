@@ -12,7 +12,9 @@
     <AuthorizeView Policy="@Policies.Fuehrung">
         <MudButton Href="/brett/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
-    <MudButton Href="/brett/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Ankündigung</MudButton>
+    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <MudButton Href="/brett/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Ankündigung</MudButton>
+    </AuthorizeView>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
     Ankündigungen &amp; Behörden-Broadcasts. Jeder aktive Agent kann eine Brett-Notiz posten; gezielte Broadcasts an
@@ -41,7 +43,6 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _laden = true;
-    private bool _istFuehrung;
     private ClaimsPrincipal _user = default!;
     private List<Eintrag> _eintraege = new();
 
@@ -50,7 +51,6 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        _istFuehrung = _user.IstFuehrung();
         await LadenAsync();
     }
 
@@ -59,7 +59,7 @@ else
         _laden = true;
         var zeilen = await BrettService.GetBrettAsync(_user);
         // Mentions aller Inhalte in einer Sammelabfrage auflösen (Verschlusssachen für Nicht-Führung verborgen).
-        var segmente = await MentionService.AufloesenVieleAsync(zeilen.Select(z => (string?)z.Inhalt).ToList(), _istFuehrung);
+        var segmente = await MentionService.AufloesenVieleAsync(zeilen.Select(z => (string?)z.Inhalt).ToList(), _user.DarfVerschlusssacheLesen(), _user.GetAgentId());
         _eintraege = zeilen.Select((z, i) => new Eintrag(z, segmente[i])).ToList();
         _laden = false;
     }

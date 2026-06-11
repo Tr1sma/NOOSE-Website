@@ -259,7 +259,7 @@ public class AgentVerwaltungService(
         agent.IstTeamLeitung = istTeamLeitung;
 
         Audit(agent, AuditAktion.Geaendert, handelnder,
-            istTeamLeitung ? "Als TeamLeitung markiert" : "TeamLeitung-Markierung entfernt");
+            istTeamLeitung ? "Als Teamleitung markiert" : "Teamleitung-Markierung entfernt");
         // Neuer SecurityStamp: TeamLeitung ist jetzt ein Claim (steuert die Nur-Lese-Aufsichtsrolle). Die
         // Stamp-Rotation beendet die Sitzungen des Betroffenen, damit der geänderte Claim – und damit der
         // Lese-/Schreibumfang – beim nächsten Login wirksam wird.

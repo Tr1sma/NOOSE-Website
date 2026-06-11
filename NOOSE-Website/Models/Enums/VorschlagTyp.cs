@@ -19,4 +19,6 @@ public enum VorschlagTyp
     Operationstyp = 6,
     // Phase 5: Typ/Kategorie einer Vorgangs-/Fallakte (Ermittlung/Überwachung/Anschlag/…) – Einzelwert mit Vorschlägen.
     Vorgangstyp = 7,
+    // Drogenrouten einer Fraktion (analog Waffen-/Lagerbestand) – Bezeichnung mit Vorschlägen.
+    Drogenroute = 8,
 }

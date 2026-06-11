@@ -13,6 +13,10 @@
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
                 }
+                @if (Fraktion.IstStaatsfraktion)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.AccountBalance">Staatsfraktion</MudChip>
+                }
             </MudStack>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Fraktion.Aktenzeichen</MudText>
             @if (!string.IsNullOrWhiteSpace(Fraktion.Art))
@@ -37,7 +41,9 @@
         <MudDivider />
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <AktualitaetsAmpel AktenTyp="@nameof(Fraktion)" ReferenzdatumUtc="@(Fraktion.GeaendertAm ?? Fraktion.ErstelltAm)" />
+            @* Staatsfraktionen können nicht veralten – feste Stufe „Frisch" hat in der Ampel Vorrang vor der Selbstberechnung. *@
+            <AktualitaetsAmpel Stufe="@(Fraktion.IstStaatsfraktion ? AktualitaetsStufe.Frisch : (AktualitaetsStufe?)null)"
+                               AktenTyp="@nameof(Fraktion)" ReferenzdatumUtc="@(Fraktion.GeaendertAm ?? Fraktion.ErstelltAm)" />
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Zuletzt aktualisiert: @((Fraktion.GeaendertAm ?? Fraktion.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
             </MudText>

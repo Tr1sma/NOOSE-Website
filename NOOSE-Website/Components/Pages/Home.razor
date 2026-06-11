@@ -293,7 +293,7 @@ else if (_verteilungen is { } v)
         var meId = user.GetAgentId(); // für die Taskforce-Mitgliedschafts-Sichtbarkeit der Kennzahlen/Listen
         _kennzahlen = await Dashboard.GetKennzahlenAsync(_istFuehrung, meId);
         _verteilungen = await Dashboard.GetVerteilungenAsync(_istFuehrung, meId);
-        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung, 50);
+        _aenderungen = await Dashboard.GetLetzteAenderungenAsync(_istFuehrung, meId, 50);
         _meineFaelligen = await WiedervorlageService.GetMeineFaelligenAsync(user);
         _aktualisierungsbedarf = await Dashboard.GetAktualisierungsbedarfAsync(_istFuehrung, meId);
         _fraktionenGefaehrdung = await Dashboard.GetFraktionenNachGefaehrdungAsync(_istFuehrung);

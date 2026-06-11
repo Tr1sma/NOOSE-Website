@@ -12,7 +12,9 @@
     <AuthorizeView Policy="@Policies.Fuehrung">
         <MudButton Href="/parteien/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
-    <MudButton Href="/parteien/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Partei</MudButton>
+    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <MudButton Href="/parteien/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Partei</MudButton>
+    </AuthorizeView>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Politische Organisationen mit Leitung, Mitgliedern, Einstufung und zugeteilten Special Agents.
@@ -63,7 +65,9 @@ else
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
                 <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Default" Size="Size.Large" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Parteien – lege die erste an.</MudText>
-                <MudButton Href="/parteien/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Partei</MudButton>
+                <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                    <MudButton Href="/parteien/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Partei</MudButton>
+                </AuthorizeView>
             </MudStack>
         </NoRecordsContent>
         <PagerContent>
@@ -82,8 +86,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var istFuehrung = user.IstFuehrung();
-        var parteien = await ParteiService.GetListeAsync(istFuehrung);
+        var darfVsLesen = user.DarfVerschlusssacheLesen();
+        var parteien = await ParteiService.GetListeAsync(darfVsLesen);
         var (warnungTage, veraltetTage) = await Aktualitaet.GetSchwelleAsync(nameof(Partei));
         var jetzt = DateTime.UtcNow;
         _zeilen = parteien.Select(p =>
@@ -95,7 +99,7 @@ else
                 Aktenzeichen = p.Aktenzeichen,
                 Name = p.Name,
                 // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
-                Mitgliederzahl = p.Mitglieder.Count(m => m.Person is not null && (istFuehrung || !m.Person.IstVerschlusssache)),
+                Mitgliederzahl = p.Mitglieder.Count(m => m.Person is not null && (darfVsLesen || !m.Person.IstVerschlusssache)),
                 Einstufung = p.Einstufung,
                 IstVerschlusssache = p.IstVerschlusssache,
                 AktualisiertUtc = referenzUtc,

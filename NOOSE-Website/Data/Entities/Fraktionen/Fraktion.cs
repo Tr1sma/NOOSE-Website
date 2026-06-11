@@ -44,10 +44,14 @@ public class Fraktion : IAuditable, ISoftDelete
     /// <summary>Verschlusssache: in Liste/Detail nur für Führung/Admin sichtbar.</summary>
     public bool IstVerschlusssache { get; set; }
 
+    /// <summary>Staatsfraktion: kann nicht „veraltet" werden (Aktualitäts-Ampel bleibt dauerhaft „Aktuell").</summary>
+    public bool IstStaatsfraktion { get; set; }
+
     // ---- Kind-Tabellen ----
     public List<FraktionRang> Raenge { get; set; } = new();
     public List<FraktionWaffenbestand> Waffenbestand { get; set; } = new();
     public List<FraktionLagerbestand> Lagerbestand { get; set; } = new();
+    public List<FraktionDrogenroute> Drogenrouten { get; set; } = new();
     public List<FraktionMitglied> Mitglieder { get; set; } = new();
     public List<FraktionAgent> Agenten { get; set; } = new();
 

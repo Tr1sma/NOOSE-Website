@@ -41,8 +41,9 @@ public partial class PlatzhalterService(IDbContextFactory<AppDbContext> dbFactor
         if (!string.IsNullOrWhiteSpace(entitaetTyp) && !string.IsNullOrWhiteSpace(entitaetId))
         {
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            // Nur sichtbare Akten auflösen (keine Verschlusssachen-Namen für Nicht-Führung).
-            if (await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp!, entitaetId!, handelnder.IstFuehrung(), cancellationToken))
+            // Nur sichtbare Akten auflösen (keine Verschlusssachen-Namen für Nicht-Führung). Die Nur-Lese-
+            // Aufsicht darf VS-Akten einsehen → DarfVerschlusssacheLesen.
+            if (await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp!, entitaetId!, handelnder.DarfVerschlusssacheLesen(), cancellationToken))
             {
                 var akte = await AkteNameAsync(db, entitaetTyp!, entitaetId!, cancellationToken);
                 name = akte.Name;

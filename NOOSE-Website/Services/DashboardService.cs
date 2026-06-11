@@ -71,7 +71,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
         var sV = Stichtag(nameof(Vorgang));
         var veralteteAkten =
               await db.Personen.CountAsync(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < sP, cancellationToken)
-            + await db.Fraktionen.CountAsync(f => (istFuehrung || !f.IstVerschlusssache) && (f.GeaendertAm ?? f.ErstelltAm) < sF, cancellationToken)
+            + await db.Fraktionen.CountAsync(f => (istFuehrung || !f.IstVerschlusssache) && !f.IstStaatsfraktion && (f.GeaendertAm ?? f.ErstelltAm) < sF, cancellationToken)
             + await db.Personengruppen.CountAsync(g => (istFuehrung || !g.IstVerschlusssache) && (g.GeaendertAm ?? g.ErstelltAm) < sG, cancellationToken)
             + await db.Parteien.CountAsync(p => (istFuehrung || !p.IstVerschlusssache) && (p.GeaendertAm ?? p.ErstelltAm) < sPt, cancellationToken)
             + await db.Operationen.CountAsync(o => (istFuehrung || !o.IstVerschlusssache) && (o.GeaendertAm ?? o.ErstelltAm) < sO, cancellationToken)
@@ -108,7 +108,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
         var (wF, vF) = schwellen[nameof(Fraktion)];
         var cutF = jetzt.AddDays(-wF);
         foreach (var x in await db.Fraktionen
-            .Where(f => (istFuehrung || !f.IstVerschlusssache) && (f.GeaendertAm ?? f.ErstelltAm) < cutF)
+            .Where(f => (istFuehrung || !f.IstVerschlusssache) && !f.IstStaatsfraktion && (f.GeaendertAm ?? f.ErstelltAm) < cutF)
             .OrderBy(f => f.GeaendertAm ?? f.ErstelltAm)
             .Select(f => new { f.Id, f.Name, f.Aktenzeichen, Referenz = f.GeaendertAm ?? f.ErstelltAm })
             .Take(max).ToListAsync(cancellationToken))
@@ -257,7 +257,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
         return new DashboardVerteilungen(faelleNachEinstufung, massnahmeAusgaenge, fraktionenNachGefaehrdung, offeneAntraegeNachArt);
     }
 
-    public async Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, int max = 8, CancellationToken cancellationToken = default)
+    public async Task<List<DashboardAenderung>> GetLetzteAenderungenAsync(bool istFuehrung, string? meId, int max = 8, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
@@ -369,6 +369,8 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
         var parteiMap = await ParteiInfos(db, ZielIds(ziele, DashboardAkteTyp.Partei), cancellationToken);
         var operationMap = await OperationInfos(db, ZielIds(ziele, DashboardAkteTyp.Operation), cancellationToken);
         var taskforceMap = await TaskforceInfos(db, ZielIds(ziele, DashboardAkteTyp.Taskforce), cancellationToken);
+        // Für Taskforces entscheidet die Mitgliedschaft (nicht Verschlusssache), welche im Feed auftauchen.
+        var sichtbareTf = await TaskforceSichtbarkeit.SichtbareIdsAsync(db, ZielIds(ziele, DashboardAkteTyp.Taskforce), istFuehrung, meId, cancellationToken);
         var vorgangMap = await VorgangInfos(db, ZielIds(ziele, DashboardAkteTyp.Vorgang), cancellationToken);
 
         var ergebnis = new List<DashboardAenderung>();
@@ -385,8 +387,20 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
                 _ => gruppeMap.GetValueOrDefault(akteId),
             };
 
-            // Akte nicht mehr auffindbar (z. B. hart entfernt) oder Verschlusssache ohne Berechtigung.
-            if (info is null || (info.IstVerschlusssache && !istFuehrung))
+            // Akte nicht mehr auffindbar (z. B. hart entfernt).
+            if (info is null)
+            {
+                continue;
+            }
+            // Taskforce: Mitgliedschaft entscheidet (zugeteilt oder darf alle). Übrige Typen: Verschlusssache.
+            if (typ == DashboardAkteTyp.Taskforce)
+            {
+                if (!sichtbareTf.Contains(akteId))
+                {
+                    continue;
+                }
+            }
+            else if (info.IstVerschlusssache && !istFuehrung)
             {
                 continue;
             }

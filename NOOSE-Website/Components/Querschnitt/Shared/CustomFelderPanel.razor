@@ -6,7 +6,7 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Zusatzfelder</MudText>
-        @if (_felder.Count > 0)
+        @if (_darfSchreiben && _felder.Count > 0)
         {
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
                        OnClick="SpeichernAsync" Disabled="_speichert">
@@ -76,10 +76,15 @@
 
     private bool _laden = true;
     private bool _speichert;
+    private bool _darfSchreiben;
     private List<CustomFeldWertAnzeige> _felder = new();
     private readonly Dictionary<string, string?> _werte = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {

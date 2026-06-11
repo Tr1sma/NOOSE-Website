@@ -2,10 +2,13 @@
    (Bezug per Query-Parameter an /aufgaben/neu übergeben). *@
 @inject NavigationManager Nav
 
-<MudTooltip Text="Aufgabe zu dieser Akte anlegen">
-    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddTask"
-               OnClick="Erstellen">Aufgabe</MudButton>
-</MudTooltip>
+@* Aufgabe anlegen ist eine Mutation → für die Nur-Lese-Aufsicht ausblenden. *@
+<AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+    <MudTooltip Text="Aufgabe zu dieser Akte anlegen">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddTask"
+                   OnClick="Erstellen">Aufgabe</MudButton>
+    </MudTooltip>
+</AuthorizeView>
 
 @code {
     [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;

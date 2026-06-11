@@ -31,19 +31,38 @@ public static class HtmlBereinigung
         {
             "p", "br", "span", "b", "strong", "i", "em", "u", "s",
             "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a",
+            // Tabellen (vom RichTextEditor / vendored quill1.3.7-table-module). Das Modul speichert
+            // eine spezifische, aber harmlose Struktur: <div.ql-table-wrapper> umschließt die <table>,
+            // Zellinhalte stehen in einem eigenen <contain>-Element. Diese Tags müssen erhalten bleiben,
+            // sonst lässt sich eine gespeicherte Tabelle nicht wieder im Editor öffnen (Round-Trip).
+            "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
         })
         {
             s.AllowedTags.Add(tag);
         }
 
         s.AllowedAttributes.Clear();
-        foreach (var attr in new[] { "href", "target", "rel", "class", "style" })
+        foreach (var attr in new[]
+        {
+            "href", "target", "rel", "class", "style",
+            // Tabellen-Struktur-Attribute des Moduls. Allesamt unkritisch (kein Script/Handler);
+            // die data-*-IDs werden beim erneuten Öffnen gebraucht, um die Tabelle zu rekonstruieren.
+            "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
+            "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
+            "data-row", "data-col", "data-w", "data-full",
+        })
         {
             s.AllowedAttributes.Add(attr);
         }
 
         s.AllowedCssProperties.Clear();
-        foreach (var prop in new[] { "color", "background-color", "text-align" })
+        foreach (var prop in new[]
+        {
+            "color", "background-color", "text-align",
+            // Für Zell-/Tabellen-Layout (Spaltenbreiten, Zellrahmen/-farben aus dem Kontextmenü).
+            "width", "height", "vertical-align",
+            "border", "border-color", "border-style", "border-width",
+        })
         {
             s.AllowedCssProperties.Add(prop);
         }

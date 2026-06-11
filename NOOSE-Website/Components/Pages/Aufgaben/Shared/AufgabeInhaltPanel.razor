@@ -83,7 +83,7 @@
     private async Task LadenAsync()
     {
         _laden = true;
-        var alle = await VerknuepfungService.GetFuerAkteAsync(nameof(Aufgabe), AufgabeId, User.IstFuehrung(), VerknuepfungArt.Standard);
+        var alle = await VerknuepfungService.GetFuerAkteAsync(nameof(Aufgabe), AufgabeId, User.IstFuehrung(), User.GetAgentId(), VerknuepfungArt.Standard);
         _liste = alle.Where(v => !v.Automatisch).ToList();
         _laden = false;
     }

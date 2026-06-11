@@ -7,9 +7,12 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Quellen &amp; Anhänge (@_quellen.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">
-            Quelle hinzufügen
-        </MudButton>
+        @if (_darfSchreiben)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">
+                Quelle hinzufügen
+            </MudButton>
+        }
     </MudStack>
 
     @if (_laden)
@@ -30,8 +33,11 @@
                         <MudIcon Icon="@TypIcon(q.Typ)" Color="Color.Primary" Size="Size.Small" />
                         <MudText Typo="Typo.body2"><b>@q.Titel</b></MudText>
                     </MudStack>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                   OnClick="@(() => EntfernenAsync(q))" aria-label="Quelle löschen" />
+                    @if (_darfSchreiben)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => EntfernenAsync(q))" aria-label="Quelle löschen" />
+                    }
                 </MudStack>
 
                 @switch (q.Typ)
@@ -78,9 +84,14 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private List<Quelle> _quellen = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {

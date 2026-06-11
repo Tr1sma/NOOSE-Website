@@ -42,6 +42,8 @@
                 Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
             </MudText>
         }
+        <MudSwitch T="bool" @bind-Value="Eingabe.IstStaatsfraktion" Color="Color.Info"
+                   Label="Staatsfraktion (wird nie als veraltet markiert)" />
     </MudItem>
 
     @if (ZeigeEinstufung)
@@ -98,6 +100,12 @@
         <SteckbriefMehrfachFeld TItem="BestandEingabe" Titel="Lagerbestand" Items="Eingabe.Lagerbestand"
                                 Typ="VorschlagTyp.Lagerbestand" ZeigeZusatz="true"
                                 HauptPlaceholder="Gegenstand" ZusatzPlaceholder="Menge (optional)" />
+
+        <div class="mt-4">
+            <SteckbriefMehrfachFeld TItem="BestandEingabe" Titel="Drogenrouten" Items="Eingabe.Drogenrouten"
+                                    Typ="VorschlagTyp.Drogenroute" ZeigeZusatz="true"
+                                    HauptPlaceholder="Route" ZusatzPlaceholder="Notiz (optional)" />
+        </div>
     </MudItem>
 </MudGrid>
 

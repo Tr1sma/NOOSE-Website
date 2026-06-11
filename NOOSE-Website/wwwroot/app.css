@@ -217,3 +217,38 @@ html, body {
     .dokument-html img {
         max-width: 100%;
     }
+
+    /* Tabellen (RichTextEditor / vendored quill1.3.7-table-module).
+       Das Modul-CSS (table-module.css) wird nur auf Editor-Seiten geladen (durch richtext.js), weil es
+       einige ungescopte globale Klassen enthält (.dialog, .input_input …). Die reine Lese-Ansicht
+       stylen wir daher hier selbst und gescopt unter .dokument-html – inklusive des modul-eigenen
+       <contain>-Zellwrappers (Klasse .ql-table-cell-inner). */
+    .dokument-html .ql-table-wrapper {
+        overflow-x: auto;
+        max-width: 100%;
+    }
+
+    .dokument-html table {
+        border-collapse: collapse;
+        max-width: 100%;
+    }
+
+    .dokument-html td,
+    .dokument-html th {
+        border: 1px solid var(--mud-palette-lines-default);
+        padding: 6px 10px;
+        vertical-align: top;
+    }
+
+        /* <contain> ist ein modul-eigenes Element – ohne Modul-CSS sonst inline. */
+        .dokument-html td contain,
+        .dokument-html th contain,
+        .dokument-html .ql-table-cell-inner {
+            display: block;
+        }
+
+    /* Absätze in Zellen nicht mit großem Außenabstand rendern. */
+    .dokument-html td p,
+    .dokument-html th p {
+        margin: 0;
+    }

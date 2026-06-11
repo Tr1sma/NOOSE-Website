@@ -10,7 +10,9 @@
     <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Primary" Size="Size.Large" />
     <MudText Typo="Typo.h4">Dokumente</MudText>
     <MudSpacer />
-    <MudButton Href="/dokumente/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Dokument</MudButton>
+    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <MudButton Href="/dokumente/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Dokument</MudButton>
+    </AuthorizeView>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Zentrale Bibliothek formatierter Dokumente. Ein Dokument kann an beliebig viele Akten als Quelle
@@ -105,7 +107,9 @@ else
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
                 <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Default" Size="Size.Large" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Dokumente – lege das erste an.</MudText>
-                <MudButton Href="/dokumente/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Dokument</MudButton>
+                <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                    <MudButton Href="/dokumente/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Dokument</MudButton>
+                </AuthorizeView>
             </MudStack>
         </NoRecordsContent>
         <PagerContent>
@@ -133,7 +137,7 @@ else
 
     private async Task LadenAsync()
     {
-        var alle = await DokumentService.GetListeAsync(_istFuehrung);
+        var alle = await DokumentService.GetListeAsync(_user.DarfVerschlusssacheLesen());
         _angepinnt = alle.Where(d => d.Angepinnt).ToList();
         _zeilen = alle.Where(d => !d.Angepinnt).ToList();
         _laden = false;

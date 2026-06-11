@@ -66,7 +66,7 @@ else
         _geladeneId = Id;
         _laden = true;
         _eingabe = null;
-        var f = await FraktionService.GetDetailAsync(Id, _istFuehrung);
+        var f = await FraktionService.GetDetailAsync(Id, _user.DarfVerschlusssacheLesen());
         if (f is not null)
         {
             _eingabe = new FraktionEingabe
@@ -82,9 +82,12 @@ else
                 Beschreibung = f.Beschreibung,
                 Einstufung = f.Einstufung,
                 IstVerschlusssache = f.IstVerschlusssache,
+                IstStaatsfraktion = f.IstStaatsfraktion,
                 Raenge = f.Raenge.OrderBy(r => r.Reihenfolge).Select(r => new RangEingabe { Bezeichnung = r.Bezeichnung }).ToList(),
                 Waffenbestand = f.Waffenbestand.Select(w => new BestandEingabe { Bezeichnung = w.Bezeichnung, Menge = w.Menge }).ToList(),
                 Lagerbestand = f.Lagerbestand.Select(l => new BestandEingabe { Bezeichnung = l.Bezeichnung, Menge = l.Menge }).ToList(),
+                // Drogenrouten teilen BestandEingabe; das Menge-Feld trägt hier die Notiz.
+                Drogenrouten = f.Drogenrouten.Select(d => new BestandEingabe { Bezeichnung = d.Bezeichnung, Menge = d.Notiz }).ToList(),
             };
         }
         _laden = false;

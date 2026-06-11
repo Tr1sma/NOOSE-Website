@@ -41,6 +41,7 @@
 
     private bool _open;
     private bool _istFuehrung;
+    private bool _darfVsLesen;
     private string? _meId;
     private MudAutocomplete<PaletteItem> _auto = default!;
     private IJSObjectReference? _modul;
@@ -52,6 +53,7 @@
     {
         var user = (await AuthStateTask).User;
         _istFuehrung = user.IstFuehrung();
+        _darfVsLesen = user.DarfVerschlusssacheLesen();
         _meId = user.GetAgentId();
         _befehle = new List<PaletteItem>
         {
@@ -123,7 +125,7 @@
         {
             try
             {
-                var treffer = await SearchService.SchnellsucheAsync(v, _istFuehrung, _meId, 8, token);
+                var treffer = await SearchService.SchnellsucheAsync(v, _darfVsLesen, _meId, 8, token);
                 ergebnis.AddRange(treffer.Select(t => new PaletteItem(t.Name, t.Aktenzeichen, PaletteIcon(t.Kategorie), SuchNavigation.Route(t.Kategorie, t.ZielId))));
             }
             catch (Exception ex)

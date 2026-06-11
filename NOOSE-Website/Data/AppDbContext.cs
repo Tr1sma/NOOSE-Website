@@ -68,6 +68,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FraktionRang> FraktionRaenge => Set<FraktionRang>();
     public DbSet<FraktionWaffenbestand> FraktionWaffenbestaende => Set<FraktionWaffenbestand>();
     public DbSet<FraktionLagerbestand> FraktionLagerbestaende => Set<FraktionLagerbestand>();
+    public DbSet<FraktionDrogenroute> FraktionDrogenrouten => Set<FraktionDrogenroute>();
     public DbSet<FraktionMitglied> FraktionMitglieder => Set<FraktionMitglied>();
     public DbSet<FraktionAgent> FraktionAgenten => Set<FraktionAgent>();
 
@@ -466,6 +467,8 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(w => w.FraktionId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(f => f.Lagerbestand).WithOne(l => l.Fraktion!)
                 .HasForeignKey(l => l.FraktionId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(f => f.Drogenrouten).WithOne(d => d.Fraktion!)
+                .HasForeignKey(d => d.FraktionId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(f => f.Mitglieder).WithOne(m => m.Fraktion!)
                 .HasForeignKey(m => m.FraktionId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(f => f.Agenten).WithOne(a => a.Fraktion!)
@@ -494,6 +497,11 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(l => l.Bezeichnung).HasMaxLength(200).IsRequired();
             b.Property(l => l.Menge).HasMaxLength(50);
+        });
+        modelBuilder.Entity<FraktionDrogenroute>(b =>
+        {
+            b.Property(d => d.Bezeichnung).HasMaxLength(200).IsRequired();
+            b.Property(d => d.Notiz).HasMaxLength(200);
         });
 
         modelBuilder.Entity<FraktionMitglied>(b =>

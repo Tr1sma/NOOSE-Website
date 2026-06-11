@@ -60,7 +60,9 @@ else
     </MudForm>
 
     <MudStack Row="true" Spacing="2" Class="mt-4">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        <AuthorizeView Policy="@Policies.Schreibrecht">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        </AuthorizeView>
         <MudButton Variant="Variant.Text" Href="@($"/personen/{Id}")">Abbrechen</MudButton>
     </MudStack>
 }
@@ -95,7 +97,7 @@ else
         _geladeneId = Id;
         _laden = true;
         _eingabe = null;
-        var p = await PersonService.GetDetailAsync(Id, _istFuehrung);
+        var p = await PersonService.GetDetailAsync(Id, _user.DarfVerschlusssacheLesen());
         if (p is not null)
         {
             _eingabe = new PersonEingabe

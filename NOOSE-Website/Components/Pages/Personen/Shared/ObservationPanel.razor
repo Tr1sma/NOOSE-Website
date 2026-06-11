@@ -6,7 +6,10 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Observationen (@_eintraege.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">Neue Observation</MudButton>
+        @if (_darfSchreiben)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">Neue Observation</MudButton>
+        }
     </MudStack>
 
     @if (_laden)
@@ -36,10 +39,13 @@
                         }
                     </MudText>
                     @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
-                    <div @onclick:stopPropagation="true">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => LoeschenAsync(anzeige))" aria-label="Observation löschen" />
-                    </div>
+                    @if (_darfSchreiben)
+                    {
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => LoeschenAsync(anzeige))" aria-label="Observation löschen" />
+                        </div>
+                    }
                 </MudStack>
                 @if (!string.IsNullOrWhiteSpace(obs.Ort))
                 {
@@ -70,9 +76,14 @@
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private List<ObservationAnzeige> _eintraege = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {

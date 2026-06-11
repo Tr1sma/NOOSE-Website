@@ -142,7 +142,7 @@ public class DokumentService(IDbContextFactory<AppDbContext> dbFactory) : IDokum
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<DokumentAnhang>> GetAnhaengeAsync(string dokumentId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<DokumentAnhang>> GetAnhaengeAsync(string dokumentId, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var quellen = await db.Quellen
@@ -157,7 +157,8 @@ public class DokumentService(IDbContextFactory<AppDbContext> dbFactory) : IDokum
         }
 
         var refs = quellen.Select(q => (q.EntitaetTyp, q.EntitaetId)).ToList();
-        var map = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken);
+        // Fremde Taskforces gar nicht erst auflösen (meId/Mitgliedschaft) → tauchen unten nicht auf.
+        var map = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken, darfAlleTaskforces: istFuehrung, meId: meId);
 
         var ergebnis = new List<DokumentAnhang>();
         foreach (var q in quellen)

@@ -106,15 +106,21 @@ public sealed class WiedervorlageFaelligkeitsDienst(IServiceScopeFactory scopeFa
 
             if (empfaengerIds.Count > 0)
             {
-                // Nur aktive Empfänger; Verschlusssache-Akten nur an die Führung (kein VS-Leck).
+                // Nur aktive Empfänger, und je Empfänger geprüft: Verschlusssache nur an die Führung,
+                // Taskforces nur an Zugeteilte (Mitgliedschaft) – über IstAkteSichtbarAsync mit der Empfänger-Id.
                 var aktive = await db.Users
                     .Where(u => empfaengerIds.Contains(u.Id) && u.Status == AgentStatus.Aktiv)
                     .Select(u => new { u.Id, u.IstAdmin, u.Dienstgrad })
                     .ToListAsync(cancellationToken);
-                var erlaubt = aktive
-                    .Where(u => !akte.Verschluss || u.IstAdmin || u.Dienstgrad >= Dienstgrad.SupervisorySpecialAgent)
-                    .Select(u => u.Id)
-                    .ToList();
+                var erlaubt = new List<string>();
+                foreach (var u in aktive)
+                {
+                    var uFuehrung = u.IstAdmin || u.Dienstgrad is >= Dienstgrad.SupervisorySpecialAgent;
+                    if (await Sichtbarkeit.IstAkteSichtbarAsync(db, w.EntitaetTyp, w.EntitaetId, uFuehrung, cancellationToken, u.Id))
+                    {
+                        erlaubt.Add(u.Id);
+                    }
+                }
 
                 if (erlaubt.Count > 0)
                 {

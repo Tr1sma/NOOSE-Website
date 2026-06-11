@@ -12,7 +12,9 @@
     <AuthorizeView Policy="@Policies.Fuehrung">
         <MudButton Href="/aufgaben/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
-    <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
+    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
+    </AuthorizeView>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
     Gemeinsames Team-Board: Karten per Drag &amp; Drop zwischen den Spalten verschieben, um den Status zu ändern.

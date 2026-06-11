@@ -11,8 +11,8 @@
     <MudText Typo="Typo.h4">Agenten-Verwaltung</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Dienstgrade vergeben, TRU- und TeamLeitung-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
-    alle laufenden Sitzungen des Agents sofort (Kill-Switch). TeamLeitungen (FiveM-Aufsicht) sind im RP-Betrieb
+    Dienstgrade vergeben, TRU- und Teamleitung-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
+    alle laufenden Sitzungen des Agents sofort (Kill-Switch). Teamleitungen (FiveM-Aufsicht) sind im RP-Betrieb
     überall ausgeblendet und nur hier sichtbar – Vollzugriff erst durch den Admin-Haken. Das Setzen des
     Admin-Hakens selbst ist ausschließlich Admins vorbehalten; die Führung kann ihn nur einsehen.
 </MudText>
@@ -23,13 +23,21 @@
 }
 else
 {
-    <MudTable Items="_agenten" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false"
+             @bind-ActivePanelIndex="_tab" Class="mb-3">
+        <MudTabPanel Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success"
+                     Text="@($"Aktiv ({AnzahlAktiv})")" />
+        <MudTabPanel Icon="@Icons.Material.Filled.Block" IconColor="Color.Error"
+                     Text="@($"Gesperrt ({AnzahlGesperrt})")" />
+    </MudTabs>
+
+    <MudTable Items="SichtbareAgenten" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
             <MudTh>Agent</MudTh>
             <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>TRU</MudTh>
-            <MudTh>TeamLeitung</MudTh>
+            <MudTh>Teamleitung</MudTh>
             <MudTh>Admin</MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
@@ -43,7 +51,11 @@ else
                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@(context.DiscordUsername ?? context.DiscordId)</MudText>
                 @if (context.IstTeamLeitung)
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Class="mt-1">TeamLeitung</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Class="mt-1">Teamleitung</MudChip>
+                }
+                @if (context.Status == AgentStatus.Gesperrt && !string.IsNullOrWhiteSpace(context.GesperrtGrund))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block mt-1">Grund: @context.GesperrtGrund</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Dienstgrad">
@@ -66,7 +78,7 @@ else
             <MudTd DataLabel="TRU">
                 <MudSwitch T="bool" Value="context.IstTRU" ValueChanged="@(v => TruSetzen(context, v))" Color="Color.Primary" />
             </MudTd>
-            <MudTd DataLabel="TeamLeitung">
+            <MudTd DataLabel="Teamleitung">
                 <MudSwitch T="bool" Value="context.IstTeamLeitung" ValueChanged="@(v => TeamLeitungSetzen(context, v))" Color="Color.Tertiary" />
             </MudTd>
             <MudTd DataLabel="Admin">
@@ -101,6 +113,11 @@ else
                 </MudStack>
             </MudTd>
         </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary py-4">
+                @(_tab == 1 ? "Keine gesperrten Agenten." : "Keine aktiven Agenten.")
+            </MudText>
+        </NoRecordsContent>
     </MudTable>
 }
 
@@ -112,6 +129,17 @@ else
     private List<Agent> _agenten = new();
     private string? _meineId;
     private bool _binAdmin;
+
+    // Aktiver Tab: 0 = Aktive, 1 = Gesperrte. Ausstehende Registrierungen werden hier bewusst nicht gezeigt –
+    // die laufen über die Freigaben-Seite. Das Sperren/Entsperren verschiebt einen Agenten zwischen den Tabs.
+    private int _tab;
+
+    private IEnumerable<Agent> SichtbareAgenten => _tab == 1
+        ? _agenten.Where(a => a.Status == AgentStatus.Gesperrt)
+        : _agenten.Where(a => a.Status == AgentStatus.Aktiv);
+
+    private int AnzahlAktiv => _agenten.Count(a => a.Status == AgentStatus.Aktiv);
+    private int AnzahlGesperrt => _agenten.Count(a => a.Status == AgentStatus.Gesperrt);
 
     protected override async Task OnInitializedAsync()
     {
@@ -188,7 +216,7 @@ else
         try
         {
             await AgentService.TeamLeitungSetzenAsync(agent.Id, wert, user);
-            Snackbar.Add($"{AnzeigeName(agent)}: TeamLeitung {(wert ? "markiert" : "entfernt")}.", Severity.Success);
+            Snackbar.Add($"{AnzeigeName(agent)}: Teamleitung {(wert ? "markiert" : "entfernt")}.", Severity.Success);
         }
         catch (Exception ex)
         {

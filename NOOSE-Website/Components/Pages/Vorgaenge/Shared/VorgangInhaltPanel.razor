@@ -84,7 +84,7 @@
     private async Task LadenAsync()
     {
         _laden = true;
-        var alle = await VerknuepfungService.GetFuerAkteAsync(nameof(Vorgang), VorgangId, User.IstFuehrung(), VerknuepfungArt.Standard);
+        var alle = await VerknuepfungService.GetFuerAkteAsync(nameof(Vorgang), VorgangId, User.IstFuehrung(), User.GetAgentId(), VerknuepfungArt.Standard);
         // Nur manuell gebündelte Akten zeigen (ein Vorgang hat keine automatischen Verknüpfungen).
         _liste = alle.Where(v => !v.Automatisch).ToList();
         _laden = false;

@@ -51,6 +51,10 @@
     [Parameter] public string Text { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> TextChanged { get; set; }
     [Parameter] public bool IstFuehrung { get; set; }
+    /// <summary>Darf Verschlusssachen sehen (Führung oder Nur-Leser) – steuert die VS-Sichtbarkeit im @-Picker und der Auflösung.</summary>
+    [Parameter] public bool DarfVerschlusssacheLesen { get; set; }
+    /// <summary>Darf Klarnamen sehen (Führung und nicht Nur-Leser) – steuert die Agenten-Klarnamen im @-Picker.</summary>
+    [Parameter] public bool DarfKlarname { get; set; }
     [Parameter] public string? Placeholder { get; set; }
     /// <summary>Wird bei Ctrl+Enter ausgelöst (Senden).</summary>
     [Parameter] public EventCallback OnSubmit { get; set; }
@@ -102,7 +106,7 @@
             _kandidaten = new();
             return;
         }
-        _kandidaten = await MentionService.KandidatenAsync(m.Groups[1].Value, IstFuehrung, _meId);
+        _kandidaten = await MentionService.KandidatenAsync(m.Groups[1].Value, DarfVerschlusssacheLesen, DarfKlarname, _meId);
         _pickerOffen = _kandidaten.Count > 0;
     }
 
@@ -146,7 +150,7 @@
             _verweise = new();
             return;
         }
-        var segmente = await MentionService.AufloesenAsync(_text, IstFuehrung);
+        var segmente = await MentionService.AufloesenAsync(_text, DarfVerschlusssacheLesen, _meId);
         _verweise = segmente.Where(s => s.IstVerweis).ToList();
     }
 

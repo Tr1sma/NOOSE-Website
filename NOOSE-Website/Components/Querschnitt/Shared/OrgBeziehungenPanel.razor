@@ -11,9 +11,12 @@
         <MudStack Spacing="3">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                 <MudText Typo="Typo.subtitle1" Color="s.Farbe">@s.Titel (@liste.Count)</MudText>
-                <MudButton Variant="Variant.Outlined" Color="s.Farbe" StartIcon="@s.Icon" OnClick="@(() => HinzufuegenAsync(s))">
-                    @s.AddText
-                </MudButton>
+                @if (_darfSchreiben)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="s.Farbe" StartIcon="@s.Icon" OnClick="@(() => HinzufuegenAsync(s))">
+                        @s.AddText
+                    </MudButton>
+                }
             </MudStack>
 
             @if (_laden)
@@ -38,8 +41,11 @@
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
                                 }
                             </MudStack>
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                           OnClick="@(() => EntfernenAsync(s, v))" aria-label="@($"{s.Bezeichnung} entfernen")" />
+                            @if (_darfSchreiben)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => EntfernenAsync(s, v))" aria-label="@($"{s.Bezeichnung} entfernen")" />
+                            }
                         </MudStack>
                     </MudPaper>
                 }
@@ -54,6 +60,7 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private readonly Dictionary<VerknuepfungArt, List<VerknuepfungAnzeige>> _listen = new();
 
     private sealed record Sektion(VerknuepfungArt Art, string Titel, string Bezeichnung, string AddText, string LeerText, Color Farbe, string Icon);
@@ -66,7 +73,11 @@
             Color.Success, Icons.Material.Filled.Handshake),
     };
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     private async Task LadenAsync()
     {
@@ -74,7 +85,7 @@
         var istFuehrung = User.IstFuehrung();
         foreach (var s in Sektionen)
         {
-            _listen[s.Art] = await VerknuepfungService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, istFuehrung, s.Art);
+            _listen[s.Art] = await VerknuepfungService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, istFuehrung, User.GetAgentId(), s.Art);
         }
         _laden = false;
     }

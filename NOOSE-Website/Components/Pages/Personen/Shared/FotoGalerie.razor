@@ -7,15 +7,18 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Foto-Galerie (@Fotos.Count)</MudText>
-        <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="HochladenAsync" Accept="image/*" MaximumFileCount="20">
-            <CustomContent>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload"
-                           OnClick="@context.OpenFilePickerAsync" Disabled="_laden">
-                    Fotos hochladen
-                </MudButton>
-            </CustomContent>
-            <SelectedTemplate />
-        </MudFileUpload>
+        @if (_darfSchreiben)
+        {
+            <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="HochladenAsync" Accept="image/*" MaximumFileCount="20">
+                <CustomContent>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload"
+                               OnClick="@context.OpenFilePickerAsync" Disabled="_laden">
+                        Fotos hochladen
+                    </MudButton>
+                </CustomContent>
+                <SelectedTemplate />
+            </MudFileUpload>
+        }
     </MudStack>
 
     @if (_laden)
@@ -39,8 +42,11 @@
                         <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                             @foto.OriginalName
                         </MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => EntfernenAsync(foto))" aria-label="Foto löschen" />
+                        @if (_darfSchreiben)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => EntfernenAsync(foto))" aria-label="Foto löschen" />
+                        }
                     </MudStack>
                 </MudPaper>
             }
@@ -55,6 +61,9 @@
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _laden;
+    private bool _darfSchreiben;
+
+    protected override void OnInitialized() => _darfSchreiben = User.DarfSchreiben();
 
     private async Task HochladenAsync(IReadOnlyList<IBrowserFile> dateien)
     {

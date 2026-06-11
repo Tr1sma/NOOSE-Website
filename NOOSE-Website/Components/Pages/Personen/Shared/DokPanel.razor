@@ -9,7 +9,10 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Doks (@_doks.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">Neues Dok</MudButton>
+        @if (_darfSchreiben)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">Neues Dok</MudButton>
+        }
     </MudStack>
 
     @if (_laden)
@@ -31,10 +34,13 @@
                         <b>@dok.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @MassnahmeAusgangAnzeige.Name(dok.Ausgang)
                     </MudText>
                     @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
-                    <div @onclick:stopPropagation="true">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => LoeschenAsync(anzeige))" aria-label="Dok löschen" />
-                    </div>
+                    @if (_darfSchreiben)
+                    {
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => LoeschenAsync(anzeige))" aria-label="Dok löschen" />
+                        </div>
+                    }
                 </MudStack>
                 @if (!string.IsNullOrWhiteSpace(dok.Grund))
                 {
@@ -76,9 +82,14 @@
     [Parameter] public EventCallback PersonChanged { get; set; }
 
     private bool _laden = true;
+    private bool _darfSchreiben;
     private List<PersonDokAnzeige> _doks = new();
 
-    protected override async Task OnInitializedAsync() => await LadenAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
 
     // Klick auf eine Dok-Karte öffnet die Detailansicht (lesen + bearbeiten); man ist bereits in der Akte.
     private async Task OeffnenAsync(PersonDokAnzeige anzeige)

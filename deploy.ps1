@@ -75,8 +75,15 @@ try {
     $scp = Resolve-Exe 'scp'
     $ssh = Resolve-Exe 'ssh'
 
-    # 1) Release veroeffentlichen
+    # 1) Release veroeffentlichen. Publish-Ordner vorher leeren, weil "dotnet publish" das Ziel NICHT
+    #    aufraeumt: Altlasten frueherer Publishes wandern sonst mit ins Artefakt (so lagen z. B. noch
+    #    quill.js / quill-table-better.* vom verworfenen Quill-2-Versuch darin). Unter -SkipPublish wird
+    #    bewusst NICHT geleert (der vorhandene Ordner soll wiederverwendet werden).
     if (-not $SkipPublish) {
+        if (Test-Path $publish) {
+            Write-Host "==> Leere Publish-Ordner (keine Altlasten)" -ForegroundColor Cyan
+            Remove-Item (Join-Path $publish '*') -Recurse -Force -ErrorAction Stop
+        }
         Invoke-Step "Veroeffentliche Release" { dotnet publish $project -c Release -o $publish --nologo }
     } else {
         Write-Host "==> ueberspringe Publish (-SkipPublish)" -ForegroundColor DarkYellow
@@ -84,6 +91,19 @@ try {
     if (-not (Test-Path (Join-Path $publish "NOOSE-Website.dll"))) {
         throw "publish-Ordner unvollstaendig: $publish (NOOSE-Website.dll fehlt). Laeuft evtl. noch eine Dev-Instanz und sperrt bin/?"
     }
+
+    # 1b) Selbst gehostete Quill-/Tabellen-Assets pruefen. dotnet publish kopiert wwwroot automatisch
+    #     mit; dieser Check stellt sicher, dass die Editor-Dateien (inkl. vendored Tabellen-Modul) wirklich
+    #     im Artefakt liegen — sonst fehlt im Editor der Tabellen-Button bzw. die Lese-Ansicht bricht.
+    $quillDir = Join-Path $publish "wwwroot\lib\quill"
+    $quillDateien = @("quill.min.js", "quill.snow.css", "table-module.js", "table-module.css", "quill-global.mjs")
+    foreach ($f in $quillDateien) {
+        $p = Join-Path $quillDir $f
+        if (-not (Test-Path $p)) {
+            throw "Publish-Output unvollstaendig: $p fehlt. Liegt die Datei in NOOSE-Website\wwwroot\lib\quill\ und wurde sie nicht ausgeschlossen?"
+        }
+    }
+    Write-Host "==> Quill-/Tabellen-Assets im Artefakt vorhanden ($($quillDateien.Count) Dateien)" -ForegroundColor DarkGray
 
     # 2) Mit tar packen — zuverlaessig; Compress-Archive hat schon 0-Byte-Dateien erzeugt.
     if (Test-Path $tarball) { Remove-Item $tarball -Force }

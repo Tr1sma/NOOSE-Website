@@ -64,7 +64,7 @@
     private async Task LadenAsync()
     {
         _laden = true;
-        _liste = await VerknuepfungService.GetFuerAkteAsync(nameof(Operation), OperationId, User.IstFuehrung(), VerknuepfungArt.Standard);
+        _liste = await VerknuepfungService.GetFuerAkteAsync(nameof(Operation), OperationId, User.IstFuehrung(), User.GetAgentId(), VerknuepfungArt.Standard);
         _laden = false;
     }
 

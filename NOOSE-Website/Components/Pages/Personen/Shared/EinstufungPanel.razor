@@ -11,6 +11,8 @@
         <EinstufungBadge Wert="Aktuell" />
     </MudStack>
 
+    @if (_darfSchreiben)
+    {
     <MudPaper Class="pa-3" Elevation="1">
         <MudText Typo="Typo.subtitle2" Class="mb-2">Einstufung ändern</MudText>
         <MudStack Spacing="2">
@@ -80,6 +82,7 @@
             </div>
         </MudStack>
     </MudPaper>
+    }
 
     <MudText Typo="Typo.subtitle2">Verlauf</MudText>
     @if (Verlauf.Count == 0)
@@ -126,12 +129,14 @@
     private bool _darfHoechste;
     private bool _kannBeantragen;
     private bool _antragLaeuft;
+    private bool _darfSchreiben;
 
     // Beantragen statt direkt setzen: höchste Stufe gewählt, kein Senior-Recht, aber Akten-Bezug vorhanden.
     private bool _istBeantragen => _neu == Einstufung.GesichertStaatsgefaehrdend && !_darfHoechste && _kannBeantragen;
 
     protected override async Task OnInitializedAsync()
     {
+        _darfSchreiben = User.DarfSchreiben();
         _kannBeantragen = !string.IsNullOrWhiteSpace(EntitaetTyp) && !string.IsNullOrWhiteSpace(EntitaetId);
         if (_kannBeantragen)
         {

@@ -32,7 +32,9 @@ else
                 <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Aufgeloest)" OnClick="@(() => StatusSetzenAsync(TaskforceStatus.Aufgeloest))">Auflösen</MudMenuItem>
             </MudMenu>
         </AuthorizeView>
-        <MudButton Href="@($"/taskforces/{_taskforce.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+            <MudButton Href="@($"/taskforces/{_taskforce.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.Fuehrung">
             <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
         </AuthorizeView>

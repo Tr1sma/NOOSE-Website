@@ -78,7 +78,8 @@ public class AufgabeService(
             ErstellerCodename = r.ErstelltVonId is not null && erstellerNamen.TryGetValue(r.ErstelltVonId, out var name) ? name : null,
             ZugewieseneCodenames = zugewieseneJeAufgabe.TryGetValue(r.Id, out var liste) ? liste : new List<string>(),
             // Status ändern dürfen Führung, Ersteller oder zugewiesene Agenten (spiegelt StatusSetzenAsync).
-            DarfStatusAendern = istFuehrung || r.ErstelltVonId == meId || meineZuweisungen.Contains(r.Id),
+            // Die Nur-Lese-Aufsicht darf nichts ändern – auch keine eigenen/zugewiesenen Aufgaben.
+            DarfStatusAendern = handelnder.DarfSchreiben() && (istFuehrung || r.ErstelltVonId == meId || meineZuweisungen.Contains(r.Id)),
         }).ToList();
     }
 
@@ -313,12 +314,14 @@ public class AufgabeService(
             return null;
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Nur anzeigen, was der Aufrufer sehen darf (Verschlusssache/Papierkorb/Personalakte-Gate).
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.IstFuehrung(), cancellationToken))
+        // Nur anzeigen, was der Aufrufer sehen darf (Verschlusssache/Papierkorb/Personalakte/Taskforce-Gate).
+        // VS: die Nur-Lese-Aufsicht darf einsehen (DarfVerschlusssacheLesen); Taskforces: nur wenn zugeteilt (meId).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.DarfVerschlusssacheLesen(), cancellationToken, handelnder.GetAgentId()))
         {
             return null;
         }
-        var map = await AktenReferenz.AufloesenAsync(db, new[] { (entitaetTyp, entitaetId) }, cancellationToken);
+        var map = await AktenReferenz.AufloesenAsync(db, new[] { (entitaetTyp, entitaetId) }, cancellationToken,
+            darfAlleTaskforces: handelnder.DarfAlleTaskforcesSehen(), meId: handelnder.GetAgentId());
         return map.TryGetValue((entitaetTyp, entitaetId), out var a) ? a.Anzeige : null;
     }
 
