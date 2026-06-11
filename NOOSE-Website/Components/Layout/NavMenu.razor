@@ -45,6 +45,9 @@
                 Dok-Vorlagen
             </MudNavLink>
             <AuthorizeView Policy="@Policies.Admin" Context="adminInner">
+                <MudNavLink Href="/admin/custom-felder" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Tune">
+                    Custom-Felder
+                </MudNavLink>
                 <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
                     Agenten-Verwaltung
                 </MudNavLink>

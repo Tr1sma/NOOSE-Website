@@ -21,6 +21,17 @@ public static class Berechtigung
         }
     }
 
+    /// <summary>Wirft, wenn der Handelnde kein Admin ist (technische Systemverwaltung: Custom-Felder,
+    /// Theming, Wartungsmodus – Plan.md §6).</summary>
+    public static void VerlangeAdmin(ClaimsPrincipal handelnder)
+    {
+        if (!handelnder.IstAdmin())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist Admins vorbehalten.");
+        }
+    }
+
     /// <summary>Wirft, wenn der Handelnde Beförderungen nicht entscheiden darf (Deputy Director+ oder Admin).</summary>
     public static void VerlangeBefoerderungEntscheiden(ClaimsPrincipal handelnder)
     {

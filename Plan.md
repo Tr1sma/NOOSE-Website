@@ -263,8 +263,8 @@
 
 ### Phase 7 – Vorlagen, Admin, Wissensbasis & Komfort
 **Ziel:** Effizienz, Datenqualität und Anpassbarkeit.
-- [ ] **Dok-Vorlagen/Templates** (admin-definierte Erfassungsmasken) – setzt eure „Vorgaben" um.
-- [ ] **Konfigurierbare Custom-Felder** je Aktentyp (Admin, ohne Code).
+- [x] **Dok-Vorlagen/Templates** (admin-definierte Erfassungsmasken) – setzt eure „Vorgaben" um.
+- [x] **Konfigurierbare Custom-Felder** je Aktentyp (Admin, ohne Code).
 - [ ] **Aktualitäts-Ampel + Wiedervorlage** (veraltete Akten markieren + Erinnerung, im Dashboard/Benachrichtigungen).
 - [ ] **Quick-Add** Schnellerfassung.
 - [ ] **Duplikat-Zusammenführen (Merge)** zweier Personenakten (inkl. Verknüpfungen/Doks).

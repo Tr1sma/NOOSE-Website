@@ -124,6 +124,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
     public DbSet<DokVorlage> DokVorlagen => Set<DokVorlage>();
 
+    // ---- Phase 7: konfigurierbare Custom-Felder je Aktentyp ----
+    public DbSet<CustomFeldDefinition> CustomFeldDefinitionen => Set<CustomFeldDefinition>();
+    public DbSet<CustomFeldWert> CustomFeldWerte => Set<CustomFeldWert>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -307,6 +311,28 @@ public class AppDbContext : IdentityDbContext<Agent>
             // geprüft (respektiert den Soft-Delete-Filter).
             b.HasIndex(v => v.Name);
             b.HasIndex(v => v.IstAktiv);
+        });
+
+        // ---- Phase 7: konfigurierbare Custom-Felder je Aktentyp ----
+        modelBuilder.Entity<CustomFeldDefinition>(b =>
+        {
+            b.Property(d => d.EntitaetTyp).HasMaxLength(128).IsRequired();
+            b.Property(d => d.Name).HasMaxLength(120).IsRequired();
+            b.Property(d => d.Optionen).HasMaxLength(2000);
+            // Kein Unique-Index (Soft-Delete würde Wieder-Anlage blockieren); Eindeutigkeit je
+            // Aktentyp prüft CustomFeldDefinitionService (respektiert den Soft-Delete-Filter).
+            b.HasIndex(d => new { d.EntitaetTyp, d.IstAktiv });
+        });
+
+        modelBuilder.Entity<CustomFeldWert>(b =>
+        {
+            b.Property(w => w.CustomFeldDefinitionId).HasMaxLength(64).IsRequired();
+            b.Property(w => w.EntitaetTyp).HasMaxLength(128).IsRequired();
+            b.Property(w => w.EntitaetId).HasMaxLength(64).IsRequired();
+            b.Property(w => w.Wert).HasColumnType("longtext");
+            b.HasIndex(w => new { w.EntitaetTyp, w.EntitaetId });
+            // Ein Wert je Feld je Akte.
+            b.HasIndex(w => new { w.CustomFeldDefinitionId, w.EntitaetTyp, w.EntitaetId }).IsUnique();
         });
 
         modelBuilder.Entity<TagZuordnung>(b =>

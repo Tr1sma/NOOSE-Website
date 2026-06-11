@@ -1,0 +1,172 @@
+@page "/admin/custom-felder"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inject ICustomFeldDefinitionService FeldService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Custom-Felder · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Tune" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Custom-Felder</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">
+        Neues Feld
+    </MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Zusatzfelder erweitern die Akten je Aktentyp – ohne Code. Aktive Felder erscheinen auf den jeweiligen
+    Akten im Tab „Zusatzfelder“ und können dort von jedem aktiven Agenten ausgefüllt werden.
+</MudText>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudSelect T="string" Label="Aktentyp-Filter" @bind-Value="_filterTyp" @bind-Value:after="StateHasChanged"
+               Variant="Variant.Outlined" Dense="true" Clearable="true" Style="max-width:280px;">
+        <MudSelectItem T="string" Value="@("")">Alle Aktentypen</MudSelectItem>
+        @foreach (var t in CustomFeldAktentypen.Alle)
+        {
+            <MudSelectItem T="string" Value="@t.TypName">@t.Anzeige</MudSelectItem>
+        }
+    </MudSelect>
+</MudStack>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="Gefiltert" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Aktentyp</MudTh>
+            <MudTh>Feld</MudTh>
+            <MudTh>Typ</MudTh>
+            <MudTh>Pflicht</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktentyp">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@CustomFeldAktentypen.Anzeige(context.EntitaetTyp)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Feld">@context.Name</MudTd>
+            <MudTd DataLabel="Typ">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@CustomFeldTypAnzeige.Name(context.FeldTyp)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Pflicht">
+                @if (context.Pflicht)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">Pflicht</MudChip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">optional</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IstAktiv)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Aktiv</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inaktiv</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => BearbeitenAsync(context))" aria-label="Feld bearbeiten" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => LoeschenAsync(context))" aria-label="Feld löschen" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Custom-Felder angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private List<CustomFeldDefinition> _felder = new();
+    private ClaimsPrincipal _user = default!;
+    private string? _filterTyp;
+
+    private IEnumerable<CustomFeldDefinition> Gefiltert =>
+        string.IsNullOrEmpty(_filterTyp) ? _felder : _felder.Where(d => d.EntitaetTyp == _filterTyp);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _felder = await FeldService.GetAlleAsync();
+        _laden = false;
+    }
+
+    private async Task NeuAsync()
+    {
+        var eingabe = await CustomFeldDefinitionDialog.ZeigenAsync(DialogService, "Neues Custom-Feld", vorgabeTyp: _filterTyp);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await FeldService.ErstellenAsync(eingabe, _user);
+            Snackbar.Add($"Feld „{eingabe.Name}“ angelegt.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task BearbeitenAsync(CustomFeldDefinition feld)
+    {
+        var eingabe = await CustomFeldDefinitionDialog.ZeigenAsync(DialogService, "Custom-Feld bearbeiten", feld);
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await FeldService.AktualisierenAsync(feld.Id, eingabe, _user);
+            Snackbar.Add("Feld gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoeschenAsync(CustomFeldDefinition feld)
+    {
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Feld löschen?",
+            $"„{feld.Name}“ wird in den Papierkorb verschoben. Bereits erfasste Werte bleiben erhalten, sind aber nicht mehr sichtbar.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await FeldService.LoeschenAsync(feld.Id, _user);
+            Snackbar.Add("Feld gelöscht.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -90,6 +90,9 @@ else
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <KommentarPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                    <CustomFelderPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+                </MudTabPanel>
                 <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
                     <TaskforceHistorieTimeline TaskforceId="@_taskforce.Id" IstFuehrung="_user.IstFuehrung()" @key="_historieKey" />
                 </MudTabPanel>
@@ -113,7 +116,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "stammdaten", "agents", "chat", "beziehungen", "quellen", "kommentare", "historie",
+        "stammdaten", "agents", "chat", "beziehungen", "quellen", "kommentare", "zusatzfelder", "historie",
     };
 
     protected override async Task OnInitializedAsync()

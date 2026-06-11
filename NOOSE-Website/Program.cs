@@ -136,6 +136,9 @@ builder.Services.AddScoped<IDokVorlageService, DokVorlageService>();
 builder.Services.AddScoped<IQuelleService, QuelleService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IKommentarService, KommentarService>();
+// Phase 7: konfigurierbare Custom-Felder je Aktentyp (Admin).
+builder.Services.AddScoped<ICustomFeldDefinitionService, CustomFeldDefinitionService>();
+builder.Services.AddScoped<ICustomFeldWertService, CustomFeldWertService>();
 // Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
 builder.Services.AddScoped<IVerknuepfungService, VerknuepfungService>();
 builder.Services.AddScoped<IBeziehungService, BeziehungService>();
