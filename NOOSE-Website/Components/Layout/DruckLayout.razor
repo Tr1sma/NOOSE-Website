@@ -1,0 +1,12 @@
+@* Minimal-Layout für Druckansichten (Phase 7): helles Theme, weißer Grund, keine Navigation –
+   die Seite selbst IST das Dokument. Genutzt von /personen/{id}/druck. *@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="false" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="druck-seite">
+    @Body
+</div>
