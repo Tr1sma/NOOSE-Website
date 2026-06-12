@@ -31,7 +31,11 @@ else
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.PushPin" Variant="Variant.Outlined">Angepinnt</MudChip>
         }
         <MudSpacer />
-        <DruckButton />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/dokumente/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
         @if (_istFuehrung)
         {
             <MudButton Variant="Variant.Text" Color="Color.Primary"

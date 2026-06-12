@@ -1,0 +1,27 @@
+@* Druck-Sektion „Verknüpfte Akten" (gemeinsam für alle Druckansichten; rendert nichts bei leer). *@
+@if (Eintraege.Count > 0)
+{
+    <section>
+        <h2>@Ueberschrift</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr><th>Typ</th><th>Akte</th><th>Bezeichnung</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var v in Eintraege)
+                {
+                    <tr>
+                        <td>@v.AndereTyp</td>
+                        <td>@v.AndereBezeichnung</td>
+                        <td>@(string.IsNullOrWhiteSpace(v.Label) ? "—" : v.Label)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<VerknuepfungAnzeige> Eintraege { get; set; } = new();
+    [Parameter] public string Ueberschrift { get; set; } = "Verknüpfte Akten";
+}

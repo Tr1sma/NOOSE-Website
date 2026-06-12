@@ -1,0 +1,124 @@
+@* Druckansicht der Parteiakte (Phase 7): komplette Akte als strukturiertes Dokument. *@
+@page "/parteien/{Id}/druck"
+@layout DruckLayout
+@inject IParteiService ParteiService
+@inject IVerknuepfungService VerknuepfungService
+@inject IKommentarService KommentarService
+@inject IZugriffsLogService ZugriffsLog
+
+<PageTitle>@(_partei is null ? "Druckansicht" : $"Parteiakte {_partei.Aktenzeichen}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_partei is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <DruckRahmen Titel="@($"Parteiakte {_partei.Aktenzeichen}")" ZurueckHref="@($"/parteien/{Id}")"
+                 GedrucktVon="@_druckVon" IstVerschlusssache="_partei.IstVerschlusssache">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Name</th><td>@_partei.Name</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_partei.Aktenzeichen</td></tr>
+                    <tr><th>Einstufung</th><td>@EinstufungAnzeige.Name(_partei.Einstufung)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_partei.Ziele))
+                    {
+                        <tr><th>Ziele</th><td class="druck-mehrzeilig">@_partei.Ziele</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_partei.Beschreibung))
+                    {
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_partei.Beschreibung</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_partei.Bemerkungen))
+                    {
+                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig">@_partei.Bemerkungen</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_partei.GeaendertAm ?? _partei.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (_mitglieder.Count > 0)
+        {
+            <section>
+                <h2>Mitglieder (@_mitglieder.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Name</th><th>Rolle</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _mitglieder)
+                        {
+                            <tr>
+                                <td>@(m.Person?.Name ?? "—")@(m.IstLeitung ? " (Leitung)" : "")</td>
+                                <td>@(string.IsNullOrWhiteSpace(m.Rolle) ? "—" : m.Rolle)</td>
+                                <td>@m.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (_agenten.Count > 0)
+        {
+            <section>
+                <h2>Zugeteilte Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Funktion</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _agenten)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@(a.IstErmittlungsleiter ? "Ermittlungsleiter" : "Zugeteilt")</td>
+                                <td>@a.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <DruckEinstufungVerlauf Eintraege="_einstufungVerlauf" />
+        <DruckVerknuepfungen Eintraege="_verknuepfungen" />
+        <DruckKommentare Eintraege="_kommentare" />
+    </DruckRahmen>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string? _druckVon;
+    private Partei? _partei;
+    private List<ParteiMitglied> _mitglieder = new();
+    private List<ParteiAgent> _agenten = new();
+    private List<EinstufungVerlauf> _einstufungVerlauf = new();
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+    private List<Kommentar> _kommentare = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var istFuehrung = user.IstFuehrung();
+        _druckVon = user.GetCodename();
+
+        _partei = await ParteiService.GetDetailAsync(Id, istFuehrung);
+        if (_partei is not null)
+        {
+            _mitglieder = await ParteiService.GetMitgliederAsync(Id, istFuehrung);
+            _agenten = await ParteiService.GetAgentenAsync(Id);
+            _einstufungVerlauf = await ParteiService.GetEinstufungVerlaufAsync(Id, istFuehrung);
+            _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Partei), Id, istFuehrung, user.GetAgentId());
+            _kommentare = await KommentarService.GetFuerAkteAsync(nameof(Partei), Id, istFuehrung);
+            await ZugriffsLog.LogAnsichtAsync(nameof(Partei), Id);
+        }
+        _laden = false;
+    }
+}

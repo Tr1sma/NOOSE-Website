@@ -1,0 +1,67 @@
+@* Druckansicht eines Paragrafen (Gesetzbuch-Modul, Phase 7). *@
+@page "/gesetze/{Id}/druck"
+@layout DruckLayout
+@inject IGesetzService GesetzService
+@inject IVerknuepfungService VerknuepfungService
+
+<PageTitle>@(_gesetz is null ? "Druckansicht" : $"{_gesetz.Paragraf} {_gesetz.Titel}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_gesetz is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dieser Paragraf existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    <DruckRahmen Titel="@($"{_gesetz.Paragraf} {_gesetz.Titel}")" ZurueckHref="@($"/gesetze/{Id}")"
+                 GedrucktVon="@_druckVon" IstVerschlusssache="false"
+                 Fusszeile="NOOSE-Wissensbasis · Rechtsgrundlagen">
+        <section>
+            <h2>Rechtsgrundlage</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Gesetzbuch</th><td>@_gesetz.Gesetzbuch</td></tr>
+                    <tr><th>Paragraf</th><td>@_gesetz.Paragraf</td></tr>
+                    <tr><th>Titel</th><td>@_gesetz.Titel</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_gesetz.Strafmass))
+                    {
+                        <tr><th>Strafmaß / Rechtsfolge</th><td>@_gesetz.Strafmass</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Gesetzestext</h2>
+            <div class="druck-mehrzeilig">@_gesetz.Text</div>
+        </section>
+
+        <DruckVerknuepfungen Eintraege="_verknuepfungen" />
+    </DruckRahmen>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string? _druckVon;
+    private Gesetz? _gesetz;
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _druckVon = user.GetCodename();
+
+        _gesetz = await GesetzService.GetAsync(Id);
+        if (_gesetz is not null)
+        {
+            _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Gesetz), Id, user.IstFuehrung(), user.GetAgentId());
+        }
+        _laden = false;
+    }
+}

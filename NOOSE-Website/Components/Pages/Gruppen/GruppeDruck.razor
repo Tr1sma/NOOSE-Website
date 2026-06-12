@@ -1,0 +1,125 @@
+@* Druckansicht der Personengruppen-Akte (Phase 7): komplette Akte als strukturiertes Dokument. *@
+@page "/personengruppen/{Id}/druck"
+@layout DruckLayout
+@inject IPersonengruppeService GruppeService
+@inject IVerknuepfungService VerknuepfungService
+@inject IKommentarService KommentarService
+@inject IZugriffsLogService ZugriffsLog
+
+<PageTitle>@(_gruppe is null ? "Druckansicht" : $"Gruppenakte {_gruppe.Aktenzeichen}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_gruppe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <DruckRahmen Titel="@($"Gruppenakte {_gruppe.Aktenzeichen}")" ZurueckHref="@($"/personengruppen/{Id}")"
+                 GedrucktVon="@_druckVon" IstVerschlusssache="_gruppe.IstVerschlusssache">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Name</th><td>@_gruppe.Name</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_gruppe.Aktenzeichen</td></tr>
+                    <tr><th>Art</th><td>@GruppenArtAnzeige.Name(_gruppe.Art)</td></tr>
+                    <tr><th>Einstufung</th><td>@EinstufungAnzeige.Name(_gruppe.Einstufung)</td></tr>
+                    @if (_gruppe.GeschaetzteMitgliederzahl is { } anzahl)
+                    {
+                        <tr><th>Geschätzte Mitgliederzahl</th><td>@anzahl</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_gruppe.Ziele))
+                    {
+                        <tr><th>Ziele</th><td class="druck-mehrzeilig">@_gruppe.Ziele</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_gruppe.Beschreibung))
+                    {
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_gruppe.Beschreibung</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_gruppe.GeaendertAm ?? _gruppe.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (_mitglieder.Count > 0)
+        {
+            <section>
+                <h2>Mitglieder (@_mitglieder.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Name</th><th>Rolle</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _mitglieder)
+                        {
+                            <tr>
+                                <td>@(m.Person?.Name ?? "—")@(m.IstLeitung ? " (Leitung)" : "")</td>
+                                <td>@(string.IsNullOrWhiteSpace(m.Rolle) ? "—" : m.Rolle)</td>
+                                <td>@m.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (_agenten.Count > 0)
+        {
+            <section>
+                <h2>Zugeteilte Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Funktion</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _agenten)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@(a.IstErmittlungsleiter ? "Ermittlungsleiter" : "Zugeteilt")</td>
+                                <td>@a.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <DruckEinstufungVerlauf Eintraege="_einstufungVerlauf" />
+        <DruckVerknuepfungen Eintraege="_verknuepfungen" />
+        <DruckKommentare Eintraege="_kommentare" />
+    </DruckRahmen>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string? _druckVon;
+    private Personengruppe? _gruppe;
+    private List<PersonengruppeMitglied> _mitglieder = new();
+    private List<PersonengruppeAgent> _agenten = new();
+    private List<EinstufungVerlauf> _einstufungVerlauf = new();
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+    private List<Kommentar> _kommentare = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var istFuehrung = user.IstFuehrung();
+        _druckVon = user.GetCodename();
+
+        _gruppe = await GruppeService.GetDetailAsync(Id, istFuehrung);
+        if (_gruppe is not null)
+        {
+            _mitglieder = await GruppeService.GetMitgliederAsync(Id, istFuehrung);
+            _agenten = await GruppeService.GetAgentenAsync(Id);
+            _einstufungVerlauf = await GruppeService.GetEinstufungVerlaufAsync(Id, istFuehrung);
+            _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Personengruppe), Id, istFuehrung, user.GetAgentId());
+            _kommentare = await KommentarService.GetFuerAkteAsync(nameof(Personengruppe), Id, istFuehrung);
+            await ZugriffsLog.LogAnsichtAsync(nameof(Personengruppe), Id);
+        }
+        _laden = false;
+    }
+}

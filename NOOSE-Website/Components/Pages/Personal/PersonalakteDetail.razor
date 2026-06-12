@@ -21,7 +21,11 @@ else
         @if (_istFuehrung)
         {
             <MudSpacer />
-            <DruckButton />
+            <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/personal/{AgentId}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
             <FolgenButton EntitaetTyp="@nameof(Agent)" EntitaetId="@_agent.Id" User="_user" />
             <AufgabeErstellenButton EntitaetTyp="@nameof(Agent)" EntitaetId="@_agent.Id" />
         }

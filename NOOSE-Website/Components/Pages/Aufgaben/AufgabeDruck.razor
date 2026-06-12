@@ -1,0 +1,104 @@
+@* Druckansicht einer Aufgabe (Phase 7): Auftrag als strukturiertes Dokument. *@
+@page "/aufgaben/{Id}/druck"
+@layout DruckLayout
+@inject IAufgabeService AufgabeService
+@inject IVerknuepfungService VerknuepfungService
+@inject IKommentarService KommentarService
+@inject IZugriffsLogService ZugriffsLog
+
+<PageTitle>@(_aufgabe is null ? "Druckansicht" : $"Aufgabe {_aufgabe.Aktenzeichen}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_aufgabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Aufgabe existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <DruckRahmen Titel="@($"Aufgabe {_aufgabe.Aktenzeichen}")" ZurueckHref="@($"/aufgaben/{Id}")"
+                 GedrucktVon="@_druckVon" IstVerschlusssache="false">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Titel</th><td>@_aufgabe.Titel</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_aufgabe.Aktenzeichen</td></tr>
+                    <tr><th>Status</th><td>@AufgabeStatusAnzeige.Name(_aufgabe.Status)</td></tr>
+                    <tr><th>Priorität</th><td>@AufgabePrioritaetAnzeige.Name(_aufgabe.Prioritaet)</td></tr>
+                    @if (_aufgabe.Faelligkeit is { } faellig)
+                    {
+                        <tr><th>Fälligkeit</th><td>@faellig.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
+                    }
+                    @if (_aufgabe.ErledigtAm is { } erledigt)
+                    {
+                        <tr><th>Erledigt am</th><td>@erledigt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    }
+                    @if (_aufgabe.IstEingeschraenkt)
+                    {
+                        <tr><th>Sichtbarkeit</th><td>Eingeschränkt (nur Beteiligte und Führung)</td></tr>
+                    }
+                    <tr><th>Erstellt</th><td>@_aufgabe.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_aufgabe.Beschreibung))
+        {
+            <section>
+                <h2>Beschreibung</h2>
+                <div class="druck-mehrzeilig">@_aufgabe.Beschreibung</div>
+            </section>
+        }
+
+        @if (_zuweisungen.Count > 0)
+        {
+            <section>
+                <h2>Zugewiesene Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th></tr></thead>
+                    <tbody>
+                        @foreach (var z in _zuweisungen)
+                        {
+                            <tr><td>@(z.Agent?.Codename ?? "—")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <DruckVerknuepfungen Eintraege="_verknuepfungen" />
+        <DruckKommentare Eintraege="_kommentare" />
+    </DruckRahmen>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string? _druckVon;
+    private Aufgabe? _aufgabe;
+    private List<AufgabeZuweisung> _zuweisungen = new();
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+    private List<Kommentar> _kommentare = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _druckVon = user.GetCodename();
+
+        // GetDetailAsync setzt die Sichtbarkeitsregeln eingeschränkter Aufgaben selbst durch.
+        _aufgabe = await AufgabeService.GetDetailAsync(Id, user);
+        if (_aufgabe is not null)
+        {
+            _zuweisungen = await AufgabeService.GetZuweisungenAsync(Id);
+            _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Aufgabe), Id, user.IstFuehrung(), user.GetAgentId());
+            _kommentare = await KommentarService.GetFuerAkteAsync(nameof(Aufgabe), Id, user.IstFuehrung());
+            await ZugriffsLog.LogAnsichtAsync(nameof(Aufgabe), Id);
+        }
+        _laden = false;
+    }
+}

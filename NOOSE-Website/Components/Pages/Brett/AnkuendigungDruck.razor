@@ -1,0 +1,99 @@
+@* Druckansicht einer Ankündigung vom Schwarzen Brett (Phase 7). *@
+@page "/brett/{Id}/druck"
+@layout DruckLayout
+@inject IAnkuendigungService AnkuendigungService
+@inject IMentionService MentionService
+@inject IZugriffsLogService ZugriffsLog
+
+<PageTitle>@(_detail is null ? "Druckansicht" : $"Ankündigung {_detail.Zeile.Aktenzeichen}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_detail is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Ankündigung existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <DruckRahmen Titel="@($"Ankündigung {_detail.Zeile.Aktenzeichen}")" ZurueckHref="@($"/brett/{Id}")"
+                 GedrucktVon="@_druckVon" IstVerschlusssache="false">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Titel</th><td>@_detail.Zeile.Titel</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_detail.Zeile.Aktenzeichen</td></tr>
+                    <tr><th>Veröffentlicht</th><td>@_detail.Zeile.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")@(string.IsNullOrWhiteSpace(_detail.Zeile.ErstellerCodename) ? "" : $" · von {_detail.Zeile.ErstellerCodename}")</td></tr>
+                    <tr><th>Zielgruppe</th><td>@_detail.Zeile.ZielAnzeige</td></tr>
+                    @if (_detail.Zeile.Wichtig)
+                    {
+                        <tr><th>Priorität</th><td>Wichtig</td></tr>
+                    }
+                    @if (_detail.Zeile.AlsBroadcast)
+                    {
+                        <tr><th>Versand</th><td>Behörden-Broadcast</td></tr>
+                    }
+                    @if (_detail.Zeile.QuittierungVerlangt)
+                    {
+                        <tr><th>Quittierung</th><td>Lesebestätigung verlangt</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        @if (_segmente.Count > 0)
+        {
+            <section>
+                <h2>Inhalt</h2>
+                <div class="druck-mehrzeilig"><MentionText Segmente="_segmente" /></div>
+            </section>
+        }
+
+        @if (_detail.Quittierungen.Count > 0)
+        {
+            <section>
+                <h2>Quittierungen (@_detail.Quittierungen.Count(q => q.QuittiertAm is not null) von @_detail.Quittierungen.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Quittiert am</th></tr></thead>
+                    <tbody>
+                        @foreach (var q in _detail.Quittierungen)
+                        {
+                            <tr>
+                                <td>@q.Codename</td>
+                                <td>@(q.QuittiertAm is { } zeit ? zeit.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "offen")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+    </DruckRahmen>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private string? _druckVon;
+    private AnkuendigungAnsicht? _detail;
+    private IReadOnlyList<MentionSegment> _segmente = Array.Empty<MentionSegment>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _druckVon = user.GetCodename();
+
+        _detail = await AnkuendigungService.GetDetailAsync(Id, user);
+        if (_detail is not null)
+        {
+            _segmente = string.IsNullOrWhiteSpace(_detail.Zeile.Inhalt)
+                ? Array.Empty<MentionSegment>()
+                : await MentionService.AufloesenAsync(_detail.Zeile.Inhalt, user.DarfVerschlusssacheLesen(), user.GetAgentId());
+            await ZugriffsLog.LogAnsichtAsync(nameof(Ankuendigung), Id);
+        }
+        _laden = false;
+    }
+}

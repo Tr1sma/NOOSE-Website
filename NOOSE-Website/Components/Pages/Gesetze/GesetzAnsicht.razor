@@ -22,7 +22,11 @@ else
         <MudIcon Icon="@Icons.Material.Filled.Gavel" Color="Color.Primary" Size="Size.Large" />
         <MudText Typo="Typo.h4">@_gesetz.Paragraf @_gesetz.Titel</MudText>
         <MudSpacer />
-        <DruckButton />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/gesetze/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
         <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
                        OnClick="BearbeitenAsync">Bearbeiten</MudButton>
