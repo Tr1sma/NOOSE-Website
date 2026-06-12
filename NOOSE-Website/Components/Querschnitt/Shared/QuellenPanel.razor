@@ -32,11 +32,22 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@TypIcon(q.Typ)" Color="Color.Primary" Size="Size.Small" />
                         <MudText Typo="Typo.body2"><b>@q.Titel</b></MudText>
+                        @if (q.Angepinnt)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.PushPin" Color="Color.Primary" Size="Size.Small" Title="Angepinnt" />
+                        }
                     </MudStack>
                     @if (_darfSchreiben)
                     {
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => EntfernenAsync(q))" aria-label="Quelle löschen" />
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                            <MudIconButton Size="Size.Small"
+                                           Icon="@(q.Angepinnt ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                                           Color="@(q.Angepinnt ? Color.Primary : Color.Default)"
+                                           OnClick="@(() => PinUmschaltenAsync(q))"
+                                           aria-label="@(q.Angepinnt ? "Quelle lösen" : "Quelle anpinnen")" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => EntfernenAsync(q))" aria-label="Quelle löschen" />
+                        </MudStack>
                     }
                 </MudStack>
 
@@ -96,7 +107,8 @@
     private async Task LadenAsync()
     {
         _laden = true;
-        _quellen = await QuelleService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, User.IstFuehrung());
+        // meId mitgeben, damit Taskforce-Mitglieder (Nicht-Führung) ihre Quellen sehen.
+        _quellen = await QuelleService.GetFuerAkteAsync(EntitaetTyp, EntitaetId, User.IstFuehrung(), meId: User.GetAgentId());
         _laden = false;
     }
 
@@ -139,6 +151,21 @@
         await QuelleService.EntfernenAsync(quelle.Id, User);
         Snackbar.Add("Quelle gelöscht.", Severity.Success);
         await LadenAsync();
+    }
+
+    private async Task PinUmschaltenAsync(Quelle quelle)
+    {
+        try
+        {
+            var neu = !quelle.Angepinnt;
+            await QuelleService.AnpinnenSetzenAsync(quelle.Id, neu, User);
+            Snackbar.Add(neu ? "Quelle angepinnt." : "Anpinnen gelöst.", Severity.Success);
+            await LadenAsync(); // neu laden → Server-Sortierung bringt sie nach oben/zurück
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private static string TypIcon(QuelleTyp typ) => typ switch

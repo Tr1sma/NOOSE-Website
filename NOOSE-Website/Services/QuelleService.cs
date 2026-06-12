@@ -13,19 +13,22 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IQuelleService" />
 public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenStorageService storage) : IQuelleService
 {
-    public async Task<List<Quelle>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<Quelle>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, CancellationToken cancellationToken = default, string? meId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Verschlusssache-Schutz: Sichtbarkeit der Eltern-Akte prüfen (Person/Fraktion/Gruppe – keine
-        // FK-Navigation bei polymorphen Assoziationen → zentraler Sichtbarkeits-Helfer).
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken))
+        // FK-Navigation bei polymorphen Assoziationen → zentraler Sichtbarkeits-Helfer). meId mitgeben,
+        // damit Taskforce-Mitglieder (Nicht-Führung) ihre Quellen sehen (Mitgliedschafts-Sichtbarkeit).
+        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, istFuehrung, cancellationToken, meId))
         {
             return new();
         }
 
         return await db.Quellen
             .Where(q => q.EntitaetTyp == entitaetTyp && q.EntitaetId == entitaetId)
-            .OrderByDescending(q => q.ErstelltAm)
+            // Angepinnte zuerst, danach die zuletzt erstellten.
+            .OrderByDescending(q => q.Angepinnt)
+            .ThenByDescending(q => q.ErstelltAm)
             .ToListAsync(cancellationToken);
     }
 
@@ -150,7 +153,27 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<Quelle?> GetFuerDownloadAsync(string quelleId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task AnpinnenSetzenAsync(string quelleId, bool angepinnt, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    {
+        // ExecuteUpdate umgeht den Audit-/Nur-Lese-Interceptor → Schreibrecht hier explizit durchsetzen
+        // (ein hochrangiger Nur-Leser bestünde sonst keine Mutations-Sperre). Anpinnen ist an das
+        // Schreibrecht der Akte gekoppelt – wer Quellen hinzufügen/löschen darf, darf auch anpinnen.
+        Berechtigung.VerlangeSchreibrecht(handelnder);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Bewusst per ExecuteUpdate statt Laden+SaveChanges: setzt nur das Flag, ohne über den Audit-
+        // Interceptor GeaendertAm/GeaendertVonId zu verändern (Anpinnen ist keine inhaltliche Bearbeitung).
+        // Der Soft-Delete-Query-Filter greift weiterhin → Papierkorb-Quellen werden nicht angefasst.
+        var betroffen = await db.Quellen
+            .Where(q => q.Id == quelleId)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.Angepinnt, angepinnt), cancellationToken);
+        if (betroffen == 0)
+        {
+            throw new InvalidOperationException("Quelle nicht gefunden.");
+        }
+    }
+
+    public async Task<Quelle?> GetFuerDownloadAsync(string quelleId, bool istFuehrung, CancellationToken cancellationToken = default, string? meId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var quelle = await db.Quellen.FirstOrDefaultAsync(q => q.Id == quelleId, cancellationToken);
@@ -158,7 +181,9 @@ public class QuelleService(IDbContextFactory<AppDbContext> dbFactory, IQuellenSt
         {
             return null;
         }
-        return await Sichtbarkeit.IstAkteSichtbarAsync(db, quelle.EntitaetTyp, quelle.EntitaetId, istFuehrung, cancellationToken)
+        // meId für Taskforce-Mitgliedschafts-Sichtbarkeit (sonst sehen Nicht-Führungs-Mitglieder ihre
+        // hochgeladenen Anhänge nicht).
+        return await Sichtbarkeit.IstAkteSichtbarAsync(db, quelle.EntitaetTyp, quelle.EntitaetId, istFuehrung, cancellationToken, meId)
             ? quelle
             : null;
     }

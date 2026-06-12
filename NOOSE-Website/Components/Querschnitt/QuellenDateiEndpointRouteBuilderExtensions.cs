@@ -27,7 +27,7 @@ public static class QuellenDateiEndpointRouteBuilderExtensions
         {
             // Der Dienst prüft Typ=Upload, Soft-Delete und die Sichtbarkeit der Eltern-Akte
             // (Verschlusssache/Papierkorb) – liefert sonst null („nicht vorhanden", kein Existenz-Leak).
-            var quelle = await quelleService.GetFuerDownloadAsync(quelleId, http.User.IstFuehrung(), cancellationToken);
+            var quelle = await quelleService.GetFuerDownloadAsync(quelleId, http.User.IstFuehrung(), cancellationToken, http.User.GetAgentId());
             if (quelle?.DateinameGespeichert is null)
             {
                 return Results.NotFound();

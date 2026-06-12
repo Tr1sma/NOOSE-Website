@@ -23,6 +23,10 @@ public class Quelle : IAuditable, ISoftDelete
 
     public string Titel { get; set; } = string.Empty;
 
+    /// <summary>Angepinnt: erscheint in der Quellenliste der Akte ganz oben (vor allen nicht
+    /// angepinnten). Steuert nur die Anzeige-Reihenfolge, kein „zuletzt bearbeitet"-Bezug.</summary>
+    public bool Angepinnt { get; set; }
+
     /// <summary>Freitext-Inhalt bzw. Notiz zur Quelle.</summary>
     public string? Beschreibung { get; set; }
 
