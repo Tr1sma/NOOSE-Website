@@ -27,7 +27,7 @@ else
             <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.Kategorie)">Kategorie</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.GroesseBytes)">Größe</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.GeaendertAm ?? x.ErstelltAm)" InitialDirection="SortDirection.Descending">Zuletzt</MudTableSortLabel></MudTh>
-            <MudTh>Verschluss</MudTh>
+            <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.IstVerschlusssache)">Verschluss</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>

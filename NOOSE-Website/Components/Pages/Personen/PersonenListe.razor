@@ -44,7 +44,7 @@ else
                     <MudLink Href="@($"/personen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                 </CellTemplate>
             </TemplateColumn>
-            <PropertyColumn Property="x => x.Aliase" Title="Aliase" Sortable="false" />
+            <PropertyColumn Property="x => x.Aliase" Title="Aliase" />
             <TemplateColumn Title="Lebensstatus" SortBy="x => x.EffektiverLebensstatus">
                 <CellTemplate>
                     <LebensstatusBadge Status="context.Item.LebensstatusRoh" TotBis="context.Item.TotBis" />
@@ -55,7 +55,7 @@ else
                     <EinstufungBadge Wert="context.Item.Einstufung" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {

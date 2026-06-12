@@ -87,8 +87,8 @@ else
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AnzeigeName(x))">Agent</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.DiscordUsername ?? x.DiscordId)">Discord</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.RegistriertAm)">Registriert</MudTableSortLabel></MudTh>
-                <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
-                <MudTh>TRU</MudTh>
+                <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => (int)Auswahl(x.Id).Grad)">Dienstgrad</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Auswahl(x.Id).Tru)">TRU</MudTableSortLabel></MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -142,7 +142,7 @@ else
             <HeaderContent>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AnzeigeName(x))">Agent</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.NamensaenderungBeantragtAm)">Beantragt</MudTableSortLabel></MudTh>
-                <MudTh>Änderungen</MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Aenderungen(x).Count)">Änderungen</MudTableSortLabel></MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>

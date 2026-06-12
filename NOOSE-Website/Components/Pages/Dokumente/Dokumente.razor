@@ -97,7 +97,7 @@ else
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Item.Kategorie) ? "—" : context.Item.Kategorie)</MudText>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {

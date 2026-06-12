@@ -3,6 +3,7 @@
    (Service-Guard VerlangeAdmin). Änderungen greifen beim nächsten Seitenwechsel/Neuladen. *@
 @page "/admin/system"
 @attribute [Authorize(Policy = Policies.AdminSeite)]
+@using MudBlazor.Utilities
 @inject ISystemEinstellungService EinstellungService
 @inject ISnackbar Snackbar
 
@@ -55,18 +56,40 @@ else
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-2">Theme-Farben</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                Akzentfarben als Hex-Wert (z. B. <code>#22D3EE</code>). Leer = Standardfarbe.
+                Akzentfarben per Color-Picker wählen (oder Hex-Wert eintippen). „Zurücksetzen" stellt die
+                jeweilige Standardfarbe wieder her.
             </MudText>
-            <MudStack Row="true" Spacing="2" Class="flex-wrap">
-                <MudTextField @bind-Value="_eingabe.ThemePrimary" Label="@($"Primär (Standard {NooseTheme.StandardPrimary})")"
-                              Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Circle"
-                              AdornmentColor="Color.Primary" Style="min-width:240px;" />
-                <MudTextField @bind-Value="_eingabe.ThemeSecondary" Label="@($"Sekundär (Standard {NooseTheme.StandardSecondary})")"
-                              Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Circle"
-                              AdornmentColor="Color.Secondary" Style="min-width:240px;" />
-                <MudTextField @bind-Value="_eingabe.ThemeTertiary" Label="@($"Tertiär (Standard {NooseTheme.StandardTertiary})")"
-                              Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Circle"
-                              AdornmentColor="Color.Tertiary" Style="min-width:240px;" />
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudColorPicker Label="@($"Primär (Standard {NooseTheme.StandardPrimary})")" ShowAlpha="false"
+                                    Variant="Variant.Outlined" Value="@AlsFarbe(_eingabe.ThemePrimary, NooseTheme.StandardPrimary)"
+                                    ValueChanged="@(c => _eingabe.ThemePrimary = c.ToString(MudColorOutputFormats.Hex))"
+                                    Style="min-width:260px;" />
+                    <MudTooltip Text="Auf Standardfarbe zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                                       OnClick="@(() => _eingabe.ThemePrimary = null)" aria-label="Primärfarbe zurücksetzen" />
+                    </MudTooltip>
+                </MudStack>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudColorPicker Label="@($"Sekundär (Standard {NooseTheme.StandardSecondary})")" ShowAlpha="false"
+                                    Variant="Variant.Outlined" Value="@AlsFarbe(_eingabe.ThemeSecondary, NooseTheme.StandardSecondary)"
+                                    ValueChanged="@(c => _eingabe.ThemeSecondary = c.ToString(MudColorOutputFormats.Hex))"
+                                    Style="min-width:260px;" />
+                    <MudTooltip Text="Auf Standardfarbe zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                                       OnClick="@(() => _eingabe.ThemeSecondary = null)" aria-label="Sekundärfarbe zurücksetzen" />
+                    </MudTooltip>
+                </MudStack>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudColorPicker Label="@($"Tertiär (Standard {NooseTheme.StandardTertiary})")" ShowAlpha="false"
+                                    Variant="Variant.Outlined" Value="@AlsFarbe(_eingabe.ThemeTertiary, NooseTheme.StandardTertiary)"
+                                    ValueChanged="@(c => _eingabe.ThemeTertiary = c.ToString(MudColorOutputFormats.Hex))"
+                                    Style="min-width:260px;" />
+                    <MudTooltip Text="Auf Standardfarbe zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                                       OnClick="@(() => _eingabe.ThemeTertiary = null)" aria-label="Tertiärfarbe zurücksetzen" />
+                    </MudTooltip>
+                </MudStack>
             </MudStack>
         </MudPaper>
 
@@ -134,6 +157,20 @@ else
             ThemeTertiary = _konfiguration.ThemeTertiary,
         };
         _laden = false;
+    }
+
+    /// <summary>Hex-Wert (oder Standardfarbe bei leer) als MudColor für den Color-Picker.</summary>
+    private static MudColor AlsFarbe(string? wert, string standard)
+    {
+        try
+        {
+            return new MudColor(string.IsNullOrWhiteSpace(wert) ? standard : wert.Trim());
+        }
+        catch (Exception)
+        {
+            // Unparsbarer Alt-Wert in der DB → Standardfarbe zeigen statt die Seite zu reißen.
+            return new MudColor(standard);
+        }
     }
 
     private async Task SpeichernAsync()

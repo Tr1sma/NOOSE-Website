@@ -55,7 +55,7 @@ else
                     <TaskforceStatusChip Status="context.Item.Status" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {
