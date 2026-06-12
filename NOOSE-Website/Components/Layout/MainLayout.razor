@@ -99,6 +99,17 @@
                 @Body
             }
         </MudContainer>
+
+        @* Rechtlicher Footer – von überall erreichbar (Impressum extern, Datenschutz intern). *@
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-4 pb-4 no-print">
+            <MudDivider Class="mb-2" />
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2">
+                <MudLink Href="@RechtlichesDaten.ImpressumUrl" Target="_blank" rel="noopener noreferrer"
+                         Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+                <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
+            </MudStack>
+        </MudContainer>
     </MudMainContent>
 
     @* Command-Palette (Strg+K) – nur für eingeloggte Agenten aktiv. *@

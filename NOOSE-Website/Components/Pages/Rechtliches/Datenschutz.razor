@@ -1,0 +1,215 @@
+@page "/datenschutz"
+@layout RechtLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+@* Öffentlich (ohne Login) erreichbare Datenschutzerklärung. Beschreibt ausschließlich die
+   tatsächliche Verarbeitung DIESER Seite: Discord-Login, technisch notwendige Cookies,
+   Server-Logfiles beim Hosting. Inhaltlich anpassen, wenn neue Verarbeitungen dazukommen
+   (z. B. Analyse-Tools, eingebettete externe Inhalte). Verantwortlicher/Kontakt/Stand werden
+   zentral aus RechtlichesDaten.cs gezogen. *@
+
+<PageTitle>Datenschutzerklärung · NOOSE</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Datenschutzerklärung</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Diese Erklärung informiert dich gemäß Art. 13 und 14 DSGVO darüber, welche personenbezogenen
+    Daten beim Besuch und bei der Nutzung dieser Website verarbeitet werden.
+</MudText>
+
+@* ---- 1. Verantwortlicher ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">1. Verantwortlicher</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Verantwortlicher für die Datenverarbeitung auf dieser Website im Sinne von Art. 4 Nr. 7 DSGVO ist:
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    <b>@RechtlichesDaten.Verantwortlicher</b><br />
+    Name und ladungsfähige Anschrift findest du im
+    <MudLink Href="@RechtlichesDaten.ImpressumUrl" Target="_blank" rel="noopener noreferrer">Impressum</MudLink>.<br />
+    Kontakt für Datenschutzanfragen: @RechtlichesDaten.DatenschutzEmail
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 2. Allgemeines ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">2. Allgemeine Hinweise</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Diese Website ist ein internes Verwaltungswerkzeug einer privaten Gaming-/Roleplay-Community.
+    Die Inhalte hinter der Anmeldung stehen ausschließlich freigeschalteten Mitgliedern offen; die
+    Anmeldung selbst erfolgt über Discord (siehe Ziffer 5). Personenbezogene Daten werden nur im
+    technisch notwendigen Umfang verarbeitet. Eine Weitergabe an Dritte erfolgt nur in dem hier
+    beschriebenen Rahmen und nur, soweit dies gesetzlich erlaubt ist.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 3. Hosting ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">3. Hosting</MudText>
+@* Hinweis: Hoster laut Server-Setup ist STRATO. Falls gewünscht, hier die vollständige
+   Anschrift der STRATO AG ergänzen. *@
+<MudText Typo="Typo.body2" Class="mb-2">
+    Die Website wird auf einem Server der <b>STRATO AG</b> (Berlin) betrieben. Die Server stehen in
+    einem Rechenzentrum in Deutschland. Wenn du diese Website aufrufst, verarbeitet der Hoster in
+    unserem Auftrag die technisch erforderlichen Daten, insbesondere Zugriffsdaten und Server-Logfiles
+    (siehe Ziffer 4). Grundlage ist ein Vertrag zur Auftragsverarbeitung gemäß Art. 28 DSGVO.
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Rechtsgrundlage ist unser berechtigtes Interesse an einem sicheren und zuverlässigen Betrieb der
+    Website (Art. 6 Abs. 1 lit. f DSGVO).
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 4. Server-Logfiles ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">4. Zugriffsdaten / Server-Logfiles</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Bei jedem Aufruf erhebt der Server automatisch Informationen, die dein Browser übermittelt und
+    in sogenannten Server-Logfiles speichert. Das sind insbesondere:
+</MudText>
+<ul style="margin:0 0 12px 20px;">
+    <li><MudText Typo="Typo.body2">IP-Adresse des anfragenden Geräts</MudText></li>
+    <li><MudText Typo="Typo.body2">Datum und Uhrzeit des Zugriffs</MudText></li>
+    <li><MudText Typo="Typo.body2">aufgerufene Adresse/Datei und übertragene Datenmenge</MudText></li>
+    <li><MudText Typo="Typo.body2">Meldung über erfolgreichen Abruf (Statuscode)</MudText></li>
+    <li><MudText Typo="Typo.body2">verwendeter Browser, dessen Version und das Betriebssystem</MudText></li>
+    <li><MudText Typo="Typo.body2">zuvor besuchte Seite (Referrer), sofern übermittelt</MudText></li>
+</ul>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Diese Daten dienen dem technischen Betrieb, der Auslieferung der Inhalte sowie der Gewährleistung
+    der Sicherheit und Stabilität (z. B. zur Erkennung und Abwehr von Angriffen). Rechtsgrundlage ist
+    unser berechtigtes Interesse gemäß Art. 6 Abs. 1 lit. f DSGVO. Die Logfiles werden aus
+    Sicherheitsgründen für kurze Zeit gespeichert und anschließend regelmäßig gelöscht; eine
+    Zusammenführung mit anderen Datenquellen findet nicht statt.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 5. Anmeldung über Discord ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">5. Anmeldung über Discord (OAuth 2.0)</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Die Anmeldung erfolgt ausschließlich über den Dienst <b>Discord</b>. Wenn du dich anmeldest,
+    wirst du zu Discord weitergeleitet und meldest dich dort mit deinem Discord-Konto an. Nach
+    erfolgreicher Anmeldung übermittelt Discord die folgenden Daten an uns:
+</MudText>
+<ul style="margin:0 0 12px 20px;">
+    <li><MudText Typo="Typo.body2">deine Discord-Benutzer-ID</MudText></li>
+    <li><MudText Typo="Typo.body2">deinen Discord-Benutzernamen bzw. Anzeigenamen</MudText></li>
+    <li><MudText Typo="Typo.body2">dein Profilbild (Avatar), sofern vorhanden</MudText></li>
+    <li><MudText Typo="Typo.body2">deine bei Discord hinterlegte E-Mail-Adresse</MudText></li>
+</ul>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Diese Daten verwenden wir ausschließlich, um dein Konto eindeutig zu identifizieren, dich zu
+    authentifizieren und dir nach Freigabe durch die Leitung Zugang zum internen Werkzeug zu geben.
+    Die von Discord ausgestellten Zugriffstokens werden gespeichert, solange dies zur
+    Aufrechterhaltung deiner Anmeldung erforderlich ist. Rechtsgrundlage ist die Durchführung des
+    Nutzungsverhältnisses (Art. 6 Abs. 1 lit. b DSGVO) sowie unser berechtigtes Interesse an einer
+    sicheren Authentifizierung (Art. 6 Abs. 1 lit. f DSGVO).
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Anbieter ist die Discord Inc., 444 De Haro Street, Suite 200, San Francisco, CA 94107, USA.
+    Dabei kann es zu einer Übermittlung von Daten in die USA (Drittland) kommen. Discord stützt
+    diese Übermittlung auf entsprechende Garantien (u. a. das EU-US Data Privacy Framework bzw.
+    Standardvertragsklauseln). Einzelheiten zur Datenverarbeitung durch Discord findest du in der
+    Datenschutzerklärung von Discord:
+    <MudLink Href="https://discord.com/privacy" Target="_blank" rel="noopener noreferrer">https://discord.com/privacy</MudLink>.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 6. Konto- und Inhaltsdaten ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">6. Konto- und Nutzungsdaten innerhalb der Anwendung</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Für den Betrieb des Werkzeugs speichern wir zu deinem Konto die unter Ziffer 5 genannten
+    Anmeldedaten sowie die innerhalb der Anwendung vergebenen Angaben, insbesondere deinen Codenamen,
+    deine Dienstnummer, deinen Dienstgrad und deinen Status. Außerdem werden Erstellung und
+    Bearbeitung von Inhalten zur Nachvollziehbarkeit protokolliert (Bearbeitungshistorie mit
+    Zeitpunkt und verantwortlichem Konto).
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Zweck ist der Betrieb des internen Verwaltungswerkzeugs, die Verwaltung von Rechten und Rollen
+    sowie die Nachvollziehbarkeit von Änderungen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b und
+    lit. f DSGVO. Die Daten werden gespeichert, solange dein Konto besteht bzw. solange dies für den
+    Betrieb erforderlich ist, und nach Wegfall des Zwecks gelöscht.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 7. Cookies ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">7. Cookies und vergleichbare Technologien</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Diese Website setzt ausschließlich <b>technisch notwendige</b> Cookies bzw. vergleichbare
+    Speichertechniken ein. Dazu gehören ein Cookie zur Aufrechterhaltung deiner Anmeldung
+    (Login-Sitzung) sowie ein Cookie zum Schutz vor seitenübergreifenden Angriffen (CSRF-/
+    Antiforgery-Schutz). Diese sind für den Betrieb und die Sicherheit zwingend erforderlich; ohne
+    sie ist eine Anmeldung nicht möglich.
+</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Da es sich um unbedingt erforderliche Cookies handelt, ist hierfür keine Einwilligung notwendig
+    (§ 25 Abs. 2 Nr. 2 TDDDG). Es werden <b>keine</b> Analyse-, Tracking- oder Werbe-Cookies und
+    keine Dienste zur Reichweitenmessung eingesetzt. Rechtsgrundlage für die Verarbeitung ist
+    Art. 6 Abs. 1 lit. f DSGVO bzw. Art. 6 Abs. 1 lit. b DSGVO.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 8. Empfänger ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">8. Empfänger der Daten</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Eine Übermittlung deiner Daten findet nur an die in dieser Erklärung genannten Stellen statt:
+    an den Hoster als Auftragsverarbeiter (Ziffer 3) sowie an den Anmeldedienst Discord (Ziffer 5).
+    Eine darüber hinausgehende Weitergabe an Dritte erfolgt nicht, es sei denn, wir sind gesetzlich
+    dazu verpflichtet.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 9. Betroffenenrechte ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">9. Deine Rechte</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Dir stehen als betroffene Person folgende Rechte zu:
+</MudText>
+<ul style="margin:0 0 12px 20px;">
+    <li><MudText Typo="Typo.body2">Auskunft über die zu dir gespeicherten Daten (Art. 15 DSGVO)</MudText></li>
+    <li><MudText Typo="Typo.body2">Berichtigung unrichtiger Daten (Art. 16 DSGVO)</MudText></li>
+    <li><MudText Typo="Typo.body2">Löschung (Art. 17 DSGVO)</MudText></li>
+    <li><MudText Typo="Typo.body2">Einschränkung der Verarbeitung (Art. 18 DSGVO)</MudText></li>
+    <li><MudText Typo="Typo.body2">Datenübertragbarkeit (Art. 20 DSGVO)</MudText></li>
+    <li><MudText Typo="Typo.body2">Widerspruch gegen die Verarbeitung (Art. 21 DSGVO, siehe Ziffer 10)</MudText></li>
+</ul>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Zur Ausübung deiner Rechte genügt eine formlose Mitteilung an den unter Ziffer 1 genannten
+    Kontakt. Soweit eine Verarbeitung auf einer Einwilligung beruht, kannst du diese jederzeit mit
+    Wirkung für die Zukunft widerrufen (Art. 7 Abs. 3 DSGVO).
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 10. Widerspruchsrecht ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">10. Widerspruchsrecht</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Soweit wir Daten auf Grundlage unseres berechtigten Interesses (Art. 6 Abs. 1 lit. f DSGVO)
+    verarbeiten, hast du das Recht, aus Gründen, die sich aus deiner besonderen Situation ergeben,
+    jederzeit Widerspruch gegen diese Verarbeitung einzulegen. Wir verarbeiten die betroffenen Daten
+    dann nicht mehr, es sei denn, wir können zwingende schutzwürdige Gründe nachweisen, die deine
+    Interessen überwiegen, oder die Verarbeitung dient der Geltendmachung, Ausübung oder Verteidigung
+    von Rechtsansprüchen.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 11. Beschwerderecht ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">11. Beschwerderecht bei einer Aufsichtsbehörde</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Unbeschadet anderweitiger Rechtsbehelfe hast du das Recht, dich bei einer Datenschutz-
+    Aufsichtsbehörde zu beschweren, wenn du der Ansicht bist, dass die Verarbeitung deiner Daten
+    gegen die DSGVO verstößt (Art. 77 DSGVO). Du kannst dich hierfür an die Aufsichtsbehörde deines
+    üblichen Aufenthaltsorts oder die für den Verantwortlichen zuständige Behörde wenden.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 12. Datensicherheit ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">12. Datensicherheit</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Diese Website nutzt aus Sicherheitsgründen eine TLS-/SSL-Verschlüsselung. Eine verschlüsselte
+    Verbindung erkennst du an „https://" in der Adresszeile deines Browsers. Dadurch können die
+    zwischen deinem Browser und dem Server übertragenen Daten von Dritten nicht mitgelesen werden.
+</MudText>
+<MudDivider Class="my-5" />
+
+@* ---- 13. Stand / Änderungen ---- *@
+<MudText Typo="Typo.h6" GutterBottom="true">13. Aktualität und Änderung dieser Erklärung</MudText>
+<MudText Typo="Typo.body2" Class="mb-2">
+    Diese Datenschutzerklärung hat den Stand <b>@RechtlichesDaten.Stand</b>. Durch die Weiterentwicklung
+    der Website oder geänderte rechtliche Vorgaben kann es notwendig werden, diese Erklärung
+    anzupassen. Es gilt jeweils die hier veröffentlichte aktuelle Fassung.
+</MudText>
