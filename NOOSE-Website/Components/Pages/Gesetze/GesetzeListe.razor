@@ -160,10 +160,9 @@ else
 
     private async Task LoeschenAsync(Gesetz gesetz)
     {
-        var bestaetigt = await DialogService.ShowMessageBox("Paragraf löschen",
-            $"„{gesetz.Paragraf} {gesetz.Titel}“ wirklich löschen? Bestehende Verknüpfungen zeigen ihn danach nicht mehr an.",
-            yesText: "Löschen", cancelText: "Abbrechen");
-        if (bestaetigt != true)
+        var bestaetigt = await BestaetigenDialog.ZeigenAsync(DialogService, "Paragraf löschen?",
+            $"„{gesetz.Paragraf} {gesetz.Titel}“ wirklich löschen? Bestehende Verknüpfungen zeigen ihn danach nicht mehr an.");
+        if (!bestaetigt)
         {
             return;
         }

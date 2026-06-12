@@ -156,10 +156,9 @@ else
 
     private async Task LoeschenAsync(BibliothekDatei datei)
     {
-        var bestaetigt = await DialogService.ShowMessageBox("Datei löschen",
-            $"„{datei.Titel}“ wirklich aus der Bibliothek entfernen?",
-            yesText: "Löschen", cancelText: "Abbrechen");
-        if (bestaetigt != true)
+        var bestaetigt = await BestaetigenDialog.ZeigenAsync(DialogService, "Datei löschen?",
+            $"„{datei.Titel}“ wirklich aus der Bibliothek entfernen?");
+        if (!bestaetigt)
         {
             return;
         }
