@@ -109,6 +109,8 @@ else
                 </MudTabPanel>
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <VerknuepfungPanel PersonId="@_person.Id" User="_user" />
+                    <MudDivider Class="my-4" />
+                    <VerknuepfungVorschlagPanel EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
                     <ZugehoerigkeitenPanel PersonId="@_person.Id" User="_user" Changed="NeuLadenAsync" @key="_historieKey" />

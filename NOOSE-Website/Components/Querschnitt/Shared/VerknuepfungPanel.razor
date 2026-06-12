@@ -8,6 +8,10 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="6">
+    @* Schneller Sprung in das interaktive Lagebild, zentriert auf diese Person (Phase 8). *@
+    <MudButton Href="@($"/graph?typ={nameof(Person)}&id={PersonId}")" Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Hub" Class="align-self-start">Im Beziehungsgraph anzeigen</MudButton>
+
     @* ---- Verknüpfte Akten (manuell, jede Aktenart) ---- *@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">

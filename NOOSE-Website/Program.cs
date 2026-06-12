@@ -201,6 +201,9 @@ builder.Services.AddScoped<ICustomFeldWertService, CustomFeldWertService>();
 // Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
 builder.Services.AddScoped<IVerknuepfungService, VerknuepfungService>();
 builder.Services.AddScoped<IBeziehungService, BeziehungService>();
+// Phase 8 – Block A: Beziehungsgraph, Pfadsuche & Verknüpfungs-Vorschläge (rein lesend auf den o. g. Quellen).
+builder.Services.AddScoped<IGraphService, GraphService>();
+builder.Services.AddScoped<IVerknuepfungVorschlagService, VerknuepfungVorschlagService>();
 // Phase 3c: globale Suche + gespeicherte Suchen.
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>();

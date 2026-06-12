@@ -290,9 +290,9 @@
 
 ### Phase 8 – Visualisierungen & erweiterte Module
 **Ziel:** Die „Wow"-Features.
-- [ ] **Beziehungs-/Netzwerk-Graph** (interaktiv, aus Verknüpfungen/Beziehungen) via JS-Interop.
-- [ ] **Beziehungs-Pfad-Suche** („wie hängen A und B zusammen?").
-- [ ] **Verknüpfungs-Vorschläge** (zusammenhängende Akten automatisch vorschlagen – gleiche Tags/Fraktion/Telefon).
+- [x] **Beziehungs-/Netzwerk-Graph** (interaktiv, aus Verknüpfungen/Beziehungen) via JS-Interop.
+- [x] **Beziehungs-Pfad-Suche** („wie hängen A und B zusammen?").
+- [x] **Verknüpfungs-Vorschläge** (zusammenhängende Akten automatisch vorschlagen – gleiche Tags/Fraktion/Telefon).
 - [ ] **Zeitstrahl/Timeline je Akte** (alle Ereignisse chronologisch).
 - [ ] **Organigramm/Personalübersicht** (NOOSE-Struktur, TRU, Taskforce-Besetzung).
 - [ ] **Karte mit Orten** (GTA-Karte + Marker für Orte/Territorien).
@@ -301,6 +301,12 @@
 - [ ] **Statistik-Reports/Export** (CSV/PDF) + **automatischer Lagebericht** (geplant erzeugt + archiviert).
 
 **Abnahme:** Graph zeigt Verbindungen; Pfadsuche findet Kette zwischen zwei Personen; Vorschläge erscheinen; Timeline korrekt; Organigramm korrekt; Karte zeigt Marker; Kalender zeigt Termine; Score wird berechnet und ist sortierbar; Monats-Lagebericht wird automatisch erzeugt.
+
+> **Block A umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):**
+> Phase 8 wird in 4 testbaren Blöcken geliefert; **Block A = Beziehungsgraph + Pfadsuche + Verknüpfungs-Vorschläge**.
+> Backend: `Services/Graph/GraphService.cs` (Graph aus `Verknuepfung` + `PersonBeziehung`, Umkreis-/Pfad-BFS, Knoten-Auflösung mit Verschlusssachen-/Taskforce-Sichtbarkeit; Gesamtgraph auf die 250 stärksten Knoten gedeckelt mit Hinweis), `Services/Graph/VerknuepfungVorschlagService.cs` (Signale: gleiche Telefonnummer/Fraktion/Gruppe/Tag + gemeinsame Verknüpfung; schließt bereits Verknüpfte/VS aus). Modelle in `Models/Graph/`.
+> Frontend: Seite `/graph` (`Components/Pages/Graph/Beziehungsgraph.razor`) mit vis-network (self-hosted unter `wwwroot/lib/vis-network/`, guarded Lazy-Loader `wwwroot/js/graph.js?v=1`): Fokus-/Gesamtmodus, Tiefe, Typ-/Art-Filter, Foto-Knoten, Einstufungs-Randfarbe (rot = staatsgefährdend), Vollbild/PNG-Export, Doppelklick → Akte. Pfadsuche zeichnet die gefundene Kette. Wiederverwendbarer `GraphAktePicker`. Vorschlags-Panel auf der Personen-Akte (Reiter „Verknüpfungen") mit 1-Klick-Verknüpfen; „Im Beziehungsgraph anzeigen" auf jeder Akte. Nav-Eintrag „Beziehungsgraph" aktiviert.
+> **Keine Migration** (rein lesend). Offen: Blöcke **B** (Zeitstrahl/Organigramm), **C** (Karte/Kalender), **D** (Bedrohungs-Score/Statistik-Reports/Lagebericht).
 
 ### Phase 9 – Partner-Zugriff (DoJ / LSPD / LSMD)
 **Ziel:** Kontrollierter Lesezugriff für Partnerbehörden.

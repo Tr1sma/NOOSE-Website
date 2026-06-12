@@ -28,6 +28,7 @@
     <MudNavLink Href="/aufgaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AssignmentTurnedIn">Aufgaben</MudNavLink>
     <MudNavLink Href="/gesetze" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Gesetzbuch</MudNavLink>
     <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
+    <MudNavLink Href="/graph" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Hub">Beziehungsgraph</MudNavLink>
 
     @* Den Freigabe-Posteingang erreicht bereits Senior Special Agent+ (entscheidet Hochstufungen);
        die übrigen Verwaltungs-Links bleiben Führung bzw. Admin vorbehalten. Die *Seite-Policies lassen
@@ -72,10 +73,6 @@
         </AuthorizeView>
     </AuthorizeView>
 
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">BALD VERFÜGBAR</MudText>
-
-    <MudNavLink Icon="@Icons.Material.Filled.Hub" Disabled="true">Beziehungsgraph</MudNavLink>
 </MudNavMenu>
 
 @code {

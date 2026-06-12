@@ -1,0 +1,108 @@
+@* Automatische Verknüpfungs-Vorschläge (Phase 8): Akten, die mit dieser vermutlich zusammenhängen
+   (gleiche Telefonnummer/Fraktion/Gruppe/Tag, gemeinsame Verknüpfung), aber noch nicht verknüpft sind. *@
+@inject IVerknuepfungVorschlagService VorschlagService
+@inject IVerknuepfungService VerknuepfungService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" />
+        <MudText Typo="Typo.subtitle1">Vorgeschlagene Verknüpfungen</MudText>
+        @if (!_laden)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@_vorschlaege.Count</MudChip>
+        }
+    </MudStack>
+
+    @if (_laden)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_vorschlaege.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Keine Vorschläge – NOOSE findet aktuell keine offensichtlich verwandte, noch unverknüpfte Akte.
+        </MudText>
+    }
+    else
+    {
+        @foreach (var v in _vorschlaege)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Small" />
+                        @if (v.Href is not null)
+                        {
+                            <MudLink Href="@v.Href" Typo="Typo.body2"><b>@v.Bezeichnung</b></MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2"><b>@v.Bezeichnung</b></MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(v.Untertitel))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@v.Untertitel</MudText>
+                        }
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@v.Grund</MudChip>
+                    </MudStack>
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudTooltip Text="Im Beziehungsgraph anzeigen">
+                            <MudIconButton Icon="@Icons.Material.Filled.Hub" Size="Size.Small" Color="Color.Default"
+                                           Href="@($"/graph?typ={v.ZielTyp}&id={v.ZielId}")" aria-label="Im Graph anzeigen" />
+                        </MudTooltip>
+                        @if (_darfSchreiben)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.AddLink" OnClick="@(() => VerknuepfenAsync(v))"
+                                       Disabled="@(_arbeitend == v.ZielId)">Verknüpfen</MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _darfSchreiben;
+    private string? _arbeitend;
+    private List<VerknuepfungVorschlag> _vorschlaege = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _darfSchreiben = User.DarfSchreiben();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _vorschlaege = await VorschlagService.GetVorschlaegeAsync(EntitaetTyp, EntitaetId, User);
+        _laden = false;
+    }
+
+    private async Task VerknuepfenAsync(VerknuepfungVorschlag v)
+    {
+        _arbeitend = v.ZielId;
+        try
+        {
+            await VerknuepfungService.ErstellenAsync(EntitaetTyp, EntitaetId, v.ZielTyp, v.ZielId, null, User);
+            Snackbar.Add($"Verknüpfung zu „{v.Bezeichnung}“ angelegt.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _arbeitend = null;
+        }
+    }
+}

@@ -450,3 +450,55 @@ html, body {
         break-after: avoid;
     }
 }
+
+/* ---- Phase 8: Beziehungsgraph (vis-network) ---- */
+.noose-graph-flaeche {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #222B36;
+    border-radius: 10px;
+    background:
+        radial-gradient(1200px 500px at 50% -10%, rgba(34, 211, 238, 0.06), transparent 60%),
+        linear-gradient(180deg, #0F141A 0%, #0B0E13 100%);
+}
+
+/* vis-network rendert in einen Canvas; das umgebende div bekommt einen feinen Innenschatten. */
+.noose-graph-flaeche > div:first-child {
+    background: transparent;
+}
+
+.noose-graph-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background: rgba(11, 14, 19, 0.35);
+}
+
+.noose-graph-punkt {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+.noose-graph-linie {
+    display: inline-block;
+    width: 22px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+/* vis-network Tooltip an das dunkle Theme angleichen. */
+div.vis-tooltip {
+    background: #11161D !important;
+    border: 1px solid #2B3744 !important;
+    border-radius: 8px !important;
+    color: #E6EDF3 !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55) !important;
+    padding: 8px 10px !important;
+    font-family: Inter, 'Segoe UI', Roboto, sans-serif !important;
+}
