@@ -22,6 +22,7 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/vorgaenge" aria-label="Zurück" />
         <MudSpacer />
+        <DruckButton />
         <FolgenButton EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" User="_user" />
         <AufgabeErstellenButton EntitaetTyp="@nameof(Vorgang)" EntitaetId="@_vorgang.Id" />
         <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">

@@ -139,6 +139,11 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<AktualitaetsSchwelle> AktualitaetsSchwellen => Set<AktualitaetsSchwelle>();
     public DbSet<Wiedervorlage> Wiedervorlagen => Set<Wiedervorlage>();
 
+    // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----
+    public DbSet<SystemEinstellung> SystemEinstellungen => Set<SystemEinstellung>();
+    public DbSet<Gesetz> Gesetze => Set<Gesetz>();
+    public DbSet<BibliothekDatei> BibliothekDateien => Set<BibliothekDatei>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -831,6 +836,37 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => a.Status);
             b.HasOne<Agent>().WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----
+        modelBuilder.Entity<SystemEinstellung>(b =>
+        {
+            b.HasKey(e => e.Schluessel);
+            b.Property(e => e.Schluessel).HasMaxLength(128);
+            // Wert bewusst ohne HasMaxLength (longtext) – trägt auch längere Banner-/Wartungstexte.
+        });
+
+        modelBuilder.Entity<Gesetz>(b =>
+        {
+            b.Property(g => g.Gesetzbuch).HasMaxLength(128).IsRequired();
+            b.Property(g => g.Paragraf).HasMaxLength(32).IsRequired();
+            b.Property(g => g.Titel).HasMaxLength(256).IsRequired();
+            b.Property(g => g.Strafmass).HasMaxLength(512);
+            // Text bewusst ohne HasMaxLength (longtext).
+            b.HasIndex(g => g.Gesetzbuch);
+            b.HasIndex(g => g.Titel);
+        });
+
+        modelBuilder.Entity<BibliothekDatei>(b =>
+        {
+            b.Property(d => d.Titel).HasMaxLength(300).IsRequired();
+            b.Property(d => d.Kategorie).HasMaxLength(120);
+            b.Property(d => d.OriginalName).HasMaxLength(260).IsRequired();
+            b.Property(d => d.DateinameGespeichert).HasMaxLength(128).IsRequired();
+            b.Property(d => d.ContentType).HasMaxLength(100).IsRequired();
+            b.HasIndex(d => d.Titel);
+            b.HasIndex(d => d.Kategorie);
+            b.HasIndex(d => d.IstVerschlusssache);
         });
 
         // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird

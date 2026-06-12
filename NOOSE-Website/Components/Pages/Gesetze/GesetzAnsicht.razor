@@ -1,0 +1,184 @@
+@* Detailansicht eines Paragrafen (Gesetzbuch-Modul, Phase 7) inkl. Verknüpfungen zu Akten. *@
+@page "/gesetze/{Id}"
+@inject IGesetzService GesetzService
+@inject IVerknuepfungService VerknuepfungService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_gesetz is null ? "Gesetzbuch" : $"{_gesetz.Paragraf} {_gesetz.Titel}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_gesetz is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dieser Paragraf existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1 no-print">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/gesetze" aria-label="Zurück zum Gesetzbuch" />
+        <MudIcon Icon="@Icons.Material.Filled.Gavel" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@_gesetz.Paragraf @_gesetz.Titel</MudText>
+        <MudSpacer />
+        <DruckButton />
+        <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
+                       OnClick="BearbeitenAsync">Bearbeiten</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@_gesetz.Gesetzbuch</MudChip>
+                <MudText Typo="Typo.h6">@_gesetz.Paragraf – @_gesetz.Titel</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_gesetz.Text</MudText>
+            @if (!string.IsNullOrWhiteSpace(_gesetz.Strafmass))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    <b>Strafmaß/Rechtsfolge:</b> @_gesetz.Strafmass
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_verknuepfungen.Count)</MudText>
+                <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink"
+                               OnClick="VerknuepfenAsync" Class="no-print">Verknüpfung hinzufügen</MudButton>
+                </AuthorizeView>
+            </MudStack>
+
+            @if (_verknuepfungen.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Noch keine Verknüpfungen – verbinde den Paragrafen z. B. mit einem Vorgang oder Dok.
+                </MudText>
+            }
+            else
+            {
+                @foreach (var v in _verknuepfungen)
+                {
+                    <MudPaper Class="pa-3" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Small" />
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@v.AndereTyp</MudChip>
+                                @if (v.Href is not null)
+                                {
+                                    <MudLink Href="@v.Href" Typo="Typo.body2">@v.AndereBezeichnung</MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">@v.AndereBezeichnung</MudText>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(v.Label))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@v.Label</MudText>
+                                }
+                            </MudStack>
+                            <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                                <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => EntfernenAsync(v))" aria-label="Verknüpfung entfernen" Class="no-print" />
+                            </AuthorizeView>
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private Gesetz? _gesetz;
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _gesetz = await GesetzService.GetAsync(Id);
+        if (_gesetz is not null)
+        {
+            _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Gesetz), Id, _user.IstFuehrung(), _user.GetAgentId());
+        }
+        _laden = false;
+    }
+
+    private async Task BearbeitenAsync()
+    {
+        if (_gesetz is null)
+        {
+            return;
+        }
+        var eingabe = await GesetzDialog.ZeigenAsync(DialogService, $"{_gesetz.Paragraf} bearbeiten", new GesetzEingabe
+        {
+            Gesetzbuch = _gesetz.Gesetzbuch,
+            Paragraf = _gesetz.Paragraf,
+            Titel = _gesetz.Titel,
+            Text = _gesetz.Text,
+            Strafmass = _gesetz.Strafmass,
+        });
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await GesetzService.AktualisierenAsync(_gesetz.Id, eingabe, _user);
+            Snackbar.Add("Paragraf gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task VerknuepfenAsync()
+    {
+        var eingabe = await VerknuepfungDialog.ZeigenAsync(DialogService, _user.IstFuehrung());
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await VerknuepfungService.ErstellenAsync(nameof(Gesetz), Id, eingabe.ZielTyp, eingabe.ZielId, eingabe.Label, _user);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EntfernenAsync(VerknuepfungAnzeige v)
+    {
+        try
+        {
+            await VerknuepfungService.EntfernenAsync(v.VerknuepfungId, _user);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -145,11 +145,19 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             ziele[(nameof(Observation), x.Id)] = ($"Observation – {x.PersonName} ({x.Beginn.ToLocalTime():dd.MM.yyyy})", x.IstVerschlusssache, $"/personen/{x.PersonId}?tab=ueberwachung");
         }
 
+        // Gesetz (Phase 7): kein Verschlusssache-Konzept (Wissensbasis); Navigation auf die Detailseite.
+        var gesetzIds = paare.Where(p => p.AndereTyp == nameof(Gesetz)).Select(p => p.AndereId).Distinct().ToList();
+        foreach (var x in await db.Gesetze.Where(g => gesetzIds.Contains(g.Id))
+                     .Select(g => new { g.Id, g.Paragraf, g.Titel, g.Gesetzbuch }).ToListAsync(cancellationToken))
+        {
+            ziele[(nameof(Gesetz), x.Id)] = ($"{x.Paragraf} {x.Titel} ({x.Gesetzbuch})", false, $"/gesetze/{x.Id}");
+        }
+
         var bekannteTypen = new[]
         {
             nameof(Person), nameof(Fraktion), nameof(Personengruppe), nameof(Partei),
             nameof(Operation), nameof(Taskforce), nameof(Vorgang), nameof(Agent),
-            nameof(PersonDok), nameof(Observation), nameof(Aufgabe),
+            nameof(PersonDok), nameof(Observation), nameof(Aufgabe), nameof(Gesetz),
         };
         var ergebnis = new List<VerknuepfungAnzeige>();
         foreach (var p in paare)

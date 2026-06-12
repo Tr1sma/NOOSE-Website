@@ -1,0 +1,192 @@
+@* Datei-Bibliothek (Phase 7): durchsuchbare Ablage hochgeladener Dateien (Formulare, SOPs,
+   Vorlagen). Eingebettet als Reiter in der Dokumenten-Bibliothek (/dokumente). *@
+@inject IBibliothekService BibliothekService
+@inject IBibliothekStorageService Storage
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+    <MudTextField @bind-Value="_suche" Placeholder="Suchen (Titel, Kategorie, Dateiname)…" Immediate="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Class="mt-0" />
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
+                   OnClick="HochladenAsync">Datei hochladen</MudButton>
+    </AuthorizeView>
+</MudStack>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_gefiltert" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true" T="BibliothekDatei">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.Titel)">Titel</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.Kategorie)">Kategorie</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.GroesseBytes)">Größe</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="BibliothekDatei" SortBy="@(x => x.GeaendertAm ?? x.ErstelltAm)" InitialDirection="SortDirection.Descending">Zuletzt</MudTableSortLabel></MudTh>
+            <MudTh>Verschluss</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Titel">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@DateiIcon(context.ContentType)" Size="Size.Small" Color="Color.Primary" />
+                    <MudLink Href="@($"/dateien/bibliothek/{context.Id}")" Target="_blank">@context.Titel</MudLink>
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@context.OriginalName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Kategorie">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Kategorie) ? "—" : context.Kategorie)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Größe">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@GroesseText(context.GroesseBytes)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Zuletzt">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@((context.GeaendertAm ?? context.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</MudText>
+            </MudTd>
+            <MudTd DataLabel="Verschluss">
+                @if (context.IstVerschlusssache)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudTooltip Text="Herunterladen">
+                        <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" Color="Color.Default"
+                                       Href="@($"/dateien/bibliothek/{context.Id}")" Target="_blank" aria-label="Datei herunterladen" />
+                    </MudTooltip>
+                    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => BearbeitenAsync(context))" aria-label="Metadaten bearbeiten" />
+                    </AuthorizeView>
+                    <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => LoeschenAsync(context))" aria-label="Datei löschen" />
+                    </AuthorizeView>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Dateien – lade die erste hoch (Formulare, SOPs, Vorlagen).</MudText>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _istFuehrung;
+    private string _suche = string.Empty;
+    private List<BibliothekDatei> _dateien = new();
+    private ClaimsPrincipal _user = default!;
+
+    private IEnumerable<BibliothekDatei> _gefiltert => string.IsNullOrWhiteSpace(_suche)
+        ? _dateien
+        : _dateien.Where(d => d.Titel.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || (d.Kategorie?.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase) ?? false)
+                           || d.OriginalName.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _dateien = await BibliothekService.GetListeAsync(_user.DarfVerschlusssacheLesen());
+        _laden = false;
+    }
+
+    private async Task HochladenAsync()
+    {
+        var ergebnis = await BibliothekDateiDialog.ZeigenAsync(DialogService, "Datei hochladen", _istFuehrung);
+        if (ergebnis?.Datei is null)
+        {
+            return;
+        }
+        try
+        {
+            // Datei vollständig puffern (Browser-Stream unterstützt kein Seek) und dann speichern.
+            await using var puffer = new MemoryStream();
+            await ergebnis.Datei.OpenReadStream(Storage.MaxBytes).CopyToAsync(puffer);
+            puffer.Position = 0;
+            await BibliothekService.HochladenAsync(ergebnis.Titel, ergebnis.Kategorie, ergebnis.IstVerschlusssache,
+                puffer, ergebnis.Datei.Name, ergebnis.Datei.ContentType, ergebnis.Datei.Size, _user);
+            Snackbar.Add("Datei hochgeladen.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task BearbeitenAsync(BibliothekDatei datei)
+    {
+        var ergebnis = await BibliothekDateiDialog.ZeigenAsync(DialogService, "Datei bearbeiten", _istFuehrung, datei);
+        if (ergebnis is null)
+        {
+            return;
+        }
+        try
+        {
+            await BibliothekService.AktualisierenAsync(datei.Id, ergebnis.Titel, ergebnis.Kategorie, ergebnis.IstVerschlusssache, _user);
+            Snackbar.Add("Gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoeschenAsync(BibliothekDatei datei)
+    {
+        var bestaetigt = await DialogService.ShowMessageBox("Datei löschen",
+            $"„{datei.Titel}“ wirklich aus der Bibliothek entfernen?",
+            yesText: "Löschen", cancelText: "Abbrechen");
+        if (bestaetigt != true)
+        {
+            return;
+        }
+        try
+        {
+            await BibliothekService.LoeschenAsync(datei.Id, _user);
+            Snackbar.Add("Datei gelöscht.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static string GroesseText(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024.0 * 1024.0):0.#} MB",
+        >= 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes} B",
+    };
+
+    private static string DateiIcon(string contentType) => contentType switch
+    {
+        "application/pdf" => Icons.Material.Filled.PictureAsPdf,
+        var t when t.StartsWith("image/") => Icons.Material.Filled.Image,
+        "application/zip" => Icons.Material.Filled.FolderZip,
+        _ => Icons.Material.Filled.InsertDriveFile,
+    };
+}

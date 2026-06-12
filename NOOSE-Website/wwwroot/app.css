@@ -252,3 +252,58 @@ html, body {
     .dokument-html th p {
         margin: 0;
     }
+
+/* ---- Druck-/PDF-Export (Phase 7) ----
+   window.print() (DruckButton) druckt nur den Akteninhalt: Navigation, Topbar, Buttons und
+   andere Bedienelemente werden ausgeblendet, dunkles Theme wird auf Schwarz-auf-Weiß gedreht.
+   "Als PDF speichern" im Browser-Druckdialog erzeugt den PDF-Export. */
+@media print {
+    .mud-appbar,
+    .mud-drawer,
+    .mud-snackbar,
+    #blazor-error-ui,
+    .mud-dialog-container,
+    .mud-overlay,
+    button,
+    .mud-button-root,
+    .mud-input-control,
+    .mud-table-pagination,
+    .no-print {
+        display: none !important;
+    }
+
+    /* Inhalt über die volle Seite, ohne App-Abstände. */
+    .mud-main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .mud-container {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* Dunkles Theme für Papier invertieren: weißer Grund, dunkle Schrift. */
+    html, body, .mud-layout, .mud-main-content, .mud-paper {
+        background: #fff !important;
+        color: #000 !important;
+        box-shadow: none !important;
+    }
+
+    .mud-paper {
+        border: 1px solid #ccc !important;
+    }
+
+    .mud-typography, .mud-text-secondary, .mud-link, .mud-chip, .mud-alert,
+    .mud-table, .mud-table * {
+        color: #000 !important;
+    }
+
+    .mud-table, .mud-table-container {
+        background: #fff !important;
+    }
+
+    a, .mud-link {
+        text-decoration: none !important;
+    }
+}

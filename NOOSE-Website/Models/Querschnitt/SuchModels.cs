@@ -58,6 +58,7 @@ public static class SuchNavigation
         nameof(Vorgang) => $"/vorgaenge/{zielId}",
         nameof(Aufgabe) => $"/aufgaben/{zielId}",
         nameof(Dokument) => $"/dokumente/{zielId}",
+        nameof(Gesetz) => $"/gesetze/{zielId}",
         _ => $"/personen/{zielId}",
     };
 

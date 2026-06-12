@@ -1,0 +1,133 @@
+@* Quick-Add (Phase 7): Schnellerfassung einer neuen Akte mit minimalen Pflichtfeldern.
+   Aus der Topbar (Plus-Knopf) erreichbar; legt die Akte sofort an und springt in die Detailansicht,
+   wo alle weiteren Angaben nachgepflegt werden können. *@
+@inject IPersonService PersonService
+@inject IFraktionService FraktionService
+@inject IPersonengruppeService GruppeService
+@inject IParteiService ParteiService
+@inject IOperationService OperationService
+@inject IVorgangService VorgangService
+@inject ITaskforceService TaskforceService
+@inject IAufgabeService AufgabeService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="string" Label="Aktentyp" @bind-Value="_typ" Variant="Variant.Outlined" Dense="true">
+                @foreach (var option in _typen)
+                {
+                    <MudSelectItem T="string" Value="@option.Wert">@option.Anzeige</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_bezeichnung" Label="@BezeichnungLabel" Variant="Variant.Outlined"
+                          Immediate="true" AutoFocus="true" OnKeyDown="TasteGedrueckt"
+                          HelperText="Es wird nur das Pflichtfeld erfasst – alle Details lassen sich danach in der Akte ergänzen." />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="AnlegenAsync"
+                   Disabled="@(_beschaeftigt || string.IsNullOrWhiteSpace(_bezeichnung))">
+            @(_beschaeftigt ? "Wird angelegt…" : "Anlegen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private record TypOption(string Wert, string Anzeige);
+    private static readonly TypOption[] _typen =
+    {
+        new(nameof(Person), "Person"),
+        new(nameof(Fraktion), "Fraktion"),
+        new(nameof(Personengruppe), "Personengruppe"),
+        new(nameof(Partei), "Partei"),
+        new(nameof(Operation), "Operation"),
+        new(nameof(Vorgang), "Vorgang"),
+        new(nameof(Taskforce), "Taskforce"),
+        new(nameof(Aufgabe), "Aufgabe"),
+    };
+
+    private string _typ = nameof(Person);
+    private string _bezeichnung = string.Empty;
+    private bool _beschaeftigt;
+
+    private string BezeichnungLabel => _typ is nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) ? "Titel" : "Name";
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    private Task TasteGedrueckt(KeyboardEventArgs e)
+        => e.Key == "Enter" && !_beschaeftigt && !string.IsNullOrWhiteSpace(_bezeichnung) ? AnlegenAsync() : Task.CompletedTask;
+
+    private async Task AnlegenAsync()
+    {
+        var bezeichnung = _bezeichnung.Trim();
+        if (string.IsNullOrWhiteSpace(bezeichnung))
+        {
+            return;
+        }
+
+        _beschaeftigt = true;
+        var user = (await AuthStateTask).User;
+        try
+        {
+            string ziel;
+            switch (_typ)
+            {
+                case nameof(Fraktion):
+                    var fraktion = await FraktionService.ErstellenAsync(new FraktionEingabe { Name = bezeichnung }, user);
+                    ziel = $"/fraktionen/{fraktion.Id}";
+                    break;
+                case nameof(Personengruppe):
+                    var gruppe = await GruppeService.ErstellenAsync(new PersonengruppeEingabe { Name = bezeichnung }, user);
+                    ziel = $"/personengruppen/{gruppe.Id}";
+                    break;
+                case nameof(Partei):
+                    var partei = await ParteiService.ErstellenAsync(new ParteiEingabe { Name = bezeichnung }, user);
+                    ziel = $"/parteien/{partei.Id}";
+                    break;
+                case nameof(Operation):
+                    var operation = await OperationService.ErstellenAsync(new OperationEingabe { Titel = bezeichnung }, user);
+                    ziel = $"/operationen/{operation.Id}";
+                    break;
+                case nameof(Vorgang):
+                    var vorgang = await VorgangService.ErstellenAsync(new VorgangEingabe { Titel = bezeichnung }, user);
+                    ziel = $"/vorgaenge/{vorgang.Id}";
+                    break;
+                case nameof(Taskforce):
+                    var taskforce = await TaskforceService.ErstellenAsync(new TaskforceEingabe { Name = bezeichnung }, user);
+                    ziel = $"/taskforces/{taskforce.Id}";
+                    break;
+                case nameof(Aufgabe):
+                    await AufgabeService.ErstellenAsync(new AufgabeEingabe { Titel = bezeichnung }, Array.Empty<string>(), user);
+                    ziel = "/aufgaben";
+                    break;
+                default:
+                    var person = await PersonService.ErstellenAsync(new PersonEingabe { Name = bezeichnung }, user);
+                    ziel = $"/personen/{person.Id}";
+                    break;
+            }
+
+            Snackbar.Add("Akte angelegt – Details können jetzt ergänzt werden.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+            Nav.NavigateTo(ziel);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _beschaeftigt = false;
+        }
+    }
+
+    /// <summary>Öffnet die Schnellerfassung (Topbar-Plus, Phase 7).</summary>
+    public static Task ZeigenAsync(IDialogService dialog)
+        => dialog.ShowAsync<QuickAddDialog>("Schnellerfassung",
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true });
+}

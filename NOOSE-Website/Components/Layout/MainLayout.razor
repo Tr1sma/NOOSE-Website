@@ -1,7 +1,9 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
+@inject ISystemEinstellungService EinstellungService
+@inject IDialogService DialogService
 
-<MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -10,7 +12,7 @@
     <MudAppBar Elevation="2">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        OnClick="ToggleDrawer" aria-label="Navigation umschalten" />
-        <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="36" Class="mr-3" />
+        <MudImage Src="@(_konfiguration?.HatLogo == true ? "/system/logo" : "NooseIcon.png")" Alt="NOOSE Wappen" Height="36" Class="mr-3" />
         <MudText Typo="Typo.h6" Class="mr-3" Style="font-weight:700;letter-spacing:.12em;">N.O.O.S.E.</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary d-none d-md-flex">
             National Office of Security Enforcement
@@ -19,6 +21,13 @@
         <AuthorizeView>
             <Authorized Context="auth">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    @* Quick-Add (Phase 7): Schnellerfassung neuer Akten direkt aus der Topbar. *@
+                    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                        <MudTooltip Text="Schnellerfassung – neue Akte anlegen">
+                            <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Inherit"
+                                           OnClick="QuickAddAsync" aria-label="Schnellerfassung" />
+                        </MudTooltip>
+                    </AuthorizeView>
                     <MudTextField T="string" @bind-Value="_suche" Placeholder="Suchen…" Immediate="true"
                                   Margin="Margin.Dense" Variant="Variant.Outlined"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
@@ -59,7 +68,36 @@
                     Nur-Lese-Modus (Aufsicht): Sie können alle Inhalte einsehen, aber keine Änderungen speichern.
                 </MudAlert>
             </AuthorizeView>
-            @Body
+
+            @* Ankündigungsbanner (Phase 7): von der Führung/Admins unter /admin/system gepflegt. *@
+            @if (!string.IsNullOrWhiteSpace(_konfiguration?.BannerText))
+            {
+                <MudAlert Severity="@BannerSeverity" Dense="true" Class="mb-4 no-print">@_konfiguration!.BannerText</MudAlert>
+            }
+
+            @if (_konfiguration?.WartungsmodusAktiv == true && _istAdmin)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4 no-print">
+                    Wartungsmodus aktiv – normale Agenten sehen derzeit nur die Wartungsseite.
+                    Deaktivieren unter <MudLink Href="/admin/system" Color="Color.Inherit"><b>System</b></MudLink>.
+                </MudAlert>
+            }
+
+            @* Wartungsmodus (Phase 7): sperrt die Inhalte für alle außer Admins. *@
+            @if (_konfiguration?.WartungsmodusAktiv == true && !_istAdmin)
+            {
+                <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-12">
+                    <MudIcon Icon="@Icons.Material.Filled.Construction" Color="Color.Warning" Style="font-size:4rem;" />
+                    <MudText Typo="Typo.h5">Wartungsmodus</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:480px;text-align:center;">
+                        @(_konfiguration!.WartungsmodusText ?? "Das System wird gerade gewartet. Bitte versuche es in Kürze erneut.")
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                @Body
+            }
         </MudContainer>
     </MudMainContent>
 
@@ -78,8 +116,34 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
     private bool _drawerOpen = true;
     private string _suche = string.Empty;
+    private SystemKonfiguration? _konfiguration;
+    private MudTheme _theme = NooseTheme.Theme;
+    private bool _istAdmin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Systemkonfiguration (gecacht): Theme-Farben, Logo, Banner, Wartungsmodus.
+        _konfiguration = await EinstellungService.GetAsync();
+        _theme = NooseTheme.MitFarben(_konfiguration.ThemePrimary, _konfiguration.ThemeSecondary, _konfiguration.ThemeTertiary);
+
+        if (AuthStateTask is not null)
+        {
+            _istAdmin = (await AuthStateTask).User.IstAdmin();
+        }
+    }
+
+    private Severity BannerSeverity => _konfiguration?.BannerStufe switch
+    {
+        BannerStufen.Warnung => Severity.Warning,
+        BannerStufen.Fehler => Severity.Error,
+        _ => Severity.Info,
+    };
+
+    private Task QuickAddAsync() => QuickAddDialog.ZeigenAsync(DialogService);
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 

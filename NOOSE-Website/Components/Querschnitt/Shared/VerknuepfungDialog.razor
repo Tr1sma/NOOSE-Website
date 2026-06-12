@@ -10,6 +10,7 @@
 @inject ITaskforceService TaskforceService
 @inject IVorgangService VorgangService
 @inject IAufgabeService AufgabeService
+@inject IGesetzService GesetzService
 
 <MudDialog>
     <DialogContent>
@@ -212,6 +213,22 @@
                         </ItemTemplate>
                     </MudAutocomplete>
                     break;
+
+                case nameof(Gesetz):
+                    <MudAutocomplete T="Gesetz" Label="Paragraf" @bind-Value="_gesetz" AutoFocus="true"
+                                     SearchFunc="@SucheGesetze" ToStringFunc="@(g => g is null ? string.Empty : $"{g.Paragraf} {g.Titel} ({g.Gesetzbuch})")"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Gavel">
+                        <ItemTemplate Context="g">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Gavel" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@g.Paragraf @g.Titel</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@g.Gesetzbuch</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
             }
 
             <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
@@ -262,6 +279,7 @@
         new(nameof(Agent), "Agent"),
         new(nameof(PersonDok), "Personen-Dok"),
         new(nameof(Observation), "Observation"),
+        new(nameof(Gesetz), "Gesetz/Paragraf"),
     };
 
     private string _zielTyp = nameof(Person);
@@ -278,6 +296,7 @@
     private Agent? _agent;
     private PersonDokAnzeige? _dok;
     private ObservationAnzeige? _observation;
+    private Gesetz? _gesetz;
 
     // Agent-/Dok-/Observations-Listen werden bei Bedarf einmalig geladen (clientseitige Suche).
     private List<Agent>? _alleAgenten;
@@ -297,6 +316,7 @@
         nameof(Agent) => _agent?.Id,
         nameof(PersonDok) => _dok?.Dok.Id,
         nameof(Observation) => _observation?.Obs.Id,
+        nameof(Gesetz) => _gesetz?.Id,
         _ => null,
     };
 
@@ -304,7 +324,7 @@
     {
         // Auswahl der vorherigen Art verwerfen, Listen für client-seitige Suche bei Bedarf laden.
         _person = null; _fraktion = null; _gruppe = null; _partei = null; _operation = null; _taskforce = null;
-        _vorgang = null; _aufgabe = null; _agent = null; _dok = null; _observation = null;
+        _vorgang = null; _aufgabe = null; _agent = null; _dok = null; _observation = null; _gesetz = null;
         if (_zielTyp == nameof(Agent) && _alleAgenten is null)
         {
             _alleAgenten = (await AgentService.GetAlleAsync()).Where(a => a.Status == AgentStatus.Aktiv).ToList();
@@ -342,6 +362,9 @@
 
     private async Task<IEnumerable<Vorgang>> SucheVorgaenge(string value, CancellationToken token)
         => await VorgangService.SucheAsync(value, IstFuehrung, 20, token);
+
+    private async Task<IEnumerable<Gesetz>> SucheGesetze(string value, CancellationToken token)
+        => await GesetzService.SucheAsync(value, 20, token);
 
     private async Task<IEnumerable<Aufgabe>> SucheAufgaben(string value, CancellationToken token)
         => await AufgabeService.SucheAsync(value, _darfVs, _meId, 20, token);

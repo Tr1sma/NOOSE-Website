@@ -1,0 +1,116 @@
+@* Basisdaten-/Lookup-Adminbereich (Phase 7): zentrale Übersicht aller Stammwerte der App.
+   Code-definierte Wertelisten (Enums) werden hier dokumentiert angezeigt; pflegbare Basisdaten
+   (Fraktionen, Tags, Vorlagen, Custom-Felder, Gesetzbuch, Aktualität) sind direkt verlinkt. *@
+@page "/admin/basisdaten"
+@attribute [Authorize(Policy = Policies.FuehrungSeite)]
+
+<PageTitle>Basisdaten · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Basisdaten &amp; Wertelisten</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Übersicht aller Stammwerte. Pflegbare Basisdaten sind verlinkt; fest hinterlegte Wertelisten
+    (Dienstgrade, Einstufungen …) sind hier dokumentiert und werden bei Bedarf per Code-Änderung erweitert.
+</MudText>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Pflegbare Basisdaten</MudText>
+            <MudList T="string" Dense="true">
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Groups" Href="/fraktionen">Fraktionsliste (Akten)</MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Label" Href="/admin/tags">Tags</MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Dvr" Href="/admin/vorlagen">Vorlagen (Dok- &amp; Dokument-Vorlagen)</MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Tune" Href="/admin/custom-felder">Custom-Felder je Aktentyp</MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Gavel" Href="/gesetze">Gesetzbuch / Rechtsgrundlagen</MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Timelapse" Href="/admin/aktualitaet">Aktualitäts-Schwellwerte</MudListItem>
+            </MudList>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Dienstgrade</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var dg in DienstgradAnzeige.Alle)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@DienstgradAnzeige.Name(dg)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Einstufungen</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var e in EinstufungAnzeige.Alle)
+                {
+                    <EinstufungBadge Wert="e" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Maßnahme-Ausgänge (Doks)</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var a in MassnahmeAusgangAnzeige.Alle)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@MassnahmeAusgangAnzeige.Name(a)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Beziehungstypen (Person ↔ Person)</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var t in BeziehungsTypAnzeige.Alle)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@BeziehungsTypAnzeige.Name(t)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Taskforce-Geltungsbereiche</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var g in TaskforceGeltungsbereichAnzeige.Alle)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@TaskforceGeltungsbereichAnzeige.Name(g)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Lebensstatus</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var s in LebensstatusAnzeige.Alle)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@LebensstatusAnzeige.Name(s)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Gruppen-Arten</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var a in GruppenArtAnzeige.Alle)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@GruppenArtAnzeige.Name(a)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>

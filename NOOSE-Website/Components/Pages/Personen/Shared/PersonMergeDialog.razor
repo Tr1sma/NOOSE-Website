@@ -1,0 +1,92 @@
+@* Duplikat-Zusammenführen (Phase 7): überführt eine doppelt angelegte Personenakte vollständig in
+   eine andere. Nur Führung; die Quell-Akte landet anschließend im Papierkorb. *@
+@inject IPersonService PersonService
+@inject IPersonMergeService MergeService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                Alle Inhalte der Quell-Akte (Doks, Observationen, Fotos, Steckbrief, Beziehungen,
+                Verknüpfungen, Tags, Kommentare, Quellen, Mitgliedschaften, Verlauf) werden in die
+                Ziel-Akte überführt. Die Quell-Akte wandert in den Papierkorb; ihr Name bleibt als
+                Alias erhalten. Einstufung und Lebensstatus der Ziel-Akte bleiben unverändert.
+            </MudAlert>
+
+            <MudAutocomplete T="Person" Label="Quell-Akte (Duplikat, wird aufgelöst)" @bind-Value="_quelle"
+                             SearchFunc="Suche" ToStringFunc="@(p => Anzeige(p))" Variant="Variant.Outlined"
+                             Clearable="true" MinCharacters="1" AutoFocus="true" />
+            <MudAutocomplete T="Person" Label="Ziel-Akte (bleibt bestehen)" @bind-Value="_ziel"
+                             SearchFunc="Suche" ToStringFunc="@(p => Anzeige(p))" Variant="Variant.Outlined"
+                             Clearable="true" MinCharacters="1" />
+
+            @if (_quelle is not null && _ziel is not null && _quelle.Id == _ziel.Id)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">Quelle und Ziel müssen unterschiedliche Akten sein.</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Abbrechen">Abbrechen</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.CallMerge"
+                   OnClick="ZusammenfuehrenAsync" Disabled="@(!KannZusammenfuehren)">
+            @(_beschaeftigt ? "Wird zusammengeführt…" : "Zusammenführen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private Person? _quelle;
+    private Person? _ziel;
+    private bool _beschaeftigt;
+
+    private bool KannZusammenfuehren
+        => !_beschaeftigt && _quelle is not null && _ziel is not null && _quelle.Id != _ziel.Id;
+
+    private static string Anzeige(Person? p) => p is null ? string.Empty : $"{p.Name} ({p.Aktenzeichen})";
+
+    private async Task<IEnumerable<Person>> Suche(string value, CancellationToken token)
+    {
+        var user = (await AuthStateTask).User;
+        return await PersonService.SucheAsync(value, user.IstFuehrung(), 15, token);
+    }
+
+    private void Abbrechen() => MudDialog.Cancel();
+
+    private async Task ZusammenfuehrenAsync()
+    {
+        if (!KannZusammenfuehren)
+        {
+            return;
+        }
+        _beschaeftigt = true;
+        try
+        {
+            var user = (await AuthStateTask).User;
+            await MergeService.ZusammenfuehrenAsync(_quelle!.Id, _ziel!.Id, user);
+            Snackbar.Add($"Akte „{_quelle.Name}“ wurde in „{_ziel.Name}“ überführt.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(_ziel.Id));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _beschaeftigt = false;
+        }
+    }
+
+    /// <summary>Öffnet den Zusammenführen-Dialog; liefert die Id der Ziel-Akte oder <c>null</c>.</summary>
+    public static async Task<string?> ZeigenAsync(IDialogService dialog)
+    {
+        var referenz = await dialog.ShowAsync<PersonMergeDialog>("Akten zusammenführen",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var ergebnis = await referenz.Result;
+        return ergebnis is { Canceled: false, Data: string zielId } ? zielId : null;
+    }
+}

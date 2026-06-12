@@ -1,0 +1,181 @@
+@* Gesetzbuch/Rechtsgrundlagen (Phase 7): durchsuchbare Wissensbasis aller Paragrafen.
+   Lesbar für alle aktiven Agenten; kuratiert (anlegen/bearbeiten/löschen) von der Führung. *@
+@page "/gesetze"
+@inject IGesetzService GesetzService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Gesetzbuch · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Gavel" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Gesetzbuch</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Fuehrung" Context="fuehrung">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="NeuAsync">Neuer Paragraf</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Rechtsgrundlagen der Ermittlungsarbeit. Paragrafen können über „Verknüpfen" mit Vorgängen,
+    Doks und anderen Akten verbunden werden und tauchen in der globalen Suche auf.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTextField @bind-Value="_suche" Placeholder="Suchen (Gesetzbuch, Paragraf, Titel, Text)…" Immediate="true"
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-3" Variant="Variant.Outlined" />
+
+    <MudTable Items="_gefiltert" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
+              T="Gesetz" RowClass="cursor-pointer" OnRowClick="@(args => Oeffnen(args.Item))">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="Gesetz" SortBy="@(x => x.Gesetzbuch)" InitialDirection="SortDirection.Ascending">Gesetzbuch</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Gesetz" SortBy="@(x => x.Paragraf)">Paragraf</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Gesetz" SortBy="@(x => x.Titel)">Titel</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Gesetz" SortBy="@(x => x.Strafmass)">Strafmaß</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Gesetzbuch">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@context.Gesetzbuch</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Paragraf"><MudText Typo="Typo.body2"><b>@context.Paragraf</b></MudText></MudTd>
+            <MudTd DataLabel="Titel">
+                <MudLink Href="@($"/gesetze/{context.Id}")" @onclick:stopPropagation="true">@context.Titel</MudLink>
+            </MudTd>
+            <MudTd DataLabel="Strafmaß">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Strafmass) ? "—" : context.Strafmass)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                @if (_istFuehrung)
+                {
+                    @* span stoppt die Klick-Propagation, damit der Button-Klick nicht zusätzlich die Zeile öffnet. *@
+                    <span @onclick:stopPropagation="true">
+                        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                           OnClick="@(() => BearbeitenAsync(context))" aria-label="Paragraf bearbeiten" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => LoeschenAsync(context))" aria-label="Paragraf löschen" />
+                        </MudStack>
+                    </span>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Paragrafen erfasst.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _istFuehrung;
+    private string _suche = string.Empty;
+    private List<Gesetz> _gesetze = new();
+    private ClaimsPrincipal _user = default!;
+
+    private IEnumerable<Gesetz> _gefiltert => string.IsNullOrWhiteSpace(_suche)
+        ? _gesetze
+        : _gesetze.Where(g => g.Titel.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || g.Paragraf.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || g.Gesetzbuch.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || g.Text.Contains(_suche.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _istFuehrung = _user.IstFuehrung();
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _gesetze = await GesetzService.GetListeAsync();
+        _laden = false;
+    }
+
+    private void Oeffnen(Gesetz? g)
+    {
+        if (g is not null)
+        {
+            Nav.NavigateTo($"/gesetze/{g.Id}");
+        }
+    }
+
+    private async Task NeuAsync()
+    {
+        var eingabe = await GesetzDialog.ZeigenAsync(DialogService, "Neuer Paragraf");
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await GesetzService.ErstellenAsync(eingabe, _user);
+            Snackbar.Add("Paragraf angelegt.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task BearbeitenAsync(Gesetz gesetz)
+    {
+        var eingabe = await GesetzDialog.ZeigenAsync(DialogService, $"{gesetz.Paragraf} bearbeiten", new GesetzEingabe
+        {
+            Gesetzbuch = gesetz.Gesetzbuch,
+            Paragraf = gesetz.Paragraf,
+            Titel = gesetz.Titel,
+            Text = gesetz.Text,
+            Strafmass = gesetz.Strafmass,
+        });
+        if (eingabe is null)
+        {
+            return;
+        }
+        try
+        {
+            await GesetzService.AktualisierenAsync(gesetz.Id, eingabe, _user);
+            Snackbar.Add("Paragraf gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LoeschenAsync(Gesetz gesetz)
+    {
+        var bestaetigt = await DialogService.ShowMessageBox("Paragraf löschen",
+            $"„{gesetz.Paragraf} {gesetz.Titel}“ wirklich löschen? Bestehende Verknüpfungen zeigen ihn danach nicht mehr an.",
+            yesText: "Löschen", cancelText: "Abbrechen");
+        if (bestaetigt != true)
+        {
+            return;
+        }
+        try
+        {
+            await GesetzService.LoeschenAsync(gesetz.Id, _user);
+            Snackbar.Add("Paragraf gelöscht.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

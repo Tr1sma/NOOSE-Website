@@ -29,6 +29,7 @@ else
             </MudTooltip>
         }
         <MudSpacer />
+        <DruckButton />
         @if (_kannBearbeiten)
         {
             <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">

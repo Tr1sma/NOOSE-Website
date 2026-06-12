@@ -375,6 +375,28 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // ---- Gesetze (Phase 7: Gesetzbuch/Paragraf/Titel/Text; ohne VS-Konzept und ohne Tag-Filter) ----
+        if (Aktiv(nameof(Gesetz)) && !hatTags)
+        {
+            var q = db.Gesetze.AsQueryable();
+            if (hatText)
+            {
+                q = q.Where(g => g.Titel.Contains(s!) || g.Paragraf.Contains(s!)
+                    || g.Gesetzbuch.Contains(s!) || g.Text.Contains(s!)
+                    || (g.Strafmass != null && g.Strafmass.Contains(s!)));
+            }
+            var roheGesetze = await q.OrderBy(g => g.Gesetzbuch).ThenBy(g => g.Paragraf).Take(MaxProKategorie)
+                .Select(g => new { g.Id, g.Paragraf, g.Titel, g.Gesetzbuch })
+                .ToListAsync(cancellationToken);
+            if (roheGesetze.Count > 0)
+            {
+                var treffer = roheGesetze
+                    .Select(g => new SuchTreffer(nameof(Gesetz), g.Id, $"{g.Paragraf} {g.Titel}", g.Gesetzbuch, g.Paragraf))
+                    .ToList();
+                gruppen.Add(new SuchErgebnisGruppe(nameof(Gesetz), "Gesetze", treffer));
+            }
+        }
+
         // ---- Aufgaben (Titel/Aktenzeichen/Beschreibung; eingeschränkte nur für Beteiligte/Aufsicht) ----
         if (Aktiv(nameof(Aufgabe)))
         {

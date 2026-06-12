@@ -243,6 +243,13 @@ builder.Services.AddSingleton<WatchlistDispatcher>();
 builder.Services.AddScoped<IAufgabeService, AufgabeService>();
 // Phase 6: News/Schwarzes Brett + Behörden-Broadcast (Brett für alle; Broadcast/Quittierung nur Führung → Glocke).
 builder.Services.AddScoped<IAnkuendigungService, AnkuendigungService>();
+// Phase 7 (Abschluss): Systemeinstellungen (Wartungsmodus/Banner/Theming/Logo), Gesetzbuch,
+// Datei-Bibliothek und Duplikat-Zusammenführung von Personenakten.
+builder.Services.AddScoped<ISystemEinstellungService, SystemEinstellungService>();
+builder.Services.AddScoped<IGesetzService, GesetzService>();
+builder.Services.AddScoped<IBibliothekStorageService, BibliothekStorageService>();
+builder.Services.AddScoped<IBibliothekService, BibliothekService>();
+builder.Services.AddScoped<IPersonMergeService, PersonMergeService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
 builder.Services.AddRateLimiter(options =>
@@ -304,6 +311,8 @@ app.MapNooseAccountEndpoints();
 app.MapNoosePersonenDateiEndpoints();
 app.MapNooseQuellenDateiEndpoints();
 app.MapNooseFraktionenDateiEndpoints();
+app.MapNooseBibliothekDateiEndpoints();
+app.MapNooseSystemEndpoints();
 
 // Start-up: ausstehende EF-Migrationen anwenden und die technische "Admin"-Rolle sicherstellen.
 using (var scope = app.Services.CreateScope())

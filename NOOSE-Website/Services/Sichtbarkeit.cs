@@ -77,12 +77,16 @@ public static class Sichtbarkeit
             nameof(Dokument) => await db.Dokumente
                 .Where(d => d.Id == entitaetId).Select(d => (bool?)d.IstVerschlusssache)
                 .FirstOrDefaultAsync(cancellationToken),
+            // Gesetz (Phase 7): keine Verschlusssache (Wissensbasis) – existiert es, ist es sichtbar.
+            nameof(Gesetz) => await db.Gesetze
+                .Where(g => g.Id == entitaetId).Select(g => (bool?)false)
+                .FirstOrDefaultAsync(cancellationToken),
             // Andere Typen besitzen (noch) keine Verschlusssache-Stufe.
             _ => false,
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(FraktionAktivitaet) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(FraktionAktivitaet) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument) or nameof(Gesetz)))
         {
             return true;
         }
