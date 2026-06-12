@@ -24,6 +24,9 @@ public class FileUploadOptions
     /// <summary>Maximale Dateigröße für Quellen-Anhänge in Bytes (Standard 25 MB).</summary>
     public long QuellenMaxBytes { get; set; } = 25 * 1024 * 1024;
 
+    /// <summary>Zielordner für Dateien der zentralen Datei-Bibliothek (Phase 7); gleiche Typ-/Größen-Regeln wie Quellen.</summary>
+    public string BibliothekPfad { get; set; } = "App_Data/uploads/bibliothek";
+
     /// <summary>Erlaubte Content-Types für Quellen-Anhänge (Dokumente + Bilder + Archive).</summary>
     public string[] ErlaubteQuellenContentTypes { get; set; } =
     [

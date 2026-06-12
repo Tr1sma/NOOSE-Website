@@ -1,0 +1,230 @@
+@* System & Erscheinungsbild (Phase 7): Wartungsmodus, Ankündigungsbanner, Theme-Farben und
+   Logo-Upload. Seite öffnet sich für Admin + Nur-Lese-Aufsicht; Speichern ist Admins vorbehalten
+   (Service-Guard VerlangeAdmin). Änderungen greifen beim nächsten Seitenwechsel/Neuladen. *@
+@page "/admin/system"
+@attribute [Authorize(Policy = Policies.AdminSeite)]
+@using MudBlazor.Utilities
+@inject ISystemEinstellungService EinstellungService
+@inject ISnackbar Snackbar
+
+<PageTitle>System · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.SettingsApplications" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">System &amp; Erscheinungsbild</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Wartungsmodus, Ankündigungsbanner, Theme-Farben und Behörden-Logo – ohne Code änderbar.
+    Änderungen werden für laufende Sitzungen beim nächsten Seitenwechsel bzw. Neuladen wirksam.
+</MudText>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Spacing="4">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Wartungsmodus</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Im Wartungsmodus sehen alle Agenten außer Admins nur noch eine Wartungsseite.
+                Admins arbeiten normal weiter (mit Hinweis-Banner).
+            </MudText>
+            <MudSwitch T="bool" @bind-Value="_eingabe.WartungsmodusAktiv" Color="Color.Error" Label="Wartungsmodus aktiv" />
+            <MudTextField @bind-Value="_eingabe.WartungsmodusText" Label="Hinweistext (optional)" Variant="Variant.Outlined"
+                          Class="mt-2" Placeholder="z. B. Geplante Wartung – wir sind in Kürze zurück." />
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Ankündigungsbanner</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Wird allen Agenten oben auf jeder Seite angezeigt. Leer lassen, um das Banner auszublenden.
+            </MudText>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudTextField @bind-Value="_eingabe.BannerText" Label="Banner-Text" Variant="Variant.Outlined" Style="flex:1;min-width:260px;" />
+                <MudSelect T="string" @bind-Value="_eingabe.BannerStufe" Label="Dringlichkeit" Variant="Variant.Outlined"
+                           Dense="true" Style="max-width:200px;">
+                    @foreach (var stufe in BannerStufen.Alle)
+                    {
+                        <MudSelectItem T="string" Value="@stufe">@stufe</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Theme-Farben</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Akzentfarben per Color-Picker wählen (oder Hex-Wert eintippen). „Zurücksetzen" stellt die
+                jeweilige Standardfarbe wieder her.
+            </MudText>
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudColorPicker Label="@($"Primär (Standard {NooseTheme.StandardPrimary})")" ShowAlpha="false"
+                                    Variant="Variant.Outlined" Value="@AlsFarbe(_eingabe.ThemePrimary, NooseTheme.StandardPrimary)"
+                                    ValueChanged="@(c => _eingabe.ThemePrimary = c.ToString(MudColorOutputFormats.Hex))"
+                                    Style="min-width:260px;" />
+                    <MudTooltip Text="Auf Standardfarbe zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                                       OnClick="@(() => _eingabe.ThemePrimary = null)" aria-label="Primärfarbe zurücksetzen" />
+                    </MudTooltip>
+                </MudStack>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudColorPicker Label="@($"Sekundär (Standard {NooseTheme.StandardSecondary})")" ShowAlpha="false"
+                                    Variant="Variant.Outlined" Value="@AlsFarbe(_eingabe.ThemeSecondary, NooseTheme.StandardSecondary)"
+                                    ValueChanged="@(c => _eingabe.ThemeSecondary = c.ToString(MudColorOutputFormats.Hex))"
+                                    Style="min-width:260px;" />
+                    <MudTooltip Text="Auf Standardfarbe zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                                       OnClick="@(() => _eingabe.ThemeSecondary = null)" aria-label="Sekundärfarbe zurücksetzen" />
+                    </MudTooltip>
+                </MudStack>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                    <MudColorPicker Label="@($"Tertiär (Standard {NooseTheme.StandardTertiary})")" ShowAlpha="false"
+                                    Variant="Variant.Outlined" Value="@AlsFarbe(_eingabe.ThemeTertiary, NooseTheme.StandardTertiary)"
+                                    ValueChanged="@(c => _eingabe.ThemeTertiary = c.ToString(MudColorOutputFormats.Hex))"
+                                    Style="min-width:260px;" />
+                    <MudTooltip Text="Auf Standardfarbe zurücksetzen">
+                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                                       OnClick="@(() => _eingabe.ThemeTertiary = null)" aria-label="Tertiärfarbe zurücksetzen" />
+                    </MudTooltip>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Behörden-Logo</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Ersetzt das Standard-Wappen in der Topbar. Nur Bilddateien (JPG, PNG, WebP, GIF).
+            </MudText>
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudImage Src="@(_konfiguration!.HatLogo ? "/system/logo" : "NooseIcon.png")" Alt="Aktuelles Logo" Height="48" />
+                <AuthorizeView Policy="@Policies.Admin" Context="admin">
+                    <MudFileUpload T="IBrowserFile" FilesChanged="LogoHochladenAsync" Accept="image/*">
+                        <CustomContent>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
+                                       OnClick="@context.OpenFilePickerAsync">
+                                Neues Logo hochladen
+                            </MudButton>
+                        </CustomContent>
+                    </MudFileUpload>
+                    @if (_konfiguration!.HatLogo)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                                   OnClick="LogoEntfernenAsync">Logo entfernen</MudButton>
+                    }
+                </AuthorizeView>
+            </MudStack>
+        </MudPaper>
+
+        <AuthorizeView Policy="@Policies.Admin" Context="admin">
+            <MudStack Row="true" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SpeichernAsync" Disabled="_beschaeftigt">Speichern</MudButton>
+            </MudStack>
+        </AuthorizeView>
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _beschaeftigt;
+    private SystemKonfiguration? _konfiguration;
+    private SystemKonfigurationEingabe _eingabe = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LadenAsync();
+    }
+
+    private async Task LadenAsync()
+    {
+        _laden = true;
+        _konfiguration = await EinstellungService.GetAsync();
+        _eingabe = new SystemKonfigurationEingabe
+        {
+            WartungsmodusAktiv = _konfiguration.WartungsmodusAktiv,
+            WartungsmodusText = _konfiguration.WartungsmodusText,
+            BannerText = _konfiguration.BannerText,
+            BannerStufe = _konfiguration.BannerStufe,
+            ThemePrimary = _konfiguration.ThemePrimary,
+            ThemeSecondary = _konfiguration.ThemeSecondary,
+            ThemeTertiary = _konfiguration.ThemeTertiary,
+        };
+        _laden = false;
+    }
+
+    /// <summary>Hex-Wert (oder Standardfarbe bei leer) als MudColor für den Color-Picker.</summary>
+    private static MudColor AlsFarbe(string? wert, string standard)
+    {
+        try
+        {
+            return new MudColor(string.IsNullOrWhiteSpace(wert) ? standard : wert.Trim());
+        }
+        catch (Exception)
+        {
+            // Unparsbarer Alt-Wert in der DB → Standardfarbe zeigen statt die Seite zu reißen.
+            return new MudColor(standard);
+        }
+    }
+
+    private async Task SpeichernAsync()
+    {
+        _beschaeftigt = true;
+        try
+        {
+            await EinstellungService.SpeichernAsync(_eingabe, _user);
+            Snackbar.Add("Systemeinstellungen gespeichert – wirksam beim nächsten Seitenwechsel.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _beschaeftigt = false;
+        }
+    }
+
+    private async Task LogoHochladenAsync(IBrowserFile? datei)
+    {
+        if (datei is null)
+        {
+            return;
+        }
+        try
+        {
+            // 10-MB-Obergrenze entspricht FileUploadOptions.MaxBytes (der Dienst validiert erneut).
+            await using var puffer = new MemoryStream();
+            await datei.OpenReadStream(10 * 1024 * 1024).CopyToAsync(puffer);
+            puffer.Position = 0;
+            await EinstellungService.LogoSetzenAsync(puffer, datei.Name, datei.ContentType, datei.Size, _user);
+            Snackbar.Add("Logo gespeichert.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LogoEntfernenAsync()
+    {
+        try
+        {
+            await EinstellungService.LogoEntfernenAsync(_user);
+            Snackbar.Add("Logo entfernt – das Standard-Wappen wird wieder verwendet.", Severity.Success);
+            await LadenAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

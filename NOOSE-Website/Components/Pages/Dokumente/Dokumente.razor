@@ -15,9 +15,13 @@
     </AuthorizeView>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Zentrale Bibliothek formatierter Dokumente. Ein Dokument kann an beliebig viele Akten als Quelle
-    angehängt werden. Verschlusssachen sind nur der Führung sichtbar.
+    Zentrale Bibliothek formatierter Dokumente und hochgeladener Dateien (Formulare, SOPs, Vorlagen).
+    Ein Dokument kann an beliebig viele Akten als Quelle angehängt werden. Verschlusssachen sind nur
+    der Führung sichtbar.
 </MudText>
+
+<MudTabs Elevation="0" Rounded="true" Class="mb-3">
+<MudTabPanel Icon="@Icons.Material.Filled.Article" Text="Dokumente">
 
 @if (_laden)
 {
@@ -82,18 +86,18 @@ else
                     </CellTemplate>
                 </TemplateColumn>
             }
-            <TemplateColumn Title="Titel" SortBy="x => x.Titel">
+            <TemplateColumn Sortable="true" Title="Titel" SortBy="x => x.Titel">
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet im neuen Tab; tastatur-/screenreader-erreichbar. *@
                     <MudLink Href="@($"/dokumente/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Titel</MudLink>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Kategorie" SortBy="x => x.Kategorie">
+            <TemplateColumn Sortable="true" Title="Kategorie" SortBy="x => x.Kategorie">
                 <CellTemplate>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Item.Kategorie) ? "—" : context.Item.Kategorie)</MudText>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {
@@ -117,6 +121,13 @@ else
         </PagerContent>
     </MudDataGrid>
 }
+
+</MudTabPanel>
+<MudTabPanel Icon="@Icons.Material.Filled.FolderOpen" Text="Dateien">
+    @* Datei-Bibliothek (Phase 7): hochgeladene Formulare/SOPs/Vorlagen. *@
+    <BibliothekPanel />
+</MudTabPanel>
+</MudTabs>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;

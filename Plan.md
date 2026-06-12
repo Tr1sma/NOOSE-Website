@@ -267,16 +267,26 @@
 - [x] **Dok-Vorlagen/Templates** (admin-definierte Erfassungsmasken) – setzt eure „Vorgaben" um.
 - [x] **Konfigurierbare Custom-Felder** je Aktentyp (Admin, ohne Code).
 - [x] **Aktualitäts-Ampel + Wiedervorlage** (Ampel grün/gelb/rot je Aktentyp – Schwellwerte im Admin unter `/admin/aktualitaet`; terminierte Wiedervorlagen je Akte mit Hintergrund-Job → Benachrichtigung an Zuständigen + Follower; veraltete Akten + fällige Wiedervorlagen im Dashboard).
-- [ ] **Quick-Add** Schnellerfassung.
-- [ ] **Duplikat-Zusammenführen (Merge)** zweier Personenakten (inkl. Verknüpfungen/Doks).
-- [ ] **Dokumenten-/Datei-Bibliothek** (zentrale, durchsuchbare Ablage: Formulare, SOPs, Vorlagen).
-- [ ] **Gesetzbuch/Rechtsgrundlagen-Modul** (Paragrafen, verknüpfbar mit Fällen/Doks).
-- [ ] **Theming/Logo-Upload** im Admin (Farben/Wappen ohne Code ändern).
-- [ ] **Wartungsmodus + Ankündigungsbanner**.
-- [ ] **PDF-/Druck-Export** von allem.
-- [ ] **Basisdaten-/Lookup-Adminbereich** (Fraktionsliste, Dienstgrade, Einstufungen, Maßnahme-Ausgänge, Beziehungstypen, Geltungsbereiche, Tags, Vorlagen).
+- [x] **Quick-Add** Schnellerfassung.
+- [x] **Duplikat-Zusammenführen (Merge)** zweier Personenakten (inkl. Verknüpfungen/Doks).
+- [x] **Dokumenten-/Datei-Bibliothek** (zentrale, durchsuchbare Ablage: Formulare, SOPs, Vorlagen).
+- [x] **Gesetzbuch/Rechtsgrundlagen-Modul** (Paragrafen, verknüpfbar mit Fällen/Doks).
+- [x] **Theming/Logo-Upload** im Admin (Farben/Wappen ohne Code ändern).
+- [x] **Wartungsmodus + Ankündigungsbanner**.
+- [x] **PDF-/Druck-Export** von allem (Druckansicht via Browser-Druckdialog → „Als PDF speichern").
+- [x] **Basisdaten-/Lookup-Adminbereich** (Fraktionsliste, Dienstgrade, Einstufungen, Maßnahme-Ausgänge, Beziehungstypen, Geltungsbereiche, Tags, Vorlagen).
 
 **Abnahme:** Vorlage + Custom-Feld anlegen und nutzen; alte Akte wird als „evtl. veraltet" geflaggt + Erinnerung; Quick-Add in Sekunden; zwei Doppel-Akten zusammenführen; Datei in Bibliothek ablegen & finden; Gesetz mit Fall verknüpfen; Logo/Theme im Admin ändern; Wartungsmodus testen; Akte als PDF exportieren.
+
+> **Verifiziert (Abschluss Phase 7):**
+> Quick-Add (`Components/Querschnitt/Shared/QuickAddDialog.razor`, Plus-Knopf in der Topbar) legt Person/Fraktion/Gruppe/Partei/Operation/Vorgang/Taskforce/Aufgabe mit Minimalfeldern an.
+> Merge (`Services/PersonMergeService.cs`, Dialog `PersonMergeDialog` auf /personen, nur Führung) überführt sämtliche Kind-/Querschnittsdaten und parkt die Quell-Akte im Papierkorb.
+> Datei-Bibliothek (`Data/Entities/Querschnitt/BibliothekDatei.cs`, Reiter „Dateien" auf /dokumente, Download `/dateien/bibliothek/{id}`).
+> Gesetzbuch (`Data/Entities/Querschnitt/Gesetz.cs`, Seiten /gesetze + /gesetze/{id}, in Verknüpfungs-Engine + globaler Suche integriert).
+> Theming/Logo + Wartungsmodus + Banner (`SystemEinstellung`-Tabelle, `Services/SystemEinstellungService.cs`, Admin-Seite /admin/system, Logo-Endpoint /system/logo, Gate im MainLayout).
+> Druck-/PDF-Export (`DruckButton` auf allen Detailseiten + @media-print-Regeln in app.css).
+> Basisdaten (/admin/basisdaten: Links auf pflegbare Stammdaten + dokumentierte Wertelisten).
+> Migration: `Phase15_Phase7Abschluss` (SystemEinstellungen, Gesetze, BibliothekDateien).
 
 ### Phase 8 – Visualisierungen & erweiterte Module
 **Ziel:** Die „Wow"-Features.

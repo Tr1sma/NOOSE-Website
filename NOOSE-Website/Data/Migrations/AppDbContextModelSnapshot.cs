@@ -2197,6 +2197,73 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("AktualitaetsSchwellen");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.BibliothekDatei", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("DateinameGespeichert")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<long>("GroesseBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IstVerschlusssache")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Kategorie")
+                        .HasMaxLength(120)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<string>("OriginalName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("varchar(260)");
+
+                    b.Property<string>("Titel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IstVerschlusssache");
+
+                    b.HasIndex("Kategorie");
+
+                    b.HasIndex("Titel");
+
+                    b.ToTable("BibliothekDateien");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.CustomFeldDefinition", b =>
                 {
                     b.Property<string>("Id")
@@ -2453,6 +2520,64 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("GespeicherteSuchen");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.Gesetz", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeloeschtAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeloeschtVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Gesetzbuch")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<bool>("IstGeloescht")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Paragraf")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<string>("Strafmass")
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Titel")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Gesetzbuch");
+
+                    b.HasIndex("Titel");
+
+                    b.ToTable("Gesetze");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.Kommentar", b =>
                 {
                     b.Property<string>("Id")
@@ -2583,6 +2708,32 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("EntitaetTyp", "EntitaetId");
 
                     b.ToTable("Quellen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.SystemEinstellung", b =>
+                {
+                    b.Property<string>("Schluessel")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTime>("ErstelltAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ErstelltVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("GeaendertAm")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GeaendertVonId")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Wert")
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Schluessel");
+
+                    b.ToTable("SystemEinstellungen");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.Tag", b =>

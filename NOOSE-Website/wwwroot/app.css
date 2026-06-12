@@ -252,3 +252,201 @@ html, body {
     .dokument-html th p {
         margin: 0;
     }
+
+/* ---- Druck-/PDF-Export (Phase 7) ----
+   window.print() (DruckButton) druckt nur den Akteninhalt: Navigation, Topbar, Buttons und
+   andere Bedienelemente werden ausgeblendet, dunkles Theme wird auf Schwarz-auf-Weiß gedreht.
+   "Als PDF speichern" im Browser-Druckdialog erzeugt den PDF-Export. */
+@media print {
+    .mud-appbar,
+    .mud-drawer,
+    .mud-snackbar,
+    #blazor-error-ui,
+    .mud-dialog-container,
+    .mud-overlay,
+    button,
+    .mud-button-root,
+    .mud-input-control,
+    .mud-table-pagination,
+    .no-print {
+        display: none !important;
+    }
+
+    /* Inhalt über die volle Seite, ohne App-Abstände. */
+    .mud-main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .mud-container {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* Dunkles Theme für Papier invertieren: weißer Grund, dunkle Schrift. */
+    html, body, .mud-layout, .mud-main-content, .mud-paper {
+        background: #fff !important;
+        color: #000 !important;
+        box-shadow: none !important;
+    }
+
+    .mud-paper {
+        border: 1px solid #ccc !important;
+    }
+
+    .mud-typography, .mud-text-secondary, .mud-link, .mud-chip, .mud-alert,
+    .mud-table, .mud-table * {
+        color: #000 !important;
+    }
+
+    .mud-table, .mud-table-container {
+        background: #fff !important;
+    }
+
+    a, .mud-link {
+        text-decoration: none !important;
+    }
+}
+
+/* ---- Druckansicht der Akten (z. B. /personen/{id}/druck, Phase 7) ----
+   Eigenständige Dokument-Darstellung: hell, schmale Spalte, klassische Akten-Optik. */
+.druck-seite {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 16px;
+    background: #fff;
+    color: #111;
+    min-height: 100vh;
+}
+
+.druck-aktionen {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.druck-dokument {
+    font-size: 14px;
+    line-height: 1.45;
+    color: #111;
+}
+
+.druck-kopf {
+    border-bottom: 3px double #111;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.druck-behoerde {
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #444;
+}
+
+.druck-dokument h1 {
+    font-size: 22px;
+    margin: 4px 0 6px;
+}
+
+.druck-dokument h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 1px solid #999;
+    padding-bottom: 3px;
+    margin: 22px 0 8px;
+}
+
+.druck-meta {
+    font-size: 12px;
+    color: #444;
+}
+
+.druck-vs {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 1px 8px;
+    border: 1.5px solid #b00;
+    color: #b00;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: .06em;
+}
+
+.druck-felder {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+    .druck-felder th {
+        text-align: left;
+        vertical-align: top;
+        width: 200px;
+        padding: 3px 10px 3px 0;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .druck-felder td {
+        padding: 3px 0;
+    }
+
+.druck-tabelle {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+    .druck-tabelle th,
+    .druck-tabelle td {
+        border: 1px solid #bbb;
+        padding: 4px 8px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .druck-tabelle thead th {
+        background: #eee;
+    }
+
+.druck-eintrag {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    break-inside: avoid;
+}
+
+.druck-eintrag-kopf {
+    margin-bottom: 4px;
+}
+
+.druck-mehrzeilig {
+    white-space: pre-wrap;
+}
+
+.druck-fusszeile {
+    margin-top: 28px;
+    border-top: 1px solid #999;
+    padding-top: 6px;
+    font-size: 11px;
+    color: #555;
+}
+
+@media print {
+    /* Tab-Leisten der interaktiven Seiten gehören nicht aufs Papier (nur der aktive Inhalt). */
+    .mud-tabs-tabbar,
+    .mud-tabs-toolbar {
+        display: none !important;
+    }
+
+    .druck-seite {
+        max-width: none;
+        padding: 0;
+    }
+
+    .druck-dokument h2 {
+        break-after: avoid;
+    }
+}

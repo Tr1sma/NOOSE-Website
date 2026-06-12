@@ -43,24 +43,24 @@ else
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
-            <TemplateColumn Title="Titel" SortBy="x => x.Titel">
+            <TemplateColumn Sortable="true" Title="Titel" SortBy="x => x.Titel">
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
                     <MudLink Href="@($"/vorgaenge/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Titel</MudLink>
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.Typ" Title="Typ" />
-            <TemplateColumn Title="Status" SortBy="x => x.Status">
+            <TemplateColumn Sortable="true" Title="Status" SortBy="x => x.Status">
                 <CellTemplate>
                     <VorgangStatusChip Status="context.Item.Status" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
+            <TemplateColumn Sortable="true" Title="Einstufung" SortBy="x => x.Einstufung">
                 <CellTemplate>
                     <EinstufungBadge Wert="context.Item.Einstufung" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {
@@ -68,7 +68,7 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+            <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Stufe">
                 <CellTemplate>
                     <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
                 </CellTemplate>

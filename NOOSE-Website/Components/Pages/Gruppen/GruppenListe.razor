@@ -42,24 +42,24 @@ else
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
-            <TemplateColumn Title="Name" SortBy="x => x.Name">
+            <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
                     <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Kategorie" SortBy="x => x.Art">
+            <TemplateColumn Sortable="true" Title="Kategorie" SortBy="x => x.Art">
                 <CellTemplate>
                     <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">@GruppenArtAnzeige.Name(context.Item.Art)</MudChip>
                 </CellTemplate>
             </TemplateColumn>
             <PropertyColumn Property="x => x.Mitgliederzahl" Title="Mitglieder" />
-            <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
+            <TemplateColumn Sortable="true" Title="Einstufung" SortBy="x => x.Einstufung">
                 <CellTemplate>
                     <EinstufungBadge Wert="context.Item.Einstufung" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {
@@ -67,7 +67,7 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+            <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Stufe">
                 <CellTemplate>
                     <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
                 </CellTemplate>

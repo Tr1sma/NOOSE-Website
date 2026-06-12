@@ -1,0 +1,367 @@
+@* Druckansicht der Personenakte (Phase 7): rendert die komplette Akte als sauber strukturiertes
+   Dokument (Stammdaten, Steckbrief, Zugehörigkeiten, Beziehungen, Doks, Observationen,
+   Einstufungs-Verlauf, Verknüpfungen, Vermerke) – ohne Tabs/Navigation. Öffnet sich aus der
+   Akte heraus in einem neuen Tab und startet den Browser-Druckdialog automatisch
+   („Als PDF speichern" = PDF-Export). *@
+@page "/personen/{Id}/druck"
+@layout DruckLayout
+@inject IPersonService PersonService
+@inject IPersonDokService DokService
+@inject IObservationService ObservationService
+@inject IBeziehungService BeziehungService
+@inject IVerknuepfungService VerknuepfungService
+@inject IKommentarService KommentarService
+@inject IZugriffsLogService ZugriffsLog
+@inject IJSRuntime JS
+
+<PageTitle>@(_person is null ? "Druckansicht" : $"Personenakte {_person.Aktenzeichen}") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_person is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <div class="no-print druck-aktionen">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print" OnClick="Drucken">
+            Drucken / als PDF speichern
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
+                   Href="@($"/personen/{Id}")">Zurück zur Akte</MudButton>
+    </div>
+
+    <div class="druck-dokument">
+        @* ---- Dokumentkopf ---- *@
+        <header class="druck-kopf">
+            <div class="druck-behoerde">N.O.O.S.E. · National Office of Security Enforcement</div>
+            <h1>Personenakte @_person.Aktenzeichen</h1>
+            <div class="druck-meta">
+                Gedruckt am @DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+                @if (!string.IsNullOrWhiteSpace(_druckVon))
+                {
+                    <text> · von @_druckVon</text>
+                }
+                @if (_person.IstVerschlusssache)
+                {
+                    <span class="druck-vs">VERSCHLUSSSACHE – NUR FÜR DIE FÜHRUNG</span>
+                }
+            </div>
+        </header>
+
+        @* ---- Stammdaten ---- *@
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Name</th><td>@_person.Name</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_person.Aktenzeichen</td></tr>
+                    <tr><th>Lebensstatus</th><td>@LebensstatusAnzeige.Name(LebensstatusLogic.Effektiv(_person.Lebensstatus, _person.TotBis, DateTime.UtcNow))</td></tr>
+                    <tr><th>Einstufung</th><td>@EinstufungAnzeige.Name(_person.Einstufung)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_person.Beschreibung))
+                    {
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_person.Beschreibung</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_person.GeaendertAm ?? _person.ErstelltAm).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @* ---- Steckbrief ---- *@
+        @if (_person.Aliase.Count > 0 || _person.Telefonnummern.Count > 0 || _person.Fahrzeuge.Count > 0
+             || _person.Orte.Count > 0 || _person.Waffen.Count > 0)
+        {
+            <section>
+                <h2>Steckbrief</h2>
+                <table class="druck-felder">
+                    <tbody>
+                        @if (_person.Aliase.Count > 0)
+                        {
+                            <tr><th>Aliase</th><td>@string.Join(", ", _person.Aliase.Select(a => a.Aliasname))</td></tr>
+                        }
+                        @if (_person.Telefonnummern.Count > 0)
+                        {
+                            <tr><th>Telefonnummern</th><td>@string.Join(", ", _person.Telefonnummern.Select(t => string.IsNullOrWhiteSpace(t.Bezeichnung) ? t.Nummer : $"{t.Nummer} ({t.Bezeichnung})"))</td></tr>
+                        }
+                        @if (_person.Fahrzeuge.Count > 0)
+                        {
+                            <tr><th>Fahrzeuge</th><td>@string.Join(", ", _person.Fahrzeuge.Select(f => string.IsNullOrWhiteSpace(f.Kennzeichen) ? f.Bezeichnung : $"{f.Bezeichnung} ({f.Kennzeichen})"))</td></tr>
+                        }
+                        @if (_person.Orte.Count > 0)
+                        {
+                            <tr><th>Orte</th><td>@string.Join("; ", _person.Orte.Select(o => string.IsNullOrWhiteSpace(o.Notiz) ? o.Text : $"{o.Text} – {o.Notiz}"))</td></tr>
+                        }
+                        @if (_person.Waffen.Count > 0)
+                        {
+                            <tr><th>Waffen</th><td>@string.Join(", ", _person.Waffen.Select(w => w.Text))</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @* ---- Zugehörigkeiten ---- *@
+        @if (_zugehoerigkeiten.Count > 0)
+        {
+            <section>
+                <h2>Zugehörigkeiten</h2>
+                <table class="druck-tabelle">
+                    <thead>
+                        <tr><th>Organisation</th><th>Aktenzeichen</th><th>Rolle</th><th>Beitritt</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var z in _zugehoerigkeiten)
+                        {
+                            <tr>
+                                <td>@z.Name@(z.IstLeitung ? " (Leitung)" : "")</td>
+                                <td>@z.Aktenzeichen</td>
+                                <td>@(string.IsNullOrWhiteSpace(z.Rolle) ? "—" : z.Rolle)</td>
+                                <td>@z.BeitrittAm.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @* ---- Beziehungen ---- *@
+        @if (_beziehungen.Count > 0)
+        {
+            <section>
+                <h2>Beziehungen</h2>
+                <table class="druck-tabelle">
+                    <thead>
+                        <tr><th>Person</th><th>Aktenzeichen</th><th>Art</th><th>Notiz</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in _beziehungen)
+                        {
+                            <tr>
+                                <td>@b.AnderePersonName</td>
+                                <td>@b.AnderePersonAktenzeichen</td>
+                                <td>@BeziehungsTypAnzeige.Name(b.Typ)</td>
+                                <td>@(string.IsNullOrWhiteSpace(b.Notiz) ? "—" : b.Notiz)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @* ---- Doks (Verhöre/Maßnahmen) ---- *@
+        @if (_doks.Count > 0)
+        {
+            <section>
+                <h2>Doks (Verhöre &amp; Maßnahmen)</h2>
+                @foreach (var d in _doks)
+                {
+                    <div class="druck-eintrag">
+                        <div class="druck-eintrag-kopf">
+                            <b>@d.Dok.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                            · Beendigung: @MassnahmeAusgangAnzeige.Name(d.Dok.Ausgang)
+                            @if (d.Dok.Wahrheitsserum)
+                            {
+                                <text> · Wahrheitsserum</text>
+                            }
+                            @if (d.Dok.GedaechtnisGeloescht)
+                            {
+                                <text> · Gedächtnis gelöscht</text>
+                            }
+                        </div>
+                        <table class="druck-felder">
+                            <tbody>
+                                @if (!string.IsNullOrWhiteSpace(d.OrgName) || !string.IsNullOrWhiteSpace(d.Dok.Fraktion))
+                                {
+                                    <tr><th>Fraktion/Gruppe</th><td>@(d.OrgName ?? d.Dok.Fraktion)</td></tr>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(d.Dok.Grund))
+                                {
+                                    <tr><th>Grund</th><td class="druck-mehrzeilig">@d.Dok.Grund</td></tr>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(d.Dok.ErhalteneInformationen))
+                                {
+                                    <tr><th>Erhaltene Informationen</th><td class="druck-mehrzeilig">@d.Dok.ErhalteneInformationen</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        }
+
+        @* ---- Observationen ---- *@
+        @if (_observationen.Count > 0)
+        {
+            <section>
+                <h2>Observationen</h2>
+                @foreach (var o in _observationen)
+                {
+                    <div class="druck-eintrag">
+                        <div class="druck-eintrag-kopf">
+                            <b>@o.Obs.Beginn.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                            @if (o.Obs.Ende is { } ende)
+                            {
+                                <text> – @ende.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</text>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(o.AgentCodename))
+                            {
+                                <text> · Agent: @o.AgentCodename</text>
+                            }
+                        </div>
+                        <table class="druck-felder">
+                            <tbody>
+                                @if (!string.IsNullOrWhiteSpace(o.Obs.Ort))
+                                {
+                                    <tr><th>Ort</th><td>@o.Obs.Ort</td></tr>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(o.Obs.Beobachtung))
+                                {
+                                    <tr><th>Beobachtung</th><td class="druck-mehrzeilig">@o.Obs.Beobachtung</td></tr>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(o.Obs.Ergebnis))
+                                {
+                                    <tr><th>Ergebnis</th><td class="druck-mehrzeilig">@o.Obs.Ergebnis</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        }
+
+        @* ---- Einstufungs-Verlauf ---- *@
+        @if (_einstufungVerlauf.Count > 0)
+        {
+            <section>
+                <h2>Einstufungs-Verlauf</h2>
+                <table class="druck-tabelle">
+                    <thead>
+                        <tr><th>Zeitpunkt</th><th>Einstufung</th><th>Begründung</th><th>Agent</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in _einstufungVerlauf)
+                        {
+                            <tr>
+                                <td>@e.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@EinstufungAnzeige.Name(e.Wert)</td>
+                                <td>@(string.IsNullOrWhiteSpace(e.Begruendung) ? "—" : e.Begruendung)</td>
+                                <td>@(e.AgentName ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @* ---- Verknüpfte Akten ---- *@
+        @if (_verknuepfungen.Count > 0)
+        {
+            <section>
+                <h2>Verknüpfte Akten</h2>
+                <table class="druck-tabelle">
+                    <thead>
+                        <tr><th>Typ</th><th>Akte</th><th>Bezeichnung</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in _verknuepfungen)
+                        {
+                            <tr>
+                                <td>@v.AndereTyp</td>
+                                <td>@v.AndereBezeichnung</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.Label) ? "—" : v.Label)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @* ---- Vermerke/Kommentare ---- *@
+        @if (_kommentare.Count > 0)
+        {
+            <section>
+                <h2>Vermerke</h2>
+                @foreach (var k in _kommentare)
+                {
+                    <div class="druck-eintrag">
+                        <div class="druck-eintrag-kopf">
+                            <b>@k.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                            @if (!string.IsNullOrWhiteSpace(k.AutorName))
+                            {
+                                <text> · @k.AutorName</text>
+                            }
+                        </div>
+                        <div class="druck-mehrzeilig">@k.Text</div>
+                    </div>
+                }
+            </section>
+        }
+
+        <footer class="druck-fusszeile">
+            NOOSE-interne Akte · @_person.Aktenzeichen · Weitergabe nur nach Freigabe durch die Führung.
+        </footer>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private bool _druckAusgeloest;
+    private string? _druckVon;
+    private Person? _person;
+    private List<PersonZugehoerigkeit> _zugehoerigkeiten = new();
+    private List<BeziehungAnzeige> _beziehungen = new();
+    private List<PersonDokAnzeige> _doks = new();
+    private List<ObservationAnzeige> _observationen = new();
+    private List<EinstufungVerlauf> _einstufungVerlauf = new();
+    private List<VerknuepfungAnzeige> _verknuepfungen = new();
+    private List<Kommentar> _kommentare = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var istFuehrung = user.IstFuehrung();
+        _druckVon = user.GetCodename();
+
+        _person = await PersonService.GetDetailAsync(Id, user.DarfVerschlusssacheLesen());
+        if (_person is not null)
+        {
+            _zugehoerigkeiten = await PersonService.GetZugehoerigkeitenAsync(Id, istFuehrung);
+            _beziehungen = await BeziehungService.GetFuerPersonAsync(Id, istFuehrung);
+            _doks = await DokService.GetFuerPersonAsync(Id, istFuehrung);
+            _observationen = await ObservationService.GetFuerPersonAsync(Id, istFuehrung);
+            _einstufungVerlauf = await PersonService.GetEinstufungVerlaufAsync(Id, istFuehrung);
+            _verknuepfungen = await VerknuepfungService.GetFuerAkteAsync(nameof(Person), Id, istFuehrung, user.GetAgentId());
+            _kommentare = await KommentarService.GetFuerAkteAsync(nameof(Person), Id, istFuehrung);
+
+            // Druckansicht zählt als Akteneinsicht.
+            await ZugriffsLog.LogAnsichtAsync(nameof(Person), Id);
+        }
+        _laden = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Druckdialog automatisch öffnen, sobald das Dokument fertig gerendert ist (nur einmal).
+        // Bricht der Nutzer ab, bleibt die Vorschau mit dem Drucken-Knopf stehen.
+        if (!_laden && _person is not null && !_druckAusgeloest)
+        {
+            _druckAusgeloest = true;
+            try
+            {
+                await JS.InvokeVoidAsync("window.print");
+            }
+            catch (JSException)
+            {
+                // Manche Browser blockieren programmatisches Drucken – der Knopf bleibt als Fallback.
+            }
+        }
+    }
+
+    private async Task Drucken() => await JS.InvokeVoidAsync("window.print");
+}

@@ -22,6 +22,11 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/parteien" aria-label="Zurück" />
         <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/parteien/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
         <FolgenButton EntitaetTyp="@nameof(Partei)" EntitaetId="@_partei.Id" User="_user" />
         <AufgabeErstellenButton EntitaetTyp="@nameof(Partei)" EntitaetId="@_partei.Id" />
         <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">

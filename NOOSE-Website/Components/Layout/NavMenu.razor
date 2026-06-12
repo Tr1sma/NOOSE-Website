@@ -26,6 +26,7 @@
     <MudNavLink Href="/taskforces" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups2">Taskforces</MudNavLink>
     <MudNavLink Href="/vorgaenge" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderSpecial">Vorgänge</MudNavLink>
     <MudNavLink Href="/aufgaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AssignmentTurnedIn">Aufgaben</MudNavLink>
+    <MudNavLink Href="/gesetze" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Gesetzbuch</MudNavLink>
     <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
 
     @* Den Freigabe-Posteingang erreicht bereits Senior Special Agent+ (entscheidet Hochstufungen);
@@ -57,7 +58,13 @@
             <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
                 Agenten-Verwaltung
             </MudNavLink>
+            <MudNavLink Href="/admin/basisdaten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Storage">
+                Basisdaten
+            </MudNavLink>
             <AuthorizeView Policy="@Policies.AdminSeite" Context="adminInner">
+                <MudNavLink Href="/admin/system" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications">
+                    System
+                </MudNavLink>
                 <MudNavLink Href="/status" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MonitorHeart">
                     System-Status
                 </MudNavLink>

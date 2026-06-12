@@ -1,0 +1,64 @@
+@* Gemeinsamer Rahmen aller Druckansichten (Phase 7): Aktionsleiste (nur Bildschirm), Dokumentkopf
+   mit Behörde/Titel/Druckvermerk/VS-Stempel, Inhalt und Fußzeile. Öffnet den Browser-Druckdialog
+   automatisch nach dem ersten Render (die Eltern-Seite rendert den Rahmen erst, wenn alle Daten
+   geladen sind); Abbruch lässt die Vorschau mit dem Drucken-Knopf stehen. *@
+@inject IJSRuntime JS
+
+<div class="no-print druck-aktionen">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print" OnClick="Drucken">
+        Drucken / als PDF speichern
+    </MudButton>
+    <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@ZurueckHref">Zurück zur Akte</MudButton>
+</div>
+
+<div class="druck-dokument">
+    <header class="druck-kopf">
+        <div class="druck-behoerde">N.O.O.S.E. · National Office of Security Enforcement</div>
+        <h1>@Titel</h1>
+        <div class="druck-meta">
+            Gedruckt am @DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+            @if (!string.IsNullOrWhiteSpace(GedrucktVon))
+            {
+                <text> · von @GedrucktVon</text>
+            }
+            @if (IstVerschlusssache)
+            {
+                <span class="druck-vs">VERSCHLUSSSACHE – NUR FÜR DIE FÜHRUNG</span>
+            }
+        </div>
+    </header>
+
+    @ChildContent
+
+    <footer class="druck-fusszeile">@Fusszeile</footer>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Titel { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string ZurueckHref { get; set; } = string.Empty;
+    [Parameter] public string? GedrucktVon { get; set; }
+    [Parameter] public bool IstVerschlusssache { get; set; }
+    [Parameter] public string Fusszeile { get; set; } = "NOOSE-interne Akte · Weitergabe nur nach Freigabe durch die Führung.";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _druckAusgeloest;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_druckAusgeloest)
+        {
+            _druckAusgeloest = true;
+            try
+            {
+                await JS.InvokeVoidAsync("window.print");
+            }
+            catch (JSException)
+            {
+                // Manche Browser blockieren programmatisches Drucken – der Knopf bleibt als Fallback.
+            }
+        }
+    }
+
+    private async Task Drucken() => await JS.InvokeVoidAsync("window.print");
+}

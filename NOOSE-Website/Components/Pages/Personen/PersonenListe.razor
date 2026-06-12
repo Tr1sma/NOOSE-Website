@@ -1,6 +1,7 @@
 @page "/personen"
 @inject IPersonService PersonService
 @inject IAktualitaetService Aktualitaet
+@inject IDialogService DialogService
 @inject NavigationManager Nav
 
 <PageTitle>Personen-Akten · NOOSE</PageTitle>
@@ -10,6 +11,8 @@
     <MudText Typo="Typo.h4">Personen-Akten</MudText>
     <MudSpacer />
     <AuthorizeView Policy="@Policies.Fuehrung">
+        <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.CallMerge"
+                   OnClick="ZusammenfuehrenAsync">Zusammenführen</MudButton>
         <MudButton Href="/personen/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
     <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
@@ -35,24 +38,24 @@ else
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.Aktenzeichen" Title="Aktenzeichen" />
-            <TemplateColumn Title="Name" SortBy="x => x.Name">
+            <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
                     <MudLink Href="@($"/personen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                 </CellTemplate>
             </TemplateColumn>
-            <PropertyColumn Property="x => x.Aliase" Title="Aliase" Sortable="false" />
-            <TemplateColumn Title="Lebensstatus" SortBy="x => x.EffektiverLebensstatus">
+            <PropertyColumn Property="x => x.Aliase" Title="Aliase" />
+            <TemplateColumn Sortable="true" Title="Lebensstatus" SortBy="x => x.EffektiverLebensstatus">
                 <CellTemplate>
                     <LebensstatusBadge Status="context.Item.LebensstatusRoh" TotBis="context.Item.TotBis" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Einstufung" SortBy="x => x.Einstufung">
+            <TemplateColumn Sortable="true" Title="Einstufung" SortBy="x => x.Einstufung">
                 <CellTemplate>
                     <EinstufungBadge Wert="context.Item.Einstufung" />
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" Sortable="false">
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {
@@ -60,7 +63,7 @@ else
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Aktualität" SortBy="x => x.Stufe">
+            <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Stufe">
                 <CellTemplate>
                     <AktualitaetsAmpel Stufe="context.Item.Stufe" ReferenzdatumUtc="context.Item.AktualisiertUtc" />
                 </CellTemplate>
@@ -130,6 +133,16 @@ else
     }
 
     private void Oeffnen(PersonZeile z) => Nav.NavigateTo($"/personen/{z.Id}");
+
+    // Duplikat-Zusammenführen (Phase 7): nach erfolgreichem Merge direkt in die Ziel-Akte springen.
+    private async Task ZusammenfuehrenAsync()
+    {
+        var zielId = await PersonMergeDialog.ZeigenAsync(DialogService);
+        if (zielId is not null)
+        {
+            Nav.NavigateTo($"/personen/{zielId}");
+        }
+    }
 
     private sealed class PersonZeile
     {

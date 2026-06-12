@@ -5,19 +5,41 @@ namespace NOOSE_Website.Theme;
 /// <summary>
 /// Dunkles NOOSE-Theme ("Anthrazit + Cyan"). Zentrale Farb- und Layout-Definition der App.
 /// Wird in <c>MainLayout</c> an den <see cref="MudThemeProvider"/> gehängt (IsDarkMode = true).
-/// In Phase 7 kann das Theme später im Admin (ohne Code) angepasst werden.
+/// Die Akzentfarben können seit Phase 7 im Admin (/admin/system) ohne Code überschrieben
+/// werden – siehe <see cref="MitFarben"/>.
 /// </summary>
 public static class NooseTheme
 {
-    public static readonly MudTheme Theme = new()
+    /// <summary>Standard-Akzentfarben (Fallback, wenn im Admin nichts gesetzt ist).</summary>
+    public const string StandardPrimary = "#22D3EE";
+    public const string StandardSecondary = "#3FB950";
+    public const string StandardTertiary = "#7C8CF8";
+
+    /// <summary>
+    /// Baut das Theme mit optional überschriebenen Akzentfarben (Admin-Theming, Phase 7).
+    /// <c>null</c>/leer → Standardfarbe. Liefert eine frische Instanz, damit per-Circuit-Themes
+    /// das statische <see cref="Theme"/> nicht verändern.
+    /// </summary>
+    public static MudTheme MitFarben(string? primary, string? secondary, string? tertiary)
+    {
+        var theme = Erzeuge();
+        theme.PaletteDark.Primary = string.IsNullOrWhiteSpace(primary) ? StandardPrimary : primary;
+        theme.PaletteDark.Secondary = string.IsNullOrWhiteSpace(secondary) ? StandardSecondary : secondary;
+        theme.PaletteDark.Tertiary = string.IsNullOrWhiteSpace(tertiary) ? StandardTertiary : tertiary;
+        return theme;
+    }
+
+    public static readonly MudTheme Theme = Erzeuge();
+
+    private static MudTheme Erzeuge() => new()
     {
         PaletteDark = new PaletteDark
         {
             // Akzente
-            Primary = "#22D3EE",               // Cyan
+            Primary = StandardPrimary,         // Cyan
             PrimaryContrastText = "#06222A",
-            Secondary = "#3FB950",
-            Tertiary = "#7C8CF8",
+            Secondary = StandardSecondary,
+            Tertiary = StandardTertiary,
 
             // Status
             Info = "#22D3EE",

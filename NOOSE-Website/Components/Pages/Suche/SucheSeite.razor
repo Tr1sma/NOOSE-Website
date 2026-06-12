@@ -37,6 +37,7 @@
             <MudCheckBox T="bool" @bind-Value="_katOperation" Label="Operationen" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katTaskforce" Label="Taskforces" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katVorgang" Label="Vorgänge" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katGesetz" Label="Gesetze" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katDok" Label="Doks" Dense="true" Disabled="_maxModus" />
             <MudCheckBox T="bool" @bind-Value="_katQuelle" Label="Quellen" Dense="true" Disabled="_maxModus" />
             <MudCheckBox T="bool" @bind-Value="_katKommentar" Label="Kommentare" Dense="true" Disabled="_maxModus" />
@@ -137,7 +138,7 @@ else
     private bool _darfVsLesen;
 
     private string _text = string.Empty;
-    private bool _katPerson = true, _katFraktion = true, _katGruppe = true, _katPartei = true, _katOperation = true, _katTaskforce = true, _katVorgang = true, _katDok = true, _katQuelle = true, _katKommentar = true;
+    private bool _katPerson = true, _katFraktion = true, _katGruppe = true, _katPartei = true, _katOperation = true, _katTaskforce = true, _katVorgang = true, _katGesetz = true, _katDok = true, _katQuelle = true, _katKommentar = true;
     private bool _fuzzy;
     private bool _maxModus;
     private IReadOnlyCollection<string> _tagAuswahl = new HashSet<string>();
@@ -202,6 +203,7 @@ else
         if (_katOperation) kategorien.Add(nameof(Operation));
         if (_katTaskforce) kategorien.Add(nameof(Taskforce));
         if (_katVorgang) kategorien.Add(nameof(Vorgang));
+        if (_katGesetz) kategorien.Add(nameof(Gesetz));
         if (_katDok) kategorien.Add(nameof(PersonDok));
         if (_katQuelle) kategorien.Add(nameof(Quelle));
         if (_katKommentar) kategorien.Add(nameof(Kommentar));
@@ -210,7 +212,7 @@ else
         {
             Text = _text,
             // Alle zehn aktiv → leere Liste (= alle), sonst die gewählte Teilmenge.
-            Kategorien = kategorien.Count == 10 ? new() : kategorien,
+            Kategorien = kategorien.Count == 11 ? new() : kategorien,
             TagIds = _tagAuswahl.ToList(),
             Fuzzy = _fuzzy,
             MaxModus = _maxModus,
@@ -232,7 +234,7 @@ else
 
     private async Task SuchenAsync()
     {
-        if (!_katPerson && !_katFraktion && !_katGruppe && !_katPartei && !_katOperation && !_katTaskforce && !_katVorgang && !_katDok && !_katQuelle && !_katKommentar && !_maxModus)
+        if (!_katPerson && !_katFraktion && !_katGruppe && !_katPartei && !_katOperation && !_katTaskforce && !_katVorgang && !_katGesetz && !_katDok && !_katQuelle && !_katKommentar && !_maxModus)
         {
             Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
             return;
@@ -311,6 +313,7 @@ else
         _katOperation = katSet is null || katSet.Contains(nameof(Operation));
         _katTaskforce = katSet is null || katSet.Contains(nameof(Taskforce));
         _katVorgang = katSet is null || katSet.Contains(nameof(Vorgang));
+        _katGesetz = katSet is null || katSet.Contains(nameof(Gesetz));
         _katDok = katSet is null || katSet.Contains(nameof(PersonDok));
         _katQuelle = katSet is null || katSet.Contains(nameof(Quelle));
         _katKommentar = katSet is null || katSet.Contains(nameof(Kommentar));
@@ -350,6 +353,7 @@ else
         nameof(Operation) => Icons.Material.Filled.Radar,
         nameof(Taskforce) => Icons.Material.Filled.Groups2,
         nameof(Vorgang) => Icons.Material.Filled.FolderSpecial,
+        nameof(Gesetz) => Icons.Material.Filled.Gavel,
         nameof(PersonDok) => Icons.Material.Filled.Description,
         nameof(Quelle) => Icons.Material.Filled.AttachFile,
         nameof(Kommentar) => Icons.Material.Filled.Comment,

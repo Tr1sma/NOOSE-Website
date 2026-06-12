@@ -35,6 +35,11 @@ else
             </MudTooltip>
         }
         <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/brett/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
         @if (z.DarfVerwalten)
         {
             <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
