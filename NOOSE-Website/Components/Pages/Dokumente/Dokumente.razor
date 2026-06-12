@@ -86,18 +86,18 @@ else
                     </CellTemplate>
                 </TemplateColumn>
             }
-            <TemplateColumn Title="Titel" SortBy="x => x.Titel">
+            <TemplateColumn Sortable="true" Title="Titel" SortBy="x => x.Titel">
                 <CellTemplate>
                     @* Echter Link: Mittelklick/Strg+Klick öffnet im neuen Tab; tastatur-/screenreader-erreichbar. *@
                     <MudLink Href="@($"/dokumente/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Titel</MudLink>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Kategorie" SortBy="x => x.Kategorie">
+            <TemplateColumn Sortable="true" Title="Kategorie" SortBy="x => x.Kategorie">
                 <CellTemplate>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Item.Kategorie) ? "—" : context.Item.Kategorie)</MudText>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Verschluss" SortBy="x => x.IstVerschlusssache">
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
                     {
