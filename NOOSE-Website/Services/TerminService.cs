@@ -70,7 +70,7 @@ public class TerminService(
             Ende = endeUtc,
             Ganztaegig = eingabe.Ganztaegig,
             Beschreibung = eingabe.Beschreibung.TrimToNull(),
-            IstEingeschraenkt = eingabe.IstEingeschraenkt,
+            Sichtbarkeit = eingabe.Sichtbarkeit,
         };
         db.Termine.Add(termin);
         await db.SaveChangesAsync(cancellationToken);
@@ -122,7 +122,7 @@ public class TerminService(
         termin.Ende = endeUtc;
         termin.Ganztaegig = eingabe.Ganztaegig;
         termin.Beschreibung = eingabe.Beschreibung.TrimToNull();
-        termin.IstEingeschraenkt = eingabe.IstEingeschraenkt;
+        termin.Sichtbarkeit = eingabe.Sichtbarkeit;
         await db.SaveChangesAsync(cancellationToken);
     }
 

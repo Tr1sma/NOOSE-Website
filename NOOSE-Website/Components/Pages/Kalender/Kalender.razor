@@ -14,8 +14,19 @@
         <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Primary" Size="Size.Large" />
         <div>
             <MudText Typo="Typo.h5">Kalender</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Termine, Operationen, Überwachungsfenster &amp; fällige Aufgaben/Wiedervorlagen auf einen Blick.</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@UntertitelText</MudText>
         </div>
+
+        @* ---- Umschalter: Mein Kalender ⇄ Behörden-Kalender ---- *@
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" OverrideStyles="false" Class="ml-2">
+            <MudButton Variant="@(_modus == KalenderModus.Mein ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_modus == KalenderModus.Mein ? Color.Primary : Color.Default)"
+                       StartIcon="@Icons.Material.Filled.Person" OnClick="@(() => ModusSetzenAsync(KalenderModus.Mein))">Mein Kalender</MudButton>
+            <MudButton Variant="@(_modus == KalenderModus.Behoerde ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_modus == KalenderModus.Behoerde ? Color.Primary : Color.Default)"
+                       StartIcon="@Icons.Material.Filled.AccountBalance" OnClick="@(() => ModusSetzenAsync(KalenderModus.Behoerde))">Behörden-Kalender</MudButton>
+        </MudButtonGroup>
+
         <MudSpacer />
         <AuthorizeView Policy="@Policies.FuehrungSeite" Context="fuehrung">
             <MudTooltip Text="Papierkorb (gelöschte Termine)">
@@ -45,18 +56,21 @@
         }
     </MudPaper>
 
-    @* ---- Legende ---- *@
+    @* ---- Arten-Filter (modus-abhängig) – Klick blendet eine Art aus/ein ---- *@
     <MudPaper Class="pa-3" Elevation="1">
-        <MudStack Row="true" Spacing="4" Class="flex-wrap" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">LEGENDE</MudText>
-            @foreach (var q in KalenderAnzeige.Alle)
+        <MudStack Row="true" Spacing="2" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">ARTEN</MudText>
+            @foreach (var q in LegendeQuellen)
             {
-                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                    <span style="@($"display:inline-block;width:12px;height:12px;border-radius:3px;background:{KalenderAnzeige.Farbe(q)};")"></span>
-                    <MudText Typo="Typo.caption">@KalenderAnzeige.Name(q)</MudText>
-                </MudStack>
+                var aktiv = _aktiveQuellen.Contains(q);
+                <MudChip T="string" Size="Size.Small" OnClick="@(() => QuelleToggleAsync(q))"
+                         Variant="@(aktiv ? Variant.Filled : Variant.Outlined)" Style="@LegendeStil(q, aktiv)">
+                    @KalenderAnzeige.Name(q)
+                </MudChip>
             }
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">· Klick öffnet die Akte · durchgestrichen = abgesagt/verschoben</MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="AlleEinblendenAsync"
+                       Disabled="@(_aktiveQuellen.Count == LegendeQuellen.Length)">Alle</MudButton>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">· Art anklicken zum Aus-/Einblenden · Eintrag anklicken öffnet die Akte</MudText>
         </MudStack>
     </MudPaper>
 </MudStack>
@@ -74,6 +88,27 @@
     private bool _ladeFehler;
     private int _ladeToken;
 
+    private KalenderModus _modus = KalenderModus.Mein;
+    private DateTime? _vonUtc;
+    private DateTime? _bisUtc;
+    private IReadOnlyList<KalenderEintrag>? _alleEintraege;
+    private HashSet<KalenderQuelle> _aktiveQuellen = new(_legendeMein);
+
+    private string UntertitelText => _modus == KalenderModus.Mein
+        ? "Meine Termine, mir zugewiesene Aufgaben & meine fälligen Wiedervorlagen."
+        : "Öffentliche Termine, Operationen, Überwachungsfenster, Personen-Doks & Fraktions-Aktivitäten.";
+
+    private static readonly KalenderQuelle[] _legendeMein =
+    {
+        KalenderQuelle.Termin, KalenderQuelle.Aufgabe, KalenderQuelle.Wiedervorlage,
+    };
+    private static readonly KalenderQuelle[] _legendeBehoerde =
+    {
+        KalenderQuelle.Termin, KalenderQuelle.Operation, KalenderQuelle.Observation,
+        KalenderQuelle.PersonDok, KalenderQuelle.FraktionAktivitaet,
+    };
+    private KalenderQuelle[] LegendeQuellen => _modus == KalenderModus.Mein ? _legendeMein : _legendeBehoerde;
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
@@ -88,7 +123,7 @@
         try
         {
             // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn kalender.js geändert wird.
-            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=4");
+            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=5");
             _ref = DotNetObjectReference.Create(this);
             _bereit = true;
             // Leer rendern – FullCalendar meldet sofort seinen Sichtbereich (datesSet) → Daten werden nachgeladen.
@@ -107,29 +142,50 @@
         }
     }
 
+    private async Task ModusSetzenAsync(KalenderModus modus)
+    {
+        if (_modus == modus)
+        {
+            return;
+        }
+        _modus = modus;
+        // Beim Sichtwechsel alle Arten der neuen Sicht wieder einblenden.
+        _aktiveQuellen = new HashSet<KalenderQuelle>(LegendeQuellen);
+        // Sicht ohne Datumssprung neu laden (das FC-Fenster bleibt gleich).
+        await NeuLadenAsync();
+    }
+
     /// <summary>FullCalendar meldet den sichtbaren Zeitraum (Initial-Render + Monats-/Wochenwechsel) → Fenster nachladen.</summary>
     [JSInvokable]
     public async Task OnDatumsbereich(string vonIso, string bisIso)
     {
-        if (_modul is null || !_bereit)
+        _vonUtc = ParseFensterUtc(vonIso, DateTime.UtcNow.AddDays(-31));
+        _bisUtc = ParseFensterUtc(bisIso, DateTime.UtcNow.AddDays(31));
+        await NeuLadenAsync();
+    }
+
+    // Lädt das aktuell gemerkte Fenster im aktuellen Modus und schiebt die Einträge an FullCalendar.
+    private async Task NeuLadenAsync()
+    {
+        if (_modul is null || !_bereit || _vonUtc is null || _bisUtc is null)
         {
             return;
         }
-        // Schnelles Vor-/Zurückblättern kann mehrere Ladevorgänge überlappen. Nur das Ergebnis des zuletzt
-        // angeforderten Fensters anwenden (sonst überschreibt eine spät zurückkehrende ältere Abfrage den Kalender).
+        // Schnelles Blättern/Umschalten kann Ladevorgänge überlappen → nur das zuletzt angeforderte Ergebnis anwenden.
         var token = ++_ladeToken;
-        var vonUtc = ParseFensterUtc(vonIso, DateTime.UtcNow.AddDays(-31));
-        var bisUtc = ParseFensterUtc(bisIso, DateTime.UtcNow.AddDays(31));
+        _laden = true;
+        StateHasChanged();
         try
         {
-            var eintraege = await KalenderService.GetEintraegeAsync(vonUtc, bisUtc, _user);
+            var eintraege = await KalenderService.GetEintraegeAsync(_vonUtc.Value, _bisUtc.Value, _user, _modus);
             if (token != _ladeToken)
             {
-                return; // veraltetes Fenster – verwerfen
+                return; // veraltetes Fenster/Modus – verwerfen
             }
+            _alleEintraege = eintraege;
             _laden = false;
             StateHasChanged();
-            await _modul.InvokeVoidAsync("setzeEreignisse", ContainerId, eintraege);
+            await PushGefiltertAsync();
         }
         catch (JSDisconnectedException) { /* Circuit weg */ }
         catch (Exception ex)
@@ -141,6 +197,51 @@
                 StateHasChanged();
             }
         }
+    }
+
+    // Eine Art (Quelle) aus-/einblenden – rein clientseitig (kein DB-Reload).
+    private async Task QuelleToggleAsync(KalenderQuelle quelle)
+    {
+        if (!_aktiveQuellen.Remove(quelle))
+        {
+            _aktiveQuellen.Add(quelle);
+        }
+        await PushGefiltertAsync();
+    }
+
+    private async Task AlleEinblendenAsync()
+    {
+        _aktiveQuellen = new HashSet<KalenderQuelle>(LegendeQuellen);
+        await PushGefiltertAsync();
+    }
+
+    // Schiebt die nach aktiven Arten gefilterten Einträge an FullCalendar.
+    private async Task PushGefiltertAsync()
+    {
+        if (_modul is null || !_bereit)
+        {
+            return;
+        }
+        var gefiltert = (_alleEintraege ?? Array.Empty<KalenderEintrag>())
+            .Where(e => _aktiveQuellen.Contains(e.Quelle)).ToList();
+        try
+        {
+            await _modul.InvokeVoidAsync("setzeEreignisse", ContainerId, gefiltert);
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Kalender: Filter-Anzeige fehlgeschlagen.");
+        }
+    }
+
+    // Stil der Arten-Chips: aktiv = gefüllt in Quellenfarbe; inaktiv = ausgegraut/umrandet.
+    private static string LegendeStil(KalenderQuelle quelle, bool aktiv)
+    {
+        var farbe = KalenderAnzeige.Farbe(quelle);
+        return aktiv
+            ? $"background:{farbe};border-color:{farbe};color:#fff;cursor:pointer;"
+            : $"background:transparent;border-color:{farbe};color:var(--mud-palette-text-secondary);opacity:.6;cursor:pointer;";
     }
 
     /// <summary>Klick auf einen Eintrag → zur zugehörigen Akte navigieren.</summary>

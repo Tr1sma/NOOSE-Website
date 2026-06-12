@@ -6,11 +6,12 @@ namespace NOOSE_Website.Data.Entities.Termine;
 /// <summary>
 /// Ein Termin (Gerichtstermin, Besprechung, Frist …) als vollwertige, verknüpfbare Akte – Phase 8 (Block C).
 /// Frei anlegbarer Kalendereintrag mit Zeitraum (<see cref="Beginn"/>/<see cref="Ende"/>) und Teilnehmern
-/// (<see cref="TerminZuweisung"/>). Sichtbarkeit wie eine Aufgabe (Team-Board): nicht eingeschränkt = für alle
-/// aktiven Agenten sichtbar; <see cref="IstEingeschraenkt"/> = nur der Ersteller, zugeteilte Teilnehmer und die
-/// Aufsicht (<c>DarfVerschlusssacheLesen()</c>). KEIN Verschlusssache-/Einstufungs-Konzept (anders als
-/// <see cref="Operationen.Operation"/>). Voll auditiert und papierkorbfähig (<see cref="IAuditable"/> +
-/// <see cref="ISoftDelete"/>). <c>ErstelltVonId</c> ist der Ersteller.
+/// (<see cref="TerminZuweisung"/>). Sichtbarkeit über drei Stufen (<see cref="Sichtbarkeit"/>): Öffentlich
+/// (alle aktiven Agenten, Behörden-Kalender), Eingeschränkt (Ersteller + zugeteilte Teilnehmer + Aufsicht) und
+/// Privat (nur der Ersteller + Aufsicht). Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>) sieht alle
+/// Stufen. KEIN Verschlusssache-/Einstufungs-Konzept (anders als <see cref="Operationen.Operation"/>). Voll
+/// auditiert und papierkorbfähig (<see cref="IAuditable"/> + <see cref="ISoftDelete"/>). <c>ErstelltVonId</c>
+/// ist der Ersteller.
 /// </summary>
 public class Termin : IAuditable, ISoftDelete
 {
@@ -41,10 +42,11 @@ public class Termin : IAuditable, ISoftDelete
     public string? Beschreibung { get; set; }
 
     /// <summary>
-    /// Eingeschränkt: nur zugeteilte Teilnehmer, der Ersteller sowie die Aufsicht (Führung/Admin/Teamleitung,
-    /// d. h. <c>DarfVerschlusssacheLesen()</c>) sehen den Termin. Nicht gesetzt = für alle sichtbar.
+    /// Sichtbarkeitsstufe: Öffentlich (alle, Behörden-Kalender), Eingeschränkt (Ersteller + Teilnehmer +
+    /// Aufsicht) oder Privat (nur Ersteller + Aufsicht). Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>)
+    /// sieht alle Stufen.
     /// </summary>
-    public bool IstEingeschraenkt { get; set; }
+    public TerminSichtbarkeitsStufe Sichtbarkeit { get; set; } = TerminSichtbarkeitsStufe.Oeffentlich;
 
     // ---- Kind-Tabellen ----
     public List<TerminZuweisung> Teilnehmer { get; set; } = new();

@@ -12,6 +12,16 @@ public enum KalenderQuelle
     Aufgabe = 3,
     Wiedervorlage = 4,
     FraktionAktivitaet = 5,
+    PersonDok = 6,
+}
+
+/// <summary>Welche Kalender-Sicht angefragt wird.</summary>
+public enum KalenderModus
+{
+    /// <summary>Persönliche Agenda: eigene Termine + zugewiesene Aufgaben + eigene Wiedervorlagen.</summary>
+    Mein = 0,
+    /// <summary>Behörden-weit (für alle): öffentliche Termine + operative Akten inkl. Personen-Doks.</summary>
+    Behoerde = 1,
 }
 
 /// <summary>
@@ -41,6 +51,7 @@ public static class KalenderAnzeige
         KalenderQuelle.Aufgabe => "#8B98A8",
         KalenderQuelle.Wiedervorlage => "#D29922",
         KalenderQuelle.FraktionAktivitaet => "#7C8CF8",
+        KalenderQuelle.PersonDok => "#A371F7",
         _ => "#8B98A8",
     };
 
@@ -52,6 +63,7 @@ public static class KalenderAnzeige
         KalenderQuelle.Aufgabe => "Aufgaben (fällig)",
         KalenderQuelle.Wiedervorlage => "Wiedervorlagen",
         KalenderQuelle.FraktionAktivitaet => "Fraktions-Aktivitäten",
+        KalenderQuelle.PersonDok => "Personen-Doks",
         _ => "—",
     };
 
@@ -63,5 +75,6 @@ public static class KalenderAnzeige
         KalenderQuelle.Aufgabe,
         KalenderQuelle.Wiedervorlage,
         KalenderQuelle.FraktionAktivitaet,
+        KalenderQuelle.PersonDok,
     };
 }

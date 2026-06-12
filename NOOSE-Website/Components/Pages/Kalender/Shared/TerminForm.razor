@@ -55,9 +55,15 @@
         </MudItem>
     }
 
-    <MudItem xs="12">
-        <MudSwitch T="bool" @bind-Value="Eingabe.IstEingeschraenkt" Color="Color.Warning"
-                   Label="Eingeschränkt (nur zugeteilte Teilnehmer, Ersteller und die Leitung sehen den Termin)" />
+    <MudItem xs="12" md="6">
+        <MudSelect T="TerminSichtbarkeitsStufe" @bind-Value="Eingabe.Sichtbarkeit" Label="Sichtbarkeit" Variant="Variant.Outlined"
+                   AdornmentIcon="@TerminSichtbarkeitsStufeAnzeige.Icon(Eingabe.Sichtbarkeit)" Adornment="Adornment.Start"
+                   HelperText="@TerminSichtbarkeitsStufeAnzeige.Hilfe(Eingabe.Sichtbarkeit)">
+            @foreach (var s in TerminSichtbarkeitsStufeAnzeige.Alle)
+            {
+                <MudSelectItem Value="s">@TerminSichtbarkeitsStufeAnzeige.Name(s)</MudSelectItem>
+            }
+        </MudSelect>
     </MudItem>
 
     @if (ZeigeZuweisung)

@@ -19,6 +19,6 @@ public class TerminEingabe
     public bool Ganztaegig { get; set; }
     public string? Beschreibung { get; set; }
 
-    /// <summary>Eingeschränkt: nur zugeteilte Teilnehmer, der Ersteller und die Aufsicht (Führung/Admin/Teamleitung) sehen den Termin.</summary>
-    public bool IstEingeschraenkt { get; set; }
+    /// <summary>Sichtbarkeitsstufe: Öffentlich / Eingeschränkt / Privat.</summary>
+    public TerminSichtbarkeitsStufe Sichtbarkeit { get; set; } = TerminSichtbarkeitsStufe.Oeffentlich;
 }

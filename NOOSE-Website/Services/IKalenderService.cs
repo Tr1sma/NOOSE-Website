@@ -11,7 +11,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IKalenderService
 {
-    /// <summary>Alle für den Betrachter sichtbaren Kalender-Einträge, die das UTC-Fenster [<paramref name="vonUtc"/>, <paramref name="bisUtc"/>] berühren.</summary>
+    /// <summary>Alle für den Betrachter sichtbaren Kalender-Einträge der gewählten Sicht (<paramref name="modus"/>),
+    /// die das UTC-Fenster [<paramref name="vonUtc"/>, <paramref name="bisUtc"/>] berühren.</summary>
     Task<IReadOnlyList<KalenderEintrag>> GetEintraegeAsync(
-        DateTime vonUtc, DateTime bisUtc, ClaimsPrincipal betrachter, CancellationToken cancellationToken = default);
+        DateTime vonUtc, DateTime bisUtc, ClaimsPrincipal betrachter, KalenderModus modus, CancellationToken cancellationToken = default);
 }

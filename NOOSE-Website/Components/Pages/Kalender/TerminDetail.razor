@@ -23,10 +23,11 @@ else
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/kalender" aria-label="Zurück" />
         <MudIcon Icon="@KategorieIcon(_termin.Kategorie)" Color="Color.Primary" />
         <MudText Typo="Typo.h5">@_termin.Titel</MudText>
-        @if (_termin.IstEingeschraenkt)
+        @if (_termin.Sichtbarkeit != TerminSichtbarkeitsStufe.Oeffentlich)
         {
-            <MudTooltip Text="Nur zugeteilte Teilnehmer, Ersteller und die Leitung sehen diesen Termin.">
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">Eingeschränkt</MudChip>
+            <MudTooltip Text="@TerminSichtbarkeitsStufeAnzeige.Hilfe(_termin.Sichtbarkeit)">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@TerminSichtbarkeitsStufeAnzeige.Icon(_termin.Sichtbarkeit)"
+                         Color="@(_termin.Sichtbarkeit == TerminSichtbarkeitsStufe.Privat ? Color.Secondary : Color.Warning)">@TerminSichtbarkeitsStufeAnzeige.Name(_termin.Sichtbarkeit)</MudChip>
             </MudTooltip>
         }
         <MudSpacer />

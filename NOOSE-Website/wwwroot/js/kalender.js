@@ -15,6 +15,7 @@ const QUELLE_FARBE = {
     3: '#8B98A8', // Aufgabe (faellig)
     4: '#D29922', // Wiedervorlage
     5: '#7C8CF8', // Fraktions-Aktivitaet
+    6: '#A371F7', // Personen-Dok
 };
 
 const instanzen = new Map(); // containerId -> { cal, dotnetRef }

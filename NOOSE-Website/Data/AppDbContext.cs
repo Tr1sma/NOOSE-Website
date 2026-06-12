@@ -721,7 +721,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(t => t.Status);
             // Kalender lädt je sichtbarem Fenster über den Beginn → Index ist der schnelle Pfad.
             b.HasIndex(t => t.Beginn);
-            b.HasIndex(t => t.IstEingeschraenkt);
+            b.HasIndex(t => t.Sichtbarkeit);
 
             b.HasMany(t => t.Teilnehmer).WithOne(z => z.Termin!)
                 .HasForeignKey(z => z.TerminId).OnDelete(DeleteBehavior.Cascade);
