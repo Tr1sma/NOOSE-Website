@@ -204,6 +204,9 @@ builder.Services.AddScoped<IBeziehungService, BeziehungService>();
 // Phase 8 – Block A: Beziehungsgraph, Pfadsuche & Verknüpfungs-Vorschläge (rein lesend auf den o. g. Quellen).
 builder.Services.AddScoped<IGraphService, GraphService>();
 builder.Services.AddScoped<IVerknuepfungVorschlagService, VerknuepfungVorschlagService>();
+// Phase 8 – Block B: vereinheitlichter Akten-Zeitstrahl (rein lesend; aggregiert Audit + semantische Quellen).
+builder.Services.AddScoped<IZeitstrahlService, ZeitstrahlService>();
+builder.Services.AddScoped<IOrganigrammService, OrganigrammService>();
 // Phase 3c: globale Suche + gespeicherte Suchen.
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>();

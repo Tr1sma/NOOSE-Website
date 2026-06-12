@@ -226,7 +226,11 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
     private static async Task<List<RohKante>> LadeRohKantenAsync(AppDbContext db, VerknuepfungArt? artFilter, CancellationToken cancellationToken)
     {
-        var vq = db.Verknuepfungen.AsQueryable();
+        // Automatische „Kollegen"-Verknüpfungen (KollegenSync: Mitglied↔Mitglied einer Organisation)
+        // bilden eine Clique (O(n²)) und werden im Graph NICHT als Kante gezeichnet – stattdessen wird
+        // die Mitgliedschaft als Stern-Kante Mitglied→Organisation ergänzt (siehe unten). Die Clique-
+        // Daten bleiben in der DB erhalten (Listen im VerknuepfungPanel).
+        var vq = db.Verknuepfungen.Where(v => !v.Automatisch);
         if (artFilter is not null)
         {
             vq = vq.Where(v => v.Art == artFilter.Value);
@@ -264,6 +268,32 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
                 art,
                 false));
         }
+
+        // Stern-Topologie: Mitgliedschaften als Kante Mitglied → Organisation (Org als Hub) – ersetzt die
+        // weggelassene Mitglied↔Mitglied-Clique. Als „Automatisch" markiert (→ dezent gestrichelt). Nur
+        // wenn der Art-Filter Standard zulässt (bei Konflikt/Bündnis werden Mitgliedschaften ausgeblendet).
+        if (artFilter is null || artFilter == VerknuepfungArt.Standard)
+        {
+            foreach (var m in await db.FraktionMitglieder
+                .Select(m => new { m.PersonId, OrgId = m.FraktionId, m.IstLeitung }).ToListAsync(cancellationToken))
+            {
+                kanten.Add(new RohKante($"{nameof(Person)}:{m.PersonId}", $"{nameof(Fraktion)}:{m.OrgId}",
+                    m.IstLeitung ? "Leitung" : null, VerknuepfungArt.Standard, true));
+            }
+            foreach (var m in await db.PersonengruppeMitglieder
+                .Select(m => new { m.PersonId, OrgId = m.PersonengruppeId, m.IstLeitung }).ToListAsync(cancellationToken))
+            {
+                kanten.Add(new RohKante($"{nameof(Person)}:{m.PersonId}", $"{nameof(Personengruppe)}:{m.OrgId}",
+                    m.IstLeitung ? "Leitung" : null, VerknuepfungArt.Standard, true));
+            }
+            foreach (var m in await db.ParteiMitglieder
+                .Select(m => new { m.PersonId, OrgId = m.ParteiId, m.IstLeitung }).ToListAsync(cancellationToken))
+            {
+                kanten.Add(new RohKante($"{nameof(Person)}:{m.PersonId}", $"{nameof(Partei)}:{m.OrgId}",
+                    m.IstLeitung ? "Leitung" : null, VerknuepfungArt.Standard, true));
+            }
+        }
+
         return kanten;
     }
 

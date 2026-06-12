@@ -119,13 +119,16 @@ function mapKante(e) {
         width: e.art === 1 || e.art === 2 ? 2 : 1,
         color: { color: farbe, highlight: '#22D3EE', hover: '#22D3EE', opacity: 1 },
         font: { color: '#9BA8B8', size: 11, strokeWidth: 0, background: 'rgba(14,17,22,0.85)' },
-        smooth: { enabled: true, type: 'dynamic' },
     };
 }
 
-function optionen() {
+function optionen(knotenAnzahl, kantenAnzahl) {
+    // Große Graphen sind teuer: improvedLayout (Kamada-Kawai-Vorlayout) und dynamisches Kanten-
+    // Smoothing verursachen sekundenlange Freezes. Ab einer Schwelle bewusst abschalten/vereinfachen.
+    const gross = knotenAnzahl > 120 || kantenAnzahl > 200;
     return {
         autoResize: true,
+        layout: { improvedLayout: !gross },
         nodes: {
             shape: 'dot',
             scaling: { min: 10, max: 40, label: { enabled: true, min: 12, max: 22 } },
@@ -134,11 +137,15 @@ function optionen() {
         edges: {
             selectionWidth: 2,
             hoverWidth: 1,
+            smooth: gross ? false : { enabled: true, type: 'continuous' },
         },
         physics: {
             solver: 'forceAtlas2Based',
-            forceAtlas2Based: { gravitationalConstant: -45, centralGravity: 0.008, springLength: 130, springConstant: 0.08, damping: 0.5 },
-            stabilization: { enabled: true, iterations: 220, updateInterval: 25, fit: true },
+            // Stärkere Abstoßung + geringere zentrale Anziehung → Fraktions-Sterne drücken sich weiter
+            // auseinander; höhere springConstant hält die Mitglieder eng an ihrem Hub (kompakte Cluster);
+            // avoidOverlap verhindert, dass sich Cluster überlagern.
+            forceAtlas2Based: { gravitationalConstant: -75, centralGravity: 0.006, springLength: 150, springConstant: 0.12, damping: 0.5, avoidOverlap: 0.4 },
+            stabilization: { enabled: true, iterations: gross ? 120 : 200, updateInterval: 25, fit: true },
         },
         interaction: { hover: true, tooltipDelay: 120, navigationButtons: true, keyboard: false, multiselect: false },
     };
@@ -153,14 +160,30 @@ export async function render(containerId, datenJson, dotnetRef) {
     zerstoere(containerId);
 
     const daten = typeof datenJson === 'string' ? JSON.parse(datenJson) : datenJson;
-    const nodes = new window.vis.DataSet((daten.knoten || []).map(mapKnoten));
-    const edges = new window.vis.DataSet((daten.kanten || []).map(mapKante));
-    const network = new window.vis.Network(container, { nodes, edges }, optionen());
+    const knotenListe = (daten.knoten || []).map(mapKnoten);
+    const kantenListe = (daten.kanten || []).map(mapKante);
+    const nodes = new window.vis.DataSet(knotenListe);
+    const edges = new window.vis.DataSet(kantenListe);
+    const network = new window.vis.Network(container, { nodes, edges }, optionen(knotenListe.length, kantenListe.length));
+
+    // Physik bleibt AN: der Graph schwingt ein und federt beim Ziehen mit („lebendig"). Er kommt von
+    // selbst zur Ruhe, wenn die Bewegungsenergie gering ist (kein Dauer-CPU-Verbrauch im Ruhezustand).
 
     // Einfachklick: fokussieren/zentrieren. Doppelklick: zur Akte navigieren (in .NET).
     network.on('doubleClick', (params) => {
-        if (params.nodes && params.nodes.length > 0) {
-            try { dotnetRef.invokeMethodAsync('OnKnotenKlick', params.nodes[0]); } catch (e) { /* Circuit weg */ }
+        // Knoten robust bestimmen – auch wenn der zweite Klick einen (durch die laufende Physik)
+        // bewegten Knoten knapp verfehlt: erst die getroffenen Knoten, dann der Knoten unter dem
+        // Zeiger, dann der bei Klick 1 ausgewählte.
+        let id = (params.nodes && params.nodes.length > 0) ? params.nodes[0] : null;
+        if (!id && params.pointer && params.pointer.DOM) {
+            id = network.getNodeAt(params.pointer.DOM);
+        }
+        if (!id) {
+            const sel = network.getSelectedNodes();
+            if (sel && sel.length > 0) { id = sel[0]; }
+        }
+        if (id) {
+            try { dotnetRef.invokeMethodAsync('OnKnotenKlick', id); } catch (e) { /* Circuit weg */ }
         }
     });
     network.on('selectNode', (params) => {

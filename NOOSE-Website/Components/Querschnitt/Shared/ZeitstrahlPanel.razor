@@ -1,0 +1,174 @@
+@* Vereinheitlichter Akten-Zeitstrahl: Audit-Ereignisse + semantische Domänen-Ereignisse einer beliebigen Akte
+   (polymorph über EntitaetTyp/EntitaetId), chronologisch absteigend, mit Kategorie-Filter. Rein lesend –
+   ersetzt den bisherigen je-Akte „Historie"-Reiter. *@
+@using NOOSE_Website.Models.Zeitstrahl
+@inject IZeitstrahlService ZeitstrahlService
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_alle.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein Verlauf vorhanden.</MudText>
+}
+else
+{
+    <MudStack Spacing="3">
+        @* Kategorie-Filter: Chips schalten die jeweilige Ereignisart ein/aus (Standard: alle an). *@
+        <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+            @foreach (var k in _vorhanden)
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Variant="@(_aktiv.Contains(k) ? Variant.Filled : Variant.Outlined)"
+                         Color="@Farbe(k)" OnClick="@(() => Umschalten(k))">
+                    @Name(k) (@_zaehler[k])
+                </MudChip>
+            }
+        </MudStack>
+
+        @{
+            var gefiltert = Gefiltert().ToList();
+        }
+        @if (gefiltert.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Ereignisse für die gewählten Kategorien.</MudText>
+        }
+        else
+        {
+            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                @foreach (var e in gefiltert)
+                {
+                    <MudTimelineItem Color="@Farbe(e.Kategorie)" Size="Size.Small">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Symbol(e.Kategorie)" Size="Size.Small" Color="@Farbe(e.Kategorie)" />
+                                @if (!string.IsNullOrEmpty(e.Href))
+                                {
+                                    <MudLink Href="@e.Href" Typo="Typo.body1"><b>@e.Titel</b></MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body1"><b>@e.Titel</b></MudText>
+                                }
+                            </MudStack>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @e.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(e.AkteurName ?? "System")
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(e.Detail))
+                            {
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@e.Detail</MudText>
+                            }
+                            @if (e.Aenderungen is { Count: > 0 } aenderungen)
+                            {
+                                <MudStack Spacing="0" Class="mt-1">
+                                    @foreach (var a in aenderungen)
+                                    {
+                                        <MudText Typo="Typo.caption">
+                                            <b>@a.Feld:</b> <span class="mud-text-secondary">@a.Alt → @a.Neu</span>
+                                        </MudText>
+                                    }
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntitaetTyp { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntitaetId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _laden = true;
+    private IReadOnlyList<ZeitstrahlEintrag> _alle = Array.Empty<ZeitstrahlEintrag>();
+    private List<ZeitstrahlKategorie> _vorhanden = new();
+    private readonly HashSet<ZeitstrahlKategorie> _aktiv = new();
+    private Dictionary<ZeitstrahlKategorie, int> _zaehler = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _alle = await ZeitstrahlService.GetZeitstrahlAsync(EntitaetTyp, EntitaetId, User);
+        _vorhanden = _alle.Select(e => e.Kategorie).Distinct().OrderBy(k => (int)k).ToList();
+        _zaehler = _alle.GroupBy(e => e.Kategorie).ToDictionary(g => g.Key, g => g.Count());
+        _aktiv.Clear();
+        foreach (var k in _vorhanden)
+        {
+            _aktiv.Add(k);
+        }
+        _laden = false;
+    }
+
+    private IEnumerable<ZeitstrahlEintrag> Gefiltert() => _alle.Where(e => _aktiv.Contains(e.Kategorie));
+
+    private void Umschalten(ZeitstrahlKategorie k)
+    {
+        if (!_aktiv.Remove(k))
+        {
+            _aktiv.Add(k);
+        }
+    }
+
+    private static string Name(ZeitstrahlKategorie k) => k switch
+    {
+        ZeitstrahlKategorie.Anlage => "Anlage",
+        ZeitstrahlKategorie.Aenderung => "Änderung",
+        ZeitstrahlKategorie.Loeschung => "Löschung",
+        ZeitstrahlKategorie.Wiederherstellung => "Wiederherstellung",
+        ZeitstrahlKategorie.Einstufung => "Einstufung",
+        ZeitstrahlKategorie.Dok => "Dok",
+        ZeitstrahlKategorie.Observation => "Observation",
+        ZeitstrahlKategorie.Foto => "Foto",
+        ZeitstrahlKategorie.Beziehung => "Beziehung",
+        ZeitstrahlKategorie.Mitgliedschaft => "Mitgliedschaft",
+        ZeitstrahlKategorie.Zuteilung => "Zuteilung",
+        ZeitstrahlKategorie.Verknuepfung => "Verknüpfung",
+        ZeitstrahlKategorie.Kommentar => "Kommentar",
+        ZeitstrahlKategorie.Quelle => "Quelle",
+        ZeitstrahlKategorie.Wiedervorlage => "Wiedervorlage",
+        ZeitstrahlKategorie.Aktivitaet => "Aktivität",
+        _ => k.ToString(),
+    };
+
+    private static Color Farbe(ZeitstrahlKategorie k) => k switch
+    {
+        ZeitstrahlKategorie.Anlage => Color.Success,
+        ZeitstrahlKategorie.Aenderung => Color.Info,
+        ZeitstrahlKategorie.Loeschung => Color.Error,
+        ZeitstrahlKategorie.Wiederherstellung => Color.Warning,
+        ZeitstrahlKategorie.Einstufung => Color.Warning,
+        ZeitstrahlKategorie.Dok => Color.Primary,
+        ZeitstrahlKategorie.Observation => Color.Info,
+        ZeitstrahlKategorie.Beziehung => Color.Tertiary,
+        ZeitstrahlKategorie.Mitgliedschaft => Color.Secondary,
+        ZeitstrahlKategorie.Zuteilung => Color.Secondary,
+        ZeitstrahlKategorie.Verknuepfung => Color.Primary,
+        ZeitstrahlKategorie.Wiedervorlage => Color.Warning,
+        ZeitstrahlKategorie.Aktivitaet => Color.Tertiary,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(ZeitstrahlKategorie k) => k switch
+    {
+        ZeitstrahlKategorie.Anlage => Icons.Material.Filled.AddCircle,
+        ZeitstrahlKategorie.Aenderung => Icons.Material.Filled.Edit,
+        ZeitstrahlKategorie.Loeschung => Icons.Material.Filled.Delete,
+        ZeitstrahlKategorie.Wiederherstellung => Icons.Material.Filled.Restore,
+        ZeitstrahlKategorie.Einstufung => Icons.Material.Filled.Shield,
+        ZeitstrahlKategorie.Dok => Icons.Material.Filled.Description,
+        ZeitstrahlKategorie.Observation => Icons.Material.Filled.Visibility,
+        ZeitstrahlKategorie.Foto => Icons.Material.Filled.Photo,
+        ZeitstrahlKategorie.Beziehung => Icons.Material.Filled.People,
+        ZeitstrahlKategorie.Mitgliedschaft => Icons.Material.Filled.GroupAdd,
+        ZeitstrahlKategorie.Zuteilung => Icons.Material.Filled.AssignmentInd,
+        ZeitstrahlKategorie.Verknuepfung => Icons.Material.Filled.Link,
+        ZeitstrahlKategorie.Kommentar => Icons.Material.Filled.Comment,
+        ZeitstrahlKategorie.Quelle => Icons.Material.Filled.AttachFile,
+        ZeitstrahlKategorie.Wiedervorlage => Icons.Material.Filled.Schedule,
+        ZeitstrahlKategorie.Aktivitaet => Icons.Material.Filled.LocalFireDepartment,
+        _ => Icons.Material.Filled.Circle,
+    };
+}

@@ -293,9 +293,8 @@
 - [x] **Beziehungs-/Netzwerk-Graph** (interaktiv, aus Verknüpfungen/Beziehungen) via JS-Interop.
 - [x] **Beziehungs-Pfad-Suche** („wie hängen A und B zusammen?").
 - [x] **Verknüpfungs-Vorschläge** (zusammenhängende Akten automatisch vorschlagen – gleiche Tags/Fraktion/Telefon).
-- [ ] **Zeitstrahl/Timeline je Akte** (alle Ereignisse chronologisch).
-- [ ] **Organigramm/Personalübersicht** (NOOSE-Struktur, TRU, Taskforce-Besetzung).
-- [ ] **Karte mit Orten** (GTA-Karte + Marker für Orte/Territorien).
+- [x] **Zeitstrahl/Timeline je Akte** (alle Ereignisse chronologisch).
+- [x] **Organigramm/Personalübersicht** (NOOSE-Struktur, TRU, Taskforce-Besetzung).
 - [ ] **Kalender/Termine** (Gerichtstermine, Operationen, Überwachungsfenster).
 - [ ] **Automatischer Bedrohungs-Score** (Personen/Fraktionen; Sortierung/Priorisierung).
 - [ ] **Statistik-Reports/Export** (CSV/PDF) + **automatischer Lagebericht** (geplant erzeugt + archiviert).
@@ -307,6 +306,15 @@
 > Backend: `Services/Graph/GraphService.cs` (Graph aus `Verknuepfung` + `PersonBeziehung`, Umkreis-/Pfad-BFS, Knoten-Auflösung mit Verschlusssachen-/Taskforce-Sichtbarkeit; Gesamtgraph auf die 250 stärksten Knoten gedeckelt mit Hinweis), `Services/Graph/VerknuepfungVorschlagService.cs` (Signale: gleiche Telefonnummer/Fraktion/Gruppe/Tag + gemeinsame Verknüpfung; schließt bereits Verknüpfte/VS aus). Modelle in `Models/Graph/`.
 > Frontend: Seite `/graph` (`Components/Pages/Graph/Beziehungsgraph.razor`) mit vis-network (self-hosted unter `wwwroot/lib/vis-network/`, guarded Lazy-Loader `wwwroot/js/graph.js?v=1`): Fokus-/Gesamtmodus, Tiefe, Typ-/Art-Filter, Foto-Knoten, Einstufungs-Randfarbe (rot = staatsgefährdend), Vollbild/PNG-Export, Doppelklick → Akte. Pfadsuche zeichnet die gefundene Kette. Wiederverwendbarer `GraphAktePicker`. Vorschlags-Panel auf der Personen-Akte (Reiter „Verknüpfungen") mit 1-Klick-Verknüpfen; „Im Beziehungsgraph anzeigen" auf jeder Akte. Nav-Eintrag „Beziehungsgraph" aktiviert.
 > **Keine Migration** (rein lesend). Offen: Blöcke **B** (Zeitstrahl/Organigramm), **C** (Karte/Kalender), **D** (Bedrohungs-Score/Statistik-Reports/Lagebericht).
+>
+> **Block B – Teil 1 umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):** vereinheitlichter **Zeitstrahl** je Akte.
+> Der bisherige technische „Historie"-Reiter (reines Audit-Log) wurde auf allen 8 Detailseiten (Person/Fraktion/Personengruppe/Partei/Operation/Vorgang/Taskforce/Aufgabe) durch einen Reiter **„Zeitstrahl"** ersetzt, der Audit-Ereignisse (Anlage/Änderung/Mitgliedschaft/Zuteilung – inkl. Feldänderungen) mit semantischen Domänen-Ereignissen zusammenführt: Einstufungs-Verlauf, Kommentare, Quellen, Wiedervorlagen, Verknüpfungen (mit aufgelöster, sichtbarkeitsgeprüfter Gegenseite) sowie Person-spezifisch Observationen/Fotos/Beziehungen und Fraktions-Aktivitäten. Chronologisch absteigend, mit **Kategorie-Filter-Chips**.
+> Backend: `Services/ZeitstrahlService.cs` (rein lesend, `IDbContextFactory`, sequenzielle flache Pomelo-Queries; Sichtbarkeits-Gate = Detailseite, Aufgaben zusätzlich über `AufgabeSichtbarkeit`). Modelle in `Models/Zeitstrahl/`. Generisches `Components/Querschnitt/Shared/ZeitstrahlPanel.razor` (Params `EntitaetTyp`/`EntitaetId`/`User`). `?tab=historie`-Deeplinks bleiben gültig (Slug unverändert). **Keine Migration.**
+> Die alten `*HistorieTimeline.razor` + `GetHistorieAsync`-Dienstmethoden sind damit ungenutzt (Cleanup später).
+>
+> **Block B – Teil 2 umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):** Seite **`/organigramm`** (Personalübersicht).
+> Für ALLE aktiven Agenten: die Dienstgrad-Hierarchie als **CSS-Org-Chart** (Wurzel „N.O.O.S.E." → Ebenen Director→Junior, Boxen + Verbindungslinien, horizontal scrollbar/druckbar; scoped `Organigramm.razor.css`), darunter TRU-Block und Taskforce-Besetzungs-Karten (Leitung hervorgehoben). Klarname nur für Führung; der Taskforce-Abschnitt respektiert die Taskforce-Sichtbarkeit (Nicht-Führung sieht nur zugeteilte, genehmigte Taskforces); RP-unsichtbare Teamleitung ist überall ausgeblendet; Avatar = Codename-Initialen (keine externen Bilder). Backend: `Services/OrganigrammService.cs` (rein lesend, 3 flache Queries, kein N+1). Modelle in `Models/Organigramm/`. Wiederverwendbare `Components/Pages/Organigramm/Shared/AgentKachel.razor`. Nav-Eintrag „Organigramm" aktiviert. **Keine Migration.**
+> Damit ist **Block B vollständig**. Offen: Blöcke **C** (Karte/Kalender), **D** (Bedrohungs-Score/Statistik-Reports/Lagebericht).
 
 ### Phase 9 – Partner-Zugriff (DoJ / LSPD / LSMD)
 **Ziel:** Kontrollierter Lesezugriff für Partnerbehörden.

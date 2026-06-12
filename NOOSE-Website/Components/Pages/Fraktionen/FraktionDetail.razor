@@ -129,8 +129,8 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFelderPanel EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" User="_user" />
                 </MudTabPanel>
-                <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <FraktionHistorieTimeline FraktionId="@_fraktion.Id" IstFuehrung="_user.DarfVerschlusssacheLesen()" @key="_historieKey" />
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <ZeitstrahlPanel EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" User="_user" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>

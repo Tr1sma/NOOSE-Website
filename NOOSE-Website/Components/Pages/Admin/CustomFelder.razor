@@ -122,7 +122,7 @@ else
         try
         {
             await FeldService.ErstellenAsync(eingabe, _user);
-            Snackbar.Add($"Feld „{eingabe.Name}“ angelegt.", Severity.Success);
+            Snackbar.Add("Feld angelegt.", Severity.Success);
             await LadenAsync();
         }
         catch (Exception ex)

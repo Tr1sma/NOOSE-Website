@@ -274,7 +274,7 @@
         try
         {
             // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn graph.js geändert wird.
-            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=1");
+            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=6");
             _ref = DotNetObjectReference.Create(this);
             _bereit = true;
             await LadeUndZeichneAsync();
@@ -426,12 +426,13 @@
 
     /// <summary>Doppelklick auf einen Knoten im Graph → zur Akte navigieren.</summary>
     [JSInvokable]
-    public void OnKnotenKlick(string nodeId)
+    public async Task OnKnotenKlick(string nodeId)
     {
         var knoten = _daten?.Knoten.FirstOrDefault(k => k.Id == nodeId);
         if (knoten?.Href is not null)
         {
-            Nav.NavigateTo(knoten.Href);
+            // Aus dem JS-Interop-Aufruf sicher in den Render-Kontext marshallen (sonst ggf. Dispatcher-Fehler).
+            await InvokeAsync(() => Nav.NavigateTo(knoten.Href!));
         }
     }
 

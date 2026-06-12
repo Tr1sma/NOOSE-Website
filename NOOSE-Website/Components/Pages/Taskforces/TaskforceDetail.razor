@@ -103,8 +103,8 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFelderPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
-                <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <TaskforceHistorieTimeline TaskforceId="@_taskforce.Id" DarfAlles="_user.DarfAlleTaskforcesSehen()" MeId="_user.GetAgentId()" @key="_historieKey" />
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <ZeitstrahlPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>

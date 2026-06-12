@@ -151,8 +151,8 @@ else
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <QuellenPanel EntitaetTyp="@nameof(Aufgabe)" EntitaetId="@_aufgabe.Id" User="_user" />
                 </MudTabPanel>
-                <MudTabPanel Text="Historie" Icon="@Icons.Material.Filled.History">
-                    <AufgabeHistorieTimeline AufgabeId="@_aufgabe.Id" @key="_historieKey" />
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <ZeitstrahlPanel EntitaetTyp="@nameof(Aufgabe)" EntitaetId="@_aufgabe.Id" User="_user" @key="_historieKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>

@@ -1,0 +1,206 @@
+/* Organigramm – klassisches CSS-Org-Chart: Wurzel oben, Dienstgrad-Ebenen darunter,
+   verbunden durch Bus-/Stichleitungen. Statisch, theme-/druckfreundlich. */
+
+.org-scroll {
+    overflow-x: auto;
+    padding: 0.5rem 0 1rem;
+}
+
+.org {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: max-content;
+    min-width: 100%;
+    margin: 0 auto;
+    --org-line: var(--mud-palette-lines-default);
+}
+
+/* Knoten-Box: Wurzel + Rang-Pille */
+.org-node {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+    background: var(--mud-palette-surface);
+    padding: 0.4rem 1rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.org-root {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border-color: var(--mud-palette-primary);
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+.org-rank {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.org-count {
+    display: inline-block;
+    margin-left: 0.45rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    background: var(--mud-palette-action-default-hover);
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75em;
+    font-weight: 600;
+}
+
+/* Senkrechter Verbinder zwischen den Ebenen */
+.org-link {
+    width: 0;
+    height: 22px;
+    border-left: 2px solid var(--org-line);
+}
+
+.org-tier {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Kinder-Reihe einer Ebene: Bus + Stichleitungen zu jeder Kachel */
+.org-leaves {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    list-style: none;
+    margin: 0;
+    padding: 22px 0 0;
+    position: relative;
+}
+
+/* Stichleitung von der Rang-Pille hinab zum Bus */
+.org-leaves::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 0;
+    height: 22px;
+    border-left: 2px solid var(--org-line);
+}
+
+.org-leaves > li {
+    position: relative;
+    padding: 22px 10px 0;
+}
+
+.org-leaves > li::before,
+.org-leaves > li::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 22px;
+    border-top: 2px solid var(--org-line);
+}
+
+.org-leaves > li::before {
+    right: 50%;
+}
+
+.org-leaves > li::after {
+    left: 50%;
+    border-left: 2px solid var(--org-line);
+}
+
+/* Außenkanten des Busses kappen */
+.org-leaves > li:first-child::before {
+    border: 0;
+}
+
+.org-leaves > li:last-child::after {
+    border: 0;
+}
+
+.org-leaves > li:last-child::before {
+    border-right: 2px solid var(--org-line);
+}
+
+/* Einzelkind: kein Bus, nur eine durchgehende mittige Stichleitung */
+.org-leaves > li:only-child::before {
+    left: 50%;
+    right: auto;
+    width: 0;
+    border-top: 0;
+    border-left: 2px solid var(--org-line);
+}
+
+.org-leaves > li:only-child::after {
+    display: none;
+}
+
+/* Agenten-Kachel im Baum (kompakt, einheitliche Breite) */
+.org-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    width: 150px;
+    padding: 0.6rem 0.5rem;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 10px;
+    background: var(--mud-palette-surface);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.org-card:hover {
+    border-color: var(--mud-palette-primary);
+    box-shadow: 0 0 0 1px var(--mud-palette-primary);
+}
+
+.org-card-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.org-card-name {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+    font-size: 0.9rem;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.org-card-sub {
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+    text-align: center;
+    line-height: 1.2;
+}
+
+.org-card-badge {
+    margin-top: 0.1rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    border: 1px solid var(--mud-palette-warning);
+    color: var(--mud-palette-warning);
+}
+
+@media print {
+    .org-scroll {
+        overflow: visible;
+    }
+
+    .org-card:hover {
+        box-shadow: none;
+    }
+}

@@ -29,6 +29,8 @@ else
                      Text="@($"Aktiv ({AnzahlAktiv})")" />
         <MudTabPanel Icon="@Icons.Material.Filled.Block" IconColor="Color.Error"
                      Text="@($"Gesperrt ({AnzahlGesperrt})")" />
+        <MudTabPanel Icon="@Icons.Material.Filled.SupervisorAccount" IconColor="Color.Tertiary"
+                     Text="@($"Teamleitung ({AnzahlTeamleitung})")" />
     </MudTabs>
 
     <MudTable Items="SichtbareAgenten" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
@@ -115,7 +117,12 @@ else
         </RowTemplate>
         <NoRecordsContent>
             <MudText Typo="Typo.body2" Class="mud-text-secondary py-4">
-                @(_tab == 1 ? "Keine gesperrten Agenten." : "Keine aktiven Agenten.")
+                @(_tab switch
+                {
+                    1 => "Keine gesperrten Agenten.",
+                    2 => "Keine Teamleitungen.",
+                    _ => "Keine aktiven Agenten.",
+                })
             </MudText>
         </NoRecordsContent>
     </MudTable>
@@ -130,16 +137,22 @@ else
     private string? _meineId;
     private bool _binAdmin;
 
-    // Aktiver Tab: 0 = Aktive, 1 = Gesperrte. Ausstehende Registrierungen werden hier bewusst nicht gezeigt –
-    // die laufen über die Freigaben-Seite. Das Sperren/Entsperren verschiebt einen Agenten zwischen den Tabs.
+    // Aktiver Tab: 0 = Aktive (ohne Teamleitungen), 1 = Gesperrte, 2 = Teamleitung (nur aktive Agenten mit gesetztem
+    // Teamleitung-Haken). Teamleitungen werden bewusst NUR im Teamleitung-Tab gezeigt, nicht zusätzlich unter "Aktiv".
+    // Ausstehende Registrierungen werden hier bewusst nicht gezeigt – die laufen über die Freigaben-Seite.
+    // Das Sperren/Entsperren verschiebt einen Agenten zwischen den Tabs.
     private int _tab;
 
-    private IEnumerable<Agent> SichtbareAgenten => _tab == 1
-        ? _agenten.Where(a => a.Status == AgentStatus.Gesperrt)
-        : _agenten.Where(a => a.Status == AgentStatus.Aktiv);
+    private IEnumerable<Agent> SichtbareAgenten => _tab switch
+    {
+        1 => _agenten.Where(a => a.Status == AgentStatus.Gesperrt),
+        2 => _agenten.Where(a => a.Status == AgentStatus.Aktiv && a.IstTeamLeitung),
+        _ => _agenten.Where(a => a.Status == AgentStatus.Aktiv && !a.IstTeamLeitung),
+    };
 
-    private int AnzahlAktiv => _agenten.Count(a => a.Status == AgentStatus.Aktiv);
+    private int AnzahlAktiv => _agenten.Count(a => a.Status == AgentStatus.Aktiv && !a.IstTeamLeitung);
     private int AnzahlGesperrt => _agenten.Count(a => a.Status == AgentStatus.Gesperrt);
+    private int AnzahlTeamleitung => _agenten.Count(a => a.Status == AgentStatus.Aktiv && a.IstTeamLeitung);
 
     protected override async Task OnInitializedAsync()
     {
