@@ -26,9 +26,9 @@ else
 {
     <MudTable Items="_taskforces" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh>Aktenzeichen</MudTh>
-            <MudTh>Name</MudTh>
-            <MudTh>Gelöscht am</MudTh>
+            <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.Aktenzeichen)">Aktenzeichen</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.GeloeschtAm)" InitialDirection="SortDirection.Descending">Gelöscht am</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>

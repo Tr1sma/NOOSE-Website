@@ -40,10 +40,10 @@ else
     {
         <MudTable Items="_offeneHochstufungen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
             <HeaderContent>
-                <MudTh>Ziel-Akte</MudTh>
-                <MudTh>Gewünscht</MudTh>
-                <MudTh>Begründung</MudTh>
-                <MudTh>Beantragt</MudTh>
+                <MudTh><MudTableSortLabel T="Antrag" SortBy="@(x => x.ZielBezeichnung)">Ziel-Akte</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Antrag" SortBy="@(x => x.ZielEinstufung)">Gewünscht</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Antrag" SortBy="@(x => x.Begruendung)">Begründung</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Antrag" SortBy="@(x => x.ErstelltAm)">Beantragt</MudTableSortLabel></MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -84,9 +84,9 @@ else
     {
         <MudTable Items="_ausstehende" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
             <HeaderContent>
-                <MudTh>Agent</MudTh>
-                <MudTh>Discord</MudTh>
-                <MudTh>Registriert</MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AnzeigeName(x))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.DiscordUsername ?? x.DiscordId)">Discord</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.RegistriertAm)">Registriert</MudTableSortLabel></MudTh>
                 <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
                 <MudTh>TRU</MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
@@ -140,8 +140,8 @@ else
     {
         <MudTable Items="_namensaenderungen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
             <HeaderContent>
-                <MudTh>Agent</MudTh>
-                <MudTh>Beantragt</MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AnzeigeName(x))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.NamensaenderungBeantragtAm)">Beantragt</MudTableSortLabel></MudTh>
                 <MudTh>Änderungen</MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
@@ -188,10 +188,10 @@ else
     {
         <MudTable Items="_beantragteTaskforces" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
             <HeaderContent>
-                <MudTh>Aktenzeichen</MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Geltungsbereich</MudTh>
-                <MudTh>Beantragt</MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.Aktenzeichen)">Aktenzeichen</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => TaskforceGeltungsbereichAnzeige.Name(x.Geltungsbereich))">Geltungsbereich</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.ErstelltAm)">Beantragt</MudTableSortLabel></MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -238,10 +238,10 @@ else
     {
         <MudTable Items="_offeneBefoerderungen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
             <HeaderContent>
-                <MudTh>Agent</MudTh>
-                <MudTh>Ziel-Dienstgrad</MudTh>
-                <MudTh>Begründung</MudTh>
-                <MudTh>Beantragt</MudTh>
+                <MudTh><MudTableSortLabel T="AgentBefoerderungsantrag" SortBy="@(x => AgentName(x.AgentId))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="AgentBefoerderungsantrag" SortBy="@(x => x.ZielDienstgrad)">Ziel-Dienstgrad</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="AgentBefoerderungsantrag" SortBy="@(x => x.Begruendung)">Begründung</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="AgentBefoerderungsantrag" SortBy="@(x => x.ErstelltAm)">Beantragt</MudTableSortLabel></MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>

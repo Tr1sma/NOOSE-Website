@@ -26,12 +26,12 @@ else
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh>Person</MudTh>
-            <MudTh>Aktenzeichen</MudTh>
-            <MudTh>Beginn</MudTh>
-            <MudTh>Ende</MudTh>
-            <MudTh>Agent</MudTh>
-            <MudTh>Ort</MudTh>
+            <MudTh><MudTableSortLabel T="ObservationAnzeige" SortBy="@(x => x.Obs.Person?.Name)">Person</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="ObservationAnzeige" SortBy="@(x => x.Obs.Person?.Aktenzeichen)">Aktenzeichen</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="ObservationAnzeige" SortBy="@(x => x.Obs.Beginn)" InitialDirection="SortDirection.Descending">Beginn</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="ObservationAnzeige" SortBy="@(x => x.Obs.Ende)">Ende</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="ObservationAnzeige" SortBy="@(x => x.AgentCodename)">Agent</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="ObservationAnzeige" SortBy="@(x => x.Obs.Ort)">Ort</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Person">

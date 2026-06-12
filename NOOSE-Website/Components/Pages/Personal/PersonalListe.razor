@@ -24,14 +24,14 @@ else
     <MudTable Items="_gefiltert" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
               OnRowClick="@((TableRowClickEventArgs<Agent> e) => Oeffnen(e.Item))" T="Agent">
         <HeaderContent>
-            <MudTh>Codename</MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Codename)">Codename</MudTableSortLabel></MudTh>
             @if (_darfKlarname)
             {
-                <MudTh>Klarname</MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Klarname)">Klarname</MudTableSortLabel></MudTh>
             }
-            <MudTh>Dienstgrad</MudTh>
-            <MudTh>Status</MudTh>
-            <MudTh>TRU</MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Dienstgrad)">Dienstgrad</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => StatusName(x.Status))">Status</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstTRU)">TRU</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Codename">

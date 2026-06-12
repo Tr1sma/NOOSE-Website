@@ -28,9 +28,9 @@ else
 {
     <MudTable Items="_eintraege" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh>Tag</MudTh>
-            <MudTh>Farbe</MudTh>
-            <MudTh>Verwendungen</MudTh>
+            <MudTh><MudTableSortLabel T="TagVerwendung" SortBy="@(x => x.Tag.Name)">Tag</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="TagVerwendung" SortBy="@(x => x.Tag.Farbe)">Farbe</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="TagVerwendung" SortBy="@(x => x.Anzahl)">Verwendungen</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>

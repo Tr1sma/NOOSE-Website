@@ -38,11 +38,11 @@ else
 {
     <MudTable Items="Gefiltert" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh>Aktentyp</MudTh>
-            <MudTh>Feld</MudTh>
-            <MudTh>Typ</MudTh>
-            <MudTh>Pflicht</MudTh>
-            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel T="CustomFeldDefinition" SortBy="@(x => CustomFeldAktentypen.Anzeige(x.EntitaetTyp))">Aktentyp</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="CustomFeldDefinition" SortBy="@(x => x.Name)">Feld</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="CustomFeldDefinition" SortBy="@(x => CustomFeldTypAnzeige.Name(x.FeldTyp))">Typ</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="CustomFeldDefinition" SortBy="@(x => x.Pflicht)">Pflicht</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="CustomFeldDefinition" SortBy="@(x => x.IstAktiv)">Status</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
