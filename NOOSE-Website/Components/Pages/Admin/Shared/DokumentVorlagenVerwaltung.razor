@@ -25,10 +25,10 @@ else
 {
     <MudTable Items="_vorlagen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh>Name</MudTh>
-            <MudTh>Beschreibung</MudTh>
-            <MudTh>Kategorie</MudTh>
-            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel T="DokumentVorlage" SortBy="@(x => x.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DokumentVorlage" SortBy="@(x => x.Beschreibung)">Beschreibung</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DokumentVorlage" SortBy="@(x => x.Kategorie)">Kategorie</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DokumentVorlage" SortBy="@(x => x.IstAktiv)">Status</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>

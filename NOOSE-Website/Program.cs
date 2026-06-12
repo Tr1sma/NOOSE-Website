@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -25,6 +26,13 @@ using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Wiedervorlagen;
 using NOOSE_Website.Services;
+
+// Einheitlich deutsches Datums-/Zahlenformat in der gesamten App (Server-Rendering und
+// Blazor-Circuits). Ohne das hängt z. B. die Anzeige der MudBlazor-Picker und jedes
+// ToString() ohne explizites Format von der Server-Locale ab.
+var germanCulture = new CultureInfo("de-DE");
+CultureInfo.DefaultThreadCurrentCulture = germanCulture;
+CultureInfo.DefaultThreadCurrentUICulture = germanCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -266,6 +274,12 @@ var app = builder.Build();
 // Muss VOR allem anderen laufen, damit nachfolgende Middleware (HTTPS-Redirect, Auth, Cookies)
 // bereits das vom nginx weitergereichte Schema/Client-IP sieht.
 app.UseForwardedHeaders();
+
+// Jede Anfrage fest auf de-DE pinnen – unabhängig vom Accept-Language-Header des Browsers.
+app.UseRequestLocalization(new RequestLocalizationOptions()
+    .SetDefaultCulture("de-DE")
+    .AddSupportedCultures("de-DE")
+    .AddSupportedUICultures("de-DE"));
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

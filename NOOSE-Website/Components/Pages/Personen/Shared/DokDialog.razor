@@ -23,7 +23,7 @@
                 <MudGrid>
                     <MudItem xs="7">
                         <MudDatePicker Label="Datum der Maßnahme" @bind-Date="_datum" Required="true"
-                                       RequiredError="Datum ist erforderlich" />
+                                       RequiredError="Datum ist erforderlich" DateFormat="dd.MM.yyyy" />
                     </MudItem>
                     <MudItem xs="5">
                         <MudTimePicker Label="Uhrzeit" @bind-Time="_zeit" />

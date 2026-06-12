@@ -33,12 +33,12 @@ else
 
     <MudTable Items="SichtbareAgenten" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh>Agent</MudTh>
-            <MudTh Style="min-width:220px;">Dienstgrad</MudTh>
-            <MudTh>Status</MudTh>
-            <MudTh>TRU</MudTh>
-            <MudTh>Teamleitung</MudTh>
-            <MudTh>Admin</MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AnzeigeName(x))">Agent</MudTableSortLabel></MudTh>
+            <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => x.Dienstgrad)">Dienstgrad</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AgentStatusAnzeige.Name(x.Status))">Status</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstTRU)">TRU</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstTeamLeitung)">Teamleitung</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstAdmin)">Admin</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>

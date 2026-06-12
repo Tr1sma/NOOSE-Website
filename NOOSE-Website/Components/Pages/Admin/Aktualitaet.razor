@@ -36,9 +36,9 @@ else
 {
     <MudTable Items="_zeilen" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh>Aktentyp</MudTh>
-            <MudTh Style="width:160px;">Gelb ab (Tage)</MudTh>
-            <MudTh Style="width:160px;">Rot ab (Tage)</MudTh>
+            <MudTh><MudTableSortLabel T="Zeile" SortBy="@(x => x.Anzeige)">Aktentyp</MudTableSortLabel></MudTh>
+            <MudTh Style="width:160px;"><MudTableSortLabel T="Zeile" SortBy="@(x => x.WarnungTage)">Gelb ab (Tage)</MudTableSortLabel></MudTh>
+            <MudTh Style="width:160px;"><MudTableSortLabel T="Zeile" SortBy="@(x => x.VeraltetTage)">Rot ab (Tage)</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
