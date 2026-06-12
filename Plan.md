@@ -214,33 +214,33 @@
 
 ### Phase 3 – Verknüpfungen, Quellen, Suche, Tags, Kommentare
 **Ziel:** Das Herzstück – alles wird verknüpfbar und auffindbar.
-- [ ] Generisches **Quellen/Anhang-System** (Upload/Link/intern/Freitext) für jede Akte.
-- [ ] **Interne Verlinkung** (bidirektional) + **Person-zu-Person-Beziehungen** mit Typen.
-- [ ] **Globale Volltextsuche** (MariaDB FULLTEXT) + Typ-/Tag-Filter; **Verschlusssachen-Flag** je Akte greift in Suche/Listen.
-- [ ] **Gespeicherte Suchen/Smart-Listen**.
-- [ ] **Command-Palette (Strg+K)** für Schnellzugriff auf Akten/Funktionen.
-- [ ] **Tags/Labels** (generisch) + Verwaltung.
-- [ ] **Kommentare/Vermerke** (generisch).
+- [X] Generisches **Quellen/Anhang-System** (Upload/Link/intern/Freitext) für jede Akte.
+- [X] **Interne Verlinkung** (bidirektional) + **Person-zu-Person-Beziehungen** mit Typen.
+- [X] **Globale Volltextsuche** (MariaDB FULLTEXT) + Typ-/Tag-Filter; **Verschlusssachen-Flag** je Akte greift in Suche/Listen.
+- [X] **Gespeicherte Suchen/Smart-Listen**.
+- [X] **Command-Palette (Strg+K)** für Schnellzugriff auf Akten/Funktionen.
+- [X] **Tags/Labels** (generisch) + Verwaltung.
+- [X] **Kommentare/Vermerke** (generisch).
 
 **Abnahme:** Quelle anhängen; zwei Akten verknüpfen und in beide Richtungen navigieren; Suche findet Inhalte (nicht nur Namen); Suche speichern; per Strg+K springen; taggen & filtern; Kommentar hinterlassen.
 
 ### Phase 4 – Fraktionen & Personengruppen
 **Ziel:** Organisationen abbilden und mit Personen verzahnen.
-- [ ] **Fraktion**-Modul (alle Felder; Bestände als strukturierte Listen; Fraktions-Ränge; Konflikte-Links; Mitglieder/Leitung verknüpft; Erkennungsfarbe; optionale Einstufung).
-- [ ] **Personengruppe** (Mitglieder, Einstufung+Verlauf, zugeteilte Agents, **Erfassungsfortschritt x/y**).
-- [ ] Rück-Verknüpfungen auf der Personenakte (zugehörige Fraktionen/Gruppen).
+- [X] **Fraktion**-Modul (alle Felder; Bestände als strukturierte Listen; Fraktions-Ränge; Konflikte-Links; Mitglieder/Leitung verknüpft; Erkennungsfarbe; optionale Einstufung).
+- [X] **Personengruppe** (Mitglieder, Einstufung+Verlauf, zugeteilte Agents, **Erfassungsfortschritt x/y**).
+- [X] Rück-Verknüpfungen auf der Personenakte (zugehörige Fraktionen/Gruppen).
 
 **Abnahme:** Fraktion mit verknüpften Mitgliedern anlegen; auf der Person erscheinen die Rück-Links; Gruppe anlegen und Fortschritt sehen.
 
 ### Phase 5 – Fälle, Operationen, Personal & Antrags-Workflow
 **Ziel:** Restliche Akten-Typen, Fallarbeit + echter Freigabe-Workflow.
-- [ ] **Partei**-Modul.
-- [ ] **Taskforce**-Modul (Leads, Mitglieder, Geltungsbereich, Genehmigung).
-- [ ] **Operationen/Einsatzberichte**-Modul.
-- [ ] **Fall-/Vorgangsakten (Cases)**: bündeln Personen/Doks/Operationen/Observationen, mit eigenem Status.
-- [ ] **Überwachungs-/Observationsprotokoll** an Personen.
-- [ ] **Personalakte je Agent** (Dienstgrad-Verlauf, Belobigungen, Disziplinarisches).
-- [ ] **Antrags-/Posteingang-Workflow** vollständig: Hochstufung, Taskforce-Genehmigung, Account-Freigabe **und Beförderungen** vereinheitlicht; Genehmigen/Ablehnen mit Begründung + Verlauf; Verknüpfung mit dem Rang-Gate aus Phase 2.
+- [X] **Partei**-Modul.
+- [X] **Taskforce**-Modul (Leads, Mitglieder, Geltungsbereich, Genehmigung).
+- [X] **Operationen/Einsatzberichte**-Modul.
+- [X] **Fall-/Vorgangsakten (Cases)**: bündeln Personen/Doks/Operationen/Observationen, mit eigenem Status.
+- [X] **Überwachungs-/Observationsprotokoll** an Personen.
+- [X] **Personalakte je Agent** (Dienstgrad-Verlauf, Belobigungen, Disziplinarisches).
+- [X] **Antrags-/Posteingang-Workflow** vollständig: Hochstufung, Taskforce-Genehmigung, Account-Freigabe **und Beförderungen** vereinheitlicht; Genehmigen/Ablehnen mit Begründung + Verlauf; Verknüpfung mit dem Rang-Gate aus Phase 2.
 
 **Abnahme:** Junior stellt Hochstufungs-Antrag → Senior genehmigt im Posteingang; Taskforce/Beförderung brauchen Führungs-Genehmigung; Fall mit mehreren Personen/Operationen anlegen; Observation erfassen.
 
@@ -331,8 +331,8 @@
 
 ### Phase 10 – Deployment, Betrieb & Härtung
 **Ziel:** Stabil und sicher auf dem eigenen VPS.
-- [ ] VPS-Setup (Reverse-Proxy, .NET-Runtime), **HTTPS** (Zertifikat), MariaDB-Prod-Konfig.
-- [ ] Migrations & Admin-Seed beim Deploy.
+- [X] VPS-Setup (Reverse-Proxy, .NET-Runtime), **HTTPS** (Zertifikat), MariaDB-Prod-Konfig.
+- [X] Migrations & Admin-Seed beim Deploy.
 - [ ] **Backups** (DB-Dump + Upload-Dateien) + dokumentierte Wiederherstellung.
 - [ ] Härtung: HSTS, Login-Rate-Limit, Upload-Validierung, Logging/Monitoring.
 - [ ] **Betriebs-/Onboarding-Doku** (README: Agenten anlegen, Rechte, Backups).
