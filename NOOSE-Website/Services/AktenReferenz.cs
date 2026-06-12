@@ -9,6 +9,7 @@ using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Termine;
 using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Querschnitt;
@@ -177,6 +178,23 @@ public static class AktenReferenz
                     .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(ct))
                 {
                     map[(nameof(Aufgabe), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", false, SuchNavigation.Route(nameof(Aufgabe), x.Id));
+                }
+            }
+        }
+
+        // Termin (Phase 8 – Block C): wie Aufgabe – kein Verschlusssache-Konzept, ABER „eingeschränkte"
+        // Termine sind nur für Beteiligte (Ersteller/Teilnehmer) bzw. die Aufsicht sichtbar. Nicht sichtbare
+        // Termine bleiben unaufgelöst → Aufrufer zeigen sie als „(nicht verfügbar)"/gar nicht. Verschluss fest false.
+        var terminIds = OffeneIds(nameof(Termin));
+        if (terminIds.Count > 0)
+        {
+            var sichtbar = await TerminSichtbarkeit.SichtbareIdsAsync(db, terminIds, darfAlleTaskforces, meId, ct);
+            if (sichtbar.Count > 0)
+            {
+                foreach (var x in await db.Termine.Where(t => sichtbar.Contains(t.Id))
+                    .Select(t => new { t.Id, t.Titel, t.Aktenzeichen }).ToListAsync(ct))
+                {
+                    map[(nameof(Termin), x.Id)] = new($"{x.Titel} ({x.Aktenzeichen})", false, SuchNavigation.Route(nameof(Termin), x.Id));
                 }
             }
         }

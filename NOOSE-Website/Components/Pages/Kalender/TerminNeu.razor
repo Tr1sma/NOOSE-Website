@@ -1,0 +1,65 @@
+@page "/kalender/neu"
+@inject ITerminService TerminService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neuer Termin · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/kalender" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.EventNote" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neuen Termin anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <TerminForm Eingabe="_eingabe" ZeigeZuweisung="true" @bind-AgentIds="_agentIds" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/kalender">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly TerminEingabe _eingabe = new();
+    private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
+    private ClaimsPrincipal _user = default!;
+    private bool _speichert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // Bequeme Vorbelegung: nächste volle Stunde (lokale RP-Zeit).
+        var jetzt = DateTime.Now;
+        _eingabe.Beginn = new DateTime(jetzt.Year, jetzt.Month, jetzt.Day, jetzt.Hour, 0, 0).AddHours(1);
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_speichert)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            var termin = await TerminService.ErstellenAsync(_eingabe, _agentIds.ToList(), _user);
+            Snackbar.Add($"Termin {termin.Aktenzeichen} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/kalender/{termin.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+}

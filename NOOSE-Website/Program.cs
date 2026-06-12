@@ -207,6 +207,9 @@ builder.Services.AddScoped<IVerknuepfungVorschlagService, VerknuepfungVorschlagS
 // Phase 8 – Block B: vereinheitlichter Akten-Zeitstrahl (rein lesend; aggregiert Audit + semantische Quellen).
 builder.Services.AddScoped<IZeitstrahlService, ZeitstrahlService>();
 builder.Services.AddScoped<IOrganigrammService, OrganigrammService>();
+// Phase 8 – Block C: Termin-Akte (CRUD) + Kalender-Aggregation (rein lesend).
+builder.Services.AddScoped<ITerminService, TerminService>();
+builder.Services.AddScoped<IKalenderService, KalenderService>();
 // Phase 3c: globale Suche + gespeicherte Suchen.
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>();

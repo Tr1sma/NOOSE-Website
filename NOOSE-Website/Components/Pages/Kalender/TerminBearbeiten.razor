@@ -1,0 +1,129 @@
+@page "/kalender/{Id}/bearbeiten"
+@inject ITerminService TerminService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Termin bearbeiten · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_keinZugriff)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Diesen Termin darf nur sein Ersteller oder die Führung bearbeiten.
+        <MudButton Href="@($"/kalender/{Id}")" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zum Termin</MudButton>
+    </MudAlert>
+}
+else if (_eingabe is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Termin nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/kalender/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Termin bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <TerminForm Eingabe="_eingabe" ZeigeZuweisung="false" @key="Id" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Teilnehmer werden im Termin unter „Teilnehmer" verwaltet.
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SpeichernAsync" Disabled="_speichert">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/kalender/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private TerminEingabe? _eingabe;
+    private ClaimsPrincipal _user = default!;
+    private bool _laden = true;
+    private bool _keinZugriff;
+    private bool _speichert;
+    private string? _geladeneId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _laden = true;
+        _eingabe = null;
+        _keinZugriff = false;
+        var t = await TerminService.GetDetailAsync(Id, _user);
+        if (t is not null)
+        {
+            // Bearbeiten ist Ersteller/Führung vorbehalten – serverseitig in AktualisierenAsync erzwungen, hier
+            // proaktiv in der UI gespiegelt, damit kein nicht-berechtigtes Formular angezeigt wird.
+            if (!_user.IstFuehrung() && t.ErstelltVonId != _user.GetAgentId())
+            {
+                _keinZugriff = true;
+            }
+            else
+            {
+                _eingabe = new TerminEingabe
+                {
+                    Titel = t.Titel,
+                    Kategorie = t.Kategorie,
+                    Status = t.Status,
+                    Ort = t.Ort,
+                    Beginn = UtcNachLokal(t.Beginn),
+                    Ende = t.Ende is { } e ? UtcNachLokal(e) : null,
+                    Ganztaegig = t.Ganztaegig,
+                    Beschreibung = t.Beschreibung,
+                    IstEingeschraenkt = t.IstEingeschraenkt,
+                };
+            }
+        }
+        _laden = false;
+    }
+
+    private async Task SpeichernAsync()
+    {
+        if (_eingabe is null || _speichert)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _speichert = true;
+        try
+        {
+            await TerminService.AktualisierenAsync(Id, _eingabe, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/kalender/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _speichert = false;
+        }
+    }
+
+    private static DateTime UtcNachLokal(DateTime utc)
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+}

@@ -28,6 +28,9 @@ public enum NotificationTyp
 
     /// <summary>Eine Wiedervorlage an einer Akte ist fällig (Empfänger = Zuständiger oder Folger der Akte).</summary>
     Wiedervorlage = 6,
+
+    /// <summary>Dem Empfänger wurde ein Termin als Teilnehmer zugeteilt (Kalender, Phase 8 – Block C).</summary>
+    TerminZugewiesen = 7,
 }
 
 /// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
@@ -42,6 +45,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.AufgabeZugewiesen => "Aufgabe",
         NotificationTyp.Ankuendigung => "Ankündigung",
         NotificationTyp.Wiedervorlage => "Wiedervorlage fällig",
+        NotificationTyp.TerminZugewiesen => "Termin",
         _ => "Benachrichtigung",
     };
 
@@ -55,6 +59,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.AufgabeZugewiesen => Icons.Material.Filled.AssignmentInd,
         NotificationTyp.Ankuendigung => Icons.Material.Filled.Campaign,
         NotificationTyp.Wiedervorlage => Icons.Material.Filled.EventRepeat,
+        NotificationTyp.TerminZugewiesen => Icons.Material.Filled.Event,
         _ => Icons.Material.Filled.Notifications,
     };
 }

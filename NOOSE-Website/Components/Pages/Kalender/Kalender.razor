@@ -1,0 +1,180 @@
+@page "/kalender"
+@using System.Globalization
+@inject IKalenderService KalenderService
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject Microsoft.Extensions.Logging.ILogger<Kalender> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Kalender · NOOSE</PageTitle>
+
+<MudStack Spacing="3">
+    @* ---- Kopfzeile ---- *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+        <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Primary" Size="Size.Large" />
+        <div>
+            <MudText Typo="Typo.h5">Kalender</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Termine, Operationen, Überwachungsfenster &amp; fällige Aufgaben/Wiedervorlagen auf einen Blick.</MudText>
+        </div>
+        <MudSpacer />
+        <AuthorizeView Policy="@Policies.FuehrungSeite" Context="fuehrung">
+            <MudTooltip Text="Papierkorb (gelöschte Termine)">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Href="/kalender/papierkorb" aria-label="Papierkorb" />
+            </MudTooltip>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" Href="/kalender/neu">Neuer Termin</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_ladeFehler)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            Der Kalender konnte nicht geladen werden. Bitte die Seite mit Strg+F5 neu laden.
+        </MudAlert>
+    }
+
+    @* ---- Kalenderfläche ---- *@
+    <MudPaper Elevation="2" Class="pa-3" Style="position:relative;">
+        <div id="@ContainerId" style="width:100%;"></div>
+        @if (_laden)
+        {
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.15);">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+    </MudPaper>
+
+    @* ---- Legende ---- *@
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Row="true" Spacing="4" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">LEGENDE</MudText>
+            @foreach (var q in KalenderAnzeige.Alle)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <span style="@($"display:inline-block;width:12px;height:12px;border-radius:3px;background:{KalenderAnzeige.Farbe(q)};")"></span>
+                    <MudText Typo="Typo.caption">@KalenderAnzeige.Name(q)</MudText>
+                </MudStack>
+            }
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">· Klick öffnet die Akte · durchgestrichen = abgesagt/verschoben</MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const string ContainerId = "noose-kalender";
+
+    private ClaimsPrincipal _user = default!;
+    private IJSObjectReference? _modul;
+    private DotNetObjectReference<Kalender>? _ref;
+    private bool _bereit;
+    private bool _laden = true;
+    private bool _ladeFehler;
+    private int _ladeToken;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        try
+        {
+            // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn kalender.js geändert wird.
+            _modul = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=4");
+            _ref = DotNetObjectReference.Create(this);
+            _bereit = true;
+            // Leer rendern – FullCalendar meldet sofort seinen Sichtbereich (datesSet) → Daten werden nachgeladen.
+            await _modul.InvokeVoidAsync("render", ContainerId, Array.Empty<KalenderEintrag>(), _ref, "de");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit getrennt – nichts zu tun.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Kalender konnte nicht initialisiert werden (JS-Interop).");
+            _ladeFehler = true;
+            _laden = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>FullCalendar meldet den sichtbaren Zeitraum (Initial-Render + Monats-/Wochenwechsel) → Fenster nachladen.</summary>
+    [JSInvokable]
+    public async Task OnDatumsbereich(string vonIso, string bisIso)
+    {
+        if (_modul is null || !_bereit)
+        {
+            return;
+        }
+        // Schnelles Vor-/Zurückblättern kann mehrere Ladevorgänge überlappen. Nur das Ergebnis des zuletzt
+        // angeforderten Fensters anwenden (sonst überschreibt eine spät zurückkehrende ältere Abfrage den Kalender).
+        var token = ++_ladeToken;
+        var vonUtc = ParseFensterUtc(vonIso, DateTime.UtcNow.AddDays(-31));
+        var bisUtc = ParseFensterUtc(bisIso, DateTime.UtcNow.AddDays(31));
+        try
+        {
+            var eintraege = await KalenderService.GetEintraegeAsync(vonUtc, bisUtc, _user);
+            if (token != _ladeToken)
+            {
+                return; // veraltetes Fenster – verwerfen
+            }
+            _laden = false;
+            StateHasChanged();
+            await _modul.InvokeVoidAsync("setzeEreignisse", ContainerId, eintraege);
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Kalender: Einträge konnten nicht geladen werden.");
+            if (token == _ladeToken)
+            {
+                _laden = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    /// <summary>Klick auf einen Eintrag → zur zugehörigen Akte navigieren.</summary>
+    [JSInvokable]
+    public async Task OnEreignisKlick(string href)
+    {
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            await InvokeAsync(() => Nav.NavigateTo(href));
+        }
+    }
+
+    // FullCalendar liefert den Bereich als ISO (mit oder ohne Offset). Ohne Offset = lokale Wandzeit → in UTC umrechnen.
+    private static DateTime ParseFensterUtc(string iso, DateTime fallback)
+    {
+        if (DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dto))
+        {
+            return dto.UtcDateTime;
+        }
+        return fallback;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_modul is not null)
+            {
+                await _modul.InvokeVoidAsync("zerstoere", ContainerId);
+                await _modul.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception) { /* Aufräum-Fehler folgenlos */ }
+        _ref?.Dispose();
+    }
+}

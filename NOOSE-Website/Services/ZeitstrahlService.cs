@@ -10,6 +10,7 @@ using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Termine;
 using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Zeitstrahl;
@@ -53,6 +54,15 @@ public class ZeitstrahlService(IDbContextFactory<AppDbContext> dbFactory) : IZei
         if (entitaetTyp == nameof(Aufgabe))
         {
             var sichtbar = await AufgabeSichtbarkeit.SichtbareIdsAsync(db, new[] { entitaetId }, darfAlleTf, meId, cancellationToken);
+            if (!sichtbar.Contains(entitaetId))
+            {
+                return Array.Empty<ZeitstrahlEintrag>();
+            }
+        }
+        // Termin analog: Sichtbarkeit stuft Termine immer als sichtbar ein → „eingeschränkt" separat prüfen.
+        if (entitaetTyp == nameof(Termin))
+        {
+            var sichtbar = await TerminSichtbarkeit.SichtbareIdsAsync(db, new[] { entitaetId }, darfAlleTf, meId, cancellationToken);
             if (!sichtbar.Contains(entitaetId))
             {
                 return Array.Empty<ZeitstrahlEintrag>();
@@ -269,6 +279,9 @@ public class ZeitstrahlService(IDbContextFactory<AppDbContext> dbFactory) : IZei
             case nameof(Aufgabe):
                 ids.UnionWith(await db.AufgabeZuweisungen.IgnoreQueryFilters().Where(z => z.AufgabeId == id).Select(z => z.Id).ToListAsync(ct));
                 return ([nameof(Aufgabe), nameof(AufgabeZuweisung)], ids);
+            case nameof(Termin):
+                ids.UnionWith(await db.TerminZuweisungen.IgnoreQueryFilters().Where(z => z.TerminId == id).Select(z => z.Id).ToListAsync(ct));
+                return ([nameof(Termin), nameof(TerminZuweisung)], ids);
             default:
                 return ([typ], ids);
         }
@@ -296,7 +309,8 @@ public class ZeitstrahlService(IDbContextFactory<AppDbContext> dbFactory) : IZei
             return (ZeitstrahlKategorie.Mitgliedschaft, $"Mitglied {Verb("aufgenommen", "entfernt")}");
         }
         if (entitaetTyp is nameof(FraktionAgent) or nameof(PersonengruppeAgent) or nameof(ParteiAgent)
-            or nameof(OperationAgent) or nameof(VorgangAgent) or nameof(TaskforceAgent) or nameof(AufgabeZuweisung))
+            or nameof(OperationAgent) or nameof(VorgangAgent) or nameof(TaskforceAgent) or nameof(AufgabeZuweisung)
+            or nameof(TerminZuweisung))
         {
             return (ZeitstrahlKategorie.Zuteilung, $"Agent {Verb("zugeteilt", "entfernt")}");
         }

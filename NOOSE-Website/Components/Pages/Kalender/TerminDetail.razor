@@ -1,0 +1,246 @@
+@page "/kalender/{Id}"
+@inject ITerminService TerminService
+@inject IZugriffsLogService ZugriffsLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_termin?.Titel ?? "Termin") · NOOSE</PageTitle>
+
+@if (_laden)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_termin is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Termin nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/kalender" aria-label="Zurück" />
+        <MudIcon Icon="@KategorieIcon(_termin.Kategorie)" Color="Color.Primary" />
+        <MudText Typo="Typo.h5">@_termin.Titel</MudText>
+        @if (_termin.IstEingeschraenkt)
+        {
+            <MudTooltip Text="Nur zugeteilte Teilnehmer, Ersteller und die Leitung sehen diesen Termin.">
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">Eingeschränkt</MudChip>
+            </MudTooltip>
+        }
+        <MudSpacer />
+        @if (_kannBearbeiten)
+        {
+            <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                <MudButton Href="@($"/kalender/{_termin.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            </AuthorizeView>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+        }
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntitaetTyp="@nameof(Termin)" EntitaetId="@_termin.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Aktenzeichen</MudText>
+                        <MudText Typo="Typo.body1">@_termin.Aktenzeichen</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Kategorie</MudText>
+                        <div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@TerminKategorieAnzeige.Name(_termin.Kategorie)</MudChip></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Status</MudText>
+                        <div><MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="StatusFarbe(_termin.Status)">@TerminStatusAnzeige.Name(_termin.Status)</MudChip></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Beginn</MudText>
+                        <MudText Typo="Typo.body2">@ZeitText(_termin.Beginn)</MudText>
+                    </div>
+                    @if (_termin.Ende is { } ende)
+                    {
+                        <div>
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Ende</MudText>
+                            <MudText Typo="Typo.body2">@ZeitText(ende)</MudText>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_termin.Ort))
+                    {
+                        <div>
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Ort</MudText>
+                            <MudText Typo="Typo.body2">@_termin.Ort</MudText>
+                        </div>
+                    }
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Teilnehmer</MudText>
+                        @if (_teilnehmer.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap" style="gap:.25rem;">
+                                @foreach (var z in _teilnehmer)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">@z.Agent?.Codename</MudChip>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Angelegt</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_termin.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_aktiverTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    @if (!string.IsNullOrWhiteSpace(_termin.Beschreibung))
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_termin.Beschreibung</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Beschreibung erfasst.</MudText>
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Teilnehmer" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <TerminTeilnehmerPanel TerminId="@_termin.Id" User="_user" KannVerwalten="_kannBearbeiten" Changed="TeilnehmerAktualisierenAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
+                    <TerminInhaltPanel TerminId="@_termin.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <KommentarPanel EntitaetTyp="@nameof(Termin)" EntitaetId="@_termin.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <QuellenPanel EntitaetTyp="@nameof(Termin)" EntitaetId="@_termin.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <ZeitstrahlPanel EntitaetTyp="@nameof(Termin)" EntitaetId="@_termin.Id" User="_user" @key="_historieKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _laden = true;
+    private Termin? _termin;
+    private List<TerminZuweisung> _teilnehmer = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _kannBearbeiten;
+    private Guid _historieKey = Guid.NewGuid();
+    private string? _geladeneId;
+
+    private int _aktiverTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "teilnehmer", "verknuepfungen", "kommentare", "quellen", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_geladeneId == Id)
+        {
+            return;
+        }
+        _geladeneId = Id;
+        _laden = true;
+        _termin = null;
+        _aktiverTab = TabUrlState.Read(Nav, _tabs);
+        await LadenAsync();
+        if (_termin is not null)
+        {
+            await ZugriffsLog.LogAnsichtAsync(nameof(Termin), _termin.Id);
+        }
+    }
+
+    private async Task LadenAsync()
+    {
+        _termin = await TerminService.GetDetailAsync(Id, _user);
+        if (_termin is not null)
+        {
+            _teilnehmer = await TerminService.GetTeilnehmerAsync(_termin.Id);
+            var meId = _user.GetAgentId();
+            _kannBearbeiten = _user.IstFuehrung() || _termin.ErstelltVonId == meId;
+        }
+        _laden = false;
+    }
+
+    private async Task TeilnehmerAktualisierenAsync()
+    {
+        if (_termin is not null)
+        {
+            _teilnehmer = await TerminService.GetTeilnehmerAsync(_termin.Id);
+        }
+        _historieKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task LoeschenAsync()
+    {
+        if (_termin is null)
+        {
+            return;
+        }
+        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Termin löschen?",
+            "Der Termin wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await TerminService.LoeschenAsync(_termin.Id, _user);
+            Snackbar.Add("Termin in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/kalender");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private string ZeitText(DateTime utc)
+    {
+        var lokal = DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+        return _termin is { Ganztaegig: true } ? lokal.ToString("dd.MM.yyyy") : lokal.ToString("dd.MM.yyyy HH:mm");
+    }
+
+    private static Color StatusFarbe(TerminStatus status) => status switch
+    {
+        TerminStatus.Wahrgenommen => Color.Success,
+        TerminStatus.Abgesagt => Color.Error,
+        TerminStatus.Verschoben => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private static string KategorieIcon(TerminKategorie kategorie) => kategorie switch
+    {
+        TerminKategorie.Gerichtstermin => Icons.Material.Filled.Gavel,
+        TerminKategorie.Besprechung => Icons.Material.Filled.Groups,
+        TerminKategorie.Einsatz => Icons.Material.Filled.Radar,
+        TerminKategorie.Frist => Icons.Material.Filled.Alarm,
+        _ => Icons.Material.Filled.Event,
+    };
+}

@@ -295,11 +295,11 @@
 - [x] **Verknüpfungs-Vorschläge** (zusammenhängende Akten automatisch vorschlagen – gleiche Tags/Fraktion/Telefon).
 - [x] **Zeitstrahl/Timeline je Akte** (alle Ereignisse chronologisch).
 - [x] **Organigramm/Personalübersicht** (NOOSE-Struktur, TRU, Taskforce-Besetzung).
-- [ ] **Kalender/Termine** (Gerichtstermine, Operationen, Überwachungsfenster).
+- [x] **Kalender/Termine** (Gerichtstermine, Operationen, Überwachungsfenster).
 - [ ] **Automatischer Bedrohungs-Score** (Personen/Fraktionen; Sortierung/Priorisierung).
 - [ ] **Statistik-Reports/Export** (CSV/PDF) + **automatischer Lagebericht** (geplant erzeugt + archiviert).
 
-**Abnahme:** Graph zeigt Verbindungen; Pfadsuche findet Kette zwischen zwei Personen; Vorschläge erscheinen; Timeline korrekt; Organigramm korrekt; Karte zeigt Marker; Kalender zeigt Termine; Score wird berechnet und ist sortierbar; Monats-Lagebericht wird automatisch erzeugt.
+**Abnahme:** Graph zeigt Verbindungen; Pfadsuche findet Kette zwischen zwei Personen; Vorschläge erscheinen; Timeline korrekt; Organigramm korrekt; Kalender zeigt Termine; Score wird berechnet und ist sortierbar; Monats-Lagebericht wird automatisch erzeugt. *(Die „Karte mit Orten" wurde vom Auftraggeber gestrichen.)*
 
 > **Block A umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):**
 > Phase 8 wird in 4 testbaren Blöcken geliefert; **Block A = Beziehungsgraph + Pfadsuche + Verknüpfungs-Vorschläge**.
@@ -315,6 +315,11 @@
 > **Block B – Teil 2 umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):** Seite **`/organigramm`** (Personalübersicht).
 > Für ALLE aktiven Agenten: die Dienstgrad-Hierarchie als **CSS-Org-Chart** (Wurzel „N.O.O.S.E." → Ebenen Director→Junior, Boxen + Verbindungslinien, horizontal scrollbar/druckbar; scoped `Organigramm.razor.css`), darunter TRU-Block und Taskforce-Besetzungs-Karten (Leitung hervorgehoben). Klarname nur für Führung; der Taskforce-Abschnitt respektiert die Taskforce-Sichtbarkeit (Nicht-Führung sieht nur zugeteilte, genehmigte Taskforces); RP-unsichtbare Teamleitung ist überall ausgeblendet; Avatar = Codename-Initialen (keine externen Bilder). Backend: `Services/OrganigrammService.cs` (rein lesend, 3 flache Queries, kein N+1). Modelle in `Models/Organigramm/`. Wiederverwendbare `Components/Pages/Organigramm/Shared/AgentKachel.razor`. Nav-Eintrag „Organigramm" aktiviert. **Keine Migration.**
 > Damit ist **Block B vollständig**. Offen: Blöcke **C** (Karte/Kalender), **D** (Bedrohungs-Score/Statistik-Reports/Lagebericht).
+>
+> **Block C umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):** Seite **`/kalender`** + eigene **Termin-Akte**.
+> Die **Karte mit Orten wurde vom Auftraggeber gestrichen** (zurückgestellt). Geliefert wurde der **Kalender**: ein self-gehostetes **FullCalendar** (v6 Global-Build unter `wwwroot/lib/fullcalendar/` + deutsche Locale; guarded Lazy-Loader `wwwroot/js/kalender.js?v=1` nach dem Graph-Muster, Monat/Woche/Liste, Klick → Akte). Er **aggregiert rein lesend** (`Services/KalenderService.cs`, sequenzielle flache Pomelo-Queries, je Fenster gedeckelt): eigene **Termine** + Operationen (Beginn/Ende) + Überwachungsfenster (Observationen) + fällige Aufgaben + offene Wiedervorlagen (Eltern sichtbarkeitsgeprüft aufgelöst) + Fraktions-Aktivitäten. Jede Quelle behält ihre kanonische Sichtbarkeit (Verschlusssache bzw. Aufgaben-/Termin-„Eingeschränkt"); farbcodierte Legende; abgesagte/verschobene Termine durchgestrichen.
+> Neue **Termin-Akte** (CRUD, Papierkorb, Verknüpfungen, Kommentare/Quellen/Zeitstrahl, Teilnehmer-Zuteilung) – Sichtbarkeit **wie eine Aufgabe**: Kippschalter **`IstEingeschraenkt`** (nur Ersteller + zugeteilte Teilnehmer + Aufsicht; sonst alle), zentral über `Services/TerminSichtbarkeit.cs`. **Kein** Verschlusssache-/Einstufungs-Konzept. Backend `Services/TerminService.cs`, Entities `Data/Entities/Termine/` (`Termin` + `TerminZuweisung`), Modelle `Models/Termine/` + `Models/Kalender/`, Seiten `Components/Pages/Kalender/` (Kalender/Detail/Neu/Bearbeiten/Papierkorb + Shared). In `AktenReferenz`/`Sichtbarkeit`/`ZeitstrahlService`/`SuchNavigation` integriert (Verknüpfungen/@-Mentions/Zeitstrahl). Nav-Eintrag „Kalender" aktiviert. **Migration `Phase17_Termine`** (Tabellen `Termine` + `TerminZuweisungen`; greift per Startup-Auto-Migrate).
+> Offen: nur noch Block **D** (Bedrohungs-Score/Statistik-Reports/Lagebericht).
 
 ### Phase 9 – Partner-Zugriff (DoJ / LSPD / LSMD)
 **Ziel:** Kontrollierter Lesezugriff für Partnerbehörden.

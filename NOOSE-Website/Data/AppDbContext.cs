@@ -14,6 +14,7 @@ using NOOSE_Website.Data.Entities.Personal;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Termine;
 using NOOSE_Website.Data.Entities.Vorgaenge;
 using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Infrastructure.Audit;
@@ -119,6 +120,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Phase 6: Aufgaben/To-Dos & Zuweisungen ----
     public DbSet<Aufgabe> Aufgaben => Set<Aufgabe>();
     public DbSet<AufgabeZuweisung> AufgabeZuweisungen => Set<AufgabeZuweisung>();
+
+    // ---- Phase 8 (Block C): Termine/Kalender & Teilnehmer ----
+    public DbSet<Termin> Termine => Set<Termin>();
+    public DbSet<TerminZuweisung> TerminZuweisungen => Set<TerminZuweisung>();
 
     // ---- Phase 6: News/Schwarzes Brett + Behörden-Broadcast ----
     public DbSet<Ankuendigung> Ankuendigungen => Set<Ankuendigung>();
@@ -700,6 +705,34 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasOne(z => z.Agent).WithMany()
                 .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(z => new { z.AufgabeId, z.AgentId }).IsUnique();
+            b.HasIndex(z => z.AgentId);
+        });
+
+        // ---- Phase 8 (Block C): Termine/Kalender & Teilnehmer (Vorlage: Aufgabe) ----
+        modelBuilder.Entity<Termin>(b =>
+        {
+            b.Property(t => t.Aktenzeichen).HasMaxLength(32).IsRequired();
+            b.Property(t => t.Titel).HasMaxLength(200).IsRequired();
+            b.Property(t => t.Ort).HasMaxLength(200);
+            b.Property(t => t.Beschreibung).HasMaxLength(4000);
+            b.HasIndex(t => t.Aktenzeichen).IsUnique();
+            b.HasIndex(t => t.Titel);
+            b.HasIndex(t => t.Kategorie);
+            b.HasIndex(t => t.Status);
+            // Kalender lädt je sichtbarem Fenster über den Beginn → Index ist der schnelle Pfad.
+            b.HasIndex(t => t.Beginn);
+            b.HasIndex(t => t.IstEingeschraenkt);
+
+            b.HasMany(t => t.Teilnehmer).WithOne(z => z.Termin!)
+                .HasForeignKey(z => z.TerminId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TerminZuweisung>(b =>
+        {
+            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            b.HasOne(z => z.Agent).WithMany()
+                .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(z => new { z.TerminId, z.AgentId }).IsUnique();
             b.HasIndex(z => z.AgentId);
         });
 

@@ -1,0 +1,153 @@
+@* Gemeinsames Formular für Anlegen/Bearbeiten eines Termins. Datum + Uhrzeit werden getrennt erfasst und in
+   Eingabe.Beginn/Ende (lokale RP-Zeit) zusammengeführt; der Dienst rechnet beim Speichern in UTC um. Beim
+   Anlegen kann zusätzlich eine Mehrfach-Zuteilung an aktive Agenten erfolgen (nur Codename – kein Klarname-Leck). *@
+@inject IAgentVerwaltungService AgentService
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        <MudTextField @bind-Value="Eingabe.Titel" Label="Titel" Required="true" RequiredError="Titel ist erforderlich"
+                      Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudSelect T="TerminKategorie" @bind-Value="Eingabe.Kategorie" Label="Kategorie" Variant="Variant.Outlined">
+            @foreach (var k in TerminKategorieAnzeige.Alle)
+            {
+                <MudSelectItem Value="k">@TerminKategorieAnzeige.Name(k)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudSelect T="TerminStatus" @bind-Value="Eingabe.Status" Label="Status" Variant="Variant.Outlined">
+            @foreach (var s in TerminStatusAnzeige.Alle)
+            {
+                <MudSelectItem Value="s">@TerminStatusAnzeige.Name(s)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" md="8">
+        <MudTextField @bind-Value="Eingabe.Ort" Label="Ort (optional)" Variant="Variant.Outlined" />
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudSwitch T="bool" Value="Eingabe.Ganztaegig" ValueChanged="GanztaegigGeaendert" Color="Color.Primary" Label="Ganztägig" />
+    </MudItem>
+
+    <MudItem xs="12" md="@(Eingabe.Ganztaegig ? 12 : 6)">
+        <MudDatePicker @bind-Date="_beginnDatum" @bind-Date:after="Sync" Label="Beginn (Datum)" Required="true"
+                       RequiredError="Beginn ist erforderlich" Variant="Variant.Outlined" Editable="true" DateFormat="dd.MM.yyyy" />
+    </MudItem>
+    @if (!Eingabe.Ganztaegig)
+    {
+        <MudItem xs="12" md="6">
+            <MudTimePicker @bind-Time="_beginnZeit" @bind-Time:after="Sync" Label="Beginn (Uhrzeit)" Variant="Variant.Outlined" Editable="true" />
+        </MudItem>
+    }
+
+    <MudItem xs="12" md="@(Eingabe.Ganztaegig ? 12 : 6)">
+        <MudDatePicker @bind-Date="_endeDatum" @bind-Date:after="Sync" Label="Ende (Datum, optional)" Variant="Variant.Outlined"
+                       Clearable="true" Editable="true" DateFormat="dd.MM.yyyy" />
+    </MudItem>
+    @if (!Eingabe.Ganztaegig)
+    {
+        <MudItem xs="12" md="6">
+            <MudTimePicker @bind-Time="_endeZeit" @bind-Time:after="Sync" Label="Ende (Uhrzeit, optional)" Variant="Variant.Outlined" Clearable="true" Editable="true" />
+        </MudItem>
+    }
+
+    <MudItem xs="12">
+        <MudSwitch T="bool" @bind-Value="Eingabe.IstEingeschraenkt" Color="Color.Warning"
+                   Label="Eingeschränkt (nur zugeteilte Teilnehmer, Ersteller und die Leitung sehen den Termin)" />
+    </MudItem>
+
+    @if (ZeigeZuweisung)
+    {
+        <MudItem xs="12">
+            <MudSelect T="string" Label="Teilnehmer (optional)" MultiSelection="true"
+                       SelectedValues="AgentIds" SelectedValuesChanged="OnAgentsChanged"
+                       MultiSelectionTextFunc="@AnzeigeAuswahl" Variant="Variant.Outlined"
+                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.ManageAccounts"
+                       HelperText="Teilnehmer erhalten eine Benachrichtigung.">
+                @foreach (var a in _agenten)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Codename (@DienstgradAnzeige.Name(a.Dienstgrad))</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    }
+
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Eingabe.Beschreibung" Label="Beschreibung (optional)" Lines="4" Variant="Variant.Outlined"
+                      HelperText="Worum geht es bei diesem Termin?" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public TerminEingabe Eingabe { get; set; } = default!;
+
+    /// <summary>Mehrfach-Zuteilung anzeigen (nur beim Anlegen).</summary>
+    [Parameter] public bool ZeigeZuweisung { get; set; }
+
+    /// <summary>Gewählte Agent-Ids (zweiweg-gebunden über <c>@bind-AgentIds</c>).</summary>
+    [Parameter] public IReadOnlyCollection<string> AgentIds { get; set; } = Array.Empty<string>();
+    [Parameter] public EventCallback<IReadOnlyCollection<string>> AgentIdsChanged { get; set; }
+
+    private List<Agent> _agenten = new();
+    private DateTime? _beginnDatum;
+    private TimeSpan? _beginnZeit;
+    private DateTime? _endeDatum;
+    private TimeSpan? _endeZeit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ZeigeZuweisung)
+        {
+            // GetAuswaehlbareAsync: nur aktive Agenten ohne TeamLeitung-Marker, bereits nach Codename sortiert.
+            _agenten = await AgentService.GetAuswaehlbareAsync();
+        }
+        // Datum/Uhrzeit aus der (ggf. vorbelegten) Eingabe übernehmen.
+        if (Eingabe.Beginn is { } b)
+        {
+            _beginnDatum = b.Date;
+            _beginnZeit = b.TimeOfDay;
+        }
+        if (Eingabe.Ende is { } e)
+        {
+            _endeDatum = e.Date;
+            _endeZeit = e.TimeOfDay;
+        }
+    }
+
+    private void GanztaegigGeaendert(bool wert)
+    {
+        Eingabe.Ganztaegig = wert;
+        if (wert)
+        {
+            _beginnZeit = null;
+            _endeZeit = null;
+        }
+        Sync();
+    }
+
+    // Datum + Uhrzeit in die Eingabe zusammenführen (Uhrzeit fehlt → 00:00).
+    private void Sync()
+    {
+        Eingabe.Beginn = Kombi(_beginnDatum, _beginnZeit);
+        Eingabe.Ende = Kombi(_endeDatum, _endeZeit);
+    }
+
+    private static DateTime? Kombi(DateTime? datum, TimeSpan? zeit)
+        => datum is { } d ? d.Date + (zeit ?? TimeSpan.Zero) : null;
+
+    private async Task OnAgentsChanged(IReadOnlyCollection<string> werte)
+    {
+        AgentIds = werte;
+        await AgentIdsChanged.InvokeAsync(werte);
+    }
+
+    private string AnzeigeAuswahl(IReadOnlyList<string> ids)
+    {
+        var namen = _agenten.Where(a => ids.Contains(a.Id)).Select(a => a.Codename).ToList();
+        return namen.Count == 0 ? string.Empty : string.Join(", ", namen);
+    }
+}

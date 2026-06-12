@@ -9,6 +9,7 @@ using NOOSE_Website.Data.Entities.Parteien;
 using NOOSE_Website.Data.Entities.Personen;
 using NOOSE_Website.Data.Entities.Querschnitt;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Data.Entities.Termine;
 using NOOSE_Website.Data.Entities.Vorgaenge;
 
 namespace NOOSE_Website.Services;
@@ -73,6 +74,11 @@ public static class Sichtbarkeit
             nameof(Aufgabe) => await db.Aufgaben
                 .Where(a => a.Id == entitaetId).Select(a => (bool?)false)
                 .FirstOrDefaultAsync(cancellationToken),
+            // Termin: wie Aufgabe – keine Verschlusssache; die „Eingeschränkt"-Regel greift separat über
+            // TerminSichtbarkeit an den Aufrufstellen (Kalender/Detail/Zeitstrahl).
+            nameof(Termin) => await db.Termine
+                .Where(t => t.Id == entitaetId).Select(t => (bool?)false)
+                .FirstOrDefaultAsync(cancellationToken),
             // Bibliotheks-Dokument: eigene Verschlusssache-Stufe (nur Führung sieht VS-Dokumente).
             nameof(Dokument) => await db.Dokumente
                 .Where(d => d.Id == entitaetId).Select(d => (bool?)d.IstVerschlusssache)
@@ -86,7 +92,7 @@ public static class Sichtbarkeit
         };
 
         // Bei unbekanntem Typ (kein Treffer im switch) gibt es keine Akte zu schützen → sichtbar.
-        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(FraktionAktivitaet) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Dokument) or nameof(Gesetz)))
+        if (entitaetTyp is not (nameof(Person) or nameof(Fraktion) or nameof(FraktionAktivitaet) or nameof(Personengruppe) or nameof(Partei) or nameof(Operation) or nameof(Vorgang) or nameof(Aufgabe) or nameof(Termin) or nameof(Dokument) or nameof(Gesetz)))
         {
             return true;
         }
