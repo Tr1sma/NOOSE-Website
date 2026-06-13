@@ -11,7 +11,7 @@ namespace NOOSE_Website.Services;
 /// <summary>
 /// Liest die Organigramm-Daten in drei flachen Abfragen zusammen (kein N+1, kein SelectMany/CROSS APPLY).
 /// Roster = aktive Agenten ohne RP-unsichtbare Teamleitung und mit gesetztem Dienstgrad; gruppiert nach
-/// Dienstgrad (Director→Junior). TRU = Querschnitt des Rosters. Taskforces = nur sichtbare (Taskforce-
+/// Dienstgrad (Director→Junior). TRU/HRB = Querschnitt des Rosters. Taskforces = nur sichtbare (Taskforce-
 /// Sichtbarkeit) und genehmigte, Mitglieder über eine einzige flache <c>WHERE TaskforceId IN (…)</c>-Abfrage.
 /// </summary>
 public class OrganigrammService(IDbContextFactory<AppDbContext> dbFactory) : IOrganigrammService
@@ -35,6 +35,7 @@ public class OrganigrammService(IDbContextFactory<AppDbContext> dbFactory) : IOr
             .ToList();
 
         var tru = roster.Where(a => a.IstTRU).ToList();
+        var hrb = roster.Where(a => a.IstHRB).ToList();
 
         // Nur sichtbare (zugeteilte bzw. Führung sieht alle) UND genehmigte Taskforces.
         var darfAlleTf = betrachter.DarfAlleTaskforcesSehen();
@@ -64,6 +65,6 @@ public class OrganigrammService(IDbContextFactory<AppDbContext> dbFactory) : IOr
                     .ToList()))
             .ToList();
 
-        return new OrganigrammDaten(raenge, tru, besetzungen);
+        return new OrganigrammDaten(raenge, tru, hrb, besetzungen);
     }
 }

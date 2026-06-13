@@ -8,7 +8,7 @@ using NOOSE_Website.Models.Querschnitt;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IBeziehungService" />
-public class BeziehungService(IDbContextFactory<AppDbContext> dbFactory) : IBeziehungService
+public class BeziehungService(IDbContextFactory<AppDbContext> dbFactory, IBedrohungsScoreService bedrohung) : IBeziehungService
 {
     public async Task<List<BeziehungAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -70,6 +70,9 @@ public class BeziehungService(IDbContextFactory<AppDbContext> dbFactory) : IBezi
             Notiz = string.IsNullOrWhiteSpace(notiz) ? null : notiz.Trim(),
         });
         await db.SaveChangesAsync(cancellationToken);
+        // Feind/Verbündeter/Geschäftspartner wirken auf P4 BEIDER Personen → beide neu berechnen.
+        await bedrohung.NeuBerechnenPersonScoreAsync(personAId, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personBId, cancellationToken);
     }
 
     public async Task EntfernenAsync(string beziehungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -80,7 +83,12 @@ public class BeziehungService(IDbContextFactory<AppDbContext> dbFactory) : IBezi
         {
             return;
         }
+        var personAId = b.PersonAId;
+        var personBId = b.PersonBId;
         db.PersonBeziehungen.Remove(b); // Soft-Delete via Interceptor
         await db.SaveChangesAsync(cancellationToken);
+        // Entfernte Beziehung wirkt auf P4 beider Personen → beide neu berechnen.
+        await bedrohung.NeuBerechnenPersonScoreAsync(personAId, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personBId, cancellationToken);
     }
 }

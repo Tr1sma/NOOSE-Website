@@ -5,7 +5,7 @@ namespace NOOSE_Website.Services;
 
 /// <summary>
 /// Stellt die NOOSE-interne Struktur für die Organigramm-Seite zusammen: aktive Agenten nach Dienstgrad,
-/// TRU-Querschnitt und die für den Betrachter sichtbaren, genehmigten Taskforces mit Besetzung. Rein lesend.
+/// TRU-/HRB-Querschnitt und die für den Betrachter sichtbaren, genehmigten Taskforces mit Besetzung. Rein lesend.
 /// </summary>
 public interface IOrganigrammService
 {

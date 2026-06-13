@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NOOSE_Website.Data;
 
@@ -11,9 +12,11 @@ using NOOSE_Website.Data;
 namespace NOOSE_Website.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260613124239_Phase19_AgentHRB")]
+    partial class Phase19_AgentHRB
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1827,15 +1830,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("varchar(32)");
 
-                    b.Property<string>("BedrohungsDetailJson")
-                        .HasColumnType("longtext");
-
-                    b.Property<int?>("BedrohungsKonfidenz")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BedrohungsScore")
-                        .HasColumnType("int");
-
                     b.Property<string>("Beschreibung")
                         .HasColumnType("longtext");
 
@@ -1873,9 +1867,6 @@ namespace NOOSE_Website.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
-
-                    b.Property<DateTime?>("ScoreBerechnetAm")
-                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime?>("TotBis")
                         .HasColumnType("datetime(6)");
@@ -2219,32 +2210,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasKey("AktenTyp");
 
                     b.ToTable("AktualitaetsSchwellen");
-                });
-
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.BedrohungsScoreKonfig", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(32)
-                        .HasColumnType("varchar(32)");
-
-                    b.Property<DateTime>("ErstelltAm")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("ErstelltVonId")
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime?>("GeaendertAm")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("GeaendertVonId")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Json")
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("BedrohungsScoreKonfigs");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Querschnitt.BibliothekDatei", b =>

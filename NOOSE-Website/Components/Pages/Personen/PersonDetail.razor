@@ -98,6 +98,17 @@ else
                     <EinstufungPanel Aktuell="_person.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
                                      EntitaetTyp="@nameof(Person)" EntitaetId="@_person.Id" ZielBezeichnung="@($"{_person.Name} ({_person.Aktenzeichen})")" />
                 </MudTabPanel>
+                <MudTabPanel Text="Gefährdung" Icon="@Icons.Material.Filled.Warning">
+                    @if (LebensstatusLogic.IstTotFenster(_person.Lebensstatus, _person.TotBis, DateTime.UtcNow)
+                         && LebensstatusLogic.VerbleibendeMinuten(_person.TotBis, DateTime.UtcNow) is { } restMin)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                            Aktuell „Tot" (temporär) – Respawn in ca. @restMin&nbsp;Min. Der Score wertet den Tod statusneutral.
+                        </MudAlert>
+                    }
+                    <GefaehrdungPanel Score="_person.BedrohungsScore" Konfidenz="_person.BedrohungsKonfidenz"
+                                      DetailJson="@_person.BedrohungsDetailJson" />
+                </MudTabPanel>
                 <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
                     <FotoGalerie PersonId="@_person.Id" Fotos="_person.Fotos" User="_user" Changed="NeuLadenAsync" />
                 </MudTabPanel>
@@ -146,7 +157,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "steckbrief", "doks", "ueberwachung", "einstufung", "fotos", "quellen", "wiedervorlagen",
+        "steckbrief", "doks", "ueberwachung", "einstufung", "gefaehrdung", "fotos", "quellen", "wiedervorlagen",
         "verknuepfungen", "zugehoerigkeit", "kommentare", "zusatzfelder", "historie",
     };
 

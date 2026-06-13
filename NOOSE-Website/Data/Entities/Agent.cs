@@ -5,7 +5,7 @@ namespace NOOSE_Website.Data.Entities;
 
 /// <summary>
 /// Ein NOOSE-Nutzerkonto. Erweitert <see cref="IdentityUser"/> (String-GUID-Key) um die
-/// fachlichen Felder: Dienstgrad, Status, TRU-Flag und Discord-Bezug. Die Anmeldung erfolgt
+/// fachlichen Felder: Dienstgrad, Status, TRU-/HRB-Flag und Discord-Bezug. Die Anmeldung erfolgt
 /// ausschließlich über Discord-OAuth; ein Passwort wird nie gesetzt.
 /// </summary>
 public class Agent : IdentityUser
@@ -34,6 +34,9 @@ public class Agent : IdentityUser
 
     /// <summary>Tactical Response Unit: rangübergreifendes Flag (jeder Rang kann rein).</summary>
     public bool IstTRU { get; set; }
+
+    /// <summary>Human Resources Branch: rangübergreifendes Flag (analog zur TRU; jeder Rang kann rein).</summary>
+    public bool IstHRB { get; set; }
 
     /// <summary>Technische Systemrolle (Auftraggeber). Unabhängig vom Dienstgrad.</summary>
     public bool IstAdmin { get; set; }

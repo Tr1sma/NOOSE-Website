@@ -111,6 +111,10 @@ else
                     <EinstufungPanel Aktuell="_fraktion.Einstufung" Verlauf="_einstufungVerlauf" User="_user" OnSetzen="EinstufungSetzenAsync"
                                      EntitaetTyp="@nameof(Fraktion)" EntitaetId="@_fraktion.Id" ZielBezeichnung="@($"{_fraktion.Name} ({_fraktion.Aktenzeichen})")" />
                 </MudTabPanel>
+                <MudTabPanel Text="Gefährdung" Icon="@Icons.Material.Filled.Warning">
+                    <GefaehrdungPanel Score="_fraktion.BedrohungsScore" Konfidenz="_fraktion.BedrohungsKonfidenz"
+                                      DetailJson="@_fraktion.BedrohungsDetailJson" />
+                </MudTabPanel>
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDoksPanel OrgTyp="@nameof(Fraktion)" OrgId="@_fraktion.Id" User="_user" />
                 </MudTabPanel>
@@ -155,7 +159,7 @@ else
     private int _aktiverTab;
     private static readonly string[] _tabs =
     {
-        "stammdaten", "mitglieder", "agents", "bestaende", "aktivitaeten", "fotos", "einstufung", "doks",
+        "stammdaten", "mitglieder", "agents", "bestaende", "aktivitaeten", "fotos", "einstufung", "gefaehrdung", "doks",
         "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 

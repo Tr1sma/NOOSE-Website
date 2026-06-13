@@ -1,5 +1,5 @@
 @* Wiederverwendbare Agenten-Karte für das Organigramm: Initialen-Avatar, Codename (Link zur Personalakte),
-   Klarname nur für Führung, optional Dienstgrad-/Rollen-Chip + TRU-Badge. *@
+   Klarname nur für Führung, optional Dienstgrad-/Rollen-Chip + TRU-/HRB-Badge. *@
 
 <MudPaper Class="pa-3" Elevation="1" Style="height:100%;">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
@@ -21,6 +21,10 @@
                 @if (Agent.IstTRU)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">TRU</MudChip>
+                }
+                @if (Agent.IstHRB)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">HRB</MudChip>
                 }
                 @if (!string.IsNullOrWhiteSpace(RolleText))
                 {

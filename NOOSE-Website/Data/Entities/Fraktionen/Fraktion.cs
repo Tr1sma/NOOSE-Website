@@ -38,8 +38,24 @@ public class Fraktion : IAuditable, ISoftDelete
     /// <summary>Optionale Einstufung der Fraktion.</summary>
     public Einstufung Einstufung { get; set; } = Einstufung.Unbekannt;
 
-    /// <summary>Automatischer Bedrohungs-Score – nur modelliert, Berechnung folgt in Phase 8.</summary>
+    /// <summary>
+    /// Automatischer Bedrohungs-Score (0–100, <c>null</c> = noch nicht bewertet bzw. ausgenommen, z. B.
+    /// Staatsfraktion). Phase 8/Block D: berechnet &amp; persistiert vom <c>BedrohungsScoreService</c>
+    /// (Algorithmus „EHK-Score", siehe AlgoPlan.md). Daraus wird on-read die <c>GefaehrdungsStufe</c> abgeleitet.
+    /// </summary>
     public int? BedrohungsScore { get; set; }
+
+    /// <summary>Daten-Konfidenz (0–100, <c>null</c> = nicht bewertet): wie gut die Fraktion erfasst ist – getrennt
+    /// vom Score (eine Lücke senkt den Score nie, nur die Konfidenz). Score immer mit Konfidenz-Badge anzeigen.</summary>
+    public int? BedrohungsKonfidenz { get; set; }
+
+    /// <summary>Strukturierte Aufschlüsselung des letzten Score-Laufs als JSON (Teilscores + Treiber + Band/Sockel),
+    /// für die nachvollziehbare Anzeige „warum dieser Score?". Im selben Lauf wie der Score erzeugt (Konsistenz).</summary>
+    public string? BedrohungsDetailJson { get; set; }
+
+    /// <summary>Zeitpunkt der letzten Score-Berechnung (UTC); <c>null</c> = noch nie berechnet. Erlaubt dem
+    /// nächtlichen Sweep, Decay-Drift zu erkennen, ohne die Aktualitäts-Ampel (<c>GeaendertAm</c>) zu verfälschen.</summary>
+    public DateTime? ScoreBerechnetAm { get; set; }
 
     /// <summary>Verschlusssache: in Liste/Detail nur für Führung/Admin sichtbar.</summary>
     public bool IstVerschlusssache { get; set; }

@@ -15,6 +15,8 @@ public enum AnkuendigungZielgruppe
     TruEinheit = 2,
     /// <summary>Nur Agenten ab einem Mindest-Dienstgrad (Ziel = <c>MinDienstgrad</c>).</summary>
     AbDienstgrad = 3,
+    /// <summary>Nur Agenten der HRB-Einheit (<see cref="Data.Entities.Agent.IstHRB"/>).</summary>
+    HrbEinheit = 4,
 }
 
 /// <summary>Anzeigetexte für die Ankündigungs-Zielgruppe (UI-frei).</summary>
@@ -25,6 +27,7 @@ public static class AnkuendigungZielgruppeAnzeige
         AnkuendigungZielgruppe.AlleAktiven => "Alle aktiven Agenten",
         AnkuendigungZielgruppe.Taskforce => "Bestimmte Taskforce",
         AnkuendigungZielgruppe.TruEinheit => "TRU-Einheit",
+        AnkuendigungZielgruppe.HrbEinheit => "HRB-Einheit",
         AnkuendigungZielgruppe.AbDienstgrad => "Ab Dienstgrad",
         _ => "—",
     };
@@ -34,6 +37,7 @@ public static class AnkuendigungZielgruppeAnzeige
         AnkuendigungZielgruppe.AlleAktiven,
         AnkuendigungZielgruppe.Taskforce,
         AnkuendigungZielgruppe.TruEinheit,
+        AnkuendigungZielgruppe.HrbEinheit,
         AnkuendigungZielgruppe.AbDienstgrad,
     };
 }

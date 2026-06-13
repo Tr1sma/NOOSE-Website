@@ -10,7 +10,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IObservationService" />
-public class ObservationService(IDbContextFactory<AppDbContext> dbFactory) : IObservationService
+public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IBedrohungsScoreService bedrohung) : IObservationService
 {
     public async Task<List<ObservationAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -142,6 +142,8 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory) : IOb
         db.Observationen.Add(obs);
         // Audit setzt ErstelltAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
+        // Observationen fließen in den Person-Score (P3) → neu berechnen.
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
         return obs;
     }
 
@@ -170,6 +172,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory) : IOb
 
         // Audit setzt GeaendertAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(obs.PersonId, cancellationToken);
         return obs;
     }
 
@@ -186,9 +189,11 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory) : IOb
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
+        var personId = obs.PersonId;
         // Soft-Delete via Interceptor.
         db.Observationen.Remove(obs);
         await db.SaveChangesAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     private static string? Leer(string? s) => s.TrimToNull();

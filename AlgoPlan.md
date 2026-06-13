@@ -24,8 +24,13 @@ Bereits im Code vorhanden (wird nur noch *gefüllt*, nicht neu gebaut):
 1. **V1 = nur Fraktion.** Person bekommt denselben Aufbau als V2 (braucht 4 neue Spalten + Migration).
 2. **Taten allein können „Kritisch" (≥75) erreichen.** Eine hochaktive, aber noch nicht eingestufte
    Fraktion wird sichtbar kritisch. Die Einstufung wirkt nur als garantiertes Mindest-Band.
-3. **Keine Admin-UI / keine konfigurierbaren Gewichte.** Alle Stellschrauben sind benannte Konstanten an
-   **einer** Stelle (`BedrohungsScoreKonstanten`), nach erstem Echtdaten-Lauf einmal kalibriert.
+3. **Score auch für Personen** (gleiche 3-Schicht-Architektur, eigene Teilscores P1–P5 — siehe Abschnitt 12).
+4. **Admin-einstellbare Parameter** (`/admin/bedrohungs-score`): alle numerischen Stellschrauben liegen in
+   einem zur Laufzeit geladenen Konfig-Objekt (`BedrohungsScoreKonfiguration`, persistiert als JSON in
+   `BedrohungsScoreKonfig`, 10-Min-Cache, Führung-only). **Fix bleiben** (bewusst nicht editierbar): die
+   Einstufungs-Sockel und die Stufen-Schwellen 25/50/75 (`BedrohungsScoreKonstanten.Sockel` /
+   `GefaehrdungsStufeLogic`) sowie die Schwere-Keyword-Tabellen. Die Default-Konfig = die bisherigen
+   Konstanten (⇒ ohne Änderung identische Ergebnisse, per Golden-Master verifiziert).
 
 ---
 
@@ -86,7 +91,7 @@ Austritt (und wäre manipulierbar). Daher:
 - `PersonDok.OrgTyp/OrgId` wird **nicht** zur Zuordnung genutzt (laut Modell „lose"/unzuverlässig) — die
   Bündelung läuft robust über die Mitgliedschaft.
 
-### S2 — Organisation & Reichweite — **Cap 25**
+### S2 — Organisation & Reichweite — **Cap 22**
 
 Größe + ausdifferenzierte Struktur + kriminelle Infrastruktur = handlungsfähige, schwer zerschlagbare
 Organisation. Nur Vorhandensein/Sättigung, **nie** Freitext-Mengen (die `Menge`-Felder sind unparsebarer
@@ -94,18 +99,19 @@ Freitext wie „ca. 20").
 
 ```
 groesse     = max( GeschaetzteMitgliederzahl ?? 0, aktiveMitgliederCount )
-groessePkt  = 12 · ( 1 − exp(−groesse / 15) )                                   // max 12
+groessePkt  = 10 · ( 1 − exp(−groesse / 15) )                                   // max 10
 strukturPkt = (Raenge ≥ 3 ? 3 : Raenge) + (aktiveLeitung > 0 ? 2 : 0)
             + (Anwesen.Trim() ≠ "" ? 1 : 0)                                     // max 6
-waffenPkt   = 4 · ( 1 − exp(−distinctWaffen / 3) )                              // max 4; distinct, getrimmt, nicht-leer
+waffenPkt   = 3 · ( 1 − exp(−distinctWaffen / 3) )                              // max 3; distinct, getrimmt, nicht-leer
 infraPkt    = 3 · ( 1 − exp(−(2·Drogenrouten + Lagerbestand) / 4) )            // max 3
 
-S2 = min( 25, groessePkt + strukturPkt + waffenPkt + infraPkt )
+S2 = min( 22, groessePkt + strukturPkt + waffenPkt + infraPkt )                 // Sub-Caps 10+6+3+3 = 22
 ```
 `distinct`+`Trim` schließt den „+1 durch 50 leere/Whitespace-Einträge"-Exploit. **Alle** „nicht-leer"-Tests
-(auch `Anwesen`) trimmen Whitespace.
+(auch `Anwesen`) trimmen Whitespace. Die Komponenten-Sub-Caps müssen exakt auf `Cap S2` summieren (sonst toter
+`Math.Min`-Bereich).
 
-### S3 — Konflikt & Bündnis — **Cap 20**
+### S3 — Konflikt & Bündnis — **Cap 15**
 
 Aktive Revierkonflikte = akute Gewaltlage; Bündnisse = vergrößerte Schlagkraft. Nur **manuelle**
 Verknüpfungen (`Automatisch == false`), damit System-„Fraktionskollege"-Sternkanten nicht zählen.
@@ -115,16 +121,25 @@ konflikte  = COUNT Verknuepfung( Art == Konflikt(1), !Automatisch, !IstGeloescht
 buendnisse = COUNT Verknuepfung( Art == Buendnis(2),  !Automatisch, !IstGeloescht, inzident zur Fraktion )
                                                        // inzident = (VonTyp=Fraktion ∧ VonId=Id) ∨ (NachTyp=Fraktion ∧ NachId=Id)
 roh = 2.0·konflikte + 1.0·buendnisse
-S3  = 20 · ( 1 − exp(−roh / 4) )
+S3  = 15 · ( 1 − exp(−roh / 4) )
 ```
 
-> **`Inhalt = S1 + S2 + S3 ∈ [0,100]`** (Caps 55+25+20). Keine Reskalierung nötig.
+### S4 — Netzwerk-Zentralität — **Cap 8** (kleiner Verstärker)
 
-> **Netzwerk-Zentralität bewusst auf V2 verschoben.** War der kleinste Term, hätte eine neue Degree-API
-> gebraucht (`GraphService.GradZaehlen` ist `private static`, `GetGraphAsync` braucht `ClaimsPrincipal` +
-> 250-Knoten-Deckelung → für einen Batch-Sweep ungeeignet) **und** dieselben Konflikt-Kanten wie S3 erneut
-> gezählt (Doppelzählung). Weglassen macht V1 einfacher *und* sauberer. V2: eigener leichter Degree-Count
-> nur aus Standard-Kanten (ohne Konflikt/Bündnis) + Mitgliederstern, mit 10-Min-Cache.
+Wie zentral die Fraktion im allgemeinen Beziehungsnetz ist (über *manuelle Standard*-Verknüpfungen zu Personen,
+Operationen, Vorgängen … — **ohne** Konflikt/Bündnis, die S3 abdeckt, und **ohne** Mitgliederstern, der in S2
+steckt). Eigener schlanker `COUNT` (nicht `GraphService`: dessen `GradZaehlen` ist `private static`,
+`GetGraphAsync` braucht `ClaimsPrincipal` + 250-Knoten-Deckelung → für einen Batch-Sweep ungeeignet).
+
+```
+grad = COUNT Verknuepfung( Art == Standard(0), !Automatisch, !IstGeloescht, inzident zur Fraktion )
+S4   = 8 · ( 1 − exp(−grad / 4) )
+```
+`Art == Standard` hält S4 **disjunkt zu S3** (Konflikt/Bündnis); `!Automatisch` ist defensiv (persistierte
+Auto-Kanten sind Person↔Person, nie fraktions-inzident). Da S4 von Standard-Kanten abhängt, recomputed
+`VerknuepfungService` jetzt bei **jeder** manuellen Verknüpfung mit Fraktionsbeteiligung (nicht nur Konflikt/Bündnis).
+
+> **`Inhalt = S1 + S2 + S3 + S4 ∈ [0,100]`** (Caps 55+22+15+8). Keine Reskalierung nötig.
 
 ---
 
@@ -223,29 +238,40 @@ noch nicht getriagte, aber hochaktive Gang — operativ sichtbar, ohne den Score
 - Aktivitäten: Raub (vor 5 T), Geiselnahme (vor 40 T), Schießerei (vor 120 T):
   `aktHeat = 2.0·0.962 + 3.0·0.735 + 2.0·0.397 = 4.92`.
 - 2 Mitglieder mit je 1 Dok „Erschossen" vor ~30 T (`decay 0.794`): `dokHeat = 2·min(8, 2.0·0.794) = 3.18`.
-  `roh = 4.92 + 0.6·3.18 = 6.83` → **S1 = 55·(1−e^−1.138) = 37.4**.
-- Organisation: ~22 Mitglieder (9.2) + Struktur 6 + 5 Waffenarten (3.2) + 1 Route (1.2) → **S2 = 19.6**.
-- 2 Konflikte + 1 Bündnis (`roh = 5`) → **S3 = 20·(1−e^−1.25) = 14.3**.
-- `Inhalt = 37.4 + 19.6 + 14.3 = 71.3`.
-- Einstufung **Verdachtsfall** → `Score = 50 + 50·0.713 = 86` → **GefaehrdungsStufe.Kritisch**, Konfidenz ~85 %.
-- UI: „Bedrohungs-Score **86** (Kritisch) · Konfidenz 85 %" — Treiber: Aktivitäts-Heat +37 · Organisation +20
-  · Konflikte +14, angehoben ins Verdachtsfall-Band (≥50).
+  `roh = 4.92 + 0.6·3.18 = 6.83` → **S1 = 55·(1−e^−1.138) = 37.4** (Cap 55 unverändert).
+- Organisation (Cap 22): ~22 Mitglieder (7.7) + Struktur 6 + 5 Waffenarten (2.4) + 1 Route (1.2) → **S2 = 17.3**.
+- 2 Konflikte + 1 Bündnis (`roh = 5`) → **S3 = 15·(1−e^−1.25) = 10.7**.
+- 5 sonstige (Standard-)Verknüpfungen → **S4 = 8·(1−e^−1.25) = 5.7**.
+- `Inhalt = 37.4 + 17.3 + 10.7 + 5.7 = 71.1`.
+- Einstufung **Verdachtsfall** → `Score = 50 + 50·0.711 = 86` → **GefaehrdungsStufe.Kritisch**, Konfidenz ~85 %.
+- UI-Treiber: Aktivitäts-Heat +37 · Organisation +17 · Konflikte +11 · Netzwerk +6, angehoben ins Verdachtsfall-Band (≥50).
 
-Sanity-Check der Verteilung (Band-Projektion verhindert Kollaps): Verdachtsfall mit Inhalt 10 → 55 (Hoch),
-mit Inhalt 40 → 70 (Hoch), mit Inhalt 71 → 86 (Kritisch). Unbekannt mit Inhalt 71 → 71 (Hoch), mit 80 →
-Kritisch. → gute Binnen-Differenzierung in jeder Klasse.
+Sanity-Check (Band-Projektion verhindert Kollaps): Vagos **ohne** Standard-Kanten (grad 0) → Inhalt 65.4 →
+Score **83** (weiter Kritisch); die 5 Standard-Kanten heben es auf **86**. Verdachtsfall mit Inhalt 10 → 55
+(Hoch), mit 40 → 70 (Hoch). Unbekannt mit Inhalt 71 → 71 (Hoch), mit 80 → Kritisch. → gute Binnen-Differenzierung.
 
 ---
 
-## 10. Zentrale Konstanten (hartkodiert, eine Stelle — kein Admin-UI)
+## 10. Parameter (admin-einstellbar) & fixe Anker
 
-`BedrohungsScoreKonstanten`:
-- Halbwertszeit **90 Tage** · S1-Sättigungs-Nenner **6** · Pro-Person-Dok-Cap **8** · `0.6`-Gewicht dokHeat.
-- Caps **55 / 25 / 20** · Sockel **0 / 12 / 50 / 75** · Triage-Schwelle **50** · Konfidenz-Frische **180 Tage**.
-- `artGewicht`-Tabelle (schwer/mittel/leicht) · `ausgangGewicht`-Tabelle.
+Alle numerischen Stellschrauben liegen in **`BedrohungsScoreKonfiguration`** (Default = die unten genannten
+Werte) und sind über **`/admin/bedrohungs-score`** editierbar (persistiert als JSON in `BedrohungsScoreKonfig`,
+10-Min-Cache via `IBedrohungsScoreKonfigService`, Führung-only, mit Summen-Validierung + „alle neu berechnen").
+
+**Default-Werte:**
+- Geteilt: Halbwertszeit **90 Tage** · Konfidenz-Frische **180 Tage** · Triage-Schwelle **50** ·
+  `artGewicht` schwer/mittel/leicht **3/2/1** · `ausgangGewicht` Erschossen/Spritze/LäuftNoch/Entlassen **2/1.5/1.2/1**.
+- Fraktion: Caps **S1 55 / S2 22 / S3 15 / S4 8** (= 100); S1-Nenner 6, Pro-Mitglied-Dok-Cap 8, dokHeat-Gewicht 0.6;
+  S2-Sub Größe 10 / (Ränge-max 3 + Leitung 2 + Anwesen 1) / Waffen 3 / Infra 3 = 22; S3-Nenner 4, S4-Nenner 4.
+- Person: Caps **P1 40 / P2 22 / P3 18 / P4 12 / P5 8** (= 100); P2-Sub Waffen 14 + Flüchtig 8 = 22;
+  Nenner P1 4 / P3 3 / P4 4 / P5 4; Person-Waffen-Nenner 2; Beziehungs-Gewichte Feind 2 / Verbündeter 1 / GP 1 / Leitung 1.5.
+
+**Fix (nie editierbar):** Sockel **0 / 12 / 50 / 75** (`BedrohungsScoreKonstanten.Sockel`), Stufen-Schwellen
+**25/50/75** (`GefaehrdungsStufeLogic`), Schwere-Keyword-Tabellen, die Sättigungsformel. **Validierung erzwingt:**
+Caps je Subjekt = 100, S2-Sub = Cap S2, P2-Sub = Cap P2, Nenner > 0, Schwere monoton ≥ 1.
 
 **Kalibrier-Hinweis:** nach dem ersten Echtdaten-Lauf einmal so justieren, dass die 2–3 unstrittig
-gefährlichsten Fraktionen ≥75 erreichen und die Verteilung streut (nicht alle im Mittelfeld); danach einfrieren.
+gefährlichsten Ziele ≥75 erreichen und die Verteilung streut; danach einfrieren.
 
 ---
 
@@ -301,10 +327,20 @@ Schema wird beim Start automatisch via `db.Database.MigrateAsync()` angewandt (`
 
 ## 12. Abgrenzung / später (V2+)
 
-- **Person-Score:** gleiche 3-Schicht-Architektur, Eingangsfelder Person.Doks / Observationen /
-  PersonBeziehung (Feind/Verbündeter) / Lebensstatus (Flüchtig); 4 neue Person-Spalten + Migration.
-  **Kein** Person→Fraktion→Person-Kontext-Bonus (vermeidet Doppelzählung). Datenreichtum
-  (Aliase/Fahrzeuge/Telefone) nur in die Person-Konfidenz, nie in den Score.
-- **Netzwerk-Zentralität (Teil-Score):** eigener leichter Degree-Count (nur Standard-Kanten + Mitgliederstern)
-  + 10-Min-Cache.
+- **Netzwerk-Zentralität (Teil-Score S4):** ✅ **umgesetzt** (Variante A: reiner Count manueller Standard-Kanten,
+  Cap 8, Nenner 4; disjunkt zu S3, orthogonal zu S2; eigener schlanker `COUNT` ohne `GraphService`; Recompute
+  bei jeder manuellen Verknüpfung mit Fraktionsbeteiligung). Bewusst **kein** Mitgliederstern (wäre Größen-Dublette
+  zu S2) und **keine** Typvielfalt-Gewichtung (ungewichteter Count hält `Berechne` an einer Zahl deterministisch/testbar).
+- **Person-Score:** ✅ **umgesetzt** (`BerechnePerson`, gleiche 3-Schicht-Architektur). Teilscores
+  **P1 Maßnahmen-Heat** (Person.Doks, Cap 40) · **P2 Bewaffnung & Eskalation** (Waffen + Flüchtig, Cap 22) ·
+  **P3 Observations-Heat** (laufend wiegt mehr, beide zeit-abklingend, Cap 18) · **P4 Soziale Gefahr**
+  (PersonBeziehung Feind/Verbündeter/GP + Leitungsrollen, Cap 12) · **P5 Netzwerk-Zentralität** (manuelle
+  Standard-Verknüpfungen, Cap 8) = 100. Lebensstatus on-read via `LebensstatusLogic.Effektiv`: **Tot
+  statusneutral** (temporär; Respawn-Hinweis on-read in der UI, **nicht** im JSON), **Flüchtig → P2-Bonus**.
+  **Kein** Person→Fraktion→Person-Kontext-Bonus (azyklisch). Datenreichtum (Aliase/Fahrzeuge/Telefone/Orte) nur
+  in die Person-Konfidenz, nie in den Score. Recompute-Trigger: PersonService / ObservationService /
+  BeziehungService / PersonDokService (zusätzlich zur Fraktion) / VerknuepfungService (Person-Zweig) /
+  Mitglieder-Leitung in Fraktion/Gruppe/Partei-Service / nächtlicher Sweep.
 - **Statistik-Reports/Export + automatischer Lagebericht** (Rest von Block D) — eigener Plan.
+- **Optional/offen:** Person-Verteilung im Dashboard (`GetPersonenNachGefaehrdungAsync`) – Kern-UI (Tab + Liste)
+  steht, die Dashboard-Kachel ist noch nicht ergänzt. P3 „laufend-Term" und Caps nach Echtdaten kalibrieren.

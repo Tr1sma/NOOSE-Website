@@ -18,7 +18,7 @@ using NOOSE_Website.Models.Querschnitt;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IVerknuepfungService" />
-public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IVerknuepfungService
+public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory, IBedrohungsScoreService bedrohung) : IVerknuepfungService
 {
     public async Task<List<VerknuepfungAnzeige>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, bool istFuehrung, string? meId, VerknuepfungArt? art = null, CancellationToken cancellationToken = default)
     {
@@ -225,6 +225,32 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
             Art = art,
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        // Jede manuelle Verknüpfung mit Fraktionsbeteiligung wirkt auf deren Score: Konflikt/Bündnis auf S3,
+        // Standard auf S4 (Netzwerk-Zentralität) → neu berechnen (no-op, falls keine Seite eine Fraktion ist).
+        await BedrohungNeuBerechnenAsync(vonTyp, vonId, nachTyp, nachId, cancellationToken);
+    }
+
+    /// <summary>Berechnet den Bedrohungs-Score jeder an der Verknüpfung beteiligten Fraktion neu (no-op für Nicht-Fraktionen).</summary>
+    private async Task BedrohungNeuBerechnenAsync(string vonTyp, string vonId, string nachTyp, string nachId, CancellationToken cancellationToken)
+    {
+        if (vonTyp == nameof(Fraktion))
+        {
+            await bedrohung.NeuBerechnenAsync(vonId, cancellationToken);
+        }
+        if (nachTyp == nameof(Fraktion))
+        {
+            await bedrohung.NeuBerechnenAsync(nachId, cancellationToken);
+        }
+        // Person-inzidente Standard-Verknüpfungen fließen in den Person-Score (P5).
+        if (vonTyp == nameof(Person))
+        {
+            await bedrohung.NeuBerechnenPersonScoreAsync(vonId, cancellationToken);
+        }
+        if (nachTyp == nameof(Person))
+        {
+            await bedrohung.NeuBerechnenPersonScoreAsync(nachId, cancellationToken);
+        }
     }
 
     public async Task EntfernenAsync(string verknuepfungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -237,5 +263,8 @@ public class VerknuepfungService(IDbContextFactory<AppDbContext> dbFactory) : IV
         }
         db.Verknuepfungen.Remove(v); // Soft-Delete via Interceptor
         await db.SaveChangesAsync(cancellationToken);
+
+        // Entfernte manuelle Verknüpfung wirkt auf S3 (Konflikt/Bündnis) oder S4 (Standard) der beteiligten Fraktionen.
+        await BedrohungNeuBerechnenAsync(v.VonTyp, v.VonId, v.NachTyp, v.NachId, cancellationToken);
     }
 }

@@ -19,6 +19,7 @@ using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Ankuendigungen;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
+using NOOSE_Website.Infrastructure.Bedrohung;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Freigaben;
@@ -126,7 +127,7 @@ builder.Services.AddIdentityCore<Agent>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-// NOOSE-Claims (Dienstgrad/Status/TRU/Admin) ins Cookie schreiben.
+// NOOSE-Claims (Dienstgrad/Status/TRU/HRB/Admin) ins Cookie schreiben.
 builder.Services.AddScoped<IUserClaimsPrincipalFactory<Agent>, AgentClaimsPrincipalFactory>();
 
 // Kill-Switch: SecurityStamp wird oft revalidiert → Sperre greift praktisch sofort. Identisch zum
@@ -210,6 +211,12 @@ builder.Services.AddScoped<IOrganigrammService, OrganigrammService>();
 // Phase 8 – Block C: Termin-Akte (CRUD) + Kalender-Aggregation (rein lesend).
 builder.Services.AddScoped<ITerminService, TerminService>();
 builder.Services.AddScoped<IKalenderService, KalenderService>();
+// Phase 8 – Block D: automatischer Bedrohungs-Score (Fraktionen + Personen) – berechnet & persistiert (Algorithmus „EHK-Score").
+// Konfig-Service ZUERST registrieren (Abhängigkeitsrichtung Score → Konfig; kein Zyklus).
+builder.Services.AddScoped<IBedrohungsScoreKonfigService, BedrohungsScoreKonfigService>();
+builder.Services.AddScoped<IBedrohungsScoreService, BedrohungsScoreService>();
+// Täglicher Sweep gegen die Zeit-Decay-Drift des Scores (+ seedet beim ersten Start alle Fraktionen).
+builder.Services.AddHostedService<BedrohungsScoreSweepDienst>();
 // Phase 3c: globale Suche + gespeicherte Suchen.
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>();

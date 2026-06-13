@@ -14,7 +14,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IFraktionService" />
-public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService, IFraktionFotoStorageService fotoStorage) : IFraktionService
+public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService, IFraktionFotoStorageService fotoStorage, IBedrohungsScoreService bedrohung) : IFraktionService
 {
     public async Task<List<Fraktion>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -179,6 +179,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         }
 
         await tx.CommitAsync(cancellationToken);
+        // Bedrohungs-Score initial berechnen (Einstufung/Mitglieder/Bestände liegen jetzt vor).
+        await bedrohung.NeuBerechnenAsync(fraktion.Id, cancellationToken);
         return fraktion;
     }
 
@@ -221,6 +223,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         await VorschlaegeVormerkenAsync(db, fraktion, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+        // Stammdaten (Mitgliederzahl/Anwesen/Staatsfraktion/Bestände) wirken auf den Score.
+        await bedrohung.NeuBerechnenAsync(id, cancellationToken);
     }
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -266,6 +270,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         fraktion.Einstufung = neu;
         db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Fraktion), id, neu, begruendung, handelnder));
         await db.SaveChangesAsync(cancellationToken);
+        // Einstufung bestimmt das Mindest-Band des Scores → neu berechnen.
+        await bedrohung.NeuBerechnenAsync(id, cancellationToken);
     }
 
     public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
@@ -327,6 +333,10 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         await db.SaveChangesAsync(cancellationToken);
         await FraktionskollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        // Mitgliederzahl/Leitung wirken auf den Score (S2) und das neue Mitglied bringt seinen Maßnahmen-Heat ein.
+        await bedrohung.NeuBerechnenAsync(fraktionId, cancellationToken);
+        // Mitgliedschaft/Leitungsrolle wirkt auf den Person-Score (P4).
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     /// <summary>
@@ -348,6 +358,9 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         mitglied.Rang = Leer(rang);
         mitglied.IstLeitung = istLeitung;
         await db.SaveChangesAsync(cancellationToken);
+        // Leitungs-Flag fließt in S2 (Struktur) der Fraktion und in P4 (Leitungsrolle) der Person → beide neu berechnen.
+        await bedrohung.NeuBerechnenAsync(mitglied.FraktionId, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(mitglied.PersonId, cancellationToken);
     }
 
     public async Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -363,6 +376,7 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         var personId = mitglied.PersonId;
+        var fraktionId = mitglied.FraktionId;
         // Austritt + Kollegen-Verknüpfungen nachführen in EINER Transaktion (kein Zwischenzustand).
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         // Soft-Delete (Join-Entity ist ISoftDelete): der Interceptor setzt GeloeschtAm (= Austrittsdatum) statt
@@ -372,6 +386,10 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         await db.SaveChangesAsync(cancellationToken);
         await FraktionskollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        // Austritt wirkt auf S2 (Größe/Leitung); der Heat des Mitglieds bleibt austritts-stabil erhalten.
+        await bedrohung.NeuBerechnenAsync(fraktionId, cancellationToken);
+        // Austritt ändert Mitgliedschaften/Leitungsrollen der Person → Person-Score (P4) neu berechnen.
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     public async Task<List<FraktionAgent>> GetAgentenAsync(string fraktionId, CancellationToken cancellationToken = default)
@@ -554,6 +572,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
             Ort = Leer(eingabe.Ort),
         });
         await db.SaveChangesAsync(cancellationToken);
+        // Aktivität = datierter Vorfall → Kern des S1-Heat → neu berechnen.
+        await bedrohung.NeuBerechnenAsync(fraktionId, cancellationToken);
     }
 
     public async Task AktivitaetAendernAsync(string aktivitaetId, AktivitaetEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -578,6 +598,8 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         aktivitaet.Beschreibung = Leer(eingabe.Beschreibung);
         aktivitaet.Ort = Leer(eingabe.Ort);
         await db.SaveChangesAsync(cancellationToken);
+        // Art/Zeitpunkt einer Aktivität wirken auf S1 → neu berechnen.
+        await bedrohung.NeuBerechnenAsync(aktivitaet.FraktionId, cancellationToken);
     }
 
     public async Task AktivitaetEntfernenAsync(string aktivitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -592,9 +614,12 @@ public class FraktionService(IDbContextFactory<AppDbContext> dbFactory, IAktenze
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
+        var fraktionId = aktivitaet.FraktionId;
         // Soft-Delete via Interceptor (bleibt als Verlaufseintrag im Papierkorb).
         db.FraktionAktivitaeten.Remove(aktivitaet);
         await db.SaveChangesAsync(cancellationToken);
+        // Entfernter Vorfall fällt aus S1 → neu berechnen.
+        await bedrohung.NeuBerechnenAsync(fraktionId, cancellationToken);
     }
 
     public async Task<List<string>> GetAktivitaetArtenAsync(CancellationToken cancellationToken = default)

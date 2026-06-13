@@ -9,7 +9,7 @@
         <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Large" />
         <div>
             <MudText Typo="Typo.h5">Organigramm</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">NOOSE-Struktur: Dienstgrade, TRU und Taskforce-Besetzung.</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">NOOSE-Struktur: Dienstgrade, TRU, HRB und Taskforce-Besetzung.</MudText>
         </div>
     </MudStack>
 
@@ -51,6 +51,10 @@
                                             {
                                                 <span class="org-card-badge">TRU</span>
                                             }
+                                            @if (a.IstHRB)
+                                            {
+                                                <span class="org-card-badge org-card-badge--hrb">HRB</span>
+                                            }
                                         </a>
                                     </li>
                                 }
@@ -73,6 +77,27 @@
                 </MudStack>
                 <MudGrid Spacing="2">
                     @foreach (var a in _daten.Tru)
+                    {
+                        <MudItem xs="12" sm="6" md="4" lg="3">
+                            <AgentKachel Agent="a" DarfKlarname="_darfKlarname" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudStack>
+        }
+
+        @* ---- HRB ---- *@
+        @if (_daten.Hrb.Count > 0)
+        {
+            <MudDivider />
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Info" />
+                    <MudText Typo="Typo.h6">Human Resources Branch (HRB)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">· @_daten.Hrb.Count rangübergreifend</MudText>
+                </MudStack>
+                <MudGrid Spacing="2">
+                    @foreach (var a in _daten.Hrb)
                     {
                         <MudItem xs="12" sm="6" md="4" lg="3">
                             <AgentKachel Agent="a" DarfKlarname="_darfKlarname" />

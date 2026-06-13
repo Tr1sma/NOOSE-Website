@@ -142,6 +142,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- Phase 7: Aktualitäts-Ampel (Schwellwerte je Aktentyp) + Wiedervorlagen ----
     public DbSet<AktualitaetsSchwelle> AktualitaetsSchwellen => Set<AktualitaetsSchwelle>();
+    public DbSet<BedrohungsScoreKonfig> BedrohungsScoreKonfigs => Set<BedrohungsScoreKonfig>();
     public DbSet<Wiedervorlage> Wiedervorlagen => Set<Wiedervorlage>();
 
     // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----
@@ -189,6 +190,8 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(p => p.Aktenzeichen).HasMaxLength(32).IsRequired();
             b.Property(p => p.Name).HasMaxLength(200).IsRequired();
+            // Bedrohungs-Score-Aufschlüsselung (Phase 8/Block D): JSON beliebiger Länge → longtext (wie bei Fraktion).
+            b.Property(p => p.BedrohungsDetailJson).HasColumnType("longtext");
             b.HasIndex(p => p.Aktenzeichen).IsUnique();
             b.HasIndex(p => p.Name);
             b.HasIndex(p => p.IstVerschlusssache);
@@ -388,6 +391,14 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(s => s.AktenTyp).HasMaxLength(64);
         });
 
+        // ---- Phase 8/Block D: admin-einstellbare Bedrohungs-Score-Konfiguration (eine Singleton-Zeile, JSON) ----
+        modelBuilder.Entity<BedrohungsScoreKonfig>(b =>
+        {
+            b.HasKey(k => k.Id);
+            b.Property(k => k.Id).HasMaxLength(32);
+            b.Property(k => k.Json).HasColumnType("longtext");
+        });
+
         modelBuilder.Entity<Wiedervorlage>(b =>
         {
             b.Property(w => w.EntitaetTyp).HasMaxLength(128);
@@ -469,6 +480,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.Erkennungsfarbe).HasMaxLength(32);
             b.Property(f => f.Ziele).HasMaxLength(2000);
             b.Property(f => f.Beschreibung).HasMaxLength(2000);
+            // Bedrohungs-Score-Aufschlüsselung (Phase 8/Block D): JSON beliebiger Länge → longtext (wie CustomFeldWert.Wert).
+            b.Property(f => f.BedrohungsDetailJson).HasColumnType("longtext");
             b.HasIndex(f => f.Aktenzeichen).IsUnique();
             b.HasIndex(f => f.Name);
             b.HasIndex(f => f.IstVerschlusssache);

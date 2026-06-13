@@ -44,6 +44,9 @@ public static class AgentPrincipalExtensions
     public static bool IstTRU(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IstTRU), "true", StringComparison.OrdinalIgnoreCase);
 
+    public static bool IstHRB(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IstHRB), "true", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>TeamLeitung-Marker (FiveM-Aufsicht) aus dem Claim. Für sich genommen keine Rolle – erst in
     /// Kombination mit dem fehlenden Admin-Haken ergibt sich die Nur-Lese-Aufsicht (<see cref="IstNurLeser"/>).</summary>
     public static bool IstTeamLeitung(this ClaimsPrincipal user)

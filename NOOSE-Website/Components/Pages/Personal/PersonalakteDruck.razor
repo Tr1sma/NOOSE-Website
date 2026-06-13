@@ -40,6 +40,10 @@ else
                     {
                         <tr><th>Einheit</th><td>TRU (Tactical Response Unit)</td></tr>
                     }
+                    @if (_agent.IstHRB)
+                    {
+                        <tr><th>Einheit</th><td>HRB (Human Resources Branch)</td></tr>
+                    }
                     <tr><th>Registriert am</th><td>@_agent.RegistriertAm.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
                 </tbody>
             </table>

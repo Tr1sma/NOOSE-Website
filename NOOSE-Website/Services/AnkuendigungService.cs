@@ -23,6 +23,7 @@ public class AnkuendigungService(
         var meId = handelnder.GetAgentId();
         var istFuehrung = handelnder.IstFuehrung();
         var istTRU = handelnder.IstTRU();
+        var istHRB = handelnder.IstHRB();
         var meinDienstgrad = handelnder.GetDienstgrad();
 
         // Taskforces des Betrachters – für die Sichtbarkeit der Taskforce-Zielgruppe (flaches WHERE FK IN).
@@ -38,6 +39,7 @@ public class AnkuendigungService(
                 || a.Zielgruppe == AnkuendigungZielgruppe.AlleAktiven
                 || (a.Zielgruppe == AnkuendigungZielgruppe.Taskforce && a.ZielId != null && meineTaskforces.Contains(a.ZielId))
                 || (a.Zielgruppe == AnkuendigungZielgruppe.TruEinheit && istTRU)
+                || (a.Zielgruppe == AnkuendigungZielgruppe.HrbEinheit && istHRB)
                 || (a.Zielgruppe == AnkuendigungZielgruppe.AbDienstgrad && meinDienstgrad != null
                     && a.MinDienstgrad != null && meinDienstgrad >= a.MinDienstgrad))
             .OrderByDescending(a => a.Wichtig)
@@ -118,7 +120,7 @@ public class AnkuendigungService(
 
         // Sichtbarkeit: Verwalter (Führung/Verfasser) ODER Empfänger der Zielgruppe.
         if (!darfVerwalten
-            && !await IstEmpfaengerAsync(db, a, meId, handelnder.IstTRU(), handelnder.GetDienstgrad(), cancellationToken))
+            && !await IstEmpfaengerAsync(db, a, meId, handelnder.IstTRU(), handelnder.IstHRB(), handelnder.GetDienstgrad(), cancellationToken))
         {
             return null;
         }
@@ -352,6 +354,7 @@ public class AnkuendigungService(
         query = a.Zielgruppe switch
         {
             AnkuendigungZielgruppe.TruEinheit => query.Where(u => u.IstTRU),
+            AnkuendigungZielgruppe.HrbEinheit => query.Where(u => u.IstHRB),
             AnkuendigungZielgruppe.AbDienstgrad => query.Where(u => u.Dienstgrad != null && u.Dienstgrad >= a.MinDienstgrad),
             AnkuendigungZielgruppe.Taskforce => query.Where(u => db.TaskforceAgenten.Any(ta => ta.TaskforceId == a.ZielId && ta.AgentId == u.Id)),
             _ => query, // AlleAktiven
@@ -361,7 +364,7 @@ public class AnkuendigungService(
 
     /// <summary>Prüft, ob der Aufrufer zum Empfängerkreis einer Ankündigung gehört (Brett-/Detail-Sichtbarkeit).</summary>
     private static async Task<bool> IstEmpfaengerAsync(AppDbContext db, Ankuendigung a, string? meId, bool istTRU,
-        Dienstgrad? meinDienstgrad, CancellationToken cancellationToken)
+        bool istHRB, Dienstgrad? meinDienstgrad, CancellationToken cancellationToken)
     {
         switch (a.Zielgruppe)
         {
@@ -369,6 +372,8 @@ public class AnkuendigungService(
                 return true;
             case AnkuendigungZielgruppe.TruEinheit:
                 return istTRU;
+            case AnkuendigungZielgruppe.HrbEinheit:
+                return istHRB;
             case AnkuendigungZielgruppe.AbDienstgrad:
                 return meinDienstgrad != null && a.MinDienstgrad != null && meinDienstgrad >= a.MinDienstgrad;
             case AnkuendigungZielgruppe.Taskforce:
@@ -386,6 +391,7 @@ public class AnkuendigungService(
         AnkuendigungZielgruppe.Taskforce => zielId != null && taskforceNamen.TryGetValue(zielId, out var n)
             ? $"Taskforce: {n}" : "Taskforce",
         AnkuendigungZielgruppe.TruEinheit => "TRU-Einheit",
+        AnkuendigungZielgruppe.HrbEinheit => "HRB-Einheit",
         AnkuendigungZielgruppe.AbDienstgrad => $"Ab {DienstgradAnzeige.Name(minDienstgrad)}",
         _ => "—",
     };

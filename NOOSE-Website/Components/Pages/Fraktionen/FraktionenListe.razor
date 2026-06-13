@@ -59,6 +59,22 @@ else
                     <EinstufungBadge Wert="context.Item.Einstufung" />
                 </CellTemplate>
             </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Gefährdung" SortBy="x => x.BedrohungsScore ?? -1" InitialDirection="SortDirection.Descending">
+                <CellTemplate>
+                    @if (context.Item.BedrohungsScore is { } gscore)
+                    {
+                        <MudTooltip Text="@($"Bedrohungs-Score {gscore}/100" + (context.Item.BedrohungsKonfidenz is { } gk ? $" · Konfidenz {gk} %" : ""))">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@GefahrFarbe(context.Item.Gefaehrdung)">
+                                @GefaehrdungsStufeLogic.Name(context.Item.Gefaehrdung)
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
             <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IstVerschlusssache">
                 <CellTemplate>
                     @if (context.Item.IstVerschlusssache)
@@ -116,6 +132,9 @@ else
                 Mitgliederzahl = f.Mitglieder.Count(m => m.Person is not null && (darfVsLesen || !m.Person.IstVerschlusssache)),
                 TitelbildFotoId = f.Fotos.FirstOrDefault(x => x.IstTitelbild)?.Id,
                 Einstufung = f.Einstufung,
+                BedrohungsScore = f.IstStaatsfraktion ? null : f.BedrohungsScore,
+                BedrohungsKonfidenz = f.BedrohungsKonfidenz,
+                Gefaehrdung = GefaehrdungsStufeLogic.Aus(f.BedrohungsScore),
                 IstVerschlusssache = f.IstVerschlusssache,
                 AktualisiertUtc = referenzUtc,
                 Aktualisiert = referenzUtc.ToLocalTime(),
@@ -140,6 +159,15 @@ else
 
     private void Oeffnen(FraktionZeile z) => Nav.NavigateTo($"/fraktionen/{z.Id}");
 
+    private static Color GefahrFarbe(GefaehrdungsStufe s) => s switch
+    {
+        GefaehrdungsStufe.Kritisch => Color.Error,
+        GefaehrdungsStufe.Hoch => Color.Error,
+        GefaehrdungsStufe.Mittel => Color.Warning,
+        GefaehrdungsStufe.Niedrig => Color.Info,
+        _ => Color.Default,
+    };
+
     private sealed class FraktionZeile
     {
         public string Id { get; set; } = string.Empty;
@@ -149,6 +177,9 @@ else
         public int Mitgliederzahl { get; set; }
         public string? TitelbildFotoId { get; set; }
         public Einstufung Einstufung { get; set; }
+        public int? BedrohungsScore { get; set; }
+        public int? BedrohungsKonfidenz { get; set; }
+        public GefaehrdungsStufe Gefaehrdung { get; set; }
         public bool IstVerschlusssache { get; set; }
         public DateTime AktualisiertUtc { get; set; }
         public DateTime Aktualisiert { get; set; }

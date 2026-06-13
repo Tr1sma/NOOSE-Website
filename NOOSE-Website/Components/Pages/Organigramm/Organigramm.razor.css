@@ -195,6 +195,11 @@
     color: var(--mud-palette-warning);
 }
 
+.org-card-badge--hrb {
+    border-color: var(--mud-palette-info);
+    color: var(--mud-palette-info);
+}
+
 @media print {
     .org-scroll {
         overflow: visible;

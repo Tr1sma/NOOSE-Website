@@ -184,6 +184,7 @@
         if (!string.IsNullOrWhiteSpace(dienstnummer)) teile.Add($"Nr. {dienstnummer}");
         teile.Add(DienstgradAnzeige.Name(user.GetDienstgrad()));
         if (user.IstTRU()) teile.Add("TRU");
+        if (user.IstHRB()) teile.Add("HRB");
         if (user.IstAdmin()) teile.Add("Admin");
         return string.Join(" · ", teile);
     }

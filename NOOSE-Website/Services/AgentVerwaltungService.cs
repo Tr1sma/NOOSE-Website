@@ -59,20 +59,21 @@ public class AgentVerwaltungService(
         return await leseDb.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
     }
 
-    public async Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, ClaimsPrincipal handelnder)
+    public async Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, bool istHRB, ClaimsPrincipal handelnder)
     {
         var agent = await GetOrThrow(agentId);
         var altRang = agent.Dienstgrad;
         agent.Status = AgentStatus.Aktiv;
         agent.Dienstgrad = dienstgrad;
         agent.IstTRU = istTRU;
+        agent.IstHRB = istHRB;
         agent.FreigegebenAm = DateTime.UtcNow;
         agent.FreigegebenVonId = handelnder.GetAgentId();
         agent.GesperrtGrund = null;
 
         VerlaufEintragHinzufuegen(agent.Id, altRang, dienstgrad, handelnder, "Erstmalige Freigabe");
         Audit(agent, AuditAktion.Geaendert, handelnder,
-            $"Freigegeben als {dienstgrad}{(istTRU ? " (TRU)" : "")}");
+            $"Freigegeben als {dienstgrad}{(istTRU ? " (TRU)" : "")}{(istHRB ? " (HRB)" : "")}");
         await Speichern(agent, neuerStamp: true);
 
         // Phase 6: den freigegebenen Agenten benachrichtigen (erscheint beim nächsten Login – der neue
@@ -247,6 +248,17 @@ public class AgentVerwaltungService(
         agent.IstTRU = istTRU;
 
         Audit(agent, AuditAktion.Geaendert, handelnder, istTRU ? "TRU-Flag gesetzt" : "TRU-Flag entfernt");
+        await Speichern(agent, neuerStamp: true);
+    }
+
+    public async Task HrbSetzenAsync(string agentId, bool istHRB, ClaimsPrincipal handelnder)
+    {
+        Berechtigung.VerlangeFuehrung(handelnder);
+
+        var agent = await GetOrThrow(agentId);
+        agent.IstHRB = istHRB;
+
+        Audit(agent, AuditAktion.Geaendert, handelnder, istHRB ? "HRB-Flag gesetzt" : "HRB-Flag entfernt");
         await Speichern(agent, neuerStamp: true);
     }
 

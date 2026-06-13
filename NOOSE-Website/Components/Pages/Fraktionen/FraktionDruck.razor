@@ -31,7 +31,7 @@ else
                         <tr><th>Art</th><td>@_fraktion.Art</td></tr>
                     }
                     <tr><th>Einstufung</th><td>@EinstufungAnzeige.Name(_fraktion.Einstufung)</td></tr>
-                    <tr><th>Gefährdung</th><td>@GefaehrdungsStufeLogic.Name(GefaehrdungsStufeLogic.Aus(_fraktion.BedrohungsScore))</td></tr>
+                    <tr><th>Gefährdung</th><td>@GefaehrdungAnzeigeText()</td></tr>
                     @if (_fraktion.IstStaatsfraktion)
                     {
                         <tr><th>Staatsfraktion</th><td>Ja</td></tr>
@@ -238,5 +238,25 @@ else
             await ZugriffsLog.LogAnsichtAsync(nameof(Fraktion), Id);
         }
         _laden = false;
+    }
+
+    /// <summary>Gefährdungsstufe inkl. Score-Zahl und Konfidenz (sofern berechnet) für die Druckansicht.</summary>
+    private string GefaehrdungAnzeigeText()
+    {
+        if (_fraktion is null)
+        {
+            return "—";
+        }
+        if (_fraktion.IstStaatsfraktion)
+        {
+            return "Ausgenommen (Staatsfraktion)";
+        }
+        var stufe = GefaehrdungsStufeLogic.Name(GefaehrdungsStufeLogic.Aus(_fraktion.BedrohungsScore));
+        if (_fraktion.BedrohungsScore is not { } score)
+        {
+            return stufe;
+        }
+        var konfidenz = _fraktion.BedrohungsKonfidenz is { } k ? $" · Konfidenz {k} %" : "";
+        return $"{stufe} (Score {score}{konfidenz})";
     }
 }

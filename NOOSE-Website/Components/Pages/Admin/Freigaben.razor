@@ -89,6 +89,7 @@ else
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.RegistriertAm)">Registriert</MudTableSortLabel></MudTh>
                 <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => (int)Auswahl(x.Id).Grad)">Dienstgrad</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Auswahl(x.Id).Tru)">TRU</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Auswahl(x.Id).Hrb)">HRB</MudTableSortLabel></MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -112,6 +113,9 @@ else
                 </MudTd>
                 <MudTd DataLabel="TRU">
                     <MudCheckBox T="bool" @bind-Value="Auswahl(context.Id).Tru" Color="Color.Primary" />
+                </MudTd>
+                <MudTd DataLabel="HRB">
+                    <MudCheckBox T="bool" @bind-Value="Auswahl(context.Id).Hrb" Color="Color.Info" />
                 </MudTd>
                 <MudTd DataLabel="Aktion" Style="text-align:right;">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
@@ -293,6 +297,7 @@ else
     {
         public Dienstgrad Grad { get; set; } = Dienstgrad.JuniorAgent;
         public bool Tru { get; set; }
+        public bool Hrb { get; set; }
     }
 
     private Auswahlzustand Auswahl(string agentId)
@@ -372,7 +377,7 @@ else
         var auswahl = Auswahl(agent.Id);
         try
         {
-            await AgentService.FreigebenAsync(agent.Id, auswahl.Grad, auswahl.Tru, _user);
+            await AgentService.FreigebenAsync(agent.Id, auswahl.Grad, auswahl.Tru, auswahl.Hrb, _user);
             Snackbar.Add($"{AnzeigeName(agent)} als {DienstgradAnzeige.Name(auswahl.Grad)} freigegeben.", Severity.Success);
         }
         catch (Exception ex)

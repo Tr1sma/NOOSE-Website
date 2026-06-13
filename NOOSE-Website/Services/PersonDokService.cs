@@ -11,7 +11,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonDokService" />
-public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPersonService personService) : IPersonDokService
+public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPersonService personService, IBedrohungsScoreService bedrohung) : IPersonDokService
 {
     public async Task<List<PersonDokAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -111,7 +111,11 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        return await ErstelleDokAsync(db, personId, eingabe, cancellationToken);
+        var dok = await ErstelleDokAsync(db, personId, eingabe, cancellationToken);
+        // Maßnahmen fließen in den Heat der Fraktionen der Person (S1) UND in den Person-Score selbst (P1).
+        await bedrohung.NeuBerechnenFuerPersonAsync(personId, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
+        return dok;
     }
 
     public async Task<PersonDok> ErstellenFuerNeuePersonAsync(string name, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -126,7 +130,10 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         // ist nach ErstellenAsync committet und wird unten in unserem Context frisch geladen.
         var person = await personService.ErstellenAsync(new PersonEingabe { Name = name.Trim() }, handelnder, cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await ErstelleDokAsync(db, person.Id, eingabe, cancellationToken);
+        var dok = await ErstelleDokAsync(db, person.Id, eingabe, cancellationToken);
+        await bedrohung.NeuBerechnenFuerPersonAsync(person.Id, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(person.Id, cancellationToken);
+        return dok;
     }
 
     public async Task<PersonDok> AktualisierenAsync(string dokId, PersonDokEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -167,6 +174,9 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
 
         // Dok + ggf. Person in einem SaveChanges → Audit setzt GeaendertAm/Von automatisch.
         await db.SaveChangesAsync(cancellationToken);
+        // Geänderter Ausgang/Zeitpunkt wirkt auf den Heat (S1) der Fraktionen der Person UND den Person-Score (P1).
+        await bedrohung.NeuBerechnenFuerPersonAsync(dok.PersonId, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(dok.PersonId, cancellationToken);
         return dok;
     }
 
@@ -275,9 +285,13 @@ public class PersonDokService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             dok.Person.TotBis = null;
         }
 
+        var personId = dok.PersonId;
         // Soft-Delete via Interceptor.
         db.PersonDoks.Remove(dok);
         await db.SaveChangesAsync(cancellationToken);
+        // Entfernte Maßnahme fällt aus dem Heat (S1) der Fraktionen der Person UND dem Person-Score (P1).
+        await bedrohung.NeuBerechnenFuerPersonAsync(personId, cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     private static string? Leer(string? s) => s.TrimToNull();

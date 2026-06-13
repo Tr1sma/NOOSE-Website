@@ -13,7 +13,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonengruppeService" />
-public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, IPersonService personService) : IPersonengruppeService
+public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, IPersonService personService, IBedrohungsScoreService bedrohung) : IPersonengruppeService
 {
     public async Task<List<Personengruppe>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -286,6 +286,8 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         await db.SaveChangesAsync(cancellationToken);
         await GruppenkollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        // Mitgliedschaft/Leitungsrolle wirkt auf den Person-Score (P4).
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     /// <summary>
@@ -307,6 +309,7 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         mitglied.Rolle = Leer(rolle);
         mitglied.IstLeitung = istLeitung;
         await db.SaveChangesAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(mitglied.PersonId, cancellationToken);
     }
 
     public async Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -329,6 +332,7 @@ public class PersonengruppeService(IDbContextFactory<AppDbContext> dbFactory, IA
         await db.SaveChangesAsync(cancellationToken);
         await GruppenkollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     public async Task<List<PersonengruppeAgent>> GetAgentenAsync(string gruppeId, CancellationToken cancellationToken = default)

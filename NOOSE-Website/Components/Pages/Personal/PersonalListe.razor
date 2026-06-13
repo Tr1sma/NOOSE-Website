@@ -32,6 +32,7 @@ else
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Dienstgrad)">Dienstgrad</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => StatusName(x.Status))">Status</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstTRU)">TRU</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstHRB)">HRB</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Codename">
@@ -46,6 +47,7 @@ else
             <MudTd DataLabel="Dienstgrad">@DienstgradAnzeige.Name(context.Dienstgrad)</MudTd>
             <MudTd DataLabel="Status">@StatusName(context.Status)</MudTd>
             <MudTd DataLabel="TRU">@(context.IstTRU ? "TRU" : "")</MudTd>
+            <MudTd DataLabel="HRB">@(context.IstHRB ? "HRB" : "")</MudTd>
         </RowTemplate>
         <NoRecordsContent>
             <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Keine Agenten gefunden.</MudText>

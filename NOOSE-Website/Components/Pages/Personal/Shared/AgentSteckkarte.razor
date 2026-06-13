@@ -1,4 +1,4 @@
-@* Steckkarte der Personalakte: Codename, Dienstgrad, Status, TRU/Admin, Dienstnummer; Klarname nur für Führung. *@
+@* Steckkarte der Personalakte: Codename, Dienstgrad, Status, TRU/HRB/Admin, Dienstnummer; Klarname nur für Führung. *@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
         <MudStack AlignItems="AlignItems.Center" Class="py-2">
@@ -25,6 +25,10 @@
             @if (Agent.IstTRU)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">TRU</MudChip>
+            }
+            @if (Agent.IstHRB)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">HRB</MudChip>
             }
             @if (Agent.IstAdmin)
             {

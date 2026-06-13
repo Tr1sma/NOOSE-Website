@@ -21,8 +21,8 @@ public interface IAgentVerwaltungService
 
     Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default);
 
-    /// <summary>Ausstehenden Account freischalten und Rang/TRU vergeben → Status Aktiv.</summary>
-    Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, ClaimsPrincipal handelnder);
+    /// <summary>Ausstehenden Account freischalten und Rang/TRU/HRB vergeben → Status Aktiv.</summary>
+    Task FreigebenAsync(string agentId, Dienstgrad dienstgrad, bool istTRU, bool istHRB, ClaimsPrincipal handelnder);
 
     /// <summary>Registrierung ablehnen → Status Gesperrt mit Begründung.</summary>
     Task AblehnenAsync(string agentId, string grund, ClaimsPrincipal handelnder);
@@ -53,6 +53,7 @@ public interface IAgentVerwaltungService
     Task BefoerderungEntscheidenAsync(string antragId, bool genehmigt, string? notiz, ClaimsPrincipal handelnder);
 
     Task TruSetzenAsync(string agentId, bool istTRU, ClaimsPrincipal handelnder);
+    Task HrbSetzenAsync(string agentId, bool istHRB, ClaimsPrincipal handelnder);
     Task AdminSetzenAsync(string agentId, bool istAdmin, ClaimsPrincipal handelnder);
 
     /// <summary>Markiert/entmarkiert einen Agenten als FiveM-Teamleitung. Reiner Sichtbarkeits-Marker –

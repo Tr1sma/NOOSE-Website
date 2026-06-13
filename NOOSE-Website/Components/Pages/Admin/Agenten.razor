@@ -11,7 +11,7 @@
     <MudText Typo="Typo.h4">Agenten-Verwaltung</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Dienstgrade vergeben, TRU- und Teamleitung-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
+    Dienstgrade vergeben, TRU-, HRB- und Teamleitung-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
     alle laufenden Sitzungen des Agents sofort (Kill-Switch). Teamleitungen (FiveM-Aufsicht) sind im RP-Betrieb
     überall ausgeblendet und nur hier sichtbar – Vollzugriff erst durch den Admin-Haken. Das Setzen des
     Admin-Hakens selbst ist ausschließlich Admins vorbehalten; die Führung kann ihn nur einsehen.
@@ -39,6 +39,7 @@ else
             <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => x.Dienstgrad)">Dienstgrad</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AgentStatusAnzeige.Name(x.Status))">Status</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstTRU)">TRU</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstHRB)">HRB</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstTeamLeitung)">Teamleitung</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IstAdmin)">Admin</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
@@ -79,6 +80,9 @@ else
             </MudTd>
             <MudTd DataLabel="TRU">
                 <MudSwitch T="bool" Value="context.IstTRU" ValueChanged="@(v => TruSetzen(context, v))" Color="Color.Primary" />
+            </MudTd>
+            <MudTd DataLabel="HRB">
+                <MudSwitch T="bool" Value="context.IstHRB" ValueChanged="@(v => HrbSetzen(context, v))" Color="Color.Info" />
             </MudTd>
             <MudTd DataLabel="Teamleitung">
                 <MudSwitch T="bool" Value="context.IstTeamLeitung" ValueChanged="@(v => TeamLeitungSetzen(context, v))" Color="Color.Tertiary" />
@@ -215,6 +219,21 @@ else
         {
             await AgentService.TruSetzenAsync(agent.Id, wert, user);
             Snackbar.Add($"{AnzeigeName(agent)}: TRU {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LadenAsync();
+    }
+
+    private async Task HrbSetzen(Agent agent, bool wert)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.HrbSetzenAsync(agent.Id, wert, user);
+            Snackbar.Add($"{AnzeigeName(agent)}: HRB {(wert ? "gesetzt" : "entfernt")}.", Severity.Success);
         }
         catch (Exception ex)
         {

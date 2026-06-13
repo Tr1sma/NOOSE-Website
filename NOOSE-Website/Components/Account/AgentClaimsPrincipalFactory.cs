@@ -7,7 +7,7 @@ using NOOSE_Website.Data.Entities;
 namespace NOOSE_Website.Components.Account;
 
 /// <summary>
-/// Schreibt beim Login die NOOSE-spezifischen Claims (Dienstgrad, Status, TRU, Admin, TeamLeitung, Codename,
+/// Schreibt beim Login die NOOSE-spezifischen Claims (Dienstgrad, Status, TRU, HRB, Admin, TeamLeitung, Codename,
 /// Dienstnummer) in das Identity-Cookie. Dadurch entscheiden Policies und UI rein aus den Claims – ohne DB-Zugriff
 /// pro Anfrage. Änderungen an Rang/Status erzwingen über den SecurityStamp einen erneuten Login,
 /// sodass die Claims aktuell bleiben.
@@ -27,6 +27,7 @@ public class AgentClaimsPrincipalFactory(
         identity.AddClaim(new Claim(AgentClaimTypes.Status, user.Status.ToString()));
         identity.AddClaim(new Claim(AgentClaimTypes.IstAdmin, user.IstAdmin ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IstTRU, user.IstTRU ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IstHRB, user.IstHRB ? "true" : "false"));
         // TeamLeitung ist nun ein Claim: Die Nur-Lese-Aufsichtsrolle (TeamLeitung ohne Admin) entscheidet
         // über Policies/UI rein aus den Claims. Das Umschalten erneuert den SecurityStamp (siehe
         // AgentVerwaltungService.TeamLeitungSetzenAsync), damit der Claim beim nächsten Login aktuell ist.

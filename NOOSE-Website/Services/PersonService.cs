@@ -15,7 +15,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonService" />
-public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, ISteckbriefVorschlagService vorschlag, IAktenzeichenService aktenzeichen) : IPersonService
+public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, ISteckbriefVorschlagService vorschlag, IAktenzeichenService aktenzeichen, IBedrohungsScoreService bedrohung) : IPersonService
 {
     public async Task<List<Person>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -120,6 +120,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         db.Personen.Add(person);
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        // Initialen Person-Score berechnen (Einstufung/Waffen/Lebensstatus liegen jetzt committet vor).
+        await bedrohung.NeuBerechnenPersonScoreAsync(person.Id, cancellationToken);
         return person;
     }
 
@@ -173,6 +175,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await VorschlaegeVormerkenAsync(db, person, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+        // Waffen (P2) und Lebensstatus „Flüchtig" (P2) wirken auf den Person-Score → neu berechnen.
+        await bedrohung.NeuBerechnenPersonScoreAsync(id, cancellationToken);
     }
 
     public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -221,6 +225,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         person.Einstufung = neu;
         db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Person), id, neu, begruendung, handelnder));
         await db.SaveChangesAsync(cancellationToken);
+        // Einstufung bestimmt das Mindest-Band des Person-Scores → neu berechnen.
+        await bedrohung.NeuBerechnenPersonScoreAsync(id, cancellationToken);
     }
 
     public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)

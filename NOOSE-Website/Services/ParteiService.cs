@@ -13,7 +13,7 @@ using NOOSE_Website.Models.Personen;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IParteiService" />
-public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService) : IParteiService
+public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag, IPersonService personService, IBedrohungsScoreService bedrohung) : IParteiService
 {
     public async Task<List<Partei>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
     {
@@ -286,6 +286,7 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         await db.SaveChangesAsync(cancellationToken);
         await ParteikollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     /// <summary>
@@ -308,6 +309,7 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         mitglied.IstLeitung = istLeitung;
         await VorschlaegeVormerkenAsync(db, mitglied.Partei?.IstVerschlusssache == true, new[] { rolle }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(mitglied.PersonId, cancellationToken);
     }
 
     public async Task MitgliedEntfernenAsync(string mitgliedId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
@@ -330,6 +332,7 @@ public class ParteiService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeic
         await db.SaveChangesAsync(cancellationToken);
         await ParteikollegenSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
     }
 
     public async Task<List<ParteiAgent>> GetAgentenAsync(string parteiId, CancellationToken cancellationToken = default)
