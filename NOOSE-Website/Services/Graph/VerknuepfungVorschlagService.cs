@@ -148,6 +148,73 @@ public class VerknuepfungVorschlagService(IDbContextFactory<AppDbContext> dbFact
             }
         }
 
+        // ---- Signal 6: gleicher Nachname / Zweitname / Alias ----
+        // Namen sind ein einzelnes Freitext-Feld → in Wörter zerlegt. Der Vorname (erstes Wort) wird
+        // ignoriert (zu unspezifisch); verglichen werden Nachname + weitere Namensteile sowie Aliase.
+        // Aus Sicht DIESER Akte je Token die treffendste Begründung (Priorität Nachname > Namensteil > Alias).
+        var eigenerName = await db.Personen.Where(p => p.Id == entitaetId)
+            .Select(p => p.Name).FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+        var eigeneAliase = await db.PersonAliase.Where(a => a.PersonId == entitaetId)
+            .Select(a => a.Aliasname).ToListAsync(cancellationToken);
+
+        var tokenGrund = new Dictionary<string, string>();
+        void TokenMerken(string anzeige, string grund)
+        {
+            var key = NormToken(anzeige);
+            if (key.Length >= 2 && !Stoppwoerter.Contains(key))
+            {
+                tokenGrund.TryAdd(key, grund); // erste Eintragung gewinnt → Reihenfolge unten = Priorität
+            }
+        }
+
+        var eigeneNamensteile = Woerter(eigenerName).Skip(1).ToList(); // Vorname raus
+        var eigenerNachname = eigeneNamensteile.LastOrDefault();
+        if (eigenerNachname is not null)
+        {
+            TokenMerken(eigenerNachname, $"gleicher Nachname: {eigenerNachname}");
+        }
+        foreach (var teil in eigeneNamensteile.Where(t => t != eigenerNachname))
+        {
+            TokenMerken(teil, $"gemeinsamer Namensteil: {teil}");
+        }
+        foreach (var alias in eigeneAliase)
+        {
+            foreach (var wort in Woerter(alias))
+            {
+                TokenMerken(wort, $"gemeinsamer Alias: {alias.Trim()}");
+            }
+        }
+
+        if (tokenGrund.Count > 0)
+        {
+            // Kandidaten-Namen (Vorname auch hier ignorieren, symmetrisch zum eigenen).
+            var andereNamen = await db.Personen.Where(p => p.Id != entitaetId)
+                .Select(p => new { p.Id, p.Name }).ToListAsync(cancellationToken);
+            foreach (var p in andereNamen)
+            {
+                foreach (var wort in Woerter(p.Name).Skip(1))
+                {
+                    if (tokenGrund.TryGetValue(NormToken(wort), out var grund))
+                    {
+                        Hinzufuegen(p.Id, grund);
+                    }
+                }
+            }
+            // Kandidaten-Aliase (alle Wörter – ein Alias kennt keinen „Vornamen").
+            var andereAliase = await db.PersonAliase.Where(a => a.PersonId != entitaetId)
+                .Select(a => new { a.PersonId, a.Aliasname }).ToListAsync(cancellationToken);
+            foreach (var a in andereAliase)
+            {
+                foreach (var wort in Woerter(a.Aliasname))
+                {
+                    if (tokenGrund.TryGetValue(NormToken(wort), out var grund))
+                    {
+                        Hinzufuegen(a.PersonId, grund);
+                    }
+                }
+            }
+        }
+
         // Bereits typisierte Person-Beziehungen ebenfalls vom Vorschlag ausschließen.
         var bezogene = await db.PersonBeziehungen
             .Where(b => b.PersonAId == entitaetId || b.PersonBId == entitaetId)
@@ -192,4 +259,20 @@ public class VerknuepfungVorschlagService(IDbContextFactory<AppDbContext> dbFact
     /// <summary>Reduziert eine Telefonnummer auf ihre Ziffern (toleriert Formatierungen/Leerzeichen).</summary>
     private static string Normalisiere(string? nummer)
         => string.IsNullOrEmpty(nummer) ? string.Empty : new string(nummer.Where(char.IsDigit).ToArray());
+
+    /// <summary>Zerlegt einen Namen/Alias in Wörter (Trennung an Leerzeichen, Bindestrich, Schrägstrich, Komma, Punkt …).</summary>
+    private static List<string> Woerter(string? text)
+        => string.IsNullOrWhiteSpace(text)
+            ? new()
+            : text.Split(new[] { ' ', '\t', '\n', '\r', '-', '/', ',', '.', ';' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+    /// <summary>Normalisiert ein Namens-Wort für den Abgleich (nur Buchstaben/Ziffern, klein – toleriert Umlaute).</summary>
+    private static string NormToken(string wort)
+        => new string(wort.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+    /// <summary>Häufige Artikel/Partikel, die als alleiniger Namens-/Alias-Treffer nur Rauschen erzeugen würden.</summary>
+    private static readonly HashSet<string> Stoppwoerter = new()
+    {
+        "der", "die", "das", "den", "dem", "von", "van", "de", "el", "la", "le", "the", "of", "und", "and",
+    };
 }
