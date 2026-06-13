@@ -76,7 +76,10 @@ else
     {
         _darfKlarname = (await AuthStateTask).User.DarfKlarnameSehen();
         // TeamLeitungen (FiveM-Aufsicht) sind im RP-Betrieb unsichtbar – aus dem Personalroster ausblenden.
-        _agenten = (await AgentService.GetAlleAsync()).Where(a => !a.IstTeamLeitung).ToList();
+        // Gesperrte Accounts (Notfall-Sperre) ebenfalls nicht im Roster zeigen.
+        _agenten = (await AgentService.GetAlleAsync())
+            .Where(a => !a.IstTeamLeitung && a.Status != AgentStatus.Gesperrt)
+            .ToList();
         _laden = false;
     }
 

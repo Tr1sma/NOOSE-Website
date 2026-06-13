@@ -151,6 +151,55 @@ else if (_verteilungen is { } v)
             </MudPaper>
         </MudItem>
     </MudGrid>
+
+    @* Zweite Reihe: gefährlichste Personen (Pendant zur Fraktionsliste) + Wegweiser zur vollen Statistik. *@
+    <MudGrid Class="mt-1">
+        <MudItem xs="12" md="6" Class="d-flex">
+            <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-2">Personen nach Gefährdung</MudText>
+                @if (_personenGefaehrdung.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine bewerteten Personen.</MudText>
+                }
+                else
+                {
+                    <div class="dashboard-fraktionsliste">
+                        <MudList T="string" Dense="true">
+                            @foreach (var p in _personenGefaehrdung)
+                            {
+                                <MudListItem T="string" OnClick="@(() => OeffneAkte(p.Href))" Style="cursor:pointer;">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <span style="@($"display:inline-block;width:12px;height:12px;border-radius:50%;background:{GefaehrdungFarbe(p.Stufe)};flex:none;")"></span>
+                                            <div>
+                                                <MudText Typo="Typo.body2"><b>@p.Name</b></MudText>
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.Aktenzeichen</MudText>
+                                            </div>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@GefaehrdungsStufeLogic.Name(p.Stufe)</MudText>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6" Class="d-flex">
+            <MudPaper Class="pa-4 flex-grow-1 d-flex flex-column" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.QueryStats" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Statistik & Auswertungen</MudText>
+                </MudStack>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                    Verteilungen über Einstufung, Gefährdung, Lebensstatus, Maßnahmen und Vorgänge,
+                    der 12-Monats-Verlauf und die gefährlichsten Akten – mit CSV- und Druck-Export.
+                </MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.QueryStats"
+                           Href="/statistik" Class="mt-auto align-self-start">Zur vollständigen Statistik</MudButton>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 }
 
 @if (!_laden && _meineFaelligen.Count > 0)
@@ -279,6 +328,7 @@ else if (_verteilungen is { } v)
     private List<WiedervorlageDashboardItem> _meineFaelligen = new();
     private List<DashboardVeralteteAkte> _aktualisierungsbedarf = new();
     private List<DashboardFraktionGefaehrdung> _fraktionenGefaehrdung = new();
+    private List<DashboardFraktionGefaehrdung> _personenGefaehrdung = new();
 
     // NOOSE-Farben je Diagramm – Reihenfolge identisch zur Segment-Reihenfolge im DashboardService.
     private static readonly string[] _farbenEinstufung = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };          // Unbekannt · Prüffall · Verdachtsfall · Gesichert staatsgefährdend
@@ -297,6 +347,7 @@ else if (_verteilungen is { } v)
         _meineFaelligen = await WiedervorlageService.GetMeineFaelligenAsync(user);
         _aktualisierungsbedarf = await Dashboard.GetAktualisierungsbedarfAsync(_istFuehrung, meId);
         _fraktionenGefaehrdung = await Dashboard.GetFraktionenNachGefaehrdungAsync(_istFuehrung);
+        _personenGefaehrdung = await Dashboard.GetPersonenNachGefaehrdungAsync(_istFuehrung);
         _laden = false;
     }
 

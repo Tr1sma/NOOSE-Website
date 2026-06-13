@@ -296,8 +296,8 @@
 - [x] **Zeitstrahl/Timeline je Akte** (alle Ereignisse chronologisch).
 - [x] **Organigramm/Personalübersicht** (NOOSE-Struktur, TRU, Taskforce-Besetzung).
 - [x] **Kalender/Termine** (Gerichtstermine, Operationen, Überwachungsfenster).
-- [ ] **Automatischer Bedrohungs-Score** (Personen/Fraktionen; Sortierung/Priorisierung).
-- [ ] **Statistik-Reports/Export** (CSV/PDF) + **automatischer Lagebericht** (geplant erzeugt + archiviert).
+- [x] **Automatischer Bedrohungs-Score** (Personen/Fraktionen; Sortierung/Priorisierung).
+- [x] **Statistik-Reports/Export** (CSV/PDF) + **automatischer Lagebericht** (geplant erzeugt + archiviert).
 
 **Abnahme:** Graph zeigt Verbindungen; Pfadsuche findet Kette zwischen zwei Personen; Vorschläge erscheinen; Timeline korrekt; Organigramm korrekt; Kalender zeigt Termine; Score wird berechnet und ist sortierbar; Monats-Lagebericht wird automatisch erzeugt. *(Die „Karte mit Orten" wurde vom Auftraggeber gestrichen.)*
 
@@ -320,6 +320,13 @@
 > Die **Karte mit Orten wurde vom Auftraggeber gestrichen** (zurückgestellt). Geliefert wurde der **Kalender**: ein self-gehostetes **FullCalendar** (v6 Global-Build unter `wwwroot/lib/fullcalendar/` + deutsche Locale; guarded Lazy-Loader `wwwroot/js/kalender.js?v=1` nach dem Graph-Muster, Monat/Woche/Liste, Klick → Akte). Er **aggregiert rein lesend** (`Services/KalenderService.cs`, sequenzielle flache Pomelo-Queries, je Fenster gedeckelt): eigene **Termine** + Operationen (Beginn/Ende) + Überwachungsfenster (Observationen) + fällige Aufgaben + offene Wiedervorlagen (Eltern sichtbarkeitsgeprüft aufgelöst) + Fraktions-Aktivitäten. Jede Quelle behält ihre kanonische Sichtbarkeit (Verschlusssache bzw. Aufgaben-/Termin-„Eingeschränkt"); farbcodierte Legende; abgesagte/verschobene Termine durchgestrichen.
 > Neue **Termin-Akte** (CRUD, Papierkorb, Verknüpfungen, Kommentare/Quellen/Zeitstrahl, Teilnehmer-Zuteilung) – Sichtbarkeit **wie eine Aufgabe**: Kippschalter **`IstEingeschraenkt`** (nur Ersteller + zugeteilte Teilnehmer + Aufsicht; sonst alle), zentral über `Services/TerminSichtbarkeit.cs`. **Kein** Verschlusssache-/Einstufungs-Konzept. Backend `Services/TerminService.cs`, Entities `Data/Entities/Termine/` (`Termin` + `TerminZuweisung`), Modelle `Models/Termine/` + `Models/Kalender/`, Seiten `Components/Pages/Kalender/` (Kalender/Detail/Neu/Bearbeiten/Papierkorb + Shared). In `AktenReferenz`/`Sichtbarkeit`/`ZeitstrahlService`/`SuchNavigation` integriert (Verknüpfungen/@-Mentions/Zeitstrahl). Nav-Eintrag „Kalender" aktiviert. **Migration `Phase17_Termine`** (Tabellen `Termine` + `TerminZuweisungen`; greift per Startup-Auto-Migrate).
 > Offen: nur noch Block **D** (Bedrohungs-Score/Statistik-Reports/Lagebericht).
+>
+> **Block D – Bedrohungs-Score umgesetzt** (Fraktion + Person, „EHK-Score", admin-konfigurierbar – Details in `AlgoPlan.md` + Memory).
+>
+> **Block D – Statistik-Reports/Export = Schritt 1 umgesetzt (Build 0/0 verifiziert; Voll-Test durch Auftraggeber offen):**
+> Neue Seite **`/statistik`** („Statistik & Auswertungen", für alle aktiven Agenten; alle Zahlen aus Sicht des Aufrufers **VS-gefiltert**). `Services/Statistik/StatistikService.cs` aggregiert rein lesend (Muster `DashboardService`, reuse `GetKennzahlenAsync`): Verteilungen (Personen nach Einstufung/Gefährdung/Lebensstatus, Fraktionen nach Gefährdung, Maßnahme-Ausgänge, Vorgänge nach Status) als Donuts (`VerteilungChart`), ein **12-Monats-Verlauf** (Maßnahmen + Neuzugänge) als Linien-Diagramm (`ZeitverlaufChart`, MudChart) und die Top-Listen der gefährlichsten Personen/Fraktionen. **CSV-Export** (UTF-8-BOM + `;` für DE-Excel) über Minimal-API `/statistik/export/{verteilungen|personen|fraktionen}.csv`; **PDF** über Browser-Druck (`/statistik/druck`, `DruckRahmen`). Dazu Dashboard-Kachel „Personen nach Gefährdung". **Keine Migration** (rein lesend).
+> **Block D – automatischer Lagebericht = Schritt 2 umgesetzt (Build 0/0; Migration `Phase21_Lagebericht`; end-to-end verifiziert):**
+> Neue Akte **`Lagebericht`** (`Data/Entities/Querschnitt/Lagebericht.cs`, IAuditable+ISoftDelete) speichert je Monat einen eingefrorenen `StatistikReport`-Schnappschuss als JSON. `Services/Statistik/LageberichtService.cs` erzeugt ihn (über `IStatistikService` mit **voller** Lage inkl. VS-Aggregaten – daher **Führung vorbehalten**), archiviert ihn und benachrichtigt die Führung (Glocke). Der Hintergrund-Dienst `Infrastructure/Statistik/LageberichtDienst.cs` (`BackgroundService`, täglich tickend) erzeugt automatisch den Bericht des abgeschlossenen Vormonats, sobald er fehlt – die Existenz des Berichts ist der Merker. Archiv-Seiten **`/lageberichte`** (Liste, Führung; „diesen Monat erzeugen"-Knopf) und **`/lageberichte/{id}`** (Dokumentansicht im `DruckRahmen` → PDF). Damit ist **Phase 8 / Block D vollständig** (offen nur die Kalibrierung der Scores am Echtbestand).
 
 ### Phase 9 – Partner-Zugriff (DoJ / LSPD / LSMD)
 **Ziel:** Kontrollierter Lesezugriff für Partnerbehörden.

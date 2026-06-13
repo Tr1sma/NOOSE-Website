@@ -31,6 +31,9 @@ public enum NotificationTyp
 
     /// <summary>Dem Empfänger wurde ein Termin als Teilnehmer zugeteilt (Kalender, Phase 8 – Block C).</summary>
     TerminZugewiesen = 7,
+
+    /// <summary>Ein neuer automatischer Monats-Lagebericht wurde erzeugt (Empfänger = Führung; Phase 8 – Block D).</summary>
+    Lagebericht = 8,
 }
 
 /// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
@@ -46,6 +49,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.Ankuendigung => "Ankündigung",
         NotificationTyp.Wiedervorlage => "Wiedervorlage fällig",
         NotificationTyp.TerminZugewiesen => "Termin",
+        NotificationTyp.Lagebericht => "Lagebericht",
         _ => "Benachrichtigung",
     };
 
@@ -60,6 +64,7 @@ public static class NotificationTypAnzeige
         NotificationTyp.Ankuendigung => Icons.Material.Filled.Campaign,
         NotificationTyp.Wiedervorlage => Icons.Material.Filled.EventRepeat,
         NotificationTyp.TerminZugewiesen => Icons.Material.Filled.Event,
+        NotificationTyp.Lagebericht => Icons.Material.Filled.Assessment,
         _ => Icons.Material.Filled.Notifications,
     };
 }

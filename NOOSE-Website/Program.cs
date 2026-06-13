@@ -24,9 +24,11 @@ using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Freigaben;
 using NOOSE_Website.Infrastructure.Notifications;
+using NOOSE_Website.Infrastructure.Statistik;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Wiedervorlagen;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Statistik;
 
 // Einheitlich deutsches Datums-/Zahlenformat in der gesamten App (Server-Rendering und
 // Blazor-Circuits). Ohne das hängt z. B. die Anzeige der MudBlazor-Picker und jedes
@@ -244,6 +246,11 @@ builder.Services.AddScoped<IPersonalakteService, PersonalakteService>();
 builder.Services.AddScoped<IAntragService, AntragService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+// Phase 8 – Block D: Statistik-Seite (aggregierte Auswertungen, rein lesend; baut auf DashboardService auf).
+builder.Services.AddScoped<IStatistikService, StatistikService>();
+// Phase 8 – Block D, Schritt 2: archivierte Monats-Lageberichte (Schnappschuss) + automatischer Erzeugungs-Dienst.
+builder.Services.AddScoped<ILageberichtService, LageberichtService>();
+builder.Services.AddHostedService<LageberichtDienst>();
 // Phase 6: In-App-Benachrichtigungen (Glocke) + Live-Broadcaster.
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
@@ -329,6 +336,7 @@ app.MapNooseQuellenDateiEndpoints();
 app.MapNooseFraktionenDateiEndpoints();
 app.MapNooseBibliothekDateiEndpoints();
 app.MapNooseSystemEndpoints();
+app.MapNooseStatistikExportEndpoints();
 
 // Start-up: ausstehende EF-Migrationen anwenden und die technische "Admin"-Rolle sicherstellen.
 using (var scope = app.Services.CreateScope())

@@ -199,6 +199,26 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IAntrag
             f.Name, f.Aktenzeichen, $"/fraktionen/{f.Id}", GefaehrdungsStufeLogic.Aus(f.BedrohungsScore))).ToList();
     }
 
+    public async Task<List<DashboardFraktionGefaehrdung>> GetPersonenNachGefaehrdungAsync(bool istFuehrung,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // Echte Personenliste (nicht aggregiert), gefährlichste zuerst – Pendant zur Fraktions-Kachel. Nur
+        // bewertete Personen (Score > 0), damit die Kachel nicht von „Keine"-Akten geflutet wird. Gefährdungsstufe
+        // on-read aus dem (Phase-8-)Bedrohungs-Score abgeleitet. VS-gefiltert; auf die obersten 15 begrenzt.
+        var rows = await db.Personen
+            .Where(p => (istFuehrung || !p.IstVerschlusssache) && p.BedrohungsScore != null && p.BedrohungsScore > 0)
+            .OrderByDescending(p => p.BedrohungsScore)
+            .ThenBy(p => p.Name)
+            .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.BedrohungsScore })
+            .Take(15)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(p => new DashboardFraktionGefaehrdung(
+            p.Name, p.Aktenzeichen, $"/personen/{p.Id}", GefaehrdungsStufeLogic.Aus(p.BedrohungsScore))).ToList();
+    }
+
     public async Task<DashboardVerteilungen> GetVerteilungenAsync(bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

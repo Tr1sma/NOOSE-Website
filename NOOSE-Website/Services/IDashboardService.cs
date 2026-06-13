@@ -26,6 +26,12 @@ public interface IDashboardService
     Task<List<DashboardFraktionGefaehrdung>> GetFraktionenNachGefaehrdungAsync(bool istFuehrung, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Die gefährlichsten Personen als echte Liste (nur bewertete, Score &gt; 0; höchster Score zuerst). VS-gefiltert;
+    /// auf die obersten Einträge begrenzt – für die Dashboard-Kachel „Personen nach Gefährdung".
+    /// </summary>
+    Task<List<DashboardFraktionGefaehrdung>> GetPersonenNachGefaehrdungAsync(bool istFuehrung, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Die jüngsten Änderungen über alle Akten hinweg (neueste zuerst), aufgelöst auf die jeweilige
     /// Eltern-Akte inkl. Anzeigename. Kind-Änderungen (Doks, Mitglieder, Agent-Zuteilungen) werden auf
     /// ihre Akte hochgerollt; Verschlusssachen erscheinen nur für die Führung.

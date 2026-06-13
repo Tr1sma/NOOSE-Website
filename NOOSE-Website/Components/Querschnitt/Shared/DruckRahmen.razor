@@ -9,7 +9,7 @@
         Drucken / als PDF speichern
     </MudButton>
     <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
-               Href="@ZurueckHref">Zurück zur Akte</MudButton>
+               Href="@ZurueckHref">@ZurueckText</MudButton>
 </div>
 
 <div class="druck-dokument">
@@ -37,16 +37,21 @@
 @code {
     [Parameter, EditorRequired] public string Titel { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string ZurueckHref { get; set; } = string.Empty;
+    /// <summary>Beschriftung des Zurück-Knopfes (Standard: „Zurück zur Akte"; z. B. Übersichten setzen ein eigenes Ziel).</summary>
+    [Parameter] public string ZurueckText { get; set; } = "Zurück zur Akte";
     [Parameter] public string? GedrucktVon { get; set; }
     [Parameter] public bool IstVerschlusssache { get; set; }
     [Parameter] public string Fusszeile { get; set; } = "NOOSE-interne Akte · Weitergabe nur nach Freigabe durch die Führung.";
+    /// <summary>Beim ersten Render automatisch den Druckdialog öffnen (Standard: an – „Druckansicht"). Für reine
+    /// Lese-/Dokumentansichten (z. B. Lagebericht-Archiv) auf <c>false</c> setzen; der Drucken-Knopf bleibt.</summary>
+    [Parameter] public bool AutomatischDrucken { get; set; } = true;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private bool _druckAusgeloest;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_druckAusgeloest)
+        if (firstRender && AutomatischDrucken && !_druckAusgeloest)
         {
             _druckAusgeloest = true;
             try

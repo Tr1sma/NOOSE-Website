@@ -1,0 +1,56 @@
+@* Wiederverwendbares Zeitreihen-Diagramm (Linie/Balken) für die Statistik-Seite: rendert mehrere benannte
+   Reihen über gemeinsame Monatsetiketten. Sind alle Werte 0 (oder keine Punkte/Reihen vorhanden), erscheint
+   ein dezenter Hinweis statt eines leeren Diagramms (MudChart zeichnete sonst eine NaN-Geometrie).
+   MudBlazor 9.5: Linien/Balken nehmen die Daten als List<ChartSeries<double>> plus ChartLabels (Etiketten). *@
+@using NOOSE_Website.Models.Statistik
+
+<div class="d-flex flex-column" style="width:100%;min-width:0;">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">@Titel</MudText>
+    @if (_leer)
+    {
+        <div class="d-flex align-center justify-center" style="@($"min-height:{Height};")">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Daten</MudText>
+        </div>
+    }
+    else
+    {
+        <MudChart ChartType="@Diagrammtyp" ChartSeries="@_serien" ChartLabels="@_etiketten"
+                  ChartOptions="@_optionen" Width="100%" Height="@Height" />
+    }
+</div>
+
+@code {
+    /// <summary>Überschrift über dem Diagramm.</summary>
+    [Parameter, EditorRequired] public string Titel { get; set; } = string.Empty;
+
+    /// <summary>Die Monatspunkte – liefern die X-Achsen-Etiketten (in fester, zeitlich aufsteigender Reihenfolge).</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<StatistikMonat> Punkte { get; set; } = Array.Empty<StatistikMonat>();
+
+    /// <summary>Die Datenreihen (Name + Werte je Monat); jede Werte-Liste hat so viele Einträge wie <see cref="Punkte"/>.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<(string Name, IReadOnlyList<int> Werte)> Reihen { get; set; }
+        = Array.Empty<(string, IReadOnlyList<int>)>();
+
+    /// <summary>Hex-Farben je Reihe, in derselben Reihenfolge wie <see cref="Reihen"/>.</summary>
+    [Parameter, EditorRequired] public string[] Farben { get; set; } = Array.Empty<string>();
+
+    /// <summary>Höhe des Diagramms (CSS-Wert).</summary>
+    [Parameter] public string Height { get; set; } = "300px";
+
+    /// <summary>Diagrammtyp (Standard: Linie). Für Balken <see cref="ChartType.Bar"/> setzen.</summary>
+    [Parameter] public ChartType Diagrammtyp { get; set; } = ChartType.Line;
+
+    private bool _leer = true;
+    private List<ChartSeries<double>> _serien = new();
+    private string[] _etiketten = Array.Empty<string>();
+    private ChartOptions _optionen = new();
+
+    protected override void OnParametersSet()
+    {
+        _etiketten = Punkte.Select(p => p.Label).ToArray();
+        _serien = Reihen
+            .Select(r => new ChartSeries<double> { Name = r.Name, Data = r.Werte.Select(w => (double)w).ToArray() })
+            .ToList();
+        _leer = Punkte.Count == 0 || Reihen.Count == 0 || Reihen.All(r => r.Werte.All(w => w == 0));
+        _optionen = new ChartOptions { ChartPalette = Farben, ShowLegend = true };
+    }
+}

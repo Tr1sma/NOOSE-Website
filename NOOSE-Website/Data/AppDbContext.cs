@@ -145,6 +145,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<BedrohungsScoreKonfig> BedrohungsScoreKonfigs => Set<BedrohungsScoreKonfig>();
     public DbSet<Wiedervorlage> Wiedervorlagen => Set<Wiedervorlage>();
 
+    // ---- Phase 8 (Block D, Schritt 2): archivierte Monats-Lageberichte ----
+    public DbSet<Lagebericht> Lageberichte => Set<Lagebericht>();
+
     // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----
     public DbSet<SystemEinstellung> SystemEinstellungen => Set<SystemEinstellung>();
     public DbSet<Gesetz> Gesetze => Set<Gesetz>();
@@ -397,6 +400,17 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasKey(k => k.Id);
             b.Property(k => k.Id).HasMaxLength(32);
             b.Property(k => k.Json).HasColumnType("longtext");
+        });
+
+        // ---- Phase 8/Block D, Schritt 2: archivierte Monats-Lageberichte (Snapshot als JSON) ----
+        modelBuilder.Entity<Lagebericht>(b =>
+        {
+            b.Property(l => l.Titel).HasMaxLength(200).IsRequired();
+            b.Property(l => l.SnapshotJson).HasColumnType("longtext");
+            // Archiv-Liste sortiert nach Berichtsmonat (neueste zuerst) – Index ist der schnelle Pfad.
+            // KEIN Unique-Index auf (Jahr, Monat): Neu-Erzeugung ersetzt per Soft-Delete (alter Bericht bleibt
+            // als gelöschte Zeile bestehen); die Aktiv-Eindeutigkeit prüft der LageberichtService.
+            b.HasIndex(l => new { l.Jahr, l.Monat });
         });
 
         modelBuilder.Entity<Wiedervorlage>(b =>
