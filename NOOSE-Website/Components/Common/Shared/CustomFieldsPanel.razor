@@ -1,0 +1,129 @@
+@* Zusatzfelder-Panel einer Akte: zeigt die admin-definierten Custom-Felder des Aktentyps und speichert deren Werte. *@
+@using System.Globalization
+@inject ICustomFieldValueService ValueService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Zusatzfelder</MudText>
+        @if (_mayWrite && _fields.Count > 0)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync" Disabled="_saves">
+                Speichern
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_fields.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Für diesen Aktentyp sind keine Zusatzfelder definiert. Die Führung kann sie unter
+            <MudLink Href="/admin/custom-felder">Verwaltung → Custom-Felder</MudLink> anlegen.
+        </MudText>
+    }
+    else
+    {
+        @foreach (var f in _fields)
+        {
+            var id = f.Definition.Id;
+            var label = f.Definition.Mandatory ? $"{f.Definition.Name} *" : f.Definition.Name;
+
+            switch (f.Definition.FieldType)
+            {
+                case CustomFieldType.Multiline:
+                    <MudTextField T="string" Label="@label" Lines="3" Variant="Variant.Outlined"
+                                  Value="@_values[id]" ValueChanged="@(v => _values[id] = v)" />
+                    break;
+                case CustomFieldType.Number:
+                    <MudNumericField T="decimal?" Label="@label" Variant="Variant.Outlined" Culture="@CultureInfo.InvariantCulture"
+                                     Value="@AsNumber(_values[id])" ValueChanged="@(v => _values[id] = v?.ToString(CultureInfo.InvariantCulture))" />
+                    break;
+                case CustomFieldType.Date:
+                    <MudDatePicker Label="@label" Variant="Variant.Outlined" DateFormat="dd.MM.yyyy"
+                                   Date="@AsDate(_values[id])" DateChanged="@(d => _values[id] = d?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+                    break;
+                case CustomFieldType.YesNo:
+                    <MudSwitch T="bool" Label="@label" Color="Color.Primary"
+                               Value="@(_values[id] == "true")" ValueChanged="@(v => _values[id] = v ? "true" : "false")" />
+                    break;
+                case CustomFieldType.Selection:
+                    <MudSelect T="string" Label="@label" Variant="Variant.Outlined" Clearable="true"
+                               Value="@_values[id]" ValueChanged="@(v => _values[id] = v)">
+                        @foreach (var opt in Options(f.Definition.Options))
+                        {
+                            <MudSelectItem T="string" Value="@opt">@opt</MudSelectItem>
+                        }
+                    </MudSelect>
+                    break;
+                default:
+                    <MudTextField T="string" Label="@label" Variant="Variant.Outlined"
+                                  Value="@_values[id]" ValueChanged="@(v => _values[id] = v)" />
+                    break;
+            }
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _saves;
+    private bool _mayWrite;
+    private List<CustomFieldValueDisplay> _fields = new();
+    private readonly Dictionary<string, string?> _values = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _fields = await ValueService.GetForRecordAsync(EntityType, EntityId);
+        _values.Clear();
+        foreach (var f in _fields)
+        {
+            _values[f.Definition.Id] = f.Value;
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saves = true;
+        try
+        {
+            await ValueService.SetAsync(EntityType, EntityId, _values, User);
+            Snackbar.Add("Zusatzfelder gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private static decimal? AsNumber(string? value)
+        => decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : null;
+
+    private static DateTime? AsDate(string? value)
+        => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt) ? dt : null;
+
+    private static IEnumerable<string> Options(string? options) => string.IsNullOrWhiteSpace(options)
+        ? Enumerable.Empty<string>()
+        : options.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+}

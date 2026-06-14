@@ -1,0 +1,115 @@
+@page "/operationen/{Id}/bearbeiten"
+@inject IOperationService OperationService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Operation bearbeiten · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Operation nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/operationen/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Operation bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <OperationForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/operationen/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private OperationInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+    }
+
+    // Diese Seite wird bei /operationen/{A}/bearbeiten → /operationen/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
+    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _input = null;
+        var o = await OperationService.GetDetailAsync(Id, _user.MayClassifiedRead());
+        if (o is not null)
+        {
+            _input = new OperationInput
+            {
+                Title = o.Title,
+                Type = o.Type,
+                Status = o.Status,
+                Location = o.Location,
+                Start = o.Start,
+                End = o.End,
+                Expiry = o.Expiry,
+                Result = o.Result,
+                Remarks = o.Remarks,
+                Classification = o.Classification,
+                IsClassified = o.IsClassified,
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            await OperationService.RefreshAsync(Id, _input, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/operationen/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

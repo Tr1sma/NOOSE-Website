@@ -1,13 +1,13 @@
 @page "/taskforces/{Id}"
 @inject ITaskforceService TaskforceService
-@inject IZugriffsLogService ZugriffsLog
+@inject IAccessLogService AccessLog
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
 <PageTitle>@(_taskforce?.Name ?? "Taskforce") · NOOSE</PageTitle>
 
-@if (_laden)
+@if (_load)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
@@ -27,84 +27,84 @@ else
                            Href="@($"/taskforces/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FolgenButton EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
-        <AufgabeErstellenButton EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" />
-        <AuthorizeView Policy="@Policies.Fuehrung">
+        <FollowButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
+        <JobCreateButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" />
+        <AuthorizeView Policy="@Policies.Leadership">
             <MudMenu Label="Genehmigung" StartIcon="@Icons.Material.Filled.Gavel" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                      Variant="Variant.Outlined" Color="Color.Secondary">
-                <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Genehmigt)" OnClick="@(() => StatusSetzenAsync(TaskforceStatus.Genehmigt))">Genehmigen</MudMenuItem>
-                <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Abgelehnt)" OnClick="@(() => StatusSetzenAsync(TaskforceStatus.Abgelehnt))">Ablehnen</MudMenuItem>
-                <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Aufgeloest)" OnClick="@(() => StatusSetzenAsync(TaskforceStatus.Aufgeloest))">Auflösen</MudMenuItem>
+                <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Approved)" OnClick="@(() => StatusSetAsync(TaskforceStatus.Approved))">Genehmigen</MudMenuItem>
+                <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Rejected)" OnClick="@(() => StatusSetAsync(TaskforceStatus.Rejected))">Ablehnen</MudMenuItem>
+                <MudMenuItem Disabled="@(_taskforce.Status == TaskforceStatus.Resolved)" OnClick="@(() => StatusSetAsync(TaskforceStatus.Resolved))">Auflösen</MudMenuItem>
             </MudMenu>
         </AuthorizeView>
-        <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/taskforces/{_taskforce.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
-        <AuthorizeView Policy="@Policies.Fuehrung">
-            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="LoeschenAsync">Löschen</MudButton>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
         </AuthorizeView>
     </MudStack>
 
     <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+        <TagChips EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
     </MudPaper>
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
-                <Taskforcekarte Taskforce="_taskforce" Leitung="_leitung" />
+                <TaskforceCard Taskforce="_taskforce" Lead="_lead" />
             </div>
         </MudItem>
 
         <MudItem xs="12" md="8" lg="9">
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
-                     @bind-ActivePanelIndex="_aktiverTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _aktiverTab))">
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
-                        @if (!string.IsNullOrWhiteSpace(_taskforce.Zweck))
+                        @if (!string.IsNullOrWhiteSpace(_taskforce.Purpose))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Sinn / Zweck</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_taskforce.Zweck</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_taskforce.Purpose</MudText>
                             </div>
                         }
-                        @if (!string.IsNullOrWhiteSpace(_taskforce.Bemerkungen))
+                        @if (!string.IsNullOrWhiteSpace(_taskforce.Remarks))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Bemerkungen</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_taskforce.Bemerkungen</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_taskforce.Remarks</MudText>
                             </div>
                         }
-                        @if (string.IsNullOrWhiteSpace(_taskforce.Zweck) && string.IsNullOrWhiteSpace(_taskforce.Bemerkungen))
+                        @if (string.IsNullOrWhiteSpace(_taskforce.Purpose) && string.IsNullOrWhiteSpace(_taskforce.Remarks))
                         {
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
                         }
                     </MudStack>
                 </MudTabPanel>
                 <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
-                    <TaskforceAgentePanel TaskforceId="@_taskforce.Id" User="_user" Changed="LeitungAktualisierenAsync" />
+                    <TaskforceAgentsPanel TaskforceId="@_taskforce.Id" User="_user" Changed="LeadRefreshAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Chat" Icon="@Icons.Material.Filled.Forum">
                     <TaskforceChatPanel TaskforceId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
-                    <TaskforceBeziehungenPanel TaskforceId="@_taskforce.Id" User="_user" />
+                    <TaskforceRelationsPanel TaskforceId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
-                    <QuellenPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+                    <SourcesPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
-                    <WiedervorlagePanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+                    <FollowupPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
-                    <KommentarPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+                    <CommentPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
-                    <CustomFelderPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" />
+                    <CustomFieldsPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
-                    <ZeitstrahlPanel EntitaetTyp="@nameof(Taskforce)" EntitaetId="@_taskforce.Id" User="_user" @key="_historieKey" />
+                    <TimelinePanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
             </MudTabs>
         </MudItem>
@@ -115,15 +115,15 @@ else
     [Parameter] public string Id { get; set; } = default!;
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
-    private bool _laden = true;
+    private bool _load = true;
     private Taskforce? _taskforce;
-    private List<(string Codename, TaskforceRolle Rolle)> _leitung = new();
+    private List<(string Codename, TaskforceRole Role)> _lead = new();
     private ClaimsPrincipal _user = default!;
-    private Guid _historieKey = Guid.NewGuid();
-    private string? _geladeneId;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
 
     // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
-    private int _aktiverTab;
+    private int _activeTab;
     private static readonly string[] _tabs =
     {
         "stammdaten", "agents", "chat", "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
@@ -140,50 +140,50 @@ else
     // bleibt gleich → kein Neuladen.
     protected override async Task OnParametersSetAsync()
     {
-        if (_geladeneId == Id)
+        if (_loadedId == Id)
         {
             return;
         }
-        _geladeneId = Id;
-        _laden = true;
+        _loadedId = Id;
+        _load = true;
         _taskforce = null;
-        _aktiverTab = TabUrlState.Read(Nav, _tabs);
-        await LadenAsync();
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
         if (_taskforce is not null)
         {
-            await ZugriffsLog.LogAnsichtAsync(nameof(Taskforce), _taskforce.Id);
+            await AccessLog.LogViewAsync(nameof(Taskforce), _taskforce.Id);
         }
     }
 
-    private async Task LadenAsync()
+    private async Task LoadAsync()
     {
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
-        _taskforce = await TaskforceService.GetDetailAsync(Id, _user.DarfAlleTaskforcesSehen(), _user.GetAgentId());
+        _taskforce = await TaskforceService.GetDetailAsync(Id, _user.MayAllTaskforcesSee(), _user.GetAgentId());
         if (_taskforce is not null)
         {
-            await LeitungLadenAsync();
+            await LeadLoadAsync();
         }
-        _laden = false;
+        _load = false;
     }
 
-    private async Task LeitungLadenAsync()
+    private async Task LeadLoadAsync()
     {
         if (_taskforce is null)
         {
             return;
         }
-        var leitung = await TaskforceService.GetLeitungAsync(_taskforce.Id);
-        _leitung = leitung.Select(a => (a.Agent?.Codename ?? "?", a.Rolle)).ToList();
+        var lead = await TaskforceService.GetLeadAsync(_taskforce.Id);
+        _lead = lead.Select(a => (a.Agent?.Codename ?? "?", a.Role)).ToList();
     }
 
-    private async Task LeitungAktualisierenAsync()
+    private async Task LeadRefreshAsync()
     {
-        await LeitungLadenAsync();
+        await LeadLoadAsync();
         StateHasChanged();
     }
 
-    private async Task StatusSetzenAsync(TaskforceStatus neu)
+    private async Task StatusSetAsync(TaskforceStatus @new)
     {
         if (_taskforce is null)
         {
@@ -191,10 +191,10 @@ else
         }
         try
         {
-            await TaskforceService.GenehmigungSetzenAsync(_taskforce.Id, neu, _user);
-            Snackbar.Add($"Status gesetzt: {TaskforceStatusAnzeige.Name(neu)}.", Severity.Success);
-            await LadenAsync();
-            _historieKey = Guid.NewGuid();
+            await TaskforceService.ApprovalSetAsync(_taskforce.Id, @new, _user);
+            Snackbar.Add($"Status gesetzt: {TaskforceStatusDisplay.Name(@new)}.", Severity.Success);
+            await LoadAsync();
+            _historyKey = Guid.NewGuid();
             StateHasChanged();
         }
         catch (Exception ex)
@@ -203,19 +203,19 @@ else
         }
     }
 
-    private async Task LoeschenAsync()
+    private async Task DeleteAsync()
     {
         if (_taskforce is null)
         {
             return;
         }
-        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Taskforce löschen?",
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Taskforce löschen?",
             "Die Taskforce wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
         if (!ok)
         {
             return;
         }
-        await TaskforceService.LoeschenAsync(_taskforce.Id, _user);
+        await TaskforceService.DeleteAsync(_taskforce.Id, _user);
         Snackbar.Add("Taskforce in den Papierkorb verschoben.", Severity.Success);
         Nav.NavigateTo("/taskforces");
     }

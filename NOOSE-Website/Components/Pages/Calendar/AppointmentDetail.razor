@@ -1,0 +1,247 @@
+@page "/kalender/{Id}"
+@inject IAppointmentService AppointmentService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_appointment?.Title ?? "Termin") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_appointment is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Termin nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/kalender" aria-label="Zurück" />
+        <MudIcon Icon="@CategoryIcon(_appointment.Category)" Color="Color.Primary" />
+        <MudText Typo="Typo.h5">@_appointment.Title</MudText>
+        @if (_appointment.Visibility != AppointmentVisibilityLevel.Public)
+        {
+            <MudTooltip Text="@AppointmentVisibilityLevelDisplay.Help(_appointment.Visibility)">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@AppointmentVisibilityLevelDisplay.Icon(_appointment.Visibility)"
+                         Color="@(_appointment.Visibility == AppointmentVisibilityLevel.Private ? Color.Secondary : Color.Warning)">@AppointmentVisibilityLevelDisplay.Name(_appointment.Visibility)</MudChip>
+            </MudTooltip>
+        }
+        <MudSpacer />
+        @if (_canEdit)
+        {
+            <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                <MudButton Href="@($"/kalender/{_appointment.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            </AuthorizeView>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        }
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(Appointment)" EntityId="@_appointment.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Aktenzeichen</MudText>
+                        <MudText Typo="Typo.body1">@_appointment.CaseNumber</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Kategorie</MudText>
+                        <div><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@AppointmentCategoryDisplay.Name(_appointment.Category)</MudChip></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Status</MudText>
+                        <div><MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="StatusColour(_appointment.Status)">@AppointmentStatusDisplay.Name(_appointment.Status)</MudChip></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Beginn</MudText>
+                        <MudText Typo="Typo.body2">@TimeText(_appointment.Start)</MudText>
+                    </div>
+                    @if (_appointment.End is { } end)
+                    {
+                        <div>
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Ende</MudText>
+                            <MudText Typo="Typo.body2">@TimeText(end)</MudText>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_appointment.Location))
+                    {
+                        <div>
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Ort</MudText>
+                            <MudText Typo="Typo.body2">@_appointment.Location</MudText>
+                        </div>
+                    }
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Teilnehmer</MudText>
+                        @if (_participant.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap" style="gap:.25rem;">
+                                @foreach (var z in _participant)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">@z.Agent?.Codename</MudChip>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Angelegt</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_appointment.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    @if (!string.IsNullOrWhiteSpace(_appointment.Description))
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_appointment.Description</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Beschreibung erfasst.</MudText>
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Teilnehmer" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <AppointmentParticipantPanel AppointmentId="@_appointment.Id" User="_user" CanManage="_canEdit" Changed="ParticipantRefreshAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
+                    <AppointmentContentPanel AppointmentId="@_appointment.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <CommentPanel EntityType="@nameof(Appointment)" EntityId="@_appointment.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <SourcesPanel EntityType="@nameof(Appointment)" EntityId="@_appointment.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <TimelinePanel EntityType="@nameof(Appointment)" EntityId="@_appointment.Id" User="_user" @key="_historyKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Appointment? _appointment;
+    private List<AppointmentAssignment> _participant = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _canEdit;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    private int _activeTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "teilnehmer", "verknuepfungen", "kommentare", "quellen", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _appointment = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
+        if (_appointment is not null)
+        {
+            await AccessLog.LogViewAsync(nameof(Appointment), _appointment.Id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _appointment = await AppointmentService.GetDetailAsync(Id, _user);
+        if (_appointment is not null)
+        {
+            _participant = await AppointmentService.GetParticipantAsync(_appointment.Id);
+            var meId = _user.GetAgentId();
+            _canEdit = _user.IsLeadership() || _appointment.CreatedById == meId;
+        }
+        _load = false;
+    }
+
+    private async Task ParticipantRefreshAsync()
+    {
+        if (_appointment is not null)
+        {
+            _participant = await AppointmentService.GetParticipantAsync(_appointment.Id);
+        }
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_appointment is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Termin löschen?",
+            "Der Termin wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await AppointmentService.DeleteAsync(_appointment.Id, _user);
+            Snackbar.Add("Termin in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/kalender");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private string TimeText(DateTime utc)
+    {
+        var local = DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+        return _appointment is { AllDay: true } ? local.ToString("dd.MM.yyyy") : local.ToString("dd.MM.yyyy HH:mm");
+    }
+
+    private static Color StatusColour(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Perceived => Color.Success,
+        AppointmentStatus.Canceled => Color.Error,
+        AppointmentStatus.Postponed => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private static string CategoryIcon(AppointmentCategory category) => category switch
+    {
+        AppointmentCategory.CourtDate => Icons.Material.Filled.Gavel,
+        AppointmentCategory.Meeting => Icons.Material.Filled.Groups,
+        AppointmentCategory.Deployment => Icons.Material.Filled.Radar,
+        AppointmentCategory.Deadline => Icons.Material.Filled.Alarm,
+        _ => Icons.Material.Filled.Event,
+    };
+}

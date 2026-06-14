@@ -1,0 +1,109 @@
+@* Automatische Verknüpfungs-Vorschläge (Phase 8): Akten, die mit dieser vermutlich zusammenhängen
+   (gleiche Telefonnummer/Fraktion/Gruppe/Tag, gemeinsame Verknüpfung, gleicher Nachname/Zweitname/Alias),
+   aber noch nicht verknüpft sind. *@
+@inject ILinkSuggestionService SuggestionService
+@inject ILinkService LinkService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" />
+        <MudText Typo="Typo.subtitle1">Vorgeschlagene Verknüpfungen</MudText>
+        @if (!_load)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@_suggestions.Count</MudChip>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_suggestions.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Keine Vorschläge – NOOSE findet aktuell keine offensichtlich verwandte, noch unverknüpfte Akte.
+        </MudText>
+    }
+    else
+    {
+        @foreach (var v in _suggestions)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Small" />
+                        @if (v.Href is not null)
+                        {
+                            <MudLink Href="@v.Href" Typo="Typo.body2"><b>@v.Designation</b></MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2"><b>@v.Designation</b></MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(v.Subtitle))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@v.Subtitle</MudText>
+                        }
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@v.Reason</MudChip>
+                    </MudStack>
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudTooltip Text="Im Beziehungsgraph anzeigen">
+                            <MudIconButton Icon="@Icons.Material.Filled.Hub" Size="Size.Small" Color="Color.Default"
+                                           Href="@($"/graph?typ={v.TargetType}&id={v.TargetId}")" aria-label="Im Graph anzeigen" />
+                        </MudTooltip>
+                        @if (_mayWrite)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.AddLink" OnClick="@(() => LinkAsync(v))"
+                                       Disabled="@(_working == v.TargetId)">Verknüpfen</MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private string? _working;
+    private List<LinkSuggestion> _suggestions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _suggestions = await SuggestionService.GetSuggestionsAsync(EntityType, EntityId, User);
+        _load = false;
+    }
+
+    private async Task LinkAsync(LinkSuggestion v)
+    {
+        _working = v.TargetId;
+        try
+        {
+            await LinkService.CreateAsync(EntityType, EntityId, v.TargetType, v.TargetId, null, User);
+            Snackbar.Add($"Verknüpfung zu „{v.Designation}“ angelegt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _working = null;
+        }
+    }
+}

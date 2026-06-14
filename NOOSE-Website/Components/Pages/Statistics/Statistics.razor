@@ -1,0 +1,192 @@
+@* Statistik & Auswertungen (Phase 8 / Block D): aggregierte Verteilungen, 12-Monats-Verlauf und die
+   Top-Listen der gefährlichsten Akten – mit CSV- und Druck-Export. Für alle aktiven Agenten sichtbar
+   (App-Default-Policy AktiverAgent); alle Zahlen sind aus Sicht des Aufrufers VS-gefiltert. *@
+@page "/statistik"
+@inject IStatisticsService StatisticsService
+@inject NavigationManager Nav
+
+<PageTitle>Statistik & Auswertungen · NOOSE</PageTitle>
+
+<div class="dashboard-seite">
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Wrap="Wrap.Wrap" Class="mb-1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.QueryStats" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Statistik &amp; Auswertungen</MudText>
+    </MudStack>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        @* Browser-Navigation (Target="_blank") liefert die CSV über den Minimal-API-Endpunkt aus –
+           Content-Disposition=attachment startet den Download, ohne die Seite zu verlassen. *@
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="/statistik/export/verteilungen.csv" Target="_blank">Verteilungen (CSV)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="/statistik/export/personen.csv" Target="_blank">Personen (CSV)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="/statistik/export/fraktionen.csv" Target="_blank">Fraktionen (CSV)</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print"
+                   Href="/statistik/druck" Target="_blank">Druck / PDF</MudButton>
+    </MudStack>
+</MudStack>
+<MudText Typo="Typo.body1" Class="mud-text-secondary mb-6">
+    Aggregierte Auswertungen über den gesamten Aktenbestand – aus deiner Sicht (Verschlusssachen werden gefiltert).
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_report is { } r)
+{
+    @* ---- Kennzahl-Streifen (identisch zum Lagezentrum) ---- *@
+    <MudGrid>
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" />
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Personen</MudText>
+                </MudStack>
+                <MudText Typo="Typo.h4" Class="mt-2">@r.Metrics.People</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Organisationen</MudText>
+                </MudStack>
+                <MudText Typo="Typo.h4" Class="mt-2">@r.Metrics.FactionsAndGroups</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Primary" />
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Operationen</MudText>
+                </MudStack>
+                <MudText Typo="Typo.h4" Class="mt-2">@r.Metrics.Operations</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Color="Color.Primary" />
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Vorgänge</MudText>
+                </MudStack>
+                <MudText Typo="Typo.h4" Class="mt-2">@r.Metrics.OpenCases</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @* ---- Verteilungs-Diagramme (Donuts) ---- *@
+    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Verteilungen</MudText>
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex">
+            <DistributionChart Title="Personen nach Einstufung" Segments="@r.PeopleByClassification" Colours="_coloursClassification" Height="260px" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex">
+            <DistributionChart Title="Personen nach Gefährdung" Segments="@r.PeopleByHazard" Colours="_coloursHazard" Height="260px" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex">
+            <DistributionChart Title="Personen nach Lebensstatus" Segments="@r.PeopleByLifeStatus" Colours="_coloursLifeStatus" Height="260px" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex">
+            <DistributionChart Title="Fraktionen nach Gefährdung" Segments="@r.FactionsByHazard" Colours="_coloursHazard" Height="260px" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex">
+            <DistributionChart Title="Maßnahme-Ausgänge" Segments="@r.MeasureOutcomes" Colours="_coloursOutcome" Height="260px" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4" Class="d-flex">
+            <DistributionChart Title="Vorgänge nach Status" Segments="@r.CasesByStatus" Colours="_coloursStatus" Height="260px" />
+        </MudItem>
+    </MudGrid>
+
+    @* ---- 12-Monats-Verlauf ---- *@
+    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Verlauf der letzten 12 Monate</MudText>
+    <MudPaper Class="pa-4" Elevation="2">
+        <TimeSeriesChart Title="Erfasste Maßnahmen &amp; neue Personenakten" Points="@r.TimeSeries"
+                          Rows="@_timeSeries" Colours="_coloursTimeSeries" Height="320px" />
+    </MudPaper>
+
+    @* ---- Top-Listen der gefährlichsten Akten ---- *@
+    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Gefährlichste Akten</MudText>
+    <MudGrid>
+        <MudItem xs="12" md="6">@TopList("Gefährlichste Personen", r.TopPeople)</MudItem>
+        <MudItem xs="12" md="6">@TopList("Gefährlichste Fraktionen", r.TopFactions)</MudItem>
+    </MudGrid>
+}
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private StatisticsReport? _report;
+    private (string Name, IReadOnlyList<int> Values)[] _timeSeries = Array.Empty<(string, IReadOnlyList<int>)>();
+
+    // NOOSE-Farben je Diagramm – Reihenfolge identisch zur jeweiligen *Anzeige.Alle-Reihenfolge (stabile Legende).
+    private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };          // Unbekannt · Prüffall · Verdachtsfall · Gesichert staatsgefährdend
+    private static readonly string[] _coloursHazard = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" }; // Keine · Niedrig · Mittel · Hoch · Kritisch
+    private static readonly string[] _coloursLifeStatus = { "#3FB950", "#F85149", "#D29922" };                    // Lebend · Tot · Flüchtig
+    private static readonly string[] _coloursOutcome = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };              // Läuft noch · Offiziell entlassen · Amnestie-Spritze · Erschossen
+    private static readonly string[] _coloursStatus = { "#22D3EE", "#7C8CF8", "#D29922", "#3FB950", "#9BA8B8" };    // Offen · In Bearbeitung · Ruht · Abgeschlossen · Archiviert
+    private static readonly string[] _coloursTimeSeries = { "#F85149", "#22D3EE" };                                // Maßnahmen · Neuzugänge
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _report = await StatisticsService.GetReportAsync(user.IsLeadership(), user.GetAgentId());
+        _timeSeries = new (string, IReadOnlyList<int>)[]
+        {
+            ("Maßnahmen", _report.TimeSeries.Select(m => m.Measures).ToList()),
+            ("Neuzugänge", _report.TimeSeries.Select(m => m.NewEntries).ToList()),
+        };
+        _load = false;
+    }
+
+    private string HazardColour(HazardLevel level)
+    {
+        var i = (int)level;
+        return i >= 0 && i < _coloursHazard.Length ? _coloursHazard[i] : "#9BA8B8";
+    }
+
+    private RenderFragment TopList(string title, IReadOnlyList<StatisticsTopEntry> entries) =>@<MudPaper Class="pa-4" Elevation="2">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">@title</MudText>
+        @if (entries.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine bewerteten Akten.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+                <thead>
+                    <tr>
+                        <th style="width:2.5rem;">#</th>
+                        <th>Akte</th>
+                        <th style="width:5rem;text-align:right;">Score</th>
+                        <th style="width:7rem;">Stufe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var rank = 0; }
+                    @foreach (var e in entries)
+                    {
+                        rank++;
+                        <tr style="cursor:pointer;" @onclick="@(() => Nav.NavigateTo(e.Href))">
+                            <td>@rank</td>
+                            <td>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <span style="@($"display:inline-block;width:10px;height:10px;border-radius:50%;background:{HazardColour(e.Level)};flex:none;")"></span>
+                                    <div>
+                                        <MudText Typo="Typo.body2"><b>@e.Name</b></MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@e.CaseNumber</MudText>
+                                    </div>
+                                </MudStack>
+                            </td>
+                            <td style="text-align:right;"><b>@e.Score</b></td>
+                            <td>@HazardLevelLogic.Name(e.Level)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>;
+}

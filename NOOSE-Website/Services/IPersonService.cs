@@ -1,8 +1,8 @@
 using System.Security.Claims;
-using NOOSE_Website.Data.Entities.Personen;
+using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
-using NOOSE_Website.Models.Personen;
+using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
@@ -13,51 +13,51 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IPersonService
 {
-    Task<List<Person>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default);
-    Task<Person?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default);
-    Task<List<Person>> GetPapierkorbAsync(CancellationToken cancellationToken = default);
+    Task<List<Person>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default);
+    Task<Person?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<Person>> GetTrashAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sucht Personen nach Name oder Aktenzeichen (für Auswahl-/Autocomplete-Felder). Liefert die
     /// ersten Treffer alphabetisch; respektiert den Verschlusssachen-Filter.
     /// </summary>
-    Task<List<Person>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default);
+    Task<List<Person>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Mögliche Dubletten anhand identischem Namen oder gemeinsamer Telefonnummer (Verschlusssache-gefiltert).</summary>
-    Task<List<Person>> FindeDuplikateAsync(string name, IEnumerable<string> telefonnummern, bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<List<Person>> FindDuplicatesAsync(string name, IEnumerable<string> phoneNumbers, bool isLeadership, CancellationToken cancellationToken = default);
 
-    Task<Person> ErstellenAsync(PersonEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
-    Task AktualisierenAsync(string id, PersonEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
-    Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
-    Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task<Person> CreateAsync(PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task RefreshAsync(string id, PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
-    Task EinstufungSetzenAsync(string id, Einstufung neu, string? begruendung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Append-only Einstufungs-Verlauf der Person (neueste zuerst; Verschlusssache-gefiltert).</summary>
-    Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
 
     /// <summary>Fraktionen/Personengruppen, denen die Person aktuell angehört (Rück-Verknüpfungen, Verschlusssache-gefiltert).</summary>
-    Task<List<PersonZugehoerigkeit>> GetZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ehemalige (beendete) Zugehörigkeiten der Person mit Beitritts-/Austrittsdatum, neueste zuerst –
     /// für den Mitgliedschafts-Verlauf. Verschlusssache-gefiltert; Akten im Papierkorb werden ausgeblendet.
     /// </summary>
-    Task<List<PersonZugehoerigkeit>> GetEhemaligeZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Abgeleitete Verbündete/Gegner: Mitglieder von Organisationen, die mit einer Organisation der Person
     /// verbündet/verfeindet sind (berechnet, nicht gespeichert; Verschlusssache-gefiltert).
     /// </summary>
-    Task<List<AbgeleiteteBeziehung>> GetAbgeleiteteBeziehungenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
 
-    Task<PersonFoto> FotoHinzufuegenAsync(string personId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
-    Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task<PersonPhoto> PhotoAddAsync(string personId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Lädt ein Foto inkl. zugehöriger Person (für Auslieferung/Sichtbarkeitsprüfung).</summary>
-    Task<PersonFoto?> GetFotoMitPersonAsync(string fotoId, CancellationToken cancellationToken = default);
+    Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, CancellationToken cancellationToken = default);
 
     /// <summary>Audit-Einträge der Person und ihrer Doks (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
-    Task<List<AuditLog>> GetHistorieAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default);
+    Task<List<AuditLog>> GetHistoryAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
 }

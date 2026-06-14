@@ -11,35 +11,35 @@ namespace NOOSE_Website.Theme;
 public static class NooseTheme
 {
     /// <summary>Standard-Akzentfarben (Fallback, wenn im Admin nichts gesetzt ist).</summary>
-    public const string StandardPrimary = "#22D3EE";
-    public const string StandardSecondary = "#3FB950";
-    public const string StandardTertiary = "#7C8CF8";
+    public const string DefaultPrimary = "#22D3EE";
+    public const string DefaultSecondary = "#3FB950";
+    public const string DefaultTertiary = "#7C8CF8";
 
     /// <summary>
     /// Baut das Theme mit optional überschriebenen Akzentfarben (Admin-Theming, Phase 7).
     /// <c>null</c>/leer → Standardfarbe. Liefert eine frische Instanz, damit per-Circuit-Themes
     /// das statische <see cref="Theme"/> nicht verändern.
     /// </summary>
-    public static MudTheme MitFarben(string? primary, string? secondary, string? tertiary)
+    public static MudTheme WithColours(string? primary, string? secondary, string? tertiary)
     {
-        var theme = Erzeuge();
-        theme.PaletteDark.Primary = string.IsNullOrWhiteSpace(primary) ? StandardPrimary : primary;
-        theme.PaletteDark.Secondary = string.IsNullOrWhiteSpace(secondary) ? StandardSecondary : secondary;
-        theme.PaletteDark.Tertiary = string.IsNullOrWhiteSpace(tertiary) ? StandardTertiary : tertiary;
+        var theme = Generate();
+        theme.PaletteDark.Primary = string.IsNullOrWhiteSpace(primary) ? DefaultPrimary : primary;
+        theme.PaletteDark.Secondary = string.IsNullOrWhiteSpace(secondary) ? DefaultSecondary : secondary;
+        theme.PaletteDark.Tertiary = string.IsNullOrWhiteSpace(tertiary) ? DefaultTertiary : tertiary;
         return theme;
     }
 
-    public static readonly MudTheme Theme = Erzeuge();
+    public static readonly MudTheme Theme = Generate();
 
-    private static MudTheme Erzeuge() => new()
+    private static MudTheme Generate() => new()
     {
         PaletteDark = new PaletteDark
         {
             // Akzente
-            Primary = StandardPrimary,         // Cyan
+            Primary = DefaultPrimary,         // Cyan
             PrimaryContrastText = "#06222A",
-            Secondary = StandardSecondary,
-            Tertiary = StandardTertiary,
+            Secondary = DefaultSecondary,
+            Tertiary = DefaultTertiary,
 
             // Status
             Info = "#22D3EE",

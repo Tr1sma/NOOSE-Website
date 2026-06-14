@@ -1,0 +1,86 @@
+@page "/kalender/papierkorb"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject IAppointmentService AppointmentService
+@inject ISnackbar Snackbar
+
+<PageTitle>Papierkorb – Termine · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/kalender" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Papierkorb – Termine</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Gelöschte Termine. Die Führung kann sie wiederherstellen; sie erscheinen dann wieder im Kalender.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_appointments.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Der Papierkorb ist leer.</MudAlert>
+}
+else
+{
+    <MudTable Items="_appointments" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="Appointment" SortBy="@(x => x.CaseNumber)">Aktenzeichen</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Appointment" SortBy="@(x => x.Title)">Titel</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Appointment" SortBy="@(x => x.Start)">Beginn</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Appointment" SortBy="@(x => x.DeletedAt)" InitialDirection="SortDirection.Descending">Gelöscht am</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.body2">@context.CaseNumber</MudText></MudTd>
+            <MudTd DataLabel="Titel"><MudText Typo="Typo.body2">@context.Title</MudText></MudTd>
+            <MudTd DataLabel="Beginn">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @DateTime.SpecifyKind(context.Start, DateTimeKind.Utc).ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Gelöscht am">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.DeletedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Restore"
+                           OnClick="@(() => RestoreAsync(context))">Wiederherstellen</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private List<Appointment> _appointments = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _appointments = await AppointmentService.GetTrashAsync();
+        _load = false;
+    }
+
+    private async Task RestoreAsync(Appointment appointment)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AppointmentService.RestoreAsync(appointment.Id, user);
+            Snackbar.Add($"Termin {appointment.CaseNumber} wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+}

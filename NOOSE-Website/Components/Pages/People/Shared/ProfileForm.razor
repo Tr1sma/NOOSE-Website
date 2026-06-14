@@ -1,0 +1,53 @@
+@* Editor für die Mehrfach-Felder des Steckbriefs. Bindet direkt an das übergebene PersonEingabe.
+   Waffen/Fahrzeuge/Orte nutzen die Chip-Eingabe mit Katalog-Vorschlägen; Aliase/Telefon bleiben Zeilen. *@
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.subtitle2">Aliase</MudText>
+            @foreach (var a in Input.Aliases)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="a.AliasName" Placeholder="Aliasname" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Input.Aliases.Remove(a))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Input.Aliases.Add(new()))">Alias hinzufügen</MudButton>
+        </MudStack>
+
+        <MudStack Spacing="1" Class="mt-4">
+            <MudText Typo="Typo.subtitle2">Telefonnummern</MudText>
+            @foreach (var t in Input.PhoneNumbers)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="t.Number" Placeholder="Nummer" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="t.Designation" Placeholder="Bezeichnung (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Input.PhoneNumbers.Remove(t))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Input.PhoneNumbers.Add(new()))">Nummer hinzufügen</MudButton>
+        </MudStack>
+
+        <div class="mt-4">
+            <ProfileMultipleField TItem="WeaponInput" Title="Weapons" Items="Input.Weapons"
+                                    Type="SuggestionType.Weapon" MainPlaceholder="Waffe" />
+        </div>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ProfileMultipleField TItem="VehicleInput" Title="Vehicles" Items="Input.Vehicles"
+                                Type="SuggestionType.Vehicle" ShowExtra="true"
+                                MainPlaceholder="Fahrzeug" ExtraPlaceholder="Kennzeichen (optional)" />
+
+        <div class="mt-4">
+            <ProfileMultipleField TItem="LocationInput" Title="Bekannte Orte" Items="Input.Locations"
+                                    Type="SuggestionType.Location" ShowExtra="true"
+                                    MainPlaceholder="Ort" ExtraPlaceholder="Notiz (optional)" />
+        </div>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public PersonInput Input { get; set; } = default!;
+}

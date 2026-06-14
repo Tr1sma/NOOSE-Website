@@ -1,0 +1,71 @@
+@* Anlegen/Bearbeiten eines Paragrafen (Gesetzbuch-Modul, Phase 7). Nur Führung. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2">
+                <MudTextField @bind-Value="_input.LawBook" Label="Gesetzbuch" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Gesetzbuch ist erforderlich"
+                              Placeholder="z. B. StGB, StVO" />
+                <MudTextField @bind-Value="_input.Paragraph" Label="Paragraf" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Paragraf ist erforderlich"
+                              Placeholder="z. B. § 31" Style="max-width:160px;" />
+            </MudStack>
+            <MudTextField @bind-Value="_input.Title" Label="Titel" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Titel ist erforderlich"
+                          Placeholder="z. B. Landfriedensbruch" />
+            <MudTextField @bind-Value="_input.Text" Label="Gesetzestext" Variant="Variant.Outlined"
+                          Lines="8" Required="true" RequiredError="Text ist erforderlich" />
+            <MudTextField @bind-Value="_input.Sentence" Label="Strafmaß / Rechtsfolge (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. Freiheitsstrafe bis zu 3 Jahren oder Geldstrafe" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_input.LawBook) || string.IsNullOrWhiteSpace(_input.Paragraph)
+                               || string.IsNullOrWhiteSpace(_input.Title) || string.IsNullOrWhiteSpace(_input.Text))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public LawInput? Preset { get; set; }
+
+    private LawInput _input = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is not null)
+        {
+            _input = new LawInput
+            {
+                LawBook = Preset.LawBook,
+                Paragraph = Preset.Paragraph,
+                Title = Preset.Title,
+                Text = Preset.Text,
+                Sentence = Preset.Sentence,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save() => MudDialog.Close(DialogResult.Ok(_input));
+
+    /// <summary>Zeigt den Dialog; liefert die Eingabe oder <c>null</c> bei Abbruch.</summary>
+    public static async Task<LawInput?> ShowAsync(IDialogService dialog, string title, LawInput? preset = null)
+    {
+        var parameters = new DialogParameters<LawDialog>
+        {
+            { x => x.Preset, preset },
+        };
+        var reference = await dialog.ShowAsync<LawDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: LawInput e } ? e : null;
+    }
+}

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using NOOSE_Website.Data.Entities.Benachrichtigungen;
+using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
 
@@ -28,15 +28,15 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
     private static readonly HashSet<Type> Whitelist =
     [
         typeof(AuditLog),
-        typeof(ZugriffsLog),
-        typeof(Benachrichtigung),
+        typeof(AccessLog),
+        typeof(Notification),
     ];
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
         var user = await currentUserService.GetAsync();
-        Verlange(eventData.Context, user);
+        Require(eventData.Context, user);
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
@@ -45,13 +45,13 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
         // Synchroner Pfad: den Agent synchron (HttpContext-only) ermitteln, statt blockierend auf den async
         // AuthenticationStateProvider zu warten (Deadlock-/Starvation-Risiko) – analog zum Audit-Interceptor.
         var user = currentUserService.Get();
-        Verlange(eventData.Context, user);
+        Require(eventData.Context, user);
         return base.SavingChanges(eventData, result);
     }
 
-    private static void Verlange(DbContext? context, CurrentUserInfo user)
+    private static void Require(DbContext? context, CurrentUserInfo user)
     {
-        if (context is null || !user.IstNurLeser)
+        if (context is null || !user.IsOnlyReader)
         {
             return;
         }

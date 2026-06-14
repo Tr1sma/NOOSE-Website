@@ -1,0 +1,100 @@
+@* Dialog zum Zuordnen der Person zu einer Fraktion oder Personengruppe (Mitgliedschaft). *@
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:360px;">
+            <MudRadioGroup T="string" @bind-Value="Type">
+                <MudRadio T="string" Value="@nameof(Faction)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                <MudRadio T="string" Value="@nameof(PersonGroup)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+            </MudRadioGroup>
+
+            <MudAutocomplete T="RecordHit" Label="@(IsFaction ? "Fraktion" : "Personengruppe")" AutoFocus="true"
+                             @bind-Value="_target" SearchFunc="@Search" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                             Adornment="Adornment.Start" AdornmentIcon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)"
+                             HelperText="Akte auswählen, der die Person zugeordnet wird.">
+                <ItemTemplate Context="a">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2">@a.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                    </MudStack>
+                </ItemTemplate>
+            </MudAutocomplete>
+
+            @* Rang/Rolle + Leitung direkt hier setzbar – spart den Umweg über die Org-Akte. *@
+            <MudTextField @bind-Value="_rankRole" Label="@(IsFaction ? "Rang (optional)" : "Rolle (optional)")"
+                          Variant="Variant.Outlined" />
+            <MudSwitch T="bool" @bind-Value="_isLead" Color="Color.Primary"
+                       Label="@(IsFaction ? "Gehört zur Leaderschaft" : "Gehört zur Leitung")" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(_target is null)">Hinzufügen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public bool IsLeadership { get; set; }
+    [Parameter] public IReadOnlyList<string> ExclusionFactionIds { get; set; } = Array.Empty<string>();
+    [Parameter] public IReadOnlyList<string> ExclusionGroupsIds { get; set; } = Array.Empty<string>();
+
+    private string _type = nameof(Faction);
+    private string Type
+    {
+        get => _type;
+        set { if (_type != value) { _type = value; _target = null; } }
+    }
+    private bool IsFaction => _type == nameof(Faction);
+    private RecordHit? _target;
+    private string? _rankRole;
+    private bool _isLead;
+
+    private async Task<IEnumerable<RecordHit>> Search(string value, CancellationToken token)
+    {
+        if (IsFaction)
+        {
+            var hit = await FactionService.SearchAsync(value, IsLeadership, 20, token);
+            return hit.Where(f => !ExclusionFactionIds.Contains(f.Id))
+                .Select(f => new RecordHit(f.Id, f.Name, f.CaseNumber));
+        }
+        var groups = await GroupService.SearchAsync(value, IsLeadership, 20, token);
+        return groups.Where(g => !ExclusionGroupsIds.Contains(g.Id))
+            .Select(g => new RecordHit(g.Id, g.Name, g.CaseNumber));
+    }
+
+    private void Save()
+    {
+        if (_target is null)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new AffiliationChoice(_type, _target.Id,
+            string.IsNullOrWhiteSpace(_rankRole) ? null : _rankRole.Trim(), _isLead)));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public record RecordHit(string Id, string Name, string CaseNumber);
+    public record AffiliationChoice(string Type, string TargetId, string? RankRole = null, bool IsLead = false);
+
+    public static async Task<AffiliationChoice?> ShowAsync(IDialogService dialog, bool isLeadership,
+        IReadOnlyList<string> exclusionFactionIds, IReadOnlyList<string> exclusionGroupsIds)
+    {
+        var parameters = new DialogParameters<AffiliationDialog>
+        {
+            { x => x.IsLeadership, isLeadership },
+            { x => x.ExclusionFactionIds, exclusionFactionIds },
+            { x => x.ExclusionGroupsIds, exclusionGroupsIds },
+        };
+        var reference = await dialog.ShowAsync<AffiliationDialog>("Zugehörigkeit hinzufügen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: AffiliationChoice w } ? w : null;
+    }
+}

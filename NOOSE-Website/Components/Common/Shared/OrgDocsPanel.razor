@@ -1,0 +1,71 @@
+@* Rück-Ansicht: Personen-Doks, die mit dieser Organisation (Fraktion/Gruppe) verknüpft sind.
+   Pro Eintrag wird die betroffene Person verlinkt; Klick öffnet die Dok-Detailansicht. *@
+@inject IPersonDocService DocService
+@inject IDialogService DialogService
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.subtitle1">Verknüpfte Doks (@_docs.Count)</MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_docs.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Keine Doks mit Bezug zu dieser Akte. (Beim Anlegen eines Doks kann diese Organisation verknüpft werden.)
+        </MudText>
+    }
+    else
+    {
+        @foreach (var display in _docs)
+        {
+            var doc = display.Doc;
+            <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => OpenAsync(display))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                    <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Small" />
+                    @if (doc.Person is not null)
+                    {
+                        <MudLink Href="@($"/personen/{doc.PersonId}")" Typo="Typo.body2" @onclick:stopPropagation="true"><b>@doc.Person.Name</b></MudLink>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@doc.Person.CaseNumber</MudText>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@doc.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@MeasureOutcomeDisplay.Name(doc.Outcome)</MudChip>
+                </MudStack>
+                @if (!string.IsNullOrWhiteSpace(doc.Reason))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary"
+                             Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:640px;">@doc.Reason</MudText>
+                }
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string OrgType { get; set; } = default!;
+    [Parameter, EditorRequired] public string OrgId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private List<PersonDocDisplay> _docs = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _docs = await DocService.GetForOrgAsync(OrgType, OrgId, User.IsLeadership());
+        _load = false;
+    }
+
+    private async Task OpenAsync(PersonDocDisplay display)
+    {
+        var modified = await DocDetailDialog.ShowAsync(DialogService, display, User, showToRecord: true);
+        if (modified)
+        {
+            await LoadAsync();
+        }
+    }
+}

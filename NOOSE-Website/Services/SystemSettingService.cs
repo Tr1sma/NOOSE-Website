@@ -1,0 +1,201 @@
+using System.Security.Claims;
+using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Infrastructure.Storage;
+using NOOSE_Website.Models.Common;
+
+namespace NOOSE_Website.Services;
+
+/// <inheritdoc cref="ISystemEinstellungService" />
+public partial class SystemSettingService(
+    IDbContextFactory<AppDbContext> dbFactory,
+    IMemoryCache cache,
+    IWebHostEnvironment env,
+    IOptions<FileUploadOptions> uploadOptions) : ISystemSettingService
+{
+    private const string CacheKey = "SystemKonfiguration";
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
+
+    // Logo liegt – wie alle Uploads – außerhalb von wwwroot und wird über /system/logo ausgeliefert.
+    private string LogoBasePath => Path.Combine(env.ContentRootPath, "App_Data", "uploads", "system");
+
+    [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
+    private static partial Regex HexColourRegex();
+
+    public async Task<SystemConfiguration> GetAsync(CancellationToken cancellationToken = default)
+    {
+        if (cache.TryGetValue(CacheKey, out SystemConfiguration? configuration) && configuration is not null)
+        {
+            return configuration;
+        }
+
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+            var values = await db.SystemSettings
+                .ToDictionaryAsync(e => e.Key, e => e.Value, cancellationToken);
+
+            configuration = new SystemConfiguration(
+                MaintenanceModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.MaintenanceModeActive), "true", StringComparison.OrdinalIgnoreCase),
+                MaintenanceModeText: Empty(values.GetValueOrDefault(SystemSettingKeys.MaintenanceModeText)),
+                BannerText: Empty(values.GetValueOrDefault(SystemSettingKeys.BannerText)),
+                BannerLevel: Empty(values.GetValueOrDefault(SystemSettingKeys.BannerLevel)) ?? BannerLevels.Info,
+                ThemePrimary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemePrimary)),
+                ThemeSecondary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeSecondary)),
+                ThemeTertiary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeTertiary)),
+                LogoFileName: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoFileName)),
+                LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)));
+        }
+        catch (Exception)
+        {
+            // Die Konfiguration wird in jedem Layout-Render gebraucht – ein DB-Schluckauf darf die App
+            // nicht reißen. Standardwerte liefern und NICHT cachen (nächster Aufruf probiert es erneut).
+            return Default();
+        }
+
+        cache.Set(CacheKey, configuration, CacheDuration);
+        return configuration;
+    }
+
+    public async Task SaveAsync(SystemConfigurationInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireAdmin(actor);
+
+        foreach (var colour in new[] { input.ThemePrimary, input.ThemeSecondary, input.ThemeTertiary })
+        {
+            if (!string.IsNullOrWhiteSpace(colour) && !HexColourRegex().IsMatch(colour.Trim()))
+            {
+                throw new InvalidOperationException($"„{colour}“ ist keine gültige Farbe – bitte als Hex-Wert angeben (z. B. #22D3EE).");
+            }
+        }
+        if (!BannerLevels.All.Contains(input.BannerLevel))
+        {
+            input.BannerLevel = BannerLevels.Info;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await SetAsync(db, SystemSettingKeys.MaintenanceModeActive, input.MaintenanceModeActive ? "true" : "false", cancellationToken);
+        await SetAsync(db, SystemSettingKeys.MaintenanceModeText, Empty(input.MaintenanceModeText), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.BannerText, Empty(input.BannerText), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.BannerLevel, input.BannerLevel, cancellationToken);
+        await SetAsync(db, SystemSettingKeys.ThemePrimary, Empty(input.ThemePrimary)?.Trim(), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.ThemeSecondary, Empty(input.ThemeSecondary)?.Trim(), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.ThemeTertiary, Empty(input.ThemeTertiary)?.Trim(), cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(CacheKey);
+    }
+
+    public async Task LogoSetAsync(Stream content, string originalName, string contentType, long sizeBytes, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireAdmin(actor);
+
+        var options = uploadOptions.Value;
+        if (!options.AllowedContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Nur Bilddateien (JPG, PNG, WebP, GIF) sind als Logo erlaubt.");
+        }
+        if (sizeBytes > options.MaxBytes)
+        {
+            throw new InvalidOperationException($"Das Logo ist zu groß (max. {options.MaxBytes / (1024 * 1024)} MB).");
+        }
+
+        // Neuer, zufälliger Dateiname je Upload → Browser-Caches des alten Logos laufen ins Leere.
+        var extension = Path.GetExtension(originalName);
+        if (string.IsNullOrEmpty(extension) || extension.Length > 12 || extension.Skip(1).Any(c => !char.IsLetterOrDigit(c)))
+        {
+            extension = ".bin";
+        }
+        var fileName = $"logo-{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+
+        Directory.CreateDirectory(LogoBasePath);
+        var target = Path.Combine(LogoBasePath, fileName);
+        await using (var fs = File.Create(target))
+        {
+            await content.CopyToAsync(fs, cancellationToken);
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var altes = await ValueAsync(db, SystemSettingKeys.LogoFileName, cancellationToken);
+        await SetAsync(db, SystemSettingKeys.LogoFileName, fileName, cancellationToken);
+        await SetAsync(db, SystemSettingKeys.LogoContentType, contentType, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        AlteLogoFileDelete(altes);
+        cache.Remove(CacheKey);
+    }
+
+    public async Task LogoRemoveAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireAdmin(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var altes = await ValueAsync(db, SystemSettingKeys.LogoFileName, cancellationToken);
+        await SetAsync(db, SystemSettingKeys.LogoFileName, null, cancellationToken);
+        await SetAsync(db, SystemSettingKeys.LogoContentType, null, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        AlteLogoFileDelete(altes);
+        cache.Remove(CacheKey);
+    }
+
+    public async Task<(Stream Content, string ContentType)?> LogoOpenAsync(CancellationToken cancellationToken = default)
+    {
+        var configuration = await GetAsync(cancellationToken);
+        if (!configuration.HasLogo)
+        {
+            return null;
+        }
+        var path = FilePathHelper.SafePath(LogoBasePath, configuration.LogoFileName!);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+        return (File.OpenRead(path), configuration.LogoContentType ?? "application/octet-stream");
+    }
+
+    private static SystemConfiguration Default()
+        => new(false, null, null, BannerLevels.Info, null, null, null, null, null);
+
+    private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static async Task<string?> ValueAsync(AppDbContext db, string key, CancellationToken cancellationToken)
+        => (await db.SystemSettings.FirstOrDefaultAsync(e => e.Key == key, cancellationToken))?.Value;
+
+    private static async Task SetAsync(AppDbContext db, string key, string? value, CancellationToken cancellationToken)
+    {
+        var row = await db.SystemSettings.FirstOrDefaultAsync(e => e.Key == key, cancellationToken);
+        if (row is null)
+        {
+            db.SystemSettings.Add(new SystemSetting { Key = key, Value = value });
+        }
+        else
+        {
+            row.Value = value;
+        }
+    }
+
+    private void AlteLogoFileDelete(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+        try
+        {
+            var path = FilePathHelper.SafePath(LogoBasePath, fileName);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            // Aufräum-Fehler sind unkritisch (verwaiste Datei bleibt liegen).
+        }
+    }
+}

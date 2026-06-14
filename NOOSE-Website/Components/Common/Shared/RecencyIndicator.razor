@@ -1,0 +1,51 @@
+@* Aktualitäts-Ampel einer Akte: farbiger Punkt (grün/gelb/rot) je nach Alter der letzten Änderung.
+   Zwei Nutzungsarten:
+   • Listen geben die bereits berechnete Stufe direkt (kein DB-Treffer je Zeile).
+   • Detailkarten geben Aktentyp + UTC-Referenzdatum; die Stufe wird über den (gecachten) Dienst ermittelt. *@
+@inject IRecencyService Recency
+
+<MudTooltip Text="@TooltipText">
+    <MudIcon Icon="@Icons.Material.Filled.Circle" Color="@RecencyLevelDisplay.Colour(_level)" Size="Size" />
+</MudTooltip>
+
+@code {
+    /// <summary>Modus A: bereits berechnete Stufe (Listen berechnen sie einmalig je Laden).</summary>
+    [Parameter] public RecencyLevel? Level { get; set; }
+
+    /// <summary>Modus B: Aktentyp (z. B. <c>nameof(Person)</c>) zur Selbstberechnung der Stufe.</summary>
+    [Parameter] public string? RecordsType { get; set; }
+
+    /// <summary>Referenzdatum in UTC (<c>GeaendertAm ?? ErstelltAm</c>) – für Selbstberechnung und Tooltip.</summary>
+    [Parameter] public DateTime? ReferenceDateUtc { get; set; }
+
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private RecencyLevel _level;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Level is { } predefined)
+        {
+            _level = predefined;
+        }
+        else if (!string.IsNullOrEmpty(RecordsType) && ReferenceDateUtc is { } d)
+        {
+            _level = await Recency.AssessAsync(RecordsType, d);
+        }
+    }
+
+    private string TooltipText
+    {
+        get
+        {
+            var name = RecencyLevelDisplay.Name(_level);
+            if (ReferenceDateUtc is not { } d)
+            {
+                return name;
+            }
+            var days = (int)Math.Floor((DateTime.UtcNow - d).TotalDays);
+            var alter = days <= 0 ? "heute" : days == 1 ? "vor 1 Tag" : $"vor {days} Tagen";
+            return $"{name} · zuletzt aktualisiert {alter}";
+        }
+    }
+}

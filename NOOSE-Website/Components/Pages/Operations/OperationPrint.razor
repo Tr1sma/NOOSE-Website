@@ -1,0 +1,128 @@
+@* Druckansicht der Operationsakte (Phase 7): kompletter Einsatzbericht als strukturiertes Dokument. *@
+@page "/operationen/{Id}/druck"
+@layout PrintLayout
+@inject IOperationService OperationService
+@inject ILinkService LinkService
+@inject ICommentService CommentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_operation is null ? "Druckansicht" : $"Operationsakte {_operation.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_operation is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Operationsakte {_operation.CaseNumber}")" BackHref="@($"/operationen/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="_operation.IsClassified">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Titel</th><td>@_operation.Title</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_operation.CaseNumber</td></tr>
+                    <tr><th>Status</th><td>@OperationStatusDisplay.Name(_operation.Status)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_operation.Type))
+                    {
+                        <tr><th>Typ</th><td>@_operation.Type</td></tr>
+                    }
+                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_operation.Classification)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_operation.Location))
+                    {
+                        <tr><th>Einsatzort</th><td>@_operation.Location</td></tr>
+                    }
+                    @if (_operation.Start is { } start)
+                    {
+                        <tr><th>Beginn</th><td>@start.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
+                    }
+                    @if (_operation.End is { } end)
+                    {
+                        <tr><th>Ende</th><td>@end.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_operation.ModifiedAt ?? _operation.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_operation.Expiry))
+        {
+            <section>
+                <h2>Ablauf</h2>
+                <div class="druck-mehrzeilig">@_operation.Expiry</div>
+            </section>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_operation.Result))
+        {
+            <section>
+                <h2>Ergebnis</h2>
+                <div class="druck-mehrzeilig">@_operation.Result</div>
+            </section>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_operation.Remarks))
+        {
+            <section>
+                <h2>Bemerkungen</h2>
+                <div class="druck-mehrzeilig">@_operation.Remarks</div>
+            </section>
+        }
+
+        @if (_operation.Agents.Count > 0)
+        {
+            <section>
+                <h2>Eingesetzte Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Funktion</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _operation.Agents)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@(a.IsInvestigationLead ? "Ermittlungsleiter" : "Einsatzkraft")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <PrintClassificationHistory Entries="_classificationHistory" />
+        <PrintLinks Entries="_links" Heading="Beteiligte / verknüpfte Akten" />
+        <PrintComments Entries="_comments" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Operation? _operation;
+    private List<ClassificationHistory> _classificationHistory = new();
+    private List<LinkDisplay> _links = new();
+    private List<Comment> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var isLeadership = user.IsLeadership();
+        _printBy = user.GetCodename();
+
+        _operation = await OperationService.GetDetailAsync(Id, isLeadership);
+        if (_operation is not null)
+        {
+            _classificationHistory = await OperationService.GetClassificationHistoryAsync(Id, isLeadership);
+            _links = await LinkService.GetForRecordAsync(nameof(Operation), Id, isLeadership, user.GetAgentId());
+            _comments = await CommentService.GetForRecordAsync(nameof(Operation), Id, isLeadership);
+            await AccessLog.LogViewAsync(nameof(Operation), Id);
+        }
+        _load = false;
+    }
+}

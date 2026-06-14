@@ -1,0 +1,31 @@
+@* Zentrale Vorlagen-Verwaltung mit Reitern. Bündelt Dok-Vorlagen (Erfassungsmasken) und
+   Dokument-Vorlagen (HTML-Body) – erweiterbar um weitere Vorlagen-Typen. Nur Führung. *@
+@page "/admin/vorlagen"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject NavigationManager Nav
+
+<PageTitle>Vorlagen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Dvr" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Vorlagen</MudText>
+</MudStack>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+         @bind-ActivePanelIndex="_activeTab"
+         @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+    <MudTabPanel Text="Dok-Vorlagen" Icon="@Icons.Material.Filled.Dvr">
+        <DocTemplatesManagement />
+    </MudTabPanel>
+    <MudTabPanel Text="Dokument-Vorlagen" Icon="@Icons.Material.Filled.Article">
+        <DocumentTemplatesManagement />
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private int _activeTab;
+    // Slugs in Panel-Reihenfolge – halten den aktiven Reiter in der URL (?tab=…).
+    private static readonly string[] _tabs = { "dok-vorlagen", "dokument-vorlagen" };
+
+    protected override void OnInitialized() => _activeTab = TabUrlState.Read(Nav, _tabs);
+}

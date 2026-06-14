@@ -31,7 +31,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             var schema = await schemeProvider.GetSchemeAsync(DiscordAuthenticationDefaults.AuthenticationScheme);
             if (schema is null)
             {
-                return RedirectZurLoginSeite(
+                return RedirectToLoginPage(
                     "Discord-Login ist noch nicht konfiguriert. Bitte Client-ID und Secret in den User Secrets hinterlegen.");
             }
 
@@ -55,37 +55,37 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
 
             if (remoteError is not null)
             {
-                return RedirectZurLoginSeite($"Discord meldete einen Fehler: {remoteError}");
+                return RedirectToLoginPage($"Discord meldete einen Fehler: {remoteError}");
             }
 
             var info = await signInManager.GetExternalLoginInfoAsync();
             if (info is null)
             {
-                return RedirectZurLoginSeite("Externe Anmeldedaten konnten nicht gelesen werden.");
+                return RedirectToLoginPage("Externe Anmeldedaten konnten nicht gelesen werden.");
             }
 
             var agent = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
             if (agent is null)
             {
-                agent = await ErstelleAgentAsync(userManager, info, configuration, logger);
+                agent = await CreateAgentAsync(userManager, info, configuration, logger);
                 if (agent is null)
                 {
-                    return RedirectZurLoginSeite("Das NOOSE-Konto konnte nicht angelegt werden.");
+                    return RedirectToLoginPage("Das NOOSE-Konto konnte nicht angelegt werden.");
                 }
             }
             else
             {
-                await AktualisiereStammdatenAsync(userManager, agent, info);
-                await StelleBootstrapAdminSicherAsync(userManager, agent, configuration, logger);
+                await RefreshMasterDataAsync(userManager, agent, info);
+                await EnsureBootstrapAdminSafeAsync(userManager, agent, configuration, logger);
             }
 
             // Status-Gate: ausschließlich aktive Agenten erhalten eine Sitzung.
             switch (agent.Status)
             {
-                case AgentStatus.Aktiv:
+                case AgentStatus.Active:
                     await signInManager.SignInAsync(agent, isPersistent: true);
                     return Results.LocalRedirect(returnUrl);
-                case AgentStatus.Ausstehend:
+                case AgentStatus.Pending:
                     return Results.Redirect("/Account/Ausstehend");
                 default:
                     return Results.Redirect("/Account/Gesperrt");
@@ -104,8 +104,8 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         return group;
     }
 
-    private static IResult RedirectZurLoginSeite(string fehler)
-        => Results.Redirect($"/Account/Login?fehler={Uri.EscapeDataString(fehler)}");
+    private static IResult RedirectToLoginPage(string error)
+        => Results.Redirect($"/Account/Login?fehler={Uri.EscapeDataString(error)}");
 
     /// <summary>
     /// Liest alle Bootstrap-Admin-Discord-IDs aus der Konfiguration. Berücksichtigt sowohl den
@@ -113,13 +113,13 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     /// <c>Bootstrap:AdminDiscordIds</c>. Diese Agenten werden beim ersten Login direkt als
     /// aktiver Admin angelegt.
     /// </summary>
-    private static HashSet<string> LeseBootstrapAdminIds(IConfiguration configuration)
+    private static HashSet<string> ReadBootstrapAdminIds(IConfiguration configuration)
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
 
-        var einzel = configuration["Bootstrap:AdminDiscordId"];
-        if (!string.IsNullOrWhiteSpace(einzel))
-            ids.Add(einzel.Trim());
+        var single = configuration["Bootstrap:AdminDiscordId"];
+        if (!string.IsNullOrWhiteSpace(single))
+            ids.Add(single.Trim());
 
         foreach (var id in configuration.GetSection("Bootstrap:AdminDiscordIds").Get<string[]>() ?? [])
         {
@@ -130,14 +130,14 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         return ids;
     }
 
-    private static async Task<Agent?> ErstelleAgentAsync(
+    private static async Task<Agent?> CreateAgentAsync(
         UserManager<Agent> userManager, ExternalLoginInfo info, IConfiguration configuration, ILogger logger)
     {
         var discordId = info.ProviderKey;
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
         var email = info.Principal.FindFirstValue(ClaimTypes.Email);
 
-        var istBootstrapAdmin = LeseBootstrapAdminIds(configuration).Contains(discordId);
+        var isBootstrapAdmin = ReadBootstrapAdminIds(configuration).Contains(discordId);
 
         var agent = new Agent
         {
@@ -148,12 +148,12 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             // auf der Agenten-Verwaltung. Der Discord-Name wird NIE als Codename übernommen.
             DiscordId = discordId,
             DiscordUsername = username,
-            AvatarUrl = ExtrahiereAvatarUrl(info.Principal),
-            RegistriertAm = DateTime.UtcNow,
-            Status = istBootstrapAdmin ? AgentStatus.Aktiv : AgentStatus.Ausstehend,
-            Dienstgrad = istBootstrapAdmin ? Dienstgrad.Director : null,
-            IstAdmin = istBootstrapAdmin,
-            FreigegebenAm = istBootstrapAdmin ? DateTime.UtcNow : null,
+            AvatarUrl = ExtractAvatarUrl(info.Principal),
+            RegisteredAt = DateTime.UtcNow,
+            Status = isBootstrapAdmin ? AgentStatus.Active : AgentStatus.Pending,
+            Rank = isBootstrapAdmin ? Rank.Director : null,
+            IsAdmin = isBootstrapAdmin,
+            ReleasedAt = isBootstrapAdmin ? DateTime.UtcNow : null,
         };
 
         var create = await userManager.CreateAsync(agent);
@@ -183,16 +183,16 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     /// Hält die internen Discord-Stammdaten (Username, Avatar) bei jedem Login aktuell.
     /// Der nutzersichtbare Codename wird NIE aus Discord befüllt – er wird ausschließlich vom Admin vergeben.
     /// </summary>
-    private static async Task AktualisiereStammdatenAsync(UserManager<Agent> userManager, Agent agent, ExternalLoginInfo info)
+    private static async Task RefreshMasterDataAsync(UserManager<Agent> userManager, Agent agent, ExternalLoginInfo info)
     {
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
-        var avatar = ExtrahiereAvatarUrl(info.Principal);
+        var avatar = ExtractAvatarUrl(info.Principal);
 
-        var geaendert = false;
-        if (username is not null && username != agent.DiscordUsername) { agent.DiscordUsername = username; geaendert = true; }
-        if (avatar is not null && avatar != agent.AvatarUrl) { agent.AvatarUrl = avatar; geaendert = true; }
+        var modified = false;
+        if (username is not null && username != agent.DiscordUsername) { agent.DiscordUsername = username; modified = true; }
+        if (avatar is not null && avatar != agent.AvatarUrl) { agent.AvatarUrl = avatar; modified = true; }
 
-        if (geaendert)
+        if (modified)
         {
             await userManager.UpdateAsync(agent);
         }
@@ -204,19 +204,19 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     /// der Agent sich schon vor dem Eintrag registriert hatte (sonst bliebe er „Ausstehend").
     /// Ein bereits vergebener Dienstgrad bleibt erhalten.
     /// </summary>
-    private static async Task StelleBootstrapAdminSicherAsync(
+    private static async Task EnsureBootstrapAdminSafeAsync(
         UserManager<Agent> userManager, Agent agent, IConfiguration configuration, ILogger logger)
     {
-        if (agent.DiscordId is null || !LeseBootstrapAdminIds(configuration).Contains(agent.DiscordId))
+        if (agent.DiscordId is null || !ReadBootstrapAdminIds(configuration).Contains(agent.DiscordId))
             return;
 
-        if (agent is { IstAdmin: true, Status: AgentStatus.Aktiv })
+        if (agent is { IsAdmin: true, Status: AgentStatus.Active })
             return;
 
-        agent.IstAdmin = true;
-        agent.Status = AgentStatus.Aktiv;
-        agent.FreigegebenAm ??= DateTime.UtcNow;
-        agent.Dienstgrad ??= Dienstgrad.Director;
+        agent.IsAdmin = true;
+        agent.Status = AgentStatus.Active;
+        agent.ReleasedAt ??= DateTime.UtcNow;
+        agent.Rank ??= Rank.Director;
 
         var update = await userManager.UpdateAsync(agent);
         if (update.Succeeded)
@@ -226,7 +226,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 agent.DiscordId, string.Join("; ", update.Errors.Select(e => e.Description)));
     }
 
-    private static string? ExtrahiereAvatarUrl(ClaimsPrincipal principal)
+    private static string? ExtractAvatarUrl(ClaimsPrincipal principal)
         => principal.FindFirstValue("urn:discord:avatar:url")
            ?? principal.FindFirstValue("urn:discord:avatar");
 }

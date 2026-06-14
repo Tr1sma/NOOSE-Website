@@ -1,0 +1,219 @@
+@page "/admin/bedrohungs-score"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject IThreatScoreConfigService ConfigService
+@inject IThreatScoreService ScoreService
+@inject ISnackbar Snackbar
+
+<PageTitle>Bedrohungs-Score · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Bedrohungs-Score</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Stellschrauben des automatischen Bedrohungs-Scores (Algorithmus „EHK-Score"). Die Caps müssen je Subjekt
+    auf 100 summieren; die Einstufungs-Sockel und die Stufen-Schwellen (25/50/75) sind bewusst fix. Nach dem
+    Speichern bitte „Alle Scores neu berechnen", damit die gespeicherten Werte die neue Konfiguration nutzen.
+</MudText>
+
+@if (_k is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true" Class="mb-4">
+        <MudExpansionPanel Text="Geteilt (Person + Fraktion)" Expanded="true">
+            <div class="d-flex flex-wrap gap-4">
+                <MudNumericField @bind-Value="_k.HalfLifeDays" Label="Halbwertszeit (Tage)" Min="1" Step="5" />
+                <MudNumericField @bind-Value="_k.ConfidenceFreshDays" Label="Konfidenz-Frische (Tage)" Min="1" />
+                <MudNumericField @bind-Value="_k.TriageThreshold" Label="Triage-Schwelle" Min="0" Max="100" />
+                <MudNumericField @bind-Value="_k.KindWeightHeavy" Label="Art schwer" Min="1" Step="0.5" />
+                <MudNumericField @bind-Value="_k.KindWeightMedium" Label="Art mittel" Min="1" Step="0.5" />
+                <MudNumericField @bind-Value="_k.KindWeightLight" Label="Art leicht" Min="1" Step="0.5" />
+                <MudNumericField @bind-Value="_k.OutcomeShot" Label="Ausgang: Erschossen" Min="0" Step="0.5" />
+                <MudNumericField @bind-Value="_k.OutcomeInjection" Label="Ausgang: Spritze" Min="0" Step="0.5" />
+                <MudNumericField @bind-Value="_k.OutcomeRunningStill" Label="Ausgang: läuft noch" Min="0" Step="0.5" />
+                <MudNumericField @bind-Value="_k.OutcomeReleased" Label="Ausgang: entlassen" Min="0" Step="0.5" />
+            </div>
+        </MudExpansionPanel>
+
+        <MudExpansionPanel>
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText>Fraktion – Teilscores S1–S4</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(FactionSumOk ? Color.Success : Color.Error)">Σ Caps @($"{FactionCapsSum:0.##}")/100</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="@(S2SubOk ? Color.Success : Color.Error)">S2-Sub @($"{S2SubSum:0.##}")/@($"{_k.CapS2:0.##}")</MudChip>
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <div class="d-flex flex-wrap gap-4">
+                    <MudNumericField @bind-Value="_k.CapS1" Label="Cap S1 (Heat)" Min="0" />
+                    <MudNumericField @bind-Value="_k.S1Denominator" Label="S1-Nenner" Min="0.1" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.DocHeatWeight" Label="Dok-Heat-Gewicht" Min="0" Step="0.1" />
+                    <MudNumericField @bind-Value="_k.PerMemberDocCap" Label="Pro-Mitglied-Dok-Cap" Min="0" />
+                    <MudNumericField @bind-Value="_k.CapS2" Label="Cap S2 (Organisation)" Min="0" />
+                    <MudNumericField @bind-Value="_k.CapSize" Label="• Größe" Min="0" />
+                    <MudNumericField @bind-Value="_k.SizeDenominator" Label="Größen-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.RanksMaxPoints" Label="• Ränge max" Min="0" />
+                    <MudNumericField @bind-Value="_k.LeadPoints" Label="• Leitung" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.EstatePoints" Label="• Anwesen" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.CapWeapons" Label="• Waffen" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.WeaponsDenominator" Label="Waffen-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.CapInfra" Label="• Infrastruktur" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.InfraDenominator" Label="Infra-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.DrugRouteWeight" Label="Drogenroute-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.CapS3" Label="Cap S3 (Konflikt)" Min="0" />
+                    <MudNumericField @bind-Value="_k.S3Denominator" Label="S3-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.ConflictWeight" Label="Konflikt-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.AllianceWeight" Label="Bündnis-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.CapS4" Label="Cap S4 (Netzwerk)" Min="0" />
+                    <MudNumericField @bind-Value="_k.S4Denominator" Label="S4-Nenner" Min="0.1" />
+                </div>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                    Hinweis: „Ränge max" ist zugleich Obergrenze (Math.Min) und Baustein der S2-Sub-Summe
+                    (Größe + Ränge-max + Leitung + Anwesen + Waffen + Infrastruktur = Cap S2).
+                </MudText>
+            </ChildContent>
+        </MudExpansionPanel>
+
+        <MudExpansionPanel>
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText>Person – Teilscores P1–P5</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(PersonSumOk ? Color.Success : Color.Error)">Σ Caps @($"{PersonCapsSum:0.##}")/100</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="@(P2SubOk ? Color.Success : Color.Error)">P2-Sub @($"{P2SubSum:0.##}")/@($"{_k.CapP2:0.##}")</MudChip>
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <div class="d-flex flex-wrap gap-4">
+                    <MudNumericField @bind-Value="_k.CapP1" Label="Cap P1 (Heat)" Min="0" />
+                    <MudNumericField @bind-Value="_k.P1Denominator" Label="P1-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.CapP2" Label="Cap P2 (Bewaffnung)" Min="0" />
+                    <MudNumericField @bind-Value="_k.PersonCapWeapons" Label="• Waffen" Min="0" />
+                    <MudNumericField @bind-Value="_k.PersonWeaponsDenominator" Label="Waffen-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.FugitivePoints" Label="• Flüchtig" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.CapP3" Label="Cap P3 (Observationen)" Min="0" />
+                    <MudNumericField @bind-Value="_k.P3Denominator" Label="P3-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.ObservationCompletedWeight" Label="Obs. abgeschl.-Gewicht" Min="0" Step="0.1" />
+                    <MudNumericField @bind-Value="_k.CapP4" Label="Cap P4 (Soziale Gefahr)" Min="0" />
+                    <MudNumericField @bind-Value="_k.P4Denominator" Label="P4-Nenner" Min="0.1" />
+                    <MudNumericField @bind-Value="_k.EnemyWeight" Label="Feind-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.AllyWeight" Label="Verbündeter-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.GpWeight" Label="Geschäftspartner-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.LeadWeight" Label="Leitungsrollen-Gewicht" Min="0" Step="0.5" />
+                    <MudNumericField @bind-Value="_k.CapP5" Label="Cap P5 (Netzwerk)" Min="0" />
+                    <MudNumericField @bind-Value="_k.P5Denominator" Label="P5-Nenner" Min="0.1" />
+                </div>
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    @if (!IsValid)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+            Die Caps summieren noch nicht korrekt (Fraktion S1–S4 = 100, S2-Sub = Cap S2, Person P1–P5 = 100,
+            P2-Sub = Cap P2). Speichern ist erst möglich, wenn alle Summen stimmen.
+        </MudAlert>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mb-6">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   Disabled="@(!IsValid || _saves)" OnClick="SaveAsync">Speichern</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.RestartAlt"
+                   OnClick="OnDefaultReset">Auf Standard zurücksetzen</MudButton>
+    </MudStack>
+
+    <MudDivider Class="my-4" />
+
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-2">
+        Gespeicherte Scores nutzen die Konfiguration vom Zeitpunkt ihrer letzten Berechnung. Nach einer Änderung
+        hier sind sie veraltet, bis sie neu berechnet werden (geschieht automatisch beim nächsten Schreibvorgang
+        oder dem nächtlichen Lauf – oder sofort per Knopf).
+    </MudAlert>
+    <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Calculate"
+               Disabled="_calculates" OnClick="AllNewCalculateAsync">
+        @if (_calculates)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            <span>Berechne…</span>
+        }
+        else
+        {
+            <span>Alle Scores jetzt neu berechnen</span>
+        }
+    </MudButton>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ThreatScoreConfiguration? _k;
+    private ClaimsPrincipal _user = default!;
+    private bool _saves;
+    private bool _calculates;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _k = await ConfigService.GetEditableAsync();
+    }
+
+    private double FactionCapsSum => _k is null ? 0 : _k.CapS1 + _k.CapS2 + _k.CapS3 + _k.CapS4;
+    private double S2SubSum => _k is null ? 0 : _k.CapSize + (_k.RanksMaxPoints + _k.LeadPoints + _k.EstatePoints) + _k.CapWeapons + _k.CapInfra;
+    private double PersonCapsSum => _k is null ? 0 : _k.CapP1 + _k.CapP2 + _k.CapP3 + _k.CapP4 + _k.CapP5;
+    private double P2SubSum => _k is null ? 0 : _k.PersonCapWeapons + _k.FugitivePoints;
+
+    private bool FactionSumOk => Math.Abs(FactionCapsSum - 100) < 0.001;
+    private bool S2SubOk => _k is not null && Math.Abs(S2SubSum - _k.CapS2) < 0.001;
+    private bool PersonSumOk => Math.Abs(PersonCapsSum - 100) < 0.001;
+    private bool P2SubOk => _k is not null && Math.Abs(P2SubSum - _k.CapP2) < 0.001;
+    private bool IsValid => FactionSumOk && S2SubOk && PersonSumOk && P2SubOk;
+
+    private async Task SaveAsync()
+    {
+        if (_k is null)
+        {
+            return;
+        }
+        _saves = true;
+        try
+        {
+            await ConfigService.SaveAsync(_k, _user);
+            Snackbar.Add("Konfiguration gespeichert. Bitte Scores neu berechnen.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private void OnDefaultReset()
+    {
+        _k = ThreatScoreConfiguration.Default();
+        Snackbar.Add("Standardwerte geladen (noch nicht gespeichert).", Severity.Info);
+    }
+
+    private async Task AllNewCalculateAsync()
+    {
+        _calculates = true;
+        try
+        {
+            var factions = await ScoreService.NewCalculateAllAsync();
+            var people = await ScoreService.NewCalculateAllPeopleScoresAsync();
+            Snackbar.Add($"Neu berechnet: {factions} Fraktionen, {people} Personen.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _calculates = false;
+        }
+    }
+}

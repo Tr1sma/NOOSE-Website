@@ -1,0 +1,244 @@
+@* Volltext-WYSIWYG-Editor zum Erstellen/Bearbeiten eines Bibliotheks-Dokuments. Optional: aus einer
+   Akte heraus gestartet (?entitaetTyp=…&entitaetId=…&attach=1) → das Dokument wird beim Speichern als
+   Quelle an die Akte gehängt. Optional: Vorlage vorausgewählt (?vorlageId=…). *@
+@page "/dokumente/neu"
+@page "/dokumente/{Id}/bearbeiten"
+@inject IDocumentService DocumentService
+@inject IDocumentTemplateService TemplateService
+@inject IPlaceholderService Placeholder
+@inject ISourceService SourceService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_edit ? "Dokument bearbeiten" : "Neues Dokument") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit && !_found)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dokument nicht gefunden oder nicht zugänglich.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="Cancel" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Article" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(_edit ? "Dokument bearbeiten" : "Neues Dokument")</MudText>
+        <MudSpacer />
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
+        <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudGrid>
+                <MudItem xs="12" md="7">
+                    <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                                  RequiredError="Titel ist erforderlich" AutoFocus="true" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudTextField @bind-Value="_category" Label="Kategorie (optional)" Variant="Variant.Outlined"
+                                  Placeholder="z. B. SOP, Formular, Vermerk" />
+                </MudItem>
+            </MudGrid>
+
+            @if (!_edit && _templates.Count > 0)
+            {
+                <MudSelect T="string" Label="Vorlage übernehmen (optional)" Value="_selectedTemplateId"
+                           ValueChanged="TemplateApplyAsync" Variant="Variant.Outlined" Clearable="true"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
+                           HelperText="Füllt den Editor mit dem Vorlagen-Text vor und ersetzt Platzhalter aus dem Kontext.">
+                    @foreach (var v in _templates)
+                    {
+                        <MudSelectItem T="string" Value="@v.Id">@v.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            @if (_isLeadership)
+            {
+                <MudSwitch @bind-Value="_isClassified" Color="Color.Warning" Label="Verschlusssache (nur für die Führung sichtbar)" />
+            }
+
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" />
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private RichTextEditor _editor = default!;
+    private ClaimsPrincipal _user = default!;
+
+    private bool _load = true;
+    private bool _edit;
+    private bool _found;
+    private bool _isLeadership;
+    private bool _saves;
+
+    private string _title = string.Empty;
+    private string? _category;
+    private bool _isClassified;
+    private string? _contentHtml;
+
+    private List<DocumentTemplate> _templates = new();
+    private string? _selectedTemplateId;
+
+    // Akten-Kontext (aus der Quellen-Ansicht heraus gestartet).
+    private string? _entityType;
+    private string? _entityId;
+    private bool _attach;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        _edit = !string.IsNullOrEmpty(Id);
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Nav.ToAbsoluteUri(Nav.Uri).Query);
+        _entityType = query.TryGetValue("entitaetTyp", out var et) ? et.ToString() : null;
+        _entityId = query.TryGetValue("entitaetId", out var ei) ? ei.ToString() : null;
+        _attach = query.TryGetValue("attach", out var at) && at == "1";
+        var templateId = query.TryGetValue("vorlageId", out var vid) ? vid.ToString() : null;
+
+        if (_edit)
+        {
+            var document = await DocumentService.GetAsync(Id!, _isLeadership);
+            if (document is not null)
+            {
+                _found = true;
+                _title = document.Title;
+                _category = document.Category;
+                _isClassified = document.IsClassified;
+                _contentHtml = document.ContentHtml;
+            }
+        }
+        else
+        {
+            _templates = await TemplateService.GetActiveAsync();
+            // Vorab gewählte Vorlage (Platzhalter direkt in den Initial-Inhalt einsetzen, da der Editor
+            // den Wert nur beim Initialisieren liest).
+            if (!string.IsNullOrEmpty(templateId))
+            {
+                var template = _templates.FirstOrDefault(v => v.Id == templateId);
+                if (template is not null)
+                {
+                    _selectedTemplateId = template.Id;
+                    _contentHtml = await Placeholder.ApplyAsync(template.ContentHtml, _entityType, _entityId, _user);
+                    if (string.IsNullOrWhiteSpace(_title))
+                    {
+                        _title = template.Name;
+                    }
+                }
+            }
+        }
+
+        _load = false;
+    }
+
+    private async Task TemplateApplyAsync(string? templateId)
+    {
+        _selectedTemplateId = templateId;
+        if (string.IsNullOrEmpty(templateId))
+        {
+            return;
+        }
+        var template = _templates.FirstOrDefault(v => v.Id == templateId);
+        if (template is null)
+        {
+            return;
+        }
+        var html = await Placeholder.ApplyAsync(template.ContentHtml, _entityType, _entityId, _user);
+        await _editor.SetHtmlAsync(html);
+        if (string.IsNullOrWhiteSpace(_title))
+        {
+            _title = template.Name;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        var title = _title?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            Snackbar.Add("Bitte einen Titel angeben.", Severity.Warning);
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var html = await _editor.GetHtmlAsync();
+            var input = new DocumentInput
+            {
+                Title = title,
+                Category = _category,
+                ContentHtml = html,
+                IsClassified = _isClassified,
+            };
+
+            string id;
+            if (_edit)
+            {
+                await DocumentService.RefreshAsync(Id!, input, _user);
+                id = Id!;
+            }
+            else
+            {
+                var document = await DocumentService.CreateAsync(input, _user);
+                id = document.Id;
+
+                // Beim Anlegen aus einer Akte heraus: direkt als Dokument-Quelle anhängen.
+                if (HasRecordsContext())
+                {
+                    await SourceService.CreateAsync(_entityType!, _entityId!, new SourceInput
+                    {
+                        Type = SourceType.Document,
+                        Title = title,
+                        TargetType = nameof(Document),
+                        TargetId = id,
+                    }, _user);
+                }
+            }
+
+            Snackbar.Add("Dokument gespeichert.", Severity.Success);
+            Nav.NavigateTo(TargetBySave(id));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        if (HasRecordsContext())
+        {
+            Nav.NavigateTo($"{SearchNavigation.Route(_entityType!, _entityId!)}?tab=quellen");
+        }
+        else if (_edit)
+        {
+            Nav.NavigateTo($"/dokumente/{Id}");
+        }
+        else
+        {
+            Nav.NavigateTo("/dokumente");
+        }
+    }
+
+    private bool HasRecordsContext()
+        => _attach && !string.IsNullOrWhiteSpace(_entityType) && !string.IsNullOrWhiteSpace(_entityId);
+
+    private string TargetBySave(string id)
+        => HasRecordsContext()
+            ? $"{SearchNavigation.Route(_entityType!, _entityId!)}?tab=quellen"
+            : $"/dokumente/{id}";
+}

@@ -1,0 +1,234 @@
+@* Übergreifender Dialog zum Anlegen eines Personen-Doks: Person wird über ein suchbares Dropdown
+   ausgewählt; existiert sie noch nicht, wird beim Speichern automatisch eine Akte angelegt. *@
+@inject IPersonService PersonService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IDocTemplateService TemplateService
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                @if (_templates.Count > 0)
+                {
+                    <MudSelect T="DocTemplate" Label="Vorlage übernehmen (optional)" Value="_selectedTemplate"
+                               ValueChanged="TemplateApply" Variant="Variant.Outlined" Clearable="true"
+                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
+                               ToStringFunc="@(v => v?.Name ?? string.Empty)"
+                               HelperText="Füllt die Dok-Felder mit den Vorgaben der Vorlage vor – frei editierbar.">
+                        @foreach (var v in _templates)
+                        {
+                            <MudSelectItem Value="v">@v.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudDivider />
+                }
+                <MudAutocomplete T="Person" Label="Person" @bind-Value="_person" @bind-Text="_personText" AutoFocus="true"
+                                 SearchFunc="@SearchPeople" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                 Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                 ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch"
+                                 HelperText="Bestehende Person auswählen oder einen neuen Namen eingeben.">
+                    <ItemTemplate Context="p">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@p.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+
+                @if (_personError)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Outlined">
+                        Bitte eine Person auswählen oder einen Namen für eine neue Akte eingeben.
+                    </MudAlert>
+                }
+                else if (IsNewRecord)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Für „@_personText!.Trim()" wird automatisch eine neue Akte angelegt.
+                    </MudAlert>
+                }
+
+                <MudDivider />
+
+                <MudGrid>
+                    <MudItem xs="7">
+                        <MudDatePicker Label="Datum der Maßnahme" @bind-Date="_date" Required="true"
+                                       RequiredError="Datum ist erforderlich" DateFormat="dd.MM.yyyy" />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_time" />
+                    </MudItem>
+                </MudGrid>
+                <MudSelect T="MeasureOutcome" Label="Beendigung der Maßnahme" @bind-Value="_input.Outcome" Variant="Variant.Outlined">
+                    @foreach (var a in MeasureOutcomeDisplay.All)
+                    {
+                        <MudSelectItem Value="a">@MeasureOutcomeDisplay.Name(a)</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_input.Outcome == MeasureOutcome.Shot)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                        Setzt den Lebensstatus für 20 Minuten auf „Tot" (Respawn-Zeit).
+                    </MudAlert>
+                }
+                else if (_input.Outcome == MeasureOutcome.Injection)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.
+                    </MudAlert>
+                }
+                <MudTextField @bind-Value="_input.Reason" Label="Grund" Lines="2" Variant="Variant.Outlined" />
+
+                @* Fraktionszugehörigkeit: bevorzugt eine bestehende Akte verknüpfen, sonst Freitext. *@
+                <MudRadioGroup T="string" @bind-Value="Type">
+                    <MudRadio T="string" Value="@nameof(Faction)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                    <MudRadio T="string" Value="@nameof(PersonGroup)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+                </MudRadioGroup>
+                <MudAutocomplete T="AffiliationDialog.RecordHit" Label="Fraktion / Gruppe (verknüpft)"
+                                 @bind-Value="_target" SearchFunc="@Search" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                                 Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                 ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                 Adornment="Adornment.Start" AdornmentIcon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)"
+                                 HelperText="Bestehende Akte verknüpfen – oder leer lassen und unten Freitext nutzen.">
+                    <ItemTemplate Context="a">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@a.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+                @if (_target is not null)
+                {
+                    <MudCheckBox T="bool" @bind-Value="_asMember" Color="Color.Primary" Dense="true"
+                                 Label="Person als Mitglied dieser Akte eintragen" />
+                }
+                <MudTextField @bind-Value="_input.Faction" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined"
+                              HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
+                <MudTextField @bind-Value="_input.ReceivedInformation" Label="Erhaltene Informationen" Lines="3" Variant="Variant.Outlined" />
+                <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Dok speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Steuert, ob auch Verschlusssachen in der Personensuche erscheinen.</summary>
+    [Parameter] public bool IsLeadership { get; set; }
+
+    private MudForm _form = default!;
+    private readonly PersonDocInput _input = new();
+    private DateTime? _date = DateTime.Now;
+    private TimeSpan? _time = DateTime.Now.TimeOfDay;
+
+    private string _orgType = nameof(Faction);
+    private string Type
+    {
+        get => _orgType;
+        // Typwechsel verwirft die bisherige Auswahl (Fraktion- und Gruppen-Treffer sind nicht austauschbar).
+        set { if (_orgType != value) { _orgType = value; _target = null; } }
+    }
+    private bool IsFaction => _orgType == nameof(Faction);
+    private AffiliationDialog.RecordHit? _target;
+    private bool _asMember;
+
+    // Vorlagen-Picker: aktive Vorlagen + aktuell gewählte.
+    private List<DocTemplate> _templates = new();
+    private DocTemplate? _selectedTemplate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = await TemplateService.GetActiveAsync();
+    }
+
+    /// <summary>Übernimmt die Vorgaben der gewählten Vorlage in das Formular (frei editierbar).</summary>
+    private void TemplateApply(DocTemplate? template)
+    {
+        _selectedTemplate = template;
+        if (template is null)
+        {
+            return;
+        }
+        _input.Reason = template.DefaultReason;
+        _input.Faction = template.DefaultFaction;
+        _input.ReceivedInformation = template.DefaultReceivedInformation;
+        _input.TruthSerum = template.DefaultTruthSerum;
+        _input.Outcome = template.DefaultOutcome;
+    }
+
+    private async Task<IEnumerable<AffiliationDialog.RecordHit>> Search(string value, CancellationToken token)
+    {
+        if (IsFaction)
+        {
+            var hit = await FactionService.SearchAsync(value, IsLeadership, 20, token);
+            return hit.Select(f => new AffiliationDialog.RecordHit(f.Id, f.Name, f.CaseNumber));
+        }
+        var groups = await GroupService.SearchAsync(value, IsLeadership, 20, token);
+        return groups.Select(g => new AffiliationDialog.RecordHit(g.Id, g.Name, g.CaseNumber));
+    }
+
+    private Person? _person;
+    private string? _personText;
+    private bool _personError;
+
+    // Neue Akte: kein bestehender Treffer gewählt, aber ein Name eingegeben.
+    private bool IsNewRecord => SelectedPersonId is null && !string.IsNullOrWhiteSpace(_personText);
+
+    // Die gewählte Person zählt nur, solange ihr Name auch im Eingabefeld steht (sonst Freitext → neue Akte).
+    private string? SelectedPersonId
+        => _person is not null && string.Equals(_person.Name, _personText?.Trim(), StringComparison.Ordinal)
+            ? _person.Id
+            : null;
+
+    private async Task<IEnumerable<Person>> SearchPeople(string value, CancellationToken token)
+        => await PersonService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+
+        var personId = SelectedPersonId;
+        var newName = personId is null ? _personText?.Trim() : null;
+        _personError = personId is null && string.IsNullOrWhiteSpace(newName);
+        if (_personError || !_form.IsValid)
+        {
+            return;
+        }
+
+        var date = (_date ?? DateTime.Now).Date;
+        var time = _time ?? TimeSpan.Zero;
+        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen.
+        _input.Timestamp = DateTime.SpecifyKind(date + time, DateTimeKind.Local).ToUniversalTime();
+        // Verknüpfung übernehmen; ohne Auswahl bleibt nur der Freitext.
+        _input.OrgId = _target?.Id;
+        _input.OrgType = _target is null ? null : _orgType;
+        _input.AsMember = _target is not null && _asMember;
+
+        MudDialog.Close(DialogResult.Ok(new DocCreateResult
+        {
+            PersonId = personId,
+            NewName = newName,
+            Input = _input,
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert die Eingabe (inkl. Personenzuordnung) oder null bei Abbruch.</summary>
+    public static async Task<DocCreateResult?> ShowAsync(IDialogService dialog, bool isLeadership)
+    {
+        var parameters = new DialogParameters<DocCreateDialog> { { x => x.IsLeadership, isLeadership } };
+        var reference = await dialog.ShowAsync<DocCreateDialog>("Neues Dok", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: DocCreateResult e } ? e : null;
+    }
+}

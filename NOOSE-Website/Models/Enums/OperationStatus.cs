@@ -7,32 +7,32 @@ namespace NOOSE_Website.Models.Enums;
 public enum OperationStatus
 {
     /// <summary>Geplant, noch nicht begonnen.</summary>
-    Geplant = 0,
+    Planned = 0,
     /// <summary>Laufend (im Einsatz).</summary>
-    Laufend = 1,
+    Running = 1,
     /// <summary>Abgeschlossen (regulär beendet).</summary>
-    Abgeschlossen = 2,
+    Completed = 2,
     /// <summary>Abgebrochen (vorzeitig beendet).</summary>
-    Abgebrochen = 3,
+    Aborted = 3,
 }
 
 /// <summary>Anzeigetexte für den Operations-Status (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
-public static class OperationStatusAnzeige
+public static class OperationStatusDisplay
 {
     public static string Name(OperationStatus status) => status switch
     {
-        OperationStatus.Geplant => "Geplant",
-        OperationStatus.Laufend => "Laufend",
-        OperationStatus.Abgeschlossen => "Abgeschlossen",
-        OperationStatus.Abgebrochen => "Abgebrochen",
+        OperationStatus.Planned => "Geplant",
+        OperationStatus.Running => "Laufend",
+        OperationStatus.Completed => "Abgeschlossen",
+        OperationStatus.Aborted => "Abgebrochen",
         _ => "—",
     };
 
-    public static readonly IReadOnlyList<OperationStatus> Alle = new[]
+    public static readonly IReadOnlyList<OperationStatus> All = new[]
     {
-        OperationStatus.Geplant,
-        OperationStatus.Laufend,
-        OperationStatus.Abgeschlossen,
-        OperationStatus.Abgebrochen,
+        OperationStatus.Planned,
+        OperationStatus.Running,
+        OperationStatus.Completed,
+        OperationStatus.Aborted,
     };
 }

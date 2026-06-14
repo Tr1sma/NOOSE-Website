@@ -3,15 +3,15 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
-using NOOSE_Website.Data.Entities.Aufgaben;
-using NOOSE_Website.Data.Entities.Fraktionen;
-using NOOSE_Website.Data.Entities.Gruppen;
-using NOOSE_Website.Data.Entities.Operationen;
-using NOOSE_Website.Data.Entities.Parteien;
-using NOOSE_Website.Data.Entities.Personen;
-using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Jobs;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Parties;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
-using NOOSE_Website.Data.Entities.Vorgaenge;
+using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Graph;
 
@@ -22,290 +22,290 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 {
     /// <summary>Obergrenze der Knoten im Gesamtgraph (ohne Fokus). Darüber wird auf die Knoten mit dem
     /// höchsten Grad reduziert und das Ergebnis als „abgeschnitten" markiert.</summary>
-    private const int MaxKnoten = 250;
+    private const int MaxNode = 250;
 
     /// <summary>Sicherheitsnetz der Pfadsuche: maximale Hop-Tiefe und maximale Zahl besuchter Knoten.</summary>
-    private const int MaxPfadTiefe = 12;
-    private const int MaxBesucht = 8000;
+    private const int MaxPathDepth = 12;
+    private const int MaxVisited = 8000;
 
     /// <summary>Roh-Kante zwischen zwei Graph-Schlüsseln, vor Sichtbarkeits-/Typ-Filterung.</summary>
-    private readonly record struct RohKante(string Von, string Nach, string? Label, VerknuepfungArt Art, bool Automatisch);
+    private readonly record struct RawEdge(string Source, string Target, string? Label, LinkKind Kind, bool Automatic);
 
-    public async Task<GraphDaten> GetGraphAsync(GraphAnfrage anfrage, ClaimsPrincipal betrachter, CancellationToken cancellationToken = default)
+    public async Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var istFuehrung = betrachter.IstFuehrung();
-        var meId = betrachter.GetAgentId();
+        var isLeadership = viewer.IsLeadership();
+        var meId = viewer.GetAgentId();
 
-        var rohKanten = await LadeRohKantenAsync(db, anfrage.ArtFilter, cancellationToken);
+        var rawEdges = await LoadRawEdgesAsync(db, query.KindFilter, cancellationToken);
 
         // Alle vorkommenden Knoten einsammeln (+ den Fokusknoten, falls er kantenlos ist).
         var keys = new HashSet<string>();
-        foreach (var k in rohKanten)
+        foreach (var k in rawEdges)
         {
-            keys.Add(k.Von);
-            keys.Add(k.Nach);
+            keys.Add(k.Source);
+            keys.Add(k.Target);
         }
-        if (anfrage.FokusTyp is not null && anfrage.FokusId is not null)
+        if (query.FocusType is not null && query.FocusId is not null)
         {
-            keys.Add($"{anfrage.FokusTyp}:{anfrage.FokusId}");
+            keys.Add($"{query.FocusType}:{query.FocusId}");
         }
 
         // Knoten sichtbarkeitsgeprüft auflösen; nicht sichtbare fallen hier bereits weg.
-        var knoten = await LoeseKnotenAsync(db, keys, istFuehrung, meId, cancellationToken);
+        var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
         // Typ-Filter (falls gesetzt) auf die aufgelösten Knoten anwenden.
-        if (anfrage.TypFilter is { Count: > 0 })
+        if (query.TypeFilter is { Count: > 0 })
         {
-            var erlaubt = anfrage.TypFilter.ToHashSet();
-            foreach (var key in knoten.Keys.ToList())
+            var allowed = query.TypeFilter.ToHashSet();
+            foreach (var key in node.Keys.ToList())
             {
-                if (!erlaubt.Contains(knoten[key].Typ))
+                if (!allowed.Contains(node[key].Type))
                 {
-                    knoten.Remove(key);
+                    node.Remove(key);
                 }
             }
         }
 
         // Kanten auf Paare sichtbarer/erlaubter Knoten reduzieren (Selbstkanten raus).
-        var kanten = rohKanten
-            .Where(k => k.Von != k.Nach && knoten.ContainsKey(k.Von) && knoten.ContainsKey(k.Nach))
+        var edges = rawEdges
+            .Where(k => k.Source != k.Target && node.ContainsKey(k.Source) && node.ContainsKey(k.Target))
             .ToList();
 
-        var abgeschnitten = false;
-        HashSet<string> behalten;
+        var truncated = false;
+        HashSet<string> keep;
 
-        if (anfrage.FokusTyp is not null && anfrage.FokusId is not null)
+        if (query.FocusType is not null && query.FocusId is not null)
         {
-            var fokusKey = $"{anfrage.FokusTyp}:{anfrage.FokusId}";
-            if (!knoten.ContainsKey(fokusKey))
+            var focusKey = $"{query.FocusType}:{query.FocusId}";
+            if (!node.ContainsKey(focusKey))
             {
                 // Fokusakte nicht sichtbar/vorhanden → leerer Graph.
-                return new GraphDaten(Array.Empty<GraphKnoten>(), Array.Empty<GraphKante>(), false);
+                return new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
             }
-            behalten = Umkreis(fokusKey, kanten, Math.Clamp(anfrage.Tiefe, 1, 3));
+            keep = Radius(focusKey, edges, Math.Clamp(query.Depth, 1, 3));
         }
         else
         {
-            behalten = knoten.Keys.ToHashSet();
-            if (behalten.Count > MaxKnoten)
+            keep = node.Keys.ToHashSet();
+            if (keep.Count > MaxNode)
             {
-                var grad = GradZaehlen(kanten);
-                behalten = behalten
-                    .OrderByDescending(k => grad.TryGetValue(k, out var g) ? g : 0)
-                    .Take(MaxKnoten)
+                var degree = DegreeCount(edges);
+                keep = keep
+                    .OrderByDescending(k => degree.TryGetValue(k, out var g) ? g : 0)
+                    .Take(MaxNode)
                     .ToHashSet();
-                abgeschnitten = true;
+                truncated = true;
             }
         }
 
-        var finaleKanten = kanten
-            .Where(k => behalten.Contains(k.Von) && behalten.Contains(k.Nach))
+        var finalEdges = edges
+            .Where(k => keep.Contains(k.Source) && keep.Contains(k.Target))
             .ToList();
-        var gradFinal = GradZaehlen(finaleKanten);
+        var degreeFinal = DegreeCount(finalEdges);
 
-        var knotenListe = behalten
-            .Where(knoten.ContainsKey)
-            .Select(k => knoten[k] with { Grad = gradFinal.TryGetValue(k, out var g) ? g : 0 })
+        var nodeList = keep
+            .Where(node.ContainsKey)
+            .Select(k => node[k] with { Degree = degreeFinal.TryGetValue(k, out var g) ? g : 0 })
             .ToList();
-        var kantenListe = finaleKanten
-            .Select(k => new GraphKante(k.Von, k.Nach, k.Label, k.Art, k.Automatisch))
+        var edgesList = finalEdges
+            .Select(k => new GraphEdge(k.Source, k.Target, k.Label, k.Kind, k.Automatic))
             .ToList();
 
-        return new GraphDaten(knotenListe, kantenListe, abgeschnitten);
+        return new GraphData(nodeList, edgesList, truncated);
     }
 
-    public async Task<PfadErgebnis> FindePfadAsync(string vonTyp, string vonId, string nachTyp, string nachId, ClaimsPrincipal betrachter, CancellationToken cancellationToken = default)
+    public async Task<PathResult> FindPathAsync(string sourceType, string sourceId, string targetType, string targetId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var istFuehrung = betrachter.IstFuehrung();
-        var meId = betrachter.GetAgentId();
+        var isLeadership = viewer.IsLeadership();
+        var meId = viewer.GetAgentId();
 
-        var vonKey = $"{vonTyp}:{vonId}";
-        var nachKey = $"{nachTyp}:{nachId}";
+        var sourceKey = $"{sourceType}:{sourceId}";
+        var targetKey = $"{targetType}:{targetId}";
 
-        var rohKanten = await LadeRohKantenAsync(db, null, cancellationToken);
-        var keys = new HashSet<string> { vonKey, nachKey };
-        foreach (var k in rohKanten)
+        var rawEdges = await LoadRawEdgesAsync(db, null, cancellationToken);
+        var keys = new HashSet<string> { sourceKey, targetKey };
+        foreach (var k in rawEdges)
         {
-            keys.Add(k.Von);
-            keys.Add(k.Nach);
+            keys.Add(k.Source);
+            keys.Add(k.Target);
         }
-        var knoten = await LoeseKnotenAsync(db, keys, istFuehrung, meId, cancellationToken);
+        var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
         // Start oder Ziel nicht sichtbar/vorhanden → kein Pfad.
-        if (!knoten.ContainsKey(vonKey) || !knoten.ContainsKey(nachKey))
+        if (!node.ContainsKey(sourceKey) || !node.ContainsKey(targetKey))
         {
-            return new PfadErgebnis(false, Array.Empty<GraphKnoten>(), Array.Empty<GraphKante>());
+            return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
         }
-        if (vonKey == nachKey)
+        if (sourceKey == targetKey)
         {
-            return new PfadErgebnis(true, new[] { knoten[vonKey] }, Array.Empty<GraphKante>());
+            return new PathResult(true, new[] { node[sourceKey] }, Array.Empty<GraphEdge>());
         }
 
         // Adjazenz nur unter sichtbaren Knoten aufbauen.
-        var adj = new Dictionary<string, List<RohKante>>();
-        void Verbinde(string a, RohKante k)
+        var adj = new Dictionary<string, List<RawEdge>>();
+        void Connect(string a, RawEdge k)
         {
-            if (!adj.TryGetValue(a, out var liste))
+            if (!adj.TryGetValue(a, out var list))
             {
-                liste = new();
-                adj[a] = liste;
+                list = new();
+                adj[a] = list;
             }
-            liste.Add(k);
+            list.Add(k);
         }
-        foreach (var k in rohKanten)
+        foreach (var k in rawEdges)
         {
-            if (k.Von == k.Nach || !knoten.ContainsKey(k.Von) || !knoten.ContainsKey(k.Nach))
+            if (k.Source == k.Target || !node.ContainsKey(k.Source) || !node.ContainsKey(k.Target))
             {
                 continue;
             }
-            Verbinde(k.Von, k);
-            Verbinde(k.Nach, k);
+            Connect(k.Source, k);
+            Connect(k.Target, k);
         }
 
         // Breitensuche mit Vorgänger-Tabelle (Knoten → benutzte Kante).
-        var vorgaenger = new Dictionary<string, RohKante>();
-        var tiefe = new Dictionary<string, int> { [vonKey] = 0 };
-        var schlange = new Queue<string>();
-        schlange.Enqueue(vonKey);
-        var besucht = 0;
-        var gefunden = false;
+        var predecessor = new Dictionary<string, RawEdge>();
+        var depth = new Dictionary<string, int> { [sourceKey] = 0 };
+        var queue = new Queue<string>();
+        queue.Enqueue(sourceKey);
+        var visited = 0;
+        var found = false;
 
-        while (schlange.Count > 0)
+        while (queue.Count > 0)
         {
-            var aktuell = schlange.Dequeue();
-            if (aktuell == nachKey)
+            var current = queue.Dequeue();
+            if (current == targetKey)
             {
-                gefunden = true;
+                found = true;
                 break;
             }
-            if (++besucht > MaxBesucht || tiefe[aktuell] >= MaxPfadTiefe || !adj.TryGetValue(aktuell, out var nachbarn))
+            if (++visited > MaxVisited || depth[current] >= MaxPathDepth || !adj.TryGetValue(current, out var neighbors))
             {
                 continue;
             }
-            foreach (var kante in nachbarn)
+            foreach (var edge in neighbors)
             {
-                var anderer = kante.Von == aktuell ? kante.Nach : kante.Von;
-                if (tiefe.ContainsKey(anderer))
+                var other = edge.Source == current ? edge.Target : edge.Source;
+                if (depth.ContainsKey(other))
                 {
                     continue;
                 }
-                tiefe[anderer] = tiefe[aktuell] + 1;
-                vorgaenger[anderer] = kante;
-                schlange.Enqueue(anderer);
+                depth[other] = depth[current] + 1;
+                predecessor[other] = edge;
+                queue.Enqueue(other);
             }
         }
 
-        if (!gefunden)
+        if (!found)
         {
-            return new PfadErgebnis(false, Array.Empty<GraphKnoten>(), Array.Empty<GraphKante>());
+            return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
         }
 
         // Pfad vom Ziel zurück zum Start rekonstruieren und umdrehen.
-        var knotenPfad = new List<string> { nachKey };
-        var kantenPfad = new List<RohKante>();
-        var cursor = nachKey;
-        while (cursor != vonKey)
+        var nodePath = new List<string> { targetKey };
+        var edgesPath = new List<RawEdge>();
+        var cursor = targetKey;
+        while (cursor != sourceKey)
         {
-            var kante = vorgaenger[cursor];
-            kantenPfad.Add(kante);
-            cursor = kante.Von == cursor ? kante.Nach : kante.Von;
-            knotenPfad.Add(cursor);
+            var edge = predecessor[cursor];
+            edgesPath.Add(edge);
+            cursor = edge.Source == cursor ? edge.Target : edge.Source;
+            nodePath.Add(cursor);
         }
-        knotenPfad.Reverse();
-        kantenPfad.Reverse();
+        nodePath.Reverse();
+        edgesPath.Reverse();
 
-        return new PfadErgebnis(
+        return new PathResult(
             true,
-            knotenPfad.Select(k => knoten[k]).ToList(),
-            kantenPfad.Select(k => new GraphKante(k.Von, k.Nach, k.Label, k.Art, k.Automatisch)).ToList());
+            nodePath.Select(k => node[k]).ToList(),
+            edgesPath.Select(k => new GraphEdge(k.Source, k.Target, k.Label, k.Kind, k.Automatic)).ToList());
     }
 
     // ---- Kanten laden (beide Quellen, optional auf eine Art gefiltert) ----
 
-    private static async Task<List<RohKante>> LadeRohKantenAsync(AppDbContext db, VerknuepfungArt? artFilter, CancellationToken cancellationToken)
+    private static async Task<List<RawEdge>> LoadRawEdgesAsync(AppDbContext db, LinkKind? kindFilter, CancellationToken cancellationToken)
     {
         // Automatische „Kollegen"-Verknüpfungen (KollegenSync: Mitglied↔Mitglied einer Organisation)
         // bilden eine Clique (O(n²)) und werden im Graph NICHT als Kante gezeichnet – stattdessen wird
         // die Mitgliedschaft als Stern-Kante Mitglied→Organisation ergänzt (siehe unten). Die Clique-
         // Daten bleiben in der DB erhalten (Listen im VerknuepfungPanel).
-        var vq = db.Verknuepfungen.Where(v => !v.Automatisch);
-        if (artFilter is not null)
+        var vq = db.Links.Where(v => !v.Automatic);
+        if (kindFilter is not null)
         {
-            vq = vq.Where(v => v.Art == artFilter.Value);
+            vq = vq.Where(v => v.Kind == kindFilter.Value);
         }
-        var verkn = await vq
-            .Select(v => new { v.VonTyp, v.VonId, v.NachTyp, v.NachId, v.Label, v.Art, v.Automatisch })
+        var link = await vq
+            .Select(v => new { v.SourceType, v.SourceId, v.TargetType, v.TargetId, v.Label, v.Kind, v.Automatic })
             .ToListAsync(cancellationToken);
 
-        var kanten = new List<RohKante>(verkn.Count);
-        foreach (var v in verkn)
+        var edges = new List<RawEdge>(link.Count);
+        foreach (var v in link)
         {
-            kanten.Add(new RohKante($"{v.VonTyp}:{v.VonId}", $"{v.NachTyp}:{v.NachId}", v.Label, v.Art, v.Automatisch));
+            edges.Add(new RawEdge($"{v.SourceType}:{v.SourceId}", $"{v.TargetType}:{v.TargetId}", v.Label, v.Kind, v.Automatic));
         }
 
         // Person-zu-Person-Beziehungen auf eine Verknüpfungs-Art mappen (Feind→Konflikt, Verbündeter→Bündnis).
-        var bez = await db.PersonBeziehungen
-            .Select(b => new { b.PersonAId, b.PersonBId, b.Typ })
+        var bez = await db.PersonRelations
+            .Select(b => new { b.PersonAId, b.PersonBId, b.Type })
             .ToListAsync(cancellationToken);
         foreach (var b in bez)
         {
-            var art = b.Typ switch
+            var kind = b.Type switch
             {
-                BeziehungsTyp.Feind => VerknuepfungArt.Konflikt,
-                BeziehungsTyp.Verbuendeter => VerknuepfungArt.Buendnis,
-                _ => VerknuepfungArt.Standard,
+                RelationType.Enemy => LinkKind.Conflict,
+                RelationType.Ally => LinkKind.Alliance,
+                _ => LinkKind.Default,
             };
-            if (artFilter is not null && art != artFilter.Value)
+            if (kindFilter is not null && kind != kindFilter.Value)
             {
                 continue;
             }
-            kanten.Add(new RohKante(
+            edges.Add(new RawEdge(
                 $"{nameof(Person)}:{b.PersonAId}",
                 $"{nameof(Person)}:{b.PersonBId}",
-                BeziehungsTypAnzeige.Name(b.Typ),
-                art,
+                RelationTypeDisplay.Name(b.Type),
+                kind,
                 false));
         }
 
         // Stern-Topologie: Mitgliedschaften als Kante Mitglied → Organisation (Org als Hub) – ersetzt die
         // weggelassene Mitglied↔Mitglied-Clique. Als „Automatisch" markiert (→ dezent gestrichelt). Nur
         // wenn der Art-Filter Standard zulässt (bei Konflikt/Bündnis werden Mitgliedschaften ausgeblendet).
-        if (artFilter is null || artFilter == VerknuepfungArt.Standard)
+        if (kindFilter is null || kindFilter == LinkKind.Default)
         {
-            foreach (var m in await db.FraktionMitglieder
-                .Select(m => new { m.PersonId, OrgId = m.FraktionId, m.IstLeitung }).ToListAsync(cancellationToken))
+            foreach (var m in await db.FactionMembers
+                .Select(m => new { m.PersonId, OrgId = m.FactionId, m.IsLead }).ToListAsync(cancellationToken))
             {
-                kanten.Add(new RohKante($"{nameof(Person)}:{m.PersonId}", $"{nameof(Fraktion)}:{m.OrgId}",
-                    m.IstLeitung ? "Leitung" : null, VerknuepfungArt.Standard, true));
+                edges.Add(new RawEdge($"{nameof(Person)}:{m.PersonId}", $"{nameof(Faction)}:{m.OrgId}",
+                    m.IsLead ? "Leitung" : null, LinkKind.Default, true));
             }
-            foreach (var m in await db.PersonengruppeMitglieder
-                .Select(m => new { m.PersonId, OrgId = m.PersonengruppeId, m.IstLeitung }).ToListAsync(cancellationToken))
+            foreach (var m in await db.PersonGroupMembers
+                .Select(m => new { m.PersonId, OrgId = m.PersonGroupId, m.IsLead }).ToListAsync(cancellationToken))
             {
-                kanten.Add(new RohKante($"{nameof(Person)}:{m.PersonId}", $"{nameof(Personengruppe)}:{m.OrgId}",
-                    m.IstLeitung ? "Leitung" : null, VerknuepfungArt.Standard, true));
+                edges.Add(new RawEdge($"{nameof(Person)}:{m.PersonId}", $"{nameof(PersonGroup)}:{m.OrgId}",
+                    m.IsLead ? "Leitung" : null, LinkKind.Default, true));
             }
-            foreach (var m in await db.ParteiMitglieder
-                .Select(m => new { m.PersonId, OrgId = m.ParteiId, m.IstLeitung }).ToListAsync(cancellationToken))
+            foreach (var m in await db.PartyMembers
+                .Select(m => new { m.PersonId, OrgId = m.PartyId, m.IsLead }).ToListAsync(cancellationToken))
             {
-                kanten.Add(new RohKante($"{nameof(Person)}:{m.PersonId}", $"{nameof(Partei)}:{m.OrgId}",
-                    m.IstLeitung ? "Leitung" : null, VerknuepfungArt.Standard, true));
+                edges.Add(new RawEdge($"{nameof(Person)}:{m.PersonId}", $"{nameof(Party)}:{m.OrgId}",
+                    m.IsLead ? "Leitung" : null, LinkKind.Default, true));
             }
         }
 
-        return kanten;
+        return edges;
     }
 
     // ---- Knoten-Auflösung (verallgemeinert aus VerknuepfungService.GetFuerAkteAsync) ----
     // Je Aktentyp eine Sammelabfrage; nicht sichtbare Akten (Verschlusssache/fremde Taskforce/Papierkorb)
     // werden gar nicht erst aufgenommen, sodass die anhängenden Kanten später automatisch wegfallen.
 
-    private static async Task<Dictionary<string, GraphKnoten>> LoeseKnotenAsync(
-        AppDbContext db, IEnumerable<string> keys, bool istFuehrung, string? meId, CancellationToken cancellationToken)
+    private static async Task<Dictionary<string, GraphNode>> ResolveNodeAsync(
+        AppDbContext db, IEnumerable<string> keys, bool isLeadership, string? meId, CancellationToken cancellationToken)
     {
         // Schlüssel nach Typ gruppieren.
-        var nachTyp = new Dictionary<string, HashSet<string>>();
+        var targetType = new Dictionary<string, HashSet<string>>();
         foreach (var key in keys)
         {
             var idx = key.IndexOf(':');
@@ -313,98 +313,98 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             {
                 continue;
             }
-            var typ = key[..idx];
+            var type = key[..idx];
             var id = key[(idx + 1)..];
-            if (!nachTyp.TryGetValue(typ, out var set))
+            if (!targetType.TryGetValue(type, out var set))
             {
                 set = new();
-                nachTyp[typ] = set;
+                targetType[type] = set;
             }
             set.Add(id);
         }
 
-        var result = new Dictionary<string, GraphKnoten>();
-        GraphKnoten Mk(string typ, string id, string bez, string? unter, string? href, int einstufung, bool vs)
-            => new($"{typ}:{id}", typ, bez, unter, href, einstufung, vs, null, 0);
+        var result = new Dictionary<string, GraphNode>();
+        GraphNode Mk(string type, string id, string bez, string? under, string? href, int classification, bool classified)
+            => new($"{type}:{id}", type, bez, under, href, classification, classified, null, 0);
 
-        List<string> Ids(string typ) => nachTyp.TryGetValue(typ, out var s) ? s.ToList() : new();
+        List<string> Ids(string type) => targetType.TryGetValue(type, out var s) ? s.ToList() : new();
 
         // ---- Person (mit Einstufungs-Farbe + Foto-Thumbnail) ----
         var personIds = Ids(nameof(Person));
         if (personIds.Count > 0)
         {
-            var rows = await db.Personen.Where(p => personIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache, p.Einstufung })
+            var rows = await db.People.Where(p => personIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification })
                 .ToListAsync(cancellationToken);
             foreach (var x in rows)
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Person)}:{x.Id}"] = Mk(nameof(Person), x.Id, x.Name, x.Aktenzeichen, $"/personen/{x.Id}", (int)x.Einstufung, x.IstVerschlusssache);
+                result[$"{nameof(Person)}:{x.Id}"] = Mk(nameof(Person), x.Id, x.Name, x.CaseNumber, $"/personen/{x.Id}", (int)x.Classification, x.IsClassified);
             }
 
-            var sichtbarePers = rows.Where(r => istFuehrung || !r.IstVerschlusssache).Select(r => r.Id).ToList();
-            if (sichtbarePers.Count > 0)
+            var visiblePers = rows.Where(r => isLeadership || !r.IsClassified).Select(r => r.Id).ToList();
+            if (visiblePers.Count > 0)
             {
-                var fotos = await db.PersonFotos.Where(f => sichtbarePers.Contains(f.PersonId))
-                    .Select(f => new { f.Id, f.PersonId, f.ErstelltAm })
+                var photos = await db.PersonPhotos.Where(f => visiblePers.Contains(f.PersonId))
+                    .Select(f => new { f.Id, f.PersonId, f.CreatedAt })
                     .ToListAsync(cancellationToken);
-                foreach (var grp in fotos.GroupBy(f => f.PersonId))
+                foreach (var grp in photos.GroupBy(f => f.PersonId))
                 {
-                    var erstes = grp.OrderBy(f => f.ErstelltAm).First();
+                    var first = grp.OrderBy(f => f.CreatedAt).First();
                     var key = $"{nameof(Person)}:{grp.Key}";
                     if (result.TryGetValue(key, out var kn))
                     {
-                        result[key] = kn with { FotoUrl = $"/dateien/personen/foto/{erstes.Id}" };
+                        result[key] = kn with { PhotoUrl = $"/dateien/personen/foto/{first.Id}" };
                     }
                 }
             }
         }
 
         // ---- Fraktion ----
-        var fraktionIds = Ids(nameof(Fraktion));
-        if (fraktionIds.Count > 0)
+        var factionIds = Ids(nameof(Faction));
+        if (factionIds.Count > 0)
         {
-            foreach (var x in await db.Fraktionen.Where(f => fraktionIds.Contains(f.Id))
-                .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache, f.Einstufung }).ToListAsync(cancellationToken))
+            foreach (var x in await db.Factions.Where(f => factionIds.Contains(f.Id))
+                .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified, f.Classification }).ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Fraktion)}:{x.Id}"] = Mk(nameof(Fraktion), x.Id, x.Name, x.Aktenzeichen, $"/fraktionen/{x.Id}", (int)x.Einstufung, x.IstVerschlusssache);
+                result[$"{nameof(Faction)}:{x.Id}"] = Mk(nameof(Faction), x.Id, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}", (int)x.Classification, x.IsClassified);
             }
         }
 
         // ---- Personengruppe ----
-        var gruppenIds = Ids(nameof(Personengruppe));
-        if (gruppenIds.Count > 0)
+        var groupsIds = Ids(nameof(PersonGroup));
+        if (groupsIds.Count > 0)
         {
-            foreach (var x in await db.Personengruppen.Where(g => gruppenIds.Contains(g.Id))
-                .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache, g.Einstufung }).ToListAsync(cancellationToken))
+            foreach (var x in await db.PersonGroups.Where(g => groupsIds.Contains(g.Id))
+                .Select(g => new { g.Id, g.Name, g.CaseNumber, g.IsClassified, g.Classification }).ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Personengruppe)}:{x.Id}"] = Mk(nameof(Personengruppe), x.Id, x.Name, x.Aktenzeichen, $"/personengruppen/{x.Id}", (int)x.Einstufung, x.IstVerschlusssache);
+                result[$"{nameof(PersonGroup)}:{x.Id}"] = Mk(nameof(PersonGroup), x.Id, x.Name, x.CaseNumber, $"/personengruppen/{x.Id}", (int)x.Classification, x.IsClassified);
             }
         }
 
         // ---- Partei ----
-        var parteiIds = Ids(nameof(Partei));
-        if (parteiIds.Count > 0)
+        var partyIds = Ids(nameof(Party));
+        if (partyIds.Count > 0)
         {
-            foreach (var x in await db.Parteien.Where(p => parteiIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache, p.Einstufung }).ToListAsync(cancellationToken))
+            foreach (var x in await db.Parties.Where(p => partyIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification }).ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Partei)}:{x.Id}"] = Mk(nameof(Partei), x.Id, x.Name, x.Aktenzeichen, $"/parteien/{x.Id}", (int)x.Einstufung, x.IstVerschlusssache);
+                result[$"{nameof(Party)}:{x.Id}"] = Mk(nameof(Party), x.Id, x.Name, x.CaseNumber, $"/parteien/{x.Id}", (int)x.Classification, x.IsClassified);
             }
         }
 
@@ -412,29 +412,29 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         var operationIds = Ids(nameof(Operation));
         if (operationIds.Count > 0)
         {
-            foreach (var x in await db.Operationen.Where(o => operationIds.Contains(o.Id))
-                .Select(o => new { o.Id, o.Titel, o.Aktenzeichen, o.IstVerschlusssache, o.Einstufung }).ToListAsync(cancellationToken))
+            foreach (var x in await db.Operations.Where(o => operationIds.Contains(o.Id))
+                .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified, o.Classification }).ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Operation)}:{x.Id}"] = Mk(nameof(Operation), x.Id, x.Titel, x.Aktenzeichen, $"/operationen/{x.Id}", (int)x.Einstufung, x.IstVerschlusssache);
+                result[$"{nameof(Operation)}:{x.Id}"] = Mk(nameof(Operation), x.Id, x.Title, x.CaseNumber, $"/operationen/{x.Id}", (int)x.Classification, x.IsClassified);
             }
         }
 
         // ---- Vorgang ----
-        var vorgangIds = Ids(nameof(Vorgang));
-        if (vorgangIds.Count > 0)
+        var caseIds = Ids(nameof(Case));
+        if (caseIds.Count > 0)
         {
-            foreach (var x in await db.Vorgaenge.Where(v => vorgangIds.Contains(v.Id))
-                .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.IstVerschlusssache, v.Einstufung }).ToListAsync(cancellationToken))
+            foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified, v.Classification }).ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Vorgang)}:{x.Id}"] = Mk(nameof(Vorgang), x.Id, x.Titel, x.Aktenzeichen, $"/vorgaenge/{x.Id}", (int)x.Einstufung, x.IstVerschlusssache);
+                result[$"{nameof(Case)}:{x.Id}"] = Mk(nameof(Case), x.Id, x.Title, x.CaseNumber, $"/vorgaenge/{x.Id}", (int)x.Classification, x.IsClassified);
             }
         }
 
@@ -442,22 +442,22 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         var taskforceIds = Ids(nameof(Taskforce));
         if (taskforceIds.Count > 0)
         {
-            var sichtbar = await TaskforceSichtbarkeit.SichtbareIdsAsync(db, taskforceIds, istFuehrung, meId, cancellationToken);
-            foreach (var x in await db.Taskforces.Where(t => sichtbar.Contains(t.Id))
-                .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(cancellationToken))
+            var visible = await TaskforceVisibility.VisibleIdsAsync(db, taskforceIds, isLeadership, meId, cancellationToken);
+            foreach (var x in await db.Taskforces.Where(t => visible.Contains(t.Id))
+                .Select(t => new { t.Id, t.Name, t.CaseNumber, t.IsClassified }).ToListAsync(cancellationToken))
             {
-                result[$"{nameof(Taskforce)}:{x.Id}"] = Mk(nameof(Taskforce), x.Id, x.Name, x.Aktenzeichen, $"/taskforces/{x.Id}", 0, x.IstVerschlusssache);
+                result[$"{nameof(Taskforce)}:{x.Id}"] = Mk(nameof(Taskforce), x.Id, x.Name, x.CaseNumber, $"/taskforces/{x.Id}", 0, x.IsClassified);
             }
         }
 
         // ---- Aufgabe (kein Verschlusssache-Konzept) ----
-        var aufgabeIds = Ids(nameof(Aufgabe));
-        if (aufgabeIds.Count > 0)
+        var jobIds = Ids(nameof(Job));
+        if (jobIds.Count > 0)
         {
-            foreach (var x in await db.Aufgaben.Where(a => aufgabeIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken))
+            foreach (var x in await db.Jobs.Where(a => jobIds.Contains(a.Id))
+                .Select(a => new { a.Id, a.Title, a.CaseNumber }).ToListAsync(cancellationToken))
             {
-                result[$"{nameof(Aufgabe)}:{x.Id}"] = Mk(nameof(Aufgabe), x.Id, x.Titel, x.Aktenzeichen, $"/aufgaben/{x.Id}", 0, false);
+                result[$"{nameof(Job)}:{x.Id}"] = Mk(nameof(Job), x.Id, x.Title, x.CaseNumber, $"/aufgaben/{x.Id}", 0, false);
             }
         }
 
@@ -474,32 +474,32 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         }
 
         // ---- Gesetz (Wissensbasis, keine Verschlusssache) ----
-        var gesetzIds = Ids(nameof(Gesetz));
-        if (gesetzIds.Count > 0)
+        var lawIds = Ids(nameof(Law));
+        if (lawIds.Count > 0)
         {
-            foreach (var x in await db.Gesetze.Where(g => gesetzIds.Contains(g.Id))
-                .Select(g => new { g.Id, g.Paragraf, g.Titel, g.Gesetzbuch }).ToListAsync(cancellationToken))
+            foreach (var x in await db.Laws.Where(g => lawIds.Contains(g.Id))
+                .Select(g => new { g.Id, g.Paragraph, g.Title, g.LawBook }).ToListAsync(cancellationToken))
             {
-                result[$"{nameof(Gesetz)}:{x.Id}"] = Mk(nameof(Gesetz), x.Id, $"{x.Paragraf} {x.Titel}", x.Gesetzbuch, $"/gesetze/{x.Id}", 0, false);
+                result[$"{nameof(Law)}:{x.Id}"] = Mk(nameof(Law), x.Id, $"{x.Paragraph} {x.Title}", x.LawBook, $"/gesetze/{x.Id}", 0, false);
             }
         }
 
         // ---- Personen-Dok (erbt Sichtbarkeit der Person; Navigation auf den Doks-Tab) ----
-        var dokIds = Ids(nameof(PersonDok));
-        if (dokIds.Count > 0)
+        var docIds = Ids(nameof(PersonDoc));
+        if (docIds.Count > 0)
         {
-            foreach (var x in await db.PersonDoks.Where(d => dokIds.Contains(d.Id))
-                .Join(db.Personen, d => d.PersonId, p => p.Id,
-                      (d, p) => new { d.Id, d.Zeitpunkt, PersonId = p.Id, PersonName = p.Name, p.IstVerschlusssache })
+            foreach (var x in await db.PersonDocs.Where(d => docIds.Contains(d.Id))
+                .Join(db.People, d => d.PersonId, p => p.Id,
+                      (d, p) => new { d.Id, d.Timestamp, PersonId = p.Id, PersonName = p.Name, p.IsClassified })
                 .ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(PersonDok)}:{x.Id}"] = Mk(nameof(PersonDok), x.Id,
-                    $"Dok – {x.PersonName}", x.Zeitpunkt.ToLocalTime().ToString("dd.MM.yyyy"),
-                    $"/personen/{x.PersonId}?tab=doks", 0, x.IstVerschlusssache);
+                result[$"{nameof(PersonDoc)}:{x.Id}"] = Mk(nameof(PersonDoc), x.Id,
+                    $"Dok – {x.PersonName}", x.Timestamp.ToLocalTime().ToString("dd.MM.yyyy"),
+                    $"/personen/{x.PersonId}?tab=doks", 0, x.IsClassified);
             }
         }
 
@@ -507,18 +507,18 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         var observationIds = Ids(nameof(Observation));
         if (observationIds.Count > 0)
         {
-            foreach (var x in await db.Observationen.Where(o => observationIds.Contains(o.Id))
-                .Join(db.Personen, o => o.PersonId, p => p.Id,
-                      (o, p) => new { o.Id, o.Beginn, PersonId = p.Id, PersonName = p.Name, p.IstVerschlusssache })
+            foreach (var x in await db.Observations.Where(o => observationIds.Contains(o.Id))
+                .Join(db.People, o => o.PersonId, p => p.Id,
+                      (o, p) => new { o.Id, o.Start, PersonId = p.Id, PersonName = p.Name, p.IsClassified })
                 .ToListAsync(cancellationToken))
             {
-                if (x.IstVerschlusssache && !istFuehrung)
+                if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
                 result[$"{nameof(Observation)}:{x.Id}"] = Mk(nameof(Observation), x.Id,
-                    $"Observation – {x.PersonName}", x.Beginn.ToLocalTime().ToString("dd.MM.yyyy"),
-                    $"/personen/{x.PersonId}?tab=ueberwachung", 0, x.IstVerschlusssache);
+                    $"Observation – {x.PersonName}", x.Start.ToLocalTime().ToString("dd.MM.yyyy"),
+                    $"/personen/{x.PersonId}?tab=ueberwachung", 0, x.IsClassified);
             }
         }
 
@@ -528,61 +528,61 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
     // ---- Graph-Hilfen ----
 
     /// <summary>Knotengrad (Anzahl anliegender Kanten) je Knoten.</summary>
-    private static Dictionary<string, int> GradZaehlen(IEnumerable<RohKante> kanten)
+    private static Dictionary<string, int> DegreeCount(IEnumerable<RawEdge> edges)
     {
-        var grad = new Dictionary<string, int>();
-        foreach (var k in kanten)
+        var degree = new Dictionary<string, int>();
+        foreach (var k in edges)
         {
-            grad[k.Von] = grad.TryGetValue(k.Von, out var a) ? a + 1 : 1;
-            grad[k.Nach] = grad.TryGetValue(k.Nach, out var b) ? b + 1 : 1;
+            degree[k.Source] = degree.TryGetValue(k.Source, out var a) ? a + 1 : 1;
+            degree[k.Target] = degree.TryGetValue(k.Target, out var b) ? b + 1 : 1;
         }
-        return grad;
+        return degree;
     }
 
     /// <summary>Alle Knoten im Umkreis von <paramref name="start"/> bis <paramref name="tiefe"/> Hops (inkl. Start).</summary>
-    private static HashSet<string> Umkreis(string start, IEnumerable<RohKante> kanten, int tiefe)
+    private static HashSet<string> Radius(string start, IEnumerable<RawEdge> edges, int depth)
     {
         var adj = new Dictionary<string, List<string>>();
-        void Verbinde(string a, string b)
+        void Connect(string a, string b)
         {
-            if (!adj.TryGetValue(a, out var liste))
+            if (!adj.TryGetValue(a, out var list))
             {
-                liste = new();
-                adj[a] = liste;
+                list = new();
+                adj[a] = list;
             }
-            liste.Add(b);
+            list.Add(b);
         }
-        foreach (var k in kanten)
+        foreach (var k in edges)
         {
-            Verbinde(k.Von, k.Nach);
-            Verbinde(k.Nach, k.Von);
+            Connect(k.Source, k.Target);
+            Connect(k.Target, k.Source);
         }
 
-        var besucht = new HashSet<string> { start };
+        var visited = new HashSet<string> { start };
         var rand = new List<string> { start };
-        for (var hop = 0; hop < tiefe; hop++)
+        for (var hop = 0; hop < depth; hop++)
         {
-            var naechste = new List<string>();
-            foreach (var knoten in rand)
+            var next = new List<string>();
+            foreach (var node in rand)
             {
-                if (!adj.TryGetValue(knoten, out var nachbarn))
+                if (!adj.TryGetValue(node, out var neighbors))
                 {
                     continue;
                 }
-                foreach (var n in nachbarn)
+                foreach (var n in neighbors)
                 {
-                    if (besucht.Add(n))
+                    if (visited.Add(n))
                     {
-                        naechste.Add(n);
+                        next.Add(n);
                     }
                 }
             }
-            if (naechste.Count == 0)
+            if (next.Count == 0)
             {
                 break;
             }
-            rand = naechste;
+            rand = next;
         }
-        return besucht;
+        return visited;
     }
 }

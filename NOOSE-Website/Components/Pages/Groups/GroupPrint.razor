@@ -1,0 +1,125 @@
+@* Druckansicht der Personengruppen-Akte (Phase 7): komplette Akte als strukturiertes Dokument. *@
+@page "/personengruppen/{Id}/druck"
+@layout PrintLayout
+@inject IPersonGroupService GroupService
+@inject ILinkService LinkService
+@inject ICommentService CommentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_group is null ? "Druckansicht" : $"Gruppenakte {_group.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_group is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Gruppenakte {_group.CaseNumber}")" BackHref="@($"/personengruppen/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="_group.IsClassified">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Name</th><td>@_group.Name</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_group.CaseNumber</td></tr>
+                    <tr><th>Art</th><td>@GroupsKindDisplay.Name(_group.Kind)</td></tr>
+                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_group.Classification)</td></tr>
+                    @if (_group.EstimatedMemberCount is { } count)
+                    {
+                        <tr><th>Geschätzte Mitgliederzahl</th><td>@count</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_group.Targets))
+                    {
+                        <tr><th>Ziele</th><td class="druck-mehrzeilig">@_group.Targets</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_group.Description))
+                    {
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_group.Description</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_group.ModifiedAt ?? _group.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (_members.Count > 0)
+        {
+            <section>
+                <h2>Mitglieder (@_members.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Name</th><th>Rolle</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _members)
+                        {
+                            <tr>
+                                <td>@(m.Person?.Name ?? "—")@(m.IsLead ? " (Leitung)" : "")</td>
+                                <td>@(string.IsNullOrWhiteSpace(m.Role) ? "—" : m.Role)</td>
+                                <td>@m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (_agents.Count > 0)
+        {
+            <section>
+                <h2>Zugeteilte Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Funktion</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _agents)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@(a.IsInvestigationLead ? "Ermittlungsleiter" : "Zugeteilt")</td>
+                                <td>@a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <PrintClassificationHistory Entries="_classificationHistory" />
+        <PrintLinks Entries="_links" />
+        <PrintComments Entries="_comments" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private PersonGroup? _group;
+    private List<PersonGroupMember> _members = new();
+    private List<PersonGroupAgent> _agents = new();
+    private List<ClassificationHistory> _classificationHistory = new();
+    private List<LinkDisplay> _links = new();
+    private List<Comment> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var isLeadership = user.IsLeadership();
+        _printBy = user.GetCodename();
+
+        _group = await GroupService.GetDetailAsync(Id, isLeadership);
+        if (_group is not null)
+        {
+            _members = await GroupService.GetMembersAsync(Id, isLeadership);
+            _agents = await GroupService.GetAgentsAsync(Id);
+            _classificationHistory = await GroupService.GetClassificationHistoryAsync(Id, isLeadership);
+            _links = await LinkService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership, user.GetAgentId());
+            _comments = await CommentService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership);
+            await AccessLog.LogViewAsync(nameof(PersonGroup), Id);
+        }
+        _load = false;
+    }
+}

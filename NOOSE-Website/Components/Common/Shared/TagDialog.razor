@@ -1,0 +1,75 @@
+@* Dialog zum Anlegen/Bearbeiten eines Tags (Name + Farbe). Liefert eine TagEingabe zurück. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_name" Label="Tag-Name" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Name ist erforderlich"
+                              AutoFocus="true" Immediate="true"
+                              OnKeyDown="@(async e => { if (e.Key == "Enter") await Save(); })" />
+                <MudSelect T="Color" Label="Farbe" @bind-Value="_colour" Variant="Variant.Outlined">
+                    @foreach (var c in TagColours.All)
+                    {
+                        <MudSelectItem Value="c">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudChip T="string" Size="Size.Small" Color="c" Variant="Variant.Filled">@_name</MudChip>
+                                <MudText Typo="Typo.body2">@c.ToString()</MudText>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? Name { get; set; }
+    [Parameter] public string? Colour { get; set; }
+
+    private MudForm _form = default!;
+    private string _name = string.Empty;
+    private Color _colour = Color.Default;
+
+    protected override void OnInitialized()
+    {
+        _name = Name ?? string.Empty;
+        _colour = Enum.TryParse<Color>(Colour, out var c) ? c : Color.Default;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new TagInput
+        {
+            Name = _name.Trim(),
+            Colour = _colour == Color.Default ? null : _colour.ToString(),
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Werten). Liefert null bei Abbruch.</summary>
+    public static async Task<TagInput?> ShowAsync(IDialogService dialog, string title, string? name = null, string? colour = null)
+    {
+        var parameters = new DialogParameters<TagDialog>
+        {
+            { x => x.Name, name },
+            { x => x.Colour, colour },
+        };
+        var reference = await dialog.ShowAsync<TagDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: TagInput e } ? e : null;
+    }
+}

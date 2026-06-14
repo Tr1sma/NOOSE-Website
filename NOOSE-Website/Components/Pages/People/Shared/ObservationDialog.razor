@@ -1,0 +1,278 @@
+@* Formular-Dialog zum Anlegen/Bearbeiten einer Observation (Überwachungseintrag). Liefert eine ObservationEingabe zurück. *@
+@inject IAgentManagementService AgentService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                @* Beginn des Beobachtungsfensters (Pflicht). *@
+                <MudGrid>
+                    <MudItem xs="7">
+                        <MudDatePicker Label="Beginn (Datum)" @bind-Date="_startDate" Required="true"
+                                       RequiredError="Beginn ist erforderlich" DateFormat="dd.MM.yyyy" />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_startTime" />
+                    </MudItem>
+                </MudGrid>
+
+                @* Ende des Beobachtungsfensters (optional). *@
+                <MudGrid>
+                    <MudItem xs="7">
+                        <MudDatePicker Label="Ende (Datum, optional)" @bind-Date="_endDate" Clearable="true" DateFormat="dd.MM.yyyy"
+                                       HelperText="Leer lassen, wenn die Observation noch läuft / kein Ende erfasst wird." />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_endTime" Clearable="true" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudTextField @bind-Value="_input.Location" Label="Ort" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_input.Sighting" Label="Beobachtung" Lines="3" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_input.Result" Label="Ergebnis / Folgerung" Lines="2" Variant="Variant.Outlined" />
+
+                @* Beobachtender Agent (Default = aktueller Nutzer). *@
+                <MudAutocomplete T="Agent" Label="Beobachtender Agent" @bind-Value="_agent"
+                                 SearchFunc="@SearchAgents" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"
+                                 Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                 ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Visibility"
+                                 HelperText="Wer die Observation durchgeführt hat – Vorbelegung ist der erfassende Agent.">
+                    <ItemTemplate Context="a">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@a.Codename</MudText>
+                            @if (_mayRealName && !string.IsNullOrWhiteSpace(a.RealName))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">(@a.RealName)</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@RankDisplay.Name(a.Rank)</MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+
+                @* Optionale Verknüpfung zu einer Fraktion/Personengruppe. *@
+                @if (_orgHidden)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Verknüpfte Akte ist hier nicht sichtbar (Verschlusssache oder gelöscht) – sie bleibt beim Speichern erhalten.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudRadioGroup T="string" @bind-Value="Type">
+                        <MudRadio T="string" Value="@nameof(Faction)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                        <MudRadio T="string" Value="@nameof(PersonGroup)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+                    </MudRadioGroup>
+                    <MudAutocomplete T="AffiliationDialog.RecordHit" Label="Fraktion / Gruppe (verknüpft, optional)"
+                                     @bind-Value="_target" SearchFunc="@SearchOrg" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)"
+                                     HelperText="Bestehende Akte verknüpfen – oder leer lassen.">
+                        <ItemTemplate Context="a">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@a.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">@(IsEdit ? "Änderungen speichern" : "Observation speichern")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Beim Bearbeiten gesetzt: vorhandene Werte zum Vorbefüllen. Null = Anlegen.</summary>
+    [Parameter] public ObservationInput? Exists { get; set; }
+
+    /// <summary>Steuert, ob auch Verschlusssachen in der Org-Suche erscheinen und ob Klarnamen sichtbar sind.</summary>
+    [Parameter] public bool IsLeadership { get; set; }
+
+    /// <summary>Agent-Id, die beim Anlegen vorbelegt wird (i. d. R. der aktuelle Nutzer).</summary>
+    [Parameter] public string? DefaultAgentId { get; set; }
+
+    /// <summary>Beim Bearbeiten: bereits aufgelöster Name/Aktenzeichen der verknüpften Org (zum Vorbefüllen der Suche).</summary>
+    [Parameter] public string? ExistsOrgName { get; set; }
+    [Parameter] public string? ExistsOrgCaseNumber { get; set; }
+
+    private bool IsEdit => Exists is not null;
+
+    private MudForm _form = default!;
+    private readonly ObservationInput _input = new();
+    private DateTime? _startDate = DateTime.Now;
+    private TimeSpan? _startTime = DateTime.Now.TimeOfDay;
+    private DateTime? _endDate;
+    private TimeSpan? _endTime;
+
+    private bool _mayRealName;
+    private List<Agent> _allAgents = new();
+    private Agent? _agent;
+
+    private string _orgType = nameof(Faction);
+    private string Type
+    {
+        get => _orgType;
+        // Typwechsel verwirft die bisherige Auswahl (Fraktion- und Gruppen-Treffer sind nicht austauschbar).
+        set { if (_orgType != value) { _orgType = value; _target = null; } }
+    }
+    private bool IsFaction => _orgType == nameof(Faction);
+    private AffiliationDialog.RecordHit? _target;
+    // True, wenn die bestehende Verknüpfung für den Nutzer nicht auflösbar ist (Verschlusssache/gelöscht).
+    private bool _orgHidden;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayRealName = IsLeadership;
+        // Auswählbare Agents laden (aktiv, ohne TeamLeitung-Marker; analog AgentZuteilenDialog).
+        _allAgents = await AgentService.GetSelectableAsync();
+
+        if (Exists is null)
+        {
+            // Anlegen: beobachtenden Agent auf den aktuellen Nutzer vorbelegen.
+            _agent = _allAgents.FirstOrDefault(a => a.Id == DefaultAgentId);
+            return;
+        }
+
+        // Edit-Modus: Felder + Zeitfenster (in Ortszeit) aus den vorhandenen Werten übernehmen.
+        _input.Location = Exists.Location;
+        _input.Sighting = Exists.Sighting;
+        _input.Result = Exists.Result;
+        var startLocal = Exists.Start.ToLocalTime();
+        _startDate = startLocal.Date;
+        _startTime = startLocal.TimeOfDay;
+        if (Exists.End is { } end)
+        {
+            var endLocal = end.ToLocalTime();
+            _endDate = endLocal.Date;
+            _endTime = endLocal.TimeOfDay;
+        }
+        _agent = _allAgents.FirstOrDefault(a => a.Id == Exists.ObservingAgentId);
+
+        // Verknüpfung vorbefüllen – der Name stammt aus der bereits aufgelösten Anzeige (kein Extra-Roundtrip).
+        if (!string.IsNullOrWhiteSpace(Exists.OrgId) && !string.IsNullOrWhiteSpace(Exists.OrgType))
+        {
+            _orgType = Exists.OrgType;
+            if (!string.IsNullOrWhiteSpace(ExistsOrgName))
+            {
+                _target = new AffiliationDialog.RecordHit(Exists.OrgId, ExistsOrgName, ExistsOrgCaseNumber ?? string.Empty);
+            }
+            else
+            {
+                // Verknüpfte Akte nicht auflösbar (Verschlusssache/gelöscht) → erhalten, nicht still löschen.
+                _orgHidden = true;
+            }
+        }
+    }
+
+    private Task<IEnumerable<Agent>> SearchAgents(string value, CancellationToken token)
+    {
+        var search = value.Trim();
+        IEnumerable<Agent> hit = string.IsNullOrWhiteSpace(value)
+            ? _allAgents
+            : _allAgents.Where(a => a.Codename.Contains(search, StringComparison.OrdinalIgnoreCase)
+                            || (_mayRealName && (a.RealName ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)));
+        return Task.FromResult(hit);
+    }
+
+    private async Task<IEnumerable<AffiliationDialog.RecordHit>> SearchOrg(string value, CancellationToken token)
+    {
+        if (IsFaction)
+        {
+            var hit = await FactionService.SearchAsync(value, IsLeadership, 20, token);
+            return hit.Select(f => new AffiliationDialog.RecordHit(f.Id, f.Name, f.CaseNumber));
+        }
+        var groups = await GroupService.SearchAsync(value, IsLeadership, 20, token);
+        return groups.Select(g => new AffiliationDialog.RecordHit(g.Id, g.Name, g.CaseNumber));
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen (vgl. Hinweis im DokDialog:
+        // In Blazor Server ist „Local" die Server-Zeitzone; das Deployment muss TZ=Europe/Berlin laufen).
+        var startDate = (_startDate ?? DateTime.Now).Date;
+        var startTime = _startTime ?? TimeSpan.Zero;
+        _input.Start = DateTime.SpecifyKind(startDate + startTime, DateTimeKind.Local).ToUniversalTime();
+
+        if (_endDate is { } ed)
+        {
+            _input.End = DateTime.SpecifyKind(ed.Date + (_endTime ?? TimeSpan.Zero), DateTimeKind.Local).ToUniversalTime();
+        }
+        else
+        {
+            _input.End = null;
+        }
+
+        _input.ObservingAgentId = _agent?.Id;
+
+        if (_orgHidden)
+        {
+            // Nicht sichtbare Verknüpfung unverändert übernehmen (kein stilles Löschen durch das leere Feld).
+            _input.OrgId = Exists!.OrgId;
+            _input.OrgType = Exists.OrgType;
+        }
+        else
+        {
+            _input.OrgId = _target?.Id;
+            _input.OrgType = _target is null ? null : _orgType;
+        }
+        MudDialog.Close(DialogResult.Ok(_input));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog (Anlegen) und liefert die Eingabe oder null bei Abbruch.</summary>
+    public static async Task<ObservationInput?> ShowAsync(IDialogService dialog, bool isLeadership, string? defaultAgentId)
+    {
+        var parameters = new DialogParameters<ObservationDialog>
+        {
+            { x => x.IsLeadership, isLeadership },
+            { x => x.DefaultAgentId, defaultAgentId },
+        };
+        var reference = await dialog.ShowAsync<ObservationDialog>("Neue Observation", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: ObservationInput e } ? e : null;
+    }
+
+    /// <summary>Zeigt den Dialog im Bearbeiten-Modus (vorbefüllt) und liefert die geänderte Eingabe oder null bei Abbruch.</summary>
+    public static async Task<ObservationInput?> ShowToEditAsync(IDialogService dialog, Observation obs, bool isLeadership,
+        string? orgName, string? orgCaseNumber)
+    {
+        var exists = new ObservationInput
+        {
+            Start = obs.Start,
+            End = obs.End,
+            Location = obs.Location,
+            Sighting = obs.Sighting,
+            Result = obs.Result,
+            ObservingAgentId = obs.ObservingAgentId,
+            OrgType = obs.OrgType,
+            OrgId = obs.OrgId,
+        };
+        var parameters = new DialogParameters<ObservationDialog>
+        {
+            { x => x.Exists, exists },
+            { x => x.IsLeadership, isLeadership },
+            { x => x.ExistsOrgName, orgName },
+            { x => x.ExistsOrgCaseNumber, orgCaseNumber },
+        };
+        var reference = await dialog.ShowAsync<ObservationDialog>("Observation bearbeiten", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: ObservationInput e } ? e : null;
+    }
+}

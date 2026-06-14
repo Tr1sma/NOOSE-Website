@@ -1,0 +1,158 @@
+@page "/personengruppen"
+@inject IPersonGroupService GroupService
+@inject IRecencyService Recency
+@inject NavigationManager Nav
+
+<PageTitle>Personengruppen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Diversity3" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Personengruppen</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Leadership">
+        <MudButton Href="/personengruppen/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        <MudButton Href="/personengruppen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Gruppe</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Lose Zusammenschlüsse von Personen mit Einstufung, zugeteilten Agents und Erfassungsfortschritt.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="GroupRow" Items="_rows" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Open(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_search" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="GroupsKind?" @bind-Value="_kindFilter" Clearable="true" Dense="true" Margin="Margin.Dense"
+                       Label="Kategorie" Variant="Variant.Outlined" Class="mt-0" Style="max-width:240px;">
+                @foreach (var a in GroupsKindDisplay.All)
+                {
+                    <MudSelectItem T="GroupsKind?" Value="@((GroupsKind?)a)">@GroupsKindDisplay.Name(a)</MudSelectItem>
+                }
+            </MudSelect>
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
+            <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
+                <CellTemplate>
+                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Kategorie" SortBy="x => x.Kind">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">@GroupsKindDisplay.Name(context.Item.Kind)</MudChip>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.MemberCount" Title="Mitglieder" />
+            <TemplateColumn Sortable="true" Title="Einstufung" SortBy="x => x.Classification">
+                <CellTemplate>
+                    <ClassificationBadge Value="context.Item.Classification" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IsClassified">
+                <CellTemplate>
+                    @if (context.Item.IsClassified)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Level">
+                <CellTemplate>
+                    <RecencyIndicator Level="context.Item.Level" ReferenceDateUtc="context.Item.RefreshedUtc" />
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Refreshed" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
+        </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Diversity3" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Personengruppen – lege die erste an.</MudText>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                    <MudButton Href="/personengruppen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Gruppe</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="GroupRow" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string _search = string.Empty;
+    private GroupsKind? _kindFilter;
+    private List<GroupRow> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var mayClassifiedRead = user.MayClassifiedRead();
+        var groups = await GroupService.GetListAsync(mayClassifiedRead);
+        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(PersonGroup));
+        var now = DateTime.UtcNow;
+        _rows = groups.Select(g =>
+        {
+            var referenceUtc = g.ModifiedAt ?? g.CreatedAt;
+            return new GroupRow
+            {
+                Id = g.Id,
+                CaseNumber = g.CaseNumber,
+                Name = g.Name,
+                // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+                MemberCount = g.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
+                Kind = g.Kind,
+                Classification = g.Classification,
+                IsClassified = g.IsClassified,
+                RefreshedUtc = referenceUtc,
+                Refreshed = referenceUtc.ToLocalTime(),
+                Level = RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+            };
+        }).ToList();
+        _load = false;
+    }
+
+    private bool Filter(GroupRow z)
+    {
+        if (_kindFilter is not null && z.Kind != _kindFilter)
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            return true;
+        }
+        var s = _search.Trim();
+        return z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Open(GroupRow z) => Nav.NavigateTo($"/personengruppen/{z.Id}");
+
+    private sealed class GroupRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string CaseNumber { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int MemberCount { get; set; }
+        public GroupsKind Kind { get; set; }
+        public Classification Classification { get; set; }
+        public bool IsClassified { get; set; }
+        public DateTime RefreshedUtc { get; set; }
+        public DateTime Refreshed { get; set; }
+        public RecencyLevel Level { get; set; }
+    }
+}

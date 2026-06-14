@@ -1,0 +1,80 @@
+@page "/brett"
+@inject IAnnouncementService BoardService
+@inject IMentionService MentionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Schwarzes Brett · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Schwarzes Brett</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Leadership">
+        <MudButton Href="/brett/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        <MudButton Href="/brett/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Ankündigung</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Ankündigungen &amp; Behörden-Broadcasts. Jeder aktive Agent kann eine Brett-Notiz posten; gezielte Broadcasts an
+    Gruppen, Glocken-Push und Quittierungen sind der Führung vorbehalten.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_entries.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Ankündigungen am Brett.</MudAlert>
+}
+else
+{
+    <MudStack Spacing="3">
+        @foreach (var e in _entries)
+        {
+            <AnnouncementCard Row="e.Row" Segments="e.Segments" OnAcknowledge="@(() => AcknowledgeAsync(e.Row))" />
+        }
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private ClaimsPrincipal _user = default!;
+    private List<Entry> _entries = new();
+
+    private sealed record Entry(AnnouncementRow Row, IReadOnlyList<MentionSegment> Segments);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var rows = await BoardService.GetBoardAsync(_user);
+        // Mentions aller Inhalte in einer Sammelabfrage auflösen (Verschlusssachen für Nicht-Führung verborgen).
+        var segments = await MentionService.ResolveManyAsync(rows.Select(z => (string?)z.Content).ToList(), _user.MayClassifiedRead(), _user.GetAgentId());
+        _entries = rows.Select((z, i) => new Entry(z, segments[i])).ToList();
+        _load = false;
+    }
+
+    private async Task AcknowledgeAsync(AnnouncementRow row)
+    {
+        try
+        {
+            await BoardService.AcknowledgeAsync(row.Id, _user);
+            Snackbar.Add("Kenntnis genommen.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

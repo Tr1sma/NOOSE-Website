@@ -1,0 +1,133 @@
+@* Quick-Add (Phase 7): Schnellerfassung einer neuen Akte mit minimalen Pflichtfeldern.
+   Aus der Topbar (Plus-Knopf) erreichbar; legt die Akte sofort an und springt in die Detailansicht,
+   wo alle weiteren Angaben nachgepflegt werden können. *@
+@inject IPersonService PersonService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IPartyService PartyService
+@inject IOperationService OperationService
+@inject ICaseService CaseService
+@inject ITaskforceService TaskforceService
+@inject IJobService JobService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="string" Label="Aktentyp" @bind-Value="_type" Variant="Variant.Outlined" Dense="true">
+                @foreach (var option in _types)
+                {
+                    <MudSelectItem T="string" Value="@option.Value">@option.Display</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_designation" Label="@DesignationLabel" Variant="Variant.Outlined"
+                          Immediate="true" AutoFocus="true" OnKeyDown="KeyPressed"
+                          HelperText="Es wird nur das Pflichtfeld erfasst – alle Details lassen sich danach in der Akte ergänzen." />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAsync"
+                   Disabled="@(_busy || string.IsNullOrWhiteSpace(_designation))">
+            @(_busy ? "Wird angelegt…" : "Anlegen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private record TypeOption(string Value, string Display);
+    private static readonly TypeOption[] _types =
+    {
+        new(nameof(Person), "Person"),
+        new(nameof(Faction), "Fraktion"),
+        new(nameof(PersonGroup), "Personengruppe"),
+        new(nameof(Party), "Partei"),
+        new(nameof(Operation), "Operation"),
+        new(nameof(Case), "Vorgang"),
+        new(nameof(Taskforce), "Taskforce"),
+        new(nameof(Job), "Aufgabe"),
+    };
+
+    private string _type = nameof(Person);
+    private string _designation = string.Empty;
+    private bool _busy;
+
+    private string DesignationLabel => _type is nameof(Operation) or nameof(Case) or nameof(Job) ? "Titel" : "Name";
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private Task KeyPressed(KeyboardEventArgs e)
+        => e.Key == "Enter" && !_busy && !string.IsNullOrWhiteSpace(_designation) ? CreateAsync() : Task.CompletedTask;
+
+    private async Task CreateAsync()
+    {
+        var designation = _designation.Trim();
+        if (string.IsNullOrWhiteSpace(designation))
+        {
+            return;
+        }
+
+        _busy = true;
+        var user = (await AuthStateTask).User;
+        try
+        {
+            string target;
+            switch (_type)
+            {
+                case nameof(Faction):
+                    var faction = await FactionService.CreateAsync(new FactionInput { Name = designation }, user);
+                    target = $"/fraktionen/{faction.Id}";
+                    break;
+                case nameof(PersonGroup):
+                    var group = await GroupService.CreateAsync(new PersonGroupInput { Name = designation }, user);
+                    target = $"/personengruppen/{group.Id}";
+                    break;
+                case nameof(Party):
+                    var party = await PartyService.CreateAsync(new PartyInput { Name = designation }, user);
+                    target = $"/parteien/{party.Id}";
+                    break;
+                case nameof(Operation):
+                    var operation = await OperationService.CreateAsync(new OperationInput { Title = designation }, user);
+                    target = $"/operationen/{operation.Id}";
+                    break;
+                case nameof(Case):
+                    var @case = await CaseService.CreateAsync(new CaseInput { Title = designation }, user);
+                    target = $"/vorgaenge/{@case.Id}";
+                    break;
+                case nameof(Taskforce):
+                    var taskforce = await TaskforceService.CreateAsync(new TaskforceInput { Name = designation }, user);
+                    target = $"/taskforces/{taskforce.Id}";
+                    break;
+                case nameof(Job):
+                    await JobService.CreateAsync(new JobInput { Title = designation }, Array.Empty<string>(), user);
+                    target = "/aufgaben";
+                    break;
+                default:
+                    var person = await PersonService.CreateAsync(new PersonInput { Name = designation }, user);
+                    target = $"/personen/{person.Id}";
+                    break;
+            }
+
+            Snackbar.Add("Akte angelegt – Details können jetzt ergänzt werden.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+            Nav.NavigateTo(target);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Öffnet die Schnellerfassung (Topbar-Plus, Phase 7).</summary>
+    public static Task ShowAsync(IDialogService dialog)
+        => dialog.ShowAsync<QuickAddDialog>("Schnellerfassung",
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseOnEscapeKey = true });
+}

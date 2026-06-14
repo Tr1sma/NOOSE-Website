@@ -1,0 +1,75 @@
+@* Folgen/Entfolgen-Umschalter für eine Akte (Watchlist). Wird in die Aktionsleiste der Detailseiten gesetzt. *@
+@inject IWatchlistService WatchlistService
+@inject ISnackbar Snackbar
+
+@* Folgen ist eine Mutation (Watchlist) → für die Nur-Lese-Aufsicht ausblenden. *@
+@if (_mayWrite)
+{
+    <MudButton Variant="@(_followed ? Variant.Filled : Variant.Outlined)"
+               Color="@(_followed ? Color.Warning : Color.Default)"
+               StartIcon="@(_followed ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
+               OnClick="ToggleAsync" Disabled="_busy"
+               aria-label="@(_followed ? "Nicht mehr folgen" : "Dieser Akte folgen")">
+        @(_followed ? "Beobachtet" : "Folgen")
+    </MudButton>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _followed;
+    private bool _busy;
+    private bool _mayWrite;
+    private string? _loaded;
+
+    // Wird mit der Detailseite bei /…/{A} → /…/{B} wiederverwendet → auf Typ+Id-Wechsel reagieren (Projekt-Lifecycle).
+    protected override async Task OnParametersSetAsync()
+    {
+        _mayWrite = User.MayWrite();
+        if (!_mayWrite)
+        {
+            return;
+        }
+        var key = $"{EntityType}:{EntityId}";
+        if (_loaded == key)
+        {
+            return;
+        }
+        _loaded = key;
+        _followed = await WatchlistService.IsFollowedAsync(EntityType, EntityId, User);
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            if (_followed)
+            {
+                await WatchlistService.UnfollowAsync(EntityType, EntityId, User);
+                _followed = false;
+                Snackbar.Add("Du folgst dieser Akte nicht mehr.", Severity.Info);
+            }
+            else
+            {
+                await WatchlistService.FollowAsync(EntityType, EntityId, User);
+                _followed = true;
+                Snackbar.Add("Du folgst dieser Akte – Änderungen erscheinen in deinen Benachrichtigungen.", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

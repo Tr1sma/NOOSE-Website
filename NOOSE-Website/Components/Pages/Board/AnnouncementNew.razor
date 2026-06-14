@@ -1,0 +1,66 @@
+@page "/brett/neu"
+@inject IAnnouncementService BoardService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Ankündigung · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/brett" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Ankündigung</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <AnnouncementForm Input="_input" ShowBroadcastOptions="_isLeadership" IsLeadership="_isLeadership" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Veröffentlichen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/brett">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly AnnouncementInput _input = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private bool _saves;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saves)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var a = await BoardService.CreateAsync(_input, _user);
+            Snackbar.Add($"Ankündigung {a.CaseNumber} veröffentlicht.", Severity.Success);
+            Nav.NavigateTo($"/brett/{a.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+}

@@ -1,0 +1,138 @@
+@* Kommentare/Vermerke einer Akte: neueste zuerst, Inline-Verfassen mit @-Verlinkung (Akten/Quellen/Agenten),
+   aufgelöste Verweise in der Anzeige, Löschen (eigene oder Führung). *@
+@inject ICommentService CommentService
+@inject IMentionService MentionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.subtitle1">Kommentare (@_entries.Count)</MudText>
+
+    @if (_mayWrite)
+    {
+        <MudStack Spacing="2">
+            <MentionInput @bind-Text="_newText" IsLeadership="_isLeadership"
+                            MayClassifiedRead="_mayClassifiedRead" MayRealName="_mayRealName"
+                            Placeholder="@Placeholder" OnSubmit="AddAsync" />
+            <MudStack Row="true" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newText))">
+                    Kommentieren
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    }
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_entries.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Kommentare.</MudText>
+    }
+    else
+    {
+        @foreach (var e in _entries)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Size="Size.Small" Color="Color.Default" />
+                        <MudText Typo="Typo.body2"><b>@(string.IsNullOrWhiteSpace(e.K.AuthorName) ? "Unbekannt" : e.K.AuthorName)</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            · @e.K.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                        </MudText>
+                    </MudStack>
+                    @if (_mayWrite && MayDelete(e.K))
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => DeleteAsync(e.K))" aria-label="Kommentar löschen" />
+                    }
+                </MudStack>
+                <div class="mt-1">
+                    <MentionText Segments="e.Segments" />
+                </div>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private const string Placeholder = "Vermerk hinzufügen … (Verlinken per @, Strg+Enter sendet)";
+    private bool _load = true;
+    private bool _saves;
+    private bool _isLeadership;
+    private bool _mayClassifiedRead;
+    private bool _mayRealName;
+    private bool _mayWrite;
+    private string _newText = string.Empty;
+    private List<Entry> _entries = new();
+
+    private sealed record Entry(Comment K, IReadOnlyList<MentionSegment> Segments);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLeadership = User.IsLeadership();
+        _mayClassifiedRead = User.MayClassifiedRead();
+        _mayRealName = User.MayRealNameSee();
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, _mayClassifiedRead);
+        // Alle Kommentar-Texte in EINER Sammelabfrage auflösen (@-Tokens → anzeigefertige Segmente, VS-/Klarname-gefiltert).
+        var segments = await MentionService.ResolveManyAsync(
+            comments.Select(k => (string?)k.Text).ToList(), _mayClassifiedRead, User.GetAgentId());
+        _entries = comments.Select((k, i) => new Entry(k, segments[i])).ToList();
+        _load = false;
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newText))
+        {
+            return;
+        }
+        _saves = true;
+        try
+        {
+            await CommentService.CreateAsync(EntityType, EntityId, _newText, User);
+            _newText = string.Empty;
+            Snackbar.Add("Kommentar gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private async Task DeleteAsync(Comment comment)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Kommentar löschen?",
+            "Der Kommentar wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await CommentService.DeleteAsync(comment.Id, User);
+        Snackbar.Add("Kommentar gelöscht.", Severity.Success);
+        await LoadAsync();
+    }
+
+    // Löschen darf der Verfasser selbst oder die Führung.
+    private bool MayDelete(Comment k)
+        => _isLeadership || (k.CreatedById is not null && k.CreatedById == User.GetAgentId());
+}

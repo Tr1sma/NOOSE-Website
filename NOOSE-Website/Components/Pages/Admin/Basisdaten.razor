@@ -2,7 +2,7 @@
    Code-definierte Wertelisten (Enums) werden hier dokumentiert angezeigt; pflegbare Basisdaten
    (Fraktionen, Tags, Vorlagen, Custom-Felder, Gesetzbuch, Aktualität) sind direkt verlinkt. *@
 @page "/admin/basisdaten"
-@attribute [Authorize(Policy = Policies.FuehrungSeite)]
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
 
 <PageTitle>Basisdaten · NOOSE</PageTitle>
 
@@ -34,9 +34,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Dienstgrade</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var dg in DienstgradAnzeige.Alle)
+                @foreach (var dg in RankDisplay.All)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@DienstgradAnzeige.Name(dg)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@RankDisplay.Name(dg)</MudChip>
                 }
             </MudStack>
         </MudPaper>
@@ -46,9 +46,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Einstufungen</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var e in EinstufungAnzeige.Alle)
+                @foreach (var e in ClassificationDisplay.All)
                 {
-                    <EinstufungBadge Wert="e" />
+                    <ClassificationBadge Value="e" />
                 }
             </MudStack>
         </MudPaper>
@@ -58,9 +58,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Maßnahme-Ausgänge (Doks)</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var a in MassnahmeAusgangAnzeige.Alle)
+                @foreach (var a in MeasureOutcomeDisplay.All)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@MassnahmeAusgangAnzeige.Name(a)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@MeasureOutcomeDisplay.Name(a)</MudChip>
                 }
             </MudStack>
         </MudPaper>
@@ -70,9 +70,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Beziehungstypen (Person ↔ Person)</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var t in BeziehungsTypAnzeige.Alle)
+                @foreach (var t in RelationTypeDisplay.All)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@BeziehungsTypAnzeige.Name(t)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@RelationTypeDisplay.Name(t)</MudChip>
                 }
             </MudStack>
         </MudPaper>
@@ -82,9 +82,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Taskforce-Geltungsbereiche</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var g in TaskforceGeltungsbereichAnzeige.Alle)
+                @foreach (var g in TaskforceScopeDisplay.All)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@TaskforceGeltungsbereichAnzeige.Name(g)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@TaskforceScopeDisplay.Name(g)</MudChip>
                 }
             </MudStack>
         </MudPaper>
@@ -94,9 +94,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Lebensstatus</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var s in LebensstatusAnzeige.Alle)
+                @foreach (var s in LifeStatusDisplay.All)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@LebensstatusAnzeige.Name(s)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@LifeStatusDisplay.Name(s)</MudChip>
                 }
             </MudStack>
         </MudPaper>
@@ -106,9 +106,9 @@
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-3">Gruppen-Arten</MudText>
             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                @foreach (var a in GruppenArtAnzeige.Alle)
+                @foreach (var a in GroupsKindDisplay.All)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@GruppenArtAnzeige.Name(a)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@GroupsKindDisplay.Name(a)</MudChip>
                 }
             </MudStack>
         </MudPaper>

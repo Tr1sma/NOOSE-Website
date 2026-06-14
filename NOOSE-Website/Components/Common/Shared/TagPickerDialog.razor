@@ -1,0 +1,132 @@
+@* Dialog zur Mehrfachauswahl von Tags für eine Akte – inkl. Inline-Anlegen neuer Tags.
+   Liefert die gewählten Tag-IDs zurück. *@
+@inject ITagService TagService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:340px;">
+            @if (_load)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else
+            {
+                @if (_all.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Tags vorhanden – unten ein neues anlegen.</MudText>
+                }
+                else
+                {
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                        @foreach (var tag in _all)
+                        {
+                            var selected = _selected.Contains(tag.Id);
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@ColourBy(tag.Colour)"
+                                     Variant="@(selected ? Variant.Filled : Variant.Outlined)"
+                                     OnClick="@(() => Toggle(tag.Id))">
+                                @(selected ? "✓ " : string.Empty)@tag.Name
+                            </MudChip>
+                        }
+                    </MudStack>
+                }
+
+                <MudDivider />
+
+                <MudText Typo="Typo.subtitle2">Neuen Tag anlegen</MudText>
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudTextField @bind-Value="_newName" Placeholder="Name" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                    <MudSelect T="Color" @bind-Value="_newColour" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;">
+                        @foreach (var c in TagColours.All)
+                        {
+                            <MudSelectItem Value="c">@c.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="CreateAsync" Disabled="@string.IsNullOrWhiteSpace(_newName)">Anlegen</MudButton>
+                </MudStack>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply">Übernehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Aktuell der Akte zugeordnete Tag-IDs (Vorauswahl).</summary>
+    [Parameter] public List<string> AlreadySet { get; set; } = new();
+
+    /// <summary>Handelnder Agent (für das Anlegen neuer Tags / Audit-Kontext).</summary>
+    [Parameter, EditorRequired] public System.Security.Claims.ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private List<Tag> _all = new();
+    private HashSet<string> _selected = new();
+
+    private string _newName = string.Empty;
+    private Color _newColour = Color.Primary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selected = new HashSet<string>(AlreadySet);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _all = await TagService.GetAllAsync();
+        _load = false;
+    }
+
+    private void Toggle(string tagId)
+    {
+        if (!_selected.Remove(tagId))
+        {
+            _selected.Add(tagId);
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName))
+        {
+            return;
+        }
+        try
+        {
+            var colour = _newColour == Color.Default ? null : _newColour.ToString();
+            var tag = await TagService.CreateAsync(_newName, colour, User);
+            _selected.Add(tag.Id);
+            _newName = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void Apply() => MudDialog.Close(DialogResult.Ok(_selected.ToList()));
+    private void Cancel() => MudDialog.Cancel();
+
+    private static Color ColourBy(string? colour) => Enum.TryParse<Color>(colour, out var c) ? c : Color.Default;
+
+    /// <summary>Zeigt den Picker und liefert die gewählten Tag-IDs oder null bei Abbruch.</summary>
+    public static async Task<List<string>?> ShowAsync(IDialogService dialog, List<string> alreadySet, System.Security.Claims.ClaimsPrincipal user)
+    {
+        var parameters = new DialogParameters<TagPickerDialog>
+        {
+            { x => x.AlreadySet, alreadySet },
+            { x => x.User, user },
+        };
+        var reference = await dialog.ShowAsync<TagPickerDialog>("Tags zuordnen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: List<string> ids } ? ids : null;
+    }
+}

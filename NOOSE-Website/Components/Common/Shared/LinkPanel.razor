@@ -1,0 +1,313 @@
+@* Verknüpfungen einer Personen-Akte. Reihenfolge: (1) Verknüpfte Akten (manuell, beliebige Aktentypen),
+   (2) Beziehungen (typisierte Person-Beziehungen + automatische Kollegen aus geteilten Organisationen),
+   (3) abgeleitete Verbündete/Gegner aus Bündnissen/Konflikten der Organisationen der Person. *@
+@inject ILinkService LinkService
+@inject IRelationService RelationService
+@inject IPersonService PersonService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="6">
+    @* Schneller Sprung in das interaktive Lagebild, zentriert auf diese Person (Phase 8). *@
+    <MudButton Href="@($"/graph?typ={nameof(Person)}&id={PersonId}")" Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Hub" Class="align-self-start">Im Beziehungsgraph anzeigen</MudButton>
+
+    @* ---- Verknüpfte Akten (manuell, jede Aktenart) ---- *@
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_manual.Count)</MudText>
+            @if (_mayWrite)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="NewLinkAsync">
+                    Verknüpfung hinzufügen
+                </MudButton>
+            }
+        </MudStack>
+
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_manual.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Verknüpfungen erfasst.</MudText>
+        }
+        else
+        {
+            @foreach (var v in _manual)
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Small" />
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@TypeDisplay(v.OtherType)</MudChip>
+                            @if (v.Href is not null)
+                            {
+                                <MudLink Href="@v.Href" Typo="Typo.body2"><b>@v.OtherDesignation</b></MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2"><b>@v.OtherDesignation</b></MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(v.Label))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@v.Label</MudChip>
+                            }
+                        </MudStack>
+                        @if (_mayWrite)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => LinkRemoveAsync(v))" aria-label="Verknüpfung löschen" />
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudStack>
+
+    <MudDivider />
+
+    @* ---- Person-Beziehungen (typisiert) + automatische Kollegen ---- *@
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.subtitle1">Beziehungen (@(_relations.Count + _colleagues.Count))</MudText>
+            @if (_mayWrite)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewRelationAsync">
+                    Beziehung hinzufügen
+                </MudButton>
+            }
+        </MudStack>
+
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_relations.Count == 0 && _colleagues.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Beziehungen erfasst.</MudText>
+        }
+        else
+        {
+            @* Manuell erfasste, typisierte Beziehungen *@
+            @foreach (var b in _relations)
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="@TypeColour(b.Type)" Variant="Variant.Filled">@RelationTypeDisplay.Name(b.Type)</MudChip>
+                            <MudLink Href="@($"/personen/{b.OtherPersonId}")" Typo="Typo.body2">
+                                <b>@b.OtherPersonName</b>
+                            </MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@b.OtherPersonCaseNumber</MudText>
+                        </MudStack>
+                        @if (_mayWrite)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => RelationRemoveAsync(b))" aria-label="Beziehung löschen" />
+                        }
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(b.Note))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">@b.Note</MudText>
+                    }
+                </MudPaper>
+            }
+
+            @* Automatische Kollegen aus geteilten Fraktionen/Gruppen/Parteien (systemgepflegt, nicht löschbar) *@
+            @foreach (var k in _colleagues)
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@k.Label</MudChip>
+                            @if (k.Href is not null)
+                            {
+                                <MudLink Href="@k.Href" Typo="Typo.body2"><b>@k.OtherDesignation</b></MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2"><b>@k.OtherDesignation</b></MudText>
+                            }
+                        </MudStack>
+                        <MudTooltip Text="@AutoTooltip(k.Label)">
+                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Default" Size="Size.Small" />
+                        </MudTooltip>
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudStack>
+
+    <MudDivider />
+
+    @* ---- Abgeleitet: Verbündete/Gegner über Bündnisse/Konflikte der eigenen Organisationen ---- *@
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.subtitle1">Über Bündnisse &amp; Konflikte (@_derived.Count)</MudText>
+        @if (!_load && _derived.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Keine abgeleiteten Verbündeten/Gegner. (Ergibt sich automatisch, wenn eine Fraktion/Gruppe der Person
+                ein Bündnis oder einen Konflikt hat.)
+            </MudText>
+        }
+        else if (!_load)
+        {
+            @foreach (var a in _derived)
+            {
+                var allied = a.Kind == LinkKind.Alliance;
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                            <MudIcon Icon="@(allied ? Icons.Material.Filled.Handshake : Icons.Material.Filled.Bolt)"
+                                     Color="@(allied ? Color.Success : Color.Error)" Size="Size.Small" />
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(allied ? Color.Success : Color.Error)">
+                                @(allied ? "Verbündeter" : "Gegner")
+                            </MudChip>
+                            <MudLink Href="@($"/personen/{a.PersonId}")" Typo="Typo.body2"><b>@a.PersonName</b></MudLink>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· über @a.SourceName ↔ @a.PartnerName</MudText>
+                        </MudStack>
+                        <MudTooltip Text="@DerivedTooltip(allied)">
+                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Default" Size="Size.Small" />
+                        </MudTooltip>
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudStack>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private List<RelationDisplay> _relations = new();
+    private List<LinkDisplay> _manual = new();
+    private List<LinkDisplay> _colleagues = new();
+    private List<DerivedRelation> _derived = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var isLeadership = User.IsLeadership();
+        _relations = await RelationService.GetForPersonAsync(PersonId, isLeadership);
+        // Standard-Verknüpfungen aufteilen: automatische Kollegen wandern zu den Beziehungen,
+        // manuell angelegte bleiben unter „Verknüpfte Akten".
+        var @default = await LinkService.GetForRecordAsync(nameof(Person), PersonId, isLeadership, User.GetAgentId(), LinkKind.Default);
+        _manual = @default.Where(v => !v.Automatic).ToList();
+        _colleagues = @default.Where(v => v.Automatic).ToList();
+        _derived = await PersonService.GetDerivedRelationsAsync(PersonId, isLeadership);
+        _load = false;
+    }
+
+    private async Task NewRelationAsync()
+    {
+        var input = await RelationDialog.ShowAsync(DialogService, User.IsLeadership(), PersonId);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await RelationService.CreateAsync(PersonId, input.TargetPersonId, input.Type, input.Note, User);
+            Snackbar.Add("Beziehung gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task NewLinkAsync()
+    {
+        var input = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(), PersonId);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(nameof(Person), PersonId, input.TargetType, input.TargetId, input.Label, User);
+            Snackbar.Add("Verknüpfung gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RelationRemoveAsync(RelationDisplay b)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Beziehung löschen?",
+            $"Die Beziehung zu „{b.OtherPersonName}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await RelationService.RemoveAsync(b.RelationId, User);
+        Snackbar.Add("Beziehung gelöscht.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task LinkRemoveAsync(LinkDisplay v)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Verknüpfung löschen?",
+            $"Die Verknüpfung zu „{v.OtherDesignation}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await LinkService.RemoveAsync(v.LinkId, User);
+        Snackbar.Add("Verknüpfung gelöscht.", Severity.Success);
+        await LoadAsync();
+    }
+
+    // Tooltip für automatische Kollegen-Verknüpfungen je nach Quelle (Fraktion/Gruppe/Partei).
+    private static string AutoTooltip(string? label) => label switch
+    {
+        ColleaguesSync.GroupColleague => "Automatisch durch eine gemeinsame Personengruppe – wird mit der Mitgliedschaft gepflegt.",
+        ColleaguesSync.PartyColleague => "Automatisch durch eine gemeinsame Partei – wird mit der Mitgliedschaft gepflegt.",
+        _ => "Automatisch durch eine gemeinsame Fraktion – wird mit der Mitgliedschaft gepflegt.",
+    };
+
+    // Tooltip für abgeleitete Verbündete/Gegner – ergeben sich aus Bündnissen/Konflikten der Organisationen.
+    private static string DerivedTooltip(bool allied) => allied
+        ? "Automatisch durch ein Bündnis der Organisation – wird mit dem Bündnis gepflegt."
+        : "Automatisch durch einen Konflikt der Organisation – wird mit dem Konflikt gepflegt.";
+
+    // Lesbarer Aktentyp-Name für die Verknüpfungs-Chips.
+    private static string TypeDisplay(string type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Personengruppe",
+        nameof(Party) => "Partei",
+        nameof(Agent) => "Agent",
+        nameof(PersonDoc) => "Dok",
+        nameof(Operation) => "Operation",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Case) => "Vorgang",
+        nameof(Observation) => "Observation",
+        _ => type,
+    };
+
+    private static Color TypeColour(RelationType type) => type switch
+    {
+        RelationType.Family => Color.Info,
+        RelationType.Ally => Color.Success,
+        RelationType.Enemy => Color.Error,
+        RelationType.BusinessPartner => Color.Warning,
+        _ => Color.Default,
+    };
+}

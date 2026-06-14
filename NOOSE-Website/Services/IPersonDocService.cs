@@ -1,0 +1,40 @@
+using System.Security.Claims;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Models.People;
+
+namespace NOOSE_Website.Services;
+
+/// <summary>
+/// Verwaltung der Personen-Doks (Verhöre/Maßnahmen). Beim Anlegen wirkt der Maßnahme-Ausgang auf
+/// den Lebensstatus der Person (Erschossen → temporärer Tod; Amnestie-Spritze → Gedächtnisverlust).
+/// </summary>
+public interface IPersonDocService
+{
+    /// <summary>Doks einer Person inkl. aufgelöster (Verschlusssache-gefilterter) Verknüpfungs-Anzeige.</summary>
+    Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+
+    /// <summary>Alle Doks (übergreifend) inkl. zugehöriger Person und aufgelöster Verknüpfung; respektiert den Verschlusssachen-Filter.</summary>
+    Task<List<PersonDocDisplay>> GetAllAsync(bool isLeadership, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Doks, die mit einer Organisation (Fraktion/Personengruppe) verknüpft sind (Rück-Verknüpfung).
+    /// <paramref name="orgTyp"/> ist <c>nameof(Fraktion)</c> bzw. <c>nameof(Personengruppe)</c>; Verschlusssache-gefiltert.
+    /// </summary>
+    Task<List<PersonDocDisplay>> GetForOrgAsync(string orgType, string orgId, bool isLeadership, CancellationToken cancellationToken = default);
+
+    Task<PersonDoc> CreateAsync(string personId, PersonDocInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Legt ein Dok für eine <b>neue</b> Person an: erstellt zunächst die Akte (nur mit Namen) und
+    /// hängt das Dok daran. Genutzt vom übergreifenden „Neues Dok"-Dialog, wenn die Person noch nicht existiert.
+    /// </summary>
+    Task<PersonDoc> CreateForNewPersonAsync(string name, PersonDocInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bearbeitet ein bestehendes Dok. Der Maßnahme-Ausgang wird neu ausgewertet und wirkt – sofern das
+    /// aktuelle Tot-Fenster der Person von genau diesem Dok stammt – erneut auf deren Lebensstatus.
+    /// </summary>
+    Task<PersonDoc> RefreshAsync(string docId, PersonDocInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    Task DeleteAsync(string docId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+}

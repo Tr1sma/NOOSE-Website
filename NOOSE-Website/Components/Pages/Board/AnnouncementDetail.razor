@@ -1,0 +1,173 @@
+@page "/brett/{Id}"
+@inject IAnnouncementService BoardService
+@inject IMentionService MentionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_detail?.Row.Title ?? "Ankündigung") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_detail is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Ankündigung nicht gefunden oder für dich nicht sichtbar.
+        <MudButton Href="/brett" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zum Brett</MudButton>
+    </MudAlert>
+}
+else
+{
+    var z = _detail.Row;
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/brett" aria-label="Zurück" />
+        @if (z.Important)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" />
+        }
+        <MudText Typo="Typo.h5">@z.Title</MudText>
+        @if (z.AsBroadcast)
+        {
+            <MudTooltip Text="Als Broadcast in die Glocke gesendet">
+                <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" />
+            </MudTooltip>
+        }
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/brett/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        @if (z.MayManage)
+        {
+            <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                <MudButton Href="@($"/brett/{z.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+                <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+            </AuthorizeView>
+        }
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="@(ShowAcknowledgmentPanel ? 8 : 12)">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                        <AnnouncementAudienceChip Audience="z.Audience" Display="@z.TargetDisplay" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @z.CaseNumber · @z.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(z.CreatorCodename ?? "System")
+                        </MudText>
+                    </MudStack>
+
+                    @if (!string.IsNullOrWhiteSpace(z.Content))
+                    {
+                        <MentionText Segments="_segments" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein Inhalt erfasst.</MudText>
+                    }
+
+                    @if (z.AcknowledgmentRequired)
+                    {
+                        @if (z.MustAcknowledge)
+                        {
+                            <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                                <div>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.DoneOutline" OnClick="AcknowledgeAsync">Kenntnis nehmen</MudButton>
+                                </div>
+                            </AuthorizeView>
+                        }
+                        else if (z.AlreadyAcknowledged)
+                        {
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">Du hast diese Ankündigung quittiert.</MudAlert>
+                        }
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        @if (ShowAcknowledgmentPanel)
+        {
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <AcknowledgmentPanel Acknowledgments="_detail.Acknowledgments" />
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private AnnouncementView? _detail;
+    private IReadOnlyList<MentionSegment> _segments = Array.Empty<MentionSegment>();
+    private ClaimsPrincipal _user = default!;
+    private string? _loadedId;
+
+    private bool ShowAcknowledgmentPanel => _detail is { Row.MayManage: true, Row.AcknowledgmentRequired: true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _detail = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _detail = await BoardService.GetDetailAsync(Id, _user);
+        _segments = _detail is null || string.IsNullOrWhiteSpace(_detail.Row.Content)
+            ? Array.Empty<MentionSegment>()
+            : await MentionService.ResolveAsync(_detail.Row.Content, _user.MayClassifiedRead(), _user.GetAgentId());
+        _load = false;
+    }
+
+    private async Task AcknowledgeAsync()
+    {
+        try
+        {
+            await BoardService.AcknowledgeAsync(Id, _user);
+            Snackbar.Add("Kenntnis genommen.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Ankündigung löschen?",
+            "Die Ankündigung wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await BoardService.DeleteAsync(Id, _user);
+            Snackbar.Add("Ankündigung in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/brett");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

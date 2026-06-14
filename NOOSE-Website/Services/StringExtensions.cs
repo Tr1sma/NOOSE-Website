@@ -7,6 +7,6 @@ namespace NOOSE_Website.Services;
 public static class StringExtensions
 {
     /// <summary>Trimmt den Wert; gibt <c>null</c> zurück, wenn er leer oder nur Whitespace ist.</summary>
-    public static string? TrimToNull(this string? wert)
-        => string.IsNullOrWhiteSpace(wert) ? null : wert.Trim();
+    public static string? TrimToNull(this string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

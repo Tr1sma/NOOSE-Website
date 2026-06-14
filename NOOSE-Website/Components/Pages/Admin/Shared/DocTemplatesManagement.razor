@@ -1,0 +1,143 @@
+@* Verwaltung der Dok-Vorlagen (Erfassungsmasken für Personen-Doks). Eingebettet als Reiter in der
+   Vorlagen-Verwaltung (/admin/vorlagen). *@
+@inject IDocTemplateService TemplateService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudText Typo="Typo.h6">Dok-Vorlagen</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+        Neue Vorlage
+    </MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Vorlagen (Erfassungsmasken) geben Standard-Werte für neue Personen-Doks vor. Beim Anlegen eines Doks
+    kann eine aktive Vorlage gewählt werden – das Formular wird vorbefüllt und bleibt frei editierbar.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_templates" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="DocTemplate" SortBy="@(x => x.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DocTemplate" SortBy="@(x => x.Description)">Beschreibung</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DocTemplate" SortBy="@(x => MeasureOutcomeDisplay.Name(x.DefaultOutcome))">Standard-Ausgang</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DocTemplate" SortBy="@(x => x.IsActive)">Status</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Beschreibung">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Description) ? "—" : context.Description)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Standard-Ausgang">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@MeasureOutcomeDisplay.Name(context.DefaultOutcome)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Aktiv</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inaktiv</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditAsync(context))" aria-label="Vorlage bearbeiten" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteAsync(context))" aria-label="Vorlage löschen" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Vorlagen angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private List<DocTemplate> _templates = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _templates = await TemplateService.GetAllAsync();
+        _load = false;
+    }
+
+    private async Task NewAsync()
+    {
+        var input = await DocTemplateDialog.ShowAsync(DialogService, "Neue Dok-Vorlage");
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await TemplateService.CreateAsync(input, _user);
+            Snackbar.Add($"Vorlage „{input.Name}“ angelegt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EditAsync(DocTemplate template)
+    {
+        var input = await DocTemplateDialog.ShowAsync(DialogService, "Dok-Vorlage bearbeiten", template);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await TemplateService.RefreshAsync(template.Id, input, _user);
+            Snackbar.Add("Vorlage gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(DocTemplate template)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Vorlage löschen?",
+            $"„{template.Name}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await TemplateService.DeleteAsync(template.Id, _user);
+            Snackbar.Add("Vorlage gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

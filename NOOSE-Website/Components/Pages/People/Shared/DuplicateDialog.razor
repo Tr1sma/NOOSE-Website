@@ -1,0 +1,40 @@
+@* Warnt beim Anlegen vor möglichen Dubletten (gleicher Name / gleiche Telefonnummer). *@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Es gibt bereits Akten mit gleichem Namen oder gleicher Telefonnummer. Bitte prüfe, ob es
+            sich um dieselbe Person handelt:
+        </MudText>
+        @* Im neuen Tab öffnen, damit das bereits ausgefüllte Anlege-Formular nicht verloren geht. *@
+        <MudList T="string" Dense="true">
+            @foreach (var p in Hit)
+            {
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Badge" Href="@($"/personen/{p.Id}")" Target="_blank">
+                    @p.Name — @p.CaseNumber
+                </MudListItem>
+            }
+        </MudList>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Anyway">Trotzdem anlegen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public List<Person> Hit { get; set; } = new();
+
+    private void Anyway() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert true, wenn „Trotzdem anlegen" gewählt wurde.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialog, List<Person> hit)
+    {
+        var parameters = new DialogParameters<DuplicateDialog> { { x => x.Hit, hit } };
+        var reference = await dialog.ShowAsync<DuplicateDialog>("Mögliche Dublette", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

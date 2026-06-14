@@ -1,6 +1,6 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
-@inject ISystemEinstellungService EinstellungService
+@inject ISystemSettingService SettingService
 @inject IDialogService DialogService
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
@@ -12,7 +12,7 @@
     <MudAppBar Elevation="2">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        OnClick="ToggleDrawer" aria-label="Navigation umschalten" />
-        <MudImage Src="@(_konfiguration?.HatLogo == true ? "/system/logo" : "NooseIcon.png")" Alt="NOOSE Wappen" Height="36" Class="mr-3" />
+        <MudImage Src="@(_configuration?.HasLogo == true ? "/system/logo" : "NooseIcon.png")" Alt="NOOSE Wappen" Height="36" Class="mr-3" />
         <MudText Typo="Typo.h6" Class="mr-3" Style="font-weight:700;letter-spacing:.12em;">N.O.O.S.E.</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary d-none d-md-flex">
             National Office of Security Enforcement
@@ -22,29 +22,29 @@
             <Authorized Context="auth">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
                     @* Quick-Add (Phase 7): Schnellerfassung neuer Akten direkt aus der Topbar. *@
-                    <AuthorizeView Policy="@Policies.Schreibrecht" Context="schreib">
+                    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
                         <MudTooltip Text="Schnellerfassung – neue Akte anlegen">
                             <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Inherit"
                                            OnClick="QuickAddAsync" aria-label="Schnellerfassung" />
                         </MudTooltip>
                     </AuthorizeView>
-                    <MudTextField T="string" @bind-Value="_suche" Placeholder="Suchen…" Immediate="true"
+                    <MudTextField T="string" @bind-Value="_search" Placeholder="Suchen…" Immediate="true"
                                   Margin="Margin.Dense" Variant="Variant.Outlined"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                  OnKeyDown="SucheKeyDown" Class="d-none d-md-flex mt-0" Style="max-width:240px;" />
+                                  OnKeyDown="SearchKeyDown" Class="d-none d-md-flex mt-0" Style="max-width:240px;" />
                     @* Auf kleinen Screens (ohne Suchfeld/Strg+K) ein Such-Icon, das direkt zur globalen Suche führt. *@
                     <MudIconButton Icon="@Icons.Material.Filled.Search" Color="Color.Inherit" Href="/suche"
                                    Class="d-flex d-md-none" aria-label="Suche" title="Suche" />
-                    <BenachrichtigungGlocke User="auth.User" />
+                    <NotificationBell User="auth.User" />
                     <MudLink Href="/profil" Underline="Underline.None" Color="Color.Inherit"
                              Class="d-flex align-center" title="Mein Profil">
                         <MudStack Spacing="0" AlignItems="AlignItems.End" Class="d-none d-sm-flex mr-3">
-                            <MudText Typo="Typo.body2" Style="line-height:1.2;">@AnzeigeName(auth.User)</MudText>
+                            <MudText Typo="Typo.body2" Style="line-height:1.2;">@DisplayName(auth.User)</MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="line-height:1.2;">
-                                @RangZeile(auth.User)
+                                @RankRow(auth.User)
                             </MudText>
                         </MudStack>
-                        <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initiale(AnzeigeName(auth.User))</MudAvatar>
+                        <MudAvatar Color="Color.Primary" Size="Size.Medium">@Initial(DisplayName(auth.User))</MudAvatar>
                     </MudLink>
                     <form method="post" action="/Account/Logout">
                         <AntiforgeryToken />
@@ -63,19 +63,19 @@
 
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-4 py-6">
-            <AuthorizeView Policy="@Policies.NurLeseModus" Context="ro">
+            <AuthorizeView Policy="@Policies.OnlyReadMode" Context="ro">
                 <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
                     Nur-Lese-Modus (Aufsicht): Sie können alle Inhalte einsehen, aber keine Änderungen speichern.
                 </MudAlert>
             </AuthorizeView>
 
             @* Ankündigungsbanner (Phase 7): von der Führung/Admins unter /admin/system gepflegt. *@
-            @if (!string.IsNullOrWhiteSpace(_konfiguration?.BannerText))
+            @if (!string.IsNullOrWhiteSpace(_configuration?.BannerText))
             {
-                <MudAlert Severity="@BannerSeverity" Dense="true" Class="mb-4 no-print">@_konfiguration!.BannerText</MudAlert>
+                <MudAlert Severity="@BannerSeverity" Dense="true" Class="mb-4 no-print">@_configuration!.BannerText</MudAlert>
             }
 
-            @if (_konfiguration?.WartungsmodusAktiv == true && _istAdmin)
+            @if (_configuration?.MaintenanceModeActive == true && _isAdmin)
             {
                 <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4 no-print">
                     Wartungsmodus aktiv – normale Agenten sehen derzeit nur die Wartungsseite.
@@ -84,13 +84,13 @@
             }
 
             @* Wartungsmodus (Phase 7): sperrt die Inhalte für alle außer Admins. *@
-            @if (_konfiguration?.WartungsmodusAktiv == true && !_istAdmin)
+            @if (_configuration?.MaintenanceModeActive == true && !_isAdmin)
             {
                 <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-12">
                     <MudIcon Icon="@Icons.Material.Filled.Construction" Color="Color.Warning" Style="font-size:4rem;" />
                     <MudText Typo="Typo.h5">Wartungsmodus</MudText>
                     <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:480px;text-align:center;">
-                        @(_konfiguration!.WartungsmodusText ?? "Das System wird gerade gewartet. Bitte versuche es in Kürze erneut.")
+                        @(_configuration!.MaintenanceModeText ?? "Das System wird gerade gewartet. Bitte versuche es in Kürze erneut.")
                     </MudText>
                 </MudStack>
             }
@@ -104,7 +104,7 @@
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-4 pb-4 no-print">
             <MudDivider Class="mb-2" />
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2">
-                <MudLink Href="@RechtlichesDaten.ImpressumUrl" Target="_blank" rel="noopener noreferrer"
+                <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
                          Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
                 <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
@@ -132,60 +132,60 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     private bool _drawerOpen = true;
-    private string _suche = string.Empty;
-    private SystemKonfiguration? _konfiguration;
+    private string _search = string.Empty;
+    private SystemConfiguration? _configuration;
     private MudTheme _theme = NooseTheme.Theme;
-    private bool _istAdmin;
+    private bool _isAdmin;
 
     protected override async Task OnInitializedAsync()
     {
         // Systemkonfiguration (gecacht): Theme-Farben, Logo, Banner, Wartungsmodus.
-        _konfiguration = await EinstellungService.GetAsync();
-        _theme = NooseTheme.MitFarben(_konfiguration.ThemePrimary, _konfiguration.ThemeSecondary, _konfiguration.ThemeTertiary);
+        _configuration = await SettingService.GetAsync();
+        _theme = NooseTheme.WithColours(_configuration.ThemePrimary, _configuration.ThemeSecondary, _configuration.ThemeTertiary);
 
         if (AuthStateTask is not null)
         {
-            _istAdmin = (await AuthStateTask).User.IstAdmin();
+            _isAdmin = (await AuthStateTask).User.IsAdmin();
         }
     }
 
-    private Severity BannerSeverity => _konfiguration?.BannerStufe switch
+    private Severity BannerSeverity => _configuration?.BannerLevel switch
     {
-        BannerStufen.Warnung => Severity.Warning,
-        BannerStufen.Fehler => Severity.Error,
+        BannerLevels.Warning => Severity.Warning,
+        BannerLevels.Error => Severity.Error,
         _ => Severity.Info,
     };
 
-    private Task QuickAddAsync() => QuickAddDialog.ZeigenAsync(DialogService);
+    private Task QuickAddAsync() => QuickAddDialog.ShowAsync(DialogService);
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 
-    private void SucheKeyDown(KeyboardEventArgs e)
+    private void SearchKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_suche))
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_search))
         {
-            Nav.NavigateTo($"/suche?q={Uri.EscapeDataString(_suche.Trim())}");
+            Nav.NavigateTo($"/suche?q={Uri.EscapeDataString(_search.Trim())}");
         }
     }
 
-    private static string Initiale(string? name)
+    private static string Initial(string? name)
         => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();
 
-    private static string AnzeigeName(System.Security.Claims.ClaimsPrincipal user)
+    private static string DisplayName(System.Security.Claims.ClaimsPrincipal user)
     {
         var codename = user.GetCodename();
         return string.IsNullOrWhiteSpace(codename) ? "Unbenannter Agent" : codename;
     }
 
-    private static string RangZeile(System.Security.Claims.ClaimsPrincipal user)
+    private static string RankRow(System.Security.Claims.ClaimsPrincipal user)
     {
-        var teile = new List<string>();
-        var dienstnummer = user.GetDienstnummer();
-        if (!string.IsNullOrWhiteSpace(dienstnummer)) teile.Add($"Nr. {dienstnummer}");
-        teile.Add(DienstgradAnzeige.Name(user.GetDienstgrad()));
-        if (user.IstTRU()) teile.Add("TRU");
-        if (user.IstHRB()) teile.Add("HRB");
-        if (user.IstAdmin()) teile.Add("Admin");
-        return string.Join(" · ", teile);
+        var parts = new List<string>();
+        var badgeNumber = user.GetBadgeNumber();
+        if (!string.IsNullOrWhiteSpace(badgeNumber)) parts.Add($"Nr. {badgeNumber}");
+        parts.Add(RankDisplay.Name(user.GetRank()));
+        if (user.IsTRU()) parts.Add("TRU");
+        if (user.IsHRB()) parts.Add("HRB");
+        if (user.IsAdmin()) parts.Add("Admin");
+        return string.Join(" · ", parts);
     }
 }

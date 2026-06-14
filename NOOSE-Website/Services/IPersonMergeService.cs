@@ -12,5 +12,5 @@ namespace NOOSE_Website.Services;
 public interface IPersonMergeService
 {
     /// <summary>Führt <paramref name="quelleId"/> in <paramref name="zielId"/> zusammen.</summary>
-    Task ZusammenfuehrenAsync(string quelleId, string zielId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task MergeAsync(string sourceId, string targetId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

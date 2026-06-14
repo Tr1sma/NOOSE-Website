@@ -24,15 +24,15 @@ public class TaskforceAgent : IAuditable
 
     /// <summary>Rolle des Agents in der Taskforce; Leitung = jede Rolle ungleich <see cref="TaskforceRolle.Mitglied"/>.</summary>
     [Column("Rolle")]
-    public TaskforceRolle Rolle { get; set; } = TaskforceRolle.Mitglied;
+    public TaskforceRole Role { get; set; } = TaskforceRole.Member;
 
     // ---- IAuditable ----
     [Column("ErstelltAm")]
-    public DateTime ErstelltAm { get; set; }
+    public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
-    public string? ErstelltVonId { get; set; }
+    public string? CreatedById { get; set; }
     [Column("GeaendertAm")]
-    public DateTime? GeaendertAm { get; set; }
+    public DateTime? ModifiedAt { get; set; }
     [Column("GeaendertVonId")]
-    public string? GeaendertVonId { get; set; }
+    public string? ModifiedById { get; set; }
 }

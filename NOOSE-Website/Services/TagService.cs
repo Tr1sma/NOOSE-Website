@@ -1,33 +1,33 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Querschnitt;
-using NOOSE_Website.Models.Querschnitt;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ITagService" />
 public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 {
-    public async Task<List<Tag>> GetAlleAsync(CancellationToken cancellationToken = default)
+    public async Task<List<Tag>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Tags.OrderBy(t => t.Name).ToListAsync(cancellationToken);
     }
 
-    public async Task<List<TagVerwendung>> GetMitVerwendungAsync(CancellationToken cancellationToken = default)
+    public async Task<List<TagUsage>> GetWithUsageAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var tags = await db.Tags.OrderBy(t => t.Name).ToListAsync(cancellationToken);
-        var anzahlen = await db.TagZuordnungen
+        var counts = await db.TagMappings
             .GroupBy(z => z.TagId)
-            .Select(g => new { TagId = g.Key, Anzahl = g.Count() })
+            .Select(g => new { TagId = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
-        var map = anzahlen.ToDictionary(x => x.TagId, x => x.Anzahl);
-        return tags.Select(t => new TagVerwendung(t, map.GetValueOrDefault(t.Id))).ToList();
+        var map = counts.ToDictionary(x => x.TagId, x => x.Count);
+        return tags.Select(t => new TagUsage(t, map.GetValueOrDefault(t.Id))).ToList();
     }
 
-    public async Task<Tag> ErstellenAsync(string name, string? farbe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<Tag> CreateAsync(string name, string? colour, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         name = (name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -40,16 +40,16 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
             throw new InvalidOperationException($"Ein Tag „{name}“ existiert bereits.");
         }
 
-        var tag = new Tag { Name = name, Farbe = Leer(farbe) };
+        var tag = new Tag { Name = name, Colour = Empty(colour) };
         db.Tags.Add(tag);
         await db.SaveChangesAsync(cancellationToken);
         return tag;
     }
 
-    public async Task AktualisierenAsync(string tagId, string name, string? farbe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RefreshAsync(string tagId, string name, string? colour, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Tags anlegen darf jeder aktive Agent; Umbenennen/Einfärben ist Verwaltung → Führung/Admin.
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         name = (name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -65,14 +65,14 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         }
 
         tag.Name = name;
-        tag.Farbe = Leer(farbe);
+        tag.Colour = Empty(colour);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task LoeschenAsync(string tagId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string tagId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Hart-Löschen entfernt das Tag von ALLEN Akten (destruktiv) → Führung/Admin.
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var tag = await db.Tags.FirstOrDefaultAsync(t => t.Id == tagId, cancellationToken);
@@ -85,40 +85,40 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<Tag>> GetFuerAkteAsync(string entitaetTyp, string entitaetId, CancellationToken cancellationToken = default)
+    public async Task<List<Tag>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Tags
-            .Where(t => db.TagZuordnungen.Any(z => z.TagId == t.Id && z.EntitaetTyp == entitaetTyp && z.EntitaetId == entitaetId))
+            .Where(t => db.TagMappings.Any(z => z.TagId == t.Id && z.EntityType == entityType && z.EntityId == entityId))
             .OrderBy(t => t.Name)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task SetzenAsync(string entitaetTyp, string entitaetId, IEnumerable<string> tagIds, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task SetAsync(string entityType, string entityId, IEnumerable<string> tagIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        var ziel = tagIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToHashSet();
+        var target = tagIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToHashSet();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var bestehende = await db.TagZuordnungen
-            .Where(z => z.EntitaetTyp == entitaetTyp && z.EntitaetId == entitaetId)
+        var existing = await db.TagMappings
+            .Where(z => z.EntityType == entityType && z.EntityId == entityId)
             .ToListAsync(cancellationToken);
-        var bestehendeIds = bestehende.Select(z => z.TagId).ToHashSet();
+        var existingIds = existing.Select(z => z.TagId).ToHashSet();
 
-        var zuEntfernen = bestehende.Where(z => !ziel.Contains(z.TagId)).ToList();
-        var zuErgaenzen = ziel
-            .Where(id => !bestehendeIds.Contains(id))
-            .Select(id => new TagZuordnung { TagId = id, EntitaetTyp = entitaetTyp, EntitaetId = entitaetId })
+        var toRemove = existing.Where(z => !target.Contains(z.TagId)).ToList();
+        var toSupplement = target
+            .Where(id => !existingIds.Contains(id))
+            .Select(id => new TagMapping { TagId = id, EntityType = entityType, EntityId = entityId })
             .ToList();
 
-        if (zuEntfernen.Count == 0 && zuErgaenzen.Count == 0)
+        if (toRemove.Count == 0 && toSupplement.Count == 0)
         {
             return;
         }
 
-        db.TagZuordnungen.RemoveRange(zuEntfernen);
-        db.TagZuordnungen.AddRange(zuErgaenzen);
+        db.TagMappings.RemoveRange(toRemove);
+        db.TagMappings.AddRange(toSupplement);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string? Leer(string? s) => s.TrimToNull();
+    private static string? Empty(string? s) => s.TrimToNull();
 }

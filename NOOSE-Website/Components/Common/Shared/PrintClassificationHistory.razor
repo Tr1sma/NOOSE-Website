@@ -1,0 +1,27 @@
+@* Druck-Sektion „Einstufungs-Verlauf" (gemeinsam für alle Druckansichten; rendert nichts bei leer). *@
+@if (Entries.Count > 0)
+{
+    <section>
+        <h2>Einstufungs-Verlauf</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr><th>Zeitpunkt</th><th>Einstufung</th><th>Begründung</th><th>Agent</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var e in Entries)
+                {
+                    <tr>
+                        <td>@e.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>@ClassificationDisplay.Name(e.Value)</td>
+                        <td>@(string.IsNullOrWhiteSpace(e.Justification) ? "—" : e.Justification)</td>
+                        <td>@(e.AgentName ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<ClassificationHistory> Entries { get; set; } = new();
+}

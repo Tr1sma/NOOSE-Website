@@ -1,0 +1,59 @@
+@* Tag-Chips einer Akte mit Picker-Button. Sichtbar ohne Tab-Wechsel. *@
+@inject ITagService TagService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+    <MudIcon Icon="@Icons.Material.Filled.Label" Size="Size.Small" Class="mud-text-secondary" />
+    @foreach (var tag in _tags)
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@ColourBy(tag.Colour)">@tag.Name</MudChip>
+    }
+    @if (_tags.Count == 0)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Tags</MudText>
+    }
+    @if (_mayWrite)
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                 Icon="@Icons.Material.Filled.Edit" OnClick="ManageAsync">Tags …</MudChip>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private List<Tag> _tags = new();
+    private bool _mayWrite;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _tags = await TagService.GetForRecordAsync(EntityType, EntityId);
+
+    private async Task ManageAsync()
+    {
+        var current = _tags.Select(t => t.Id).ToList();
+        var selected = await TagPickerDialog.ShowAsync(DialogService, current, User);
+        if (selected is null)
+        {
+            return;
+        }
+        try
+        {
+            await TagService.SetAsync(EntityType, EntityId, selected, User);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static Color ColourBy(string? colour) => Enum.TryParse<Color>(colour, out var c) ? c : Color.Default;
+}

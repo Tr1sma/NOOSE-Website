@@ -2,106 +2,106 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Operationen;
-using NOOSE_Website.Data.Entities.Personen;
-using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
-using NOOSE_Website.Models.Operationen;
+using NOOSE_Website.Models.Operations;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IOperationService" />
-public class OperationService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen, ISteckbriefVorschlagService vorschlag) : IOperationService
+public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion) : IOperationService
 {
-    public async Task<List<Operation>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<Operation>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Operationen
-            .Where(o => istFuehrung || !o.IstVerschlusssache)
-            .OrderByDescending(o => o.GeaendertAm ?? o.ErstelltAm)
+        return await db.Operations
+            .Where(o => isLeadership || !o.IsClassified)
+            .OrderByDescending(o => o.ModifiedAt ?? o.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Operation?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<Operation?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var operation = await db.Operationen.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
-        if (operation is null || (operation.IstVerschlusssache && !istFuehrung))
+        var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+        if (operation is null || (operation.IsClassified && !isLeadership))
         {
             return null;
         }
         return operation;
     }
 
-    public async Task<List<Operation>> GetPapierkorbAsync(CancellationToken cancellationToken = default)
+    public async Task<List<Operation>> GetTrashAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Operationen.IgnoreQueryFilters()
-            .Where(o => o.IstGeloescht)
-            .OrderByDescending(o => o.GeloeschtAm)
+        return await db.Operations.IgnoreQueryFilters()
+            .Where(o => o.IsDeleted)
+            .OrderByDescending(o => o.DeletedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Operation>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Operation>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Operationen.Where(o => istFuehrung || !o.IstVerschlusssache);
+        var query = db.Operations.Where(o => isLeadership || !o.IsClassified);
 
-        var s = suchtext?.Trim();
+        var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))
         {
-            query = query.Where(o => o.Titel.Contains(s) || o.Aktenzeichen.Contains(s));
+            query = query.Where(o => o.Title.Contains(s) || o.CaseNumber.Contains(s));
         }
 
         return await query
-            .OrderBy(o => o.Titel)
+            .OrderBy(o => o.Title)
             .Take(max)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Operation> ErstellenAsync(OperationEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<Operation> CreateAsync(OperationInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        EinstufungHelfer.PruefeRangGate(eingabe.Einstufung, handelnder);
+        ClassificationHelper.CheckRankGate(input.Classification, actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var operation = new Operation
         {
-            Aktenzeichen = await aktenzeichen.NaechstesAsync(db, "OP", cancellationToken),
-            Titel = eingabe.Titel.Trim(),
-            Typ = Leer(eingabe.Typ),
-            Status = eingabe.Status,
-            Ort = Leer(eingabe.Ort),
-            Beginn = eingabe.Beginn,
-            Ende = eingabe.Ende,
-            Ablauf = Leer(eingabe.Ablauf),
-            Ergebnis = Leer(eingabe.Ergebnis),
-            Bemerkungen = Leer(eingabe.Bemerkungen),
-            Einstufung = eingabe.Einstufung,
-            IstVerschlusssache = eingabe.IstVerschlusssache,
+            CaseNumber = await caseNumber.NextAsync(db, "OP", cancellationToken),
+            Title = input.Title.Trim(),
+            Type = Empty(input.Type),
+            Status = input.Status,
+            Location = Empty(input.Location),
+            Start = input.Start,
+            End = input.End,
+            Expiry = Empty(input.Expiry),
+            Result = Empty(input.Result),
+            Remarks = Empty(input.Remarks),
+            Classification = input.Classification,
+            IsClassified = input.IsClassified,
         };
 
-        if (eingabe.Einstufung != Einstufung.Unbekannt)
+        if (input.Classification != Classification.Unknown)
         {
-            db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Operation), operation.Id, eingabe.Einstufung, eingabe.EinstufungBegruendung, handelnder));
+            db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Operation), operation.Id, input.Classification, input.ClassificationJustification, actor));
         }
 
-        await VorschlaegeVormerkenAsync(db, operation.IstVerschlusssache, eingabe.Typ, cancellationToken);
+        await SuggestionsStageAsync(db, operation.IsClassified, input.Type, cancellationToken);
 
-        db.Operationen.Add(operation);
+        db.Operations.Add(operation);
         await db.SaveChangesAsync(cancellationToken);
 
         // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
-        var erstellerId = handelnder.GetAgentId();
-        if (erstellerId is not null)
+        var creatorId = actor.GetAgentId();
+        if (creatorId is not null)
         {
-            db.OperationAgenten.Add(new OperationAgent
+            db.OperationAgents.Add(new OperationAgent
             {
                 OperationId = operation.Id,
-                AgentId = erstellerId,
-                IstErmittlungsleiter = true,
+                AgentId = creatorId,
+                IsInvestigationLead = true,
             });
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -110,219 +110,219 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
         return operation;
     }
 
-    public async Task AktualisierenAsync(string id, OperationEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RefreshAsync(string id, OperationInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var operation = await db.Operationen.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+        var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{id}' nicht gefunden.");
 
-        if (operation.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (operation.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        operation.Titel = eingabe.Titel.Trim();
-        operation.Typ = Leer(eingabe.Typ);
-        operation.Status = eingabe.Status;
-        operation.Ort = Leer(eingabe.Ort);
-        operation.Beginn = eingabe.Beginn;
-        operation.Ende = eingabe.Ende;
-        operation.Ablauf = Leer(eingabe.Ablauf);
-        operation.Ergebnis = Leer(eingabe.Ergebnis);
-        operation.Bemerkungen = Leer(eingabe.Bemerkungen);
-        operation.IstVerschlusssache = eingabe.IstVerschlusssache;
+        operation.Title = input.Title.Trim();
+        operation.Type = Empty(input.Type);
+        operation.Status = input.Status;
+        operation.Location = Empty(input.Location);
+        operation.Start = input.Start;
+        operation.End = input.End;
+        operation.Expiry = Empty(input.Expiry);
+        operation.Result = Empty(input.Result);
+        operation.Remarks = Empty(input.Remarks);
+        operation.IsClassified = input.IsClassified;
 
-        await VorschlaegeVormerkenAsync(db, operation.IstVerschlusssache, eingabe.Typ, cancellationToken);
+        await SuggestionsStageAsync(db, operation.IsClassified, input.Type, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var operation = await db.Operationen.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+        var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{id}' nicht gefunden.");
-        db.Operationen.Remove(operation);
+        db.Operations.Remove(operation);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var operation = await db.Operationen.IgnoreQueryFilters()
+        var operation = await db.Operations.IgnoreQueryFilters()
             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{id}' nicht gefunden.");
 
-        operation.IstGeloescht = false;
-        operation.GeloeschtAm = null;
-        operation.GeloeschtVonId = null;
+        operation.IsDeleted = false;
+        operation.DeletedAt = null;
+        operation.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task EinstufungSetzenAsync(string id, Einstufung neu, string? begruendung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        EinstufungHelfer.PruefeRangGate(neu, handelnder);
+        ClassificationHelper.CheckRankGate(@new, actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var operation = await db.Operationen.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
+        var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{id}' nicht gefunden.");
 
-        if (operation.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (operation.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        operation.Einstufung = neu;
-        db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Operation), id, neu, begruendung, handelnder));
+        operation.Classification = @new;
+        db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Operation), id, @new, justification, actor));
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Operation), id, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Operation), id, isLeadership, cancellationToken))
         {
             return new();
         }
-        return await db.EinstufungVerlauf
-            .Where(e => e.EntitaetTyp == nameof(Operation) && e.EntitaetId == id)
-            .OrderByDescending(e => e.Zeitpunkt)
+        return await db.ClassificationHistory
+            .Where(e => e.EntityType == nameof(Operation) && e.EntityId == id)
+            .OrderByDescending(e => e.Timestamp)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<OperationAgent>> GetAgentenAsync(string operationId, CancellationToken cancellationToken = default)
+    public async Task<List<OperationAgent>> GetAgentsAsync(string operationId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.OperationAgenten
+        return await db.OperationAgents
             .Where(a => a.OperationId == operationId)
             .Include(a => a.Agent)
-            .OrderByDescending(a => a.IstErmittlungsleiter)
+            .OrderByDescending(a => a.IsInvestigationLead)
             .ThenBy(a => a.Agent!.Codename)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<OperationAgent>> GetErmittlungsleiterAsync(string operationId, CancellationToken cancellationToken = default)
+    public async Task<List<OperationAgent>> GetInvestigationLeadAsync(string operationId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.OperationAgenten
-            .Where(a => a.OperationId == operationId && a.IstErmittlungsleiter)
+        return await db.OperationAgents
+            .Where(a => a.OperationId == operationId && a.IsInvestigationLead)
             .Include(a => a.Agent)
             .OrderBy(a => a.Agent!.Codename)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task AgentZuteilenAsync(string operationId, string agentId, bool alsErmittlungsleiter, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task AgentAllocateAsync(string operationId, string agentId, bool asInvestigationLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var operation = await db.Operationen.FirstOrDefaultAsync(o => o.Id == operationId, cancellationToken)
+        var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == operationId, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{operationId}' nicht gefunden.");
-        if (operation.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (operation.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        await VerlangeFuehrungOderELAsync(db, operationId, handelnder, cancellationToken);
+        await RequireLeadershipOrELAsync(db, operationId, actor, cancellationToken);
         // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
-        if (alsErmittlungsleiter)
+        if (asInvestigationLead)
         {
-            Berechtigung.VerlangeFuehrung(handelnder);
+            Permission.RequireLeadership(actor);
         }
         if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
         {
             throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
         }
-        if (await db.OperationAgenten.AnyAsync(a => a.OperationId == operationId && a.AgentId == agentId, cancellationToken))
+        if (await db.OperationAgents.AnyAsync(a => a.OperationId == operationId && a.AgentId == agentId, cancellationToken))
         {
             throw new InvalidOperationException("Dieser Agent ist der Operation bereits zugeteilt.");
         }
 
-        db.OperationAgenten.Add(new OperationAgent
+        db.OperationAgents.Add(new OperationAgent
         {
             OperationId = operationId,
             AgentId = agentId,
-            IstErmittlungsleiter = alsErmittlungsleiter,
+            IsInvestigationLead = asInvestigationLead,
         });
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AgentEntfernenAsync(string zuteilungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task AgentRemoveAsync(string allocationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var zuteilung = await db.OperationAgenten.Include(a => a.Operation).FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken);
-        if (zuteilung is null)
+        var allocation = await db.OperationAgents.Include(a => a.Operation).FirstOrDefaultAsync(a => a.Id == allocationId, cancellationToken);
+        if (allocation is null)
         {
             return;
         }
-        if (zuteilung.Operation?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        if (allocation.Operation?.IsClassified == true && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        await VerlangeFuehrungOderELAsync(db, zuteilung.OperationId, handelnder, cancellationToken);
-        db.OperationAgenten.Remove(zuteilung);
+        await RequireLeadershipOrELAsync(db, allocation.OperationId, actor, cancellationToken);
+        db.OperationAgents.Remove(allocation);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task ErmittlungsleiterSetzenAsync(string zuteilungId, bool ist, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var zuteilung = await db.OperationAgenten.FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken)
+        var allocation = await db.OperationAgents.FirstOrDefaultAsync(a => a.Id == allocationId, cancellationToken)
             ?? throw new InvalidOperationException("Zuteilung nicht gefunden.");
-        zuteilung.IstErmittlungsleiter = ist;
+        allocation.IsInvestigationLead = @is;
         await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Operation ist.</summary>
-    private static async Task VerlangeFuehrungOderELAsync(AppDbContext db, string operationId, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    private static async Task RequireLeadershipOrELAsync(AppDbContext db, string operationId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
-        if (handelnder.IstFuehrung())
+        if (actor.IsLeadership())
         {
             return;
         }
-        var agentId = handelnder.GetAgentId();
-        var istEL = agentId is not null && await db.OperationAgenten
-            .AnyAsync(a => a.OperationId == operationId && a.AgentId == agentId && a.IstErmittlungsleiter, cancellationToken);
-        if (!istEL)
+        var agentId = actor.GetAgentId();
+        var isEL = agentId is not null && await db.OperationAgents
+            .AnyAsync(a => a.OperationId == operationId && a.AgentId == agentId && a.IsInvestigationLead, cancellationToken);
+        if (!isEL)
         {
             throw new UnauthorizedAccessException(
                 "Agents zuteilen oder entfernen dürfen nur die Führung oder ein Ermittlungsleiter dieser Akte.");
         }
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string operationId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistoryAsync(string operationId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Operation), operationId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Operation), operationId, isLeadership, cancellationToken))
         {
             return new();
         }
-        var agentZuteilungIds = await db.OperationAgenten
+        var agentAllocationIds = await db.OperationAgents
             .Where(a => a.OperationId == operationId)
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
         // Manuelle Beziehungen (Beteiligte/Verknüpfungen), die diese Operation als Quelle oder Ziel berühren –
         // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
-        var beziehungIds = await db.Verknuepfungen
+        var relationIds = await db.Links
             .IgnoreQueryFilters()
-            .Where(v => !v.Automatisch
-                && ((v.VonTyp == nameof(Operation) && v.VonId == operationId)
-                 || (v.NachTyp == nameof(Operation) && v.NachId == operationId)))
+            .Where(v => !v.Automatic
+                && ((v.SourceType == nameof(Operation) && v.SourceId == operationId)
+                 || (v.TargetType == nameof(Operation) && v.TargetId == operationId)))
             .Select(v => v.Id)
             .ToListAsync(cancellationToken);
 
         var ids = new HashSet<string> { operationId };
-        ids.UnionWith(agentZuteilungIds);
-        ids.UnionWith(beziehungIds);
-        var typen = new[] { nameof(Operation), nameof(OperationAgent), nameof(Verknuepfung) };
+        ids.UnionWith(agentAllocationIds);
+        ids.UnionWith(relationIds);
+        var types = new[] { nameof(Operation), nameof(OperationAgent), nameof(Link) };
 
         return await db.AuditLogs
-            .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
-            .OrderByDescending(a => a.Zeitpunkt)
+            .Where(a => types.Contains(a.EntityType) && ids.Contains(a.EntityId))
+            .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
     }
 
@@ -332,14 +332,14 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
     /// sensiblen Werte in die geteilte Liste gelangen. Nur vormerken – der Aufrufer speichert im selben
     /// SaveChanges (atomar mit der Operation).
     /// </summary>
-    private async Task VorschlaegeVormerkenAsync(AppDbContext db, bool istVerschlusssache, string? typ, CancellationToken cancellationToken)
+    private async Task SuggestionsStageAsync(AppDbContext db, bool isClassified, string? type, CancellationToken cancellationToken)
     {
-        if (istVerschlusssache || string.IsNullOrWhiteSpace(typ))
+        if (isClassified || string.IsNullOrWhiteSpace(type))
         {
             return;
         }
-        await vorschlag.VormerkenAsync(db, VorschlagTyp.Operationstyp, new[] { typ }, cancellationToken);
+        await suggestion.StageAsync(db, SuggestionType.OperationType, new[] { type }, cancellationToken);
     }
 
-    private static string? Leer(string? s) => s.TrimToNull();
+    private static string? Empty(string? s) => s.TrimToNull();
 }

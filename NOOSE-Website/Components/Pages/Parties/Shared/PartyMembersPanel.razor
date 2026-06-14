@@ -1,0 +1,130 @@
+@* Mitglieder einer Partei: Liste (Leitung zuerst), Hinzufügen/Bearbeiten/Entfernen mit Rolle + Leitung. *@
+@inject IPartyService PartyService
+@inject IPersonService PersonService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Mitglieder (@_members.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="AddAsync">
+            Mitglied hinzufügen
+        </MudButton>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_members.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Mitglieder erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var m in _members)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Small" />
+                        <MudLink Href="@($"/personen/{m.PersonId}")" Typo="Typo.body2"><b>@m.Person?.Name</b></MudLink>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@m.Person?.CaseNumber</MudText>
+                        @if (m.IsLead)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Star">Leitung</MudChip>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(m.Role))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@m.Role</MudChip>
+                        }
+                    </MudStack>
+                    <MudStack Row="true" Spacing="0">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
+                                       OnClick="@(() => EditAsync(m))" aria-label="Mitgliedschaft bearbeiten" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveAsync(m))" aria-label="Mitglied entfernen" />
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PartyId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    /// <summary>Wird nach Änderungen ausgelöst (damit die Steckkarte die Mitgliederzahl aktualisiert).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private List<PartyMember> _members = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _members = await PartyService.GetMembersAsync(PartyId, User.IsLeadership());
+        _load = false;
+    }
+
+    private async Task AddAsync()
+    {
+        var exclusion = _members.Select(m => m.PersonId).ToList();
+        var input = await PartyMemberDialog.ShowAsync(DialogService, User.IsLeadership(), exclusion);
+        if (input is null)
+        {
+            return;
+        }
+        // Beim Anlegen einer neuen Person vor gleichnamigen Dubletten warnen.
+        if (!await DuplicateCheck.MayNewRecordCreateAsync(DialogService, PersonService, input.NewPersonName, User.IsLeadership()))
+        {
+            return;
+        }
+        try
+        {
+            await PartyService.MemberAddAsync(PartyId, input, User);
+            Snackbar.Add("Mitglied hinzugefügt.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EditAsync(PartyMember m)
+    {
+        var input = await PartyMemberDialog.ShowToEditAsync(DialogService, m.Person?.Name ?? "—", m.Role, m.IsLead);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await PartyService.MemberChangeAsync(m.Id, input.Role, input.IsLead, User);
+            Snackbar.Add("Mitgliedschaft aktualisiert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(PartyMember m)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Mitglied entfernen?",
+            $"„{m.Person?.Name}“ wird aus der Partei entfernt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        await PartyService.MemberRemoveAsync(m.Id, User);
+        Snackbar.Add("Mitglied entfernt.", Severity.Success);
+        await LoadAsync();
+        await Changed.InvokeAsync();
+    }
+}

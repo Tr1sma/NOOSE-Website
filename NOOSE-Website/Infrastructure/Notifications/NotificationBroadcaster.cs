@@ -10,7 +10,7 @@ namespace NOOSE_Website.Infrastructure.Notifications;
 public sealed class NotificationBroadcaster
 {
     /// <summary>Wird mit der betroffenen Empfänger-Agent-Id ausgelöst, sobald sich dessen Benachrichtigungen ändern.</summary>
-    public event Action<string>? Empfangen;
+    public event Action<string>? Received;
 
-    public void Melde(string empfaengerId) => Empfangen?.Invoke(empfaengerId);
+    public void Report(string recipientId) => Received?.Invoke(recipientId);
 }

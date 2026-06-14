@@ -1,0 +1,362 @@
+@page "/suche"
+@using System.Text.Json
+@inject ISearchService SearchService
+@inject ISavedSearchService SavedSearchService
+@inject ITagService TagService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Suche · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Globale Suche</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Durchsucht Personen, Fraktionen, Personengruppen, Parteien, Operationen, Doks, Quellen und Kommentare. Verschlusssachen erscheinen nur für die Führung.
+    Die <b>Smart-Suche</b> toleriert Tippfehler; der <b>Deep-Scan</b> durchsucht zusätzlich alle Nebenfelder (inkl. Person-Steckbrief) und bezieht Doks/Quellen/Kommentare immer mit ein.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudTextField @bind-Value="_text" Placeholder="Suchbegriff…" Variant="Variant.Outlined" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="SearchKeyDown" Class="flex-grow-1 mt-0" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search"
+                       OnClick="SearchAsync">Suchen</MudButton>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Kategorien:</MudText>
+            <MudCheckBox T="bool" @bind-Value="_katPerson" Label="Personen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katFaction" Label="Fraktionen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katGroup" Label="Personengruppen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katParty" Label="Parteien" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katOperation" Label="Operationen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katTaskforce" Label="Taskforces" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katCase" Label="Vorgänge" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katLaw" Label="Gesetze" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katDoc" Label="Doks" Dense="true" Disabled="_maxMode" />
+            <MudCheckBox T="bool" @bind-Value="_katSource" Label="Quellen" Dense="true" Disabled="_maxMode" />
+            <MudCheckBox T="bool" @bind-Value="_katComment" Label="Kommentare" Dense="true" Disabled="_maxMode" />
+            <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_tagSelection" Label="Tags" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:220px;"
+                       MultiSelectionTextFunc="@(items => $"{items.Count} Tag(s)")">
+                @foreach (var t in _tags)
+                {
+                    <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Modus:</MudText>
+            <MudTooltip Text="Findet Treffer auch bei Tippfehlern (Levenshtein-Algorithmus).">
+                <MudCheckBox T="bool" @bind-Value="_fuzzy" Label="Smart-Suche" Dense="true" Color="Color.Primary" />
+            </MudTooltip>
+            <MudTooltip Text="Durchsucht alle Felder inkl. Person-Steckbrief sowie Doks/Quellen/Kommentare – toleranter, aber langsamer.">
+                <MudCheckBox T="bool" @bind-Value="_maxMode" @bind-Value:after="MaxAddendum" Label="Deep-Scan" Dense="true" Color="Color.Secondary" />
+            </MudTooltip>
+            @if (_maxMode)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Doks/Quellen/Kommentare sind im Deep-Scan immer aktiv.</MudText>
+            }
+        </MudStack>
+
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudTextField @bind-Value="_saveName" Placeholder="Suche speichern als…" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:240px;" Class="mt-0" />
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.BookmarkAdd"
+                       OnClick="SaveAsync" Disabled="@string.IsNullOrWhiteSpace(_saveName)">Speichern</MudButton>
+
+            @if (_saved.Count > 0)
+            {
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Gespeichert:</MudText>
+                @foreach (var g in _saved)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyAsync(g))" OnClose="@(() => SearchDeleteAsync(g))">@g.Name</MudChip>
+                }
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_searched && _groups.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine Treffer.</MudAlert>
+}
+else if (!_searched)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Suchbegriff eingeben oder Tags wählen und „Suchen" klicken.</MudText>
+}
+else
+{
+    <MudStack Spacing="4">
+        @foreach (var group in _groups)
+        {
+            <div>
+                <MudText Typo="Typo.subtitle1" Class="mb-2">
+                    <MudIcon Icon="@CategoryIcon(group.Category)" Size="Size.Small" Class="mr-1" />@group.Display (@group.Hit.Count)
+                </MudText>
+                <MudStack Spacing="2">
+                    @foreach (var t in group.Hit)
+                    {
+                        <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => Open(t))">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2"><b>@t.Title</b></MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@t.CaseNumber</MudText>
+                            </MudStack>
+                            @if (!string.IsNullOrWhiteSpace(t.Snippet))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"
+                                         Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:720px;">
+                                    @t.Snippet
+                                </MudText>
+                            }
+                        </MudPaper>
+                    }
+                </MudStack>
+            </div>
+        }
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "q")] private string? Q { get; set; }
+
+    private ClaimsPrincipal _user = default!;
+    private string? _agentId;
+    private bool _mayClassifiedRead;
+
+    private string _text = string.Empty;
+    private bool _katPerson = true, _katFaction = true, _katGroup = true, _katParty = true, _katOperation = true, _katTaskforce = true, _katCase = true, _katLaw = true, _katDoc = true, _katSource = true, _katComment = true;
+    private bool _fuzzy;
+    private bool _maxMode;
+    private IReadOnlyCollection<string> _tagSelection = new HashSet<string>();
+    private string _saveName = string.Empty;
+
+    private bool _load;
+    private bool _searchingNow;
+    private bool _againSearch;
+    private bool _searched;
+    private List<SearchResultGroup> _groups = new();
+    private List<Tag> _tags = new();
+    private List<SavedSearch> _saved = new();
+
+    private string? _appliedQ;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _agentId = _user.GetAgentId();
+        _mayClassifiedRead = _user.MayClassifiedRead();
+        _tags = await TagService.GetAllAsync();
+        await SavedLoadAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Aufruf über die Topbar/Command-Palette: ?q=… übernehmen und sofort suchen.
+        if (Q != _appliedQ)
+        {
+            _appliedQ = Q;
+            if (!string.IsNullOrWhiteSpace(Q))
+            {
+                _text = Q;
+                await SearchAsync();
+            }
+        }
+    }
+
+    private async Task SavedLoadAsync()
+    {
+        if (_agentId is not null)
+        {
+            _saved = await SavedSearchService.GetForAgentAsync(_agentId);
+        }
+    }
+
+    private async Task SearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private SearchCriteria BuildCriteria()
+    {
+        var categories = new List<string>();
+        if (_katPerson) categories.Add(nameof(Person));
+        if (_katFaction) categories.Add(nameof(Faction));
+        if (_katGroup) categories.Add(nameof(PersonGroup));
+        if (_katParty) categories.Add(nameof(Party));
+        if (_katOperation) categories.Add(nameof(Operation));
+        if (_katTaskforce) categories.Add(nameof(Taskforce));
+        if (_katCase) categories.Add(nameof(Case));
+        if (_katLaw) categories.Add(nameof(Law));
+        if (_katDoc) categories.Add(nameof(PersonDoc));
+        if (_katSource) categories.Add(nameof(Source));
+        if (_katComment) categories.Add(nameof(Comment));
+
+        return new SearchCriteria
+        {
+            Text = _text,
+            // Alle zehn aktiv → leere Liste (= alle), sonst die gewählte Teilmenge.
+            Categories = categories.Count == 11 ? new() : categories,
+            TagIds = _tagSelection.ToList(),
+            Fuzzy = _fuzzy,
+            MaxMode = _maxMode,
+        };
+    }
+
+    // Max-Modus zieht Doks/Quellen/Kommentare immer mit (Service erzwingt es ohnehin); zur Klarheit
+    // hier die Häkchen setzen, damit der angezeigte Zustand der tatsächlichen Suche entspricht.
+    // Läuft als @bind-Value:after, also nach dem Setzen von _maxModus; Blazor rendert danach automatisch neu.
+    private void MaxAddendum()
+    {
+        if (_maxMode)
+        {
+            _katDoc = true;
+            _katSource = true;
+            _katComment = true;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (!_katPerson && !_katFaction && !_katGroup && !_katParty && !_katOperation && !_katTaskforce && !_katCase && !_katLaw && !_katDoc && !_katSource && !_katComment && !_maxMode)
+        {
+            Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
+            return;
+        }
+        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen.
+        // Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt – verhindert den inkonsistenten
+        // Zustand „Feld zeigt X, Treffer zeigen Y" und unnötige Parallel-Abfragen.
+        if (_searchingNow)
+        {
+            _againSearch = true;
+            return;
+        }
+
+        _searchingNow = true;
+        _load = true;
+        StateHasChanged();
+        try
+        {
+            do
+            {
+                _againSearch = false;
+                _groups = await SearchService.SearchAsync(BuildCriteria(), _mayClassifiedRead, _agentId);
+                _searched = true;
+            }
+            while (_againSearch);
+        }
+        catch (Exception ex)
+        {
+            // Fehler sichtbar machen statt den Ladeindikator hängen zu lassen.
+            _groups = new();
+            _searched = true;
+            Snackbar.Add($"Suche fehlgeschlagen: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+            _searchingNow = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_agentId is null)
+        {
+            return;
+        }
+        try
+        {
+            await SavedSearchService.SaveAsync(_agentId, _saveName, BuildCriteria(), _user);
+            Snackbar.Add($"Suche „{_saveName.Trim()}“ gespeichert.", Severity.Success);
+            _saveName = string.Empty;
+            await SavedLoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ApplyAsync(SavedSearch g)
+    {
+        SearchCriteria? k = null;
+        try { k = JsonSerializer.Deserialize<SearchCriteria>(g.SearchParameterJson); }
+        catch { /* defekte gespeicherte Suche ignorieren */ }
+        if (k is null)
+        {
+            return;
+        }
+
+        _text = k.Text ?? string.Empty;
+        var katSet = k.Categories is { Count: > 0 } ? k.Categories.ToHashSet() : null;
+        _katPerson = katSet is null || katSet.Contains(nameof(Person));
+        _katFaction = katSet is null || katSet.Contains(nameof(Faction));
+        _katGroup = katSet is null || katSet.Contains(nameof(PersonGroup));
+        _katParty = katSet is null || katSet.Contains(nameof(Party));
+        _katOperation = katSet is null || katSet.Contains(nameof(Operation));
+        _katTaskforce = katSet is null || katSet.Contains(nameof(Taskforce));
+        _katCase = katSet is null || katSet.Contains(nameof(Case));
+        _katLaw = katSet is null || katSet.Contains(nameof(Law));
+        _katDoc = katSet is null || katSet.Contains(nameof(PersonDoc));
+        _katSource = katSet is null || katSet.Contains(nameof(Source));
+        _katComment = katSet is null || katSet.Contains(nameof(Comment));
+        _tagSelection = new HashSet<string>(k.TagIds ?? new());
+        _fuzzy = k.Fuzzy;
+        _maxMode = k.MaxMode;
+
+        await SearchAsync();
+    }
+
+    private async Task SearchDeleteAsync(SavedSearch g)
+    {
+        if (_agentId is null)
+        {
+            return;
+        }
+        // Das X liegt direkt neben „Suche anwenden" → vor dem Löschen kurz bestätigen (kein versehentlicher Verlust).
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Gespeicherte Suche löschen?",
+            $"„{g.Name}“ wird dauerhaft entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        await SavedSearchService.DeleteAsync(g.Id, _agentId);
+        Snackbar.Add($"Suche „{g.Name}“ gelöscht.", Severity.Success);
+        await SavedLoadAsync();
+    }
+
+    private void Open(SearchHit t) => Nav.NavigateTo(SearchNavigation.Route(t));
+
+    private static string CategoryIcon(string category) => category switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Law) => Icons.Material.Filled.Gavel,
+        nameof(PersonDoc) => Icons.Material.Filled.Description,
+        nameof(Source) => Icons.Material.Filled.AttachFile,
+        nameof(Comment) => Icons.Material.Filled.Comment,
+        _ => Icons.Material.Filled.Article,
+    };
+}

@@ -1,0 +1,181 @@
+@page "/doks"
+@inject IPersonDocService DocService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IPersonService PersonService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Personen-Doks · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Description" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Personen-Doks</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="NewAsync">Neues Dok</MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Übergreifende Liste aller Verhör- und Maßnahmen-Doks. Beim Anlegen wird die Person über die Suche
+    gewählt – existiert sie noch nicht, wird automatisch eine neue Akte angelegt.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable T="PersonDocDisplay" Items="_docs" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true"
+              Filter="Filter" RowClass="cursor-pointer" OnRowClick="@(args => Open(args.Item))">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_search" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Person?.Name)">Person</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Person?.CaseNumber)">Aktenzeichen</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Timestamp)" InitialDirection="SortDirection.Descending">Zeitpunkt</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => MeasureOutcomeDisplay.Name(x.Doc.Outcome))">Ausgang</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.OrgName ?? x.Doc.Faction)">Fraktion</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Reason)">Grund</MudTableSortLabel></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Person">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body2">@context.Doc.Person?.Name</MudText>
+                    @if (context.Doc.Person?.IsClassified == true)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Doc.Person?.CaseNumber</MudText>
+            </MudTd>
+            <MudTd DataLabel="Zeitpunkt">
+                <MudText Typo="Typo.body2">@context.Doc.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Ausgang">
+                <MudText Typo="Typo.body2">@MeasureOutcomeDisplay.Name(context.Doc.Outcome)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Fraktion">
+                @* Verknüpfte Fraktion/Gruppe als Link (Klick öffnet nicht den Dialog); sonst Freitext. *@
+                @if (context.OrgRoute is not null)
+                {
+                    <MudLink Href="@context.OrgRoute" Typo="Typo.body2" @onclick:stopPropagation="true">@context.OrgName</MudLink>
+                }
+                else if (!string.IsNullOrWhiteSpace(context.Doc.Faction))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Doc.Faction</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Grund">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary"
+                         Style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    @(string.IsNullOrWhiteSpace(context.Doc.Reason) ? "—" : context.Doc.Reason)
+                </MudText>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Doks erfasst.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string _search = string.Empty;
+    private List<PersonDocDisplay> _docs = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _docs = await DocService.GetAllAsync(_isLeadership);
+        _load = false;
+    }
+
+    private bool Filter(PersonDocDisplay display)
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            return true;
+        }
+        var s = _search.Trim();
+        var doc = display.Doc;
+        return (doc.Person?.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (doc.Person?.CaseNumber?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (display.OrgName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (doc.Faction?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    // Klick auf eine Zeile öffnet das Dok als Detail-Dialog (lesen + bearbeiten, mit „Zur Akte"-Sprung).
+    private async Task Open(PersonDocDisplay? display)
+    {
+        if (display is null)
+        {
+            return;
+        }
+        var modified = await DocDetailDialog.ShowAsync(DialogService, display, _user, showToRecord: true);
+        if (modified)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task NewAsync()
+    {
+        var result = await DocCreateDialog.ShowAsync(DialogService, _isLeadership);
+        if (result is null)
+        {
+            return;
+        }
+
+        // Beim Anlegen einer neuen Akte vor gleichnamigen Dubletten warnen (wie im regulären „Neue Person"-Formular).
+        if (result.PersonId is null
+            && !await DuplicateCheck.MayNewRecordCreateAsync(DialogService, PersonService, result.NewName, _isLeadership))
+        {
+            return;
+        }
+
+        try
+        {
+            // Die Person, auf die sich eine optionale Mitgliedschaft bezieht (bestehend oder neu angelegt).
+            string personId;
+            if (result.PersonId is not null)
+            {
+                await DocService.CreateAsync(result.PersonId, result.Input, _user);
+                personId = result.PersonId;
+                Snackbar.Add("Dok gespeichert.", Severity.Success);
+            }
+            else
+            {
+                var doc = await DocService.CreateForNewPersonAsync(result.NewName!, result.Input, _user);
+                personId = doc.PersonId;
+                Snackbar.Add($"Neue Akte „{result.NewName}“ samt Dok angelegt.", Severity.Success);
+            }
+            // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
+            await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, personId, result.Input, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

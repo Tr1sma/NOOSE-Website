@@ -10,54 +10,54 @@
 <MudStack Spacing="2" Style="height:60vh;">
     @* Spaltenumkehr → neueste Nachricht klebt unten (CSS-Autoscroll, kein JS nötig). *@
     <div style="flex:1 1 auto; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
-        @if (_laden)
+        @if (_load)
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
         }
         else
         {
-            @foreach (var e in _eintraege.AsEnumerable().Reverse())
+            @foreach (var e in _entries.AsEnumerable().Reverse())
             {
-                var eigen = e.Msg.ErstelltVonId == _meineId;
-                <div style="@(eigen ? "align-self:flex-end;" : "align-self:flex-start;")max-width:80%;">
-                    <MudPaper Class="pa-2" Elevation="@(eigen ? 0 : 1)" Outlined="@(!eigen)"
-                              Style="@(eigen ? "background-color:var(--mud-palette-primary-hover);" : "")">
+                var own = e.Msg.CreatedById == _myId;
+                <div style="@(own ? "align-self:flex-end;" : "align-self:flex-start;")max-width:80%;">
+                    <MudPaper Class="pa-2" Elevation="@(own ? 0 : 1)" Outlined="@(!own)"
+                              Style="@(own ? "background-color:var(--mud-palette-primary-hover);" : "")">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudText Typo="Typo.caption"><b>@(string.IsNullOrWhiteSpace(e.Msg.AutorName) ? "Unbekannt" : e.Msg.AutorName)</b></MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· @e.Msg.ErstelltAm.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
-                            @if (_darfSchreiben && (eigen || _istFuehrung))
+                            <MudText Typo="Typo.caption"><b>@(string.IsNullOrWhiteSpace(e.Msg.AuthorName) ? "Unbekannt" : e.Msg.AuthorName)</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· @e.Msg.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                            @if (_mayWrite && (own || _isLeadership))
                             {
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                               OnClick="@(() => LoeschenAsync(e.Msg))" aria-label="Nachricht zurückziehen" />
+                                               OnClick="@(() => DeleteAsync(e.Msg))" aria-label="Nachricht zurückziehen" />
                             }
                         </MudStack>
-                        <MentionText Segmente="e.Segmente" />
+                        <MentionText Segments="e.Segments" />
                     </MudPaper>
                 </div>
             }
-            @if (_mehrMoeglich)
+            @if (_morePossible)
             {
                 <div style="align-self:center;">
                     <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ExpandLess"
-                               OnClick="AeltereLadenAsync" Disabled="_laedtMehr">Ältere laden</MudButton>
+                               OnClick="OlderLoadAsync" Disabled="_loadsMore">Ältere laden</MudButton>
                 </div>
             }
-            @if (_eintraege.Count == 0)
+            @if (_entries.Count == 0)
             {
                 <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="align-self:center;">Noch keine Nachrichten – beginne den Chat.</MudText>
             }
         }
     </div>
 
-    @if (_darfSchreiben)
+    @if (_mayWrite)
     {
         <div>
-            <MentionEingabe @bind-Text="_text" IstFuehrung="_istFuehrung"
-                            DarfVerschlusssacheLesen="_darfVsLesen" DarfKlarname="_darfKlarname"
-                            Placeholder="@Platzhalter" OnSubmit="SendenAsync" />
+            <MentionInput @bind-Text="_text" IsLeadership="_isLeadership"
+                            MayClassifiedRead="_mayClassifiedRead" MayRealName="_mayRealName"
+                            Placeholder="@Placeholder" OnSubmit="SendAsync" />
             <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
-                           OnClick="SendenAsync" Disabled="@(_sendet || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
+                           OnClick="SendAsync" Disabled="@(_sends || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
             </MudStack>
         </div>
     }
@@ -67,89 +67,89 @@
     [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    private const int Seite = 50;
-    private const string Platzhalter = "Nachricht verfassen … (Verlinken per @, Strg+Enter sendet)";
-    private bool _laden = true;
-    private bool _laedtMehr;
-    private bool _sendet;
-    private bool _mehrMoeglich;
-    private bool _istFuehrung;
-    private bool _darfVsLesen;
-    private bool _darfKlarname;
-    private bool _darfSchreiben;
-    private string? _meineId;
+    private const int Page = 50;
+    private const string Placeholder = "Nachricht verfassen … (Verlinken per @, Strg+Enter sendet)";
+    private bool _load = true;
+    private bool _loadsMore;
+    private bool _sends;
+    private bool _morePossible;
+    private bool _isLeadership;
+    private bool _mayClassifiedRead;
+    private bool _mayRealName;
+    private bool _mayWrite;
+    private string? _myId;
     private string _text = string.Empty;
-    private List<Eintrag> _eintraege = new();
+    private List<Entry> _entries = new();
 
-    private sealed record Eintrag(TaskforceNachricht Msg, IReadOnlyList<MentionSegment> Segmente);
+    private sealed record Entry(TaskforceMessage Msg, IReadOnlyList<MentionSegment> Segments);
 
     protected override async Task OnInitializedAsync()
     {
-        _istFuehrung = User.IstFuehrung();
-        _darfVsLesen = User.DarfVerschlusssacheLesen();
-        _darfKlarname = User.DarfKlarnameSehen();
-        _darfSchreiben = User.DarfSchreiben();
-        _meineId = User.GetAgentId();
-        Broadcaster.Geaendert += OnGeaendert;
-        await LadenAsync();
+        _isLeadership = User.IsLeadership();
+        _mayClassifiedRead = User.MayClassifiedRead();
+        _mayRealName = User.MayRealNameSee();
+        _mayWrite = User.MayWrite();
+        _myId = User.GetAgentId();
+        Broadcaster.Modified += OnModified;
+        await LoadAsync();
     }
 
-    private async Task LadenAsync()
+    private async Task LoadAsync()
     {
-        _laden = true;
-        var nachrichten = await ChatService.GetNachrichtenAsync(TaskforceId, _darfVsLesen, Seite);
-        _mehrMoeglich = nachrichten.Count >= Seite;
-        _eintraege = await ZuEintraegenAsync(nachrichten);
-        _laden = false;
+        _load = true;
+        var messages = await ChatService.GetMessagesAsync(TaskforceId, _mayClassifiedRead, Page);
+        _morePossible = messages.Count >= Page;
+        _entries = await ToEntriesAsync(messages);
+        _load = false;
     }
 
-    private async Task<List<Eintrag>> ZuEintraegenAsync(List<TaskforceNachricht> nachrichten)
+    private async Task<List<Entry>> ToEntriesAsync(List<TaskforceMessage> messages)
     {
-        var segmente = await MentionService.AufloesenVieleAsync(
-            nachrichten.Select(n => (string?)n.Text).ToList(), _darfVsLesen, _meineId);
-        return nachrichten.Select((n, i) => new Eintrag(n, segmente[i])).ToList();
+        var segments = await MentionService.ResolveManyAsync(
+            messages.Select(n => (string?)n.Text).ToList(), _mayClassifiedRead, _myId);
+        return messages.Select((n, i) => new Entry(n, segments[i])).ToList();
     }
 
-    private async Task AeltereLadenAsync()
+    private async Task OlderLoadAsync()
     {
-        if (_eintraege.Count == 0 || _laedtMehr)
+        if (_entries.Count == 0 || _loadsMore)
         {
             return;
         }
-        _laedtMehr = true;
-        var aeltester = _eintraege[0].Msg.ErstelltAm;
-        var weitere = await ChatService.GetNachrichtenAsync(TaskforceId, _darfVsLesen, Seite, aeltester);
-        _mehrMoeglich = weitere.Count >= Seite;
-        if (weitere.Count > 0)
+        _loadsMore = true;
+        var oldest = _entries[0].Msg.CreatedAt;
+        var more = await ChatService.GetMessagesAsync(TaskforceId, _mayClassifiedRead, Page, oldest);
+        _morePossible = more.Count >= Page;
+        if (more.Count > 0)
         {
-            var neue = await ZuEintraegenAsync(weitere);
-            _eintraege = neue.Concat(_eintraege).ToList();
+            var @new = await ToEntriesAsync(more);
+            _entries = @new.Concat(_entries).ToList();
         }
-        _laedtMehr = false;
+        _loadsMore = false;
     }
 
-    private async Task SendenAsync()
+    private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(_text) || _sendet)
+        if (string.IsNullOrWhiteSpace(_text) || _sends)
         {
             return;
         }
-        _sendet = true;
+        _sends = true;
         try
         {
-            await ChatService.SendenAsync(TaskforceId, _text, User);
+            await ChatService.SendAsync(TaskforceId, _text, User);
             _text = string.Empty; // Die Liste aktualisiert der Broadcaster (auch für andere Nutzer).
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
-        _sendet = false;
+        _sends = false;
     }
 
-    private async Task LoeschenAsync(TaskforceNachricht m)
+    private async Task DeleteAsync(TaskforceMessage m)
     {
-        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Nachricht zurückziehen?",
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Nachricht zurückziehen?",
             "Die Nachricht wird aus dem Chat entfernt.", "Zurückziehen");
         if (!ok)
         {
@@ -157,7 +157,7 @@
         }
         try
         {
-            await ChatService.LoeschenAsync(m.Id, User); // Broadcaster lädt neu.
+            await ChatService.DeleteAsync(m.Id, User); // Broadcaster lädt neu.
         }
         catch (Exception ex)
         {
@@ -166,7 +166,7 @@
     }
 
     // Live-Signal (auch von anderen Circuits) → in den eigenen Circuit marshallen und neu laden.
-    private void OnGeaendert(string taskforceId)
+    private void OnModified(string taskforceId)
     {
         if (taskforceId != TaskforceId)
         {
@@ -174,14 +174,14 @@
         }
         _ = InvokeAsync(async () =>
         {
-            await LadenAsync();
+            await LoadAsync();
             StateHasChanged();
         });
     }
 
     public ValueTask DisposeAsync()
     {
-        Broadcaster.Geaendert -= OnGeaendert;
+        Broadcaster.Modified -= OnModified;
         return ValueTask.CompletedTask;
     }
 }

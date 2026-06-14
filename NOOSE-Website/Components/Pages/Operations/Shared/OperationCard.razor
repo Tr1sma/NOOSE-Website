@@ -1,0 +1,82 @@
+@* Identitäts-/Steckkarte der Operation: Titel, Status, Typ, Zeitraum, Ort, Einstufung, Ermittlungsleiter. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.Radar" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Operation.Title</MudText>
+                @if (Operation.IsClassified)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Operation.CaseNumber</MudText>
+        </div>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+            <OperationStatusChip Status="Operation.Status" />
+            @if (!string.IsNullOrWhiteSpace(Operation.Type))
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@Operation.Type</MudChip>
+            }
+        </MudStack>
+
+        <ClassificationBadge Value="Operation.Classification" />
+
+        <InvestigationLeadDisplay Names="InvestigationLead" />
+
+        <MudDivider />
+
+        @if (Operation.Start is not null || Operation.End is not null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Default" />
+                <MudText Typo="Typo.body2">@TimeRange</MudText>
+            </MudStack>
+        }
+        @if (!string.IsNullOrWhiteSpace(Operation.Location))
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" Color="Color.Default" />
+                <MudText Typo="Typo.body2">@Operation.Location</MudText>
+            </MudStack>
+        }
+
+        <MudDivider />
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <RecencyIndicator RecordsType="@nameof(Operation)" ReferenceDateUtc="@(Operation.ModifiedAt ?? Operation.CreatedAt)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Operation.ModifiedAt ?? Operation.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Operation Operation { get; set; } = default!;
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
+
+    private string TimeRange
+    {
+        get
+        {
+            var source = Operation.Start?.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+            var until = Operation.End?.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+            return (source, until) switch
+            {
+                (not null, not null) => $"{source} – {until}",
+                (not null, null) => $"ab {source}",
+                (null, not null) => $"bis {until}",
+                _ => "—",
+            };
+        }
+    }
+}

@@ -1,0 +1,123 @@
+@* Dialog zum Anlegen/Bearbeiten einer Fraktions-Aktivität: Titel, Art (Freitext+Vorschläge), Datum+Uhrzeit, Ort, Beschreibung. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:380px;">
+            <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined" Immediate="true" MaxLength="200"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Bolt"
+                          HelperText="Was ist passiert? (z. B. Überfall Fleeca Bank)" />
+
+            <MudAutocomplete T="string" Label="Art (optional)" @bind-Value="_kind"
+                             SearchFunc="@SearchKinds" Variant="Variant.Outlined" Clearable="true"
+                             CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                             MinCharacters="0" Immediate="true" MaxLength="100"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category"
+                             HelperText="Kategorie wie Raub oder Geiselnahme – tippen oder bestehende wählen." />
+
+            <MudStack Row="true" Spacing="2">
+                <MudDatePicker @bind-Date="_date" Label="Datum" Editable="true" Variant="Variant.Outlined"
+                               DateFormat="dd.MM.yyyy" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Event" />
+                <MudTimePicker @bind-Time="_time" Label="Uhrzeit" Editable="true" Variant="Variant.Outlined"
+                               AmPm="false" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Schedule" />
+            </MudStack>
+
+            <MudTextField @bind-Value="_location" Label="Ort (optional)" Variant="Variant.Outlined" MaxLength="200"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Place" />
+
+            <MudTextField @bind-Value="_description" Label="Beschreibung (optional)" Variant="Variant.Outlined"
+                          Lines="3" MaxLength="4000" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!CanSave)">
+            @(IsEdit ? "Speichern" : "Hinzufügen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Bereits genutzte Arten als Vorschläge für die Autocomplete (Freitext bleibt möglich).</summary>
+    [Parameter] public IReadOnlyList<string> KindsSuggestions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Vorhandene Werte beim Bearbeiten (mit lokalem Zeitpunkt); null = Neuanlage.</summary>
+    [Parameter] public ActivityInput? Exists { get; set; }
+
+    private bool IsEdit => Exists is not null;
+
+    private string? _title;
+    private string? _kind;
+    private DateTime? _date;
+    private TimeSpan? _time;
+    private string? _location;
+    private string? _description;
+
+    // Speichern erst möglich, wenn Titel und Datum gesetzt sind.
+    private bool CanSave => !string.IsNullOrWhiteSpace(_title) && _date is not null;
+
+    protected override void OnInitialized()
+    {
+        if (Exists is not null)
+        {
+            _title = Exists.Title;
+            _kind = Exists.Kind;
+            _date = Exists.Timestamp.Date;
+            _time = Exists.Timestamp.TimeOfDay;
+            _location = Exists.Location;
+            _description = Exists.Description;
+        }
+        else
+        {
+            // Neuanlage: auf „jetzt" vorbelegen (lokal).
+            var now = DateTime.Now;
+            _date = now.Date;
+            _time = now.TimeOfDay;
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchKinds(string value, CancellationToken token)
+    {
+        var v = value?.Trim() ?? string.Empty;
+        IEnumerable<string> hit = string.IsNullOrWhiteSpace(v)
+            ? KindsSuggestions
+            : KindsSuggestions.Where(a => a.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(hit);
+    }
+
+    private void Save()
+    {
+        if (string.IsNullOrWhiteSpace(_title) || _date is null)
+        {
+            return;
+        }
+        // Datum + Uhrzeit zu einem lokalen Zeitpunkt zusammenführen (Kind=Unspecified → der Dienst speichert als UTC).
+        var timestamp = _date.Value.Date + (_time ?? TimeSpan.Zero);
+        MudDialog.Close(DialogResult.Ok(new ActivityInput
+        {
+            Title = _title.Trim(),
+            Kind = string.IsNullOrWhiteSpace(_kind) ? null : _kind.Trim(),
+            Timestamp = timestamp,
+            Location = _location,
+            Description = _description,
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog (Anlegen oder Bearbeiten); liefert die Eingabe oder null bei Abbruch.</summary>
+    public static async Task<ActivityInput?> ShowAsync(IDialogService dialog,
+        IReadOnlyList<string> kindsSuggestions, ActivityInput? exists = null)
+    {
+        var parameters = new DialogParameters<ActivityDialog>
+        {
+            { x => x.KindsSuggestions, kindsSuggestions },
+            { x => x.Exists, exists },
+        };
+        var title = exists is null ? "Aktivität hinzufügen" : "Aktivität bearbeiten";
+        var reference = await dialog.ShowAsync<ActivityDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: ActivityInput e } ? e : null;
+    }
+}

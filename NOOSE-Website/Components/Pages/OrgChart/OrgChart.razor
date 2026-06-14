@@ -1,0 +1,191 @@
+@page "/organigramm"
+@inject IOrgChartService OrgChartService
+
+<PageTitle>Organigramm · NOOSE</PageTitle>
+
+<MudStack Spacing="4">
+    @* ---- Kopfzeile ---- *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Large" />
+        <div>
+            <MudText Typo="Typo.h5">Organigramm</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">NOOSE-Struktur: Dienstgrade, TRU, HRB und Taskforce-Besetzung.</MudText>
+        </div>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_data is not null)
+    {
+        @* ---- Dienstgrad-Hierarchie als Org-Chart (Director oben → Junior unten) ---- *@
+        @if (_data.Ranks.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine aktiven Agenten erfasst.</MudText>
+        }
+        else
+        {
+            <div class="org-scroll">
+                <div class="org">
+                    <div class="org-node org-root">N.O.O.S.E.</div>
+                    @foreach (var rank in _data.Ranks)
+                    {
+                        <div class="org-link"></div>
+                        <div class="org-tier">
+                            <div class="org-node org-rank">
+                                @RankDisplay.Name(rank.Rank)<span class="org-count">@rank.Agents.Count</span>
+                            </div>
+                            <ul class="org-leaves">
+                                @foreach (var a in rank.Agents)
+                                {
+                                    <li class="org-leaf">
+                                        <a class="org-card" href="@($"/personal/{a.Id}")">
+                                            <span class="org-card-avatar">@Initials(a.Codename)</span>
+                                            <span class="org-card-name">@(string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannt" : a.Codename)</span>
+                                            @if (_mayRealName && !string.IsNullOrWhiteSpace(a.RealName))
+                                            {
+                                                <span class="org-card-sub">@a.RealName</span>
+                                            }
+                                            @if (a.IsTRU)
+                                            {
+                                                <span class="org-card-badge">TRU</span>
+                                            }
+                                            @if (a.IsHRB)
+                                            {
+                                                <span class="org-card-badge org-card-badge--hrb">HRB</span>
+                                            }
+                                        </a>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @* ---- TRU ---- *@
+        @if (_data.Tru.Count > 0)
+        {
+            <MudDivider />
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                    <MudIcon Icon="@Icons.Material.Filled.LocalPolice" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6">Tactical Response Unit (TRU)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">· @_data.Tru.Count rangübergreifend</MudText>
+                </MudStack>
+                <MudGrid Spacing="2">
+                    @foreach (var a in _data.Tru)
+                    {
+                        <MudItem xs="12" sm="6" md="4" lg="3">
+                            <AgentTile Agent="a" MayRealName="_mayRealName" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudStack>
+        }
+
+        @* ---- HRB ---- *@
+        @if (_data.Hrb.Count > 0)
+        {
+            <MudDivider />
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Info" />
+                    <MudText Typo="Typo.h6">Human Resources Branch (HRB)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">· @_data.Hrb.Count rangübergreifend</MudText>
+                </MudStack>
+                <MudGrid Spacing="2">
+                    @foreach (var a in _data.Hrb)
+                    {
+                        <MudItem xs="12" sm="6" md="4" lg="3">
+                            <AgentTile Agent="a" MayRealName="_mayRealName" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudStack>
+        }
+
+        @* ---- Taskforce-Besetzung ---- *@
+        <MudDivider />
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Groups2" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">Taskforces</MudText>
+            </MudStack>
+            @if (_data.Taskforces.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_taskforceEmptyText</MudText>
+            }
+            else
+            {
+                @foreach (var tf in _data.Taskforces)
+                {
+                    <MudPaper Class="pa-3" Elevation="1">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                                <MudLink Href="@($"/taskforces/{tf.Taskforce.Id}")" Typo="Typo.subtitle1"><b>@tf.Taskforce.Name</b></MudLink>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text">@tf.Taskforce.CaseNumber</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@TaskforceScopeDisplay.Name(tf.Taskforce.Scope)</MudChip>
+                            </MudStack>
+                            @if (tf.Members.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Mitglieder.</MudText>
+                            }
+                            else
+                            {
+                                <MudGrid Spacing="2">
+                                    @foreach (var m in tf.Members)
+                                    {
+                                        <MudItem xs="12" sm="6" md="4" lg="3">
+                                            <AgentTile Agent="m.Agent!" MayRealName="_mayRealName"
+                                                         RoleText="@(TaskforceRoleDisplay.IsLead(m.Role) ? TaskforceRoleDisplay.Name(m.Role) : null)"
+                                                         IsLead="@TaskforceRoleDisplay.IsLead(m.Role)" />
+                                        </MudItem>
+                                    }
+                                </MudGrid>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        </MudStack>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayRealName;
+    private OrgChartData? _data;
+    private string _taskforceEmptyText = "Keine genehmigten Taskforces vorhanden.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _mayRealName = user.MayRealNameSee();
+        _taskforceEmptyText = user.IsLeadership()
+            ? "Keine genehmigten Taskforces vorhanden."
+            : "Dir sind keine genehmigten Taskforces zugeteilt.";
+        _data = await OrgChartService.GetAsync(user);
+        _load = false;
+    }
+
+    // Initialen aus dem Codename (1–2 Buchstaben) für den Avatar.
+    private static string Initials(string? codename)
+    {
+        if (string.IsNullOrWhiteSpace(codename))
+        {
+            return "?";
+        }
+        var parts = codename.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+        {
+            return string.Concat(char.ToUpperInvariant(parts[0][0]), char.ToUpperInvariant(parts[1][0]));
+        }
+        var word = parts[0];
+        return word.Length >= 2 ? word[..2].ToUpperInvariant() : word[..1].ToUpperInvariant();
+    }
+}

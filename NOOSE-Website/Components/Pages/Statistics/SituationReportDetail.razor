@@ -1,0 +1,48 @@
+@* Detailansicht eines archivierten Lageberichts (Phase 8 / Block D, Schritt 2): rendert den eingefrorenen
+   Schnappschuss als Dokument im DruckRahmen (ohne automatischen Druckdialog – der Drucken-/PDF-Knopf bleibt).
+   Nur für die Führung; der Bericht enthält die vollständige Lage inkl. Verschlusssachen-Aggregate. *@
+@page "/lageberichte/{Id}"
+@layout PrintLayout
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject ISituationReportService SituationReports
+
+<PageTitle>@(_display?.Title ?? "Lagebericht") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_display is null)
+{
+    <div class="pa-6">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+            Dieser Lagebericht existiert nicht (mehr) oder ist nicht lesbar.
+        </MudAlert>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/lageberichte">Zurück zum Archiv</MudButton>
+    </div>
+}
+else
+{
+    <PrintFrame Title="@_display.Title" BackHref="/lageberichte" BackText="Zurück zum Archiv"
+                 IsClassified="false" AutomaticPrint="false"
+                 Footer="NOOSE-interne Auswertung · automatisch erzeugter Lagebericht · Weitergabe nur nach Freigabe durch die Führung.">
+        <p class="druck-meta">
+            Automatisch erzeugter Lagebericht · Berichtsstand @_display.GeneratedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+            · erzeugt von @(_display.GeneratedBy ?? "System")
+        </p>
+        <StatisticsReportTables Report="_display.Report" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    private bool _load = true;
+    private SituationReportDisplay? _display;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _display = await SituationReports.GetDisplayAsync(Id);
+        _load = false;
+    }
+}

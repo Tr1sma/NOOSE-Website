@@ -1,0 +1,28 @@
+@* Farbiger Status-Chip einer Operation (Geplant/Laufend/Abgeschlossen/Abgebrochen). Zentralisiert
+   Beschriftung und Farbgebung für Karte, Liste und Detailseite. *@
+<MudChip T="string" Size="@Size" Variant="Variant.Filled" Color="@Colour(Status)" Icon="@Symbol(Status)">
+    @OperationStatusDisplay.Name(Status)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public OperationStatus Status { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private static Color Colour(OperationStatus status) => status switch
+    {
+        OperationStatus.Planned => Color.Info,
+        OperationStatus.Running => Color.Warning,
+        OperationStatus.Completed => Color.Success,
+        OperationStatus.Aborted => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(OperationStatus status) => status switch
+    {
+        OperationStatus.Planned => Icons.Material.Filled.Event,
+        OperationStatus.Running => Icons.Material.Filled.PlayArrow,
+        OperationStatus.Completed => Icons.Material.Filled.CheckCircle,
+        OperationStatus.Aborted => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline,
+    };
+}

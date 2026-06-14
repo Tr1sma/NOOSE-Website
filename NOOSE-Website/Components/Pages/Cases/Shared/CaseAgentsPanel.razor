@@ -1,0 +1,147 @@
+@* Dem Vorgang zugeteilte (beteiligte) NOOSE-Agents: Liste + Zuteilen/Entfernen + Fallführer-Markierung.
+   Komponentenname bewusst „VorgangAgentePanel" (nicht „AgentePanel"), um Tag-Auflösungs-Kollisionen mit
+   den gleichnamigen Komponenten anderer Module zu vermeiden (alle Shared-Ordner sind global @using). *@
+@inject ICaseService CaseService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Beteiligte Agents (@_agents.Count)</MudText>
+        @if (_canManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AllocateAsync">
+                Agent zuteilen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_agents.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Agents beteiligt.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _agents)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@(a.IsCaseLead ? Icons.Material.Filled.LocalPolice : Icons.Material.Filled.Person)"
+                                 Color="@(a.IsCaseLead ? Color.Warning : Color.Primary)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(a.Agent?.Rank)</MudChip>
+                        @if (a.IsCaseLead)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.LocalPolice">Fallführer</MudChip>
+                        }
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        @if (_isLeadership)
+                        {
+                            <MudIconButton Icon="@(a.IsCaseLead ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                           Color="@(a.IsCaseLead ? Color.Warning : Color.Default)" Size="Size.Small"
+                                           OnClick="@(() => CaseLeadToggleAsync(a))"
+                                           aria-label="@(a.IsCaseLead ? "Fallführer-Markierung entfernen" : "Als Fallführer markieren")" />
+                        }
+                        @if (_canManage)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => RemoveAsync(a))" aria-label="Agent entfernen" />
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string CaseId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Wird nach jeder Änderung der Zuteilungen/Fallführer ausgelöst (Steckkarte aktualisieren).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private bool _isLeadership;
+    private bool _canManage;
+    private List<CaseAgent> _agents = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLeadership = User.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _agents = await CaseService.GetAgentsAsync(CaseId);
+        // Verwalten (zuteilen/entfernen) darf die Führung oder ein Fallführer dieser Akte.
+        var myId = User.GetAgentId();
+        _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && a.IsCaseLead);
+        _load = false;
+    }
+
+    private async Task AllocateAsync()
+    {
+        var exclusion = _agents.Select(a => a.AgentId).ToList();
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), _isLeadership, "Als Fallführer zuteilen");
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await CaseService.AgentAllocateAsync(CaseId, choice.AgentId, choice.AsInvestigationLead, User);
+            Snackbar.Add("Agent zugeteilt.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task CaseLeadToggleAsync(CaseAgent a)
+    {
+        try
+        {
+            await CaseService.CaseLeadSetAsync(a.Id, !a.IsCaseLead, User);
+            Snackbar.Add(a.IsCaseLead ? "Fallführer-Markierung entfernt." : "Als Fallführer markiert.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(CaseAgent a)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Zuteilung aufheben?",
+            $"„{a.Agent?.Codename}“ wird dem Vorgang nicht mehr zugeteilt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await CaseService.AgentRemoveAsync(a.Id, User);
+            Snackbar.Add("Zuteilung aufgehoben.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

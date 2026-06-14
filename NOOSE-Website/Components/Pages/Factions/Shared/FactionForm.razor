@@ -1,0 +1,211 @@
+@* Gemeinsames Formular für Anlegen/Bearbeiten einer Fraktion: Stammdaten + strukturierte Listen
+   (Ränge, Waffen-/Lagerbestand). Bindet direkt an das übergebene FraktionEingabe. Beim Anlegen können
+   bereits Mitglieder erfasst werden (ZeigeMitglieder); im Bearbeiten laufen sie über den Akten-Tab. *@
+@using MudBlazor.Utilities
+@inject IProfileSuggestionService SuggestionService
+@inject IDialogService DialogService
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        <MudTextField @bind-Value="Input.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
+                      Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        @* Wie das Waffen-Feld: Autocomplete mit Vorschlägen aus dem gemeinsamen Katalog; freie Eingabe erlaubt. *@
+        <MudAutocomplete T="string" @bind-Value="Input.Kind" Label="Art (z. B. Gang, Konzern)"
+                         SearchFunc="@KindSearch" Variant="Variant.Outlined"
+                         CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                         MinCharacters="0" Immediate="true" MaxItems="20" Clearable="true"
+                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category" />
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudTextField @bind-Value="Input.Radio" Label="Funk" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudTextField @bind-Value="Input.Darkchat" Label="Darkchat" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudTextField @bind-Value="Input.IssuingTimes" Label="Ausstellungszeiten" Variant="Variant.Outlined" />
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudNumericField @bind-Value="Input.EstimatedMemberCount" Label="Geschätzte Mitgliederzahl"
+                         Variant="Variant.Outlined" Min="0" HelperText="Für den Erfassungsfortschritt (x/y)" Clearable="true" />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudColorPicker Label="Erkennungsfarbe (optional)" Value="_colour" ValueChanged="ColourSet"
+                        Variant="Variant.Outlined" Placeholder="z. B. #1E88E5" Clearable="true" />
+    </MudItem>
+    <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
+        <MudSwitch T="bool" @bind-Value="Input.IsClassified" Color="Color.Warning"
+                   Label="Verschlusssache (nur Führung sichtbar)" />
+        @if (Input.IsClassified && !IsLeadership)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Warning">
+                Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
+            </MudText>
+        }
+        <MudSwitch T="bool" @bind-Value="Input.IsStateFaction" Color="Color.Info"
+                   Label="Staatsfraktion (wird nie als veraltet markiert)" />
+    </MudItem>
+
+    @if (ShowClassification)
+    {
+        <MudItem xs="12" md="6">
+            <MudSelect T="Classification" @bind-Value="Input.Classification" Label="Einstufung" Variant="Variant.Outlined">
+                @foreach (var e in ClassificationDisplay.All)
+                {
+                    <MudSelectItem Value="e" Disabled="@(e == Classification.SecuredStateThreatening && !MayHighest)">
+                        @ClassificationDisplay.Name(e)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    }
+
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Input.Estate" Label="Anwesen" Lines="2" Variant="Variant.Outlined"
+                      HelperText="Sitz/Anwesen der Fraktion – Adresse und Notizen (optional)." />
+    </MudItem>
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Input.Targets" Label="Ziele" Lines="2" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Input.Description" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+    </MudItem>
+</MudGrid>
+
+<MudDivider Class="my-4" />
+<MudGrid>
+    @* Ränge als einfache Zeilen (Reihenfolge = Listenreihenfolge). *@
+    <MudItem xs="12" md="6">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.subtitle2">Ränge</MudText>
+            @foreach (var r in Input.Ranks)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTextField @bind-Value="r.Designation" Placeholder="Rang-Bezeichnung" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => Input.Ranks.Remove(r))" aria-label="Entfernen" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => Input.Ranks.Add(new()))">Rang hinzufügen</MudButton>
+        </MudStack>
+
+        <div class="mt-4">
+            <ProfileMultipleField TItem="StockInput" Title="WeaponStock" Items="Input.WeaponStock"
+                                    Type="SuggestionType.Weapon" ShowExtra="true"
+                                    MainPlaceholder="Waffe" ExtraPlaceholder="Menge (optional)" />
+        </div>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ProfileMultipleField TItem="StockInput" Title="Inventory" Items="Input.Inventory"
+                                Type="SuggestionType.Inventory" ShowExtra="true"
+                                MainPlaceholder="Gegenstand" ExtraPlaceholder="Menge (optional)" />
+
+        <div class="mt-4">
+            <ProfileMultipleField TItem="StockInput" Title="DrugRoutes" Items="Input.DrugRoutes"
+                                    Type="SuggestionType.DrugRoute" ShowExtra="true"
+                                    MainPlaceholder="Route" ExtraPlaceholder="Notiz (optional)" />
+        </div>
+    </MudItem>
+</MudGrid>
+
+@if (ShowMembers)
+{
+    <MudDivider Class="my-4" />
+    <MudStack Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">Mitglieder</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="MemberAddAsync">
+                Mitglied hinzufügen
+            </MudButton>
+        </MudStack>
+        @if (Input.Members.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Mitglieder – optional. Können auch später in der Akte ergänzt werden.</MudText>
+        }
+        else
+        {
+            @foreach (var m in Input.Members)
+            {
+                <MudPaper Class="pa-2" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Small" />
+                            <MudText Typo="Typo.body2"><b>@m.PersonName</b></MudText>
+                            @if (m.IsLead)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Star">Leitung</MudChip>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(m.Rank))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@m.Rank</MudChip>
+                            }
+                        </MudStack>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => Input.Members.Remove(m))" aria-label="Mitglied entfernen" />
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public FactionInput Input { get; set; } = default!;
+    /// <summary>Einstufung im Formular zeigen (nur beim Anlegen; im Bearbeiten läuft sie über den Tab „Einstufung").</summary>
+    [Parameter] public bool ShowClassification { get; set; }
+    [Parameter] public bool MayHighest { get; set; }
+    /// <summary>Ob der aktuelle Nutzer der Führung angehört (Verschlusssache-Warnung + Mitglieder-Suche).</summary>
+    [Parameter] public bool IsLeadership { get; set; }
+    /// <summary>Mitglieder-Sektion zeigen (nur beim Anlegen; im Bearbeiten über den Tab „Mitglieder").</summary>
+    [Parameter] public bool ShowMembers { get; set; }
+
+    private MudColor? _colour;
+    private IReadOnlyList<string> _kindSuggestions = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+        => _kindSuggestions = await SuggestionService.GetAsync(SuggestionType.Kind);
+
+    protected override void OnParametersSet()
+        => _colour = string.IsNullOrWhiteSpace(Input.RecognitionColor) ? null : new MudColor(Input.RecognitionColor);
+
+    private Task<IEnumerable<string>> KindSearch(string value, CancellationToken token)
+    {
+        IEnumerable<string> hit = string.IsNullOrWhiteSpace(value)
+            ? _kindSuggestions
+            : _kindSuggestions.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(hit);
+    }
+
+    private void ColourSet(MudColor? colour)
+    {
+        _colour = colour;
+        Input.RecognitionColor = colour is null ? null : colour.ToString(MudColorOutputFormats.Hex);
+    }
+
+    private async Task MemberAddAsync()
+    {
+        var exclusion = Input.Members.Select(m => m.PersonId).ToList();
+        // Ränge stehen erst nach dem Speichern als Akte; beim Anlegen die im Formular erfassten Bezeichnungen anbieten.
+        var ranks = Input.Ranks.Where(r => !string.IsNullOrWhiteSpace(r.Designation)).Select(r => r.Designation).ToList();
+        var @new = await MemberDialog.ShowAsync(DialogService, IsLeadership, ranks, exclusion);
+        if (@new is null)
+        {
+            return;
+        }
+        // Doppelte vermeiden: gleiche bestehende Person oder gleicher neuer Name.
+        var alreadyExists =
+            (!string.IsNullOrWhiteSpace(@new.PersonId) && Input.Members.Any(m => m.PersonId == @new.PersonId))
+            || (!string.IsNullOrWhiteSpace(@new.NewPersonName)
+                && Input.Members.Any(m => string.Equals(m.NewPersonName, @new.NewPersonName, StringComparison.OrdinalIgnoreCase)));
+        if (!alreadyExists)
+        {
+            Input.Members.Add(@new);
+        }
+    }
+}

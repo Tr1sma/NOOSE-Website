@@ -1,0 +1,83 @@
+@* Dialog zum Bearbeiten der Agent-Stammdaten: Klarname (intern), Codename (öffentlich) und
+   Dienstnummer (öffentlich). Der Discord-Name dient nur der internen Identifikation. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.AlternateEmail">
+                    Discord (intern): <b>@DiscordCaption</b>
+                </MudAlert>
+
+                <MudTextField @bind-Value="_realName" Label="Klarname (echter Name)" Variant="Variant.Outlined"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.VisibilityOff"
+                              HelperText="Nur für die Führungsebene sichtbar – wird rangniedrigeren Nutzern nie angezeigt." />
+
+                <MudTextField @bind-Value="_codename" Label="Codename (Deckname)" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Der Codename darf nicht leer sein."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge"
+                              HelperText="Für alle Nutzer sichtbar – ersetzt überall den Discord-Namen." />
+
+                <MudTextField @bind-Value="_badgeNumber" Label="Dienstnummer" Variant="Variant.Outlined"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Numbers"
+                              HelperText="Für alle Nutzer sichtbar (Freitext, optional)." />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? RealName { get; set; }
+    [Parameter] public string Codename { get; set; } = string.Empty;
+    [Parameter] public string? BadgeNumber { get; set; }
+    [Parameter] public string DiscordCaption { get; set; } = string.Empty;
+
+    private MudForm _form = default!;
+    private string? _realName;
+    private string _codename = string.Empty;
+    private string? _badgeNumber;
+
+    protected override void OnInitialized()
+    {
+        _realName = RealName;
+        _codename = Codename;
+        _badgeNumber = BadgeNumber;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(new AgentMasterData(_realName, _codename.Trim(), _badgeNumber)));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert die geänderten Stammdaten oder null bei Abbruch.</summary>
+    public static async Task<AgentMasterData?> ShowAsync(IDialogService dialog, Agent agent)
+    {
+        var parameters = new DialogParameters<AgentEditDialog>
+        {
+            { x => x.RealName, agent.RealName },
+            { x => x.Codename, agent.Codename },
+            { x => x.BadgeNumber, agent.BadgeNumber },
+            { x => x.DiscordCaption, agent.DiscordUsername ?? agent.DiscordId },
+        };
+        var reference = await dialog.ShowAsync<AgentEditDialog>("Agent bearbeiten", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: AgentMasterData e } ? e : null;
+    }
+
+    /// <summary>Ergebnis des Bearbeiten-Dialogs.</summary>
+    public record AgentMasterData(string? RealName, string Codename, string? BadgeNumber);
+}

@@ -13,10 +13,10 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary">National Office of Security Enforcement</MudText>
         </MudStack>
 
-        @if (!string.IsNullOrEmpty(Fehler))
+        @if (!string.IsNullOrEmpty(Error))
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Style="width:100%;">
-                @Fehler
+                @Error
             </MudAlert>
         }
 
@@ -36,7 +36,7 @@
 
         @* Rechtliche Pflichtlinks – schon vor dem Login erreichbar. *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2">
-            <MudLink Href="@RechtlichesDaten.ImpressumUrl" Target="_blank" rel="noopener noreferrer"
+            <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
                      Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
             <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
@@ -48,7 +48,7 @@
 
 @code {
     [SupplyParameterFromQuery(Name = "fehler")]
-    private string? Fehler { get; set; }
+    private string? Error { get; set; }
 
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }

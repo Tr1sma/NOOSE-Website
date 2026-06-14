@@ -1,0 +1,116 @@
+@* Identitäts-/Steckkarte der Fraktions-Akte: Name, Erkennungsfarbe, Einstufung und Kerndaten auf einen Blick. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        @* Titelbild (falls markiert), sonst Farb-Banner in der Erkennungsfarbe bzw. neutraler Platzhalter. *@
+        @if (!string.IsNullOrEmpty(TitleImagePhotoId))
+        {
+            <MudImage Src="@($"/dateien/fraktionen/foto/{TitleImagePhotoId}")" Alt="Titelbild"
+                      Height="120" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+        }
+        else
+        {
+            <div style="@BannerStyle()" class="rounded d-flex align-center justify-center">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Style="font-size:3rem;color:#fff;opacity:.85;" />
+            </div>
+        }
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Faction.Name</MudText>
+                @if (Faction.IsClassified)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+                @if (Faction.IsStateFaction)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.AccountBalance">Staatsfraktion</MudChip>
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Faction.CaseNumber</MudText>
+            @if (!string.IsNullOrWhiteSpace(Faction.Kind))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Faction.Kind</MudText>
+            }
+        </div>
+
+        <MudStack Spacing="1">
+            <ClassificationBadge Value="Faction.Classification" />
+            @if (!string.IsNullOrWhiteSpace(Faction.RecognitionColor))
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="@($"width:18px;height:18px;border-radius:4px;background:{Faction.RecognitionColor};border:1px solid rgba(255,255,255,.3);")"></div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Faction.RecognitionColor</MudText>
+                </MudStack>
+            }
+        </MudStack>
+
+        <InvestigationLeadDisplay Names="InvestigationLead" />
+
+        <MudDivider />
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            @* Staatsfraktionen können nicht veralten – feste Stufe „Frisch" hat in der Ampel Vorrang vor der Selbstberechnung. *@
+            <RecencyIndicator Level="@(Faction.IsStateFaction ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                               RecordsType="@nameof(Faction)" ReferenceDateUtc="@(Faction.ModifiedAt ?? Faction.CreatedAt)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Faction.ModifiedAt ?? Faction.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
+
+        @* Erfassungsfortschritt erfasst/geschätzt – nur wenn eine geschätzte Gesamtgröße hinterlegt ist (wie bei der Personengruppe). *@
+        @if (Faction.EstimatedMemberCount is > 0)
+        {
+            <div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle2">Erfassungsfortschritt</MudText>
+                    <MudText Typo="Typo.body2">@MemberCount / @Faction.EstimatedMemberCount</MudText>
+                </MudStack>
+                <MudProgressLinear Color="Color.Primary" Value="@Percent()" Class="mt-1" Rounded="true" Size="Size.Medium" />
+            </div>
+        }
+
+        <MudStack Row="true" Spacing="4" Class="flex-wrap">
+            @foreach (var (value, label) in Metrics())
+            {
+                <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@value</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Faction Faction { get; set; } = default!;
+    [Parameter] public int MemberCount { get; set; }
+
+    /// <summary>Id des als Titelbild markierten Fotos (ersetzt den Farb-Banner); null = kein Titelbild.</summary>
+    [Parameter] public string? TitleImagePhotoId { get; set; }
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
+
+    private double Percent()
+    {
+        if (Faction.EstimatedMemberCount is not > 0)
+        {
+            return 0;
+        }
+        var p = (double)MemberCount / Faction.EstimatedMemberCount.Value * 100;
+        return Math.Clamp(p, 0, 100);
+    }
+
+    private string BannerStyle()
+    {
+        var colour = string.IsNullOrWhiteSpace(Faction.RecognitionColor) ? "var(--mud-palette-primary)" : Faction.RecognitionColor;
+        return $"height:120px;width:100%;background:{colour};";
+    }
+
+    private IEnumerable<(int Value, string Label)> Metrics()
+    {
+        yield return (MemberCount, "Mitglieder");
+        yield return (Faction.Ranks.Count, "Ränge");
+        yield return (Faction.WeaponStock.Count + Faction.Inventory.Count, "Bestände");
+    }
+}

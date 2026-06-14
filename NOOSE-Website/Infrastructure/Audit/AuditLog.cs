@@ -12,7 +12,7 @@ public class AuditLog
 {
     public long Id { get; set; }
     [Column("Zeitpunkt")]
-    public DateTime Zeitpunkt { get; set; }
+    public DateTime Timestamp { get; set; }
 
     /// <summary>Agent-Id (Identity-Key) des Verursachers; null bei System-/Hintergrundaktionen.</summary>
     public string? AgentId { get; set; }
@@ -22,16 +22,16 @@ public class AuditLog
 
     /// <summary>CLR-Typname der betroffenen Entität (z. B. "Person").</summary>
     [Column("EntitaetTyp")]
-    public string EntitaetTyp { get; set; } = string.Empty;
+    public string EntityType { get; set; } = string.Empty;
 
     /// <summary>Primärschlüssel der betroffenen Entität als Text.</summary>
     [Column("EntitaetId")]
-    public string EntitaetId { get; set; } = string.Empty;
+    public string EntityId { get; set; } = string.Empty;
 
     [Column("Aktion")]
-    public AuditAktion Aktion { get; set; }
+    public AuditAction Action { get; set; }
 
     /// <summary>JSON mit den geänderten Feldern (alt → neu). Null bei reinen Erstellungen.</summary>
     [Column("AenderungenJson")]
-    public string? AenderungenJson { get; set; }
+    public string? ChangesJson { get; set; }
 }

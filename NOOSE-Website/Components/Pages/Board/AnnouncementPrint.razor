@@ -1,0 +1,99 @@
+@* Druckansicht einer Ankündigung vom Schwarzen Brett (Phase 7). *@
+@page "/brett/{Id}/druck"
+@layout PrintLayout
+@inject IAnnouncementService AnnouncementService
+@inject IMentionService MentionService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_detail is null ? "Druckansicht" : $"Ankündigung {_detail.Row.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_detail is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Ankündigung existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Ankündigung {_detail.Row.CaseNumber}")" BackHref="@($"/brett/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="false">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Titel</th><td>@_detail.Row.Title</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_detail.Row.CaseNumber</td></tr>
+                    <tr><th>Veröffentlicht</th><td>@_detail.Row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")@(string.IsNullOrWhiteSpace(_detail.Row.CreatorCodename) ? "" : $" · von {_detail.Row.CreatorCodename}")</td></tr>
+                    <tr><th>Zielgruppe</th><td>@_detail.Row.TargetDisplay</td></tr>
+                    @if (_detail.Row.Important)
+                    {
+                        <tr><th>Priorität</th><td>Wichtig</td></tr>
+                    }
+                    @if (_detail.Row.AsBroadcast)
+                    {
+                        <tr><th>Versand</th><td>Behörden-Broadcast</td></tr>
+                    }
+                    @if (_detail.Row.AcknowledgmentRequired)
+                    {
+                        <tr><th>Quittierung</th><td>Lesebestätigung verlangt</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        @if (_segments.Count > 0)
+        {
+            <section>
+                <h2>Inhalt</h2>
+                <div class="druck-mehrzeilig"><MentionText Segments="_segments" /></div>
+            </section>
+        }
+
+        @if (_detail.Acknowledgments.Count > 0)
+        {
+            <section>
+                <h2>Quittierungen (@_detail.Acknowledgments.Count(q => q.AcknowledgedAt is not null) von @_detail.Acknowledgments.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Quittiert am</th></tr></thead>
+                    <tbody>
+                        @foreach (var q in _detail.Acknowledgments)
+                        {
+                            <tr>
+                                <td>@q.Codename</td>
+                                <td>@(q.AcknowledgedAt is { } time ? time.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "offen")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private AnnouncementView? _detail;
+    private IReadOnlyList<MentionSegment> _segments = Array.Empty<MentionSegment>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+
+        _detail = await AnnouncementService.GetDetailAsync(Id, user);
+        if (_detail is not null)
+        {
+            _segments = string.IsNullOrWhiteSpace(_detail.Row.Content)
+                ? Array.Empty<MentionSegment>()
+                : await MentionService.ResolveAsync(_detail.Row.Content, user.MayClassifiedRead(), user.GetAgentId());
+            await AccessLog.LogViewAsync(nameof(Announcement), Id);
+        }
+        _load = false;
+    }
+}

@@ -35,7 +35,7 @@ internal sealed class IdentityRevalidatingAuthenticationStateProvider(
     private async Task<bool> ValidateAsync(UserManager<Agent> userManager, ClaimsPrincipal principal)
     {
         var agent = await userManager.GetUserAsync(principal);
-        if (agent is null || agent.Status != AgentStatus.Aktiv)
+        if (agent is null || agent.Status != AgentStatus.Active)
         {
             return false;
         }
@@ -45,8 +45,8 @@ internal sealed class IdentityRevalidatingAuthenticationStateProvider(
             return true;
         }
 
-        var stampImCookie = principal.FindFirstValue(options.Value.ClaimsIdentity.SecurityStampClaimType);
-        var aktuellerStamp = await userManager.GetSecurityStampAsync(agent);
-        return stampImCookie == aktuellerStamp;
+        var stampInCookie = principal.FindFirstValue(options.Value.ClaimsIdentity.SecurityStampClaimType);
+        var currentStamp = await userManager.GetSecurityStampAsync(agent);
+        return stampInCookie == currentStamp;
     }
 }

@@ -1,0 +1,188 @@
+@* Detailansicht eines Paragrafen (Gesetzbuch-Modul, Phase 7) inkl. Verknüpfungen zu Akten. *@
+@page "/gesetze/{Id}"
+@inject ILawService LawService
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_law is null ? "Gesetzbuch" : $"{_law.Paragraph} {_law.Title}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_law is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dieser Paragraf existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1 no-print">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/gesetze" aria-label="Zurück zum Gesetzbuch" />
+        <MudIcon Icon="@Icons.Material.Filled.Gavel" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@_law.Paragraph @_law.Title</MudText>
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/gesetze/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <AuthorizeView Policy="@Policies.Leadership" Context="fuehrung">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
+                       OnClick="EditAsync">Bearbeiten</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@_law.LawBook</MudChip>
+                <MudText Typo="Typo.h6">@_law.Paragraph – @_law.Title</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_law.Text</MudText>
+            @if (!string.IsNullOrWhiteSpace(_law.Sentence))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    <b>Strafmaß/Rechtsfolge:</b> @_law.Sentence
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_links.Count)</MudText>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink"
+                               OnClick="LinkAsync" Class="no-print">Verknüpfung hinzufügen</MudButton>
+                </AuthorizeView>
+            </MudStack>
+
+            @if (_links.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Noch keine Verknüpfungen – verbinde den Paragrafen z. B. mit einem Vorgang oder Dok.
+                </MudText>
+            }
+            else
+            {
+                @foreach (var v in _links)
+                {
+                    <MudPaper Class="pa-3" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Small" />
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@v.OtherType</MudChip>
+                                @if (v.Href is not null)
+                                {
+                                    <MudLink Href="@v.Href" Typo="Typo.body2">@v.OtherDesignation</MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2">@v.OtherDesignation</MudText>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(v.Label))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@v.Label</MudText>
+                                }
+                            </MudStack>
+                            <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                                <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => RemoveAsync(v))" aria-label="Verknüpfung entfernen" Class="no-print" />
+                            </AuthorizeView>
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Law? _law;
+    private List<LinkDisplay> _links = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _law = await LawService.GetAsync(Id);
+        if (_law is not null)
+        {
+            _links = await LinkService.GetForRecordAsync(nameof(Law), Id, _user.IsLeadership(), _user.GetAgentId());
+        }
+        _load = false;
+    }
+
+    private async Task EditAsync()
+    {
+        if (_law is null)
+        {
+            return;
+        }
+        var input = await LawDialog.ShowAsync(DialogService, $"{_law.Paragraph} bearbeiten", new LawInput
+        {
+            LawBook = _law.LawBook,
+            Paragraph = _law.Paragraph,
+            Title = _law.Title,
+            Text = _law.Text,
+            Sentence = _law.Sentence,
+        });
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await LawService.RefreshAsync(_law.Id, input, _user);
+            Snackbar.Add("Paragraf gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LinkAsync()
+    {
+        var input = await LinkDialog.ShowAsync(DialogService, _user.IsLeadership());
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(nameof(Law), Id, input.TargetType, input.TargetId, input.Label, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(LinkDisplay v)
+    {
+        try
+        {
+            await LinkService.RemoveAsync(v.LinkId, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

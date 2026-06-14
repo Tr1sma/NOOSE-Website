@@ -1,0 +1,43 @@
+using NOOSE_Website.Models.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace NOOSE_Website.Data.Entities.Common;
+
+/// <summary>
+/// Ein generischer Kommentar/Vermerk an einer beliebigen Akte (polymorph über <see cref="EntitaetTyp"/>
+/// + <see cref="EntitaetId"/>). Voll auditiert und papierkorbfähig. @-Erwähnungen folgen erst in Phase 6.
+/// </summary>
+[Table("Kommentare")]
+public class Comment : IAuditable, ISoftDelete
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+
+    [Column("EntitaetTyp")]
+    public string EntityType { get; set; } = string.Empty;
+    [Column("EntitaetId")]
+    public string EntityId { get; set; } = string.Empty;
+
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>Codename des Autors zum Zeitpunkt der Erstellung (denormalisiert, wie EinstufungVerlauf.AgentName).</summary>
+    [Column("AutorName")]
+    public string? AuthorName { get; set; }
+
+    // ---- IAuditable ----
+    [Column("ErstelltAm")]
+    public DateTime CreatedAt { get; set; }
+    [Column("ErstelltVonId")]
+    public string? CreatedById { get; set; }
+    [Column("GeaendertAm")]
+    public DateTime? ModifiedAt { get; set; }
+    [Column("GeaendertVonId")]
+    public string? ModifiedById { get; set; }
+
+    // ---- ISoftDelete ----
+    [Column("IstGeloescht")]
+    public bool IsDeleted { get; set; }
+    [Column("GeloeschtAm")]
+    public DateTime? DeletedAt { get; set; }
+    [Column("GeloeschtVonId")]
+    public string? DeletedById { get; set; }
+}

@@ -1,0 +1,193 @@
+@* Einstufung anzeigen/ändern (mit Rang-Gate) und Verlauf als Zeitleiste. Akten-agnostisch:
+   der Aufrufer reicht aktuelle Einstufung + Verlauf herein und behandelt das Setzen via OnSetzen.
+   Reicht der Aufrufer EntitaetTyp/EntitaetId mit, kann ein Agent unterhalb Senior Special Agent die
+   höchste Einstufung „Gesichert staatsgefährdend" per Hochstufungs-Antrag beantragen (Phase 5). *@
+@inject ISnackbar Snackbar
+@inject IRequestService RequestService
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.subtitle1">Aktuelle Einstufung:</MudText>
+        <ClassificationBadge Value="Current" />
+    </MudStack>
+
+    @if (_mayWrite)
+    {
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Einstufung ändern</MudText>
+        <MudStack Spacing="2">
+            <MudSelect T="Classification" @bind-Value="_new" Label="Neue Einstufung" Variant="Variant.Outlined" Dense="true">
+                @foreach (var e in ClassificationDisplay.All)
+                {
+                    <MudSelectItem Value="e" Disabled="@(e == Classification.SecuredStateThreatening && !_mayHighest && !_canRequest)">
+                        @ClassificationDisplay.Name(e)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+            @if (!_mayHighest && _canRequest)
+            {
+                @if (_requestRunning)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Für diese Akte läuft bereits ein Hochstufungs-Antrag – er wartet auf die Entscheidung
+                        eines Senior Special Agent.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        „Gesichert staatsgefährdend“ kannst du nicht direkt setzen. Wähle die Stufe aus und stelle
+                        mit Begründung einen Hochstufungs-Antrag; ein Senior Special Agent entscheidet darüber.
+                    </MudAlert>
+                }
+            }
+            else if (!_mayHighest)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    „Gesichert staatsgefährdend“ kann erst ab Senior Special Agent direkt gesetzt werden.
+                </MudAlert>
+            }
+            <MudTextField @bind-Value="_justification" Immediate="true" Lines="2" Variant="Variant.Outlined"
+                          Label="@(_isRequest ? "Begründung (für den Antrag erforderlich)" : "Begründung (optional)")" />
+            <div>
+                @if (_isRequest)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Send"
+                               OnClick="RequestAsync" Disabled="@(_requestRunning || string.IsNullOrWhiteSpace(_justification))">
+                        Hochstufung beantragen</MudButton>
+                    @if (_requestRunning)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                            Es läuft bereits ein Antrag für diese Akte.
+                        </MudText>
+                    }
+                    else if (string.IsNullOrWhiteSpace(_justification))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                            Für den Antrag ist eine Begründung erforderlich.
+                        </MudText>
+                    }
+                }
+                else
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="SetAsync" Disabled="@(_new == Current)">Einstufung speichern</MudButton>
+                    @if (_new == Current)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                            Wähle oben eine andere Einstufung, um sie zu speichern.
+                        </MudText>
+                    }
+                }
+            </div>
+        </MudStack>
+    </MudPaper>
+    }
+
+    <MudText Typo="Typo.subtitle2">Verlauf</MudText>
+    @if (History.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Einstufungs-Änderungen.</MudText>
+    }
+    else
+    {
+        <MudTimeline TimelinePosition="TimelinePosition.Start">
+            @foreach (var v in History.OrderByDescending(x => x.Timestamp))
+            {
+                <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                    <MudText Typo="Typo.body2"><b>@ClassificationDisplay.Name(v.Value)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @v.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(v.AgentName ?? "—")
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(v.Justification))
+                    {
+                        <MudText Typo="Typo.body2">@v.Justification</MudText>
+                    }
+                </MudTimelineItem>
+            }
+        </MudTimeline>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Classification Current { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<ClassificationHistory> History { get; set; } = Array.Empty<ClassificationHistory>();
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    /// <summary>Wird mit (neue Einstufung, Begründung) aufgerufen; der Aufrufer persistiert und lädt neu.</summary>
+    [Parameter, EditorRequired] public EventCallback<(Classification New, string? Justification)> OnSet { get; set; }
+
+    // Optionaler Akten-Bezug: ermöglicht den Hochstufungs-Antrag für Agenten unterhalb Senior Special Agent.
+    [Parameter] public string? EntityType { get; set; }
+    [Parameter] public string? EntityId { get; set; }
+    /// <summary>Denormalisierte Bezeichnung der Akte (Name + Aktenzeichen) für den Antrag/Posteingang.</summary>
+    [Parameter] public string? TargetDesignation { get; set; }
+
+    private Classification _new;
+    private Classification _lastCurrent;
+    private bool _initialized;
+    private string? _justification;
+    private bool _mayHighest;
+    private bool _canRequest;
+    private bool _requestRunning;
+    private bool _mayWrite;
+
+    // Beantragen statt direkt setzen: höchste Stufe gewählt, kein Senior-Recht, aber Akten-Bezug vorhanden.
+    private bool _isRequest => _new == Classification.SecuredStateThreatening && !_mayHighest && _canRequest;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        _canRequest = !string.IsNullOrWhiteSpace(EntityType) && !string.IsNullOrWhiteSpace(EntityId);
+        if (_canRequest)
+        {
+            _requestRunning = await RequestService.HasOpenRequestAsync(EntityType!, EntityId!);
+        }
+    }
+
+    private async Task RequestAsync()
+    {
+        if (!_canRequest || string.IsNullOrWhiteSpace(_justification))
+        {
+            return;
+        }
+        try
+        {
+            await RequestService.UpgradeRequestAsync(EntityType!, EntityId!, TargetDesignation ?? string.Empty, _new, _justification!, User);
+            _requestRunning = true;
+            _justification = null;
+            _new = Current;
+            Snackbar.Add("Hochstufungs-Antrag gestellt. Ein Senior Special Agent entscheidet darüber.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _mayHighest = User.MayHighestClassification();
+        // Auswahl an die aktuelle Einstufung angleichen – aber nur bei echter Änderung, damit
+        // eine laufende Auswahl des Nutzers nicht durch Re-Renders des Elternteils zurückgesetzt wird.
+        if (!_initialized || _lastCurrent != Current)
+        {
+            _new = Current;
+            _lastCurrent = Current;
+            _initialized = true;
+        }
+    }
+
+    private async Task SetAsync()
+    {
+        try
+        {
+            await OnSet.InvokeAsync((_new, _justification));
+            Snackbar.Add($"Einstufung auf {ClassificationDisplay.Name(_new)} gesetzt.", Severity.Success);
+            _justification = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

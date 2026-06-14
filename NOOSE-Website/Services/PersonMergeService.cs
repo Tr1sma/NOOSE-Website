@@ -2,294 +2,294 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Personen;
-using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Common;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonMergeService" />
 public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPersonMergeService
 {
-    public async Task ZusammenfuehrenAsync(string quelleId, string zielId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task MergeAsync(string sourceId, string targetId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
         // ExecuteUpdate umgeht den SaveChanges-Interceptor → die Nur-Lese-Aufsicht hier explizit sperren.
-        Berechtigung.VerlangeSchreibrecht(handelnder);
+        Permission.RequireWriteAccess(actor);
 
-        if (string.IsNullOrWhiteSpace(quelleId) || string.IsNullOrWhiteSpace(zielId) || quelleId == zielId)
+        if (string.IsNullOrWhiteSpace(sourceId) || string.IsNullOrWhiteSpace(targetId) || sourceId == targetId)
         {
             throw new InvalidOperationException("Bitte zwei unterschiedliche Akten wählen.");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var quelle = await db.Personen
-            .Include(p => p.Aliase).Include(p => p.Telefonnummern).Include(p => p.Fahrzeuge)
-            .Include(p => p.Orte).Include(p => p.Waffen)
-            .FirstOrDefaultAsync(p => p.Id == quelleId, cancellationToken)
+        var source = await db.People
+            .Include(p => p.Aliases).Include(p => p.PhoneNumbers).Include(p => p.Vehicles)
+            .Include(p => p.Locations).Include(p => p.Weapons)
+            .FirstOrDefaultAsync(p => p.Id == sourceId, cancellationToken)
             ?? throw new InvalidOperationException("Die Quell-Akte wurde nicht gefunden.");
-        var ziel = await db.Personen
-            .Include(p => p.Aliase).Include(p => p.Telefonnummern).Include(p => p.Fahrzeuge)
-            .Include(p => p.Orte).Include(p => p.Waffen)
-            .FirstOrDefaultAsync(p => p.Id == zielId, cancellationToken)
+        var target = await db.People
+            .Include(p => p.Aliases).Include(p => p.PhoneNumbers).Include(p => p.Vehicles)
+            .Include(p => p.Locations).Include(p => p.Weapons)
+            .FirstOrDefaultAsync(p => p.Id == targetId, cancellationToken)
             ?? throw new InvalidOperationException("Die Ziel-Akte wurde nicht gefunden.");
 
         // ---- Kind-Daten ohne Dubletten-Risiko: komplett umhängen (Bulk, umgeht das Change-Tracking
         //      der geladenen Person-Children nicht – Doks/Fotos/Observationen sind nicht geladen). ----
-        await db.PersonDoks.Where(d => d.PersonId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.PersonId, zielId), cancellationToken);
-        await db.Observationen.Where(o => o.PersonId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(o => o.PersonId, zielId), cancellationToken);
-        await db.PersonFotos.Where(f => f.PersonId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(f => f.PersonId, zielId), cancellationToken);
+        await db.PersonDocs.Where(d => d.PersonId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.PersonId, targetId), cancellationToken);
+        await db.Observations.Where(o => o.PersonId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(o => o.PersonId, targetId), cancellationToken);
+        await db.PersonPhotos.Where(f => f.PersonId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.PersonId, targetId), cancellationToken);
 
         // ---- Steckbrief-Kinder mit Dubletten-Abgleich (case-insensitiv über Trim/Lower). ----
         static string Norm(string? s) => (s ?? string.Empty).Trim().ToLowerInvariant();
 
-        var zielAliase = ziel.Aliase.Select(a => Norm(a.Aliasname)).ToHashSet();
-        zielAliase.Add(Norm(ziel.Name));
-        foreach (var alias in quelle.Aliase)
+        var targetAliases = target.Aliases.Select(a => Norm(a.AliasName)).ToHashSet();
+        targetAliases.Add(Norm(target.Name));
+        foreach (var alias in source.Aliases)
         {
-            if (zielAliase.Add(Norm(alias.Aliasname)))
+            if (targetAliases.Add(Norm(alias.AliasName)))
             {
-                alias.PersonId = zielId;
+                alias.PersonId = targetId;
             }
             else
             {
-                db.PersonAliase.Remove(alias);
+                db.PersonAliases.Remove(alias);
             }
         }
         // Der Name der Quell-Akte bleibt als Alias auffindbar.
-        if (zielAliase.Add(Norm(quelle.Name)))
+        if (targetAliases.Add(Norm(source.Name)))
         {
-            db.PersonAliase.Add(new PersonAlias { PersonId = zielId, Aliasname = quelle.Name });
+            db.PersonAliases.Add(new PersonAlias { PersonId = targetId, AliasName = source.Name });
         }
 
-        var zielTelefone = ziel.Telefonnummern.Select(t => Norm(t.Nummer)).ToHashSet();
-        foreach (var telefon in quelle.Telefonnummern)
+        var targetPhones = target.PhoneNumbers.Select(t => Norm(t.Number)).ToHashSet();
+        foreach (var phone in source.PhoneNumbers)
         {
-            if (zielTelefone.Add(Norm(telefon.Nummer)))
+            if (targetPhones.Add(Norm(phone.Number)))
             {
-                telefon.PersonId = zielId;
+                phone.PersonId = targetId;
             }
             else
             {
-                db.PersonTelefone.Remove(telefon);
+                db.PersonPhones.Remove(phone);
             }
         }
 
-        var zielFahrzeuge = ziel.Fahrzeuge.Select(f => Norm(f.Bezeichnung) + "|" + Norm(f.Kennzeichen)).ToHashSet();
-        foreach (var fahrzeug in quelle.Fahrzeuge)
+        var targetVehicles = target.Vehicles.Select(f => Norm(f.Designation) + "|" + Norm(f.LicensePlate)).ToHashSet();
+        foreach (var vehicle in source.Vehicles)
         {
-            if (zielFahrzeuge.Add(Norm(fahrzeug.Bezeichnung) + "|" + Norm(fahrzeug.Kennzeichen)))
+            if (targetVehicles.Add(Norm(vehicle.Designation) + "|" + Norm(vehicle.LicensePlate)))
             {
-                fahrzeug.PersonId = zielId;
+                vehicle.PersonId = targetId;
             }
             else
             {
-                db.PersonFahrzeuge.Remove(fahrzeug);
+                db.PersonVehicles.Remove(vehicle);
             }
         }
 
-        var zielOrte = ziel.Orte.Select(o => Norm(o.Text)).ToHashSet();
-        foreach (var ort in quelle.Orte)
+        var targetLocations = target.Locations.Select(o => Norm(o.Text)).ToHashSet();
+        foreach (var location in source.Locations)
         {
-            if (zielOrte.Add(Norm(ort.Text)))
+            if (targetLocations.Add(Norm(location.Text)))
             {
-                ort.PersonId = zielId;
+                location.PersonId = targetId;
             }
             else
             {
-                db.PersonOrte.Remove(ort);
+                db.PersonLocations.Remove(location);
             }
         }
 
-        var zielWaffen = ziel.Waffen.Select(w => Norm(w.Text)).ToHashSet();
-        foreach (var waffe in quelle.Waffen)
+        var targetWeapons = target.Weapons.Select(w => Norm(w.Text)).ToHashSet();
+        foreach (var weapon in source.Weapons)
         {
-            if (zielWaffen.Add(Norm(waffe.Text)))
+            if (targetWeapons.Add(Norm(weapon.Text)))
             {
-                waffe.PersonId = zielId;
+                weapon.PersonId = targetId;
             }
             else
             {
-                db.PersonWaffen.Remove(waffe);
+                db.PersonWeapons.Remove(weapon);
             }
         }
 
         // ---- Person-zu-Person-Beziehungen: umhängen; Selbstbezüge entfernen. ----
-        var beziehungen = await db.PersonBeziehungen
-            .Where(b => b.PersonAId == quelleId || b.PersonBId == quelleId)
+        var relations = await db.PersonRelations
+            .Where(b => b.PersonAId == sourceId || b.PersonBId == sourceId)
             .ToListAsync(cancellationToken);
-        foreach (var beziehung in beziehungen)
+        foreach (var relation in relations)
         {
-            if (beziehung.PersonAId == quelleId)
+            if (relation.PersonAId == sourceId)
             {
-                beziehung.PersonAId = zielId;
+                relation.PersonAId = targetId;
             }
-            if (beziehung.PersonBId == quelleId)
+            if (relation.PersonBId == sourceId)
             {
-                beziehung.PersonBId = zielId;
+                relation.PersonBId = targetId;
             }
-            if (beziehung.PersonAId == beziehung.PersonBId)
+            if (relation.PersonAId == relation.PersonBId)
             {
-                db.PersonBeziehungen.Remove(beziehung);
+                db.PersonRelations.Remove(relation);
             }
         }
 
         // ---- Mitgliedschaften (aktive): umhängen, außer das Ziel ist in derselben Akte bereits Mitglied. ----
-        var zielFraktionen = await db.FraktionMitglieder.Where(m => m.PersonId == zielId)
-            .Select(m => m.FraktionId).ToListAsync(cancellationToken);
-        foreach (var mitglied in await db.FraktionMitglieder.Where(m => m.PersonId == quelleId).ToListAsync(cancellationToken))
+        var targetFactions = await db.FactionMembers.Where(m => m.PersonId == targetId)
+            .Select(m => m.FactionId).ToListAsync(cancellationToken);
+        foreach (var member in await db.FactionMembers.Where(m => m.PersonId == sourceId).ToListAsync(cancellationToken))
         {
-            if (zielFraktionen.Contains(mitglied.FraktionId))
+            if (targetFactions.Contains(member.FactionId))
             {
-                db.FraktionMitglieder.Remove(mitglied);
+                db.FactionMembers.Remove(member);
             }
             else
             {
-                mitglied.PersonId = zielId;
+                member.PersonId = targetId;
             }
         }
 
-        var zielGruppen = await db.PersonengruppeMitglieder.Where(m => m.PersonId == zielId)
-            .Select(m => m.PersonengruppeId).ToListAsync(cancellationToken);
-        foreach (var mitglied in await db.PersonengruppeMitglieder.Where(m => m.PersonId == quelleId).ToListAsync(cancellationToken))
+        var targetGroups = await db.PersonGroupMembers.Where(m => m.PersonId == targetId)
+            .Select(m => m.PersonGroupId).ToListAsync(cancellationToken);
+        foreach (var member in await db.PersonGroupMembers.Where(m => m.PersonId == sourceId).ToListAsync(cancellationToken))
         {
-            if (zielGruppen.Contains(mitglied.PersonengruppeId))
+            if (targetGroups.Contains(member.PersonGroupId))
             {
-                db.PersonengruppeMitglieder.Remove(mitglied);
+                db.PersonGroupMembers.Remove(member);
             }
             else
             {
-                mitglied.PersonId = zielId;
+                member.PersonId = targetId;
             }
         }
 
-        var zielParteien = await db.ParteiMitglieder.Where(m => m.PersonId == zielId)
-            .Select(m => m.ParteiId).ToListAsync(cancellationToken);
-        foreach (var mitglied in await db.ParteiMitglieder.Where(m => m.PersonId == quelleId).ToListAsync(cancellationToken))
+        var targetParties = await db.PartyMembers.Where(m => m.PersonId == targetId)
+            .Select(m => m.PartyId).ToListAsync(cancellationToken);
+        foreach (var member in await db.PartyMembers.Where(m => m.PersonId == sourceId).ToListAsync(cancellationToken))
         {
-            if (zielParteien.Contains(mitglied.ParteiId))
+            if (targetParties.Contains(member.PartyId))
             {
-                db.ParteiMitglieder.Remove(mitglied);
+                db.PartyMembers.Remove(member);
             }
             else
             {
-                mitglied.PersonId = zielId;
+                member.PersonId = targetId;
             }
         }
 
         // ---- Polymorphe Bezüge (EntitaetTyp/-Id == Person/quelleId) umhängen. ----
-        const string typ = nameof(Person);
+        const string type = nameof(Person);
 
         // Einstufungs-Verlauf (append-only) – die Historie beider Akten wird zusammengeführt.
-        await db.EinstufungVerlauf.Where(e => e.EntitaetTyp == typ && e.EntitaetId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.EntitaetId, zielId), cancellationToken);
+        await db.ClassificationHistory.Where(e => e.EntityType == type && e.EntityId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.EntityId, targetId), cancellationToken);
 
         // Kommentare, Quellen, Wiedervorlagen: konfliktfrei umhängen.
-        await db.Kommentare.Where(k => k.EntitaetTyp == typ && k.EntitaetId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(k => k.EntitaetId, zielId), cancellationToken);
-        await db.Quellen.Where(q => q.EntitaetTyp == typ && q.EntitaetId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(q => q.EntitaetId, zielId), cancellationToken);
-        await db.Quellen.Where(q => q.ZielTyp == typ && q.ZielId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(q => q.ZielId, zielId), cancellationToken);
-        await db.Wiedervorlagen.Where(w => w.EntitaetTyp == typ && w.EntitaetId == quelleId)
-            .ExecuteUpdateAsync(s => s.SetProperty(w => w.EntitaetId, zielId), cancellationToken);
+        await db.Comments.Where(k => k.EntityType == type && k.EntityId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(k => k.EntityId, targetId), cancellationToken);
+        await db.Sources.Where(q => q.EntityType == type && q.EntityId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.EntityId, targetId), cancellationToken);
+        await db.Sources.Where(q => q.TargetType == type && q.TargetId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(q => q.TargetId, targetId), cancellationToken);
+        await db.Followups.Where(w => w.EntityType == type && w.EntityId == sourceId)
+            .ExecuteUpdateAsync(s => s.SetProperty(w => w.EntityId, targetId), cancellationToken);
 
         // Tags: Unique-Index (TagId, Typ, Id) → nur umhängen, was das Ziel noch nicht trägt.
-        var zielTagIds = await db.TagZuordnungen.Where(z => z.EntitaetTyp == typ && z.EntitaetId == zielId)
+        var targetTagIds = await db.TagMappings.Where(z => z.EntityType == type && z.EntityId == targetId)
             .Select(z => z.TagId).ToListAsync(cancellationToken);
-        foreach (var zuordnung in await db.TagZuordnungen.Where(z => z.EntitaetTyp == typ && z.EntitaetId == quelleId).ToListAsync(cancellationToken))
+        foreach (var mapping in await db.TagMappings.Where(z => z.EntityType == type && z.EntityId == sourceId).ToListAsync(cancellationToken))
         {
-            if (zielTagIds.Contains(zuordnung.TagId))
+            if (targetTagIds.Contains(mapping.TagId))
             {
-                db.TagZuordnungen.Remove(zuordnung);
+                db.TagMappings.Remove(mapping);
             }
             else
             {
-                zuordnung.EntitaetId = zielId;
+                mapping.EntityId = targetId;
             }
         }
 
         // Custom-Felder: Unique-Index je Definition → vorhandene Ziel-Werte haben Vorrang.
-        var zielFeldIds = await db.CustomFeldWerte.Where(w => w.EntitaetTyp == typ && w.EntitaetId == zielId)
-            .Select(w => w.CustomFeldDefinitionId).ToListAsync(cancellationToken);
-        foreach (var wert in await db.CustomFeldWerte.Where(w => w.EntitaetTyp == typ && w.EntitaetId == quelleId).ToListAsync(cancellationToken))
+        var targetFieldIds = await db.CustomFieldValues.Where(w => w.EntityType == type && w.EntityId == targetId)
+            .Select(w => w.CustomFieldDefinitionId).ToListAsync(cancellationToken);
+        foreach (var value in await db.CustomFieldValues.Where(w => w.EntityType == type && w.EntityId == sourceId).ToListAsync(cancellationToken))
         {
-            if (zielFeldIds.Contains(wert.CustomFeldDefinitionId))
+            if (targetFieldIds.Contains(value.CustomFieldDefinitionId))
             {
-                db.CustomFeldWerte.Remove(wert);
+                db.CustomFieldValues.Remove(value);
             }
             else
             {
-                wert.EntitaetId = zielId;
+                value.EntityId = targetId;
             }
         }
 
         // Watchlist: je Agent nur ein aktiver Eintrag pro Akte.
-        var zielFolger = await db.Watchlisten.Where(w => w.EntitaetTyp == typ && w.EntitaetId == zielId)
+        var targetFollower = await db.Watchlists.Where(w => w.EntityType == type && w.EntityId == targetId)
             .Select(w => w.AgentId).ToListAsync(cancellationToken);
-        foreach (var eintrag in await db.Watchlisten.Where(w => w.EntitaetTyp == typ && w.EntitaetId == quelleId).ToListAsync(cancellationToken))
+        foreach (var entry in await db.Watchlists.Where(w => w.EntityType == type && w.EntityId == sourceId).ToListAsync(cancellationToken))
         {
-            if (zielFolger.Contains(eintrag.AgentId))
+            if (targetFollower.Contains(entry.AgentId))
             {
-                db.Watchlisten.Remove(eintrag);
+                db.Watchlists.Remove(entry);
             }
             else
             {
-                eintrag.EntitaetId = zielId;
+                entry.EntityId = targetId;
             }
         }
 
         // Verknüpfungen: beide Seiten umhängen; entstehende Selbst-Verknüpfungen entfernen.
-        foreach (var verknuepfung in await db.Verknuepfungen
-                     .Where(v => (v.VonTyp == typ && v.VonId == quelleId) || (v.NachTyp == typ && v.NachId == quelleId))
+        foreach (var link in await db.Links
+                     .Where(v => (v.SourceType == type && v.SourceId == sourceId) || (v.TargetType == type && v.TargetId == sourceId))
                      .ToListAsync(cancellationToken))
         {
-            if (verknuepfung.VonTyp == typ && verknuepfung.VonId == quelleId)
+            if (link.SourceType == type && link.SourceId == sourceId)
             {
-                verknuepfung.VonId = zielId;
+                link.SourceId = targetId;
             }
-            if (verknuepfung.NachTyp == typ && verknuepfung.NachId == quelleId)
+            if (link.TargetType == type && link.TargetId == sourceId)
             {
-                verknuepfung.NachId = zielId;
+                link.TargetId = targetId;
             }
-            if (verknuepfung.VonTyp == verknuepfung.NachTyp && verknuepfung.VonId == verknuepfung.NachId)
+            if (link.SourceType == link.TargetType && link.SourceId == link.TargetId)
             {
-                db.Verknuepfungen.Remove(verknuepfung);
+                db.Links.Remove(link);
             }
         }
 
         // Offene Anträge (z. B. Hochstufung): auf die Ziel-Akte umbiegen, Bezeichnung aktualisieren.
-        foreach (var antrag in await db.Antraege
-                     .Where(a => a.ZielTyp == typ && a.ZielId == quelleId)
+        foreach (var request in await db.Requests
+                     .Where(a => a.TargetType == type && a.TargetId == sourceId)
                      .ToListAsync(cancellationToken))
         {
-            antrag.ZielId = zielId;
-            antrag.ZielBezeichnung = $"{ziel.Name} ({ziel.Aktenzeichen})";
+            request.TargetId = targetId;
+            request.TargetDesignation = $"{target.Name} ({target.CaseNumber})";
         }
 
         // ---- Steckbrief: fehlende Angaben der Ziel-Akte aus der Quelle übernehmen. ----
-        if (string.IsNullOrWhiteSpace(ziel.Beschreibung) && !string.IsNullOrWhiteSpace(quelle.Beschreibung))
+        if (string.IsNullOrWhiteSpace(target.Description) && !string.IsNullOrWhiteSpace(source.Description))
         {
-            ziel.Beschreibung = quelle.Beschreibung;
+            target.Description = source.Description;
         }
         // Verschlusssache „färbt ab": die zusammengeführte Akte enthält auch die VS-Inhalte der Quelle.
-        ziel.IstVerschlusssache = ziel.IstVerschlusssache || quelle.IstVerschlusssache;
+        target.IsClassified = target.IsClassified || source.IsClassified;
         // Einstufung/Lebensstatus der Ziel-Akte bleiben bewusst unangetastet (Rang-Gate der Einstufung).
 
         // Nachvollziehbarkeit direkt an der Ziel-Akte (zusätzlich zum Audit-Log).
-        db.Kommentare.Add(new Kommentar
+        db.Comments.Add(new Comment
         {
-            EntitaetTyp = typ,
-            EntitaetId = zielId,
-            Text = $"Akte „{quelle.Name}“ ({quelle.Aktenzeichen}) wurde in diese Akte überführt (Duplikat-Zusammenführung).",
-            AutorName = handelnder.GetCodename(),
+            EntityType = type,
+            EntityId = targetId,
+            Text = $"Akte „{source.Name}“ ({source.CaseNumber}) wurde in diese Akte überführt (Duplikat-Zusammenführung).",
+            AuthorName = actor.GetCodename(),
         });
 
         // ---- Quell-Akte in den Papierkorb (Interceptor wandelt Remove in Soft-Delete um). ----
-        db.Personen.Remove(quelle);
+        db.People.Remove(source);
 
         await db.SaveChangesAsync(cancellationToken);
     }

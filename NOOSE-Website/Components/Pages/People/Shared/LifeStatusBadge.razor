@@ -1,0 +1,41 @@
+@* Zeigt den effektiven Lebensstatus farbig an. Bei laufendem Tot-Fenster mit Respawn-Countdown. *@
+@{
+    var now = DateTime.UtcNow;
+    var effective = LifeStatusLogic.Effective(Status, DeadUntil, now);
+    var inWindow = LifeStatusLogic.IsDeadWindow(Status, DeadUntil, now);
+    var minutes = LifeStatusLogic.RemainingMinutes(DeadUntil, now);
+}
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+    <MudIcon Icon="@Icon(effective)" Color="@Colour(effective)" Size="Size.Small" />
+    <MudText Typo="Typo.body2" Color="@Colour(effective)">
+        @if (inWindow)
+        {
+            @($"Tot · respawnt in {minutes} Min")
+        }
+        else
+        {
+            @LifeStatusDisplay.Name(effective)
+        }
+    </MudText>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public LifeStatus Status { get; set; }
+    [Parameter] public DateTime? DeadUntil { get; set; }
+
+    private static Color Colour(LifeStatus s) => s switch
+    {
+        LifeStatus.Alive => Color.Success,
+        LifeStatus.Dead => Color.Error,
+        LifeStatus.Fugitive => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private static string Icon(LifeStatus s) => s switch
+    {
+        LifeStatus.Alive => Icons.Material.Filled.Favorite,
+        LifeStatus.Dead => Icons.Material.Filled.HeartBroken,
+        LifeStatus.Fugitive => Icons.Material.Filled.DirectionsRun,
+        _ => Icons.Material.Filled.Help,
+    };
+}

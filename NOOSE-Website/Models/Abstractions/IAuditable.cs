@@ -6,8 +6,8 @@ namespace NOOSE_Website.Models.Abstractions;
 /// </summary>
 public interface IAuditable
 {
-    DateTime ErstelltAm { get; set; }
-    string? ErstelltVonId { get; set; }
-    DateTime? GeaendertAm { get; set; }
-    string? GeaendertVonId { get; set; }
+    DateTime CreatedAt { get; set; }
+    string? CreatedById { get; set; }
+    DateTime? ModifiedAt { get; set; }
+    string? ModifiedById { get; set; }
 }

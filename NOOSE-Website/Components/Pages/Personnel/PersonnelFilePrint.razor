@@ -1,0 +1,146 @@
+@* Druckansicht der Personalakte eines Agenten (Phase 7): Laufbahn als strukturiertes Dokument.
+   Klarname nur für Berechtigte (DarfKlarnameSehen). *@
+@page "/personal/{Id}/druck"
+@layout PrintLayout
+@inject IAgentManagementService AgentService
+@inject IPersonnelFileService PersonnelFileService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_agent is null ? "Druckansicht" : $"Personalakte {_agent.Codename}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_agent is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Personalakte existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Personalakte – {DisplayName(_agent)}")" BackHref="@($"/personal/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="false"
+                 Footer="NOOSE-interne Personalakte · Weitergabe nur nach Freigabe durch die Führung.">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Codename</th><td>@DisplayName(_agent)</td></tr>
+                    @if (_mayRealName && !string.IsNullOrWhiteSpace(_agent.RealName))
+                    {
+                        <tr><th>Klarname</th><td>@_agent.RealName</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_agent.BadgeNumber))
+                    {
+                        <tr><th>Dienstnummer</th><td>@_agent.BadgeNumber</td></tr>
+                    }
+                    <tr><th>Dienstgrad</th><td>@RankDisplay.Name(_agent.Rank)</td></tr>
+                    <tr><th>Status</th><td>@AgentStatusDisplay.Name(_agent.Status)</td></tr>
+                    @if (_agent.IsTRU)
+                    {
+                        <tr><th>Einheit</th><td>TRU (Tactical Response Unit)</td></tr>
+                    }
+                    @if (_agent.IsHRB)
+                    {
+                        <tr><th>Einheit</th><td>HRB (Human Resources Branch)</td></tr>
+                    }
+                    <tr><th>Registriert am</th><td>@_agent.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (_rankHistory.Count > 0)
+        {
+            <section>
+                <h2>Dienstgrad-Verlauf</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Zeitpunkt</th><th>Änderung</th><th>Grund</th><th>Durch</th></tr></thead>
+                    <tbody>
+                        @foreach (var v in _rankHistory)
+                        {
+                            <tr>
+                                <td>@v.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@RankDisplay.Name(v.Alt) → @RankDisplay.Name(v.New)</td>
+                                <td>@(string.IsNullOrWhiteSpace(v.Reason) ? "—" : v.Reason)</td>
+                                <td>@(v.ActorName ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (_commendations.Count > 0)
+        {
+            <section>
+                <h2>Belobigungen</h2>
+                @foreach (var v in _commendations)
+                {
+                    <div class="druck-eintrag">
+                        <div class="druck-eintrag-kopf">
+                            <b>@v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                            @if (!string.IsNullOrWhiteSpace(v.AuthorName))
+                            {
+                                <text> · @v.AuthorName</text>
+                            }
+                        </div>
+                        <div class="druck-mehrzeilig">@v.Text</div>
+                    </div>
+                }
+            </section>
+        }
+
+        @if (_disciplinary.Count > 0)
+        {
+            <section>
+                <h2>Disziplinarisches</h2>
+                @foreach (var v in _disciplinary)
+                {
+                    <div class="druck-eintrag">
+                        <div class="druck-eintrag-kopf">
+                            <b>@v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                            @if (!string.IsNullOrWhiteSpace(v.AuthorName))
+                            {
+                                <text> · @v.AuthorName</text>
+                            }
+                        </div>
+                        <div class="druck-mehrzeilig">@v.Text</div>
+                    </div>
+                }
+            </section>
+        }
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayRealName;
+    private string? _printBy;
+    private Agent? _agent;
+    private List<AgentRankHistory> _rankHistory = new();
+    private List<AgentNote> _commendations = new();
+    private List<AgentNote> _disciplinary = new();
+
+    private static string DisplayName(Agent a)
+        => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _mayRealName = user.MayRealNameSee();
+        _printBy = user.GetCodename();
+
+        _agent = await AgentService.FindAsync(Id);
+        if (_agent is not null)
+        {
+            _rankHistory = await PersonnelFileService.GetRankHistoryAsync(Id);
+            _commendations = await PersonnelFileService.GetNotesAsync(Id, AgentNoteKind.Commendation);
+            _disciplinary = await PersonnelFileService.GetNotesAsync(Id, AgentNoteKind.Disciplinary);
+            await AccessLog.LogViewAsync(nameof(Agent), Id);
+        }
+        _load = false;
+    }
+}

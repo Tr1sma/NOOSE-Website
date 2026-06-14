@@ -1,0 +1,61 @@
+@page "/fraktionen/neu"
+@inject IFactionService FactionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Fraktion · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Fraktion anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <FactionForm Input="_input" ShowClassification="true" MayHighest="_mayHighest" IsLeadership="_isLeadership" ShowMembers="true" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/fraktionen">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly FactionInput _input = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _mayHighest;
+    private bool _isLeadership;
+    private bool _saves;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayHighest = _user.MayHighestClassification();
+        _isLeadership = _user.IsLeadership();
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var faction = await FactionService.CreateAsync(_input, _user);
+            Snackbar.Add($"Fraktion {faction.CaseNumber} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/fraktionen/{faction.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

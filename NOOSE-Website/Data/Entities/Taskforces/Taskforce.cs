@@ -19,46 +19,46 @@ public class Taskforce : IAuditable, ISoftDelete
 
     /// <summary>Menschenlesbares, eindeutiges Aktenzeichen (z. B. NOOSE-TF-2026-0001).</summary>
     [Column("Aktenzeichen")]
-    public string Aktenzeichen { get; set; } = string.Empty;
+    public string CaseNumber { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Sinn/Zweck der Taskforce (Freitext).</summary>
     [Column("Zweck")]
-    public string? Zweck { get; set; }
+    public string? Purpose { get; set; }
 
     [Column("Geltungsbereich")]
-    public TaskforceGeltungsbereich Geltungsbereich { get; set; } = TaskforceGeltungsbereich.Innerbehoerdlich;
+    public TaskforceScope Scope { get; set; } = TaskforceScope.InternalAgency;
 
     /// <summary>Genehmigungs-/Lebenszyklus-Status. Beim Anlegen stets <see cref="TaskforceStatus.Beantragt"/>.</summary>
-    public TaskforceStatus Status { get; set; } = TaskforceStatus.Beantragt;
+    public TaskforceStatus Status { get; set; } = TaskforceStatus.Requested;
 
     /// <summary>Interne Bemerkungen/Vermerke (Freitext).</summary>
     [Column("Bemerkungen")]
-    public string? Bemerkungen { get; set; }
+    public string? Remarks { get; set; }
 
     /// <summary>Verschlusssache: in Liste/Detail nur für Führung/Admin sichtbar.</summary>
     [Column("IstVerschlusssache")]
-    public bool IstVerschlusssache { get; set; }
+    public bool IsClassified { get; set; }
 
     // ---- Kind-Tabellen ----
-    public List<TaskforceAgent> Agenten { get; set; } = new();
+    public List<TaskforceAgent> Agents { get; set; } = new();
 
     // ---- IAuditable ----
     [Column("ErstelltAm")]
-    public DateTime ErstelltAm { get; set; }
+    public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
-    public string? ErstelltVonId { get; set; }
+    public string? CreatedById { get; set; }
     [Column("GeaendertAm")]
-    public DateTime? GeaendertAm { get; set; }
+    public DateTime? ModifiedAt { get; set; }
     [Column("GeaendertVonId")]
-    public string? GeaendertVonId { get; set; }
+    public string? ModifiedById { get; set; }
 
     // ---- ISoftDelete ----
     [Column("IstGeloescht")]
-    public bool IstGeloescht { get; set; }
+    public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]
-    public DateTime? GeloeschtAm { get; set; }
+    public DateTime? DeletedAt { get; set; }
     [Column("GeloeschtVonId")]
-    public string? GeloeschtVonId { get; set; }
+    public string? DeletedById { get; set; }
 }

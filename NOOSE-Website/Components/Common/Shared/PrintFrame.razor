@@ -1,0 +1,69 @@
+@* Gemeinsamer Rahmen aller Druckansichten (Phase 7): Aktionsleiste (nur Bildschirm), Dokumentkopf
+   mit Behörde/Titel/Druckvermerk/VS-Stempel, Inhalt und Fußzeile. Öffnet den Browser-Druckdialog
+   automatisch nach dem ersten Render (die Eltern-Seite rendert den Rahmen erst, wenn alle Daten
+   geladen sind); Abbruch lässt die Vorschau mit dem Drucken-Knopf stehen. *@
+@inject IJSRuntime JS
+
+<div class="no-print druck-aktionen">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print" OnClick="Print">
+        Drucken / als PDF speichern
+    </MudButton>
+    <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
+               Href="@BackHref">@BackText</MudButton>
+</div>
+
+<div class="druck-dokument">
+    <header class="druck-kopf">
+        <div class="druck-behoerde">N.O.O.S.E. · National Office of Security Enforcement</div>
+        <h1>@Title</h1>
+        <div class="druck-meta">
+            Gedruckt am @DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+            @if (!string.IsNullOrWhiteSpace(PrintedBy))
+            {
+                <text> · von @PrintedBy</text>
+            }
+            @if (IsClassified)
+            {
+                <span class="druck-vs">VERSCHLUSSSACHE – NUR FÜR DIE FÜHRUNG</span>
+            }
+        </div>
+    </header>
+
+    @ChildContent
+
+    <footer class="druck-fusszeile">@Footer</footer>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string BackHref { get; set; } = string.Empty;
+    /// <summary>Beschriftung des Zurück-Knopfes (Standard: „Zurück zur Akte"; z. B. Übersichten setzen ein eigenes Ziel).</summary>
+    [Parameter] public string BackText { get; set; } = "Zurück zur Akte";
+    [Parameter] public string? PrintedBy { get; set; }
+    [Parameter] public bool IsClassified { get; set; }
+    [Parameter] public string Footer { get; set; } = "NOOSE-interne Akte · Weitergabe nur nach Freigabe durch die Führung.";
+    /// <summary>Beim ersten Render automatisch den Druckdialog öffnen (Standard: an – „Druckansicht"). Für reine
+    /// Lese-/Dokumentansichten (z. B. Lagebericht-Archiv) auf <c>false</c> setzen; der Drucken-Knopf bleibt.</summary>
+    [Parameter] public bool AutomaticPrint { get; set; } = true;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _printTriggered;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && AutomaticPrint && !_printTriggered)
+        {
+            _printTriggered = true;
+            try
+            {
+                await JS.InvokeVoidAsync("window.print");
+            }
+            catch (JSException)
+            {
+                // Manche Browser blockieren programmatisches Drucken – der Knopf bleibt als Fallback.
+            }
+        }
+    }
+
+    private async Task Print() => await JS.InvokeVoidAsync("window.print");
+}

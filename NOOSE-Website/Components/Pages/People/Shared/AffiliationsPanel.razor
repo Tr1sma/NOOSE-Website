@@ -1,0 +1,188 @@
+@* Rück-Verknüpfungen einer Person: Fraktionen und Personengruppen, denen sie angehört.
+   Hinzufügen/Entfernen direkt hier; eine Fraktions-Mitgliedschaft erzeugt automatisch
+   „Fraktionskollege"-Verknüpfungen zu den übrigen Mitgliedern (siehe Tab „Verknüpfungen"). *@
+@inject IPersonService PersonService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Zugehörigkeit (@_affiliations.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddAsync">
+            Fraktion / Gruppe hinzufügen
+        </MudButton>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_affiliations.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Fraktions- oder Gruppen-Zugehörigkeit erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var z in _affiliations)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@TypeIcon(z.Type)" Color="Color.Primary" Size="Size.Small" />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@TypeDisplay(z.Type)</MudChip>
+                        <MudLink Href="@Route(z)" Typo="Typo.body2"><b>@z.Name</b></MudLink>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@z.CaseNumber</MudText>
+                        @if (z.IsLead)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Star">Leitung</MudChip>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(z.Role))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@z.Role</MudChip>
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">seit @z.JoinedAt.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                    </MudStack>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => RemoveAsync(z))" aria-label="Zugehörigkeit entfernen" />
+                </MudStack>
+            </MudPaper>
+        }
+    }
+
+    @* Mitgliedschafts-Verlauf: beendete Zugehörigkeiten mit Beitritts-/Austrittsdatum (nur lesbar). *@
+    @if (!_load && _former.Count > 0)
+    {
+        <MudDivider Class="my-2" />
+        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Ehemalige Zugehörigkeiten (@_former.Count)</MudText>
+        @foreach (var z in _former)
+        {
+            <MudPaper Class="pa-3" Outlined="true" Style="opacity:.7;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@TypeIcon(z.Type)" Color="Color.Default" Size="Size.Small" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@TypeDisplay(z.Type)</MudChip>
+                    <MudLink Href="@Route(z)" Typo="Typo.body2">@z.Name</MudLink>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@z.CaseNumber</MudText>
+                    @if (z.IsLead)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Star">Leitung</MudChip>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(z.Role))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@z.Role</MudChip>
+                    }
+                    <MudSpacer />
+                    <MudIcon Icon="@Icons.Material.Filled.DateRange" Size="Size.Small" Class="mud-text-secondary" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @z.JoinedAt.ToLocalTime().ToString("dd.MM.yyyy") – @(z.EndedAt?.ToLocalTime().ToString("dd.MM.yyyy"))
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    @* Wird nach Hinzufügen/Entfernen ausgelöst, damit die Eltern-Akte (Übersichtskarte + Historie) aktualisiert. *@
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private List<PersonAffiliation> _affiliations = new();
+    private List<PersonAffiliation> _former = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var isLeadership = User.IsLeadership();
+        _affiliations = await PersonService.GetAffiliationsAsync(PersonId, isLeadership);
+        _former = await PersonService.GetFormerAffiliationsAsync(PersonId, isLeadership);
+        _load = false;
+    }
+
+    @* Nach einer Änderung: ist die Komponente in eine Akte eingebunden, benachrichtigt sie die Eltern – die
+       re-keyen dieses Panel (frisches Neuladen) und aktualisieren die Übersichtskarte. Sonst lädt sie sich
+       selbst neu (Standalone-Betrieb). Vermeidet Doppel-Laden über das Re-Key. *@
+    private async Task RefreshAsync()
+    {
+        if (Changed.HasDelegate)
+        {
+            await Changed.InvokeAsync();
+        }
+        else
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        var factionIds = _affiliations.Where(z => z.Type == nameof(Faction)).Select(z => z.Id).ToList();
+        var groupsIds = _affiliations.Where(z => z.Type == nameof(PersonGroup)).Select(z => z.Id).ToList();
+        var choice = await AffiliationDialog.ShowAsync(DialogService, User.IsLeadership(), factionIds, groupsIds);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            if (choice.Type == nameof(Faction))
+            {
+                await FactionService.MemberAddAsync(choice.TargetId,
+                    new MemberInput { PersonId = PersonId, Rank = choice.RankRole, IsLead = choice.IsLead }, User);
+            }
+            else
+            {
+                await GroupService.MemberAddAsync(choice.TargetId,
+                    new GroupMemberInput { PersonId = PersonId, Role = choice.RankRole, IsLead = choice.IsLead }, User);
+            }
+            Snackbar.Add("Zugehörigkeit hinzugefügt.", Severity.Success);
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(PersonAffiliation z)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Zugehörigkeit entfernen?",
+            $"Die Mitgliedschaft in „{z.Name}“ wird entfernt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            if (z.Type == nameof(Faction))
+            {
+                await FactionService.MemberRemoveAsync(z.MemberId, User);
+            }
+            else
+            {
+                await GroupService.MemberRemoveAsync(z.MemberId, User);
+            }
+            Snackbar.Add("Zugehörigkeit entfernt.", Severity.Success);
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static string Route(PersonAffiliation z)
+        => z.Type == nameof(PersonGroup) ? $"/personengruppen/{z.Id}" : $"/fraktionen/{z.Id}";
+
+    private static string TypeDisplay(string type)
+        => type == nameof(PersonGroup) ? "Gruppe" : "Fraktion";
+
+    private static string TypeIcon(string type)
+        => type == nameof(PersonGroup) ? Icons.Material.Filled.Diversity3 : Icons.Material.Filled.Groups;
+}

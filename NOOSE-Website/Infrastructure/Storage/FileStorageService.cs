@@ -6,48 +6,48 @@ namespace NOOSE_Website.Infrastructure.Storage;
 public class FileStorageService : IFileStorageService
 {
     private readonly FileUploadOptions _options;
-    private readonly string _basisPfad;
+    private readonly string _basePath;
 
     public FileStorageService(IWebHostEnvironment env, IOptions<FileUploadOptions> options)
     {
         _options = options.Value;
-        _basisPfad = Path.IsPathRooted(_options.PersonenPfad)
-            ? _options.PersonenPfad
-            : Path.Combine(env.ContentRootPath, _options.PersonenPfad);
+        _basePath = Path.IsPathRooted(_options.PeoplePath)
+            ? _options.PeoplePath
+            : Path.Combine(env.ContentRootPath, _options.PeoplePath);
     }
 
     public long MaxBytes => _options.MaxBytes;
 
-    public bool IstErlaubterTyp(string contentType)
-        => _options.ErlaubteContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase);
+    public bool IsAllowedType(string contentType)
+        => _options.AllowedContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase);
 
-    public async Task<string> SpeichernAsync(Stream inhalt, string contentType, CancellationToken cancellationToken = default)
+    public async Task<string> SaveAsync(Stream content, string contentType, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(_basisPfad);
-        var dateiname = $"{Guid.NewGuid():N}{EndungFuer(contentType)}";
-        var ziel = Path.Combine(_basisPfad, dateiname);
+        Directory.CreateDirectory(_basePath);
+        var fileName = $"{Guid.NewGuid():N}{ExtensionFor(contentType)}";
+        var target = Path.Combine(_basePath, fileName);
 
-        await using var fs = File.Create(ziel);
-        await inhalt.CopyToAsync(fs, cancellationToken);
-        return dateiname;
+        await using var fs = File.Create(target);
+        await content.CopyToAsync(fs, cancellationToken);
+        return fileName;
     }
 
-    public Stream OeffnenLesen(string dateinameGespeichert)
-        => File.OpenRead(SichererPfad(dateinameGespeichert));
+    public Stream OpenRead(string fileNameSaved)
+        => File.OpenRead(SafePath(fileNameSaved));
 
-    public void Loeschen(string dateinameGespeichert)
+    public void Delete(string fileNameSaved)
     {
-        var pfad = SichererPfad(dateinameGespeichert);
-        if (File.Exists(pfad))
+        var path = SafePath(fileNameSaved);
+        if (File.Exists(path))
         {
-            File.Delete(pfad);
+            File.Delete(path);
         }
     }
 
     /// <summary>Lässt nur blanke Dateinamen zu und kombiniert sie sicher mit dem Basispfad.</summary>
-    private string SichererPfad(string dateiname) => DateiPfadHelfer.SichererPfad(_basisPfad, dateiname);
+    private string SafePath(string fileName) => FilePathHelper.SafePath(_basePath, fileName);
 
-    private static string EndungFuer(string contentType) => contentType.ToLowerInvariant() switch
+    private static string ExtensionFor(string contentType) => contentType.ToLowerInvariant() switch
     {
         "image/jpeg" => ".jpg",
         "image/png" => ".png",

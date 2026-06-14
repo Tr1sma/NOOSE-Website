@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using NOOSE_Website.Models.Querschnitt;
+using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
@@ -20,14 +20,14 @@ public static partial class MentionParser
         {
             return Array.Empty<MentionToken>();
         }
-        var liste = new List<MentionToken>();
+        var list = new List<MentionToken>();
         foreach (Match m in TokenRegex().Matches(text))
         {
-            liste.Add(new MentionToken(m.Groups["typ"].Value, m.Groups["id"].Value, m.Index, m.Length));
+            list.Add(new MentionToken(m.Groups["typ"].Value, m.Groups["id"].Value, m.Index, m.Length));
         }
-        return liste;
+        return list;
     }
 
     /// <summary>Bildet das Speicher-Token für einen Verweis: <c>@{Typ:Id}</c>.</summary>
-    public static string Token(string typ, string id) => $"@{{{typ}:{id}}}";
+    public static string Token(string type, string id) => $"@{{{type}:{id}}}";
 }

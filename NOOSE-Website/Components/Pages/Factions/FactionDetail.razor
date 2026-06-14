@@ -1,0 +1,288 @@
+@page "/fraktionen/{Id}"
+@inject IFactionService FactionService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_faction?.Name ?? "Fraktion") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_faction is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Fraktion nicht gefunden oder nicht zugänglich (ggf. Verschlusssache).
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/fraktionen/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <FollowButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+        <JobCreateButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton Href="@($"/fraktionen/{_faction.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <FactionCard Faction="_faction" MemberCount="_memberCount" InvestigationLead="_investigationLead"
+                                TitleImagePhotoId="@(_faction.Photos.FirstOrDefault(x => x.IsTitleImage)?.Id)" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" Spacing="6" Class="flex-wrap">
+                            @foreach (var (label, value) in MasterData())
+                            {
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">@label</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@value</MudText>
+                                </div>
+                            }
+                        </MudStack>
+                        @if (!string.IsNullOrWhiteSpace(_faction.Estate))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Anwesen</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_faction.Estate</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_faction.Targets))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Ziele</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_faction.Targets</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_faction.Description))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_faction.Description</MudText>
+                            </div>
+                        }
+                        <ProfileList Title="Ränge" Values="@_faction.Ranks.OrderBy(r => r.Order).Select(r => r.Designation)" />
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Groups">
+                    <MembersPanel FactionId="@_faction.Id" User="_user" Ranks="_ranks" Changed="MembersModifiedAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <FactionAgentsPanel FactionId="@_faction.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Bestände" Icon="@Icons.Material.Filled.Inventory2">
+                    <MudStack Spacing="3">
+                        <ProfileList Title="WeaponStock" Values="StockTexts(_faction.WeaponStock.Select(w => (w.Designation, w.Quantity)))" />
+                        <ProfileList Title="Inventory" Values="StockTexts(_faction.Inventory.Select(l => (l.Designation, l.Quantity)))" />
+                        <ProfileList Title="DrugRoutes" Values="StockTexts(_faction.DrugRoutes.Select(d => (d.Designation, d.Note)))" />
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Aktivitäten" Icon="@Icons.Material.Filled.Timeline">
+                    <ActivitiesPanel FactionId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    <FactionPhotoGallery FactionId="@_faction.Id" User="_user" Changed="PhotosModifiedAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                    <ClassificationPanel Current="_faction.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
+                                     EntityType="@nameof(Faction)" EntityId="@_faction.Id" TargetDesignation="@($"{_faction.Name} ({_faction.CaseNumber})")" />
+                </MudTabPanel>
+                <MudTabPanel Text="Gefährdung" Icon="@Icons.Material.Filled.Warning">
+                    <HazardPanel Score="_faction.ThreatScore" Confidence="_faction.ThreatConfidence"
+                                      DetailJson="@_faction.ThreatDetailJson" />
+                </MudTabPanel>
+                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                    <OrgDocsPanel OrgType="@nameof(Faction)" OrgId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
+                    <OrgRelationsPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <SourcesPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                    <FollowupPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <CommentPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                    <CustomFieldsPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Faction? _faction;
+    private int _memberCount;
+    private List<string> _investigationLead = new();
+    private List<string> _ranks = new();
+    private List<ClassificationHistory> _classificationHistory = new();
+    private ClaimsPrincipal _user = default!;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _activeTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "mitglieder", "agents", "bestaende", "aktivitaeten", "fotos", "einstufung", "gefaehrdung", "doks",
+        "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    // Diese Seite wird bei Navigation /fraktionen/{A} → /fraktionen/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
+    // Akte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch. Tab-/Query-Wechsel: Id
+    // bleibt gleich → kein Neuladen.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _faction = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
+        if (_faction is not null)
+        {
+            await AccessLog.LogViewAsync(nameof(Faction), _faction.Id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
+        // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
+        var mayClassifiedRead = _user.MayClassifiedRead();
+        _faction = await FactionService.GetDetailAsync(Id, mayClassifiedRead);
+        if (_faction is not null)
+        {
+            _ranks = _faction.Ranks.OrderBy(r => r.Order).Select(r => r.Designation).ToList();
+            _classificationHistory = await FactionService.GetClassificationHistoryAsync(_faction.Id, mayClassifiedRead);
+            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, mayClassifiedRead)).Count;
+            await InvestigationLeadLoadAsync();
+        }
+        _load = false;
+    }
+
+    private async Task InvestigationLeadLoadAsync()
+    {
+        if (_faction is null)
+        {
+            return;
+        }
+        var el = await FactionService.GetInvestigationLeadAsync(_faction.Id);
+        _investigationLead = el.Select(a => a.Agent?.Codename ?? "?").ToList();
+    }
+
+    private async Task InvestigationLeadRefreshAsync()
+    {
+        await InvestigationLeadLoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task NewLoadAsync()
+    {
+        await LoadAsync();
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task MembersModifiedAsync()
+    {
+        if (_faction is not null)
+        {
+            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, _user.MayClassifiedRead())).Count;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PhotosModifiedAsync()
+    {
+        if (_faction is not null)
+        {
+            // Fotos der Akte neu laden, damit der Steckkarten-Banner das (ggf. neue) Titelbild zeigt.
+            _faction.Photos = await FactionService.GetPhotosAsync(_faction.Id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClassificationSetAsync((Classification New, string? Justification) input)
+    {
+        if (_faction is null)
+        {
+            return;
+        }
+        await FactionService.ClassificationSetAsync(_faction.Id, input.New, input.Justification, _user);
+        await NewLoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_faction is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Fraktion löschen?",
+            "Die Fraktion wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await FactionService.DeleteAsync(_faction.Id, _user);
+        Snackbar.Add("Fraktion in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/fraktionen");
+    }
+
+    private IEnumerable<(string Label, string Value)> MasterData()
+    {
+        yield return ("Art", _faction!.Kind ?? "—");
+        yield return ("Funk", _faction.Radio ?? "—");
+        yield return ("Darkchat", _faction.Darkchat ?? "—");
+        yield return ("Ausstellungszeiten", _faction.IssuingTimes ?? "—");
+    }
+
+    private static IEnumerable<string> StockTexts(IEnumerable<(string Designation, string? Quantity)> items)
+        => items.Select(i => string.IsNullOrWhiteSpace(i.Quantity) ? i.Designation : $"{i.Designation} · {i.Quantity}");
+}

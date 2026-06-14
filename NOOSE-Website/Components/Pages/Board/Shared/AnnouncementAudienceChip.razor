@@ -1,0 +1,22 @@
+@* Kleiner Chip, der die Zielgruppe einer Ankündigung anzeigt (Icon je Art + aufgelöster Anzeigetext). *@
+
+<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Icon="@Symbol">
+    @(string.IsNullOrWhiteSpace(Display) ? AnnouncementAudienceDisplay.Name(Audience) : Display)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public AnnouncementAudience Audience { get; set; }
+
+    /// <summary>Aufgelöster Anzeigetext (z. B. „Taskforce: Nightfall" oder „Ab Senior Special Agent").</summary>
+    [Parameter] public string? Display { get; set; }
+
+    private string Symbol => Audience switch
+    {
+        AnnouncementAudience.AllActive => Icons.Material.Filled.Public,
+        AnnouncementAudience.Taskforce => Icons.Material.Filled.Groups2,
+        AnnouncementAudience.TruUnit => Icons.Material.Filled.Security,
+        AnnouncementAudience.HrbUnit => Icons.Material.Filled.Groups,
+        AnnouncementAudience.FromRank => Icons.Material.Filled.MilitaryTech,
+        _ => Icons.Material.Filled.Group,
+    };
+}

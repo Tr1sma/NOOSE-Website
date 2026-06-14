@@ -1,0 +1,281 @@
+@page "/kalender"
+@using System.Globalization
+@inject ICalendarService CalendarService
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject Microsoft.Extensions.Logging.ILogger<Calendar> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Kalender · NOOSE</PageTitle>
+
+<MudStack Spacing="3">
+    @* ---- Kopfzeile ---- *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+        <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Primary" Size="Size.Large" />
+        <div>
+            <MudText Typo="Typo.h5">Kalender</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@SubtitleText</MudText>
+        </div>
+
+        @* ---- Umschalter: Mein Kalender ⇄ Behörden-Kalender ---- *@
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" OverrideStyles="false" Class="ml-2">
+            <MudButton Variant="@(_mode == CalendarMode.My ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_mode == CalendarMode.My ? Color.Primary : Color.Default)"
+                       StartIcon="@Icons.Material.Filled.Person" OnClick="@(() => ModeSetAsync(CalendarMode.My))">Mein Kalender</MudButton>
+            <MudButton Variant="@(_mode == CalendarMode.Authority ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_mode == CalendarMode.Authority ? Color.Primary : Color.Default)"
+                       StartIcon="@Icons.Material.Filled.AccountBalance" OnClick="@(() => ModeSetAsync(CalendarMode.Authority))">Behörden-Kalender</MudButton>
+        </MudButtonGroup>
+
+        <MudSpacer />
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="fuehrung">
+            <MudTooltip Text="Papierkorb (gelöschte Termine)">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Href="/kalender/papierkorb" aria-label="Papierkorb" />
+            </MudTooltip>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary" Href="/kalender/neu">Neuer Termin</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_loadError)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            Der Kalender konnte nicht geladen werden. Bitte die Seite mit Strg+F5 neu laden.
+        </MudAlert>
+    }
+
+    @* ---- Kalenderfläche ---- *@
+    <MudPaper Elevation="2" Class="pa-3" Style="position:relative;">
+        <div id="@ContainerId" style="width:100%;"></div>
+        @if (_load)
+        {
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.15);">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+    </MudPaper>
+
+    @* ---- Arten-Filter (modus-abhängig) – Klick blendet eine Art aus/ein ---- *@
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Row="true" Spacing="2" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">ARTEN</MudText>
+            @foreach (var q in LegendSources)
+            {
+                var active = _activeSources.Contains(q);
+                <MudChip T="string" Size="Size.Small" OnClick="@(() => SourceToggleAsync(q))"
+                         Variant="@(active ? Variant.Filled : Variant.Outlined)" Style="@LegendStyle(q, active)">
+                    @CalendarDisplay.Name(q)
+                </MudChip>
+            }
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="AllShowAsync"
+                       Disabled="@(_activeSources.Count == LegendSources.Length)">Alle</MudButton>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">· Art anklicken zum Aus-/Einblenden · Eintrag anklicken öffnet die Akte</MudText>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const string ContainerId = "noose-kalender";
+
+    private ClaimsPrincipal _user = default!;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<Calendar>? _ref;
+    private bool _ready;
+    private bool _load = true;
+    private bool _loadError;
+    private int _loadToken;
+
+    private CalendarMode _mode = CalendarMode.My;
+    private DateTime? _sourceUtc;
+    private DateTime? _untilUtc;
+    private IReadOnlyList<CalendarEntry>? _allEntries;
+    private HashSet<CalendarSource> _activeSources = new(_legendMy);
+
+    private string SubtitleText => _mode == CalendarMode.My
+        ? "Meine Termine, mir zugewiesene Aufgaben & meine fälligen Wiedervorlagen."
+        : "Öffentliche Termine, Operationen, Überwachungsfenster, Personen-Doks & Fraktions-Aktivitäten.";
+
+    private static readonly CalendarSource[] _legendMy =
+    {
+        CalendarSource.Appointment, CalendarSource.Job, CalendarSource.Followup,
+    };
+    private static readonly CalendarSource[] _legendAuthority =
+    {
+        CalendarSource.Appointment, CalendarSource.Operation, CalendarSource.Observation,
+        CalendarSource.PersonDoc, CalendarSource.FactionActivity,
+    };
+    private CalendarSource[] LegendSources => _mode == CalendarMode.My ? _legendMy : _legendAuthority;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        try
+        {
+            // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn kalender.js geändert wird.
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=5");
+            _ref = DotNetObjectReference.Create(this);
+            _ready = true;
+            // Leer rendern – FullCalendar meldet sofort seinen Sichtbereich (datesSet) → Daten werden nachgeladen.
+            await _module.InvokeVoidAsync("render", ContainerId, Array.Empty<CalendarEntry>(), _ref, "de");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit getrennt – nichts zu tun.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Kalender konnte nicht initialisiert werden (JS-Interop).");
+            _loadError = true;
+            _load = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ModeSetAsync(CalendarMode mode)
+    {
+        if (_mode == mode)
+        {
+            return;
+        }
+        _mode = mode;
+        // Beim Sichtwechsel alle Arten der neuen Sicht wieder einblenden.
+        _activeSources = new HashSet<CalendarSource>(LegendSources);
+        // Sicht ohne Datumssprung neu laden (das FC-Fenster bleibt gleich).
+        await NewLoadAsync();
+    }
+
+    /// <summary>FullCalendar meldet den sichtbaren Zeitraum (Initial-Render + Monats-/Wochenwechsel) → Fenster nachladen.</summary>
+    [JSInvokable]
+    public async Task OnDateRange(string sourceIso, string untilIso)
+    {
+        _sourceUtc = ParseWindowUtc(sourceIso, DateTime.UtcNow.AddDays(-31));
+        _untilUtc = ParseWindowUtc(untilIso, DateTime.UtcNow.AddDays(31));
+        await NewLoadAsync();
+    }
+
+    // Lädt das aktuell gemerkte Fenster im aktuellen Modus und schiebt die Einträge an FullCalendar.
+    private async Task NewLoadAsync()
+    {
+        if (_module is null || !_ready || _sourceUtc is null || _untilUtc is null)
+        {
+            return;
+        }
+        // Schnelles Blättern/Umschalten kann Ladevorgänge überlappen → nur das zuletzt angeforderte Ergebnis anwenden.
+        var token = ++_loadToken;
+        _load = true;
+        StateHasChanged();
+        try
+        {
+            var entries = await CalendarService.GetEntriesAsync(_sourceUtc.Value, _untilUtc.Value, _user, _mode);
+            if (token != _loadToken)
+            {
+                return; // veraltetes Fenster/Modus – verwerfen
+            }
+            _allEntries = entries;
+            _load = false;
+            StateHasChanged();
+            await PushFilteredAsync();
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Kalender: Einträge konnten nicht geladen werden.");
+            if (token == _loadToken)
+            {
+                _load = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    // Eine Art (Quelle) aus-/einblenden – rein clientseitig (kein DB-Reload).
+    private async Task SourceToggleAsync(CalendarSource source)
+    {
+        if (!_activeSources.Remove(source))
+        {
+            _activeSources.Add(source);
+        }
+        await PushFilteredAsync();
+    }
+
+    private async Task AllShowAsync()
+    {
+        _activeSources = new HashSet<CalendarSource>(LegendSources);
+        await PushFilteredAsync();
+    }
+
+    // Schiebt die nach aktiven Arten gefilterten Einträge an FullCalendar.
+    private async Task PushFilteredAsync()
+    {
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        var filtered = (_allEntries ?? Array.Empty<CalendarEntry>())
+            .Where(e => _activeSources.Contains(e.Source)).ToList();
+        try
+        {
+            await _module.InvokeVoidAsync("setzeEreignisse", ContainerId, filtered);
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Kalender: Filter-Anzeige fehlgeschlagen.");
+        }
+    }
+
+    // Stil der Arten-Chips: aktiv = gefüllt in Quellenfarbe; inaktiv = ausgegraut/umrandet.
+    private static string LegendStyle(CalendarSource source, bool active)
+    {
+        var colour = CalendarDisplay.Colour(source);
+        return active
+            ? $"background:{colour};border-color:{colour};color:#fff;cursor:pointer;"
+            : $"background:transparent;border-color:{colour};color:var(--mud-palette-text-secondary);opacity:.6;cursor:pointer;";
+    }
+
+    /// <summary>Klick auf einen Eintrag → zur zugehörigen Akte navigieren.</summary>
+    [JSInvokable]
+    public async Task OnEventClick(string href)
+    {
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            await InvokeAsync(() => Nav.NavigateTo(href));
+        }
+    }
+
+    // FullCalendar liefert den Bereich als ISO (mit oder ohne Offset). Ohne Offset = lokale Wandzeit → in UTC umrechnen.
+    private static DateTime ParseWindowUtc(string iso, DateTime fallback)
+    {
+        if (DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dto))
+        {
+            return dto.UtcDateTime;
+        }
+        return fallback;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("zerstoere", ContainerId);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception) { /* Aufräum-Fehler folgenlos */ }
+        _ref?.Dispose();
+    }
+}

@@ -13,7 +13,7 @@ namespace NOOSE_Website.Infrastructure.Notifications;
 /// </summary>
 public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications)
 {
-    public async Task VerarbeiteAsync(string? akteurId, IReadOnlyCollection<(string Typ, string Id)> akten,
+    public async Task ProcessAsync(string? actorId, IReadOnlyCollection<(string Type, string Id)> records,
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -22,63 +22,63 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
         // unbekannte Verweise lösen sich NICHT auf → werden übersprungen (bewusst keine „gelöscht"-Meldung).
         // Hier (Hintergrund, viele Empfänger) ALLE Taskforce-Namen auflösen (Standard); die Mitgliedschaftsprüfung
         // erfolgt pro Folger unten über IstAkteSichtbarAsync mit dessen Id.
-        var aufgeloest = await AktenReferenz.AufloesenAsync(db, akten, cancellationToken);
+        var resolved = await RecordsReference.ResolveAsync(db, records, cancellationToken);
 
-        foreach (var (typ, id) in akten.Distinct())
+        foreach (var (type, id) in records.Distinct())
         {
-            if (!aufgeloest.TryGetValue((typ, id), out var aufl))
+            if (!resolved.TryGetValue((type, id), out var aufl))
             {
                 continue;
             }
 
-            var folgerIds = await db.Watchlisten
-                .Where(w => w.EntitaetTyp == typ && w.EntitaetId == id)
+            var followerIds = await db.Watchlists
+                .Where(w => w.EntityType == type && w.EntityId == id)
                 .Select(w => w.AgentId).Distinct().ToListAsync(cancellationToken);
-            if (akteurId is not null)
+            if (actorId is not null)
             {
-                folgerIds.Remove(akteurId);
+                followerIds.Remove(actorId);
             }
-            if (folgerIds.Count == 0)
+            if (followerIds.Count == 0)
             {
                 continue;
             }
 
             // Nur aktive Folger (Gesperrte/Ausstehende sehen ohnehin nichts).
-            var folger = await db.Users
-                .Where(u => folgerIds.Contains(u.Id) && u.Status == AgentStatus.Aktiv)
-                .Select(u => new { u.Id, u.IstAdmin, u.Dienstgrad })
+            var follower = await db.Users
+                .Where(u => followerIds.Contains(u.Id) && u.Status == AgentStatus.Active)
+                .Select(u => new { u.Id, u.IsAdmin, u.Rank })
                 .ToListAsync(cancellationToken);
-            if (folger.Count == 0)
+            if (follower.Count == 0)
             {
                 continue;
             }
 
             // Coalescing: wer zu dieser Akte schon eine UNGELESENE Meldung hat, bekommt keine zweite.
-            var schonOffen = new HashSet<string>();
+            var alreadyOpen = new HashSet<string>();
             if (!string.IsNullOrWhiteSpace(aufl.Href))
             {
-                schonOffen = (await db.Benachrichtigungen
-                    .Where(n => n.Typ == NotificationTyp.AkteGeaendert && n.Href == aufl.Href
-                                && n.GelesenAm == null && folgerIds.Contains(n.EmpfaengerId))
-                    .Select(n => n.EmpfaengerId)
+                alreadyOpen = (await db.Notifications
+                    .Where(n => n.Type == NotificationType.RecordModified && n.Href == aufl.Href
+                                && n.ReadAt == null && followerIds.Contains(n.RecipientId))
+                    .Select(n => n.RecipientId)
                     .ToListAsync(cancellationToken)).ToHashSet();
             }
 
-            var titel = $"„{aufl.Anzeige}“ wurde aktualisiert.";
-            foreach (var f in folger)
+            var title = $"„{aufl.Display}“ wurde aktualisiert.";
+            foreach (var f in follower)
             {
-                if (schonOffen.Contains(f.Id))
+                if (alreadyOpen.Contains(f.Id))
                 {
                     continue;
                 }
                 // Verschlusssache-/Personalakte-/Taskforce-Schutz aus Sicht des EMPFÄNGERS (kein Leck an
                 // Nicht-Berechtigte). Bei Taskforces zählt die Mitgliedschaft → die Folger-Id (f.Id) mitgeben.
-                var istFuehrung = f.IstAdmin || f.Dienstgrad is >= Dienstgrad.SupervisorySpecialAgent;
-                if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, typ, id, istFuehrung, cancellationToken, f.Id))
+                var isLeadership = f.IsAdmin || f.Rank is >= Rank.SupervisorySpecialAgent;
+                if (!await Visibility.IsRecordVisibleAsync(db, type, id, isLeadership, cancellationToken, f.Id))
                 {
                     continue;
                 }
-                await notifications.BenachrichtigeAsync(f.Id, NotificationTyp.AkteGeaendert, titel, aufl.Href, cancellationToken);
+                await notifications.NotifyAsync(f.Id, NotificationType.RecordModified, title, aufl.Href, cancellationToken);
             }
         }
     }
