@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Watchlist;
 
@@ -10,6 +11,7 @@ namespace NOOSE_Website.Data.Entities.Watchlist;
 /// kein Unique-Index"); Entfolgen ist ein Soft-Delete, erneutes Folgen reaktiviert die alte Zeile –
 /// die Aktiv-Eindeutigkeit prüft der <c>WatchlistService</c> per Aktiv-Abfrage (analog FraktionMitglied).
 /// </summary>
+[Table("Watchlisten")]
 public class WatchlistEintrag : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -17,17 +19,26 @@ public class WatchlistEintrag : IAuditable, ISoftDelete
     /// <summary>Agent-Id des Folgers (Identity-User-Id).</summary>
     public string AgentId { get; set; } = string.Empty;
 
+    [Column("EntitaetTyp")]
     public string EntitaetTyp { get; set; } = string.Empty;
+    [Column("EntitaetId")]
     public string EntitaetId { get; set; } = string.Empty;
 
     // ---- IAuditable ----
+    [Column("ErstelltAm")]
     public DateTime ErstelltAm { get; set; }
+    [Column("ErstelltVonId")]
     public string? ErstelltVonId { get; set; }
+    [Column("GeaendertAm")]
     public DateTime? GeaendertAm { get; set; }
+    [Column("GeaendertVonId")]
     public string? GeaendertVonId { get; set; }
 
     // ---- ISoftDelete ----
+    [Column("IstGeloescht")]
     public bool IstGeloescht { get; set; }
+    [Column("GeloeschtAm")]
     public DateTime? GeloeschtAm { get; set; }
+    [Column("GeloeschtVonId")]
     public string? GeloeschtVonId { get; set; }
 }

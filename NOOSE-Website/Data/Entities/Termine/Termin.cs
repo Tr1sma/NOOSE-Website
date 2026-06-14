@@ -1,5 +1,6 @@
 using NOOSE_Website.Models.Abstractions;
 using NOOSE_Website.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Termine;
 
@@ -13,32 +14,41 @@ namespace NOOSE_Website.Data.Entities.Termine;
 /// auditiert und papierkorbfähig (<see cref="IAuditable"/> + <see cref="ISoftDelete"/>). <c>ErstelltVonId</c>
 /// ist der Ersteller.
 /// </summary>
+[Table("Termine")]
 public class Termin : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
     /// <summary>Menschenlesbares, eindeutiges Aktenzeichen (z. B. NOOSE-TM-2026-0001).</summary>
+    [Column("Aktenzeichen")]
     public string Aktenzeichen { get; set; } = string.Empty;
 
+    [Column("Titel")]
     public string Titel { get; set; } = string.Empty;
 
+    [Column("Kategorie")]
     public TerminKategorie Kategorie { get; set; } = TerminKategorie.Sonstiges;
 
     public TerminStatus Status { get; set; } = TerminStatus.Geplant;
 
     /// <summary>Ort des Termins (Freitext).</summary>
+    [Column("Ort")]
     public string? Ort { get; set; }
 
     /// <summary>Beginn des Termins (RP-Zeit, UTC gespeichert). Pflichtfeld.</summary>
+    [Column("Beginn")]
     public DateTime Beginn { get; set; }
 
     /// <summary>Ende des Termins (optional, RP-Zeit, UTC gespeichert).</summary>
+    [Column("Ende")]
     public DateTime? Ende { get; set; }
 
     /// <summary>Ganztägiger Termin – Uhrzeiten werden dann ausgeblendet/ignoriert.</summary>
+    [Column("Ganztaegig")]
     public bool Ganztaegig { get; set; }
 
     /// <summary>Beschreibung/Worum geht es (Freitext).</summary>
+    [Column("Beschreibung")]
     public string? Beschreibung { get; set; }
 
     /// <summary>
@@ -46,19 +56,27 @@ public class Termin : IAuditable, ISoftDelete
     /// Aufsicht) oder Privat (nur Ersteller + Aufsicht). Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>)
     /// sieht alle Stufen.
     /// </summary>
+    [Column("Sichtbarkeit")]
     public TerminSichtbarkeitsStufe Sichtbarkeit { get; set; } = TerminSichtbarkeitsStufe.Oeffentlich;
 
     // ---- Kind-Tabellen ----
     public List<TerminZuweisung> Teilnehmer { get; set; } = new();
 
     // ---- IAuditable ----
+    [Column("ErstelltAm")]
     public DateTime ErstelltAm { get; set; }
+    [Column("ErstelltVonId")]
     public string? ErstelltVonId { get; set; }
+    [Column("GeaendertAm")]
     public DateTime? GeaendertAm { get; set; }
+    [Column("GeaendertVonId")]
     public string? GeaendertVonId { get; set; }
 
     // ---- ISoftDelete ----
+    [Column("IstGeloescht")]
     public bool IstGeloescht { get; set; }
+    [Column("GeloeschtAm")]
     public DateTime? GeloeschtAm { get; set; }
+    [Column("GeloeschtVonId")]
     public string? GeloeschtVonId { get; set; }
 }

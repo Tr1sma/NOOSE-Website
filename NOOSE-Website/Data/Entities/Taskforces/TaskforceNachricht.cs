@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Taskforces;
 
@@ -9,6 +10,7 @@ namespace NOOSE_Website.Data.Entities.Taskforces;
 /// von der Eltern-Taskforce (kein eigenes Verschlusssache-Flag). Voll auditiert und papierkorbfähig
 /// (Soft-Delete = Nachricht „zurückgezogen").
 /// </summary>
+[Table("TaskforceNachrichten")]
 public class TaskforceNachricht : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -20,16 +22,24 @@ public class TaskforceNachricht : IAuditable, ISoftDelete
     public string Text { get; set; } = string.Empty;
 
     /// <summary>Codename des Autors zum Sende-Zeitpunkt (denormalisiert).</summary>
+    [Column("AutorName")]
     public string? AutorName { get; set; }
 
     // ---- IAuditable ----
+    [Column("ErstelltAm")]
     public DateTime ErstelltAm { get; set; }
+    [Column("ErstelltVonId")]
     public string? ErstelltVonId { get; set; }
+    [Column("GeaendertAm")]
     public DateTime? GeaendertAm { get; set; }
+    [Column("GeaendertVonId")]
     public string? GeaendertVonId { get; set; }
 
     // ---- ISoftDelete ----
+    [Column("IstGeloescht")]
     public bool IstGeloescht { get; set; }
+    [Column("GeloeschtAm")]
     public DateTime? GeloeschtAm { get; set; }
+    [Column("GeloeschtVonId")]
     public string? GeloeschtVonId { get; set; }
 }

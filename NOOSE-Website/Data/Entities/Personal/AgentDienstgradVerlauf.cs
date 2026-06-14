@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Personal;
 
@@ -8,6 +9,7 @@ namespace NOOSE_Website.Data.Entities.Personal;
 /// (Freigabe, manuelle Rangänderung, genehmigte Beförderung). <see cref="AkteurName"/> ist der Codename
 /// des Handelnden zum Zeitpunkt (denormalisiert).
 /// </summary>
+[Table("AgentDienstgradVerlaeufe")]
 public class AgentDienstgradVerlauf
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -18,13 +20,17 @@ public class AgentDienstgradVerlauf
     public Dienstgrad? Alt { get; set; }
 
     /// <summary>Neuer Dienstgrad.</summary>
+    [Column("Neu")]
     public Dienstgrad Neu { get; set; }
 
+    [Column("Zeitpunkt")]
     public DateTime Zeitpunkt { get; set; }
 
     /// <summary>Codename des Handelnden (denormalisiert).</summary>
+    [Column("AkteurName")]
     public string? AkteurName { get; set; }
 
     /// <summary>Grund/Anlass (z. B. „Erstmalige Freigabe", „Rangänderung", „Beförderung").</summary>
+    [Column("Grund")]
     public string? Grund { get; set; }
 }

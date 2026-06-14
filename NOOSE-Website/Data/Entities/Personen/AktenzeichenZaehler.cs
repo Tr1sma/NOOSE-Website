@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Personen;
 
 /// <summary>
@@ -5,14 +6,18 @@ namespace NOOSE_Website.Data.Entities.Personen;
 /// Wird beim Anlegen einer Akte atomar per „INSERT ... ON DUPLICATE KEY UPDATE" hochgezählt.
 /// Pro Aktentyp eine eigene Sequenz über den <see cref="Praefix"/> (P = Person, F = Fraktion, G = Gruppe).
 /// </summary>
+[Table("AktenzeichenZaehler")]
 public class AktenzeichenZaehler
 {
     /// <summary>Präfix des Aktentyps (Teil des zusammengesetzten Primärschlüssels): P/F/G/…</summary>
+    [Column("Praefix")]
     public string Praefix { get; set; } = "P";
 
     /// <summary>Kalenderjahr (Teil des zusammengesetzten Primärschlüssels).</summary>
+    [Column("Jahr")]
     public int Jahr { get; set; }
 
     /// <summary>Zuletzt vergebene laufende Nummer in diesem Jahr für diesen Präfix.</summary>
+    [Column("LetzteNummer")]
     public int LetzteNummer { get; set; }
 }

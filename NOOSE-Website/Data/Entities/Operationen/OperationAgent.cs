@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Abstractions;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Operationen;
 
@@ -7,6 +8,7 @@ namespace NOOSE_Website.Data.Entities.Operationen;
 /// <see cref="IAuditable"/>. FK auf den <see cref="Agent"/> (Identity-Tabelle) ist <c>Restrict</c>; FK auf
 /// die Operation ist Cascade.
 /// </summary>
+[Table("OperationAgenten")]
 public class OperationAgent : IAuditable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -18,11 +20,16 @@ public class OperationAgent : IAuditable
     public Agent? Agent { get; set; }
 
     /// <summary>Markiert diesen zugeteilten Agent als Ermittlungsleiter der Operation (mehrere je Akte möglich).</summary>
+    [Column("IstErmittlungsleiter")]
     public bool IstErmittlungsleiter { get; set; }
 
     // ---- IAuditable ----
+    [Column("ErstelltAm")]
     public DateTime ErstelltAm { get; set; }
+    [Column("ErstelltVonId")]
     public string? ErstelltVonId { get; set; }
+    [Column("GeaendertAm")]
     public DateTime? GeaendertAm { get; set; }
+    [Column("GeaendertVonId")]
     public string? GeaendertVonId { get; set; }
 }
