@@ -164,7 +164,8 @@ export async function render(containerId, datenJson, dotnetRef) {
     const kantenListe = (daten.kanten || []).map(mapKante);
     const nodes = new window.vis.DataSet(knotenListe);
     const edges = new window.vis.DataSet(kantenListe);
-    const network = new window.vis.Network(container, { nodes, edges }, optionen(knotenListe.length, kantenListe.length));
+    const opts = optionen(knotenListe.length, kantenListe.length);
+    const network = new window.vis.Network(container, { nodes, edges }, opts);
 
     // Physik bleibt AN: der Graph schwingt ein und federt beim Ziehen mit („lebendig"). Er kommt von
     // selbst zur Ruhe, wenn die Bewegungsenergie gering ist (kein Dauer-CPU-Verbrauch im Ruhezustand).
@@ -192,7 +193,31 @@ export async function render(containerId, datenJson, dotnetRef) {
         }
     });
 
-    instanzen.set(containerId, { network, nodes, edges, dotnetRef });
+    // Die Standard-Physik (inkl. größenabhängiger Stabilisierung) merken, damit der freie Modus
+    // sie später unverändert wiederherstellen kann.
+    instanzen.set(containerId, { network, nodes, edges, dotnetRef, physikStandard: opts.physics, frei: false });
+}
+
+// Physik des „freien Modus": KEINE Abstoßung und KEINE Zentralgravitation – nichts „drückt" die Knoten
+// auseinander, man kann sie frei ziehen und schieben und sie bleiben liegen (hohe Dämpfung). Eine schwache
+// Federkraft bleibt aktiv, damit verbundene Knoten sich noch ein wenig gegenseitig ziehen.
+const PHYSIK_FREI = {
+    enabled: true,
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: { gravitationalConstant: 0, centralGravity: 0, springLength: 150, springConstant: 0.03, damping: 0.9, avoidOverlap: 0 },
+    stabilization: false,
+    minVelocity: 0.5,
+};
+
+// Schaltet zwischen dem „lebendigen" Standard und dem freien Anordnungsmodus um. Im freien Modus entfällt
+// das automatische Auseinanderdrücken/Einschwingen; der Nutzer ordnet die Knoten selbst an.
+export function setzeFreierModus(containerId, frei) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    inst.frei = !!frei;
+    inst.network.setOptions({ physics: frei ? PHYSIK_FREI : inst.physikStandard });
 }
 
 // Hebt den gefundenen Pfad hervor und blendet den Rest aus (ausgegraut).
