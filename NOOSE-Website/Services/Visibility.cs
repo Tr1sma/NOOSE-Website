@@ -79,9 +79,10 @@ public static class Visibility
             nameof(Appointment) => await db.Appointments
                 .Where(t => t.Id == entityId).Select(t => (bool?)false)
                 .FirstOrDefaultAsync(cancellationToken),
-            // Bibliotheks-Dokument: eigene Verschlusssache-Stufe (nur Führung sieht VS-Dokumente).
+            // Bibliotheks-Dokument: eigene Verschlusssache-Stufe. Jede Stufe (Führung/TRU/HRB) gilt hier als
+            // Verschlusssache → in diesem Quellen-Kontext nur der Führung sichtbar (kein Namens-Leak an Dritte).
             nameof(Document) => await db.Documents
-                .Where(d => d.Id == entityId).Select(d => (bool?)d.IsClassified)
+                .Where(d => d.Id == entityId).Select(d => (bool?)(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified))
                 .FirstOrDefaultAsync(cancellationToken),
             // Gesetz (Phase 7): keine Verschlusssache (Wissensbasis) – existiert es, ist es sichtbar.
             nameof(Law) => await db.Laws

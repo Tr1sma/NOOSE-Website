@@ -27,10 +27,16 @@
                           RequiredError="Titel ist erforderlich" />
             <MudTextField @bind-Value="_category" Label="Kategorie (optional)" Variant="Variant.Outlined"
                           Placeholder="z. B. Formular, SOP, Vorlage" />
-            @if (MayClassified)
+            @if (_options.Count > 1)
             {
-                <MudSwitch T="bool" @bind-Value="_isClassified" Color="Color.Warning"
-                           Label="Verschlusssache (nur Führung sichtbar)" />
+                <MudSelect T="DocumentClassification" @bind-Value="_classification" Label="Verschluss-Stufe"
+                           Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                           HelperText="Bestimmt, wer die Datei sehen darf.">
+                    @foreach (var option in _options)
+                    {
+                        <MudSelectItem T="DocumentClassification" Value="@option">@DocumentClassificationDisplay.Label(option)</MudSelectItem>
+                    }
+                </MudSelect>
             }
         </MudStack>
     </DialogContent>
@@ -46,7 +52,7 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    [Parameter] public bool MayClassified { get; set; }
+    [Parameter] public IReadOnlyList<DocumentClassification> ClassificationOptions { get; set; } = Array.Empty<DocumentClassification>();
     [Parameter] public LibraryFile? Preset { get; set; }
 
     private bool IsProcessing => Preset is not null;
@@ -55,15 +61,27 @@
     private string? _warning;
     private string _title = string.Empty;
     private string? _category;
-    private bool _isClassified;
+    private DocumentClassification _classification;
+    // Auswahlliste: die vom Agenten vergebbaren Stufen, plus – beim Bearbeiten – die bereits gesetzte Stufe,
+    // damit sie auch dann anwählbar bleibt, wenn der Agent sie nicht selbst neu vergeben dürfte (Beibehalten).
+    private List<DocumentClassification> _options = new();
 
     protected override void OnParametersSet()
     {
+        _options = ClassificationOptions.ToList();
+        if (_options.Count == 0)
+        {
+            _options.Add(DocumentClassification.None);
+        }
         if (Preset is not null && string.IsNullOrEmpty(_title))
         {
             _title = Preset.Title;
             _category = Preset.Category;
-            _isClassified = Preset.IsClassified;
+            _classification = Preset.Classification;
+        }
+        if (!_options.Contains(_classification))
+        {
+            _options.Add(_classification);
         }
     }
 
@@ -96,17 +114,18 @@
     private void Cancel() => MudDialog.Cancel();
 
     private void Save()
-        => MudDialog.Close(DialogResult.Ok(new Result(_title.Trim(), _category, _isClassified, _file)));
+        => MudDialog.Close(DialogResult.Ok(new Result(_title.Trim(), _category, _classification, _file)));
 
     /// <summary>Dialog-Ergebnis: Metadaten + (nur beim Upload) die gewählte Datei.</summary>
-    public sealed record Result(string Title, string? Category, bool IsClassified, IBrowserFile? File);
+    public sealed record Result(string Title, string? Category, DocumentClassification Classification, IBrowserFile? File);
 
     /// <summary>Zeigt den Dialog; liefert das Ergebnis oder <c>null</c> bei Abbruch.</summary>
-    public static async Task<Result?> ShowAsync(IDialogService dialog, string title, bool mayClassified, LibraryFile? preset = null)
+    public static async Task<Result?> ShowAsync(IDialogService dialog, string title,
+        IReadOnlyList<DocumentClassification> classificationOptions, LibraryFile? preset = null)
     {
         var parameters = new DialogParameters<LibraryFileDialog>
         {
-            { x => x.MayClassified, mayClassified },
+            { x => x.ClassificationOptions, classificationOptions },
             { x => x.Preset, preset },
         };
         var reference = await dialog.ShowAsync<LibraryFileDialog>(title, parameters,

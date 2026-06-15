@@ -199,16 +199,18 @@ public static class RecordsReference
             }
         }
 
-        // Bibliotheks-Dokument: Anzeige = Titel, echtes Verschlusssache-Flag, Route auf den Viewer.
+        // Bibliotheks-Dokument: Anzeige = Titel, Route auf den Viewer. Jede Verschluss-Stufe (Führung/TRU/HRB)
+        // gilt hier als Verschlusssache → der Titel bleibt in fremden Akten-/Verweis-Kontexten der Führung
+        // vorbehalten (kein Namens-Leak an Dritte).
         var documentIds = OpenIds(nameof(Document));
         if (documentIds.Count > 0)
         {
             foreach (var x in await db.Documents.Where(d => documentIds.Contains(d.Id))
-                .Select(d => new { d.Id, d.Title, d.IsClassified }).ToListAsync(ct))
+                .Select(d => new { d.Id, d.Title, Classified = d.IsClassified || d.IsTRUClassified || d.IsHRBClassified }).ToListAsync(ct))
             {
                 map[(nameof(Document), x.Id)] = new(
                     string.IsNullOrWhiteSpace(x.Title) ? "Dokument" : x.Title,
-                    x.IsClassified, SearchNavigation.Route(nameof(Document), x.Id));
+                    x.Classified, SearchNavigation.Route(nameof(Document), x.Id));
             }
         }
 

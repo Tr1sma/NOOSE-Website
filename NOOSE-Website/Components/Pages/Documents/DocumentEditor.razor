@@ -57,9 +57,16 @@ else
                 </MudSelect>
             }
 
-            @if (_isLeadership)
+            @if (_classificationOptions.Count > 1)
             {
-                <MudSwitch @bind-Value="_isClassified" Color="Color.Warning" Label="Verschlusssache (nur für die Führung sichtbar)" />
+                <MudSelect T="DocumentClassification" @bind-Value="_classification" Label="Verschluss-Stufe"
+                           Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                           HelperText="Bestimmt, wer das Dokument sehen darf.">
+                    @foreach (var option in _classificationOptions)
+                    {
+                        <MudSelectItem T="DocumentClassification" Value="@option">@DocumentClassificationDisplay.Label(option)</MudSelectItem>
+                    }
+                </MudSelect>
             }
 
             <RichTextEditor @ref="_editor" Value="@_contentHtml" />
@@ -77,12 +84,12 @@ else
     private bool _load = true;
     private bool _edit;
     private bool _found;
-    private bool _isLeadership;
     private bool _saves;
 
     private string _title = string.Empty;
     private string? _category;
-    private bool _isClassified;
+    private DocumentClassification _classification;
+    private IReadOnlyList<DocumentClassification> _classificationOptions = Array.Empty<DocumentClassification>();
     private string? _contentHtml;
 
     private List<DocumentTemplate> _templates = new();
@@ -96,7 +103,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        _isLeadership = _user.IsLeadership();
+        _classificationOptions = DocumentViewerScope.AssignableOptions(_user);
         _edit = !string.IsNullOrEmpty(Id);
 
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Nav.ToAbsoluteUri(Nav.Uri).Query);
@@ -107,13 +114,13 @@ else
 
         if (_edit)
         {
-            var document = await DocumentService.GetAsync(Id!, _isLeadership);
+            var document = await DocumentService.GetAsync(Id!, DocumentViewerScope.From(_user));
             if (document is not null)
             {
                 _found = true;
                 _title = document.Title;
                 _category = document.Category;
-                _isClassified = document.IsClassified;
+                _classification = document.Classification;
                 _contentHtml = document.ContentHtml;
             }
         }
@@ -178,7 +185,7 @@ else
                 Title = title,
                 Category = _category,
                 ContentHtml = html,
-                IsClassified = _isClassified,
+                Classification = _classification,
             };
 
             string id;

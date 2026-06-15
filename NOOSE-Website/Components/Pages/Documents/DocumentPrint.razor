@@ -17,7 +17,7 @@ else if (_document is null)
 else
 {
     <PrintFrame Title="@_document.Title" BackHref="@($"/dokumente/{Id}")"
-                 PrintedBy="@_printBy" IsClassified="_document.IsClassified"
+                 PrintedBy="@_printBy" IsClassified="_document.IsRestricted"
                  Footer="NOOSE-internes Dokument · Weitergabe nur nach Freigabe durch die Führung.">
         <section>
             <h2>Dokumentdaten</h2>
@@ -75,7 +75,7 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _document = await DocumentService.GetAsync(Id, isLeadership);
+        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(user));
         if (_document is not null)
         {
             _attachments = await DocumentService.GetAttachmentsAsync(Id, isLeadership, user.GetAgentId());

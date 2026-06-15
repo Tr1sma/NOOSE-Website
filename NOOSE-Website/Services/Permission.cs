@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using NOOSE_Website.Authorization;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -44,6 +45,22 @@ public static class Permission
         {
             throw new UnauthorizedAccessException(
                 "Diese Aktion ist Admins vorbehalten.");
+        }
+    }
+
+    /// <summary>Wirft, wenn der Handelnde die gewünschte Dokument-Verschluss-Stufe nicht vergeben darf.
+    /// Führung darf jede Stufe setzen; TRU-/HRB-Angehörige nur die eigene; „Keine" ist für jeden
+    /// Schreibberechtigten erlaubt (die Schreibsperre greift separat über <see cref="RequireWriteAccess"/>).</summary>
+    public static void RequireMayAssignClassification(ClaimsPrincipal actor, DocumentClassification classification)
+    {
+        if (classification == DocumentClassification.None)
+        {
+            return;
+        }
+        if (!DocumentViewerScope.From(actor).CanSee(classification))
+        {
+            throw new UnauthorizedAccessException(
+                $"Du darfst die Stufe „{DocumentClassificationDisplay.Label(classification)}“ nicht vergeben.");
         }
     }
 

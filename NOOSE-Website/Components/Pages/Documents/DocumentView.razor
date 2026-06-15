@@ -22,9 +22,9 @@ else
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/dokumente" aria-label="Zurück zur Bibliothek" />
         <MudIcon Icon="@Icons.Material.Filled.Article" Color="Color.Primary" Size="Size.Large" />
         <MudText Typo="Typo.h4">@_document.Title</MudText>
-        @if (_document.IsClassified)
+        @if (_document.IsRestricted)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Lock" Variant="Variant.Outlined">Verschlusssache</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Lock" Variant="Variant.Outlined">@DocumentClassificationDisplay.Label(_document.Classification)</MudChip>
         }
         @if (_document.Pinned)
         {
@@ -131,7 +131,7 @@ else
     {
         _load = true;
         _isLeadership = _user.IsLeadership();
-        _document = await DocumentService.GetAsync(Id, _isLeadership);
+        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(_user));
         if (_document is not null)
         {
             _attachments = await DocumentService.GetAttachmentsAsync(Id, _isLeadership, _user.GetAgentId());

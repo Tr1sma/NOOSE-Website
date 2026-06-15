@@ -27,7 +27,7 @@ else
             <MudTh><MudTableSortLabel T="LibraryFile" SortBy="@(x => x.Category)">Kategorie</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="LibraryFile" SortBy="@(x => x.SizeBytes)">Größe</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="LibraryFile" SortBy="@(x => x.ModifiedAt ?? x.CreatedAt)" InitialDirection="SortDirection.Descending">Zuletzt</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="LibraryFile" SortBy="@(x => x.IsClassified)">Verschluss</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="LibraryFile" SortBy="@(x => x.Classification)">Verschluss</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -48,9 +48,10 @@ else
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@((context.ModifiedAt ?? context.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</MudText>
             </MudTd>
             <MudTd DataLabel="Verschluss">
-                @if (context.IsClassified)
+                @if (context.IsRestricted)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                             Icon="@Icons.Material.Filled.Lock">@DocumentClassificationDisplay.ChipLabel(context.Classification)</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
@@ -86,7 +87,6 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
-    private bool _isLeadership;
     private string _search = string.Empty;
     private List<LibraryFile> _files = new();
     private ClaimsPrincipal _user = default!;
@@ -100,20 +100,19 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        _isLeadership = _user.IsLeadership();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _load = true;
-        _files = await LibraryService.GetListAsync(_user.MayClassifiedRead());
+        _files = await LibraryService.GetListAsync(DocumentViewerScope.From(_user));
         _load = false;
     }
 
     private async Task UploadAsync()
     {
-        var result = await LibraryFileDialog.ShowAsync(DialogService, "Datei hochladen", _isLeadership);
+        var result = await LibraryFileDialog.ShowAsync(DialogService, "Datei hochladen", DocumentViewerScope.AssignableOptions(_user));
         if (result?.File is null)
         {
             return;
@@ -124,7 +123,7 @@ else
             await using var buffer = new MemoryStream();
             await result.File.OpenReadStream(Storage.MaxBytes).CopyToAsync(buffer);
             buffer.Position = 0;
-            await LibraryService.UploadAsync(result.Title, result.Category, result.IsClassified,
+            await LibraryService.UploadAsync(result.Title, result.Category, result.Classification,
                 buffer, result.File.Name, result.File.ContentType, result.File.Size, _user);
             Snackbar.Add("Datei hochgeladen.", Severity.Success);
             await LoadAsync();
@@ -137,14 +136,14 @@ else
 
     private async Task EditAsync(LibraryFile file)
     {
-        var result = await LibraryFileDialog.ShowAsync(DialogService, "Datei bearbeiten", _isLeadership, file);
+        var result = await LibraryFileDialog.ShowAsync(DialogService, "Datei bearbeiten", DocumentViewerScope.AssignableOptions(_user), file);
         if (result is null)
         {
             return;
         }
         try
         {
-            await LibraryService.RefreshAsync(file.Id, result.Title, result.Category, result.IsClassified, _user);
+            await LibraryService.RefreshAsync(file.Id, result.Title, result.Category, result.Classification, _user);
             Snackbar.Add("Gespeichert.", Severity.Success);
             await LoadAsync();
         }

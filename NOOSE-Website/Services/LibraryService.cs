@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Storage;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -11,24 +13,27 @@ public class LibraryService(
     IDbContextFactory<AppDbContext> dbFactory,
     ILibraryStorageService storage) : ILibraryService
 {
-    public async Task<List<LibraryFile>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<LibraryFile>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // In lokale Variablen ziehen, damit EF die Verschluss-Filter als SQL-Parameter übersetzt.
+        bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
         return await db.LibraryFiles
-            .Where(d => isLeadership || !d.IsClassified)
+            .Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
+                || mayClassified
+                || (d.IsTRUClassified && isTru)
+                || (d.IsHRBClassified && isHrb))
             .OrderByDescending(d => d.ModifiedAt ?? d.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<LibraryFile> UploadAsync(string title, string? category, bool isClassified,
+    public async Task<LibraryFile> UploadAsync(string title, string? category, DocumentClassification classification,
         Stream content, string originalName, string contentType, long sizeBytes,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireWriteAccess(actor);
-        if (isClassified)
-        {
-            Permission.RequireLeadership(actor);
-        }
+        // Nur Stufen vergeben, für die der Handelnde berechtigt ist (Führung: alle; TRU/HRB: nur die eigene).
+        Permission.RequireMayAssignClassification(actor, classification);
 
         title = title.Trim();
         if (string.IsNullOrWhiteSpace(title))
@@ -53,7 +58,7 @@ public class LibraryService(
             FileNameSaved = fileName,
             ContentType = contentType,
             SizeBytes = sizeBytes,
-            IsClassified = isClassified,
+            Classification = classification,
         };
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -62,7 +67,7 @@ public class LibraryService(
         return file;
     }
 
-    public async Task RefreshAsync(string id, string title, string? category, bool isClassified,
+    public async Task RefreshAsync(string id, string title, string? category, DocumentClassification classification,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireWriteAccess(actor);
@@ -77,14 +82,19 @@ public class LibraryService(
         var file = await db.LibraryFiles.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Datei nicht gefunden.");
 
-        if (file.IsClassified != isClassified)
+        // Bearbeiten nur, wer die aktuelle Stufe sehen darf; eine geänderte Stufe muss zuweisbar sein.
+        if (!DocumentViewerScope.From(actor).CanSee(file.Classification))
         {
-            Permission.RequireLeadership(actor);
+            throw new UnauthorizedAccessException("Diese Datei ist eine Verschlusssache und dir nicht zugänglich.");
+        }
+        if (file.Classification != classification)
+        {
+            Permission.RequireMayAssignClassification(actor, classification);
         }
 
         file.Title = title;
         file.Category = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
-        file.IsClassified = isClassified;
+        file.Classification = classification;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -102,11 +112,11 @@ public class LibraryService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<LibraryFile?> GetForDownloadAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<LibraryFile?> GetForDownloadAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var file = await db.LibraryFiles.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
-        if (file is null || (file.IsClassified && !isLeadership))
+        if (file is null || !scope.CanSee(file.Classification))
         {
             // Kein Existenz-Leak: nicht vorhanden oder nicht sichtbar → null.
             return null;

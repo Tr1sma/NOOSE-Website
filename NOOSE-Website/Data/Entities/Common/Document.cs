@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Abstractions;
+using NOOSE_Website.Models.Enums;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
@@ -29,6 +30,37 @@ public class Document : IAuditable, ISoftDelete
     /// <summary>Verschlusssache: nur für die Führung sichtbar (Bibliothek/Viewer/Auswahl filtern entsprechend).</summary>
     [Column("IstVerschlusssache")]
     public bool IsClassified { get; set; }
+
+    /// <summary>Verschlusssache nur für die TRU (Tactical Response Unit). Schließt sich mit den übrigen
+    /// Verschluss-Stufen gegenseitig aus (gesetzt über <see cref="Classification"/>).</summary>
+    [Column("IstVerschlusssacheTRU")]
+    public bool IsTRUClassified { get; set; }
+
+    /// <summary>Verschlusssache nur für den HRB (Human Resources Branch). Schließt sich mit den übrigen
+    /// Verschluss-Stufen gegenseitig aus (gesetzt über <see cref="Classification"/>).</summary>
+    [Column("IstVerschlusssacheHRB")]
+    public bool IsHRBClassified { get; set; }
+
+    /// <summary>Einheitliche Verschluss-Stufe (Mapping auf genau eine der Bool-Spalten bzw. keine).
+    /// Führung hat beim Lesen Vorrang, falls je mehrere Flags gesetzt wären.</summary>
+    [NotMapped]
+    public DocumentClassification Classification
+    {
+        get => IsClassified ? DocumentClassification.Leadership
+            : IsTRUClassified ? DocumentClassification.Tru
+            : IsHRBClassified ? DocumentClassification.Hrb
+            : DocumentClassification.None;
+        set
+        {
+            IsClassified = value == DocumentClassification.Leadership;
+            IsTRUClassified = value == DocumentClassification.Tru;
+            IsHRBClassified = value == DocumentClassification.Hrb;
+        }
+    }
+
+    /// <summary>True, wenn überhaupt eine Verschluss-Stufe gesetzt ist (für die Schloss-Anzeige).</summary>
+    [NotMapped]
+    public bool IsRestricted => IsClassified || IsTRUClassified || IsHRBClassified;
 
     /// <summary>Angepinnt: erscheint in der Bibliothek in einem abgesetzten Block ganz oben. Globale, von der
     /// Führung kuratierte Markierung (kein „zuletzt bearbeitet"-Bezug). Steuert nur die Anzeige-Reihenfolge.</summary>

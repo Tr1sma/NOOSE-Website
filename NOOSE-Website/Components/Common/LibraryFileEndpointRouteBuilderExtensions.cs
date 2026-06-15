@@ -26,7 +26,7 @@ public static class LibraryFileEndpointRouteBuilderExtensions
             CancellationToken cancellationToken) =>
         {
             // Der Dienst prüft Soft-Delete und Verschlusssache – liefert sonst null (kein Existenz-Leak).
-            var file = await library.GetForDownloadAsync(fileId, http.User.IsLeadership(), cancellationToken);
+            var file = await library.GetForDownloadAsync(fileId, DocumentViewerScope.From(http.User), cancellationToken);
             if (file is null)
             {
                 return Results.NotFound();

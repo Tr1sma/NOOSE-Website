@@ -1,28 +1,31 @@
 using System.Security.Claims;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
 /// <summary>
 /// Zentrale Datei-Bibliothek (Phase 7): durchsuchbare Ablage hochgeladener Dateien (Formulare,
-/// SOPs, Vorlagen). Hochladen dürfen alle schreibberechtigten Agenten; Löschen und das
-/// Verschlusssache-Flag sind der Führung vorbehalten. Verschlusssachen sieht nur die Führung.
+/// SOPs, Vorlagen). Hochladen dürfen alle schreibberechtigten Agenten. Die Verschluss-Stufe (Führung/
+/// TRU/HRB) darf nur vergeben, wer der jeweiligen Einheit angehört (die Führung jede Stufe); sichtbar
+/// ist eine Verschlusssache entsprechend nur dem berechtigten Personenkreis.
 /// </summary>
 public interface ILibraryService
 {
-    Task<List<LibraryFile>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<LibraryFile>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>Lädt eine Datei in die Bibliothek hoch (Typ-/Größen-Validierung im Storage-Dienst).</summary>
-    Task<LibraryFile> UploadAsync(string title, string? category, bool isClassified,
+    Task<LibraryFile> UploadAsync(string title, string? category, DocumentClassification classification,
         Stream content, string originalName, string contentType, long sizeBytes,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Titel/Kategorie/Verschlusssache nachträglich ändern (VS-Flag nur Führung).</summary>
-    Task RefreshAsync(string id, string title, string? category, bool isClassified,
+    /// <summary>Titel/Kategorie/Verschluss-Stufe nachträglich ändern (Stufe nur durch dafür Berechtigte).</summary>
+    Task RefreshAsync(string id, string title, string? category, DocumentClassification classification,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Für den Download-Endpoint: liefert die Datei nur, wenn sie für den Aufrufer sichtbar ist.</summary>
-    Task<LibraryFile?> GetForDownloadAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<LibraryFile?> GetForDownloadAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default);
 }
