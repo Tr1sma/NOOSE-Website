@@ -113,6 +113,9 @@
     /// <summary>Steuert, ob auch Verschlusssachen in der Personensuche erscheinen.</summary>
     [Parameter] public bool IsLeadership { get; set; }
 
+    /// <summary>Verschluss-Sichtbarkeit des Betrachters für die Dokumenten-Auswahl (Führung/TRU/HRB).</summary>
+    [Parameter] public DocumentViewerScope DocumentScope { get; set; }
+
     private MudForm _form = default!;
     private readonly SourceInput _input = new();
     private Person? _targetPerson;
@@ -123,7 +126,7 @@
         => await PersonService.SearchAsync(value, IsLeadership, 20, token);
 
     private async Task<IEnumerable<DocumentListItem>> SearchDocuments(string value, CancellationToken token)
-        => await DocumentService.SearchAsync(value, IsLeadership, 20, token);
+        => await DocumentService.SearchAsync(value, DocumentScope, 20, token);
 
     private void DocumentSelected(DocumentListItem? document)
     {
@@ -224,9 +227,13 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Zeigt den Dialog und liefert die Eingabe oder null bei Abbruch.</summary>
-    public static async Task<SourceInput?> ShowAsync(IDialogService dialog, bool isLeadership)
+    public static async Task<SourceInput?> ShowAsync(IDialogService dialog, ClaimsPrincipal user)
     {
-        var parameters = new DialogParameters<SourceDialog> { { x => x.IsLeadership, isLeadership } };
+        var parameters = new DialogParameters<SourceDialog>
+        {
+            { x => x.IsLeadership, user.IsLeadership() },
+            { x => x.DocumentScope, DocumentViewerScope.From(user) },
+        };
         var reference = await dialog.ShowAsync<SourceDialog>("Quelle hinzufügen", parameters);
         var result = await reference.Result;
         return result is { Canceled: false, Data: SourceInput e } ? e : null;

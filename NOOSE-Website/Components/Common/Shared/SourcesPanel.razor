@@ -114,7 +114,7 @@
 
     private async Task NewAsync()
     {
-        var input = await SourceDialog.ShowAsync(DialogService, User.IsLeadership());
+        var input = await SourceDialog.ShowAsync(DialogService, User);
         if (input is null)
         {
             return;
