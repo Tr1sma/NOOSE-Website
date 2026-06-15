@@ -16,6 +16,11 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Verknüpfungen &amp; Beziehungen aller Akten als interaktives Lagebild.</MudText>
         </div>
         <MudSpacer />
+        <MudTooltip Text="@(_freeMode ? "Freies Anordnen aktiv – Knoten lassen sich frei ziehen und schieben. Klicken zum Zurückschalten auf die lebendige Animation." : "Frei anordnen: Animation &amp; automatisches Auseinanderdrücken aus – Knoten frei ziehen und schieben")">
+            <MudIconButton Icon="@(_freeMode ? Icons.Material.Filled.PanTool : Icons.Material.Outlined.PanTool)"
+                           Color="@(_freeMode ? Color.Primary : Color.Default)"
+                           OnClick="ToggleFreeModeAsync" Disabled="@(!_ready)" />
+        </MudTooltip>
         <MudTooltip Text="Auf den Bildschirm einpassen">
             <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" OnClick="CustomizeAsync" Disabled="@(!_ready)" />
         </MudTooltip>
@@ -218,6 +223,7 @@
 
     private GraphData? _data;
     private bool _load = true;
+    private bool _freeMode;
 
     private bool _modeFocus;
     private GraphRecordChoice? _focus;
@@ -274,7 +280,7 @@
         try
         {
             // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn graph.js geändert wird.
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=6");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=7");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             await LoadAndDrawAsync();
@@ -345,6 +351,11 @@
         try
         {
             await _module.InvokeVoidAsync("render", ContainerId, _data, _ref);
+            // render() setzt immer die Standard-Physik – den freien Modus danach erneut anwenden.
+            if (_freeMode)
+            {
+                await _module.InvokeVoidAsync("setzeFreierModus", ContainerId, true);
+            }
         }
         catch (JSDisconnectedException) { /* Circuit weg */ }
         catch (Exception ex)
@@ -407,6 +418,17 @@
         }
         _pathRunning = false;
         StateHasChanged();
+    }
+
+    private async Task ToggleFreeModeAsync()
+    {
+        _freeMode = !_freeMode;
+        if (_module is not null && _ready)
+        {
+            try { await _module.InvokeVoidAsync("setzeFreierModus", ContainerId, _freeMode); }
+            catch (JSDisconnectedException) { /* Circuit weg */ }
+            catch (Exception ex) { Logger.LogWarning(ex, "Beziehungsgraph: freier Modus konnte nicht umgeschaltet werden."); }
+        }
     }
 
     private async Task CustomizeAsync() => await SafeInvoke("passeAn");
