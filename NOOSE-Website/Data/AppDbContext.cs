@@ -108,6 +108,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<AgentNote> AgentNotes => Set<AgentNote>();
     public DbSet<AgentPromotionRequest> AgentPromotionRequests => Set<AgentPromotionRequest>();
 
+    // ---- Phase 22: Ausbildungsmodule + Abschluss je Agent ----
+    public DbSet<TrainingModule> TrainingModules => Set<TrainingModule>();
+    public DbSet<AgentModuleCompletion> AgentModuleCompletions => Set<AgentModuleCompletion>();
+
     // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----
     public DbSet<Request> Requests => Set<Request>();
 
@@ -896,6 +900,25 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => a.Status);
             b.HasOne<Agent>().WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ---- Phase 22: Ausbildungsmodule (Katalog) + Abschluss je Agent ----
+        modelBuilder.Entity<TrainingModule>(b =>
+        {
+            b.Property(m => m.Name).HasMaxLength(160).IsRequired();
+            b.Property(m => m.Description).HasMaxLength(2000);
+            b.HasIndex(m => m.Name);
+        });
+
+        modelBuilder.Entity<AgentModuleCompletion>(b =>
+        {
+            b.Property(c => c.CompleterName).HasMaxLength(128);
+            b.Property(c => c.Note).HasMaxLength(2000);
+            b.HasIndex(c => new { c.AgentId, c.ModuleId });
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(c => c.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(c => c.Module).WithMany()
+                .HasForeignKey(c => c.ModuleId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----

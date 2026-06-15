@@ -4,6 +4,7 @@
 @layout PrintLayout
 @inject IAgentManagementService AgentService
 @inject IPersonnelFileService PersonnelFileService
+@inject ITrainingModuleService ModuleService
 @inject IAccessLogService AccessLog
 
 <PageTitle>@(_agent is null ? "Druckansicht" : $"Personalakte {_agent.Codename}") · NOOSE</PageTitle>
@@ -109,6 +110,27 @@ else
                 }
             </section>
         }
+
+        @if (_completedModules.Count > 0)
+        {
+            <section>
+                <h2>Abgeschlossene Module</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Modul</th><th>Abgeschlossen am</th><th>Erfasst durch</th><th>Notiz</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _completedModules)
+                        {
+                            <tr>
+                                <td>@m.Module.Name</td>
+                                <td>@m.CompletedAt!.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@(m.CompleterName ?? "—")</td>
+                                <td>@(string.IsNullOrWhiteSpace(m.Note) ? "—" : m.Note)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
     </PrintFrame>
 }
 
@@ -123,6 +145,7 @@ else
     private List<AgentRankHistory> _rankHistory = new();
     private List<AgentNote> _commendations = new();
     private List<AgentNote> _disciplinary = new();
+    private List<AgentModuleStatus> _completedModules = new();
 
     private static string DisplayName(Agent a)
         => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename;
@@ -139,6 +162,7 @@ else
             _rankHistory = await PersonnelFileService.GetRankHistoryAsync(Id);
             _commendations = await PersonnelFileService.GetNotesAsync(Id, AgentNoteKind.Commendation);
             _disciplinary = await PersonnelFileService.GetNotesAsync(Id, AgentNoteKind.Disciplinary);
+            _completedModules = (await ModuleService.GetStatusForAgentAsync(Id)).Where(m => m.IsCompleted).ToList();
             await AccessLog.LogViewAsync(nameof(Agent), Id);
         }
         _load = false;

@@ -1,0 +1,72 @@
+@* Dialog zum Anlegen/Bearbeiten eines Ausbildungsmoduls (Schulung). Liefert eine ModuleInput zurück. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_name" Label="Modul-Name" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Name ist erforderlich"
+                              AutoFocus="true" Immediate="true" MaxLength="160" />
+                <MudTextField @bind-Value="_description" Label="Beschreibung (optional)" Variant="Variant.Outlined"
+                              Lines="3" MaxLength="2000" />
+                <MudNumericField @bind-Value="_sorting" Label="Sortierung" Variant="Variant.Outlined"
+                                 Min="0" HelperText="Kleinere Werte erscheinen zuerst." />
+                <MudSwitch @bind-Value="_isActive" Color="Color.Primary" Label="Aktiv (in Personalakten abschließbar)" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public ModuleInput? Value { get; set; }
+
+    private MudForm _form = default!;
+    private string _name = string.Empty;
+    private string? _description;
+    private int _sorting;
+    private bool _isActive = true;
+
+    protected override void OnInitialized()
+    {
+        if (Value is not null)
+        {
+            _name = Value.Name;
+            _description = Value.Description;
+            _sorting = Value.Sorting;
+            _isActive = Value.IsActive;
+        }
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new ModuleInput
+        {
+            Name = _name.Trim(),
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+            Sorting = _sorting,
+            IsActive = _isActive,
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Werten). Liefert null bei Abbruch.</summary>
+    public static async Task<ModuleInput?> ShowAsync(IDialogService dialog, string title, ModuleInput? value = null)
+    {
+        var parameters = new DialogParameters<ModuleDialog> { { x => x.Value, value } };
+        var reference = await dialog.ShowAsync<ModuleDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: ModuleInput e } ? e : null;
+    }
+}
