@@ -1,0 +1,92 @@
+@* Gemeinsames Formular für Anlegen/Bearbeiten einer Aufgabe. Beim Anlegen kann zusätzlich eine
+   Mehrfach-Zuweisung an aktive Agenten erfolgen (nur Codename – kein Klarname-Leck). Beim Bearbeiten
+   werden Zuweisungen über das Beteiligte-Panel der Detailseite verwaltet. *@
+@inject IAgentManagementService AgentService
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Input.Title" Label="Titel" Required="true" RequiredError="Titel ist erforderlich"
+                      Variant="Variant.Outlined" />
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudSelect T="JobStatus" @bind-Value="Input.Status" Label="Status" Variant="Variant.Outlined">
+            @foreach (var s in JobStatusDisplay.All)
+            {
+                <MudSelectItem Value="s">@JobStatusDisplay.Name(s)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudSelect T="JobPriority" @bind-Value="Input.Priority" Label="Priorität" Variant="Variant.Outlined">
+            @foreach (var p in JobPriorityDisplay.All)
+            {
+                <MudSelectItem Value="p">@JobPriorityDisplay.Name(p)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudDatePicker @bind-Date="Input.DueDate" Label="Fälligkeit (optional)" Variant="Variant.Outlined"
+                       Clearable="true" Editable="true" DateFormat="dd.MM.yyyy" />
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudSwitch T="bool" @bind-Value="Input.IsRestricted" Color="Color.Warning"
+                   Label="Eingeschränkt (nur zugeteilte Agents, Ersteller und die Leitung sehen die Aufgabe)" />
+    </MudItem>
+
+    @if (ShowAssignment)
+    {
+        <MudItem xs="12">
+            <MudSelect T="string" Label="Zuweisen an (optional)" MultiSelection="true"
+                       SelectedValues="AgentIds" SelectedValuesChanged="OnAgentsChanged"
+                       MultiSelectionTextFunc="@DisplaySelection" Variant="Variant.Outlined"
+                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.ManageAccounts"
+                       HelperText="Zugewiesene Agenten erhalten eine Benachrichtigung.">
+                @foreach (var a in _agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Codename (@RankDisplay.Name(a.Rank))</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    }
+
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Input.Description" Label="Beschreibung (optional)" Lines="4" Variant="Variant.Outlined"
+                      HelperText="Worum geht es bei dieser Aufgabe?" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public JobInput Input { get; set; } = default!;
+
+    /// <summary>Mehrfach-Zuweisung anzeigen (nur beim Anlegen).</summary>
+    [Parameter] public bool ShowAssignment { get; set; }
+
+    /// <summary>Gewählte Agent-Ids (zweiweg-gebunden über <c>@bind-AgentIds</c>).</summary>
+    [Parameter] public IReadOnlyCollection<string> AgentIds { get; set; } = Array.Empty<string>();
+    [Parameter] public EventCallback<IReadOnlyCollection<string>> AgentIdsChanged { get; set; }
+
+    private List<Agent> _agents = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ShowAssignment)
+        {
+            // GetAuswaehlbareAsync: nur aktive Agenten ohne TeamLeitung-Marker, bereits nach Codename sortiert.
+            _agents = await AgentService.GetSelectableAsync();
+        }
+    }
+
+    private async Task OnAgentsChanged(IReadOnlyCollection<string> values)
+    {
+        AgentIds = values;
+        await AgentIdsChanged.InvokeAsync(values);
+    }
+
+    private string DisplaySelection(IReadOnlyList<string> ids)
+    {
+        var names = _agents.Where(a => ids.Contains(a.Id)).Select(a => a.Codename).ToList();
+        return names.Count == 0 ? string.Empty : string.Join(", ", names);
+    }
+}

@@ -2,7 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
@@ -11,18 +11,18 @@ using NOOSE_Website.Models.Taskforces;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ITaskforceService" />
-public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenzeichenService aktenzeichen) : ITaskforceService
+public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber) : ITaskforceService
 {
-    public async Task<List<Taskforce>> GetListeAsync(bool darfAlles, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Taskforces
-            .NurSichtbare(db, darfAlles, meId)
-            .OrderByDescending(t => t.GeaendertAm ?? t.ErstelltAm)
+            .OnlyVisible(db, mayAll, meId)
+            .OrderByDescending(t => t.ModifiedAt ?? t.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Taskforce?> GetDetailAsync(string id, bool darfAlles, string? meId, CancellationToken cancellationToken = default)
+    public async Task<Taskforce?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
@@ -31,32 +31,32 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
             return null;
         }
         // Sichtbar nur für Führung/Admin oder zugeteilte Agenten (Verschlusssache ist damit subsumiert).
-        if (!darfAlles
-            && !(meId is not null && await db.TaskforceAgenten.AnyAsync(a => a.TaskforceId == id && a.AgentId == meId, cancellationToken)))
+        if (!mayAll
+            && !(meId is not null && await db.TaskforceAgents.AnyAsync(a => a.TaskforceId == id && a.AgentId == meId, cancellationToken)))
         {
             return null;
         }
         return taskforce;
     }
 
-    public async Task<List<Taskforce>> GetPapierkorbAsync(CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> GetTrashAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Taskforces.IgnoreQueryFilters()
-            .Where(t => t.IstGeloescht)
-            .OrderByDescending(t => t.GeloeschtAm)
+            .Where(t => t.IsDeleted)
+            .OrderByDescending(t => t.DeletedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Taskforce>> SucheAsync(string? suchtext, bool darfAlles, string? meId, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Taskforces.NurSichtbare(db, darfAlles, meId);
+        var query = db.Taskforces.OnlyVisible(db, mayAll, meId);
 
-        var s = suchtext?.Trim();
+        var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))
         {
-            query = query.Where(t => t.Name.Contains(s) || t.Aktenzeichen.Contains(s));
+            query = query.Where(t => t.Name.Contains(s) || t.CaseNumber.Contains(s));
         }
 
         return await query
@@ -65,44 +65,44 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Taskforce>> GetBeantragteAsync(CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> GetRequestedAsync(CancellationToken cancellationToken = default)
     {
         // Nur für den Führungs-Freigabe-Posteingang (Seite ist Policies.Fuehrung-gated) → kein VS-Filter nötig.
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Taskforces
-            .Where(t => t.Status == TaskforceStatus.Beantragt)
-            .OrderBy(t => t.ErstelltAm)
+            .Where(t => t.Status == TaskforceStatus.Requested)
+            .OrderBy(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Taskforce> ErstellenAsync(TaskforceEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<Taskforce> CreateAsync(TaskforceInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var taskforce = new Taskforce
         {
-            Aktenzeichen = await aktenzeichen.NaechstesAsync(db, "TF", cancellationToken),
-            Name = eingabe.Name.Trim(),
-            Zweck = Leer(eingabe.Zweck),
-            Geltungsbereich = eingabe.Geltungsbereich,
-            Status = TaskforceStatus.Beantragt,
-            Bemerkungen = Leer(eingabe.Bemerkungen),
-            IstVerschlusssache = eingabe.IstVerschlusssache,
+            CaseNumber = await caseNumber.NextAsync(db, "TF", cancellationToken),
+            Name = input.Name.Trim(),
+            Purpose = Empty(input.Purpose),
+            Scope = input.Scope,
+            Status = TaskforceStatus.Requested,
+            Remarks = Empty(input.Remarks),
+            IsClassified = input.IsClassified,
         };
 
         db.Taskforces.Add(taskforce);
         await db.SaveChangesAsync(cancellationToken);
 
         // Ersteller automatisch als Chefermittler (Leitung) zuteilen (so existiert stets mindestens eine Leitung).
-        var erstellerId = handelnder.GetAgentId();
-        if (erstellerId is not null)
+        var creatorId = actor.GetAgentId();
+        if (creatorId is not null)
         {
-            db.TaskforceAgenten.Add(new TaskforceAgent
+            db.TaskforceAgents.Add(new TaskforceAgent
             {
                 TaskforceId = taskforce.Id,
-                AgentId = erstellerId,
-                Rolle = TaskforceRolle.Chefermittler,
+                AgentId = creatorId,
+                Role = TaskforceRole.LeadInvestigator,
             });
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -111,29 +111,29 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
         return taskforce;
     }
 
-    public async Task AktualisierenAsync(string id, TaskforceEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RefreshAsync(string id, TaskforceInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Taskforce '{id}' nicht gefunden.");
 
-        if (taskforce.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (taskforce.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        taskforce.Name = eingabe.Name.Trim();
-        taskforce.Zweck = Leer(eingabe.Zweck);
-        taskforce.Geltungsbereich = eingabe.Geltungsbereich;
-        taskforce.Bemerkungen = Leer(eingabe.Bemerkungen);
-        taskforce.IstVerschlusssache = eingabe.IstVerschlusssache;
+        taskforce.Name = input.Name.Trim();
+        taskforce.Purpose = Empty(input.Purpose);
+        taskforce.Scope = input.Scope;
+        taskforce.Remarks = Empty(input.Remarks);
+        taskforce.IsClassified = input.IsClassified;
 
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
@@ -142,164 +142,164 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, IAktenz
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.IgnoreQueryFilters()
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Taskforce '{id}' nicht gefunden.");
 
-        taskforce.IstGeloescht = false;
-        taskforce.GeloeschtAm = null;
-        taskforce.GeloeschtVonId = null;
+        taskforce.IsDeleted = false;
+        taskforce.DeletedAt = null;
+        taskforce.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task GenehmigungSetzenAsync(string id, TaskforceStatus neu, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task ApprovalSetAsync(string id, TaskforceStatus @new, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Genehmigen/Ablehnen/Auflösen ist der Führung vorbehalten (Plan §6 „Taskforce genehmigen").
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Taskforce '{id}' nicht gefunden.");
 
-        taskforce.Status = neu;
+        taskforce.Status = @new;
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<TaskforceAgent>> GetAgentenAsync(string taskforceId, CancellationToken cancellationToken = default)
+    public async Task<List<TaskforceAgent>> GetAgentsAsync(string taskforceId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.TaskforceAgenten
+        return await db.TaskforceAgents
             .Where(a => a.TaskforceId == taskforceId)
             .Include(a => a.Agent)
             // Leitung (Rolle != Mitglied) zuerst, dann nach Rolle (Chefermittler < CID-Lead < TRU-Lead), dann Codename.
-            .OrderBy(a => a.Rolle == TaskforceRolle.Mitglied)
-            .ThenBy(a => a.Rolle)
+            .OrderBy(a => a.Role == TaskforceRole.Member)
+            .ThenBy(a => a.Role)
             .ThenBy(a => a.Agent!.Codename)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<TaskforceAgent>> GetLeitungAsync(string taskforceId, CancellationToken cancellationToken = default)
+    public async Task<List<TaskforceAgent>> GetLeadAsync(string taskforceId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.TaskforceAgenten
-            .Where(a => a.TaskforceId == taskforceId && a.Rolle != TaskforceRolle.Mitglied)
+        return await db.TaskforceAgents
+            .Where(a => a.TaskforceId == taskforceId && a.Role != TaskforceRole.Member)
             .Include(a => a.Agent)
-            .OrderBy(a => a.Rolle)
+            .OrderBy(a => a.Role)
             .ThenBy(a => a.Agent!.Codename)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task AgentZuteilenAsync(string taskforceId, string agentId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task AgentAllocateAsync(string taskforceId, string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == taskforceId, cancellationToken)
             ?? throw new InvalidOperationException($"Taskforce '{taskforceId}' nicht gefunden.");
-        if (taskforce.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (taskforce.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        await VerlangeFuehrungOderLeitungAsync(db, taskforceId, handelnder, cancellationToken);
+        await RequireLeadershipOrLeadAsync(db, taskforceId, actor, cancellationToken);
         if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
         {
             throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
         }
-        if (await db.TaskforceAgenten.AnyAsync(a => a.TaskforceId == taskforceId && a.AgentId == agentId, cancellationToken))
+        if (await db.TaskforceAgents.AnyAsync(a => a.TaskforceId == taskforceId && a.AgentId == agentId, cancellationToken))
         {
             throw new InvalidOperationException("Dieser Agent ist der Taskforce bereits zugeteilt.");
         }
 
-        db.TaskforceAgenten.Add(new TaskforceAgent
+        db.TaskforceAgents.Add(new TaskforceAgent
         {
             TaskforceId = taskforceId,
             AgentId = agentId,
-            Rolle = TaskforceRolle.Mitglied,
+            Role = TaskforceRole.Member,
         });
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AgentEntfernenAsync(string zuteilungId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task AgentRemoveAsync(string allocationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var zuteilung = await db.TaskforceAgenten.Include(a => a.Taskforce).FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken);
-        if (zuteilung is null)
+        var allocation = await db.TaskforceAgents.Include(a => a.Taskforce).FirstOrDefaultAsync(a => a.Id == allocationId, cancellationToken);
+        if (allocation is null)
         {
             return;
         }
-        if (zuteilung.Taskforce?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        if (allocation.Taskforce?.IsClassified == true && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        await VerlangeFuehrungOderLeitungAsync(db, zuteilung.TaskforceId, handelnder, cancellationToken);
-        db.TaskforceAgenten.Remove(zuteilung);
+        await RequireLeadershipOrLeadAsync(db, allocation.TaskforceId, actor, cancellationToken);
+        db.TaskforceAgents.Remove(allocation);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task RolleSetzenAsync(string zuteilungId, TaskforceRolle rolle, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RoleSetAsync(string allocationId, TaskforceRole role, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Rollen/Leitung vergeben/entziehen ist der Führung vorbehalten.
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var zuteilung = await db.TaskforceAgenten.FirstOrDefaultAsync(a => a.Id == zuteilungId, cancellationToken)
+        var allocation = await db.TaskforceAgents.FirstOrDefaultAsync(a => a.Id == allocationId, cancellationToken)
             ?? throw new InvalidOperationException("Zuteilung nicht gefunden.");
-        zuteilung.Rolle = rolle;
+        allocation.Role = role;
         await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Wirft, wenn der Handelnde weder Führung noch Leitung (Rolle != Mitglied) dieser Taskforce ist.</summary>
-    private static async Task VerlangeFuehrungOderLeitungAsync(AppDbContext db, string taskforceId, ClaimsPrincipal handelnder, CancellationToken cancellationToken)
+    private static async Task RequireLeadershipOrLeadAsync(AppDbContext db, string taskforceId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
-        if (handelnder.IstFuehrung())
+        if (actor.IsLeadership())
         {
             return;
         }
-        var agentId = handelnder.GetAgentId();
-        var istLeitung = agentId is not null && await db.TaskforceAgenten
-            .AnyAsync(a => a.TaskforceId == taskforceId && a.AgentId == agentId && a.Rolle != TaskforceRolle.Mitglied, cancellationToken);
-        if (!istLeitung)
+        var agentId = actor.GetAgentId();
+        var isLead = agentId is not null && await db.TaskforceAgents
+            .AnyAsync(a => a.TaskforceId == taskforceId && a.AgentId == agentId && a.Role != TaskforceRole.Member, cancellationToken);
+        if (!isLead)
         {
             throw new UnauthorizedAccessException(
                 "Agents zuteilen oder entfernen dürfen nur die Führung oder die Leitung dieser Taskforce.");
         }
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string taskforceId, bool darfAlles, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistoryAsync(string taskforceId, bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Taskforce), taskforceId, darfAlles, cancellationToken, meId))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, mayAll, cancellationToken, meId))
         {
             return new();
         }
-        var agentZuteilungIds = await db.TaskforceAgenten
+        var agentAllocationIds = await db.TaskforceAgents
             .Where(a => a.TaskforceId == taskforceId)
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
         // Manuelle Beziehungen (Verknüpfungen), die diese Taskforce als Quelle oder Ziel berühren –
         // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
-        var beziehungIds = await db.Verknuepfungen
+        var relationIds = await db.Links
             .IgnoreQueryFilters()
-            .Where(v => !v.Automatisch
-                && ((v.VonTyp == nameof(Taskforce) && v.VonId == taskforceId)
-                 || (v.NachTyp == nameof(Taskforce) && v.NachId == taskforceId)))
+            .Where(v => !v.Automatic
+                && ((v.SourceType == nameof(Taskforce) && v.SourceId == taskforceId)
+                 || (v.TargetType == nameof(Taskforce) && v.TargetId == taskforceId)))
             .Select(v => v.Id)
             .ToListAsync(cancellationToken);
 
         var ids = new HashSet<string> { taskforceId };
-        ids.UnionWith(agentZuteilungIds);
-        ids.UnionWith(beziehungIds);
-        var typen = new[] { nameof(Taskforce), nameof(TaskforceAgent), nameof(Verknuepfung) };
+        ids.UnionWith(agentAllocationIds);
+        ids.UnionWith(relationIds);
+        var types = new[] { nameof(Taskforce), nameof(TaskforceAgent), nameof(Link) };
 
         return await db.AuditLogs
-            .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
-            .OrderByDescending(a => a.Zeitpunkt)
+            .Where(a => types.Contains(a.EntityType) && ids.Contains(a.EntityId))
+            .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
     }
 
-    private static string? Leer(string? s) => s.TrimToNull();
+    private static string? Empty(string? s) => s.TrimToNull();
 }

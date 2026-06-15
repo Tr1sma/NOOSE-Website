@@ -1,0 +1,204 @@
+@* Eingabefeld mit @-Picker: beim Tippen von @… erscheinen Vorschläge (Akten/Quellen/Agenten); die Auswahl
+   fügt ein @{Typ:Id}-Token an der Tippstelle ein. Darunter eine „Verlinkt:"-Chipleiste mit ✕ zum Entfernen.
+   Ctrl+Enter löst OnSubmit aus. Zweiweg-Bindung über @bind-Text. Wiederverwendbar. *@
+@using System.Text.RegularExpressions
+@inject IMentionService MentionService
+
+<MudTextField T="string" Value="@_text" ValueChanged="OnTextChanged" Immediate="true"
+              Placeholder="@Placeholder" Variant="Variant.Outlined" Lines="2"
+              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
+              OnAdornmentClick="ManualOpenAsync" AdornmentAriaLabel="Objekt verlinken"
+              OnKeyDown="OnKeyDown" />
+
+@if (_pickerOpen && _candidates.Count > 0)
+{
+    <MudPaper Class="pa-1 mt-1" Elevation="4" Style="max-height:260px;overflow-y:auto;">
+        @foreach (var k in _candidates)
+        {
+            <MudButton FullWidth="true" Variant="Variant.Text" Class="justify-start text-none px-2"
+                       OnClick="@(() => InsertAsync(k))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-grow-1" Style="width:100%;">
+                    <MudIcon Icon="@Symbol(k.Type)" Size="Size.Small" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2">@k.Display</MudText>
+                    @if (!string.IsNullOrWhiteSpace(k.Sub))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@k.Sub</MudText>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@TypeLabel(k.Type)</MudText>
+                </MudStack>
+            </MudButton>
+        }
+    </MudPaper>
+}
+
+@if (_references.Count > 0)
+{
+    <MudStack Row="true" Spacing="1" Class="flex-wrap mt-1" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Verlinkt:</MudText>
+        @for (var i = 0; i < _references.Count; i++)
+        {
+            var idx = i;
+            var v = _references[i];
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                     Color="@(v.Hidden ? Color.Warning : Color.Primary)"
+                     Icon="@Symbol(v.Type)" OnClose="@(() => RemoveTokenAsync(idx))">@v.Text</MudChip>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Text { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> TextChanged { get; set; }
+    [Parameter] public bool IsLeadership { get; set; }
+    /// <summary>Darf Verschlusssachen sehen (Führung oder Nur-Leser) – steuert die VS-Sichtbarkeit im @-Picker und der Auflösung.</summary>
+    [Parameter] public bool MayClassifiedRead { get; set; }
+    /// <summary>Darf Klarnamen sehen (Führung und nicht Nur-Leser) – steuert die Agenten-Klarnamen im @-Picker.</summary>
+    [Parameter] public bool MayRealName { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    /// <summary>Wird bei Ctrl+Enter ausgelöst (Senden).</summary>
+    [Parameter] public EventCallback OnSubmit { get; set; }
+
+    // Agent-Id des Betrachters – für die Taskforce-Mitgliedschafts-Sichtbarkeit im @-Picker.
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+    private string? _meId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            _meId = (await AuthStateTask).User.GetAgentId();
+        }
+    }
+
+    private string _text = string.Empty;
+    private bool _pickerOpen;
+    private List<MentionHit> _candidates = new();
+    private List<MentionSegment> _references = new();
+    private string _referenceSignature = string.Empty;
+
+    // Aktive @-Abfrage am Tippende: @ gefolgt von Zeichen ohne Leerraum/@/Klammern (schließt fertige Tokens aus).
+    private static readonly Regex ActiveQuery = new(@"@([^\s@{}]*)$", RegexOptions.Compiled);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_text != (Text ?? string.Empty))
+        {
+            _text = Text ?? string.Empty;
+            await ReferencesRefreshAsync();
+        }
+    }
+
+    private async Task OnTextChanged(string? @new)
+    {
+        _text = @new ?? string.Empty;
+        await TextChanged.InvokeAsync(_text);
+        await PickerRefreshAsync();
+        await ReferencesRefreshAsync();
+    }
+
+    private async Task PickerRefreshAsync()
+    {
+        var m = ActiveQuery.Match(_text);
+        if (!m.Success || m.Groups[1].Value.Length < 1)
+        {
+            _pickerOpen = false;
+            _candidates = new();
+            return;
+        }
+        _candidates = await MentionService.CandidatesAsync(m.Groups[1].Value, MayClassifiedRead, MayRealName, _meId);
+        _pickerOpen = _candidates.Count > 0;
+    }
+
+    private async Task InsertAsync(MentionHit k)
+    {
+        var m = ActiveQuery.Match(_text);
+        // Die aktive „@query" durch das Token ersetzen (sonst anhängen).
+        _text = m.Success
+            ? string.Concat(_text.AsSpan(0, m.Index), MentionParser.Token(k.Type, k.Id), " ")
+            : _text + MentionParser.Token(k.Type, k.Id) + " ";
+        _pickerOpen = false;
+        _candidates = new();
+        await TextChanged.InvokeAsync(_text);
+        await ReferencesRefreshAsync();
+    }
+
+    private async Task RemoveTokenAsync(int index)
+    {
+        var tokens = MentionParser.Parse(_text);
+        if (index < 0 || index >= tokens.Count)
+        {
+            return;
+        }
+        var t = tokens[index];
+        _text = _text.Remove(t.Start, t.Length);
+        await TextChanged.InvokeAsync(_text);
+        await ReferencesRefreshAsync();
+    }
+
+    private async Task ReferencesRefreshAsync()
+    {
+        // Nur erneut auflösen, wenn sich die Token-Menge geändert hat (spart DB-Abfragen beim normalen Tippen).
+        var sig = string.Join(",", MentionParser.Parse(_text).Select(t => $"{t.Type}:{t.Id}"));
+        if (sig == _referenceSignature)
+        {
+            return;
+        }
+        _referenceSignature = sig;
+        if (string.IsNullOrEmpty(sig))
+        {
+            _references = new();
+            return;
+        }
+        var segments = await MentionService.ResolveAsync(_text, MayClassifiedRead, _meId);
+        _references = segments.Where(s => s.IsReference).ToList();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && _pickerOpen)
+        {
+            _pickerOpen = false;
+            return;
+        }
+        if (e.Key == "Enter" && e.CtrlKey)
+        {
+            _pickerOpen = false;
+            await OnSubmit.InvokeAsync();
+        }
+    }
+
+    // Adornment-Klick: „@" einfügen als Starthilfe; die Vorschläge erscheinen, sobald ein Zeichen folgt.
+    private async Task ManualOpenAsync()
+    {
+        var separator = _text.Length > 0 && !_text.EndsWith(" ") && !_text.EndsWith("\n") ? " " : string.Empty;
+        _text = $"{_text}{separator}@";
+        await TextChanged.InvokeAsync(_text);
+    }
+
+    private static string Symbol(string? type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Source) => Icons.Material.Filled.AttachFile,
+        nameof(Agent) => Icons.Material.Filled.Person,
+        _ => Icons.Material.Filled.Link,
+    };
+
+    private static string TypeLabel(string? type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Gruppe",
+        nameof(Party) => "Partei",
+        nameof(Operation) => "Operation",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Source) => "Quelle",
+        nameof(Agent) => "Agent",
+        _ => "",
+    };
+}

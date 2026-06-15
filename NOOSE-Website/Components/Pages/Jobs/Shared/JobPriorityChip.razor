@@ -1,0 +1,25 @@
+@* Farbiger Prioritäts-Chip einer Aufgabe (Niedrig/Normal/Hoch). *@
+<MudChip T="string" Size="@Size" Variant="Variant.Outlined" Color="@Colour(Priority)" Icon="@Symbol(Priority)">
+    @JobPriorityDisplay.Name(Priority)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public JobPriority Priority { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private static Color Colour(JobPriority priority) => priority switch
+    {
+        JobPriority.Low => Color.Default,
+        JobPriority.Normal => Color.Info,
+        JobPriority.High => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(JobPriority priority) => priority switch
+    {
+        JobPriority.Low => Icons.Material.Filled.LowPriority,
+        JobPriority.Normal => Icons.Material.Filled.DragHandle,
+        JobPriority.High => Icons.Material.Filled.PriorityHigh,
+        _ => Icons.Material.Filled.DragHandle,
+    };
+}

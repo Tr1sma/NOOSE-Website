@@ -1,0 +1,86 @@
+@* Druckansicht eines Bibliotheks-Dokuments (Phase 7): Metadaten + formatierter Inhalt. *@
+@page "/dokumente/{Id}/druck"
+@layout PrintLayout
+@inject IDocumentService DocumentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_document is null ? "Druckansicht" : _document.Title) · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_document is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dieses Dokument existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@_document.Title" BackHref="@($"/dokumente/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="_document.IsClassified"
+                 Footer="NOOSE-internes Dokument · Weitergabe nur nach Freigabe durch die Führung.">
+        <section>
+            <h2>Dokumentdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    @if (!string.IsNullOrWhiteSpace(_document.Category))
+                    {
+                        <tr><th>Kategorie</th><td>@_document.Category</td></tr>
+                    }
+                    <tr><th>Erstellt</th><td>@_document.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    @if (_document.ModifiedAt is { } modified)
+                    {
+                        <tr><th>Geändert</th><td>@modified.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Inhalt</h2>
+            @* Serverseitig bereinigtes HTML (HtmlBereinigung) – sicher als MarkupString renderbar. *@
+            <div class="dokument-html">@((MarkupString)_document.ContentHtml)</div>
+        </section>
+
+        @if (_attachments.Count > 0)
+        {
+            <section>
+                <h2>Angehängt an</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Typ</th><th>Akte</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _attachments)
+                        {
+                            <tr><td>@a.EntityType</td><td>@a.Display</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Document? _document;
+    private List<DocumentAttachment> _attachments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var isLeadership = user.IsLeadership();
+        _printBy = user.GetCodename();
+
+        _document = await DocumentService.GetAsync(Id, isLeadership);
+        if (_document is not null)
+        {
+            _attachments = await DocumentService.GetAttachmentsAsync(Id, isLeadership, user.GetAgentId());
+            await AccessLog.LogViewAsync(nameof(Document), Id);
+        }
+        _load = false;
+    }
+}

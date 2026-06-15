@@ -1,0 +1,155 @@
+@* Verknüpfungen des Termins: beliebige Akten (Personen, Operationen, Vorgänge, Taskforces, Organisationen,
+   Agenten …) über die generische Verknüpfungs-Engine. Beidseitig klickbar. Vorlage: AufgabeInhaltPanel. *@
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_list.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
+            Akte verknüpfen
+        </MudButton>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_list.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Noch nichts verknüpft. Verknüpfe z. B. die Person/Operation/den Vorgang, um den es bei diesem Termin geht.
+        </MudText>
+    }
+    else
+    {
+        @foreach (var group in _grouped)
+        {
+            <div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                    <MudIcon Icon="@TypeIcon(group.Key)" Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle2">@TypeDisplay(group.Key) (@group.Count())</MudText>
+                </MudStack>
+                @foreach (var v in group)
+                {
+                    <MudPaper Class="pa-3 mb-2" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                                @if (v.Href is not null)
+                                {
+                                    <MudLink Href="@v.Href" Typo="Typo.body2"><b>@v.OtherDesignation</b></MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2"><b>@v.OtherDesignation</b></MudText>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(v.Label))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
+                                }
+                            </MudStack>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => RemoveAsync(v))" aria-label="Verknüpfung entfernen" />
+                        </MudStack>
+                    </MudPaper>
+                }
+            </div>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string AppointmentId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private List<LinkDisplay> _list = new();
+
+    private static readonly string[] _order =
+    {
+        nameof(Person), nameof(PersonDoc), nameof(Observation), nameof(Operation), nameof(Case),
+        nameof(Taskforce), nameof(Faction), nameof(PersonGroup), nameof(Party), nameof(Agent), nameof(Job), nameof(Appointment),
+    };
+
+    private IEnumerable<IGrouping<string, LinkDisplay>> _grouped =>
+        _list.GroupBy(v => v.OtherType)
+              .OrderBy(g => Array.IndexOf(_order, g.Key) is var i && i >= 0 ? i : int.MaxValue)
+              .ThenBy(g => g.Key);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var all = await LinkService.GetForRecordAsync(nameof(Appointment), AppointmentId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        _list = all.Where(v => !v.Automatic).ToList();
+        _load = false;
+    }
+
+    private async Task AddAsync()
+    {
+        var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership());
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(nameof(Appointment), AppointmentId, choice.TargetType, choice.TargetId, choice.Label, User, LinkKind.Default);
+            Snackbar.Add("Akte verknüpft.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(LinkDisplay v)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Verknüpfung entfernen?",
+            $"„{v.OtherDesignation}“ wird vom Termin entfernt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        await LinkService.RemoveAsync(v.LinkId, User);
+        Snackbar.Add("Verknüpfung entfernt.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private static string TypeDisplay(string type) => type switch
+    {
+        nameof(Person) => "Personen",
+        nameof(PersonDoc) => "Personen-Doks",
+        nameof(Observation) => "Observationen",
+        nameof(Operation) => "Operationen",
+        nameof(Case) => "Vorgänge",
+        nameof(Taskforce) => "Taskforces",
+        nameof(Faction) => "Fraktionen",
+        nameof(PersonGroup) => "Personengruppen",
+        nameof(Party) => "Parteien",
+        nameof(Agent) => "Agenten",
+        nameof(Job) => "Aufgaben",
+        nameof(Appointment) => "Termine",
+        _ => type,
+    };
+
+    private static string TypeIcon(string type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(PersonDoc) => Icons.Material.Filled.Description,
+        nameof(Observation) => Icons.Material.Filled.Visibility,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Agent) => Icons.Material.Filled.Person,
+        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
+        nameof(Appointment) => Icons.Material.Filled.Event,
+        _ => Icons.Material.Filled.Hub,
+    };
+}

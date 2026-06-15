@@ -1,28 +1,28 @@
 @* Farbiger Genehmigungs-Status-Chip einer Taskforce (Beantragt/Genehmigt/Abgelehnt/Aufgelöst).
    Zentralisiert Beschriftung und Farbgebung für Karte, Liste und Detailseite. *@
-<MudChip T="string" Size="@Size" Variant="Variant.Filled" Color="@Farbe(Status)" Icon="@Symbol(Status)">
-    @TaskforceStatusAnzeige.Name(Status)
+<MudChip T="string" Size="@Size" Variant="Variant.Filled" Color="@Colour(Status)" Icon="@Symbol(Status)">
+    @TaskforceStatusDisplay.Name(Status)
 </MudChip>
 
 @code {
     [Parameter, EditorRequired] public TaskforceStatus Status { get; set; }
     [Parameter] public Size Size { get; set; } = Size.Small;
 
-    private static Color Farbe(TaskforceStatus status) => status switch
+    private static Color Colour(TaskforceStatus status) => status switch
     {
-        TaskforceStatus.Beantragt => Color.Info,
-        TaskforceStatus.Genehmigt => Color.Success,
-        TaskforceStatus.Abgelehnt => Color.Error,
-        TaskforceStatus.Aufgeloest => Color.Default,
+        TaskforceStatus.Requested => Color.Info,
+        TaskforceStatus.Approved => Color.Success,
+        TaskforceStatus.Rejected => Color.Error,
+        TaskforceStatus.Resolved => Color.Default,
         _ => Color.Default,
     };
 
     private static string Symbol(TaskforceStatus status) => status switch
     {
-        TaskforceStatus.Beantragt => Icons.Material.Filled.HourglassTop,
-        TaskforceStatus.Genehmigt => Icons.Material.Filled.CheckCircle,
-        TaskforceStatus.Abgelehnt => Icons.Material.Filled.Cancel,
-        TaskforceStatus.Aufgeloest => Icons.Material.Filled.Archive,
+        TaskforceStatus.Requested => Icons.Material.Filled.HourglassTop,
+        TaskforceStatus.Approved => Icons.Material.Filled.CheckCircle,
+        TaskforceStatus.Rejected => Icons.Material.Filled.Cancel,
+        TaskforceStatus.Resolved => Icons.Material.Filled.Archive,
         _ => Icons.Material.Filled.HelpOutline,
     };
 }

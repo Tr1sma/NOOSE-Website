@@ -69,7 +69,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
     private async Task WritePendingAsync(DbContext? context, CancellationToken cancellationToken)
     {
-        if (!TryNimmPending(context, out var ctx, out var logs))
+        if (!TryTakePending(context, out var ctx, out var logs))
         {
             return;
         }
@@ -80,7 +80,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
     private void WritePending(DbContext? context)
     {
-        if (!TryNimmPending(context, out var ctx, out var logs))
+        if (!TryTakePending(context, out var ctx, out var logs))
         {
             return;
         }
@@ -92,7 +92,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
     /// Entnimmt die ausstehenden Audit-Einträge eines Contexts (einmalig). Pro Context nur einmal verarbeitet –
     /// auch der re-entrante AuditLog-Save landet hier (dann mit leerer Liste) und wird so sauber abgeräumt.
     /// </summary>
-    private bool TryNimmPending(DbContext? context, out DbContext ctx, out List<AuditLog> logs)
+    private bool TryTakePending(DbContext? context, out DbContext ctx, out List<AuditLog> logs)
     {
         ctx = context!;
         logs = new List<AuditLog>();
@@ -118,7 +118,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
         foreach (var entry in context.ChangeTracker.Entries())
         {
             // Die Protokoll-Tabellen selbst werden nicht auditiert.
-            if (entry.Entity is AuditLog or ZugriffsLog)
+            if (entry.Entity is AuditLog or AccessLog)
             {
                 continue;
             }
@@ -129,30 +129,30 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
             {
                 if (originalState == EntityState.Added)
                 {
-                    auditable.ErstelltAm = now;
-                    auditable.ErstelltVonId = user.Id;
+                    auditable.CreatedAt = now;
+                    auditable.CreatedById = user.Id;
                 }
                 else if (originalState == EntityState.Modified)
                 {
-                    auditable.GeaendertAm = now;
-                    auditable.GeaendertVonId = user.Id;
+                    auditable.ModifiedAt = now;
+                    auditable.ModifiedById = user.Id;
                 }
             }
 
-            var istWiederherstellung = false;
+            var isRestoration = false;
             if (originalState == EntityState.Deleted && entry.Entity is ISoftDelete soft)
             {
                 // Hard-Delete → Soft-Delete umwandeln.
                 entry.State = EntityState.Modified;
-                soft.IstGeloescht = true;
-                soft.GeloeschtAm = now;
-                soft.GeloeschtVonId = user.Id;
+                soft.IsDeleted = true;
+                soft.DeletedAt = now;
+                soft.DeletedById = user.Id;
             }
             else if (originalState == EntityState.Modified && entry.Entity is ISoftDelete
-                     && entry.Property(nameof(ISoftDelete.IstGeloescht)) is { IsModified: true } flag
+                     && entry.Property(nameof(ISoftDelete.IsDeleted)) is { IsModified: true } flag
                      && flag.OriginalValue is true && flag.CurrentValue is false)
             {
-                istWiederherstellung = true;
+                isRestoration = true;
             }
 
             if (entry.Entity is not IAuditable)
@@ -160,19 +160,19 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
                 continue;
             }
 
-            var aktion = originalState switch
+            var action = originalState switch
             {
-                EntityState.Added => AuditAktion.Erstellt,
-                EntityState.Deleted => AuditAktion.Geloescht,
-                EntityState.Modified when entry.Entity is ISoftDelete s && s.IstGeloescht => AuditAktion.Geloescht,
-                EntityState.Modified when istWiederherstellung => AuditAktion.Wiederhergestellt,
-                EntityState.Modified => AuditAktion.Geaendert,
-                _ => (AuditAktion?)null,
+                EntityState.Added => AuditAction.Created,
+                EntityState.Deleted => AuditAction.Deleted,
+                EntityState.Modified when entry.Entity is ISoftDelete s && s.IsDeleted => AuditAction.Deleted,
+                EntityState.Modified when isRestoration => AuditAction.Restored,
+                EntityState.Modified => AuditAction.Modified,
+                _ => (AuditAction?)null,
             };
 
-            if (aktion is not null)
+            if (action is not null)
             {
-                pending.Add(new PendingAudit(entry, aktion.Value, now, user));
+                pending.Add(new PendingAudit(entry, action.Value, now, user));
             }
         }
 
@@ -186,25 +186,25 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
     private sealed class PendingAudit
     {
         private readonly EntityEntry _entry;
-        private readonly AuditAktion _aktion;
-        private readonly DateTime _zeitpunkt;
+        private readonly AuditAction _action;
+        private readonly DateTime _timestamp;
         private readonly CurrentUserInfo _user;
-        private readonly Dictionary<string, object?[]> _aenderungen = new();
+        private readonly Dictionary<string, object?[]> _changes = new();
 
-        public PendingAudit(EntityEntry entry, AuditAktion aktion, DateTime zeitpunkt, CurrentUserInfo user)
+        public PendingAudit(EntityEntry entry, AuditAction action, DateTime timestamp, CurrentUserInfo user)
         {
             _entry = entry;
-            _aktion = aktion;
-            _zeitpunkt = zeitpunkt;
+            _action = action;
+            _timestamp = timestamp;
             _user = user;
 
-            if (aktion is AuditAktion.Geaendert or AuditAktion.Geloescht or AuditAktion.Wiederhergestellt)
+            if (action is AuditAction.Modified or AuditAction.Deleted or AuditAction.Restored)
             {
                 foreach (var prop in entry.Properties)
                 {
                     if (prop.IsModified && !Equals(prop.OriginalValue, prop.CurrentValue))
                     {
-                        _aenderungen[prop.Metadata.Name] = new[] { prop.OriginalValue, prop.CurrentValue };
+                        _changes[prop.Metadata.Name] = new[] { prop.OriginalValue, prop.CurrentValue };
                     }
                 }
             }
@@ -212,13 +212,13 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
         public AuditLog ToAuditLog() => new()
         {
-            Zeitpunkt = _zeitpunkt,
+            Timestamp = _timestamp,
             AgentId = _user.Id,
             AgentName = _user.Name,
-            EntitaetTyp = _entry.Entity.GetType().Name,
-            EntitaetId = KeyString(_entry),
-            Aktion = _aktion,
-            AenderungenJson = _aenderungen.Count > 0 ? JsonSerializer.Serialize(_aenderungen) : null,
+            EntityType = _entry.Entity.GetType().Name,
+            EntityId = KeyString(_entry),
+            Action = _action,
+            ChangesJson = _changes.Count > 0 ? JsonSerializer.Serialize(_changes) : null,
         };
 
         private static string KeyString(EntityEntry entry)
@@ -229,8 +229,8 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
                 return string.Empty;
             }
 
-            var werte = key.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString() ?? "");
-            return string.Join(",", werte);
+            var values = key.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString() ?? "");
+            return string.Join(",", values);
         }
     }
 }

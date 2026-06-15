@@ -1,0 +1,104 @@
+@* Druckansicht einer Aufgabe (Phase 7): Auftrag als strukturiertes Dokument. *@
+@page "/aufgaben/{Id}/druck"
+@layout PrintLayout
+@inject IJobService JobService
+@inject ILinkService LinkService
+@inject ICommentService CommentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_job is null ? "Druckansicht" : $"Aufgabe {_job.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_job is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Aufgabe existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Aufgabe {_job.CaseNumber}")" BackHref="@($"/aufgaben/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="false">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Titel</th><td>@_job.Title</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_job.CaseNumber</td></tr>
+                    <tr><th>Status</th><td>@JobStatusDisplay.Name(_job.Status)</td></tr>
+                    <tr><th>Priorität</th><td>@JobPriorityDisplay.Name(_job.Priority)</td></tr>
+                    @if (_job.DueDate is { } due)
+                    {
+                        <tr><th>Fälligkeit</th><td>@due.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
+                    }
+                    @if (_job.DoneAt is { } done)
+                    {
+                        <tr><th>Erledigt am</th><td>@done.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    }
+                    @if (_job.IsRestricted)
+                    {
+                        <tr><th>Sichtbarkeit</th><td>Eingeschränkt (nur Beteiligte und Führung)</td></tr>
+                    }
+                    <tr><th>Erstellt</th><td>@_job.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_job.Description))
+        {
+            <section>
+                <h2>Beschreibung</h2>
+                <div class="druck-mehrzeilig">@_job.Description</div>
+            </section>
+        }
+
+        @if (_assignments.Count > 0)
+        {
+            <section>
+                <h2>Zugewiesene Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th></tr></thead>
+                    <tbody>
+                        @foreach (var z in _assignments)
+                        {
+                            <tr><td>@(z.Agent?.Codename ?? "—")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <PrintLinks Entries="_links" />
+        <PrintComments Entries="_comments" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Job? _job;
+    private List<JobAssignment> _assignments = new();
+    private List<LinkDisplay> _links = new();
+    private List<Comment> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+
+        // GetDetailAsync setzt die Sichtbarkeitsregeln eingeschränkter Aufgaben selbst durch.
+        _job = await JobService.GetDetailAsync(Id, user);
+        if (_job is not null)
+        {
+            _assignments = await JobService.GetAssignmentsAsync(Id);
+            _links = await LinkService.GetForRecordAsync(nameof(Job), Id, user.IsLeadership(), user.GetAgentId());
+            _comments = await CommentService.GetForRecordAsync(nameof(Job), Id, user.IsLeadership());
+            await AccessLog.LogViewAsync(nameof(Job), Id);
+        }
+        _load = false;
+    }
+}

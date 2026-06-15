@@ -1,0 +1,66 @@
+@* Wiederverwendbares Verteilungs-Diagramm fürs Lagezentrum (§248): rendert eine (Bezeichnung, Anzahl)-Liste
+   als Donut in NOOSE-Farben. Sind alle Werte 0 (oder keine Segmente vorhanden), erscheint ein dezenter Hinweis
+   statt eines leeren Rings (MudChart würde sonst eine NaN-Geometrie zeichnen). MudBlazor 9.5: Pie/Donut nehmen
+   die Daten als ChartSeries (über die AsChartDataSet()-Erweiterung) plus ChartLabels.
+   Bare = ohne eigene Kachel (für mehrere Diagramme in einer gemeinsamen Kachel); Height steuert die Donut-Größe. *@
+@using NOOSE_Website.Models.Dashboard
+
+@if (Bare)
+{
+    <div class="d-flex flex-column flex-grow-1" style="min-width:0;width:100%;">
+        <MudText Typo="Typo.subtitle2" Align="Align.Center" Class="mb-1">@Title</MudText>
+        @Diagram
+    </div>
+}
+else
+{
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">@Title</MudText>
+        @Diagram
+    </MudPaper>
+}
+
+@code {
+    /// <summary>Überschrift der Karte (z. B. „Fälle nach Einstufung").</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    /// <summary>Die Segmente (Kategorie + Anzahl) in fester Reihenfolge.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<DistributionSegment> Segments { get; set; } = Array.Empty<DistributionSegment>();
+
+    /// <summary>Hex-Farben je Segment, in derselben Reihenfolge wie <see cref="Segmente"/>.</summary>
+    [Parameter, EditorRequired] public string[] Colours { get; set; } = Array.Empty<string>();
+
+    /// <summary>Höhe des Donuts (CSS-Wert). Standard 300px; für kompakte Darstellung kleiner setzen.</summary>
+    [Parameter] public string Height { get; set; } = "300px";
+
+    /// <summary>Ohne eigene MudPaper-Kachel rendern (z. B. zwei Diagramme in einer gemeinsamen Kachel).</summary>
+    [Parameter] public bool Bare { get; set; }
+
+    private bool _empty = true;
+    private double[] _data = Array.Empty<double>();
+    private string[] _labels = Array.Empty<string>();
+    private ChartOptions _options = new();
+
+    protected override void OnParametersSet()
+    {
+        _empty = Segments.Count == 0 || Segments.All(s => s.Count == 0);
+        _data = Segments.Select(s => (double)s.Count).ToArray();
+        // Anzahl direkt ins Etikett → die Legende ist auch ohne Tooltip selbsterklärend.
+        _labels = Segments.Select(s => $"{s.Designation} ({s.Count})").ToArray();
+        _options = new ChartOptions { ChartPalette = Colours, ShowLegend = true };
+    }
+
+    private RenderFragment Diagram =>@<text>
+        @if (_empty)
+        {
+            <div class="d-flex align-center justify-center" style="@($"min-height:{Height};")">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Daten</MudText>
+            </div>
+        }
+        else
+        {
+            <MudChart ChartType="ChartType.Donut" ChartSeries="@(_data.AsChartDataSet())" ChartLabels="@_labels"
+                      ChartOptions="@_options" Width="100%" Height="@Height" />
+        }
+    </text>;
+}

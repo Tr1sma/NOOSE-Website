@@ -2,69 +2,69 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Fraktionen;
-using NOOSE_Website.Data.Entities.Gruppen;
-using NOOSE_Website.Data.Entities.Parteien;
-using NOOSE_Website.Data.Entities.Personen;
-using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Parties;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
-using NOOSE_Website.Models.Personen;
+using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonService" />
-public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, ISteckbriefVorschlagService vorschlag, IAktenzeichenService aktenzeichen, IBedrohungsScoreService bedrohung) : IPersonService
+public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, IProfileSuggestionService suggestion, ICaseNumberService caseNumber, IThreatScoreService threat) : IPersonService
 {
-    public async Task<List<Person>> GetListeAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Personen
-            .Where(p => istFuehrung || !p.IstVerschlusssache)
-            .Include(p => p.Aliase)
-            .OrderByDescending(p => p.GeaendertAm ?? p.ErstelltAm)
+        return await db.People
+            .Where(p => isLeadership || !p.IsClassified)
+            .Include(p => p.Aliases)
+            .OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Person?> GetDetailAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<Person?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var person = await db.Personen
-            .Include(p => p.Aliase)
-            .Include(p => p.Telefonnummern)
-            .Include(p => p.Fahrzeuge)
-            .Include(p => p.Orte)
-            .Include(p => p.Waffen)
-            .Include(p => p.Fotos)
+        var person = await db.People
+            .Include(p => p.Aliases)
+            .Include(p => p.PhoneNumbers)
+            .Include(p => p.Vehicles)
+            .Include(p => p.Locations)
+            .Include(p => p.Weapons)
+            .Include(p => p.Photos)
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
-        if (person is null || (person.IstVerschlusssache && !istFuehrung))
+        if (person is null || (person.IsClassified && !isLeadership))
         {
             return null;
         }
         return person;
     }
 
-    public async Task<List<Person>> GetPapierkorbAsync(CancellationToken cancellationToken = default)
+    public async Task<List<Person>> GetTrashAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Personen.IgnoreQueryFilters()
-            .Where(p => p.IstGeloescht)
-            .OrderByDescending(p => p.GeloeschtAm)
+        return await db.People.IgnoreQueryFilters()
+            .Where(p => p.IsDeleted)
+            .OrderByDescending(p => p.DeletedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Person>> SucheAsync(string? suchtext, bool istFuehrung, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Personen.Where(p => istFuehrung || !p.IstVerschlusssache);
+        var query = db.People.Where(p => isLeadership || !p.IsClassified);
 
-        var s = suchtext?.Trim();
+        var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))
         {
-            query = query.Where(p => p.Name.Contains(s) || p.Aktenzeichen.Contains(s));
+            query = query.Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s));
         }
 
         return await query
@@ -73,10 +73,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Person>> FindeDuplikateAsync(string name, IEnumerable<string> telefonnummern, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> FindDuplicatesAsync(string name, IEnumerable<string> phoneNumbers, bool isLeadership, CancellationToken cancellationToken = default)
     {
         var nameLower = (name ?? string.Empty).Trim().ToLower();
-        var nummern = telefonnummern
+        var numbers = phoneNumbers
             .Select(n => (n ?? string.Empty).Trim())
             .Where(n => n.Length > 0)
             .ToList();
@@ -84,285 +84,285 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Verschlusssachen nur für die Führung als mögliche Dublette anzeigen – sonst leakt der Warn-Dialog
         // Name + Aktenzeichen klassifizierter Akten an jeden Agenten (Namens-/Nummern-Raten genügt).
-        return await db.Personen
-            .Where(p => istFuehrung || !p.IstVerschlusssache)
-            .Include(p => p.Telefonnummern)
+        return await db.People
+            .Where(p => isLeadership || !p.IsClassified)
+            .Include(p => p.PhoneNumbers)
             .Where(p => p.Name.ToLower() == nameLower
-                     || p.Telefonnummern.Any(t => nummern.Contains(t.Nummer)))
+                     || p.PhoneNumbers.Any(t => numbers.Contains(t.Number)))
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Person> ErstellenAsync(PersonEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<Person> CreateAsync(PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        EinstufungHelfer.PruefeRangGate(eingabe.Einstufung, handelnder);
+        ClassificationHelper.CheckRankGate(input.Classification, actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var person = new Person
         {
-            Aktenzeichen = await aktenzeichen.NaechstesAsync(db, "P", cancellationToken),
-            Name = eingabe.Name.Trim(),
-            Beschreibung = Leer(eingabe.Beschreibung),
-            Lebensstatus = eingabe.Lebensstatus,
-            TotBis = eingabe.Lebensstatus == Lebensstatus.Tot ? LebensstatusLogic.TotBisAb(DateTime.UtcNow) : null,
-            Einstufung = eingabe.Einstufung,
-            IstVerschlusssache = eingabe.IstVerschlusssache,
+            CaseNumber = await caseNumber.NextAsync(db, "P", cancellationToken),
+            Name = input.Name.Trim(),
+            Description = Empty(input.Description),
+            LifeStatus = input.LifeStatus,
+            DeadUntil = input.LifeStatus == LifeStatus.Dead ? LifeStatusLogic.DeadUntilFrom(DateTime.UtcNow) : null,
+            Classification = input.Classification,
+            IsClassified = input.IsClassified,
         };
-        KinderMappen(person, eingabe);
-        await VorschlaegeVormerkenAsync(db, person, cancellationToken);
+        ChildrenMap(person, input);
+        await SuggestionsStageAsync(db, person, cancellationToken);
 
-        if (eingabe.Einstufung != Einstufung.Unbekannt)
+        if (input.Classification != Classification.Unknown)
         {
-            db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Person), person.Id, eingabe.Einstufung, eingabe.EinstufungBegruendung, handelnder));
+            db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Person), person.Id, input.Classification, input.ClassificationJustification, actor));
         }
 
-        db.Personen.Add(person);
+        db.People.Add(person);
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         // Initialen Person-Score berechnen (Einstufung/Waffen/Lebensstatus liegen jetzt committet vor).
-        await bedrohung.NeuBerechnenPersonScoreAsync(person.Id, cancellationToken);
+        await threat.NewCalculatePersonScoreAsync(person.Id, cancellationToken);
         return person;
     }
 
-    public async Task AktualisierenAsync(string id, PersonEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RefreshAsync(string id, PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var person = await db.Personen
-            .Include(p => p.Aliase)
-            .Include(p => p.Telefonnummern)
-            .Include(p => p.Fahrzeuge)
-            .Include(p => p.Orte)
-            .Include(p => p.Waffen)
+        var person = await db.People
+            .Include(p => p.Aliases)
+            .Include(p => p.PhoneNumbers)
+            .Include(p => p.Vehicles)
+            .Include(p => p.Locations)
+            .Include(p => p.Weapons)
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
         // Verschlusssache nur für die Führung bearbeitbar (serverseitig erzwungen, nicht nur via UI).
-        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (person.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        var altStatus = person.Lebensstatus;
-        var altTotBis = person.TotBis;
+        var altStatus = person.LifeStatus;
+        var altDeadUntil = person.DeadUntil;
 
-        person.Name = eingabe.Name.Trim();
-        person.Beschreibung = Leer(eingabe.Beschreibung);
-        person.IstVerschlusssache = eingabe.IstVerschlusssache;
-        person.Lebensstatus = eingabe.Lebensstatus;
-        if (eingabe.Lebensstatus == Lebensstatus.Tot)
+        person.Name = input.Name.Trim();
+        person.Description = Empty(input.Description);
+        person.IsClassified = input.IsClassified;
+        person.LifeStatus = input.LifeStatus;
+        if (input.LifeStatus == LifeStatus.Dead)
         {
             // Ein frisches 20-Minuten-Fenster startet NUR beim echten Übergang nach „Tot" (vorher kein Tot).
             // War die Person bereits „Tot", bleibt das bestehende Fenster erhalten – auch ein abgelaufenes wird
             // nicht neu gestartet (sonst „tötet" eine harmlose Bearbeitung die Person erneut).
-            person.TotBis = altStatus != Lebensstatus.Tot
-                ? LebensstatusLogic.TotBisAb(DateTime.UtcNow)
-                : altTotBis;
+            person.DeadUntil = altStatus != LifeStatus.Dead
+                ? LifeStatusLogic.DeadUntilFrom(DateTime.UtcNow)
+                : altDeadUntil;
         }
         else
         {
-            person.TotBis = null;
+            person.DeadUntil = null;
         }
 
         // Steckbrief-Kinder vollständig ersetzen (alte hart löschen, neue anlegen).
-        db.PersonAliase.RemoveRange(person.Aliase);
-        db.PersonTelefone.RemoveRange(person.Telefonnummern);
-        db.PersonFahrzeuge.RemoveRange(person.Fahrzeuge);
-        db.PersonOrte.RemoveRange(person.Orte);
-        db.PersonWaffen.RemoveRange(person.Waffen);
-        KinderMappen(person, eingabe);
-        await VorschlaegeVormerkenAsync(db, person, cancellationToken);
+        db.PersonAliases.RemoveRange(person.Aliases);
+        db.PersonPhones.RemoveRange(person.PhoneNumbers);
+        db.PersonVehicles.RemoveRange(person.Vehicles);
+        db.PersonLocations.RemoveRange(person.Locations);
+        db.PersonWeapons.RemoveRange(person.Weapons);
+        ChildrenMap(person, input);
+        await SuggestionsStageAsync(db, person, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         // Waffen (P2) und Lebensstatus „Flüchtig" (P2) wirken auf den Person-Score → neu berechnen.
-        await bedrohung.NeuBerechnenPersonScoreAsync(id, cancellationToken);
+        await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
     }
 
-    public async Task LoeschenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Löschen/Archivieren ist laut Rechte-Matrix Führung/Admin vorbehalten – serverseitig erzwingen.
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
+        var person = await db.People.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
         // Hard-Delete wird vom Interceptor in Soft-Delete umgewandelt (+ Audit „Geloescht").
-        db.Personen.Remove(person);
+        db.People.Remove(person);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task WiederherstellenAsync(string id, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         // Wiederherstellen aus dem Papierkorb ist Führung/Admin vorbehalten.
-        Berechtigung.VerlangeFuehrung(handelnder);
+        Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var person = await db.Personen.IgnoreQueryFilters()
+        var person = await db.People.IgnoreQueryFilters()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
-        person.IstGeloescht = false;
-        person.GeloeschtAm = null;
-        person.GeloeschtVonId = null;
+        person.IsDeleted = false;
+        person.DeletedAt = null;
+        person.DeletedById = null;
         // Interceptor erkennt den Übergang true → false und schreibt „Wiederhergestellt".
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task EinstufungSetzenAsync(string id, Einstufung neu, string? begruendung, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        EinstufungHelfer.PruefeRangGate(neu, handelnder);
+        ClassificationHelper.CheckRankGate(@new, actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
+        var person = await db.People.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
-        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (person.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        person.Einstufung = neu;
-        db.EinstufungVerlauf.Add(EinstufungHelfer.Eintrag(nameof(Person), id, neu, begruendung, handelnder));
+        person.Classification = @new;
+        db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Person), id, @new, justification, actor));
         await db.SaveChangesAsync(cancellationToken);
         // Einstufung bestimmt das Mindest-Band des Person-Scores → neu berechnen.
-        await bedrohung.NeuBerechnenPersonScoreAsync(id, cancellationToken);
+        await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
     }
 
-    public async Task<List<EinstufungVerlauf>> GetEinstufungVerlaufAsync(string id, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Verschlusssache-/Papierkorb-Schutz: Verlauf einer nicht sichtbaren Akte nicht ausliefern.
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), id, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), id, isLeadership, cancellationToken))
         {
             return new();
         }
-        return await db.EinstufungVerlauf
-            .Where(e => e.EntitaetTyp == nameof(Person) && e.EntitaetId == id)
-            .OrderByDescending(e => e.Zeitpunkt)
+        return await db.ClassificationHistory
+            .Where(e => e.EntityType == nameof(Person) && e.EntityId == id)
+            .OrderByDescending(e => e.Timestamp)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<PersonZugehoerigkeit>> GetZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
         {
             return new();
         }
         // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
         // Der globale Soft-Delete-Filter blendet beendete Mitgliedschaften aus → nur aktive (BeendetAm = null).
-        var fraktionen = await (
-            from m in db.FraktionMitglieder
+        var factions = await (
+            from m in db.FactionMembers
             where m.PersonId == personId
-            join f in db.Fraktionen on m.FraktionId equals f.Id
-            where istFuehrung || !f.IstVerschlusssache
+            join f in db.Factions on m.FactionId equals f.Id
+            where isLeadership || !f.IsClassified
             orderby f.Name
-            select new PersonZugehoerigkeit(nameof(Fraktion), m.Id, f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung, m.ErstelltAm, (DateTime?)null))
+            select new PersonAffiliation(nameof(Faction), m.Id, f.Id, f.Name, f.CaseNumber, m.Rank, m.IsLead, m.CreatedAt, (DateTime?)null))
             .ToListAsync(cancellationToken);
 
-        var gruppen = await (
-            from m in db.PersonengruppeMitglieder
+        var groups = await (
+            from m in db.PersonGroupMembers
             where m.PersonId == personId
-            join g in db.Personengruppen on m.PersonengruppeId equals g.Id
-            where istFuehrung || !g.IstVerschlusssache
+            join g in db.PersonGroups on m.PersonGroupId equals g.Id
+            where isLeadership || !g.IsClassified
             orderby g.Name
-            select new PersonZugehoerigkeit(nameof(Personengruppe), m.Id, g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung, m.ErstelltAm, (DateTime?)null))
+            select new PersonAffiliation(nameof(PersonGroup), m.Id, g.Id, g.Name, g.CaseNumber, m.Role, m.IsLead, m.CreatedAt, (DateTime?)null))
             .ToListAsync(cancellationToken);
 
-        return fraktionen.Concat(gruppen).ToList();
+        return factions.Concat(groups).ToList();
     }
 
-    public async Task<List<PersonZugehoerigkeit>> GetEhemaligeZugehoerigkeitenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
         {
             return new();
         }
         // IgnoreQueryFilters: beendete (soft-gelöschte) Mitgliedschaften gezielt holen. Achtung – das schaltet
         // ALLE Filter der Query ab, auch die der Eltern-Akte → Papierkorb/Verschlusssache hier manuell nachsetzen.
-        var fraktionen = await (
-            from m in db.FraktionMitglieder.IgnoreQueryFilters()
-            where m.PersonId == personId && m.IstGeloescht
-            join f in db.Fraktionen on m.FraktionId equals f.Id
-            where !f.IstGeloescht && (istFuehrung || !f.IstVerschlusssache)
-            select new PersonZugehoerigkeit(nameof(Fraktion), m.Id, f.Id, f.Name, f.Aktenzeichen, m.Rang, m.IstLeitung, m.ErstelltAm, m.GeloeschtAm))
+        var factions = await (
+            from m in db.FactionMembers.IgnoreQueryFilters()
+            where m.PersonId == personId && m.IsDeleted
+            join f in db.Factions on m.FactionId equals f.Id
+            where !f.IsDeleted && (isLeadership || !f.IsClassified)
+            select new PersonAffiliation(nameof(Faction), m.Id, f.Id, f.Name, f.CaseNumber, m.Rank, m.IsLead, m.CreatedAt, m.DeletedAt))
             .ToListAsync(cancellationToken);
 
-        var gruppen = await (
-            from m in db.PersonengruppeMitglieder.IgnoreQueryFilters()
-            where m.PersonId == personId && m.IstGeloescht
-            join g in db.Personengruppen on m.PersonengruppeId equals g.Id
-            where !g.IstGeloescht && (istFuehrung || !g.IstVerschlusssache)
-            select new PersonZugehoerigkeit(nameof(Personengruppe), m.Id, g.Id, g.Name, g.Aktenzeichen, m.Rolle, m.IstLeitung, m.ErstelltAm, m.GeloeschtAm))
+        var groups = await (
+            from m in db.PersonGroupMembers.IgnoreQueryFilters()
+            where m.PersonId == personId && m.IsDeleted
+            join g in db.PersonGroups on m.PersonGroupId equals g.Id
+            where !g.IsDeleted && (isLeadership || !g.IsClassified)
+            select new PersonAffiliation(nameof(PersonGroup), m.Id, g.Id, g.Name, g.CaseNumber, m.Role, m.IsLead, m.CreatedAt, m.DeletedAt))
             .ToListAsync(cancellationToken);
 
         // Neueste Beendigung zuerst (typübergreifend).
-        return fraktionen.Concat(gruppen).OrderByDescending(z => z.BeendetAm).ToList();
+        return factions.Concat(groups).OrderByDescending(z => z.EndedAt).ToList();
     }
 
-    public async Task<List<AbgeleiteteBeziehung>> GetAbgeleiteteBeziehungenAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
         {
             return new();
         }
 
         // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen + Parteien).
-        var meineFraktionen = await db.FraktionMitglieder
+        var myFactions = await db.FactionMembers
             .Where(m => m.PersonId == personId)
-            .Join(db.Fraktionen, m => m.FraktionId, f => f.Id, (m, f) => f)
-            .Where(f => istFuehrung || !f.IstVerschlusssache)
+            .Join(db.Factions, m => m.FactionId, f => f.Id, (m, f) => f)
+            .Where(f => isLeadership || !f.IsClassified)
             .Select(f => new { f.Id, f.Name })
             .ToListAsync(cancellationToken);
-        var meineGruppen = await db.PersonengruppeMitglieder
+        var myGroups = await db.PersonGroupMembers
             .Where(m => m.PersonId == personId)
-            .Join(db.Personengruppen, m => m.PersonengruppeId, g => g.Id, (m, g) => g)
-            .Where(g => istFuehrung || !g.IstVerschlusssache)
+            .Join(db.PersonGroups, m => m.PersonGroupId, g => g.Id, (m, g) => g)
+            .Where(g => isLeadership || !g.IsClassified)
             .Select(g => new { g.Id, g.Name })
             .ToListAsync(cancellationToken);
-        var meineParteien = await db.ParteiMitglieder
+        var myParties = await db.PartyMembers
             .Where(m => m.PersonId == personId)
-            .Join(db.Parteien, m => m.ParteiId, p => p.Id, (m, p) => p)
-            .Where(p => istFuehrung || !p.IstVerschlusssache)
+            .Join(db.Parties, m => m.PartyId, p => p.Id, (m, p) => p)
+            .Where(p => isLeadership || !p.IsClassified)
             .Select(p => new { p.Id, p.Name })
             .ToListAsync(cancellationToken);
 
-        var orgNamen = new Dictionary<string, string>();
-        foreach (var f in meineFraktionen) orgNamen[$"{nameof(Fraktion)}|{f.Id}"] = f.Name;
-        foreach (var g in meineGruppen) orgNamen[$"{nameof(Personengruppe)}|{g.Id}"] = g.Name;
-        foreach (var p in meineParteien) orgNamen[$"{nameof(Partei)}|{p.Id}"] = p.Name;
-        if (orgNamen.Count == 0)
+        var orgNames = new Dictionary<string, string>();
+        foreach (var f in myFactions) orgNames[$"{nameof(Faction)}|{f.Id}"] = f.Name;
+        foreach (var g in myGroups) orgNames[$"{nameof(PersonGroup)}|{g.Id}"] = g.Name;
+        foreach (var p in myParties) orgNames[$"{nameof(Party)}|{p.Id}"] = p.Name;
+        if (orgNames.Count == 0)
         {
             return new();
         }
 
         // 2. Bündnis-/Konflikt-Verknüpfungen, an denen eine meiner Organisationen beteiligt ist.
-        var meineOrgIds = meineFraktionen.Select(f => f.Id)
-            .Concat(meineGruppen.Select(g => g.Id))
-            .Concat(meineParteien.Select(p => p.Id))
+        var myOrgIds = myFactions.Select(f => f.Id)
+            .Concat(myGroups.Select(g => g.Id))
+            .Concat(myParties.Select(p => p.Id))
             .ToList();
-        var roh = await db.Verknuepfungen
-            .Where(v => (v.Art == VerknuepfungArt.Buendnis || v.Art == VerknuepfungArt.Konflikt)
-                     && (meineOrgIds.Contains(v.VonId) || meineOrgIds.Contains(v.NachId)))
-            .Select(v => new { v.VonTyp, v.VonId, v.NachTyp, v.NachId, v.Art })
+        var raw = await db.Links
+            .Where(v => (v.Kind == LinkKind.Alliance || v.Kind == LinkKind.Conflict)
+                     && (myOrgIds.Contains(v.SourceId) || myOrgIds.Contains(v.TargetId)))
+            .Select(v => new { v.SourceType, v.SourceId, v.TargetType, v.TargetId, v.Kind })
             .ToListAsync(cancellationToken);
 
         // Je Verknüpfung die eigene Seite (Quelle) und die Partner-Organisation bestimmen.
-        var partner = new List<(string QuelleKey, string PartnerTyp, string PartnerId, VerknuepfungArt Art)>();
-        foreach (var v in roh)
+        var partner = new List<(string SourceKey, string PartnerType, string PartnerId, LinkKind Kind)>();
+        foreach (var v in raw)
         {
-            var vonKey = $"{v.VonTyp}|{v.VonId}";
-            var nachKey = $"{v.NachTyp}|{v.NachId}";
-            if (orgNamen.ContainsKey(vonKey))
+            var sourceKey = $"{v.SourceType}|{v.SourceId}";
+            var targetKey = $"{v.TargetType}|{v.TargetId}";
+            if (orgNames.ContainsKey(sourceKey))
             {
-                partner.Add((vonKey, v.NachTyp, v.NachId, v.Art));
+                partner.Add((sourceKey, v.TargetType, v.TargetId, v.Kind));
             }
-            else if (orgNamen.ContainsKey(nachKey))
+            else if (orgNames.ContainsKey(targetKey))
             {
-                partner.Add((nachKey, v.VonTyp, v.VonId, v.Art));
+                partner.Add((targetKey, v.SourceType, v.SourceId, v.Kind));
             }
         }
         if (partner.Count == 0)
@@ -371,127 +371,127 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         }
 
         // 3. Sichtbare Partner-Organisationen auflösen (Name; Verschlusssache nur für Führung).
-        var partnerFraktionIds = partner.Where(p => p.PartnerTyp == nameof(Fraktion)).Select(p => p.PartnerId).Distinct().ToList();
-        var partnerGruppenIds = partner.Where(p => p.PartnerTyp == nameof(Personengruppe)).Select(p => p.PartnerId).Distinct().ToList();
-        var partnerParteiIds = partner.Where(p => p.PartnerTyp == nameof(Partei)).Select(p => p.PartnerId).Distinct().ToList();
-        var partnerFraktionen = (await db.Fraktionen
-            .Where(f => partnerFraktionIds.Contains(f.Id) && (istFuehrung || !f.IstVerschlusssache))
+        var partnerFactionIds = partner.Where(p => p.PartnerType == nameof(Faction)).Select(p => p.PartnerId).Distinct().ToList();
+        var partnerGroupsIds = partner.Where(p => p.PartnerType == nameof(PersonGroup)).Select(p => p.PartnerId).Distinct().ToList();
+        var partnerPartyIds = partner.Where(p => p.PartnerType == nameof(Party)).Select(p => p.PartnerId).Distinct().ToList();
+        var partnerFactions = (await db.Factions
+            .Where(f => partnerFactionIds.Contains(f.Id) && (isLeadership || !f.IsClassified))
             .Select(f => new { f.Id, f.Name }).ToListAsync(cancellationToken)).ToDictionary(f => f.Id, f => f.Name);
-        var partnerGruppen = (await db.Personengruppen
-            .Where(g => partnerGruppenIds.Contains(g.Id) && (istFuehrung || !g.IstVerschlusssache))
+        var partnerGroups = (await db.PersonGroups
+            .Where(g => partnerGroupsIds.Contains(g.Id) && (isLeadership || !g.IsClassified))
             .Select(g => new { g.Id, g.Name }).ToListAsync(cancellationToken)).ToDictionary(g => g.Id, g => g.Name);
-        var partnerParteien = (await db.Parteien
-            .Where(p => partnerParteiIds.Contains(p.Id) && (istFuehrung || !p.IstVerschlusssache))
+        var partnerParties = (await db.Parties
+            .Where(p => partnerPartyIds.Contains(p.Id) && (isLeadership || !p.IsClassified))
             .Select(p => new { p.Id, p.Name }).ToListAsync(cancellationToken)).ToDictionary(p => p.Id, p => p.Name);
 
         // 4. Mitglieder der Partner-Organisationen (Person-Ids je Partner).
-        var sichtbareFraktionIds = partnerFraktionen.Keys.ToList();
-        var sichtbareGruppenIds = partnerGruppen.Keys.ToList();
-        var sichtbareParteiIds = partnerParteien.Keys.ToList();
-        var fraktionMitglieder = await db.FraktionMitglieder
-            .Where(m => sichtbareFraktionIds.Contains(m.FraktionId))
-            .Select(m => new { m.FraktionId, m.PersonId }).ToListAsync(cancellationToken);
-        var gruppenMitglieder = await db.PersonengruppeMitglieder
-            .Where(m => sichtbareGruppenIds.Contains(m.PersonengruppeId))
-            .Select(m => new { m.PersonengruppeId, m.PersonId }).ToListAsync(cancellationToken);
-        var parteiMitglieder = await db.ParteiMitglieder
-            .Where(m => sichtbareParteiIds.Contains(m.ParteiId))
-            .Select(m => new { m.ParteiId, m.PersonId }).ToListAsync(cancellationToken);
-        var mitgliederJePartner = fraktionMitglieder.GroupBy(m => m.FraktionId).ToDictionary(g => g.Key, g => g.Select(x => x.PersonId).ToList());
-        foreach (var grp in gruppenMitglieder.GroupBy(m => m.PersonengruppeId))
+        var visibleFactionIds = partnerFactions.Keys.ToList();
+        var visibleGroupsIds = partnerGroups.Keys.ToList();
+        var visiblePartyIds = partnerParties.Keys.ToList();
+        var factionMembers = await db.FactionMembers
+            .Where(m => visibleFactionIds.Contains(m.FactionId))
+            .Select(m => new { m.FactionId, m.PersonId }).ToListAsync(cancellationToken);
+        var groupsMembers = await db.PersonGroupMembers
+            .Where(m => visibleGroupsIds.Contains(m.PersonGroupId))
+            .Select(m => new { m.PersonGroupId, m.PersonId }).ToListAsync(cancellationToken);
+        var partyMembers = await db.PartyMembers
+            .Where(m => visiblePartyIds.Contains(m.PartyId))
+            .Select(m => new { m.PartyId, m.PersonId }).ToListAsync(cancellationToken);
+        var membersPerPartner = factionMembers.GroupBy(m => m.FactionId).ToDictionary(g => g.Key, g => g.Select(x => x.PersonId).ToList());
+        foreach (var grp in groupsMembers.GroupBy(m => m.PersonGroupId))
         {
-            mitgliederJePartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
+            membersPerPartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
         }
-        foreach (var grp in parteiMitglieder.GroupBy(m => m.ParteiId))
+        foreach (var grp in partyMembers.GroupBy(m => m.PartyId))
         {
-            mitgliederJePartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
+            membersPerPartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
         }
 
         // 5. Kandidaten bilden (dedupliziert je (Person, Art); sich selbst ausschließen).
-        var kandidaten = new Dictionary<(string PersonId, VerknuepfungArt Art), (string QuelleName, string PartnerName)>();
+        var candidates = new Dictionary<(string PersonId, LinkKind Kind), (string SourceName, string PartnerName)>();
         foreach (var p in partner)
         {
-            var partnerName = p.PartnerTyp switch
+            var partnerName = p.PartnerType switch
             {
-                nameof(Fraktion) => partnerFraktionen.TryGetValue(p.PartnerId, out var fn) ? fn : null,
-                nameof(Personengruppe) => partnerGruppen.TryGetValue(p.PartnerId, out var gn) ? gn : null,
-                nameof(Partei) => partnerParteien.TryGetValue(p.PartnerId, out var pn) ? pn : null,
+                nameof(Faction) => partnerFactions.TryGetValue(p.PartnerId, out var fn) ? fn : null,
+                nameof(PersonGroup) => partnerGroups.TryGetValue(p.PartnerId, out var gn) ? gn : null,
+                nameof(Party) => partnerParties.TryGetValue(p.PartnerId, out var pn) ? pn : null,
                 _ => null,
             };
-            if (partnerName is null || !mitgliederJePartner.TryGetValue(p.PartnerId, out var mids))
+            if (partnerName is null || !membersPerPartner.TryGetValue(p.PartnerId, out var mids))
             {
                 continue;
             }
-            var quelleName = orgNamen[p.QuelleKey];
+            var sourceName = orgNames[p.SourceKey];
             foreach (var mid in mids)
             {
                 if (mid == personId)
                 {
                     continue;
                 }
-                kandidaten.TryAdd((mid, p.Art), (quelleName, partnerName));
+                candidates.TryAdd((mid, p.Kind), (sourceName, partnerName));
             }
         }
-        if (kandidaten.Count == 0)
+        if (candidates.Count == 0)
         {
             return new();
         }
 
         // 6. Personen auflösen (Name/Aktenzeichen; Verschlusssache nur für Führung).
-        var personIds = kandidaten.Keys.Select(k => k.PersonId).Distinct().ToList();
-        var personen = (await db.Personen
-            .Where(p => personIds.Contains(p.Id) && (istFuehrung || !p.IstVerschlusssache))
-            .Select(p => new { p.Id, p.Name, p.Aktenzeichen }).ToListAsync(cancellationToken))
+        var personIds = candidates.Keys.Select(k => k.PersonId).Distinct().ToList();
+        var people = (await db.People
+            .Where(p => personIds.Contains(p.Id) && (isLeadership || !p.IsClassified))
+            .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken))
             .ToDictionary(p => p.Id);
 
-        var ergebnis = new List<AbgeleiteteBeziehung>();
-        foreach (var ((pid, art), (quelleName, partnerName)) in kandidaten)
+        var result = new List<DerivedRelation>();
+        foreach (var ((pid, kind), (sourceName, partnerName)) in candidates)
         {
-            if (!personen.TryGetValue(pid, out var person))
+            if (!people.TryGetValue(pid, out var person))
             {
                 continue;
             }
-            ergebnis.Add(new AbgeleiteteBeziehung(art, person.Id, person.Name, person.Aktenzeichen, quelleName, partnerName));
+            result.Add(new DerivedRelation(kind, person.Id, person.Name, person.CaseNumber, sourceName, partnerName));
         }
-        return ergebnis
-            .OrderBy(e => e.Art)
+        return result
+            .OrderBy(e => e.Kind)
             .ThenBy(e => e.PersonName)
             .ToList();
     }
 
-    public async Task<PersonFoto> FotoHinzufuegenAsync(string personId, Stream inhalt, string originalName, string contentType, long groesse, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<PersonPhoto> PhotoAddAsync(string personId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        if (!fileStorage.IstErlaubterTyp(contentType))
+        if (!fileStorage.IsAllowedType(contentType))
         {
             throw new InvalidOperationException($"Dateityp '{contentType}' ist nicht erlaubt.");
         }
         // Größenlimit serverseitig erzwingen (nicht nur in der UI) – verhindert Disk-Filling über andere Pfade.
-        if (groesse > fileStorage.MaxBytes)
+        if (size > fileStorage.MaxBytes)
         {
             throw new InvalidOperationException($"Datei zu groß (max. {fileStorage.MaxBytes / (1024 * 1024)} MB).");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Existenz + Verschlusssache-Sichtbarkeit der Akte prüfen, BEVOR eine Datei geschrieben wird.
-        var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
+        var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
-        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (person.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        var dateiname = await fileStorage.SpeichernAsync(inhalt, contentType, cancellationToken);
-        var foto = new PersonFoto
+        var fileName = await fileStorage.SaveAsync(content, contentType, cancellationToken);
+        var photo = new PersonPhoto
         {
             PersonId = personId,
-            DateinameGespeichert = dateiname,
+            FileNameSaved = fileName,
             OriginalName = originalName,
             ContentType = contentType,
-            GroesseBytes = groesse,
-            ErstelltAm = DateTime.UtcNow,
-            ErstelltVonId = handelnder.GetAgentId(),
+            SizeBytes = size,
+            CreatedAt = DateTime.UtcNow,
+            CreatedById = actor.GetAgentId(),
         };
-        db.PersonFotos.Add(foto);
+        db.PersonPhotos.Add(photo);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -499,82 +499,82 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         catch
         {
             // Schlägt der DB-Insert fehl, die bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
-            fileStorage.Loeschen(dateiname);
+            fileStorage.Delete(fileName);
             throw;
         }
-        return foto;
+        return photo;
     }
 
-    public async Task FotoEntfernenAsync(string fotoId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var foto = await db.PersonFotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
-        if (foto is null)
+        var photo = await db.PersonPhotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        if (photo is null)
         {
             return;
         }
-        if (foto.Person?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        if (photo.Person?.IsClassified == true && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         // Erst den DB-Datensatz entfernen (Quelle der Wahrheit), dann die Datei löschen. So bleibt
         // bei einem Speicherfehler kein verwaister Datensatz zurück, der auf eine fehlende Datei zeigt.
-        db.PersonFotos.Remove(foto);
+        db.PersonPhotos.Remove(photo);
         await db.SaveChangesAsync(cancellationToken);
-        fileStorage.Loeschen(foto.DateinameGespeichert);
+        fileStorage.Delete(photo.FileNameSaved);
     }
 
-    public async Task<PersonFoto?> GetFotoMitPersonAsync(string fotoId, CancellationToken cancellationToken = default)
+    public async Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.PersonFotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == fotoId, cancellationToken);
+        return await db.PersonPhotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
     }
 
-    public async Task<List<AuditLog>> GetHistorieAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistoryAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
         {
             return new();
         }
         // Kind-IDs (Doks) einsammeln, damit deren Audit-Einträge in der Akten-Historie erscheinen.
-        var dokIds = await db.PersonDoks.IgnoreQueryFilters()
+        var docIds = await db.PersonDocs.IgnoreQueryFilters()
             .Where(d => d.PersonId == personId)
             .Select(d => d.Id)
             .ToListAsync(cancellationToken);
 
-        var ids = new HashSet<string>(dokIds) { personId };
-        var typen = new[] { nameof(Person), nameof(PersonDok) };
+        var ids = new HashSet<string>(docIds) { personId };
+        var types = new[] { nameof(Person), nameof(PersonDoc) };
 
         return await db.AuditLogs
-            .Where(a => typen.Contains(a.EntitaetTyp) && ids.Contains(a.EntitaetId))
-            .OrderByDescending(a => a.Zeitpunkt)
+            .Where(a => types.Contains(a.EntityType) && ids.Contains(a.EntityId))
+            .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
     }
 
     // ---- Helfer ----
 
-    private static void KinderMappen(Person person, PersonEingabe eingabe)
+    private static void ChildrenMap(Person person, PersonInput input)
     {
-        person.Aliase = eingabe.Aliase
-            .Where(a => !string.IsNullOrWhiteSpace(a.Aliasname))
-            .Select(a => new PersonAlias { PersonId = person.Id, Aliasname = a.Aliasname.Trim() })
+        person.Aliases = input.Aliases
+            .Where(a => !string.IsNullOrWhiteSpace(a.AliasName))
+            .Select(a => new PersonAlias { PersonId = person.Id, AliasName = a.AliasName.Trim() })
             .ToList();
-        person.Telefonnummern = eingabe.Telefonnummern
-            .Where(t => !string.IsNullOrWhiteSpace(t.Nummer))
-            .Select(t => new PersonTelefon { PersonId = person.Id, Nummer = t.Nummer.Trim(), Bezeichnung = Leer(t.Bezeichnung) })
+        person.PhoneNumbers = input.PhoneNumbers
+            .Where(t => !string.IsNullOrWhiteSpace(t.Number))
+            .Select(t => new PersonPhone { PersonId = person.Id, Number = t.Number.Trim(), Designation = Empty(t.Designation) })
             .ToList();
-        person.Fahrzeuge = eingabe.Fahrzeuge
-            .Where(f => !string.IsNullOrWhiteSpace(f.Bezeichnung) || !string.IsNullOrWhiteSpace(f.Kennzeichen))
-            .Select(f => new PersonFahrzeug { PersonId = person.Id, Bezeichnung = (f.Bezeichnung ?? string.Empty).Trim(), Kennzeichen = Leer(f.Kennzeichen) })
+        person.Vehicles = input.Vehicles
+            .Where(f => !string.IsNullOrWhiteSpace(f.Designation) || !string.IsNullOrWhiteSpace(f.LicensePlate))
+            .Select(f => new PersonVehicle { PersonId = person.Id, Designation = (f.Designation ?? string.Empty).Trim(), LicensePlate = Empty(f.LicensePlate) })
             .ToList();
-        person.Orte = eingabe.Orte
+        person.Locations = input.Locations
             .Where(o => !string.IsNullOrWhiteSpace(o.Text))
-            .Select(o => new PersonOrt { PersonId = person.Id, Text = o.Text.Trim(), Notiz = Leer(o.Notiz) })
+            .Select(o => new PersonLocation { PersonId = person.Id, Text = o.Text.Trim(), Note = Empty(o.Note) })
             .ToList();
-        person.Waffen = eingabe.Waffen
+        person.Weapons = input.Weapons
             .Where(w => !string.IsNullOrWhiteSpace(w.Text))
-            .Select(w => new PersonWaffe { PersonId = person.Id, Text = w.Text.Trim() })
+            .Select(w => new PersonWeapon { PersonId = person.Id, Text = w.Text.Trim() })
             .ToList();
     }
 
@@ -583,16 +583,16 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     /// Verschlusssachen bleiben außen vor, damit klassifizierte Werte nicht in die geteilte Liste gelangen.
     /// Merkt nur im übergebenen Context vor – persistiert wird mit dem nachfolgenden SaveChanges der Person (atomar).
     /// </summary>
-    private async Task VorschlaegeVormerkenAsync(AppDbContext db, Person person, CancellationToken cancellationToken)
+    private async Task SuggestionsStageAsync(AppDbContext db, Person person, CancellationToken cancellationToken)
     {
-        if (person.IstVerschlusssache)
+        if (person.IsClassified)
         {
             return;
         }
-        await vorschlag.VormerkenAsync(db, VorschlagTyp.Waffe, person.Waffen.Select(w => w.Text), cancellationToken);
-        await vorschlag.VormerkenAsync(db, VorschlagTyp.Fahrzeug, person.Fahrzeuge.Select(f => f.Bezeichnung), cancellationToken);
-        await vorschlag.VormerkenAsync(db, VorschlagTyp.Ort, person.Orte.Select(o => o.Text), cancellationToken);
+        await suggestion.StageAsync(db, SuggestionType.Weapon, person.Weapons.Select(w => w.Text), cancellationToken);
+        await suggestion.StageAsync(db, SuggestionType.Vehicle, person.Vehicles.Select(f => f.Designation), cancellationToken);
+        await suggestion.StageAsync(db, SuggestionType.Location, person.Locations.Select(o => o.Text), cancellationToken);
     }
 
-    private static string? Leer(string? s) => s.TrimToNull();
+    private static string? Empty(string? s) => s.TrimToNull();
 }

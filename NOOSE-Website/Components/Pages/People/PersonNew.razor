@@ -1,0 +1,113 @@
+@page "/personen/neu"
+@inject IPersonService PersonService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Person · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Person anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudTextField @bind-Value="_input.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
+                          Variant="Variant.Outlined" AutoFocus="true" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="LifeStatus" @bind-Value="_input.LifeStatus" Label="Lebensstatus" Variant="Variant.Outlined">
+                @foreach (var s in LifeStatusDisplay.All)
+                {
+                    <MudSelectItem Value="s">@LifeStatusDisplay.Name(s)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_input.Description" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudSelect T="Classification" @bind-Value="_input.Classification" Label="Einstufung" Variant="Variant.Outlined">
+                @foreach (var e in ClassificationDisplay.All)
+                {
+                    <MudSelectItem Value="e" Disabled="@(e == Classification.SecuredStateThreatening && !_mayHighest)">
+                        @ClassificationDisplay.Name(e)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
+            <MudSwitch T="bool" @bind-Value="_input.IsClassified" Color="Color.Warning" Label="Verschlusssache (nur Führung sichtbar)" />
+            @if (_input.IsClassified && !_isLeadership)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Warning">
+                    Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
+                </MudText>
+            }
+        </MudItem>
+    </MudGrid>
+
+    <MudDivider Class="my-4" />
+    <MudText Typo="Typo.h6" Class="mb-2">Steckbrief</MudText>
+    <ProfileForm Input="_input" />
+</MudForm>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/personen">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private readonly PersonInput _input = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _mayHighest;
+    private bool _isLeadership;
+    private bool _saves;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayHighest = _user.MayHighestClassification();
+        _isLeadership = _user.IsLeadership();
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var numbers = _input.PhoneNumbers.Select(t => t.Number).Where(n => !string.IsNullOrWhiteSpace(n));
+            var duplicates = await PersonService.FindDuplicatesAsync(_input.Name, numbers, _isLeadership);
+            if (duplicates.Count > 0)
+            {
+                var next = await DuplicateDialog.ShowAsync(DialogService, duplicates);
+                if (!next)
+                {
+                    _saves = false;
+                    return;
+                }
+            }
+
+            var person = await PersonService.CreateAsync(_input, _user);
+            Snackbar.Add($"Akte {person.CaseNumber} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/personen/{person.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

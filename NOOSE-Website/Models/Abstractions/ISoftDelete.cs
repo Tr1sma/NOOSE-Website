@@ -7,7 +7,7 @@ namespace NOOSE_Website.Models.Abstractions;
 /// </summary>
 public interface ISoftDelete
 {
-    bool IstGeloescht { get; set; }
-    DateTime? GeloeschtAm { get; set; }
-    string? GeloeschtVonId { get; set; }
+    bool IsDeleted { get; set; }
+    DateTime? DeletedAt { get; set; }
+    string? DeletedById { get; set; }
 }

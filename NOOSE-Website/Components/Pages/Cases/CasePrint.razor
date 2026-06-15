@@ -1,0 +1,121 @@
+@* Druckansicht der Vorgangs-/Fallakte (Phase 7): kompletter Fall als strukturiertes Dokument. *@
+@page "/vorgaenge/{Id}/druck"
+@layout PrintLayout
+@inject ICaseService CaseService
+@inject ILinkService LinkService
+@inject ICommentService CommentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_case is null ? "Druckansicht" : $"Vorgangsakte {_case.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_case is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Vorgangsakte {_case.CaseNumber}")" BackHref="@($"/vorgaenge/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="_case.IsClassified">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Titel</th><td>@_case.Title</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_case.CaseNumber</td></tr>
+                    <tr><th>Status</th><td>@CaseStatusDisplay.Name(_case.Status)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_case.Type))
+                    {
+                        <tr><th>Typ</th><td>@_case.Type</td></tr>
+                    }
+                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_case.Classification)</td></tr>
+                    <tr><th>Eröffnet</th><td>@_case.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    @if (_case.CompletedAt is { } completed)
+                    {
+                        <tr><th>Abgeschlossen</th><td>@completed.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_case.ModifiedAt ?? _case.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_case.Description))
+        {
+            <section>
+                <h2>Sachverhalt</h2>
+                <div class="druck-mehrzeilig">@_case.Description</div>
+            </section>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_case.Summary))
+        {
+            <section>
+                <h2>Aktueller Stand</h2>
+                <div class="druck-mehrzeilig">@_case.Summary</div>
+            </section>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_case.ClosingNote))
+        {
+            <section>
+                <h2>Abschlussvermerk</h2>
+                <div class="druck-mehrzeilig">@_case.ClosingNote</div>
+            </section>
+        }
+
+        @if (_case.Agents.Count > 0)
+        {
+            <section>
+                <h2>Fallführung &amp; zugeteilte Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Funktion</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _case.Agents)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@(a.IsCaseLead ? "Fallführer" : "Zugeteilt")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <PrintLinks Entries="_links" Heading="Gebündelte Inhalte (Personen, Doks, Operationen …)" />
+        <PrintClassificationHistory Entries="_classificationHistory" />
+        <PrintComments Entries="_comments" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Case? _case;
+    private List<ClassificationHistory> _classificationHistory = new();
+    private List<LinkDisplay> _links = new();
+    private List<Comment> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var isLeadership = user.IsLeadership();
+        _printBy = user.GetCodename();
+
+        _case = await CaseService.GetDetailAsync(Id, isLeadership);
+        if (_case is not null)
+        {
+            _classificationHistory = await CaseService.GetClassificationHistoryAsync(Id, isLeadership);
+            _links = await LinkService.GetForRecordAsync(nameof(Case), Id, isLeadership, user.GetAgentId());
+            _comments = await CommentService.GetForRecordAsync(nameof(Case), Id, isLeadership);
+            await AccessLog.LogViewAsync(nameof(Case), Id);
+        }
+        _load = false;
+    }
+}

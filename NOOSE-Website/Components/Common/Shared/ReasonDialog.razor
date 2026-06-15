@@ -1,0 +1,65 @@
+@* Bestätigungs-Dialog mit Begründungs-Eingabe (z. B. Sperren, Ablehnen). Liefert den eingegebenen
+   Grund zurück (oder null bei Abbruch). Mit AutoFocus auf dem Begründungsfeld. *@
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrWhiteSpace(Text))
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">@Text</MudText>
+        }
+        <MudTextField @bind-Value="_reason" Label="@Label" Lines="2" Variant="Variant.Outlined"
+                      AutoFocus="true" Immediate="true"
+                      Required="@MandatoryReason" RequiredError="Bitte eine Begründung angeben." />
+        @if (_error)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error">Bitte eine Begründung angeben.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="@Colour" Variant="Variant.Filled" OnClick="Confirm">@ConfirmText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Bestätigen";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string Label { get; set; } = "Begründung";
+    [Parameter] public string ConfirmText { get; set; } = "Bestätigen";
+    [Parameter] public bool MandatoryReason { get; set; }
+    [Parameter] public Color Colour { get; set; } = Color.Primary;
+
+    private string _reason = string.Empty;
+    private bool _error;
+
+    private void Confirm()
+    {
+        if (MandatoryReason && string.IsNullOrWhiteSpace(_reason))
+        {
+            _error = true;
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(_reason.Trim()));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog; liefert den eingegebenen Grund oder null bei Abbruch.</summary>
+    public static async Task<string?> ShowAsync(IDialogService dialog, string title, string? text,
+        string confirmText = "Bestätigen", string label = "Begründung", bool mandatoryReason = false, Color colour = Color.Primary)
+    {
+        var parameters = new DialogParameters<ReasonDialog>
+        {
+            { x => x.Title, title },
+            { x => x.Text, text },
+            { x => x.Label, label },
+            { x => x.ConfirmText, confirmText },
+            { x => x.MandatoryReason, mandatoryReason },
+            { x => x.Colour, colour },
+        };
+        var reference = await dialog.ShowAsync<ReasonDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: string reason } ? reason : null;
+    }
+}

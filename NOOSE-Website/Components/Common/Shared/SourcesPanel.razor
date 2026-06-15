@@ -1,0 +1,180 @@
+@* Quellen-/Anhang-Liste einer Akte: Upload/Link/interne Verknüpfung/Freitext anhängen und entfernen. *@
+@inject ISourceService SourceService
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Quellen &amp; Anhänge (@_sources.Count)</MudText>
+        @if (_mayWrite)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+                Quelle hinzufügen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_sources.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Quellen erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var q in _sources)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@TypeIcon(q.Type)" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@q.Title</b></MudText>
+                        @if (q.Pinned)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.PushPin" Color="Color.Primary" Size="Size.Small" Title="Angepinnt" />
+                        }
+                    </MudStack>
+                    @if (_mayWrite)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                            <MudIconButton Size="Size.Small"
+                                           Icon="@(q.Pinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                                           Color="@(q.Pinned ? Color.Primary : Color.Default)"
+                                           OnClick="@(() => PinToggleAsync(q))"
+                                           aria-label="@(q.Pinned ? "Quelle lösen" : "Quelle anpinnen")" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => RemoveAsync(q))" aria-label="Quelle löschen" />
+                        </MudStack>
+                    }
+                </MudStack>
+
+                @switch (q.Type)
+                {
+                    case SourceType.Link:
+                        <MudLink Href="@q.Url" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">@q.Url</MudLink>
+                        break;
+                    case SourceType.Upload:
+                        <MudLink Href="@($"/dateien/quellen/{q.Id}")" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" Class="mr-1" />@(q.OriginalName ?? "Datei herunterladen")
+                        </MudLink>
+                        break;
+                    case SourceType.Internal when q.TargetType == nameof(Person) && q.TargetId is not null:
+                        <MudLink Href="@($"/personen/{q.TargetId}")" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />Verknüpfte Akte öffnen
+                        </MudLink>
+                        break;
+                    case SourceType.FreeText:
+                        <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@q.Description</MudText>
+                        break;
+                    case SourceType.Document when q.TargetId is not null:
+                        <MudLink Href="@($"/dokumente/{q.TargetId}")" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />Dokument öffnen
+                        </MudLink>
+                        break;
+                }
+
+                @if (q.Type != SourceType.FreeText && !string.IsNullOrWhiteSpace(q.Description))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">@q.Description</MudText>
+                }
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                    @SourceTypeDisplay.Name(q.Type) · @q.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                </MudText>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private List<Source> _sources = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        // meId mitgeben, damit Taskforce-Mitglieder (Nicht-Führung) ihre Quellen sehen.
+        _sources = await SourceService.GetForRecordAsync(EntityType, EntityId, User.IsLeadership(), meId: User.GetAgentId());
+        _load = false;
+    }
+
+    private async Task NewAsync()
+    {
+        var input = await SourceDialog.ShowAsync(DialogService, User.IsLeadership());
+        if (input is null)
+        {
+            return;
+        }
+
+        // Sonderfall „Neues Dokument erstellen": zum Volltext-Editor wechseln; das Dokument wird beim
+        // Speichern automatisch als Quelle an diese Akte gehängt (attach=1).
+        if (input.NewDocumentCreate)
+        {
+            Nav.NavigateTo($"/dokumente/neu?entitaetTyp={Uri.EscapeDataString(EntityType)}&entitaetId={Uri.EscapeDataString(EntityId)}&attach=1");
+            return;
+        }
+
+        try
+        {
+            await SourceService.CreateAsync(EntityType, EntityId, input, User);
+            Snackbar.Add("Quelle gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(Source source)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Quelle löschen?",
+            $"„{source.Title}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await SourceService.RemoveAsync(source.Id, User);
+        Snackbar.Add("Quelle gelöscht.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task PinToggleAsync(Source source)
+    {
+        try
+        {
+            var @new = !source.Pinned;
+            await SourceService.PinSetAsync(source.Id, @new, User);
+            Snackbar.Add(@new ? "Quelle angepinnt." : "Anpinnen gelöst.", Severity.Success);
+            await LoadAsync(); // neu laden → Server-Sortierung bringt sie nach oben/zurück
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static string TypeIcon(SourceType type) => type switch
+    {
+        SourceType.Upload => Icons.Material.Filled.AttachFile,
+        SourceType.Link => Icons.Material.Filled.Link,
+        SourceType.Internal => Icons.Material.Filled.AccountTree,
+        SourceType.FreeText => Icons.Material.Filled.Notes,
+        SourceType.Document => Icons.Material.Filled.Article,
+        _ => Icons.Material.Filled.Description,
+    };
+}

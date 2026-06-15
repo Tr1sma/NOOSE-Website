@@ -18,17 +18,17 @@ public static class AgentPrincipalExtensions
         => user.FindFirstValue(AgentClaimTypes.Codename);
 
     /// <summary>Dienstnummer (Freitext) – für alle Nutzer sichtbar, leer wenn nicht vergeben.</summary>
-    public static string? GetDienstnummer(this ClaimsPrincipal user)
+    public static string? GetBadgeNumber(this ClaimsPrincipal user)
     {
-        var wert = user.FindFirstValue(AgentClaimTypes.Dienstnummer);
-        return string.IsNullOrWhiteSpace(wert) ? null : wert;
+        var value = user.FindFirstValue(AgentClaimTypes.BadgeNumber);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
-    public static Dienstgrad? GetDienstgrad(this ClaimsPrincipal user)
+    public static Rank? GetRank(this ClaimsPrincipal user)
     {
-        var raw = user.FindFirstValue(AgentClaimTypes.Dienstgrad);
-        return int.TryParse(raw, out var value) && Enum.IsDefined(typeof(Dienstgrad), value)
-            ? (Dienstgrad)value
+        var raw = user.FindFirstValue(AgentClaimTypes.Rank);
+        return int.TryParse(raw, out var value) && Enum.IsDefined(typeof(Rank), value)
+            ? (Rank)value
             : null;
     }
 
@@ -38,19 +38,19 @@ public static class AgentPrincipalExtensions
         return Enum.TryParse<AgentStatus>(raw, out var value) ? value : null;
     }
 
-    public static bool IstAdmin(this ClaimsPrincipal user)
-        => string.Equals(user.FindFirstValue(AgentClaimTypes.IstAdmin), "true", StringComparison.OrdinalIgnoreCase);
+    public static bool IsAdmin(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsAdmin), "true", StringComparison.OrdinalIgnoreCase);
 
-    public static bool IstTRU(this ClaimsPrincipal user)
-        => string.Equals(user.FindFirstValue(AgentClaimTypes.IstTRU), "true", StringComparison.OrdinalIgnoreCase);
+    public static bool IsTRU(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTRU), "true", StringComparison.OrdinalIgnoreCase);
 
-    public static bool IstHRB(this ClaimsPrincipal user)
-        => string.Equals(user.FindFirstValue(AgentClaimTypes.IstHRB), "true", StringComparison.OrdinalIgnoreCase);
+    public static bool IsHRB(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsHRB), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>TeamLeitung-Marker (FiveM-Aufsicht) aus dem Claim. Für sich genommen keine Rolle – erst in
     /// Kombination mit dem fehlenden Admin-Haken ergibt sich die Nur-Lese-Aufsicht (<see cref="IstNurLeser"/>).</summary>
-    public static bool IstTeamLeitung(this ClaimsPrincipal user)
-        => string.Equals(user.FindFirstValue(AgentClaimTypes.IstTeamLeitung), "true", StringComparison.OrdinalIgnoreCase);
+    public static bool IsTeamLead(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTeamLead), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Globale Nur-Lese-Aufsicht = TeamLeitung OHNE Admin. Darf alles lesen (inkl. aller Seiten und
@@ -58,42 +58,42 @@ public static class AgentPrincipalExtensions
     /// (<see cref="DarfSchreiben"/>) und KEINE Klarnamen sehen (<see cref="DarfKlarnameSehen"/>).
     /// Ein TeamLeiter MIT Admin-Haken ist kein Nur-Leser und behält vollen Zugriff.
     /// </summary>
-    public static bool IstNurLeser(this ClaimsPrincipal user)
-        => user.IstTeamLeitung() && !user.IstAdmin();
+    public static bool IsOnlyReader(this ClaimsPrincipal user)
+        => user.IsTeamLead() && !user.IsAdmin();
 
     /// <summary>Darf überhaupt Daten schreiben/ändern. Nur-Leser (Aufsicht) dürfen das nie. Einzige Quelle
     /// der Schreib-Sichtbarkeitsregel für die UI – Mutations-Controls hierüber aus-/einblenden.</summary>
-    public static bool DarfSchreiben(this ClaimsPrincipal user) => !user.IstNurLeser();
+    public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader();
 
     /// <summary>Führung = Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
-    public static bool IstFuehrung(this ClaimsPrincipal user)
-        => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SupervisorySpecialAgent;
+    public static bool IsLeadership(this ClaimsPrincipal user)
+        => user.IsAdmin() || user.GetRank() is >= Rank.SupervisorySpecialAgent;
 
     /// <summary>
     /// Darf Verschlusssachen-Inhalte LESEN = Führung oder Nur-Lese-Aufsicht. Ausschließlich für Lese-Gates
     /// (Sichtbarkeit von VS-Akten) verwenden – NIE für Schreiben oder Klarname-Sicht (die Aufsicht darf VS
     /// sehen, aber keine Klarnamen).
     /// </summary>
-    public static bool DarfVerschlusssacheLesen(this ClaimsPrincipal user)
-        => user.IstFuehrung() || user.IstNurLeser();
+    public static bool MayClassifiedRead(this ClaimsPrincipal user)
+        => user.IsLeadership() || user.IsOnlyReader();
 
     /// <summary>Darf ALLE Taskforces sehen (auch ohne Zuteilung) = Führung/Admin oder Nur-Lese-Aufsicht. Sonst
     /// sieht ein Agent nur die Taskforces, denen er zugeteilt ist. Einzige Quelle dieser Regel.</summary>
-    public static bool DarfAlleTaskforcesSehen(this ClaimsPrincipal user)
-        => user.IstFuehrung() || user.IstNurLeser();
+    public static bool MayAllTaskforcesSee(this ClaimsPrincipal user)
+        => user.IsLeadership() || user.IsOnlyReader();
 
     /// <summary>
     /// Darf den (sonst verborgenen) Klarnamen sehen = Führungsebene oder Admin, ABER nie die Nur-Lese-Aufsicht.
     /// Einzige Quelle der Klarname-Sichtbarkeitsregel – überall hierüber prüfen, statt Dienstgrad/Admin einzeln
     /// abzufragen. Nur-Leser sehen trotz „alles lesen" bewusst keine Klarnamen (auch bei hohem Dienstgrad).
     /// </summary>
-    public static bool DarfKlarnameSehen(this ClaimsPrincipal user) => user.IstFuehrung() && !user.IstNurLeser();
+    public static bool MayRealNameSee(this ClaimsPrincipal user) => user.IsLeadership() && !user.IsOnlyReader();
 
     /// <summary>Darf „Gesichert staatsgefährdend" direkt setzen = Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
-    public static bool DarfHoechsteEinstufung(this ClaimsPrincipal user)
-        => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.SeniorSpecialAgent;
+    public static bool MayHighestClassification(this ClaimsPrincipal user)
+        => user.IsAdmin() || user.GetRank() is >= Rank.SeniorSpecialAgent;
 
     /// <summary>Darf Beförderungen entscheiden = Dienstgrad ≥ Deputy Director oder Admin (entspricht <c>Policies.BefoerderungEntscheiden</c>).</summary>
-    public static bool DarfBefoerderungEntscheiden(this ClaimsPrincipal user)
-        => user.IstAdmin() || user.GetDienstgrad() is >= Dienstgrad.DeputyDirector;
+    public static bool MayPromotionDecide(this ClaimsPrincipal user)
+        => user.IsAdmin() || user.GetRank() is >= Rank.DeputyDirector;
 }

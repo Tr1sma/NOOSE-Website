@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using NOOSE_Website.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities;
 
@@ -15,10 +16,12 @@ public class Agent : IdentityUser
 
     /// <summary>Klarname (echter Name des Agenten). Nur für die Führungsebene (Supervisory+) und Admins sichtbar,
     /// nie für rangniedrigere Nutzer. Sichtbarkeit überall via <c>ClaimsPrincipal.DarfKlarnameSehen()</c> prüfen.</summary>
-    public string? Klarname { get; set; }
+    [Column("Klarname")]
+    public string? RealName { get; set; }
 
     /// <summary>Dienstnummer (alphanumerische Dienstkennung, Freitext). Für alle Nutzer sichtbar.</summary>
-    public string? Dienstnummer { get; set; }
+    [Column("Dienstnummer")]
+    public string? BadgeNumber { get; set; }
 
     /// <summary>Numerische Discord-Benutzer-ID (stabiler externer Schlüssel, eindeutig). Rein intern.</summary>
     public string DiscordId { get; set; } = string.Empty;
@@ -30,35 +33,45 @@ public class Agent : IdentityUser
     public string? AvatarUrl { get; set; }
 
     /// <summary>NOOSE-Dienstgrad. Null, solange der Account noch nicht freigegeben wurde.</summary>
-    public Dienstgrad? Dienstgrad { get; set; }
+    [Column("Dienstgrad")]
+    public Rank? Rank { get; set; }
 
     /// <summary>Tactical Response Unit: rangübergreifendes Flag (jeder Rang kann rein).</summary>
-    public bool IstTRU { get; set; }
+    [Column("IstTRU")]
+    public bool IsTRU { get; set; }
 
     /// <summary>Human Resources Branch: rangübergreifendes Flag (analog zur TRU; jeder Rang kann rein).</summary>
-    public bool IstHRB { get; set; }
+    [Column("IstHRB")]
+    public bool IsHRB { get; set; }
 
     /// <summary>Technische Systemrolle (Auftraggeber). Unabhängig vom Dienstgrad.</summary>
-    public bool IstAdmin { get; set; }
+    [Column("IstAdmin")]
+    public bool IsAdmin { get; set; }
 
     /// <summary>FiveM-Server-Teamleitung (Aufsicht). Reiner Sichtbarkeits-Marker: verleiht KEINE Rechte und greift
     /// NICHT in die Dienstgrad-Hierarchie ein. Vollzugriff entsteht ausschließlich über den separat gesetzten
     /// <see cref="IstAdmin"/>-Haken. TeamLeitungen sind im gesamten RP-Betrieb unsichtbar (nirgends auswählbar,
     /// erwähnbar oder gelistet) und nur in der Agenten-Verwaltung sichtbar.</summary>
-    public bool IstTeamLeitung { get; set; }
+    [Column("IstTeamLeitung")]
+    public bool IsTeamLead { get; set; }
 
     /// <summary>Account-Lebenszyklus (Ausstehend/Aktiv/Gesperrt).</summary>
-    public AgentStatus Status { get; set; } = AgentStatus.Ausstehend;
+    public AgentStatus Status { get; set; } = AgentStatus.Pending;
 
-    public DateTime RegistriertAm { get; set; }
-    public DateTime? FreigegebenAm { get; set; }
-    public string? FreigegebenVonId { get; set; }
+    [Column("RegistriertAm")]
+    public DateTime RegisteredAt { get; set; }
+    [Column("FreigegebenAm")]
+    public DateTime? ReleasedAt { get; set; }
+    [Column("FreigegebenVonId")]
+    public string? ReleasedById { get; set; }
 
     /// <summary>Begründung der letzten Sperrung (für Audit/Anzeige).</summary>
-    public string? GesperrtGrund { get; set; }
+    [Column("GesperrtGrund")]
+    public string? BlockedReason { get; set; }
 
     /// <summary>Zeitpunkt des letzten Discord-Rollen-Syncs (vorbereitet, derzeit ungenutzt).</summary>
-    public DateTime? DiscordRollenSyncAm { get; set; }
+    [Column("DiscordRollenSyncAm")]
+    public DateTime? DiscordRolesSyncAt { get; set; }
 
     // --- Ausstehende Selbst-Namensänderung -----------------------------------------------------
     // Ränge unterhalb Supervisory können ihre Stammdaten nicht direkt ändern; der gewünschte
@@ -68,14 +81,18 @@ public class Agent : IdentityUser
     // Dienstnummer dürfen auch im Antrag legitim null sein = Feld soll geleert werden).
 
     /// <summary>Beantragter neuer Codename (nur gültig, wenn <see cref="NamensaenderungBeantragtAm"/> gesetzt ist).</summary>
-    public string? AusstehenderCodename { get; set; }
+    [Column("AusstehenderCodename")]
+    public string? PendingCodename { get; set; }
 
     /// <summary>Beantragter neuer Klarname (Schnappschuss; null = Feld soll geleert werden).</summary>
-    public string? AusstehenderKlarname { get; set; }
+    [Column("AusstehenderKlarname")]
+    public string? PendingRealName { get; set; }
 
     /// <summary>Beantragte neue Dienstnummer (Schnappschuss; null = Feld soll geleert werden).</summary>
-    public string? AusstehendeDienstnummer { get; set; }
+    [Column("AusstehendeDienstnummer")]
+    public string? PendingBadgeNumber { get; set; }
 
     /// <summary>Zeitpunkt des offenen Namensänderungs-Antrags. Null = kein offener Antrag.</summary>
-    public DateTime? NamensaenderungBeantragtAm { get; set; }
+    [Column("NamensaenderungBeantragtAm")]
+    public DateTime? NameChangeRequestedAt { get; set; }
 }

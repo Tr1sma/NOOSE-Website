@@ -1,0 +1,229 @@
+@page "/aufgaben"
+@inject IJobService JobService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Aufgaben · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Aufgaben-Board</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Leadership">
+        <MudButton Href="/aufgaben/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Gemeinsames Team-Board: Karten per Drag &amp; Drop zwischen den Spalten verschieben, um den Status zu ändern.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @* Filterzeile *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4 flex-wrap">
+        <MudTextField T="string" Value="_search" ValueChanged="SearchModified" Placeholder="Suchen (Titel, Aktenzeichen, Agent)…"
+                      Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="max-width:360px;" />
+        <MudSpacer />
+        <MudSwitch T="bool" Value="_onlyMy" ValueChanged="OnlyMySelected" Color="Color.Primary" Label="Nur meine" />
+        <MudSelect T="JobPriority?" Value="_priorityFilter" ValueChanged="PrioritySelected" Label="Priorität" Dense="true"
+                   Clearable="true" Variant="Variant.Outlined" Style="max-width:200px;">
+            <MudSelectItem T="JobPriority?" Value="@((JobPriority?)null)">Alle</MudSelectItem>
+            @foreach (var p in JobPriorityDisplay.All)
+            {
+                <MudSelectItem T="JobPriority?" Value="@p">@JobPriorityDisplay.Name(p)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
+
+    @* Kennzahl-Kacheln *@
+    <MudGrid Class="mb-4">
+        @foreach (var s in JobStatusDisplay.All)
+        {
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-3" Elevation="2">
+                    <MudText Typo="Typo.h5">@Count(s)</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@JobStatusDisplay.Name(s)</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-3" Elevation="2">
+                <MudText Typo="Typo.h5" Color="@(CountOverdue > 0 ? Color.Error : Color.Default)">@CountOverdue</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Überfällig</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudDropContainer T="JobRow" @ref="_container" Items="_all"
+                      ItemsSelector="@((item, zone) => item.Status.ToString() == zone && Matches(item))"
+                      ItemDropped="ItemDroppedAsync"
+                      CanDrop="@((item, zone) => item.MayStatusChange)"
+                      ApplyDropClassesOnDragStarted="true"
+                      CanDropClass="aufgaben-dropzone-aktiv" NoDropClass="aufgaben-dropzone-gesperrt">
+        <ChildContent>
+            <div class="aufgaben-board">
+                @foreach (var s in JobStatusDisplay.All)
+                {
+                    <div class="aufgaben-spalte">
+                        <div class="aufgaben-spalte-kopf" style="@($"background-color:{Colour(s)};")">
+                            <MudIcon Icon="@Symbol(s)" Size="Size.Small" />
+                            <span>@JobStatusDisplay.Name(s)</span>
+                            <MudSpacer />
+                            <span>(@Count(s))</span>
+                        </div>
+                        <MudDropZone T="JobRow" Identifier="@s.ToString()" Class="aufgaben-spalte-body" />
+                    </div>
+                }
+            </div>
+        </ChildContent>
+        <ItemRenderer>
+            @* Karte ist gleichzeitig ziehbar (Drag&Drop) UND klickbar. Navigation MUSS per @onclick (programmatisch)
+               erfolgen – ein <a href> (MudLink) würde vom Drag-Container per preventDefault geschluckt; ein
+               Blazor-@onclick-Handler feuert hingegen weiterhin. *@
+            <MudPaper Class="aufgaben-karte pa-3" Elevation="2" @onclick="@(() => Open(context))">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">@context.Title</MudText>
+                        <JobPriorityChip Priority="context.Priority" />
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.CaseNumber</MudText>
+                    @if (context.DueDate is { } f)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Color="@(Overdue(context) ? Color.Error : Color.Default)" />
+                            <MudText Typo="Typo.caption" Color="@(Overdue(context) ? Color.Error : Color.Default)">
+                                @f.ToLocalTime().ToString("dd.MM.yyyy")@(Overdue(context) ? " · überfällig" : "")
+                            </MudText>
+                        </MudStack>
+                    }
+                    @if (context.AssignedCodenames.Count > 0)
+                    {
+                        <div class="d-flex flex-wrap" style="gap:.25rem;">
+                            @foreach (var c in context.AssignedCodenames)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">@c</MudChip>
+                            }
+                        </div>
+                    }
+                </MudStack>
+            </MudPaper>
+        </ItemRenderer>
+    </MudDropContainer>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _onlyMy;
+    private string _search = string.Empty;
+    private JobPriority? _priorityFilter;
+    private List<JobRow> _all = new();
+    private ClaimsPrincipal _user = default!;
+    private MudDropContainer<JobRow>? _container;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _all = await JobService.GetTeamBoardAsync(_onlyMy, _user);
+        _load = false;
+        _container?.Refresh();
+    }
+
+    private async Task OnlyMySelected(bool value)
+    {
+        _onlyMy = value;
+        await LoadAsync();
+    }
+
+    private void SearchModified(string value)
+    {
+        _search = value ?? string.Empty;
+        _container?.Refresh();
+    }
+
+    private void PrioritySelected(JobPriority? priority)
+    {
+        _priorityFilter = priority;
+        _container?.Refresh();
+    }
+
+    /// <summary>Client-Filter (Suchtext + Priorität); der „nur meine"-Filter läuft serverseitig.</summary>
+    private bool Matches(JobRow z)
+    {
+        if (_priorityFilter is not null && z.Priority != _priorityFilter)
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            return true;
+        }
+        var s = _search.Trim();
+        return z.Title.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.AssignedCodenames.Any(c => c.Contains(s, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private int Count(JobStatus s) => _all.Count(z => z.Status == s && Matches(z));
+    private int CountOverdue => _all.Count(z => Matches(z) && Overdue(z));
+
+    private static bool Overdue(JobRow z)
+        => z.DueDate is { } f && f.Date < DateTime.Today && JobStatusDisplay.IsOpen(z.Status);
+
+    private async Task ItemDroppedAsync(MudItemDropInfo<JobRow> info)
+    {
+        var item = info.Item;
+        if (item is null || !Enum.TryParse<JobStatus>(info.DropzoneIdentifier, out var target) || item.Status == target)
+        {
+            return;
+        }
+        var alt = item.Status;
+        item.Status = target; // optimistisch: Karte sofort in der Zielspalte
+        _container?.Refresh();
+        try
+        {
+            await JobService.StatusSetAsync(item.Id, target, _user);
+        }
+        catch (Exception ex)
+        {
+            item.Status = alt; // zurückrollen
+            _container?.Refresh();
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void Open(JobRow z) => Nav.NavigateTo($"/aufgaben/{z.Id}");
+
+    private static string Colour(JobStatus s) => s switch
+    {
+        JobStatus.Open => "var(--mud-palette-info)",
+        JobStatus.InProcessing => "var(--mud-palette-warning)",
+        JobStatus.Done => "var(--mud-palette-success)",
+        JobStatus.Aborted => "var(--mud-palette-dark)",
+        _ => "var(--mud-palette-surface)",
+    };
+
+    private static string Symbol(JobStatus s) => s switch
+    {
+        JobStatus.Open => Icons.Material.Filled.RadioButtonUnchecked,
+        JobStatus.InProcessing => Icons.Material.Filled.Autorenew,
+        JobStatus.Done => Icons.Material.Filled.CheckCircle,
+        JobStatus.Aborted => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline,
+    };
+}

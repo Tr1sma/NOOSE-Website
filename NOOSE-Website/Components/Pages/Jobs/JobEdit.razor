@@ -1,0 +1,123 @@
+@page "/aufgaben/{Id}/bearbeiten"
+@inject IJobService JobService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Aufgabe bearbeiten · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_noAccess)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Diese Aufgabe darf nur ihr Ersteller oder die Führung bearbeiten.
+        <MudButton Href="@($"/aufgaben/{Id}")" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zur Aufgabe</MudButton>
+    </MudAlert>
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Aufgabe nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/aufgaben/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Aufgabe bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <JobForm Input="_input" ShowAssignment="false" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Zuweisungen werden in der Aufgabe unter „Beteiligte" verwaltet.
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/aufgaben/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private JobInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _noAccess;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _input = null;
+        _noAccess = false;
+        var a = await JobService.GetDetailAsync(Id, _user);
+        if (a is not null)
+        {
+            // Bearbeiten ist Ersteller/Führung vorbehalten – serverseitig in AktualisierenAsync erzwungen, hier
+            // proaktiv in der UI gespiegelt, damit kein nicht-berechtigtes Formular angezeigt wird.
+            if (!_user.IsLeadership() && a.CreatedById != _user.GetAgentId())
+            {
+                _noAccess = true;
+            }
+            else
+            {
+                _input = new JobInput
+                {
+                    Title = a.Title,
+                    Description = a.Description,
+                    Status = a.Status,
+                    Priority = a.Priority,
+                    DueDate = a.DueDate,
+                    IsRestricted = a.IsRestricted,
+                };
+            }
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null || _saves)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            await JobService.RefreshAsync(Id, _input, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/aufgaben/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

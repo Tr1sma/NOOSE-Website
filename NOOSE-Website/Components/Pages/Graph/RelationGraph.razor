@@ -1,0 +1,453 @@
+@page "/graph"
+@inject IGraphService GraphService
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject Microsoft.Extensions.Logging.ILogger<RelationGraph> Logger
+@implements IAsyncDisposable
+
+<PageTitle>Beziehungsgraph · NOOSE</PageTitle>
+
+<MudStack Spacing="3">
+    @* ---- Kopfzeile ---- *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+        <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" Size="Size.Large" />
+        <div>
+            <MudText Typo="Typo.h5">Beziehungsgraph</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Verknüpfungen &amp; Beziehungen aller Akten als interaktives Lagebild.</MudText>
+        </div>
+        <MudSpacer />
+        <MudTooltip Text="Auf den Bildschirm einpassen">
+            <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" OnClick="CustomizeAsync" Disabled="@(!_ready)" />
+        </MudTooltip>
+        <MudTooltip Text="Vollbild">
+            <MudIconButton Icon="@Icons.Material.Filled.Fullscreen" OnClick="FullscreenAsync" Disabled="@(!_ready)" />
+        </MudTooltip>
+        <MudTooltip Text="Als Bild (PNG) speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Download" OnClick="ExportAsync" Disabled="@(!_ready)" />
+        </MudTooltip>
+        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Outlined" Color="Color.Primary"
+                   OnClick="LoadAndDrawAsync" Disabled="@(!_ready)">Neu laden</MudButton>
+    </MudStack>
+
+    @* ---- Steuerleiste ---- *@
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" OverrideStyles="false">
+                <MudButton Variant="@(_modeFocus ? Variant.Filled : Variant.Outlined)" Color="@(_modeFocus ? Color.Primary : Color.Default)"
+                           StartIcon="@Icons.Material.Filled.CenterFocusWeak" OnClick="@(() => ModeSetAsync(true))">Fokus</MudButton>
+                <MudButton Variant="@(!_modeFocus ? Variant.Filled : Variant.Outlined)" Color="@(!_modeFocus ? Color.Primary : Color.Default)"
+                           StartIcon="@Icons.Material.Filled.BubbleChart" OnClick="@(() => ModeSetAsync(false))">Gesamtnetz</MudButton>
+            </MudButtonGroup>
+
+            @if (_modeFocus)
+            {
+                <GraphRecordPicker Label="Fokus-Akte" IsLeadership="_isLeadership" MeId="_meId" MayAllTf="_mayAllTf"
+                                 Selected="FocusSelectedAsync" />
+                <MudSelect T="int" @bind-Value="_depth" @bind-Value:after="LoadAndDrawAsync" Label="Tiefe" Dense="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:110px;">
+                    <MudSelectItem Value="1">1 Hop</MudSelectItem>
+                    <MudSelectItem Value="2">2 Hops</MudSelectItem>
+                    <MudSelectItem Value="3">3 Hops</MudSelectItem>
+                </MudSelect>
+            }
+
+            <MudSelect T="string" MultiSelection="true" SelectedValues="_typeFilter" SelectedValuesChanged="TypeFilterChanged"
+                       Label="Aktentypen" Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px;"
+                       MultiSelectionTextFunc="@(s => s.Count == 0 ? "Alle" : $"{s.Count} gewählt")">
+                @foreach (var t in _allTypes)
+                {
+                    <MudSelectItem T="string" Value="@t.Value">@t.Display</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="string" @bind-Value="_kindChoice" @bind-Value:after="LoadAndDrawAsync" Label="Beziehungsart" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:150px;">
+                <MudSelectItem T="string" Value="@("alle")">Alle</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Standard")">Standard</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Konflikt")">Konflikt</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Buendnis")">Bündnis</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+    </MudPaper>
+
+    @if (_loadError)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            Der Graph konnte nicht geladen werden. Bitte die Seite mit Strg+F5 neu laden.
+        </MudAlert>
+    }
+    @if (_data?.Truncated == true)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Sehr großes Netz – angezeigt werden die @_data.Node.Count am stärksten vernetzten Akten.
+            Für Details eine Akte als <b>Fokus</b> wählen.
+        </MudAlert>
+    }
+
+    @* ---- Graph-Fläche ---- *@
+    <MudPaper Elevation="2" Class="noose-graph-flaeche">
+        <div id="@ContainerId" style="height:72vh;width:100%;"></div>
+        @if (_load)
+        {
+            <div class="noose-graph-overlay">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+        else if (_data is not null && _data.Node.Count == 0)
+        {
+            <div class="noose-graph-overlay">
+                <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Outlined.Hub" Size="Size.Large" Class="mud-text-secondary" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @(_modeFocus && _focus is null ? "Bitte oben eine Fokus-Akte wählen." : "Keine sichtbaren Verbindungen.")
+                    </MudText>
+                </MudStack>
+            </div>
+        }
+    </MudPaper>
+
+    @* ---- Legende ---- *@
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Row="true" Spacing="4" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">LEGENDE</MudText>
+            @foreach (var t in _legendTypes)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <span class="noose-graph-punkt" style="background:@t.Colour;"></span>
+                    <MudText Typo="Typo.caption">@t.Display</MudText>
+                </MudStack>
+            }
+            <MudDivider Vertical="true" FlexItem="true" />
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <span class="noose-graph-linie" style="background:#F85149;"></span><MudText Typo="Typo.caption">Konflikt</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <span class="noose-graph-linie" style="background:#3FB950;"></span><MudText Typo="Typo.caption">Bündnis</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Error" /><MudText Typo="Typo.caption">roter Rand = staatsgefährdend</MudText>
+            </MudStack>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">· Doppelklick öffnet die Akte</MudText>
+        </MudStack>
+    </MudPaper>
+
+    @* ---- Pfadsuche ---- *@
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.AltRoute" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle1">Pfadsuche – wie hängen zwei Akten zusammen?</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <GraphRecordPicker Label="Von" IsLeadership="_isLeadership" MeId="_meId" MayAllTf="_mayAllTf" Selected="@(w => _pathA = w)" />
+                <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Class="mud-text-secondary" />
+                <GraphRecordPicker Label="Nach" IsLeadership="_isLeadership" MeId="_meId" MayAllTf="_mayAllTf" Selected="@(w => _pathB = w)" />
+                <MudButton StartIcon="@Icons.Material.Filled.Route" Variant="Variant.Filled" Color="Color.Primary"
+                           OnClick="PathSearchAsync" Disabled="@(_pathA is null || _pathB is null || _pathRunning)">Pfad finden</MudButton>
+                @if (_path?.Found == true)
+                {
+                    <MudButton StartIcon="@Icons.Material.Filled.RestartAlt" Variant="Variant.Text" OnClick="LoadAndDrawAsync">Graph zurücksetzen</MudButton>
+                }
+            </MudStack>
+
+            @if (_pathRunning)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_path is not null && _path.Found)
+            {
+                <MudPaper Class="pa-3" Elevation="0" Style="background:var(--mud-palette-background-grey);">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                        @for (var i = 0; i < _path.Node.Count; i++)
+                        {
+                            @* Pro Iteration in lokale Variablen kapseln: verschachtelte ChildContent-Fragmente
+                               werden verzögert ausgewertet und dürfen NICHT die Schleifenvariable i schließen. *@
+                            var k = _path.Node[i];
+                            var edge = i < _path.Edges.Count ? _path.Edges[i] : null;
+                            @if (k.Href is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" Href="@k.Href">@k.Designation</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled">@k.Designation</MudChip>
+                            }
+                            @if (edge is not null)
+                            {
+                                <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.East" Size="Size.Small" Class="mud-text-secondary" />
+                                    @if (!string.IsNullOrWhiteSpace(edge.Label))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@edge.Label</MudText>
+                                    }
+                                </MudStack>
+                            }
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                        @(_path.Node.Count - 1) Schritt(e) zwischen den beiden Akten.
+                    </MudText>
+                </MudPaper>
+            }
+            else if (_pathSearched)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                    Kein (sichtbarer) Zusammenhang zwischen den beiden Akten gefunden.
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "typ")] private string? FocusTypeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "id")] private string? FocusIdQuery { get; set; }
+
+    private const string ContainerId = "noose-graph";
+
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private string? _meId;
+    private bool _mayAllTf;
+
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<RelationGraph>? _ref;
+    private bool _ready;
+    private bool _loadError;
+
+    private GraphData? _data;
+    private bool _load = true;
+
+    private bool _modeFocus;
+    private GraphRecordChoice? _focus;
+    private int _depth = 2;
+    private IReadOnlyCollection<string> _typeFilter = new HashSet<string>();
+    private string _kindChoice = "alle";
+
+    private GraphRecordChoice? _pathA;
+    private GraphRecordChoice? _pathB;
+    private PathResult? _path;
+    private bool _pathSearched;
+    private bool _pathRunning;
+
+    private record TypeOption(string Value, string Display, string Colour);
+    private static readonly TypeOption[] _allTypes =
+    {
+        new(nameof(Person), "Personen", "#22D3EE"),
+        new(nameof(Faction), "Fraktionen", "#7C8CF8"),
+        new(nameof(PersonGroup), "Personengruppen", "#D29922"),
+        new(nameof(Party), "Parteien", "#3FB950"),
+        new(nameof(Operation), "Operationen", "#F0883E"),
+        new(nameof(Case), "Vorgänge", "#A371F7"),
+        new(nameof(Taskforce), "Taskforces", "#2DD4BF"),
+        new(nameof(Job), "Aufgaben", "#8B98A8"),
+        new(nameof(Agent), "Agenten", "#E6EDF3"),
+        new(nameof(Law), "Gesetze", "#C9A227"),
+        new(nameof(PersonDoc), "Doks", "#6E7681"),
+        new(nameof(Observation), "Observationen", "#58A6FF"),
+    };
+    // Kompakte Legende (die wichtigsten Aktentypen).
+    private static readonly TypeOption[] _legendTypes = _allTypes.Take(7).ToArray();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        _meId = _user.GetAgentId();
+        _mayAllTf = _user.MayAllTaskforcesSee();
+
+        // Aus einer Detailseite mit ?typ=&id= → direkt fokussiert starten.
+        if (!string.IsNullOrWhiteSpace(FocusTypeQuery) && !string.IsNullOrWhiteSpace(FocusIdQuery))
+        {
+            _modeFocus = true;
+            _focus = new GraphRecordChoice(FocusTypeQuery!, FocusIdQuery!, string.Empty);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        try
+        {
+            // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn graph.js geändert wird.
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=6");
+            _ref = DotNetObjectReference.Create(this);
+            _ready = true;
+            await LoadAndDrawAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit getrennt – nichts zu tun.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Beziehungsgraph konnte nicht initialisiert werden (JS-Interop).");
+            _loadError = true;
+            _load = false;
+            StateHasChanged();
+        }
+    }
+
+    private LinkKind? KindFilter => _kindChoice switch
+    {
+        "Standard" => LinkKind.Default,
+        "Konflikt" => LinkKind.Conflict,
+        "Buendnis" => LinkKind.Alliance,
+        _ => null,
+    };
+
+    private async Task LoadAndDrawAsync()
+    {
+        _load = true;
+        _path = null;
+        _pathSearched = false;
+        StateHasChanged();
+
+        try
+        {
+            if (_modeFocus && _focus is null)
+            {
+                // Fokus-Modus ohne Auswahl → leerer Graph mit Hinweis.
+                _data = new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
+            }
+            else
+            {
+                var query = new GraphQuery(
+                    _modeFocus ? _focus!.Type : null,
+                    _modeFocus ? _focus!.Id : null,
+                    _depth,
+                    _typeFilter.Any() ? _typeFilter.ToList() : null,
+                    KindFilter);
+                _data = await GraphService.GetGraphAsync(query, _user);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Beziehungsgraph: Daten konnten nicht geladen werden.");
+            _data = new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
+        }
+
+        _load = false;
+        StateHasChanged();
+        await DrawAsync();
+    }
+
+    private async Task DrawAsync()
+    {
+        if (_module is null || !_ready || _data is null)
+        {
+            return;
+        }
+        try
+        {
+            await _module.InvokeVoidAsync("render", ContainerId, _data, _ref);
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Beziehungsgraph: Zeichnen fehlgeschlagen (JS-Interop).");
+        }
+    }
+
+    private async Task ModeSetAsync(bool focus)
+    {
+        _modeFocus = focus;
+        await LoadAndDrawAsync();
+    }
+
+    private async Task FocusSelectedAsync(GraphRecordChoice? choice)
+    {
+        _focus = choice;
+        if (_modeFocus)
+        {
+            await LoadAndDrawAsync();
+        }
+    }
+
+    private async Task TypeFilterChanged(IReadOnlyCollection<string> values)
+    {
+        _typeFilter = values ?? new HashSet<string>();
+        await LoadAndDrawAsync();
+    }
+
+    private async Task PathSearchAsync()
+    {
+        if (_pathA is null || _pathB is null)
+        {
+            return;
+        }
+        _pathRunning = true;
+        StateHasChanged();
+        try
+        {
+            _path = await GraphService.FindPathAsync(_pathA.Type, _pathA.Id, _pathB.Type, _pathB.Id, _user);
+            _pathSearched = true;
+            if (_path.Found)
+            {
+                // Den gefundenen Pfad als eigenständigen Graph zeichnen und hervorheben.
+                _data = new GraphData(_path.Node, _path.Edges, false);
+                StateHasChanged();
+                await DrawAsync();
+                if (_module is not null)
+                {
+                    var ids = _path.Node.Select(k => k.Id).ToList();
+                    var edges = _path.Edges.Select(k => $"{k.Source}|{k.Target}").ToList();
+                    try { await _module.InvokeVoidAsync("markierePfad", ContainerId, ids, edges); }
+                    catch (JSDisconnectedException) { /* Circuit weg */ }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Beziehungsgraph: Pfadsuche fehlgeschlagen.");
+        }
+        _pathRunning = false;
+        StateHasChanged();
+    }
+
+    private async Task CustomizeAsync() => await SafeInvoke("passeAn");
+    private async Task FullscreenAsync() => await SafeInvoke("vollbild");
+    private async Task ExportAsync() => await SafeInvoke("alsBildExportieren");
+
+    private async Task SafeInvoke(string function)
+    {
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        try { await _module.InvokeVoidAsync(function, ContainerId); }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception ex) { Logger.LogWarning(ex, "Beziehungsgraph: {Funktion} fehlgeschlagen.", function); }
+    }
+
+    /// <summary>Doppelklick auf einen Knoten im Graph → zur Akte navigieren.</summary>
+    [JSInvokable]
+    public async Task OnNodeClick(string nodeId)
+    {
+        var node = _data?.Node.FirstOrDefault(k => k.Id == nodeId);
+        if (node?.Href is not null)
+        {
+            // Aus dem JS-Interop-Aufruf sicher in den Render-Kontext marshallen (sonst ggf. Dispatcher-Fehler).
+            await InvokeAsync(() => Nav.NavigateTo(node.Href!));
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("zerstoere", ContainerId);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (Exception) { /* Aufräum-Fehler folgenlos */ }
+        _ref?.Dispose();
+    }
+}

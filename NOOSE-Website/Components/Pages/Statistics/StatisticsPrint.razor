@@ -1,0 +1,39 @@
+@* Druckansicht der Statistik (Phase 8 / Block D): rendert die Auswertungen als reine Tabellen
+   (keine Donuts – die invertiert das Druck-CSS sauber auf Papier) im gemeinsamen DruckRahmen,
+   der den Behördenkopf, den Druckvermerk und den automatischen Browser-Druckdialog liefert.
+   Aus Sicht des Aufrufers VS-gefiltert; in einem neuen Tab geöffnet → „Als PDF speichern". *@
+@page "/statistik/druck"
+@layout PrintLayout
+@using NOOSE_Website.Models.Dashboard
+@inject IStatisticsService Statistics
+
+<PageTitle>Statistik – Druckansicht · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_report is { } r)
+{
+    <PrintFrame Title="Statistik &amp; Auswertungen" BackHref="/statistik" BackText="Zurück zur Statistik"
+                 PrintedBy="@_printBy" IsClassified="false"
+                 Footer="NOOSE-interne Auswertung · Stand der Erzeugung · Weitergabe nur nach Freigabe durch die Führung.">
+        <StatisticsReportTables Report="r" />
+    </PrintFrame>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private StatisticsReport? _report;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+        _report = await Statistics.GetReportAsync(user.IsLeadership(), user.GetAgentId());
+        _load = false;
+    }
+}

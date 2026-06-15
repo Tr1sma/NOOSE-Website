@@ -1,0 +1,112 @@
+@* Der Aufgabe zugewiesene NOOSE-Agents: Liste + Zuweisen/Entfernen. Verwalten darf der Ersteller oder die
+   Führung (über das Flag <see cref="KannVerwalten"/>). Komponentenname bewusst „AufgabeAgentePanel" wegen der
+   global per @using sichtbaren Shared-Ordner. *@
+@inject IJobService JobService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Zugewiesene Agents (@_agents.Count)</MudText>
+        @if (CanManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AssignAsync">
+                Agent zuweisen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_agents.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch niemandem zugewiesen.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _agents)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(a.Agent?.Rank)</MudChip>
+                    </MudStack>
+                    @if (CanManage)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveAsync(a))" aria-label="Zuweisung aufheben" />
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string JobId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Darf der Aufrufer zuweisen/entfernen (Ersteller oder Führung)? Vom Detail berechnet.</summary>
+    [Parameter] public bool CanManage { get; set; }
+
+    /// <summary>Wird nach jeder Änderung der Zuweisungen ausgelöst (Karte aktualisieren).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private List<JobAssignment> _agents = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _agents = await JobService.GetAssignmentsAsync(JobId);
+        _load = false;
+    }
+
+    private async Task AssignAsync()
+    {
+        var exclusion = _agents.Select(a => a.AgentId).ToList();
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await JobService.AgentAssignAsync(JobId, choice.AgentId, User);
+            Snackbar.Add("Agent zugewiesen.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(JobAssignment a)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Zuweisung aufheben?",
+            $"„{a.Agent?.Codename}“ ist dieser Aufgabe nicht mehr zugewiesen.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await JobService.AgentRemoveAsync(a.Id, User);
+            Snackbar.Add("Zuweisung aufgehoben.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

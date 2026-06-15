@@ -1,0 +1,188 @@
+@page "/fraktionen"
+@inject IFactionService FactionService
+@inject IRecencyService Recency
+@inject NavigationManager Nav
+
+<PageTitle>Fraktionen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Fraktionen</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Leadership">
+        <MudButton Href="/fraktionen/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Organisationen (Gangs, Konzerne, …) mit Mitgliedern, Beständen, Rängen und Konflikten.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="FactionRow" Items="_rows" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Open(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_search" Placeholder="Suchen (Name, Aktenzeichen, Art)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
+            <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
+                <CellTemplate>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @* Titelbild als kleines Vorschaubild (falls markiert), sonst neutraler Platzhalter. *@
+                        @if (!string.IsNullOrEmpty(context.Item.TitleImagePhotoId))
+                        {
+                            <MudImage Src="@($"/dateien/fraktionen/foto/{context.Item.TitleImagePhotoId}")" Alt="Titelbild"
+                                      Height="28" Width="28" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Default" Size="Size.Small" />
+                        }
+                        @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                        <MudLink Href="@($"/fraktionen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Kind" Title="Art" />
+            <PropertyColumn Property="x => x.MemberCount" Title="Mitglieder" />
+            <TemplateColumn Sortable="true" Title="Einstufung" SortBy="x => x.Classification">
+                <CellTemplate>
+                    <ClassificationBadge Value="context.Item.Classification" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Gefährdung" SortBy="x => x.ThreatScore ?? -1" InitialDirection="SortDirection.Descending">
+                <CellTemplate>
+                    @if (context.Item.ThreatScore is { } gscore)
+                    {
+                        <MudTooltip Text="@($"Bedrohungs-Score {gscore}/100" + (context.Item.ThreatConfidence is { } gk ? $" · Konfidenz {gk} %" : ""))">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@DangerColour(context.Item.Hazard)">
+                                @HazardLevelLogic.Name(context.Item.Hazard)
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IsClassified">
+                <CellTemplate>
+                    @if (context.Item.IsClassified)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Level">
+                <CellTemplate>
+                    <RecencyIndicator Level="context.Item.Level" ReferenceDateUtc="context.Item.RefreshedUtc" />
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Refreshed" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
+        </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Fraktionen erfasst – lege die erste an.</MudText>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                    <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="FactionRow" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string _search = string.Empty;
+    private List<FactionRow> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var mayClassifiedRead = user.MayClassifiedRead();
+        var factions = await FactionService.GetListAsync(mayClassifiedRead);
+        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Faction));
+        var now = DateTime.UtcNow;
+        _rows = factions.Select(f =>
+        {
+            var referenceUtc = f.ModifiedAt ?? f.CreatedAt;
+            return new FactionRow
+            {
+                Id = f.Id,
+                CaseNumber = f.CaseNumber,
+                Name = f.Name,
+                Kind = f.Kind ?? "—",
+                // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+                MemberCount = f.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
+                TitleImagePhotoId = f.Photos.FirstOrDefault(x => x.IsTitleImage)?.Id,
+                Classification = f.Classification,
+                ThreatScore = f.IsStateFaction ? null : f.ThreatScore,
+                ThreatConfidence = f.ThreatConfidence,
+                Hazard = HazardLevelLogic.From(f.ThreatScore),
+                IsClassified = f.IsClassified,
+                RefreshedUtc = referenceUtc,
+                Refreshed = referenceUtc.ToLocalTime(),
+                // Staatsfraktionen können nicht veralten – Ampel bleibt dauerhaft „Aktuell".
+                Level = f.IsStateFaction ? RecencyLevel.Fresh : RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+            };
+        }).ToList();
+        _load = false;
+    }
+
+    private bool Filter(FactionRow z)
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            return true;
+        }
+        var s = _search.Trim();
+        return z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Kind.Contains(s, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Open(FactionRow z) => Nav.NavigateTo($"/fraktionen/{z.Id}");
+
+    private static Color DangerColour(HazardLevel s) => s switch
+    {
+        HazardLevel.Critical => Color.Error,
+        HazardLevel.High => Color.Error,
+        HazardLevel.Medium => Color.Warning,
+        HazardLevel.Low => Color.Info,
+        _ => Color.Default,
+    };
+
+    private sealed class FactionRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string CaseNumber { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public int MemberCount { get; set; }
+        public string? TitleImagePhotoId { get; set; }
+        public Classification Classification { get; set; }
+        public int? ThreatScore { get; set; }
+        public int? ThreatConfidence { get; set; }
+        public HazardLevel Hazard { get; set; }
+        public bool IsClassified { get; set; }
+        public DateTime RefreshedUtc { get; set; }
+        public DateTime Refreshed { get; set; }
+        public RecencyLevel Level { get; set; }
+    }
+}

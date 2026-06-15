@@ -1,0 +1,271 @@
+@page "/aufgaben/{Id}"
+@inject IJobService JobService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_job?.Title ?? "Aufgabe") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_job is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Aufgabe nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/aufgaben" aria-label="Zurück" />
+        <MudText Typo="Typo.h5">@_job.Title</MudText>
+        @if (_job.IsRestricted)
+        {
+            <MudTooltip Text="Nur zugeteilte Agents, Ersteller und die Leitung sehen diese Aufgabe.">
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">Eingeschränkt</MudChip>
+            </MudTooltip>
+        }
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/aufgaben/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        @if (_canEdit)
+        {
+            <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                <MudButton Href="@($"/aufgaben/{_job.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            </AuthorizeView>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        }
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(Job)" EntityId="@_job.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Aktenzeichen</MudText>
+                        <MudText Typo="Typo.body1">@_job.CaseNumber</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Status</MudText>
+                        <div><JobStatusChip Status="_job.Status" /></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Priorität</MudText>
+                        <div><JobPriorityChip Priority="_job.Priority" /></div>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Fälligkeit</MudText>
+                        @if (_job.DueDate is { } f)
+                        {
+                            <MudText Typo="Typo.body2" Color="@(Overdue ? Color.Error : Color.Default)">
+                                @f.ToLocalTime().ToString("dd.MM.yyyy")@(Overdue ? " · überfällig" : "")
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Zugewiesen</MudText>
+                        @if (_assignments.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap" style="gap:.25rem;">
+                                @foreach (var z in _assignments)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Person">@z.Agent?.Codename</MudChip>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Angelegt</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@_job.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                    </div>
+                    @if (_job.DoneAt is { } done)
+                    {
+                        <div>
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Abgeschlossen</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@done.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                        </div>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="4">
+                        <MudSelect T="JobStatus" Value="_job.Status" ValueChanged="StatusChangeAsync" Label="Status"
+                                   Variant="Variant.Outlined" Disabled="@(!_canStatusChange)" Style="max-width:280px;">
+                            @foreach (var s in JobStatusDisplay.All)
+                            {
+                                <MudSelectItem Value="s">@JobStatusDisplay.Name(s)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        @if (!_canStatusChange)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Nur der Ersteller, zugewiesene Agenten oder die Führung können den Status ändern.
+                            </MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_job.Description))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_job.Description</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Beschreibung erfasst.</MudText>
+                        }
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Beteiligte" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <JobAgentsPanel JobId="@_job.Id" User="_user" CanManage="_canEdit" Changed="AssignmentsRefreshAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
+                    <JobContentPanel JobId="@_job.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <CommentPanel EntityType="@nameof(Job)" EntityId="@_job.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <SourcesPanel EntityType="@nameof(Job)" EntityId="@_job.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <TimelinePanel EntityType="@nameof(Job)" EntityId="@_job.Id" User="_user" @key="_historyKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Job? _job;
+    private List<JobAssignment> _assignments = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _canEdit;
+    private bool _amInvolved;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    private bool _canStatusChange => _canEdit || _amInvolved;
+    private bool Overdue => _job?.DueDate is { } f && f.Date < DateTime.Today && JobStatusDisplay.IsOpen(_job.Status);
+
+    private int _activeTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "beteiligte", "verknuepfungen", "kommentare", "quellen", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _job = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
+        if (_job is not null)
+        {
+            await AccessLog.LogViewAsync(nameof(Job), _job.Id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _job = await JobService.GetDetailAsync(Id, _user);
+        if (_job is not null)
+        {
+            await AssignmentsLoadAsync();
+            var meId = _user.GetAgentId();
+            _canEdit = _user.IsLeadership() || _job.CreatedById == meId;
+        }
+        _load = false;
+    }
+
+    private async Task AssignmentsLoadAsync()
+    {
+        if (_job is null)
+        {
+            return;
+        }
+        _assignments = await JobService.GetAssignmentsAsync(_job.Id);
+        var meId = _user.GetAgentId();
+        _amInvolved = meId is not null && _assignments.Any(z => z.AgentId == meId);
+    }
+
+    private async Task AssignmentsRefreshAsync()
+    {
+        await AssignmentsLoadAsync();
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task StatusChangeAsync(JobStatus @new)
+    {
+        if (_job is null || @new == _job.Status)
+        {
+            return;
+        }
+        try
+        {
+            await JobService.StatusSetAsync(_job.Id, @new, _user);
+            Snackbar.Add($"Status: {JobStatusDisplay.Name(@new)}.", Severity.Success);
+            await LoadAsync();
+            _historyKey = Guid.NewGuid();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_job is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Aufgabe löschen?",
+            "Die Aufgabe wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await JobService.DeleteAsync(_job.Id, _user);
+        Snackbar.Add("Aufgabe in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/aufgaben");
+    }
+}

@@ -1,0 +1,174 @@
+@* Vereinheitlichter Akten-Zeitstrahl: Audit-Ereignisse + semantische Domänen-Ereignisse einer beliebigen Akte
+   (polymorph über EntitaetTyp/EntitaetId), chronologisch absteigend, mit Kategorie-Filter. Rein lesend –
+   ersetzt den bisherigen je-Akte „Historie"-Reiter. *@
+@using NOOSE_Website.Models.Timeline
+@inject ITimelineService TimelineService
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_all.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein Verlauf vorhanden.</MudText>
+}
+else
+{
+    <MudStack Spacing="3">
+        @* Kategorie-Filter: Chips schalten die jeweilige Ereignisart ein/aus (Standard: alle an). *@
+        <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+            @foreach (var k in _exists)
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Variant="@(_active.Contains(k) ? Variant.Filled : Variant.Outlined)"
+                         Color="@Colour(k)" OnClick="@(() => Toggle(k))">
+                    @Name(k) (@_counter[k])
+                </MudChip>
+            }
+        </MudStack>
+
+        @{
+            var filtered = Filtered().ToList();
+        }
+        @if (filtered.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Ereignisse für die gewählten Kategorien.</MudText>
+        }
+        else
+        {
+            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                @foreach (var e in filtered)
+                {
+                    <MudTimelineItem Color="@Colour(e.Category)" Size="Size.Small">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Symbol(e.Category)" Size="Size.Small" Color="@Colour(e.Category)" />
+                                @if (!string.IsNullOrEmpty(e.Href))
+                                {
+                                    <MudLink Href="@e.Href" Typo="Typo.body1"><b>@e.Title</b></MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body1"><b>@e.Title</b></MudText>
+                                }
+                            </MudStack>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @e.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(e.ActorName ?? "System")
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(e.Detail))
+                            {
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@e.Detail</MudText>
+                            }
+                            @if (e.Changes is { Count: > 0 } changes)
+                            {
+                                <MudStack Spacing="0" Class="mt-1">
+                                    @foreach (var a in changes)
+                                    {
+                                        <MudText Typo="Typo.caption">
+                                            <b>@a.Field:</b> <span class="mud-text-secondary">@a.Alt → @a.New</span>
+                                        </MudText>
+                                    }
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private IReadOnlyList<TimelineEntry> _all = Array.Empty<TimelineEntry>();
+    private List<TimelineCategory> _exists = new();
+    private readonly HashSet<TimelineCategory> _active = new();
+    private Dictionary<TimelineCategory, int> _counter = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _all = await TimelineService.GetTimelineAsync(EntityType, EntityId, User);
+        _exists = _all.Select(e => e.Category).Distinct().OrderBy(k => (int)k).ToList();
+        _counter = _all.GroupBy(e => e.Category).ToDictionary(g => g.Key, g => g.Count());
+        _active.Clear();
+        foreach (var k in _exists)
+        {
+            _active.Add(k);
+        }
+        _load = false;
+    }
+
+    private IEnumerable<TimelineEntry> Filtered() => _all.Where(e => _active.Contains(e.Category));
+
+    private void Toggle(TimelineCategory k)
+    {
+        if (!_active.Remove(k))
+        {
+            _active.Add(k);
+        }
+    }
+
+    private static string Name(TimelineCategory k) => k switch
+    {
+        TimelineCategory.Asset => "Anlage",
+        TimelineCategory.Change => "Änderung",
+        TimelineCategory.Deletion => "Löschung",
+        TimelineCategory.Restoration => "Wiederherstellung",
+        TimelineCategory.Classification => "Einstufung",
+        TimelineCategory.Doc => "Dok",
+        TimelineCategory.Observation => "Observation",
+        TimelineCategory.Photo => "Foto",
+        TimelineCategory.Relation => "Beziehung",
+        TimelineCategory.Membership => "Mitgliedschaft",
+        TimelineCategory.Allocation => "Zuteilung",
+        TimelineCategory.Link => "Verknüpfung",
+        TimelineCategory.Comment => "Kommentar",
+        TimelineCategory.Source => "Quelle",
+        TimelineCategory.Followup => "Wiedervorlage",
+        TimelineCategory.Activity => "Aktivität",
+        _ => k.ToString(),
+    };
+
+    private static Color Colour(TimelineCategory k) => k switch
+    {
+        TimelineCategory.Asset => Color.Success,
+        TimelineCategory.Change => Color.Info,
+        TimelineCategory.Deletion => Color.Error,
+        TimelineCategory.Restoration => Color.Warning,
+        TimelineCategory.Classification => Color.Warning,
+        TimelineCategory.Doc => Color.Primary,
+        TimelineCategory.Observation => Color.Info,
+        TimelineCategory.Relation => Color.Tertiary,
+        TimelineCategory.Membership => Color.Secondary,
+        TimelineCategory.Allocation => Color.Secondary,
+        TimelineCategory.Link => Color.Primary,
+        TimelineCategory.Followup => Color.Warning,
+        TimelineCategory.Activity => Color.Tertiary,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(TimelineCategory k) => k switch
+    {
+        TimelineCategory.Asset => Icons.Material.Filled.AddCircle,
+        TimelineCategory.Change => Icons.Material.Filled.Edit,
+        TimelineCategory.Deletion => Icons.Material.Filled.Delete,
+        TimelineCategory.Restoration => Icons.Material.Filled.Restore,
+        TimelineCategory.Classification => Icons.Material.Filled.Shield,
+        TimelineCategory.Doc => Icons.Material.Filled.Description,
+        TimelineCategory.Observation => Icons.Material.Filled.Visibility,
+        TimelineCategory.Photo => Icons.Material.Filled.Photo,
+        TimelineCategory.Relation => Icons.Material.Filled.People,
+        TimelineCategory.Membership => Icons.Material.Filled.GroupAdd,
+        TimelineCategory.Allocation => Icons.Material.Filled.AssignmentInd,
+        TimelineCategory.Link => Icons.Material.Filled.Link,
+        TimelineCategory.Comment => Icons.Material.Filled.Comment,
+        TimelineCategory.Source => Icons.Material.Filled.AttachFile,
+        TimelineCategory.Followup => Icons.Material.Filled.Schedule,
+        TimelineCategory.Activity => Icons.Material.Filled.LocalFireDepartment,
+        _ => Icons.Material.Filled.Circle,
+    };
+}

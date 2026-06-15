@@ -1,0 +1,92 @@
+@* Duplikat-Zusammenführen (Phase 7): überführt eine doppelt angelegte Personenakte vollständig in
+   eine andere. Nur Führung; die Quell-Akte landet anschließend im Papierkorb. *@
+@inject IPersonService PersonService
+@inject IPersonMergeService MergeService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                Alle Inhalte der Quell-Akte (Doks, Observationen, Fotos, Steckbrief, Beziehungen,
+                Verknüpfungen, Tags, Kommentare, Quellen, Mitgliedschaften, Verlauf) werden in die
+                Ziel-Akte überführt. Die Quell-Akte wandert in den Papierkorb; ihr Name bleibt als
+                Alias erhalten. Einstufung und Lebensstatus der Ziel-Akte bleiben unverändert.
+            </MudAlert>
+
+            <MudAutocomplete T="Person" Label="Quell-Akte (Duplikat, wird aufgelöst)" @bind-Value="_source"
+                             SearchFunc="Search" ToStringFunc="@(p => Display(p))" Variant="Variant.Outlined"
+                             Clearable="true" MinCharacters="1" AutoFocus="true" />
+            <MudAutocomplete T="Person" Label="Ziel-Akte (bleibt bestehen)" @bind-Value="_target"
+                             SearchFunc="Search" ToStringFunc="@(p => Display(p))" Variant="Variant.Outlined"
+                             Clearable="true" MinCharacters="1" />
+
+            @if (_source is not null && _target is not null && _source.Id == _target.Id)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">Quelle und Ziel müssen unterschiedliche Akten sein.</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.CallMerge"
+                   OnClick="MergeAsync" Disabled="@(!CanMerge)">
+            @(_busy ? "Wird zusammengeführt…" : "Zusammenführen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private Person? _source;
+    private Person? _target;
+    private bool _busy;
+
+    private bool CanMerge
+        => !_busy && _source is not null && _target is not null && _source.Id != _target.Id;
+
+    private static string Display(Person? p) => p is null ? string.Empty : $"{p.Name} ({p.CaseNumber})";
+
+    private async Task<IEnumerable<Person>> Search(string value, CancellationToken token)
+    {
+        var user = (await AuthStateTask).User;
+        return await PersonService.SearchAsync(value, user.IsLeadership(), 15, token);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task MergeAsync()
+    {
+        if (!CanMerge)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var user = (await AuthStateTask).User;
+            await MergeService.MergeAsync(_source!.Id, _target!.Id, user);
+            Snackbar.Add($"Akte „{_source.Name}“ wurde in „{_target.Name}“ überführt.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(_target.Id));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Öffnet den Zusammenführen-Dialog; liefert die Id der Ziel-Akte oder <c>null</c>.</summary>
+    public static async Task<string?> ShowAsync(IDialogService dialog)
+    {
+        var reference = await dialog.ShowAsync<PersonMergeDialog>("Akten zusammenführen",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: string targetId } ? targetId : null;
+    }
+}

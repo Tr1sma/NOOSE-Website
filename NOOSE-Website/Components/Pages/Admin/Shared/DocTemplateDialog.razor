@@ -1,0 +1,93 @@
+@* Dialog zum Anlegen/Bearbeiten einer Dok-Vorlage (Erfassungsmaske). Liefert eine DokVorlageEingabe zurück. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_input.Name" Label="Name der Vorlage" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Name ist erforderlich" AutoFocus="true" Immediate="true"
+                              HelperText="z. B. „Verhör – Standard“ oder „Routine-Kontrolle“." />
+                <MudTextField @bind-Value="_input.Description" Label="Beschreibung (optional)" Lines="2" Variant="Variant.Outlined"
+                              HelperText="Wird in der Verwaltung und im Vorlagen-Picker angezeigt." />
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudSwitch T="bool" @bind-Value="_input.IsActive" Color="Color.Primary"
+                                   Label="Aktiv (im Picker auswählbar)" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField T="int" @bind-Value="_input.Sorting" Label="Sortierung" Variant="Variant.Outlined"
+                                         HelperText="Kleinere Werte zuerst." />
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Vorbelegte Dok-Felder</MudText>
+
+                <MudSelect T="MeasureOutcome" Label="Beendigung der Maßnahme" @bind-Value="_input.DefaultOutcome" Variant="Variant.Outlined">
+                    @foreach (var a in MeasureOutcomeDisplay.All)
+                    {
+                        <MudSelectItem Value="a">@MeasureOutcomeDisplay.Name(a)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField @bind-Value="_input.DefaultReason" Label="Grund (Vorgabe)" Lines="2" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_input.DefaultFaction" Label="Fraktionszugehörigkeit – Freitext (Vorgabe)" Variant="Variant.Outlined"
+                              HelperText="Org-Verknüpfung wird beim Dok selbst gewählt; hier nur der Freitext-Default." />
+                <MudTextField @bind-Value="_input.DefaultReceivedInformation" Label="Erhaltene Informationen (Vorgabe)" Lines="3" Variant="Variant.Outlined" />
+                <MudSwitch T="bool" @bind-Value="_input.DefaultTruthSerum" Color="Color.Primary" Label="Wahrheitsserum vorbelegen" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Beim Bearbeiten gesetzt: vorhandene Vorlage zum Vorbefüllen. Null = Anlegen.</summary>
+    [Parameter] public DocTemplate? Exists { get; set; }
+
+    private MudForm _form = default!;
+    private readonly DocTemplateInput _input = new();
+
+    protected override void OnInitialized()
+    {
+        if (Exists is null)
+        {
+            return;
+        }
+        _input.Name = Exists.Name;
+        _input.Description = Exists.Description;
+        _input.IsActive = Exists.IsActive;
+        _input.Sorting = Exists.Sorting;
+        _input.DefaultReason = Exists.DefaultReason;
+        _input.DefaultFaction = Exists.DefaultFaction;
+        _input.DefaultReceivedInformation = Exists.DefaultReceivedInformation;
+        _input.DefaultTruthSerum = Exists.DefaultTruthSerum;
+        _input.DefaultOutcome = Exists.DefaultOutcome;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        _input.Name = _input.Name.Trim();
+        MudDialog.Close(DialogResult.Ok(_input));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Vorlage). Liefert null bei Abbruch.</summary>
+    public static async Task<DocTemplateInput?> ShowAsync(IDialogService dialog, string title, DocTemplate? exists = null)
+    {
+        var parameters = new DialogParameters<DocTemplateDialog> { { x => x.Exists, exists } };
+        var reference = await dialog.ShowAsync<DocTemplateDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: DocTemplateInput e } ? e : null;
+    }
+}

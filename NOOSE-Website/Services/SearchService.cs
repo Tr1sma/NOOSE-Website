@@ -1,632 +1,632 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Aufgaben;
-using NOOSE_Website.Data.Entities.Fraktionen;
-using NOOSE_Website.Data.Entities.Gruppen;
-using NOOSE_Website.Data.Entities.Operationen;
-using NOOSE_Website.Data.Entities.Parteien;
-using NOOSE_Website.Data.Entities.Personen;
-using NOOSE_Website.Data.Entities.Querschnitt;
+using NOOSE_Website.Data.Entities.Jobs;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Parties;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
-using NOOSE_Website.Data.Entities.Vorgaenge;
+using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Models.Enums;
-using NOOSE_Website.Models.Querschnitt;
+using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ISearchService" />
 public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchService
 {
-    private const int MaxProKategorie = 50;
+    private const int MaxPerCategory = 50;
 
     /// <summary>Obergrenze der in-memory geprüften Fuzzy-Kandidaten je Kategorie (Schutz vor Last bei großen Datenmengen).</summary>
-    private const int FuzzyKandidatenMax = 2000;
+    private const int FuzzyCandidatesMax = 2000;
 
-    public async Task<List<SuchErgebnisGruppe>> SuchenAsync(SuchKriterien kriterien, bool istFuehrung, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<SearchResultGroup>> SearchAsync(SearchCriteria criteria, bool isLeadership, string? meId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var s = kriterien.Text?.Trim();
-        var hatText = !string.IsNullOrEmpty(s);
-        var tagIds = kriterien.TagIds ?? new();
-        var hatTags = tagIds.Count > 0;
-        var max = kriterien.MaxModus;
+        var s = criteria.Text?.Trim();
+        var hasText = !string.IsNullOrEmpty(s);
+        var tagIds = criteria.TagIds ?? new();
+        var hasTags = tagIds.Count > 0;
+        var max = criteria.MaxMode;
 
         // Bewusst KEIN Früh-Ausstieg bei leerem Text/leeren Tags: ohne Filter sollen alle (sichtbaren)
         // Personen erscheinen (Durchblättern). Die Personen-Query unten lässt dann einfach das Text-Where
         // weg; die reinen Text-Kategorien (Doks/Quellen/Kommentare) bleiben mangels Suchtext leer.
 
-        var kategorien = kriterien.Kategorien is { Count: > 0 } ? kriterien.Kategorien.ToHashSet() : null;
-        bool Aktiv(string kat) => kategorien is null || kategorien.Contains(kat);
+        var categories = criteria.Categories is { Count: > 0 } ? criteria.Categories.ToHashSet() : null;
+        bool Active(string kat) => categories is null || categories.Contains(kat);
 
         // Im Max-Modus werden die Inhalts-Kategorien (Doks/Quellen/Kommentare) immer mitdurchsucht,
         // unabhängig davon, ob ihr Häkchen gesetzt ist – eine einzige Wahrheitsquelle für die Erzwingung.
-        bool InhaltAktiv(string kat) => max || Aktiv(kat);
+        bool ContentActive(string kat) => max || Active(kat);
 
         // Suchwörter nur einmal zerlegen (für den in-memory Fuzzy-Pass).
-        var suchworte = kriterien.Fuzzy && hatText
-            ? TextAehnlichkeit.Tokens(s)
+        var searchWords = criteria.Fuzzy && hasText
+            ? TextSimilarity.Tokens(s)
             : (IReadOnlyList<string>)Array.Empty<string>();
-        bool FuzzyAktiv(int substringTreffer) => kriterien.Fuzzy && hatText && substringTreffer < MaxProKategorie;
+        bool FuzzyActive(int substringHit) => criteria.Fuzzy && hasText && substringHit < MaxPerCategory;
 
-        var gruppen = new List<SuchErgebnisGruppe>();
+        var groups = new List<SearchResultGroup>();
 
         // ---- Personen (Name/Aktenzeichen/Beschreibung/Aliase; Max zusätzlich Steckbrief-Unterdaten) ----
-        if (Aktiv(nameof(Person)))
+        if (Active(nameof(Person)))
         {
-            var q = db.Personen.Where(p => istFuehrung || !p.IstVerschlusssache);
-            if (hatText)
+            var q = db.People.Where(p => isLeadership || !p.IsClassified);
+            if (hasText)
             {
-                q = q.Where(p => p.Name.Contains(s!) || p.Aktenzeichen.Contains(s!)
-                    || (p.Beschreibung != null && p.Beschreibung.Contains(s!))
-                    || p.Aliase.Any(a => a.Aliasname.Contains(s!))
+                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
+                    || (p.Description != null && p.Description.Contains(s!))
+                    || p.Aliases.Any(a => a.AliasName.Contains(s!))
                     || (max && (
-                           p.Telefonnummern.Any(t => t.Nummer.Contains(s!) || (t.Bezeichnung != null && t.Bezeichnung.Contains(s!)))
-                        || p.Fahrzeuge.Any(f => f.Bezeichnung.Contains(s!) || (f.Kennzeichen != null && f.Kennzeichen.Contains(s!)))
-                        || p.Orte.Any(o => o.Text.Contains(s!) || (o.Notiz != null && o.Notiz.Contains(s!)))
-                        || p.Waffen.Any(w => w.Text.Contains(s!)))));
+                           p.PhoneNumbers.Any(t => t.Number.Contains(s!) || (t.Designation != null && t.Designation.Contains(s!)))
+                        || p.Vehicles.Any(f => f.Designation.Contains(s!) || (f.LicensePlate != null && f.LicensePlate.Contains(s!)))
+                        || p.Locations.Any(o => o.Text.Contains(s!) || (o.Note != null && o.Note.Contains(s!)))
+                        || p.Weapons.Any(w => w.Text.Contains(s!)))));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(p => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Person) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(p => p.Name).Take(MaxProKategorie)
-                .Select(p => new SuchTreffer(nameof(Person), p.Id, p.Name,
-                    p.Beschreibung ?? string.Empty, p.Aktenzeichen))
+            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
+                .Select(p => new SearchHit(nameof(Person), p.Id, p.Name,
+                    p.Description ?? string.Empty, p.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Personen.Where(p => istFuehrung || !p.IstVerschlusssache);
-                if (hatTags)
+                var @base = db.People.Where(p => isLeadership || !p.IsClassified);
+                if (hasTags)
                 {
-                    basis = basis.Where(p => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Person) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(p => p.GeaendertAm ?? p.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.Beschreibung })
+                var raw = await @base.OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(p => new { p.Id, p.Name, p.CaseNumber, p.Description })
                     .ToListAsync(cancellationToken);
                 // Aliase separat als flache Abfrage über die Kind-Tabelle laden (WHERE PersonId IN …).
                 // Bewusst KEIN SelectMany über die Navigation und KEINE Collection-Projektion mit .ToList():
                 // beides erzeugt auf MySQL/MariaDB ein nicht übersetzbares CROSS APPLY bzw. LATERAL.
-                var ids = roh.Select(x => x.Id).ToList();
-                var aliasNachPerson = (await db.PersonAliase
+                var ids = raw.Select(x => x.Id).ToList();
+                var aliasByPerson = (await db.PersonAliases
                         .Where(a => ids.Contains(a.PersonId))
-                        .Select(a => new { a.PersonId, a.Aliasname })
+                        .Select(a => new { a.PersonId, a.AliasName })
                         .ToListAsync(cancellationToken))
                     .GroupBy(a => a.PersonId)
-                    .ToDictionary(g => g.Key, g => g.Select(a => a.Aliasname).ToList());
-                var kandidaten = roh.Select(x =>
+                    .ToDictionary(g => g.Key, g => g.Select(a => a.AliasName).ToList());
+                var candidates = raw.Select(x =>
                 {
-                    var aliase = aliasNachPerson.TryGetValue(x.Id, out var liste) ? liste : new List<string>();
-                    return new FuzzyKandidat(x.Id, x.Name, x.Aktenzeichen, x.Beschreibung ?? string.Empty,
+                    var aliases = aliasByPerson.TryGetValue(x.Id, out var list) ? list : new List<string>();
+                    return new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Description ?? string.Empty,
                         max
-                            ? TextAehnlichkeit.Tokens(new[] { x.Name, x.Aktenzeichen, x.Beschreibung }.Concat(aliase).ToArray())
-                            : TextAehnlichkeit.Tokens(new[] { x.Name, x.Aktenzeichen }.Concat(aliase).ToArray()));
+                            ? TextSimilarity.Tokens(new[] { x.Name, x.CaseNumber, x.Description }.Concat(aliases).ToArray())
+                            : TextSimilarity.Tokens(new[] { x.Name, x.CaseNumber }.Concat(aliases).ToArray()));
                 });
-                treffer = FuzzyErgaenzen(nameof(Person), treffer, suchworte, kandidaten);
+                hit = FuzzySupplement(nameof(Person), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Person), "Personen", treffer));
+                groups.Add(new SearchResultGroup(nameof(Person), "Personen", hit));
             }
         }
 
         // ---- Fraktionen (Name/Aktenzeichen/Art/Beschreibung/Ziele; Max zusätzlich Anwesen/Funk/Darkchat/Ausstellungszeiten) ----
-        if (Aktiv(nameof(Fraktion)))
+        if (Active(nameof(Faction)))
         {
-            var q = db.Fraktionen.Where(f => istFuehrung || !f.IstVerschlusssache);
-            if (hatText)
+            var q = db.Factions.Where(f => isLeadership || !f.IsClassified);
+            if (hasText)
             {
-                q = q.Where(f => f.Name.Contains(s!) || f.Aktenzeichen.Contains(s!)
-                    || (f.Art != null && f.Art.Contains(s!))
-                    || (f.Beschreibung != null && f.Beschreibung.Contains(s!))
-                    || (f.Ziele != null && f.Ziele.Contains(s!))
+                q = q.Where(f => f.Name.Contains(s!) || f.CaseNumber.Contains(s!)
+                    || (f.Kind != null && f.Kind.Contains(s!))
+                    || (f.Description != null && f.Description.Contains(s!))
+                    || (f.Targets != null && f.Targets.Contains(s!))
                     || (max && (
-                           (f.Anwesen != null && f.Anwesen.Contains(s!))
-                        || (f.Funk != null && f.Funk.Contains(s!))
+                           (f.Estate != null && f.Estate.Contains(s!))
+                        || (f.Radio != null && f.Radio.Contains(s!))
                         || (f.Darkchat != null && f.Darkchat.Contains(s!))
-                        || (f.Ausstellungszeiten != null && f.Ausstellungszeiten.Contains(s!)))));
+                        || (f.IssuingTimes != null && f.IssuingTimes.Contains(s!)))));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(f => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Fraktion) && z.EntitaetId == f.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(f => db.TagMappings.Any(z => z.EntityType == nameof(Faction) && z.EntityId == f.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(f => f.Name).Take(MaxProKategorie)
-                .Select(f => new SuchTreffer(nameof(Fraktion), f.Id, f.Name, f.Art ?? string.Empty, f.Aktenzeichen))
+            var hit = await q.OrderBy(f => f.Name).Take(MaxPerCategory)
+                .Select(f => new SearchHit(nameof(Faction), f.Id, f.Name, f.Kind ?? string.Empty, f.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Fraktionen.Where(f => istFuehrung || !f.IstVerschlusssache);
-                if (hatTags)
+                var @base = db.Factions.Where(f => isLeadership || !f.IsClassified);
+                if (hasTags)
                 {
-                    basis = basis.Where(f => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Fraktion) && z.EntitaetId == f.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(f => db.TagMappings.Any(z => z.EntityType == nameof(Faction) && z.EntityId == f.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(f => f.GeaendertAm ?? f.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.Art, f.Beschreibung, f.Ziele, f.Anwesen, f.Funk, f.Darkchat, f.Ausstellungszeiten })
+                var raw = await @base.OrderByDescending(f => f.ModifiedAt ?? f.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(f => new { f.Id, f.Name, f.CaseNumber, f.Kind, f.Description, f.Targets, f.Estate, f.Radio, f.Darkchat, f.IssuingTimes })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Name, x.Aktenzeichen, x.Art ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Kind ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen, x.Art, x.Beschreibung, x.Ziele, x.Anwesen, x.Funk, x.Darkchat, x.Ausstellungszeiten)
-                        : TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Fraktion), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Kind, x.Description, x.Targets, x.Estate, x.Radio, x.Darkchat, x.IssuingTimes)
+                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(Faction), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Fraktion), "Fraktionen", treffer));
+                groups.Add(new SearchResultGroup(nameof(Faction), "Fraktionen", hit));
             }
         }
 
         // ---- Personengruppen (Name/Aktenzeichen/Beschreibung/Ziele/Art; Ziele jetzt analog Fraktion/Partei) ----
-        if (Aktiv(nameof(Personengruppe)))
+        if (Active(nameof(PersonGroup)))
         {
-            var q = db.Personengruppen.Where(g => istFuehrung || !g.IstVerschlusssache);
-            if (hatText)
+            var q = db.PersonGroups.Where(g => isLeadership || !g.IsClassified);
+            if (hasText)
             {
                 // Auch nach Kategorie-Namen (z. B. „Persönlichkeit", „Person of Interest") suchbar.
-                var passendeArten = GruppenArtAnzeige.Alle
-                    .Where(a => GruppenArtAnzeige.Name(a).Contains(s!, StringComparison.OrdinalIgnoreCase))
+                var matchingKinds = GroupsKindDisplay.All
+                    .Where(a => GroupsKindDisplay.Name(a).Contains(s!, StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                q = q.Where(g => g.Name.Contains(s!) || g.Aktenzeichen.Contains(s!)
-                    || (g.Beschreibung != null && g.Beschreibung.Contains(s!))
-                    || (g.Ziele != null && g.Ziele.Contains(s!))
-                    || passendeArten.Contains(g.Art));
+                q = q.Where(g => g.Name.Contains(s!) || g.CaseNumber.Contains(s!)
+                    || (g.Description != null && g.Description.Contains(s!))
+                    || (g.Targets != null && g.Targets.Contains(s!))
+                    || matchingKinds.Contains(g.Kind));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(g => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Personengruppe) && z.EntitaetId == g.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(g => db.TagMappings.Any(z => z.EntityType == nameof(PersonGroup) && z.EntityId == g.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(g => g.Name).Take(MaxProKategorie)
-                .Select(g => new SuchTreffer(nameof(Personengruppe), g.Id, g.Name, g.Beschreibung ?? string.Empty, g.Aktenzeichen))
+            var hit = await q.OrderBy(g => g.Name).Take(MaxPerCategory)
+                .Select(g => new SearchHit(nameof(PersonGroup), g.Id, g.Name, g.Description ?? string.Empty, g.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Personengruppen.Where(g => istFuehrung || !g.IstVerschlusssache);
-                if (hatTags)
+                var @base = db.PersonGroups.Where(g => isLeadership || !g.IsClassified);
+                if (hasTags)
                 {
-                    basis = basis.Where(g => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Personengruppe) && z.EntitaetId == g.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(g => db.TagMappings.Any(z => z.EntityType == nameof(PersonGroup) && z.EntityId == g.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(g => g.GeaendertAm ?? g.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.Beschreibung, g.Ziele })
+                var raw = await @base.OrderByDescending(g => g.ModifiedAt ?? g.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(g => new { g.Id, g.Name, g.CaseNumber, g.Description, g.Targets })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Name, x.Aktenzeichen, x.Beschreibung ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Description ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen, x.Beschreibung, x.Ziele)
-                        : TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Personengruppe), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Description, x.Targets)
+                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(PersonGroup), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Personengruppe), "Personengruppen", treffer));
+                groups.Add(new SearchResultGroup(nameof(PersonGroup), "Personengruppen", hit));
             }
         }
 
         // ---- Parteien (Name/Aktenzeichen/Beschreibung/Ziele/Bemerkungen) ----
-        if (Aktiv(nameof(Partei)))
+        if (Active(nameof(Party)))
         {
-            var q = db.Parteien.Where(p => istFuehrung || !p.IstVerschlusssache);
-            if (hatText)
+            var q = db.Parties.Where(p => isLeadership || !p.IsClassified);
+            if (hasText)
             {
-                q = q.Where(p => p.Name.Contains(s!) || p.Aktenzeichen.Contains(s!)
-                    || (p.Beschreibung != null && p.Beschreibung.Contains(s!))
-                    || (p.Ziele != null && p.Ziele.Contains(s!))
-                    || (p.Bemerkungen != null && p.Bemerkungen.Contains(s!)));
+                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
+                    || (p.Description != null && p.Description.Contains(s!))
+                    || (p.Targets != null && p.Targets.Contains(s!))
+                    || (p.Remarks != null && p.Remarks.Contains(s!)));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(p => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Partei) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Party) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(p => p.Name).Take(MaxProKategorie)
-                .Select(p => new SuchTreffer(nameof(Partei), p.Id, p.Name, p.Beschreibung ?? string.Empty, p.Aktenzeichen))
+            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
+                .Select(p => new SearchHit(nameof(Party), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Parteien.Where(p => istFuehrung || !p.IstVerschlusssache);
-                if (hatTags)
+                var @base = db.Parties.Where(p => isLeadership || !p.IsClassified);
+                if (hasTags)
                 {
-                    basis = basis.Where(p => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Partei) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Party) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(p => p.GeaendertAm ?? p.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.Beschreibung, p.Ziele, p.Bemerkungen })
+                var raw = await @base.OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(p => new { p.Id, p.Name, p.CaseNumber, p.Description, p.Targets, p.Remarks })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Name, x.Aktenzeichen, x.Beschreibung ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Description ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen, x.Beschreibung, x.Ziele, x.Bemerkungen)
-                        : TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Partei), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Description, x.Targets, x.Remarks)
+                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(Party), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Partei), "Parteien", treffer));
+                groups.Add(new SearchResultGroup(nameof(Party), "Parteien", hit));
             }
         }
 
         // ---- Operationen (Titel/Aktenzeichen/Ablauf/Ergebnis/Ort/Typ/Bemerkungen) ----
-        if (Aktiv(nameof(Operation)))
+        if (Active(nameof(Operation)))
         {
-            var q = db.Operationen.Where(o => istFuehrung || !o.IstVerschlusssache);
-            if (hatText)
+            var q = db.Operations.Where(o => isLeadership || !o.IsClassified);
+            if (hasText)
             {
-                q = q.Where(o => o.Titel.Contains(s!) || o.Aktenzeichen.Contains(s!)
-                    || (o.Ablauf != null && o.Ablauf.Contains(s!))
-                    || (o.Ergebnis != null && o.Ergebnis.Contains(s!))
-                    || (o.Ort != null && o.Ort.Contains(s!))
-                    || (o.Typ != null && o.Typ.Contains(s!))
-                    || (o.Bemerkungen != null && o.Bemerkungen.Contains(s!)));
+                q = q.Where(o => o.Title.Contains(s!) || o.CaseNumber.Contains(s!)
+                    || (o.Expiry != null && o.Expiry.Contains(s!))
+                    || (o.Result != null && o.Result.Contains(s!))
+                    || (o.Location != null && o.Location.Contains(s!))
+                    || (o.Type != null && o.Type.Contains(s!))
+                    || (o.Remarks != null && o.Remarks.Contains(s!)));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(o => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Operation) && z.EntitaetId == o.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(o => db.TagMappings.Any(z => z.EntityType == nameof(Operation) && z.EntityId == o.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(o => o.Titel).Take(MaxProKategorie)
-                .Select(o => new SuchTreffer(nameof(Operation), o.Id, o.Titel, o.Ablauf ?? o.Typ ?? string.Empty, o.Aktenzeichen))
+            var hit = await q.OrderBy(o => o.Title).Take(MaxPerCategory)
+                .Select(o => new SearchHit(nameof(Operation), o.Id, o.Title, o.Expiry ?? o.Type ?? string.Empty, o.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Operationen.Where(o => istFuehrung || !o.IstVerschlusssache);
-                if (hatTags)
+                var @base = db.Operations.Where(o => isLeadership || !o.IsClassified);
+                if (hasTags)
                 {
-                    basis = basis.Where(o => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Operation) && z.EntitaetId == o.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(o => db.TagMappings.Any(z => z.EntityType == nameof(Operation) && z.EntityId == o.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(o => o.GeaendertAm ?? o.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(o => new { o.Id, o.Titel, o.Aktenzeichen, o.Typ, o.Ort, o.Ablauf, o.Ergebnis, o.Bemerkungen })
+                var raw = await @base.OrderByDescending(o => o.ModifiedAt ?? o.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(o => new { o.Id, o.Title, o.CaseNumber, o.Type, o.Location, o.Expiry, o.Result, o.Remarks })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Titel, x.Aktenzeichen, x.Ablauf ?? x.Typ ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, x.CaseNumber, x.Expiry ?? x.Type ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen, x.Typ, x.Ort, x.Ablauf, x.Ergebnis, x.Bemerkungen)
-                        : TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Operation), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Title, x.CaseNumber, x.Type, x.Location, x.Expiry, x.Result, x.Remarks)
+                        : TextSimilarity.Tokens(x.Title, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(Operation), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Operation), "Operationen", treffer));
+                groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
             }
         }
 
         // ---- Taskforces (Name/Aktenzeichen/Zweck/Bemerkungen) ----
-        if (Aktiv(nameof(Taskforce)))
+        if (Active(nameof(Taskforce)))
         {
-            var q = db.Taskforces.NurSichtbare(db, istFuehrung, meId);
-            if (hatText)
+            var q = db.Taskforces.OnlyVisible(db, isLeadership, meId);
+            if (hasText)
             {
-                q = q.Where(t => t.Name.Contains(s!) || t.Aktenzeichen.Contains(s!)
-                    || (t.Zweck != null && t.Zweck.Contains(s!))
-                    || (t.Bemerkungen != null && t.Bemerkungen.Contains(s!)));
+                q = q.Where(t => t.Name.Contains(s!) || t.CaseNumber.Contains(s!)
+                    || (t.Purpose != null && t.Purpose.Contains(s!))
+                    || (t.Remarks != null && t.Remarks.Contains(s!)));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(t => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Taskforce) && z.EntitaetId == t.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(t => db.TagMappings.Any(z => z.EntityType == nameof(Taskforce) && z.EntityId == t.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(t => t.Name).Take(MaxProKategorie)
-                .Select(t => new SuchTreffer(nameof(Taskforce), t.Id, t.Name, t.Zweck ?? string.Empty, t.Aktenzeichen))
+            var hit = await q.OrderBy(t => t.Name).Take(MaxPerCategory)
+                .Select(t => new SearchHit(nameof(Taskforce), t.Id, t.Name, t.Purpose ?? string.Empty, t.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Taskforces.NurSichtbare(db, istFuehrung, meId);
-                if (hatTags)
+                var @base = db.Taskforces.OnlyVisible(db, isLeadership, meId);
+                if (hasTags)
                 {
-                    basis = basis.Where(t => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Taskforce) && z.EntitaetId == t.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(t => db.TagMappings.Any(z => z.EntityType == nameof(Taskforce) && z.EntityId == t.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(t => t.GeaendertAm ?? t.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.Zweck, t.Bemerkungen })
+                var raw = await @base.OrderByDescending(t => t.ModifiedAt ?? t.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(t => new { t.Id, t.Name, t.CaseNumber, t.Purpose, t.Remarks })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Name, x.Aktenzeichen, x.Zweck ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Purpose ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen, x.Zweck, x.Bemerkungen)
-                        : TextAehnlichkeit.Tokens(x.Name, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Taskforce), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Purpose, x.Remarks)
+                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(Taskforce), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Taskforce), "Taskforces", treffer));
+                groups.Add(new SearchResultGroup(nameof(Taskforce), "Taskforces", hit));
             }
         }
 
         // ---- Vorgänge/Fälle (Titel/Aktenzeichen/Typ/Beschreibung/Zusammenfassung/Abschlussvermerk) ----
-        if (Aktiv(nameof(Vorgang)))
+        if (Active(nameof(Case)))
         {
-            var q = db.Vorgaenge.Where(v => istFuehrung || !v.IstVerschlusssache);
-            if (hatText)
+            var q = db.Cases.Where(v => isLeadership || !v.IsClassified);
+            if (hasText)
             {
-                q = q.Where(v => v.Titel.Contains(s!) || v.Aktenzeichen.Contains(s!)
-                    || (v.Typ != null && v.Typ.Contains(s!))
-                    || (v.Beschreibung != null && v.Beschreibung.Contains(s!))
-                    || (v.Zusammenfassung != null && v.Zusammenfassung.Contains(s!))
-                    || (v.Abschlussvermerk != null && v.Abschlussvermerk.Contains(s!)));
+                q = q.Where(v => v.Title.Contains(s!) || v.CaseNumber.Contains(s!)
+                    || (v.Type != null && v.Type.Contains(s!))
+                    || (v.Description != null && v.Description.Contains(s!))
+                    || (v.Summary != null && v.Summary.Contains(s!))
+                    || (v.ClosingNote != null && v.ClosingNote.Contains(s!)));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(v => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Vorgang) && z.EntitaetId == v.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(v => db.TagMappings.Any(z => z.EntityType == nameof(Case) && z.EntityId == v.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(v => v.Titel).Take(MaxProKategorie)
-                .Select(v => new SuchTreffer(nameof(Vorgang), v.Id, v.Titel, v.Beschreibung ?? v.Typ ?? string.Empty, v.Aktenzeichen))
+            var hit = await q.OrderBy(v => v.Title).Take(MaxPerCategory)
+                .Select(v => new SearchHit(nameof(Case), v.Id, v.Title, v.Description ?? v.Type ?? string.Empty, v.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Vorgaenge.Where(v => istFuehrung || !v.IstVerschlusssache);
-                if (hatTags)
+                var @base = db.Cases.Where(v => isLeadership || !v.IsClassified);
+                if (hasTags)
                 {
-                    basis = basis.Where(v => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Vorgang) && z.EntitaetId == v.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(v => db.TagMappings.Any(z => z.EntityType == nameof(Case) && z.EntityId == v.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(v => v.GeaendertAm ?? v.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.Typ, v.Beschreibung, v.Zusammenfassung, v.Abschlussvermerk })
+                var raw = await @base.OrderByDescending(v => v.ModifiedAt ?? v.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(v => new { v.Id, v.Title, v.CaseNumber, v.Type, v.Description, v.Summary, v.ClosingNote })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Titel, x.Aktenzeichen, x.Beschreibung ?? x.Typ ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, x.CaseNumber, x.Description ?? x.Type ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen, x.Typ, x.Beschreibung, x.Zusammenfassung, x.Abschlussvermerk)
-                        : TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Vorgang), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Title, x.CaseNumber, x.Type, x.Description, x.Summary, x.ClosingNote)
+                        : TextSimilarity.Tokens(x.Title, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(Case), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Vorgang), "Vorgänge", treffer));
+                groups.Add(new SearchResultGroup(nameof(Case), "Vorgänge", hit));
             }
         }
 
         // ---- Gesetze (Phase 7: Gesetzbuch/Paragraf/Titel/Text; ohne VS-Konzept und ohne Tag-Filter) ----
-        if (Aktiv(nameof(Gesetz)) && !hatTags)
+        if (Active(nameof(Law)) && !hasTags)
         {
-            var q = db.Gesetze.AsQueryable();
-            if (hatText)
+            var q = db.Laws.AsQueryable();
+            if (hasText)
             {
-                q = q.Where(g => g.Titel.Contains(s!) || g.Paragraf.Contains(s!)
-                    || g.Gesetzbuch.Contains(s!) || g.Text.Contains(s!)
-                    || (g.Strafmass != null && g.Strafmass.Contains(s!)));
+                q = q.Where(g => g.Title.Contains(s!) || g.Paragraph.Contains(s!)
+                    || g.LawBook.Contains(s!) || g.Text.Contains(s!)
+                    || (g.Sentence != null && g.Sentence.Contains(s!)));
             }
-            var roheGesetze = await q.OrderBy(g => g.Gesetzbuch).ThenBy(g => g.Paragraf).Take(MaxProKategorie)
-                .Select(g => new { g.Id, g.Paragraf, g.Titel, g.Gesetzbuch })
+            var rawLaws = await q.OrderBy(g => g.LawBook).ThenBy(g => g.Paragraph).Take(MaxPerCategory)
+                .Select(g => new { g.Id, g.Paragraph, g.Title, g.LawBook })
                 .ToListAsync(cancellationToken);
-            if (roheGesetze.Count > 0)
+            if (rawLaws.Count > 0)
             {
-                var treffer = roheGesetze
-                    .Select(g => new SuchTreffer(nameof(Gesetz), g.Id, $"{g.Paragraf} {g.Titel}", g.Gesetzbuch, g.Paragraf))
+                var hit = rawLaws
+                    .Select(g => new SearchHit(nameof(Law), g.Id, $"{g.Paragraph} {g.Title}", g.LawBook, g.Paragraph))
                     .ToList();
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Gesetz), "Gesetze", treffer));
+                groups.Add(new SearchResultGroup(nameof(Law), "Gesetze", hit));
             }
         }
 
         // ---- Aufgaben (Titel/Aktenzeichen/Beschreibung; eingeschränkte nur für Beteiligte/Aufsicht) ----
-        if (Aktiv(nameof(Aufgabe)))
+        if (Active(nameof(Job)))
         {
-            var q = db.Aufgaben.NurSichtbare(db, istFuehrung, meId);
-            if (hatText)
+            var q = db.Jobs.OnlyVisible(db, isLeadership, meId);
+            if (hasText)
             {
-                q = q.Where(a => a.Titel.Contains(s!) || a.Aktenzeichen.Contains(s!)
-                    || (a.Beschreibung != null && a.Beschreibung.Contains(s!)));
+                q = q.Where(a => a.Title.Contains(s!) || a.CaseNumber.Contains(s!)
+                    || (a.Description != null && a.Description.Contains(s!)));
             }
-            if (hatTags)
+            if (hasTags)
             {
-                q = q.Where(a => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Aufgabe) && z.EntitaetId == a.Id && tagIds.Contains(z.TagId)));
+                q = q.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(Job) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
             }
-            var treffer = await q.OrderBy(a => a.Titel).Take(MaxProKategorie)
-                .Select(a => new SuchTreffer(nameof(Aufgabe), a.Id, a.Titel, a.Beschreibung ?? string.Empty, a.Aktenzeichen))
+            var hit = await q.OrderBy(a => a.Title).Take(MaxPerCategory)
+                .Select(a => new SearchHit(nameof(Job), a.Id, a.Title, a.Description ?? string.Empty, a.CaseNumber))
                 .ToListAsync(cancellationToken);
 
-            if (FuzzyAktiv(treffer.Count))
+            if (FuzzyActive(hit.Count))
             {
-                var basis = db.Aufgaben.NurSichtbare(db, istFuehrung, meId);
-                if (hatTags)
+                var @base = db.Jobs.OnlyVisible(db, isLeadership, meId);
+                if (hasTags)
                 {
-                    basis = basis.Where(a => db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Aufgabe) && z.EntitaetId == a.Id && tagIds.Contains(z.TagId)));
+                    @base = @base.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(Job) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
                 }
-                var roh = await basis.OrderByDescending(a => a.GeaendertAm ?? a.ErstelltAm).Take(FuzzyKandidatenMax)
-                    .Select(a => new { a.Id, a.Titel, a.Aktenzeichen, a.Beschreibung })
+                var raw = await @base.OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(a => new { a.Id, a.Title, a.CaseNumber, a.Description })
                     .ToListAsync(cancellationToken);
-                var kandidaten = roh.Select(x => new FuzzyKandidat(x.Id, x.Titel, x.Aktenzeichen, x.Beschreibung ?? string.Empty,
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, x.CaseNumber, x.Description ?? string.Empty,
                     max
-                        ? TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen, x.Beschreibung)
-                        : TextAehnlichkeit.Tokens(x.Titel, x.Aktenzeichen)));
-                treffer = FuzzyErgaenzen(nameof(Aufgabe), treffer, suchworte, kandidaten);
+                        ? TextSimilarity.Tokens(x.Title, x.CaseNumber, x.Description)
+                        : TextSimilarity.Tokens(x.Title, x.CaseNumber)));
+                hit = FuzzySupplement(nameof(Job), hit, searchWords, candidates);
             }
 
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Aufgabe), "Aufgaben", treffer));
+                groups.Add(new SearchResultGroup(nameof(Job), "Aufgaben", hit));
             }
         }
 
         // Die folgenden Kategorien sind Text-Inhalte → nur bei vorhandenem Suchtext. Im Max-Modus immer aktiv.
         // Wichtig: expliziter Join auf db.Personen (NICHT Include über die soft-delete-gefilterte
         // Pflichtnavigation), sonst greift das fragile Query-Filter-/Pflichtnavigations-Zusammenspiel.
-        if (hatText && InhaltAktiv(nameof(PersonDok)))
+        if (hasText && ContentActive(nameof(PersonDoc)))
         {
-            var treffer = await (
-                from d in db.PersonDoks
-                where (d.Grund != null && d.Grund.Contains(s!)) || (d.ErhalteneInformationen != null && d.ErhalteneInformationen.Contains(s!))
-                    || (max && d.Fraktion != null && d.Fraktion.Contains(s!))
-                join p in db.Personen on d.PersonId equals p.Id
-                where (istFuehrung || !p.IstVerschlusssache)
-                    && (!hatTags || db.TagZuordnungen.Any(z => z.EntitaetTyp == nameof(Person) && z.EntitaetId == p.Id && tagIds.Contains(z.TagId)))
-                orderby d.Zeitpunkt descending
-                select new SuchTreffer(nameof(PersonDok), p.Id, p.Name,
-                    (d.Grund ?? d.ErhalteneInformationen) ?? string.Empty, p.Aktenzeichen))
-                .Take(MaxProKategorie)
+            var hit = await (
+                from d in db.PersonDocs
+                where (d.Reason != null && d.Reason.Contains(s!)) || (d.ReceivedInformation != null && d.ReceivedInformation.Contains(s!))
+                    || (max && d.Faction != null && d.Faction.Contains(s!))
+                join p in db.People on d.PersonId equals p.Id
+                where (isLeadership || !p.IsClassified)
+                    && (!hasTags || db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)))
+                orderby d.Timestamp descending
+                select new SearchHit(nameof(PersonDoc), p.Id, p.Name,
+                    (d.Reason ?? d.ReceivedInformation) ?? string.Empty, p.CaseNumber))
+                .Take(MaxPerCategory)
                 .ToListAsync(cancellationToken);
-            if (treffer.Count > 0)
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(PersonDok), "Doks", treffer));
+                groups.Add(new SearchResultGroup(nameof(PersonDoc), "Doks", hit));
             }
         }
 
-        if (hatText && InhaltAktiv(nameof(Quelle)))
+        if (hasText && ContentActive(nameof(Source)))
         {
             // Quellen aller Akten-Eltern (Person/Fraktion/Gruppe) durchsuchen; Eltern + Sichtbarkeit/Tags
             // anschließend zentral auflösen, damit der Treffer auf die richtige Akte verlinkt.
-            var roh = await db.Quellen
-                .Where(quelle => quelle.Titel.Contains(s!) || (quelle.Beschreibung != null && quelle.Beschreibung.Contains(s!)))
-                .OrderByDescending(quelle => quelle.ErstelltAm)
-                .Select(quelle => new RohTreffer(quelle.EntitaetTyp, quelle.EntitaetId, quelle.Titel))
-                .Take(MaxProKategorie * 4)
+            var raw = await db.Sources
+                .Where(source => source.Title.Contains(s!) || (source.Description != null && source.Description.Contains(s!)))
+                .OrderByDescending(source => source.CreatedAt)
+                .Select(source => new RawHit(source.EntityType, source.EntityId, source.Title))
+                .Take(MaxPerCategory * 4)
                 .ToListAsync(cancellationToken);
-            var treffer = await AkteElternTrefferAsync(db, nameof(Quelle), roh, istFuehrung, meId, hatTags, tagIds, cancellationToken);
-            if (treffer.Count > 0)
+            var hit = await RecordParentsHitAsync(db, nameof(Source), raw, isLeadership, meId, hasTags, tagIds, cancellationToken);
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Quelle), "Quellen", treffer));
+                groups.Add(new SearchResultGroup(nameof(Source), "Quellen", hit));
             }
         }
 
-        if (hatText && InhaltAktiv(nameof(Kommentar)))
+        if (hasText && ContentActive(nameof(Comment)))
         {
-            var roh = await db.Kommentare
-                .Where(kommentar => kommentar.Text.Contains(s!))
-                .OrderByDescending(kommentar => kommentar.ErstelltAm)
-                .Select(kommentar => new RohTreffer(kommentar.EntitaetTyp, kommentar.EntitaetId, kommentar.Text))
-                .Take(MaxProKategorie * 4)
+            var raw = await db.Comments
+                .Where(comment => comment.Text.Contains(s!))
+                .OrderByDescending(comment => comment.CreatedAt)
+                .Select(comment => new RawHit(comment.EntityType, comment.EntityId, comment.Text))
+                .Take(MaxPerCategory * 4)
                 .ToListAsync(cancellationToken);
-            var treffer = await AkteElternTrefferAsync(db, nameof(Kommentar), roh, istFuehrung, meId, hatTags, tagIds, cancellationToken);
-            if (treffer.Count > 0)
+            var hit = await RecordParentsHitAsync(db, nameof(Comment), raw, isLeadership, meId, hasTags, tagIds, cancellationToken);
+            if (hit.Count > 0)
             {
-                gruppen.Add(new SuchErgebnisGruppe(nameof(Kommentar), "Kommentare", treffer));
+                groups.Add(new SearchResultGroup(nameof(Comment), "Kommentare", hit));
             }
         }
 
-        return gruppen;
+        return groups;
     }
 
-    public async Task<List<SchnellTreffer>> SchnellsucheAsync(string text, bool istFuehrung, string? meId, int max = 8, CancellationToken cancellationToken = default)
+    public async Task<List<QuickHit>> QuickSearchAsync(string text, bool isLeadership, string? meId, int max = 8, CancellationToken cancellationToken = default)
     {
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
         {
-            return new List<SchnellTreffer>();
+            return new List<QuickHit>();
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var personen = await db.Personen
-            .Where(p => (istFuehrung || !p.IstVerschlusssache) && (p.Name.Contains(s) || p.Aktenzeichen.Contains(s)))
+        var people = await db.People
+            .Where(p => (isLeadership || !p.IsClassified) && (p.Name.Contains(s) || p.CaseNumber.Contains(s)))
             .OrderBy(p => p.Name).Take(max)
-            .Select(p => new SchnellTreffer(nameof(Person), p.Id, p.Name, p.Aktenzeichen))
+            .Select(p => new QuickHit(nameof(Person), p.Id, p.Name, p.CaseNumber))
             .ToListAsync(cancellationToken);
-        var fraktionen = await db.Fraktionen
-            .Where(f => (istFuehrung || !f.IstVerschlusssache) && (f.Name.Contains(s) || f.Aktenzeichen.Contains(s)))
+        var factions = await db.Factions
+            .Where(f => (isLeadership || !f.IsClassified) && (f.Name.Contains(s) || f.CaseNumber.Contains(s)))
             .OrderBy(f => f.Name).Take(max)
-            .Select(f => new SchnellTreffer(nameof(Fraktion), f.Id, f.Name, f.Aktenzeichen))
+            .Select(f => new QuickHit(nameof(Faction), f.Id, f.Name, f.CaseNumber))
             .ToListAsync(cancellationToken);
-        var gruppen = await db.Personengruppen
-            .Where(g => (istFuehrung || !g.IstVerschlusssache) && (g.Name.Contains(s) || g.Aktenzeichen.Contains(s)))
+        var groups = await db.PersonGroups
+            .Where(g => (isLeadership || !g.IsClassified) && (g.Name.Contains(s) || g.CaseNumber.Contains(s)))
             .OrderBy(g => g.Name).Take(max)
-            .Select(g => new SchnellTreffer(nameof(Personengruppe), g.Id, g.Name, g.Aktenzeichen))
+            .Select(g => new QuickHit(nameof(PersonGroup), g.Id, g.Name, g.CaseNumber))
             .ToListAsync(cancellationToken);
-        var parteien = await db.Parteien
-            .Where(p => (istFuehrung || !p.IstVerschlusssache) && (p.Name.Contains(s) || p.Aktenzeichen.Contains(s)))
+        var parties = await db.Parties
+            .Where(p => (isLeadership || !p.IsClassified) && (p.Name.Contains(s) || p.CaseNumber.Contains(s)))
             .OrderBy(p => p.Name).Take(max)
-            .Select(p => new SchnellTreffer(nameof(Partei), p.Id, p.Name, p.Aktenzeichen))
+            .Select(p => new QuickHit(nameof(Party), p.Id, p.Name, p.CaseNumber))
             .ToListAsync(cancellationToken);
-        var operationen = await db.Operationen
-            .Where(o => (istFuehrung || !o.IstVerschlusssache) && (o.Titel.Contains(s) || o.Aktenzeichen.Contains(s)))
-            .OrderBy(o => o.Titel).Take(max)
-            .Select(o => new SchnellTreffer(nameof(Operation), o.Id, o.Titel, o.Aktenzeichen))
+        var operations = await db.Operations
+            .Where(o => (isLeadership || !o.IsClassified) && (o.Title.Contains(s) || o.CaseNumber.Contains(s)))
+            .OrderBy(o => o.Title).Take(max)
+            .Select(o => new QuickHit(nameof(Operation), o.Id, o.Title, o.CaseNumber))
             .ToListAsync(cancellationToken);
-        var taskforces = await db.Taskforces.NurSichtbare(db, istFuehrung, meId)
-            .Where(t => t.Name.Contains(s) || t.Aktenzeichen.Contains(s))
+        var taskforces = await db.Taskforces.OnlyVisible(db, isLeadership, meId)
+            .Where(t => t.Name.Contains(s) || t.CaseNumber.Contains(s))
             .OrderBy(t => t.Name).Take(max)
-            .Select(t => new SchnellTreffer(nameof(Taskforce), t.Id, t.Name, t.Aktenzeichen))
+            .Select(t => new QuickHit(nameof(Taskforce), t.Id, t.Name, t.CaseNumber))
             .ToListAsync(cancellationToken);
-        var vorgaenge = await db.Vorgaenge
-            .Where(v => (istFuehrung || !v.IstVerschlusssache) && (v.Titel.Contains(s) || v.Aktenzeichen.Contains(s)))
-            .OrderBy(v => v.Titel).Take(max)
-            .Select(v => new SchnellTreffer(nameof(Vorgang), v.Id, v.Titel, v.Aktenzeichen))
+        var cases = await db.Cases
+            .Where(v => (isLeadership || !v.IsClassified) && (v.Title.Contains(s) || v.CaseNumber.Contains(s)))
+            .OrderBy(v => v.Title).Take(max)
+            .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber))
             .ToListAsync(cancellationToken);
-        var aufgaben = await db.Aufgaben.NurSichtbare(db, istFuehrung, meId)
-            .Where(a => a.Titel.Contains(s) || a.Aktenzeichen.Contains(s))
-            .OrderBy(a => a.Titel).Take(max)
-            .Select(a => new SchnellTreffer(nameof(Aufgabe), a.Id, a.Titel, a.Aktenzeichen))
+        var jobs = await db.Jobs.OnlyVisible(db, isLeadership, meId)
+            .Where(a => a.Title.Contains(s) || a.CaseNumber.Contains(s))
+            .OrderBy(a => a.Title).Take(max)
+            .Select(a => new QuickHit(nameof(Job), a.Id, a.Title, a.CaseNumber))
             .ToListAsync(cancellationToken);
 
         // Immer leicht aktive Tippfehler-Toleranz auf Identifikatoren (Name/Titel/Aktenzeichen). Pro
         // Kategorie nur, wenn der Begriff lang genug ist UND noch Platz frei ist (sonst lohnt der Scan nicht).
-        var suchworte = TextAehnlichkeit.Tokens(s);
-        if (suchworte.Any(w => w.Length >= TextAehnlichkeit.MinWortLaenge))
+        var searchWords = TextSimilarity.Tokens(s);
+        if (searchWords.Any(w => w.Length >= TextSimilarity.MinWordLength))
         {
-            if (personen.Count < max)
+            if (people.Count < max)
             {
-                var k = await db.Personen.Where(p => istFuehrung || !p.IstVerschlusssache)
-                    .OrderBy(p => p.Name).Take(FuzzyKandidatenMax)
-                    .Select(p => new { p.Id, p.Name, p.Aktenzeichen }).ToListAsync(cancellationToken);
-                personen = SchnellFuzzy(nameof(Person), personen, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.People.Where(p => isLeadership || !p.IsClassified)
+                    .OrderBy(p => p.Name).Take(FuzzyCandidatesMax)
+                    .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken);
+                people = QuickFuzzy(nameof(Person), people, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
-            if (fraktionen.Count < max)
+            if (factions.Count < max)
             {
-                var k = await db.Fraktionen.Where(f => istFuehrung || !f.IstVerschlusssache)
-                    .OrderBy(f => f.Name).Take(FuzzyKandidatenMax)
-                    .Select(f => new { f.Id, f.Name, f.Aktenzeichen }).ToListAsync(cancellationToken);
-                fraktionen = SchnellFuzzy(nameof(Fraktion), fraktionen, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.Factions.Where(f => isLeadership || !f.IsClassified)
+                    .OrderBy(f => f.Name).Take(FuzzyCandidatesMax)
+                    .Select(f => new { f.Id, f.Name, f.CaseNumber }).ToListAsync(cancellationToken);
+                factions = QuickFuzzy(nameof(Faction), factions, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
-            if (gruppen.Count < max)
+            if (groups.Count < max)
             {
-                var k = await db.Personengruppen.Where(g => istFuehrung || !g.IstVerschlusssache)
-                    .OrderBy(g => g.Name).Take(FuzzyKandidatenMax)
-                    .Select(g => new { g.Id, g.Name, g.Aktenzeichen }).ToListAsync(cancellationToken);
-                gruppen = SchnellFuzzy(nameof(Personengruppe), gruppen, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.PersonGroups.Where(g => isLeadership || !g.IsClassified)
+                    .OrderBy(g => g.Name).Take(FuzzyCandidatesMax)
+                    .Select(g => new { g.Id, g.Name, g.CaseNumber }).ToListAsync(cancellationToken);
+                groups = QuickFuzzy(nameof(PersonGroup), groups, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
-            if (parteien.Count < max)
+            if (parties.Count < max)
             {
-                var k = await db.Parteien.Where(p => istFuehrung || !p.IstVerschlusssache)
-                    .OrderBy(p => p.Name).Take(FuzzyKandidatenMax)
-                    .Select(p => new { p.Id, p.Name, p.Aktenzeichen }).ToListAsync(cancellationToken);
-                parteien = SchnellFuzzy(nameof(Partei), parteien, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.Parties.Where(p => isLeadership || !p.IsClassified)
+                    .OrderBy(p => p.Name).Take(FuzzyCandidatesMax)
+                    .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken);
+                parties = QuickFuzzy(nameof(Party), parties, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
-            if (operationen.Count < max)
+            if (operations.Count < max)
             {
-                var k = await db.Operationen.Where(o => istFuehrung || !o.IstVerschlusssache)
-                    .OrderBy(o => o.Titel).Take(FuzzyKandidatenMax)
-                    .Select(o => new { o.Id, Name = o.Titel, o.Aktenzeichen }).ToListAsync(cancellationToken);
-                operationen = SchnellFuzzy(nameof(Operation), operationen, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.Operations.Where(o => isLeadership || !o.IsClassified)
+                    .OrderBy(o => o.Title).Take(FuzzyCandidatesMax)
+                    .Select(o => new { o.Id, Name = o.Title, o.CaseNumber }).ToListAsync(cancellationToken);
+                operations = QuickFuzzy(nameof(Operation), operations, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
             if (taskforces.Count < max)
             {
-                var k = await db.Taskforces.NurSichtbare(db, istFuehrung, meId)
-                    .OrderBy(t => t.Name).Take(FuzzyKandidatenMax)
-                    .Select(t => new { t.Id, Name = t.Name, t.Aktenzeichen }).ToListAsync(cancellationToken);
-                taskforces = SchnellFuzzy(nameof(Taskforce), taskforces, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.Taskforces.OnlyVisible(db, isLeadership, meId)
+                    .OrderBy(t => t.Name).Take(FuzzyCandidatesMax)
+                    .Select(t => new { t.Id, Name = t.Name, t.CaseNumber }).ToListAsync(cancellationToken);
+                taskforces = QuickFuzzy(nameof(Taskforce), taskforces, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
-            if (vorgaenge.Count < max)
+            if (cases.Count < max)
             {
-                var k = await db.Vorgaenge.Where(v => istFuehrung || !v.IstVerschlusssache)
-                    .OrderBy(v => v.Titel).Take(FuzzyKandidatenMax)
-                    .Select(v => new { v.Id, Name = v.Titel, v.Aktenzeichen }).ToListAsync(cancellationToken);
-                vorgaenge = SchnellFuzzy(nameof(Vorgang), vorgaenge, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.Cases.Where(v => isLeadership || !v.IsClassified)
+                    .OrderBy(v => v.Title).Take(FuzzyCandidatesMax)
+                    .Select(v => new { v.Id, Name = v.Title, v.CaseNumber }).ToListAsync(cancellationToken);
+                cases = QuickFuzzy(nameof(Case), cases, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
-            if (aufgaben.Count < max)
+            if (jobs.Count < max)
             {
-                var k = await db.Aufgaben.NurSichtbare(db, istFuehrung, meId)
-                    .OrderBy(a => a.Titel).Take(FuzzyKandidatenMax)
-                    .Select(a => new { a.Id, Name = a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken);
-                aufgaben = SchnellFuzzy(nameof(Aufgabe), aufgaben, suchworte, k.Select(x => (x.Id, x.Name, x.Aktenzeichen)), max);
+                var k = await db.Jobs.OnlyVisible(db, isLeadership, meId)
+                    .OrderBy(a => a.Title).Take(FuzzyCandidatesMax)
+                    .Select(a => new { a.Id, Name = a.Title, a.CaseNumber }).ToListAsync(cancellationToken);
+                jobs = QuickFuzzy(nameof(Job), jobs, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
             }
         }
 
         // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
-        return Mischen(personen, fraktionen, gruppen, parteien, operationen, taskforces, vorgaenge, aufgaben).Take(max).ToList();
+        return Shuffle(people, factions, groups, parties, operations, taskforces, cases, jobs).Take(max).ToList();
     }
 
     /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
-    private static IEnumerable<SchnellTreffer> Mischen(params List<SchnellTreffer>[] listen)
+    private static IEnumerable<QuickHit> Shuffle(params List<QuickHit>[] lists)
     {
         for (var index = 0; ; index++)
         {
-            var etwas = false;
-            foreach (var liste in listen)
+            var some = false;
+            foreach (var list in lists)
             {
-                if (index < liste.Count)
+                if (index < list.Count)
                 {
-                    etwas = true;
-                    yield return liste[index];
+                    some = true;
+                    yield return list[index];
                 }
             }
-            if (!etwas)
+            if (!some)
             {
                 yield break;
             }
@@ -634,178 +634,178 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
     }
 
     /// <summary>Kandidat für den in-memory Fuzzy-Pass: Anzeige-Daten + die zu vergleichenden Wörter.</summary>
-    private sealed record FuzzyKandidat(string Id, string Anzeige, string Aktenzeichen, string Snippet, IReadOnlyList<string> Tokens);
+    private sealed record FuzzyCandidate(string Id, string Display, string CaseNumber, string Snippet, IReadOnlyList<string> Tokens);
 
     /// <summary>
     /// Hängt an eine bereits ermittelte Substring-Trefferliste die per Levenshtein ähnlichen Kandidaten
     /// an (dedupliziert gegen die vorhandenen Ziel-Ids, sortiert nach aufsteigender Editierdistanz).
     /// Substring-Treffer bleiben vorne (höhere Relevanz); Gesamtzahl auf <see cref="MaxProKategorie"/> gekappt.
     /// </summary>
-    private static List<SuchTreffer> FuzzyErgaenzen(
-        string kategorie, List<SuchTreffer> substring, IReadOnlyList<string> suchworte, IEnumerable<FuzzyKandidat> kandidaten)
+    private static List<SearchHit> FuzzySupplement(
+        string category, List<SearchHit> substring, IReadOnlyList<string> searchWords, IEnumerable<FuzzyCandidate> candidates)
     {
-        if (suchworte.Count == 0)
+        if (searchWords.Count == 0)
         {
             return substring;
         }
-        var vorhanden = substring.Select(t => t.ZielId).ToHashSet();
-        var fuzzy = new List<(SuchTreffer Treffer, int Distanz)>();
-        foreach (var k in kandidaten)
+        var exists = substring.Select(t => t.TargetId).ToHashSet();
+        var fuzzy = new List<(SearchHit Hit, int Distance)>();
+        foreach (var k in candidates)
         {
-            if (vorhanden.Contains(k.Id))
+            if (exists.Contains(k.Id))
             {
                 continue;
             }
-            if (TextAehnlichkeit.PhraseAehnlich(suchworte, k.Tokens, out var distanz))
+            if (TextSimilarity.PhraseSimilar(searchWords, k.Tokens, out var distance))
             {
-                fuzzy.Add((new SuchTreffer(kategorie, k.Id, k.Anzeige, k.Snippet, k.Aktenzeichen), distanz));
+                fuzzy.Add((new SearchHit(category, k.Id, k.Display, k.Snippet, k.CaseNumber), distance));
             }
         }
         if (fuzzy.Count == 0)
         {
             return substring;
         }
-        var ergebnis = new List<SuchTreffer>(substring);
-        ergebnis.AddRange(fuzzy.OrderBy(f => f.Distanz).Select(f => f.Treffer));
-        return ergebnis.Count > MaxProKategorie ? ergebnis.Take(MaxProKategorie).ToList() : ergebnis;
+        var result = new List<SearchHit>(substring);
+        result.AddRange(fuzzy.OrderBy(f => f.Distance).Select(f => f.Hit));
+        return result.Count > MaxPerCategory ? result.Take(MaxPerCategory).ToList() : result;
     }
 
     /// <summary>Leichtgewichtige Fuzzy-Ergänzung für die Schnellsuche: Identifikatoren (Name/Titel + Aktenzeichen).</summary>
-    private static List<SchnellTreffer> SchnellFuzzy(
-        string kategorie, List<SchnellTreffer> bereits, IReadOnlyList<string> suchworte,
-        IEnumerable<(string Id, string Name, string Aktenzeichen)> kandidaten, int max)
+    private static List<QuickHit> QuickFuzzy(
+        string category, List<QuickHit> already, IReadOnlyList<string> searchWords,
+        IEnumerable<(string Id, string Name, string CaseNumber)> candidates, int max)
     {
-        var vorhanden = bereits.Select(t => t.ZielId).ToHashSet();
-        var fuzzy = new List<(SchnellTreffer Treffer, int Distanz)>();
-        foreach (var k in kandidaten)
+        var exists = already.Select(t => t.TargetId).ToHashSet();
+        var fuzzy = new List<(QuickHit Hit, int Distance)>();
+        foreach (var k in candidates)
         {
-            if (vorhanden.Contains(k.Id))
+            if (exists.Contains(k.Id))
             {
                 continue;
             }
-            if (TextAehnlichkeit.PhraseAehnlich(suchworte, TextAehnlichkeit.Tokens(k.Name, k.Aktenzeichen), out var distanz))
+            if (TextSimilarity.PhraseSimilar(searchWords, TextSimilarity.Tokens(k.Name, k.CaseNumber), out var distance))
             {
-                fuzzy.Add((new SchnellTreffer(kategorie, k.Id, k.Name, k.Aktenzeichen), distanz));
+                fuzzy.Add((new QuickHit(category, k.Id, k.Name, k.CaseNumber), distance));
             }
         }
         if (fuzzy.Count == 0)
         {
-            return bereits;
+            return already;
         }
-        var ergebnis = new List<SchnellTreffer>(bereits);
-        ergebnis.AddRange(fuzzy.OrderBy(f => f.Distanz).Take(max).Select(f => f.Treffer));
-        return ergebnis;
+        var result = new List<QuickHit>(already);
+        result.AddRange(fuzzy.OrderBy(f => f.Distance).Take(max).Select(f => f.Hit));
+        return result;
     }
 
     /// <summary>Roh-Treffer eines polymorphen Inhalts (Quelle/Kommentar): Eltern-Typ/-Id + Anzeige-Schnipsel.</summary>
-    private sealed record RohTreffer(string EntitaetTyp, string EntitaetId, string Schnipsel);
+    private sealed record RawHit(string EntityType, string EntityId, string Snippet);
 
     /// <summary>
     /// Löst Roh-Treffer (Quellen/Kommentare) auf ihre Eltern-Akte auf: Name/Aktenzeichen je Typ
     /// (Person/Fraktion/Personengruppe), filtert Verschlusssachen (außer Führung) und – falls gefordert –
     /// nach Tags der Eltern-Akte. Reihenfolge der Roh-Treffer bleibt erhalten; auf <see cref="MaxProKategorie"/> gekürzt.
     /// </summary>
-    private static async Task<List<SuchTreffer>> AkteElternTrefferAsync(
-        AppDbContext db, string kategorie, List<RohTreffer> roh, bool istFuehrung, string? meId, bool hatTags, List<string> tagIds, CancellationToken cancellationToken)
+    private static async Task<List<SearchHit>> RecordParentsHitAsync(
+        AppDbContext db, string category, List<RawHit> raw, bool isLeadership, string? meId, bool hasTags, List<string> tagIds, CancellationToken cancellationToken)
     {
-        if (roh.Count == 0)
+        if (raw.Count == 0)
         {
             return new();
         }
 
-        var personIds = roh.Where(r => r.EntitaetTyp == nameof(Person)).Select(r => r.EntitaetId).Distinct().ToList();
-        var fraktionIds = roh.Where(r => r.EntitaetTyp == nameof(Fraktion)).Select(r => r.EntitaetId).Distinct().ToList();
-        var gruppenIds = roh.Where(r => r.EntitaetTyp == nameof(Personengruppe)).Select(r => r.EntitaetId).Distinct().ToList();
-        var parteiIds = roh.Where(r => r.EntitaetTyp == nameof(Partei)).Select(r => r.EntitaetId).Distinct().ToList();
-        var operationIds = roh.Where(r => r.EntitaetTyp == nameof(Operation)).Select(r => r.EntitaetId).Distinct().ToList();
-        var taskforceIds = roh.Where(r => r.EntitaetTyp == nameof(Taskforce)).Select(r => r.EntitaetId).Distinct().ToList();
-        var vorgangIds = roh.Where(r => r.EntitaetTyp == nameof(Vorgang)).Select(r => r.EntitaetId).Distinct().ToList();
-        var aufgabeIds = roh.Where(r => r.EntitaetTyp == nameof(Aufgabe)).Select(r => r.EntitaetId).Distinct().ToList();
+        var personIds = raw.Where(r => r.EntityType == nameof(Person)).Select(r => r.EntityId).Distinct().ToList();
+        var factionIds = raw.Where(r => r.EntityType == nameof(Faction)).Select(r => r.EntityId).Distinct().ToList();
+        var groupsIds = raw.Where(r => r.EntityType == nameof(PersonGroup)).Select(r => r.EntityId).Distinct().ToList();
+        var partyIds = raw.Where(r => r.EntityType == nameof(Party)).Select(r => r.EntityId).Distinct().ToList();
+        var operationIds = raw.Where(r => r.EntityType == nameof(Operation)).Select(r => r.EntityId).Distinct().ToList();
+        var taskforceIds = raw.Where(r => r.EntityType == nameof(Taskforce)).Select(r => r.EntityId).Distinct().ToList();
+        var caseIds = raw.Where(r => r.EntityType == nameof(Case)).Select(r => r.EntityId).Distinct().ToList();
+        var jobIds = raw.Where(r => r.EntityType == nameof(Job)).Select(r => r.EntityId).Distinct().ToList();
 
         // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
-        var map = new Dictionary<(string, string), (string Name, string Aktenzeichen, bool Verschluss)>();
-        foreach (var x in await db.Personen.Where(p => personIds.Contains(p.Id))
-                     .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(cancellationToken))
+        var map = new Dictionary<(string, string), (string Name, string CaseNumber, bool Classified)>();
+        foreach (var x in await db.People.Where(p => personIds.Contains(p.Id))
+                     .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Person), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(Person), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
         }
-        foreach (var x in await db.Fraktionen.Where(f => fraktionIds.Contains(f.Id))
-                     .Select(f => new { f.Id, f.Name, f.Aktenzeichen, f.IstVerschlusssache }).ToListAsync(cancellationToken))
+        foreach (var x in await db.Factions.Where(f => factionIds.Contains(f.Id))
+                     .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Fraktion), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(Faction), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
         }
-        foreach (var x in await db.Personengruppen.Where(g => gruppenIds.Contains(g.Id))
-                     .Select(g => new { g.Id, g.Name, g.Aktenzeichen, g.IstVerschlusssache }).ToListAsync(cancellationToken))
+        foreach (var x in await db.PersonGroups.Where(g => groupsIds.Contains(g.Id))
+                     .Select(g => new { g.Id, g.Name, g.CaseNumber, g.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Personengruppe), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(PersonGroup), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
         }
-        foreach (var x in await db.Parteien.Where(p => parteiIds.Contains(p.Id))
-                     .Select(p => new { p.Id, p.Name, p.Aktenzeichen, p.IstVerschlusssache }).ToListAsync(cancellationToken))
+        foreach (var x in await db.Parties.Where(p => partyIds.Contains(p.Id))
+                     .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Partei), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(Party), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
         }
-        foreach (var x in await db.Operationen.Where(o => operationIds.Contains(o.Id))
-                     .Select(o => new { o.Id, o.Titel, o.Aktenzeichen, o.IstVerschlusssache }).ToListAsync(cancellationToken))
+        foreach (var x in await db.Operations.Where(o => operationIds.Contains(o.Id))
+                     .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Operation), x.Id)] = (x.Titel, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(Operation), x.Id)] = (x.Title, x.CaseNumber, x.IsClassified);
         }
         foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
-                     .Select(t => new { t.Id, t.Name, t.Aktenzeichen, t.IstVerschlusssache }).ToListAsync(cancellationToken))
+                     .Select(t => new { t.Id, t.Name, t.CaseNumber, t.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Taskforce), x.Id)] = (x.Name, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(Taskforce), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
         }
-        foreach (var x in await db.Vorgaenge.Where(v => vorgangIds.Contains(v.Id))
-                     .Select(v => new { v.Id, v.Titel, v.Aktenzeichen, v.IstVerschlusssache }).ToListAsync(cancellationToken))
+        foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
+                     .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Vorgang), x.Id)] = (x.Titel, x.Aktenzeichen, x.IstVerschlusssache);
+            map[(nameof(Case), x.Id)] = (x.Title, x.CaseNumber, x.IsClassified);
         }
         // Eingeschränkte Aufgaben nur für Beteiligte/Aufsicht in die Map aufnehmen – sonst werden Treffer auf
         // Kommentaren/Quellen einer eingeschränkten Aufgabe unten (fehlt in der Map → continue) ausgeblendet.
-        foreach (var x in await db.Aufgaben.NurSichtbare(db, istFuehrung, meId).Where(a => aufgabeIds.Contains(a.Id))
-                     .Select(a => new { a.Id, a.Titel, a.Aktenzeichen }).ToListAsync(cancellationToken))
+        foreach (var x in await db.Jobs.OnlyVisible(db, isLeadership, meId).Where(a => jobIds.Contains(a.Id))
+                     .Select(a => new { a.Id, a.Title, a.CaseNumber }).ToListAsync(cancellationToken))
         {
-            map[(nameof(Aufgabe), x.Id)] = (x.Titel, x.Aktenzeichen, false);
+            map[(nameof(Job), x.Id)] = (x.Title, x.CaseNumber, false);
         }
 
         // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
-        HashSet<(string, string)>? mitTag = null;
-        if (hatTags)
+        HashSet<(string, string)>? withTag = null;
+        if (hasTags)
         {
-            mitTag = (await db.TagZuordnungen
+            withTag = (await db.TagMappings
                 .Where(z => tagIds.Contains(z.TagId)
-                    && ((z.EntitaetTyp == nameof(Person) && personIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Fraktion) && fraktionIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Personengruppe) && gruppenIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Partei) && parteiIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Operation) && operationIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Taskforce) && taskforceIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Vorgang) && vorgangIds.Contains(z.EntitaetId))
-                     || (z.EntitaetTyp == nameof(Aufgabe) && aufgabeIds.Contains(z.EntitaetId))))
-                .Select(z => new { z.EntitaetTyp, z.EntitaetId }).ToListAsync(cancellationToken))
-                .Select(z => (z.EntitaetTyp, z.EntitaetId)).ToHashSet();
+                    && ((z.EntityType == nameof(Person) && personIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(Faction) && factionIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(PersonGroup) && groupsIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(Party) && partyIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(Operation) && operationIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(Taskforce) && taskforceIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(Case) && caseIds.Contains(z.EntityId))
+                     || (z.EntityType == nameof(Job) && jobIds.Contains(z.EntityId))))
+                .Select(z => new { z.EntityType, z.EntityId }).ToListAsync(cancellationToken))
+                .Select(z => (z.EntityType, z.EntityId)).ToHashSet();
         }
 
-        var ergebnis = new List<SuchTreffer>();
-        foreach (var r in roh)
+        var result = new List<SearchHit>();
+        foreach (var r in raw)
         {
-            if (!map.TryGetValue((r.EntitaetTyp, r.EntitaetId), out var info))
+            if (!map.TryGetValue((r.EntityType, r.EntityId), out var info))
             {
                 continue; // Eltern-Akte gelöscht/unbekannt → ausblenden.
             }
-            if (info.Verschluss && !istFuehrung)
+            if (info.Classified && !isLeadership)
             {
                 continue;
             }
-            if (hatTags && (mitTag is null || !mitTag.Contains((r.EntitaetTyp, r.EntitaetId))))
+            if (hasTags && (withTag is null || !withTag.Contains((r.EntityType, r.EntityId))))
             {
                 continue;
             }
-            ergebnis.Add(new SuchTreffer(kategorie, r.EntitaetId, info.Name, r.Schnipsel, info.Aktenzeichen, r.EntitaetTyp));
-            if (ergebnis.Count >= MaxProKategorie)
+            result.Add(new SearchHit(category, r.EntityId, info.Name, r.Snippet, info.CaseNumber, r.EntityType));
+            if (result.Count >= MaxPerCategory)
             {
                 break;
             }
         }
-        return ergebnis;
+        return result;
     }
 }

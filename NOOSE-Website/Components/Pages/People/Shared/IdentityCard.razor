@@ -1,0 +1,125 @@
+@* Identitäts-/Steckkarte der Personen-Akte: Mugshot und Kerndaten auf einen Blick.
+   Als Avatar dient das aktuellste hochgeladene Foto (neueste Aufnahme der Person). *@
+@{
+    var photo = Person.Photos.OrderByDescending(f => f.CreatedAt).FirstOrDefault();
+}
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        @* Mugshot bzw. Initialen-Platzhalter, falls noch kein Foto hinterlegt ist. *@
+        @if (photo is not null)
+        {
+            <MudImage Src="@($"/dateien/personen/foto/{photo.Id}")" Alt="@Person.Name"
+                      Height="220" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+        }
+        else
+        {
+            <MudStack AlignItems="AlignItems.Center" Class="py-4">
+                <MudAvatar Color="Color.Primary" Rounded="true" Style="height:140px;width:140px;font-size:3rem;">
+                    @Initials(Person.Name)
+                </MudAvatar>
+            </MudStack>
+        }
+
+        @* Name + Verschlusssache-Kennzeichnung *@
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Person.Name</MudText>
+                @if (Person.IsClassified)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Person.CaseNumber</MudText>
+        </div>
+
+        @* Status-Badges *@
+        <MudStack Spacing="1">
+            <LifeStatusBadge Status="Person.LifeStatus" DeadUntil="Person.DeadUntil" />
+            <ClassificationBadge Value="Person.Classification" />
+        </MudStack>
+
+        @* Zugehörigkeit (Fraktionen/Gruppen) auf einen Blick – ohne Tab-Wechsel. *@
+        @if (Affiliations.Count > 0)
+        {
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-1">Zugehörigkeit</MudText>
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @foreach (var z in Affiliations)
+                    {
+                        <MudTooltip Text="@Title(z)">
+                            <MudChip T="string" Size="Size.Small"
+                                     Variant="@(z.IsLead ? Variant.Filled : Variant.Outlined)"
+                                     Color="@(z.IsLead ? Color.Warning : Color.Default)"
+                                     Icon="@TypeIcon(z.Type)" Href="@Route(z)">@z.Name</MudChip>
+                        </MudTooltip>
+                    }
+                </MudStack>
+            </div>
+        }
+
+        <MudDivider />
+
+        @* Meta + Kennzahlen aus den bereits geladenen Daten *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <RecencyIndicator RecordsType="@nameof(Person)" ReferenceDateUtc="@(Person.ModifiedAt ?? Person.CreatedAt)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Person.ModifiedAt ?? Person.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
+        <MudStack Row="true" Spacing="4" Class="flex-wrap">
+            @foreach (var (value, label) in Metrics())
+            {
+                <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">@value</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Person Person { get; set; } = default!;
+
+    @* Aktive Fraktions-/Gruppen-Zugehörigkeiten (von der Akte geladen, Verschlusssache-gefiltert). *@
+    [Parameter] public IReadOnlyList<PersonAffiliation> Affiliations { get; set; } = [];
+
+    private IEnumerable<(int Value, string Label)> Metrics()
+    {
+        yield return (Person.Photos.Count, "Fotos");
+        yield return (Person.Aliases.Count, "Aliase");
+        yield return (Person.PhoneNumbers.Count, "Telefon");
+    }
+
+    private static string Route(PersonAffiliation z)
+        => z.Type == nameof(PersonGroup) ? $"/personengruppen/{z.Id}" : $"/fraktionen/{z.Id}";
+
+    private static string TypeIcon(string type)
+        => type == nameof(PersonGroup) ? Icons.Material.Filled.Diversity3 : Icons.Material.Filled.Groups;
+
+    @* Tooltip-Text: Typ, ggf. „Leitung", ggf. Rang/Rolle – mit „ · " verbunden. *@
+    private static string Title(PersonAffiliation z)
+    {
+        var parts = new List<string> { z.Type == nameof(PersonGroup) ? "Gruppe" : "Fraktion" };
+        if (z.IsLead)
+        {
+            parts.Add("Leitung");
+        }
+        if (!string.IsNullOrWhiteSpace(z.Role))
+        {
+            parts.Add(z.Role);
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "?";
+        }
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var letters = parts.Take(2).Select(t => t[0]);
+        return string.Concat(letters).ToUpperInvariant();
+    }
+}

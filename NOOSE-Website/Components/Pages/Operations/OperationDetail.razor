@@ -1,0 +1,223 @@
+@page "/operationen/{Id}"
+@inject IOperationService OperationService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_operation?.Title ?? "Operation") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_operation is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Operation nicht gefunden oder nicht zugänglich (ggf. Verschlusssache).
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/operationen" aria-label="Zurück" />
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/operationen/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <FollowButton EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
+        <JobCreateButton EntityType="@nameof(Operation)" EntityId="@_operation.Id" />
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton Href="@($"/operationen/{_operation.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <OperationCard Operation="_operation" InvestigationLead="_investigationLead" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="3">
+                        @if (!string.IsNullOrWhiteSpace(_operation.Expiry))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Ablauf</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_operation.Expiry</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_operation.Result))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Ergebnis</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_operation.Result</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_operation.Remarks))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Bemerkungen</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_operation.Remarks</MudText>
+                            </div>
+                        }
+                        @if (string.IsNullOrWhiteSpace(_operation.Expiry) && string.IsNullOrWhiteSpace(_operation.Result) && string.IsNullOrWhiteSpace(_operation.Remarks))
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
+                        }
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <OperationAgentsPanel OperationId="@_operation.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Beteiligte / Beziehungen" Icon="@Icons.Material.Filled.Hub">
+                    <OperationInvolvedPanel OperationId="@_operation.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                    <ClassificationPanel Current="_operation.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
+                                     EntityType="@nameof(Operation)" EntityId="@_operation.Id" TargetDesignation="@($"{_operation.Title} ({_operation.CaseNumber})")" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <SourcesPanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                    <FollowupPanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <CommentPanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                    <CustomFieldsPanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <TimelinePanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" @key="_historyKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Operation? _operation;
+    private List<string> _investigationLead = new();
+    private List<ClassificationHistory> _classificationHistory = new();
+    private ClaimsPrincipal _user = default!;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _activeTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "agents", "beziehungen", "einstufung",
+        "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    // Diese Seite wird bei Navigation /operationen/{A} → /operationen/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
+    // Akte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch. Tab-/Query-Wechsel: Id
+    // bleibt gleich → kein Neuladen.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _operation = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
+        if (_operation is not null)
+        {
+            await AccessLog.LogViewAsync(nameof(Operation), _operation.Id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
+        var mayClassifiedRead = _user.MayClassifiedRead();
+        _operation = await OperationService.GetDetailAsync(Id, mayClassifiedRead);
+        if (_operation is not null)
+        {
+            _classificationHistory = await OperationService.GetClassificationHistoryAsync(_operation.Id, mayClassifiedRead);
+            await InvestigationLeadLoadAsync();
+        }
+        _load = false;
+    }
+
+    private async Task InvestigationLeadLoadAsync()
+    {
+        if (_operation is null)
+        {
+            return;
+        }
+        var el = await OperationService.GetInvestigationLeadAsync(_operation.Id);
+        _investigationLead = el.Select(a => a.Agent?.Codename ?? "?").ToList();
+    }
+
+    private async Task InvestigationLeadRefreshAsync()
+    {
+        await InvestigationLeadLoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task NewLoadAsync()
+    {
+        await LoadAsync();
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task ClassificationSetAsync((Classification New, string? Justification) input)
+    {
+        if (_operation is null)
+        {
+            return;
+        }
+        await OperationService.ClassificationSetAsync(_operation.Id, input.New, input.Justification, _user);
+        await NewLoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_operation is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Operation löschen?",
+            "Die Operation wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await OperationService.DeleteAsync(_operation.Id, _user);
+        Snackbar.Add("Operation in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/operationen");
+    }
+}

@@ -1,0 +1,18 @@
+@* Zeigt die Sicherheitseinstufung farbig an. *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+    <MudIcon Icon="@Icons.Material.Filled.Shield" Color="@Colour(Value)" Size="Size.Small" />
+    <MudText Typo="Typo.body2" Color="@Colour(Value)">@ClassificationDisplay.Name(Value)</MudText>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Classification Value { get; set; }
+
+    private static Color Colour(Classification e) => e switch
+    {
+        Classification.Unknown => Color.Default,
+        Classification.ReviewCase => Color.Info,
+        Classification.SuspicionCase => Color.Warning,
+        Classification.SecuredStateThreatening => Color.Error,
+        _ => Color.Default,
+    };
+}

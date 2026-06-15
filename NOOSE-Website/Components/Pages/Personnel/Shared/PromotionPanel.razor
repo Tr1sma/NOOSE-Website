@@ -1,0 +1,140 @@
+@* Beförderungsanträge eines Agents: Liste (für alle sichtbar), Beantragen (Führung) und Entscheiden
+   (Deputy Director+/Admin). Die Entscheidung setzt den Rang (im AgentVerwaltungService) → Changed-Callback. *@
+@inject IPersonnelFileService PersonnelFileService
+@inject IAgentManagementService AgentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Beförderungsanträge (@_requests.Count)</MudText>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.TrendingUp"
+                       OnClick="RequestAsync">Beförderung beantragen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_requests.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Beförderungsanträge.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _requests)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2"><b>Ziel: @RankDisplay.Name(a.TargetRank)</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(a.Status)">@PromotionStatusDisplay.Name(a.Status)</MudChip>
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(a.Justification))
+                    {
+                        <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@a.Justification</MudText>
+                    }
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Beantragt von @(a.RequesterName ?? "—") · @a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                        @if (a.Status != PromotionStatus.Requested && a.DecidedAt is not null)
+                        {
+                            <span> · entschieden von @(a.DeciderName ?? "—") am @a.DecidedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        }
+                    </MudText>
+
+                    @if (a.Status == PromotionStatus.Requested)
+                    {
+                        <AuthorizeView Policy="@Policies.PromotionDecide">
+                            <MudStack Row="true" Spacing="2" Class="mt-1">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                           StartIcon="@Icons.Material.Filled.Check" OnClick="@(() => DecideAsync(a, true))">Genehmigen</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                           StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => DecideAsync(a, false))">Ablehnen</MudButton>
+                            </MudStack>
+                        </AuthorizeView>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Agent Agent { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Wird nach einer Entscheidung ausgelöst (Rang kann sich geändert haben → Steckkarte/Verlauf neu laden).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private ClaimsPrincipal _user = default!;
+    private List<AgentPromotionRequest> _requests = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _requests = await PersonnelFileService.GetPromotionRequestsAsync(Agent.Id);
+        _load = false;
+    }
+
+    private async Task RequestAsync()
+    {
+        var choice = await PromotionDialog.ShowAsync(DialogService, Agent.Codename, Agent.Rank ?? Rank.JuniorAgent);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await PersonnelFileService.PromotionRequestAsync(Agent.Id, choice.TargetRank, choice.Justification, _user);
+            Snackbar.Add("Beförderungsantrag eingereicht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DecideAsync(AgentPromotionRequest a, bool approved)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService,
+            approved ? "Beförderung genehmigen?" : "Beförderung ablehnen?",
+            approved
+                ? $"{Agent.Codename} erhält den Dienstgrad {RankDisplay.Name(a.TargetRank)}. Der Agent muss sich danach neu anmelden (neuer Sicherheits-Stamp)."
+                : "Der Antrag wird abgelehnt.",
+            approved ? "Genehmigen" : "Ablehnen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.PromotionDecideAsync(a.Id, approved, null, _user);
+            Snackbar.Add(approved ? "Beförderung genehmigt." : "Antrag abgelehnt.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static Color StatusColour(PromotionStatus s) => s switch
+    {
+        PromotionStatus.Requested => Color.Info,
+        PromotionStatus.Approved => Color.Success,
+        PromotionStatus.Rejected => Color.Error,
+        _ => Color.Default,
+    };
+}

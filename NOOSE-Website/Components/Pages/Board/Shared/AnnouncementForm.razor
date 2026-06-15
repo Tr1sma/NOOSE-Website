@@ -1,0 +1,101 @@
+@* Formular zum Anlegen/Bearbeiten einer Ankündigung. Inhalt mit @-Erwähnungen. Die Broadcast-Optionen
+   (Zielgruppe/Push/Quittierung) erscheinen nur, wenn ZeigeBroadcastOptionen gesetzt ist (= Führung beim Anlegen);
+   beim Bearbeiten sind sie bewusst ausgeblendet (nach dem Anlegen fix). *@
+@inject ITaskforceService TaskforceService
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudTextField @bind-Value="Input.Title" Label="Titel" Required="true" RequiredError="Titel ist erforderlich"
+                      Variant="Variant.Outlined" />
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Inhalt</MudText>
+        <MentionInput @bind-Text="_content" IsLeadership="IsLeadership"
+                        MayClassifiedRead="IsLeadership" MayRealName="IsLeadership" Placeholder="@Placeholder" />
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudSwitch T="bool" @bind-Value="Input.Important" Color="Color.Warning" Label="Wichtig (oben am Brett anpinnen)" />
+    </MudItem>
+
+    @if (ShowBroadcastOptions)
+    {
+        <MudItem xs="12">
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle1">Behörden-Broadcast (nur Führung)</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Die Zielgruppe bestimmt, wer den Eintrag am Brett sieht. „In die Glocke senden" pusht zusätzlich eine
+                Benachrichtigung; „Quittierung verlangen" fordert eine Lesebestätigung an.
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudSelect T="AnnouncementAudience" @bind-Value="Input.Audience" Label="Zielgruppe" Variant="Variant.Outlined">
+                @foreach (var z in AnnouncementAudienceDisplay.All)
+                {
+                    <MudSelectItem Value="z">@AnnouncementAudienceDisplay.Name(z)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        @if (Input.Audience == AnnouncementAudience.Taskforce)
+        {
+            <MudItem xs="12" md="6">
+                <MudSelect T="string" @bind-Value="Input.TargetId" Label="Taskforce" Variant="Variant.Outlined" Clearable="true">
+                    @foreach (var t in _taskforces)
+                    {
+                        <MudSelectItem T="string" Value="@t.Id">@t.Name (@t.CaseNumber)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        }
+        else if (Input.Audience == AnnouncementAudience.FromRank)
+        {
+            <MudItem xs="12" md="6">
+                <MudSelect T="Rank?" @bind-Value="Input.MinRank" Label="Mindest-Dienstgrad" Variant="Variant.Outlined">
+                    @foreach (var d in RankDisplay.All)
+                    {
+                        <MudSelectItem T="Rank?" Value="@((Rank?)d)">@RankDisplay.Name(d)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        }
+        <MudItem xs="12" md="6">
+            <MudSwitch T="bool" @bind-Value="Input.AsBroadcast" Color="Color.Primary" Label="In die Glocke senden (Broadcast)" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudSwitch T="bool" @bind-Value="Input.AcknowledgmentRequired" Color="Color.Primary" Label="Quittierung verlangen (Lesebestätigung)" />
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public AnnouncementInput Input { get; set; } = default!;
+
+    /// <summary>Broadcast-Optionen anzeigen (nur Führung, nur beim Anlegen).</summary>
+    [Parameter] public bool ShowBroadcastOptions { get; set; }
+
+    /// <summary>Steuert die Klarname-Sichtbarkeit im @-Picker (Führung).</summary>
+    [Parameter] public bool IsLeadership { get; set; }
+
+    // Platzhalter als Konstante – ein @ in einem Komponenten-Attributwert bräche sonst den Razor-Parser.
+    private const string Placeholder = "Text der Ankündigung … (Akten/Agenten verlinken per @)";
+
+    private List<Taskforce> _taskforces = new();
+
+    // MentionEingabe bindet an einen Nicht-Null-String; mit dem optionalen Inhalt synchronisieren.
+    private string _content
+    {
+        get => Input.Content ?? string.Empty;
+        set => Input.Content = value;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ShowBroadcastOptions)
+        {
+            // Taskforce-Ziel-Auswahl. ZeigeBroadcastOptionen ist der Führung vorbehalten → darfAlles (IstFuehrung)
+            // ist hier immer true und liefert ALLE Taskforces; meId ist daher ohne Belang (null).
+            _taskforces = await TaskforceService.GetListAsync(IsLeadership, null);
+        }
+    }
+}

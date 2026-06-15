@@ -1,0 +1,118 @@
+@* Beteiligte einer Operation (Personen & Organisationen) über die generische Verknüpfungs-Engine
+   (VerknuepfungArt.Standard). Beidseitig klickbar; die Notiz dient als Rolle/Funktion des Beteiligten.
+   Beteiligte Agents laufen separat über das Agent-Panel. *@
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Beteiligte Personen &amp; Organisationen (@_list.Count)</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
+            Beteiligten hinzufügen
+        </MudButton>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_list.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Noch keine Beteiligten erfasst. (Agents werden im Tab „Beteiligte Agents" zugeteilt.)
+        </MudText>
+    }
+    else
+    {
+        @foreach (var v in _list)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@TypeIcon(v.OtherType)" Color="Color.Primary" Size="Size.Small" />
+                        @if (v.Href is not null)
+                        {
+                            <MudLink Href="@v.Href" Typo="Typo.body2"><b>@v.OtherDesignation</b></MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2"><b>@v.OtherDesignation</b></MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(v.Label))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
+                        }
+                    </MudStack>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => RemoveAsync(v))" aria-label="Beteiligten entfernen" />
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string OperationId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private List<LinkDisplay> _list = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _list = await LinkService.GetForRecordAsync(nameof(Operation), OperationId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        _load = false;
+    }
+
+    private async Task AddAsync()
+    {
+        // Bereits beteiligte Ziele je Typ ausschließen. Die Operation selbst ist kein Person/Org-Ziel → keine Selbstverknüpfung möglich.
+        var factionFrom = _list.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
+        var groupsFrom = _list.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
+        var partyFrom = _list.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();
+        var personFrom = _list.Where(v => v.OtherType == nameof(Person)).Select(v => v.OtherId).ToList();
+
+        var choice = await OrgRelationDialog.ShowAsync(DialogService, "Beteiligten", User.IsLeadership(),
+            factionFrom, groupsFrom, partyFrom, personFrom, peopleAllow: true);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(nameof(Operation), OperationId, choice.TargetType, choice.TargetId, choice.Note, User, LinkKind.Default);
+            Snackbar.Add("Beteiligter gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(LinkDisplay v)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Beteiligten entfernen?",
+            $"Die Beziehung zu „{v.OtherDesignation}“ wird entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        await LinkService.RemoveAsync(v.LinkId, User);
+        Snackbar.Add("Beteiligter entfernt.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private static string TypeIcon(string type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        _ => Icons.Material.Filled.Hub,
+    };
+}

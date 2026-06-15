@@ -1,0 +1,110 @@
+@page "/parteien/{Id}/bearbeiten"
+@inject IPartyService PartyService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Partei bearbeiten · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Partei nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/parteien/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Partei bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <PartyForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/parteien/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private PartyInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+    }
+
+    // Diese Seite wird bei /parteien/{A}/bearbeiten → /parteien/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
+    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _input = null;
+        var p = await PartyService.GetDetailAsync(Id, _user.MayClassifiedRead());
+        if (p is not null)
+        {
+            _input = new PartyInput
+            {
+                Name = p.Name,
+                Description = p.Description,
+                Targets = p.Targets,
+                Remarks = p.Remarks,
+                Classification = p.Classification,
+                IsClassified = p.IsClassified,
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            await PartyService.RefreshAsync(Id, _input, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/parteien/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

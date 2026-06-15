@@ -11,24 +11,24 @@ using MudBlazor.Services;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Components;
 using NOOSE_Website.Components.Account;
-using NOOSE_Website.Components.Fraktionen;
-using NOOSE_Website.Components.Personen;
-using NOOSE_Website.Components.Querschnitt;
+using NOOSE_Website.Components.Factions;
+using NOOSE_Website.Components.People;
+using NOOSE_Website.Components.Common;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
-using NOOSE_Website.Infrastructure.Ankuendigungen;
+using NOOSE_Website.Infrastructure.Announcements;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
-using NOOSE_Website.Infrastructure.Bedrohung;
+using NOOSE_Website.Infrastructure.Threat;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
-using NOOSE_Website.Infrastructure.Freigaben;
+using NOOSE_Website.Infrastructure.Shares;
 using NOOSE_Website.Infrastructure.Notifications;
-using NOOSE_Website.Infrastructure.Statistik;
+using NOOSE_Website.Infrastructure.Statistics;
 using NOOSE_Website.Infrastructure.Storage;
-using NOOSE_Website.Infrastructure.Wiedervorlagen;
+using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Services;
-using NOOSE_Website.Services.Statistik;
+using NOOSE_Website.Services.Statistics;
 
 // Einheitlich deutsches Datums-/Zahlenformat in der gesamten App (Server-Rendering und
 // Blazor-Circuits). Ohne das hängt z. B. die Anzeige der MudBlazor-Picker und jedes
@@ -88,7 +88,7 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<ReadOnlyBarrierInterceptor>();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 // Phase 6: zweiter, unabhängiger Interceptor für die Watchlist (gefolgte Akte geändert → Glocke).
-builder.Services.AddScoped<WatchlistAenderungInterceptor>();
+builder.Services.AddScoped<WatchlistChangeInterceptor>();
 
 // Die Server-Version (lokal MariaDB/XAMPP, Produktion MySQL 8.0) wurde bereits beim Auflösen der
 // Verbindung ermittelt (DatabaseConnectionResolver) und hier wiederverwendet – spart eine zweite
@@ -107,7 +107,7 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
            .AddInterceptors(
                sp.GetRequiredService<ReadOnlyBarrierInterceptor>(),
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
-               sp.GetRequiredService<WatchlistAenderungInterceptor>())
+               sp.GetRequiredService<WatchlistChangeInterceptor>())
            // Steckbrief-Kinder (Alias/Telefon/…) werden ausschließlich über die – bereits
            // soft-delete-gefilterte – Person geladen. Die EF-Warnung zum Zusammenspiel von
            // Query-Filter und Pflichtnavigation ist daher für unsere Zugriffsmuster unkritisch.
@@ -172,66 +172,66 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 
 // Fachliche Dienste.
-builder.Services.AddScoped<IAgentVerwaltungService, AgentVerwaltungService>();
-builder.Services.AddScoped<IZugriffsLogService, ZugriffsLogService>();
+builder.Services.AddScoped<IAgentManagementService, AgentManagementService>();
+builder.Services.AddScoped<IAccessLogService, AccessLogService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
-builder.Services.AddScoped<IQuellenStorageService, QuellenStorageService>();
-builder.Services.AddScoped<IFraktionFotoStorageService, FraktionFotoStorageService>();
+builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
+builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
 // Gemeinsame Aktenzeichen-Vergabe (Person/Fraktion/Gruppe).
-builder.Services.AddScoped<IAktenzeichenService, AktenzeichenService>();
+builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
-builder.Services.AddScoped<IPersonDokService, PersonDokService>();
-builder.Services.AddScoped<ISteckbriefVorschlagService, SteckbriefVorschlagService>();
+builder.Services.AddScoped<IPersonDocService, PersonDocService>();
+builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>();
 // Phase 7: admin-definierte Dok-Vorlagen (Erfassungsmasken).
-builder.Services.AddScoped<IDokVorlageService, DokVorlageService>();
+builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
 // Phase 7: Dokumenten-Bibliothek (WYSIWYG-Dokumente) + Dokument-Vorlagen + Platzhalter-Ersetzung.
-builder.Services.AddScoped<IDokumentService, DokumentService>();
-builder.Services.AddScoped<IDokumentVorlageService, DokumentVorlageService>();
-builder.Services.AddScoped<IPlatzhalterService, PlatzhalterService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<IDocumentTemplateService, DocumentTemplateService>();
+builder.Services.AddScoped<IPlaceholderService, PlaceholderService>();
 // Phase 7: Aktualitäts-Ampel (Schwellwerte je Aktentyp, gecacht) + Wiedervorlagen (terminierte Erinnerungen).
 builder.Services.AddMemoryCache();
-builder.Services.AddScoped<IAktualitaetService, AktualitaetService>();
-builder.Services.AddScoped<IWiedervorlageService, WiedervorlageService>();
+builder.Services.AddScoped<IRecencyService, RecencyService>();
+builder.Services.AddScoped<IFollowupService, FollowupService>();
 // Wiederkehrender Fälligkeits-Check der Wiedervorlagen → Benachrichtigung an Zuständige + Follower.
-builder.Services.AddHostedService<WiedervorlageFaelligkeitsDienst>();
+builder.Services.AddHostedService<FollowupDueWorker>();
 // Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
-builder.Services.AddScoped<IQuelleService, QuelleService>();
+builder.Services.AddScoped<ISourceService, SourceService>();
 builder.Services.AddScoped<ITagService, TagService>();
-builder.Services.AddScoped<IKommentarService, KommentarService>();
+builder.Services.AddScoped<ICommentService, CommentService>();
 // Phase 7: konfigurierbare Custom-Felder je Aktentyp (Admin).
-builder.Services.AddScoped<ICustomFeldDefinitionService, CustomFeldDefinitionService>();
-builder.Services.AddScoped<ICustomFeldWertService, CustomFeldWertService>();
+builder.Services.AddScoped<ICustomFieldDefinitionService, CustomFieldDefinitionService>();
+builder.Services.AddScoped<ICustomFieldValueService, CustomFieldValueService>();
 // Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
-builder.Services.AddScoped<IVerknuepfungService, VerknuepfungService>();
-builder.Services.AddScoped<IBeziehungService, BeziehungService>();
+builder.Services.AddScoped<ILinkService, LinkService>();
+builder.Services.AddScoped<IRelationService, RelationService>();
 // Phase 8 – Block A: Beziehungsgraph, Pfadsuche & Verknüpfungs-Vorschläge (rein lesend auf den o. g. Quellen).
 builder.Services.AddScoped<IGraphService, GraphService>();
-builder.Services.AddScoped<IVerknuepfungVorschlagService, VerknuepfungVorschlagService>();
+builder.Services.AddScoped<ILinkSuggestionService, LinkSuggestionService>();
 // Phase 8 – Block B: vereinheitlichter Akten-Zeitstrahl (rein lesend; aggregiert Audit + semantische Quellen).
-builder.Services.AddScoped<IZeitstrahlService, ZeitstrahlService>();
-builder.Services.AddScoped<IOrganigrammService, OrganigrammService>();
+builder.Services.AddScoped<ITimelineService, TimelineService>();
+builder.Services.AddScoped<IOrgChartService, OrgChartService>();
 // Phase 8 – Block C: Termin-Akte (CRUD) + Kalender-Aggregation (rein lesend).
-builder.Services.AddScoped<ITerminService, TerminService>();
-builder.Services.AddScoped<IKalenderService, KalenderService>();
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<ICalendarService, CalendarService>();
 // Phase 8 – Block D: automatischer Bedrohungs-Score (Fraktionen + Personen) – berechnet & persistiert (Algorithmus „EHK-Score").
 // Konfig-Service ZUERST registrieren (Abhängigkeitsrichtung Score → Konfig; kein Zyklus).
-builder.Services.AddScoped<IBedrohungsScoreKonfigService, BedrohungsScoreKonfigService>();
-builder.Services.AddScoped<IBedrohungsScoreService, BedrohungsScoreService>();
+builder.Services.AddScoped<IThreatScoreConfigService, ThreatScoreConfigService>();
+builder.Services.AddScoped<IThreatScoreService, ThreatScoreService>();
 // Täglicher Sweep gegen die Zeit-Decay-Drift des Scores (+ seedet beim ersten Start alle Fraktionen).
-builder.Services.AddHostedService<BedrohungsScoreSweepDienst>();
+builder.Services.AddHostedService<ThreatScoreSweepWorker>();
 // Phase 3c: globale Suche + gespeicherte Suchen.
 builder.Services.AddScoped<ISearchService, SearchService>();
-builder.Services.AddScoped<IGespeicherteSucheService, GespeicherteSucheService>();
+builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
 // Phase 4a: Fraktionen.
-builder.Services.AddScoped<IFraktionService, FraktionService>();
+builder.Services.AddScoped<IFactionService, FactionService>();
 // Phase 4b: Personengruppen.
-builder.Services.AddScoped<IPersonengruppeService, PersonengruppeService>();
+builder.Services.AddScoped<IPersonGroupService, PersonGroupService>();
 // Phase 5a: Parteien.
-builder.Services.AddScoped<IParteiService, ParteiService>();
+builder.Services.AddScoped<IPartyService, PartyService>();
 // Phase 5b: Operationen.
 builder.Services.AddScoped<IOperationService, OperationService>();
 // Phase 5: Vorgangs-/Fallakten (bündeln Personen/Operationen/Observationen/Doks).
-builder.Services.AddScoped<IVorgangService, VorgangService>();
+builder.Services.AddScoped<ICaseService, CaseService>();
 // Phase 5c: Taskforces.
 builder.Services.AddScoped<ITaskforceService, TaskforceService>();
 // Phase 5d: Taskforce-Chat mit @-Verlinkung (Mentions) + Live-Broadcaster.
@@ -241,37 +241,37 @@ builder.Services.AddSingleton<TaskforceChatBroadcaster>();
 // Phase 5: Observationen (Überwachungseinträge an Personen).
 builder.Services.AddScoped<IObservationService, ObservationService>();
 // Phase 5e: Personalakte je Agent (Verlauf, Vermerke, Beförderungsanträge).
-builder.Services.AddScoped<IPersonalakteService, PersonalakteService>();
+builder.Services.AddScoped<IPersonnelFileService, PersonnelFileService>();
 // Phase 5: generischer Antrags-/Posteingang-Workflow (Hochstufungs-Anträge).
-builder.Services.AddScoped<IAntragService, AntragService>();
+builder.Services.AddScoped<IRequestService, RequestService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 // Phase 8 – Block D: Statistik-Seite (aggregierte Auswertungen, rein lesend; baut auf DashboardService auf).
-builder.Services.AddScoped<IStatistikService, StatistikService>();
+builder.Services.AddScoped<IStatisticsService, StatisticsService>();
 // Phase 8 – Block D, Schritt 2: archivierte Monats-Lageberichte (Schnappschuss) + automatischer Erzeugungs-Dienst.
-builder.Services.AddScoped<ILageberichtService, LageberichtService>();
-builder.Services.AddHostedService<LageberichtDienst>();
+builder.Services.AddScoped<ISituationReportService, SituationReportService>();
+builder.Services.AddHostedService<SituationReportWorker>();
 // Phase 6: In-App-Benachrichtigungen (Glocke) + Live-Broadcaster.
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
 // Live-Aktualisierung des „Freigaben"-Badges in der NavMenu nach jeder Posteingangs-Entscheidung.
-builder.Services.AddSingleton<FreigabenBroadcaster>();
+builder.Services.AddSingleton<SharesBroadcaster>();
 // Live-Aktualisierung des „Schwarzes Brett"-Badges (offene Quittierungen) nach einer Quittierung.
-builder.Services.AddSingleton<QuittierungBroadcaster>();
+builder.Services.AddSingleton<AcknowledgmentBroadcaster>();
 // Phase 6: Watchlist (Akten folgen → „gefolgte Akte geändert"). Fan-out entkoppelt über den Singleton-Dispatcher.
 builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<WatchlistFanout>();
 builder.Services.AddSingleton<WatchlistDispatcher>();
 // Phase 6: Aufgaben/To-Dos & Zuweisungen (Team-Board; Zuweisung/Erledigung → Glocke).
-builder.Services.AddScoped<IAufgabeService, AufgabeService>();
+builder.Services.AddScoped<IJobService, JobService>();
 // Phase 6: News/Schwarzes Brett + Behörden-Broadcast (Brett für alle; Broadcast/Quittierung nur Führung → Glocke).
-builder.Services.AddScoped<IAnkuendigungService, AnkuendigungService>();
+builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 // Phase 7 (Abschluss): Systemeinstellungen (Wartungsmodus/Banner/Theming/Logo), Gesetzbuch,
 // Datei-Bibliothek und Duplikat-Zusammenführung von Personenakten.
-builder.Services.AddScoped<ISystemEinstellungService, SystemEinstellungService>();
-builder.Services.AddScoped<IGesetzService, GesetzService>();
-builder.Services.AddScoped<IBibliothekStorageService, BibliothekStorageService>();
-builder.Services.AddScoped<IBibliothekService, BibliothekService>();
+builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
+builder.Services.AddScoped<ILawService, LawService>();
+builder.Services.AddScoped<ILibraryStorageService, LibraryStorageService>();
+builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<IPersonMergeService, PersonMergeService>();
 
 // Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
@@ -331,12 +331,12 @@ app.MapHealthChecks("/health").AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapNooseAccountEndpoints();
-app.MapNoosePersonenDateiEndpoints();
-app.MapNooseQuellenDateiEndpoints();
-app.MapNooseFraktionenDateiEndpoints();
-app.MapNooseBibliothekDateiEndpoints();
+app.MapNoosePeopleFileEndpoints();
+app.MapNooseSourcesFileEndpoints();
+app.MapNooseFactionsFileEndpoints();
+app.MapNooseLibraryFileEndpoints();
 app.MapNooseSystemEndpoints();
-app.MapNooseStatistikExportEndpoints();
+app.MapNooseStatisticsExportEndpoints();
 
 // Start-up: ausstehende EF-Migrationen anwenden und die technische "Admin"-Rolle sicherstellen.
 using (var scope = app.Services.CreateScope())

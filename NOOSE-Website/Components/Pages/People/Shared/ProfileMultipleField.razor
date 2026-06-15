@@ -1,0 +1,91 @@
+@* Generische Chip-Eingabe für ein Steckbrief-Mehrfachfeld (Waffe/Fahrzeug/Ort):
+   vorhandene Werte als umbrechende Chips, Hinzufügen per Autocomplete mit Katalog-Vorschlägen
+   (freie Eingabe neuer Werte möglich) plus optionalem Zusatzfeld (Kennzeichen/Notiz). *@
+@typeparam TItem where TItem : IProfileMultiple, new()
+@inject IProfileSuggestionService SuggestionService
+
+<MudStack Spacing="1">
+    <MudText Typo="Typo.subtitle2">@Title</MudText>
+
+    @if (Items.Count > 0)
+    {
+        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+            @foreach (var item in Items)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Default"
+                         OnClose="@(() => Remove(item))">@ChipText(item)</MudChip>
+            }
+        </MudStack>
+    }
+
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+        <MudAutocomplete T="string" @bind-Value="_newMain" @bind-Text="_newMainText"
+                         SearchFunc="@Search" Placeholder="@MainPlaceholder"
+                         Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                         CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                         MinCharacters="0" Immediate="true" MaxItems="20" Clearable="true"
+                         Class="flex-grow-1" Style="min-width:160px;"
+                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        @if (ShowExtra)
+        {
+            <MudTextField @bind-Value="_newExtra" Placeholder="@ExtraPlaceholder"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:140px;" />
+        }
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Variant="Variant.Filled"
+                   Color="Color.Primary" OnClick="Add"
+                   Disabled="@string.IsNullOrWhiteSpace(_newMainText)">Hinzufügen</MudButton>
+    </MudStack>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public List<TItem> Items { get; set; } = new();
+    [Parameter, EditorRequired] public SuggestionType Type { get; set; }
+    [Parameter] public bool ShowExtra { get; set; }
+    [Parameter] public string? MainPlaceholder { get; set; }
+    [Parameter] public string? ExtraPlaceholder { get; set; }
+
+    private string? _newMain;
+    private string? _newMainText;
+    private string? _newExtra;
+    private IReadOnlyList<string> _suggestions = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+        => _suggestions = await SuggestionService.GetAsync(Type);
+
+    private Task<IEnumerable<string>> Search(string value, CancellationToken token)
+    {
+        IEnumerable<string> hit = string.IsNullOrWhiteSpace(value)
+            ? _suggestions
+            : _suggestions.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        // Bereits erfasste Werte nicht erneut vorschlagen.
+        return Task.FromResult(hit.Where(v =>
+            !Items.Any(i => string.Equals(i.MainValue, v, StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static string ChipText(TItem item)
+        => string.IsNullOrWhiteSpace(item.Extra) ? item.MainValue : $"{item.MainValue} · {item.Extra}";
+
+    private void Add()
+    {
+        // Maßgeblich ist der sichtbare Text (deckt Vorschlag-Auswahl und freie Eingabe gleichermaßen ab).
+        var main = _newMainText?.Trim();
+        if (string.IsNullOrWhiteSpace(main))
+        {
+            return;
+        }
+        // Duplikate (case-insensitiv) innerhalb derselben Person vermeiden.
+        if (!Items.Any(i => string.Equals(i.MainValue, main, StringComparison.OrdinalIgnoreCase)))
+        {
+            var item = new TItem();
+            item.MainValue = main;
+            item.Extra = string.IsNullOrWhiteSpace(_newExtra) ? null : _newExtra.Trim();
+            Items.Add(item);
+        }
+        _newMain = null;
+        _newMainText = null;
+        _newExtra = null;
+    }
+
+    private void Remove(TItem item) => Items.Remove(item);
+}

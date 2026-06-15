@@ -1,0 +1,346 @@
+@page "/admin/agenten"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject IAgentManagementService AgentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Agenten-Verwaltung · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Agenten-Verwaltung</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Dienstgrade vergeben, TRU-, HRB- und Teamleitung-Rechte verwalten sowie Accounts sperren. Eine Sperre beendet
+    alle laufenden Sitzungen des Agents sofort (Kill-Switch). Teamleitungen (FiveM-Aufsicht) sind im RP-Betrieb
+    überall ausgeblendet und nur hier sichtbar – Vollzugriff erst durch den Admin-Haken. Das Setzen des
+    Admin-Hakens selbst ist ausschließlich Admins vorbehalten; die Führung kann ihn nur einsehen.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false"
+             @bind-ActivePanelIndex="_tab" Class="mb-3">
+        <MudTabPanel Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success"
+                     Text="@($"Aktiv ({CountActive})")" />
+        <MudTabPanel Icon="@Icons.Material.Filled.Block" IconColor="Color.Error"
+                     Text="@($"Gesperrt ({CountBlocked})")" />
+        <MudTabPanel Icon="@Icons.Material.Filled.SupervisorAccount" IconColor="Color.Tertiary"
+                     Text="@($"Teamleitung ({CountTeamLead})")" />
+    </MudTabs>
+
+    <MudTable Items="VisibleAgents" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => DisplayName(x))">Agent</MudTableSortLabel></MudTh>
+            <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => x.Rank)">Dienstgrad</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AgentStatusDisplay.Name(x.Status))">Status</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IsTRU)">TRU</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IsHRB)">HRB</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IsTeamLead)">Teamleitung</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IsAdmin)">Admin</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Agent">
+                <MudText Typo="Typo.body2">@DisplayName(context)</MudText>
+                @if (!string.IsNullOrWhiteSpace(RealNameBadgeNumber(context)))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@RealNameBadgeNumber(context)</MudText>
+                }
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@(context.DiscordUsername ?? context.DiscordId)</MudText>
+                @if (context.IsTeamLead)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Class="mt-1">Teamleitung</MudChip>
+                }
+                @if (context.Status == AgentStatus.Blocked && !string.IsNullOrWhiteSpace(context.BlockedReason))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block mt-1">Grund: @context.BlockedReason</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Dienstgrad">
+                <MudSelect T="Rank" Value="@(context.Rank ?? Rank.JuniorAgent)"
+                           ValueChanged="@(degree => RankChange(context, degree))"
+                           Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                           Disabled="@(context.Status != AgentStatus.Active)">
+                    @foreach (var dg in RankDisplay.All)
+                    {
+                        <MudSelectItem Value="dg">@RankDisplay.Name(dg)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@StatusIcon(context.Status)" Color="@StatusColour(context.Status)" Size="Size.Small" />
+                    <MudText Typo="Typo.body2" Color="@StatusColour(context.Status)">@AgentStatusDisplay.Name(context.Status)</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="TRU">
+                <MudSwitch T="bool" Value="context.IsTRU" ValueChanged="@(v => TruSet(context, v))" Color="Color.Primary" />
+            </MudTd>
+            <MudTd DataLabel="HRB">
+                <MudSwitch T="bool" Value="context.IsHRB" ValueChanged="@(v => HrbSet(context, v))" Color="Color.Info" />
+            </MudTd>
+            <MudTd DataLabel="Teamleitung">
+                <MudSwitch T="bool" Value="context.IsTeamLead" ValueChanged="@(v => TeamLeadSet(context, v))" Color="Color.Tertiary" />
+            </MudTd>
+            <MudTd DataLabel="Admin">
+                <MudTooltip Text="@AdminToggleHint(context)" Disabled="@(_amAdmin && context.Id != _myId)">
+                    <MudSwitch T="bool" Value="context.IsAdmin" ValueChanged="@(v => AdminSet(context, v))"
+                               Color="Color.Secondary" Disabled="@(!_amAdmin || context.Id == _myId)" />
+                </MudTooltip>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudTooltip Text="Personalakte">
+                        <MudIconButton Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Default"
+                                       Href="@($"/personal/{context.Id}")" aria-label="Personalakte öffnen" />
+                    </MudTooltip>
+                    <MudTooltip Text="Stammdaten bearbeiten">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="() => Edit(context)" aria-label="Stammdaten bearbeiten" />
+                    </MudTooltip>
+                    @if (context.Status == AgentStatus.Blocked)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.LockOpen"
+                                   OnClick="() => Unblock(context)">Entsperren</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Block"
+                                   Disabled="@(context.Id == _myId)"
+                                   OnClick="() => Block(context)">Sperren</MudButton>
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary py-4">
+                @(_tab switch
+                {
+                    1 => "Keine gesperrten Agenten.",
+                    2 => "Keine Teamleitungen.",
+                    _ => "Keine aktiven Agenten.",
+                })
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private List<Agent> _agents = new();
+    private string? _myId;
+    private bool _amAdmin;
+
+    // Aktiver Tab: 0 = Aktive (ohne Teamleitungen), 1 = Gesperrte, 2 = Teamleitung (nur aktive Agenten mit gesetztem
+    // Teamleitung-Haken). Teamleitungen werden bewusst NUR im Teamleitung-Tab gezeigt, nicht zusätzlich unter "Aktiv".
+    // Ausstehende Registrierungen werden hier bewusst nicht gezeigt – die laufen über die Freigaben-Seite.
+    // Das Sperren/Entsperren verschiebt einen Agenten zwischen den Tabs.
+    private int _tab;
+
+    private IEnumerable<Agent> VisibleAgents => _tab switch
+    {
+        1 => _agents.Where(a => a.Status == AgentStatus.Blocked),
+        2 => _agents.Where(a => a.Status == AgentStatus.Active && a.IsTeamLead),
+        _ => _agents.Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead),
+    };
+
+    private int CountActive => _agents.Count(a => a.Status == AgentStatus.Active && !a.IsTeamLead);
+    private int CountBlocked => _agents.Count(a => a.Status == AgentStatus.Blocked);
+    private int CountTeamLead => _agents.Count(a => a.Status == AgentStatus.Active && a.IsTeamLead);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _myId = user.GetAgentId();
+        _amAdmin = user.IsAdmin();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _agents = await AgentService.GetAllAsync();
+        _load = false;
+    }
+
+    private async Task Edit(Agent agent)
+    {
+        var result = await AgentEditDialog.ShowAsync(DialogService, agent);
+        if (result is null)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.MasterDataChangeAsync(agent.Id, result.RealName, result.Codename, result.BadgeNumber, user);
+            Snackbar.Add($"Stammdaten von {result.Codename} gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RankChange(Agent agent, Rank degree)
+    {
+        if (agent.Rank == degree)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.RankChangeAsync(agent.Id, degree, user);
+            Snackbar.Add($"{DisplayName(agent)}: Dienstgrad auf {RankDisplay.Name(degree)} gesetzt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task TruSet(Agent agent, bool value)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.TruSetAsync(agent.Id, value, user);
+            Snackbar.Add($"{DisplayName(agent)}: TRU {(value ? "gesetzt" : "entfernt")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task HrbSet(Agent agent, bool value)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.HrbSetAsync(agent.Id, value, user);
+            Snackbar.Add($"{DisplayName(agent)}: HRB {(value ? "gesetzt" : "entfernt")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task TeamLeadSet(Agent agent, bool value)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.TeamLeadSetAsync(agent.Id, value, user);
+            Snackbar.Add($"{DisplayName(agent)}: Teamleitung {(value ? "markiert" : "entfernt")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task AdminSet(Agent agent, bool value)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.AdminSetAsync(agent.Id, value, user);
+            Snackbar.Add($"{DisplayName(agent)}: Admin-Rechte {(value ? "vergeben" : "entzogen")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task Block(Agent agent)
+    {
+        // Destruktive Aktion (beendet alle Sitzungen sofort) → Bestätigung + optionale Begründung einholen.
+        var reason = await ReasonDialog.ShowAsync(DialogService,
+            $"{DisplayName(agent)} sperren?",
+            "Die Sperre beendet alle laufenden Sitzungen des Agents sofort (Kill-Switch).",
+            confirmText: "Sperren", label: "Begründung (optional)", colour: Color.Error);
+        if (reason is null)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.BlockAsync(agent.Id, string.IsNullOrWhiteSpace(reason) ? "Notfall-Sperre durch Führung/Admin" : reason, user);
+            Snackbar.Add($"{DisplayName(agent)} gesperrt – alle Sitzungen werden beendet.", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task Unblock(Agent agent)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.UnblockAsync(agent.Id, user);
+            Snackbar.Add($"{DisplayName(agent)} entsperrt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    // Erklärt, warum der Admin-Schalter gesperrt ist. Bei freigeschaltetem Schalter ist der Tooltip ausgeblendet.
+    private string AdminToggleHint(Agent agent)
+    {
+        if (!_amAdmin)
+        {
+            return "Nur Admins können Admin-Rechte vergeben oder entziehen.";
+        }
+        return agent.Id == _myId ? "Du kannst deine eigenen Admin-Rechte hier nicht ändern." : string.Empty;
+    }
+
+    private static string DisplayName(Agent agent)
+        => string.IsNullOrWhiteSpace(agent.Codename) ? "Unbenannter Agent" : agent.Codename;
+
+    private static string RealNameBadgeNumber(Agent agent)
+        => string.Join(" · ", new[] { agent.RealName, agent.BadgeNumber }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    private static Color StatusColour(AgentStatus status) => status switch
+    {
+        AgentStatus.Active => Color.Success,
+        AgentStatus.Pending => Color.Warning,
+        AgentStatus.Blocked => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string StatusIcon(AgentStatus status) => status switch
+    {
+        AgentStatus.Active => Icons.Material.Filled.CheckCircle,
+        AgentStatus.Pending => Icons.Material.Filled.HourglassTop,
+        AgentStatus.Blocked => Icons.Material.Filled.Block,
+        _ => Icons.Material.Filled.Help,
+    };
+}

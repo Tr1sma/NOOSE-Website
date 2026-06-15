@@ -1,0 +1,267 @@
+@* Formular-Dialog zum Anlegen eines Personen-Doks. Liefert eine PersonDokEingabe zurück. *@
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IDocTemplateService TemplateService
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                @if (!IsEdit && _templates.Count > 0)
+                {
+                    <MudSelect T="DocTemplate" Label="Vorlage übernehmen (optional)" Value="_selectedTemplate"
+                               ValueChanged="TemplateApply" Variant="Variant.Outlined" Clearable="true"
+                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
+                               ToStringFunc="@(v => v?.Name ?? string.Empty)"
+                               HelperText="Füllt die Felder mit den Vorgaben der Vorlage vor – frei editierbar.">
+                        @foreach (var v in _templates)
+                        {
+                            <MudSelectItem Value="v">@v.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudDivider />
+                }
+                <MudGrid>
+                    <MudItem xs="7">
+                        <MudDatePicker Label="Datum der Maßnahme" @bind-Date="_date" Required="true"
+                                       RequiredError="Datum ist erforderlich" DateFormat="dd.MM.yyyy" />
+                    </MudItem>
+                    <MudItem xs="5">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_time" />
+                    </MudItem>
+                </MudGrid>
+                <MudSelect T="MeasureOutcome" Label="Beendigung der Maßnahme" @bind-Value="_input.Outcome" Variant="Variant.Outlined">
+                    @foreach (var a in MeasureOutcomeDisplay.All)
+                    {
+                        <MudSelectItem Value="a">@MeasureOutcomeDisplay.Name(a)</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_input.Outcome == MeasureOutcome.Shot)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                        Setzt den Lebensstatus für 20 Minuten auf „Tot" (Respawn-Zeit).
+                    </MudAlert>
+                }
+                else if (_input.Outcome == MeasureOutcome.Injection)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.
+                    </MudAlert>
+                }
+                <MudTextField @bind-Value="_input.Reason" Label="Grund" Lines="2" Variant="Variant.Outlined" />
+
+                @* Fraktionszugehörigkeit: bevorzugt eine bestehende Akte verknüpfen, sonst Freitext. *@
+                @if (_orgHidden)
+                {
+                    @* Verknüpfte Akte ist hier nicht auflösbar (Verschlusssache/gelöscht): Picker ausblenden,
+                       damit eine harmlose Bearbeitung die bestehende Verknüpfung nicht still löscht. *@
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                        Verknüpfte Akte ist hier nicht sichtbar (Verschlusssache oder gelöscht) – sie bleibt beim Speichern erhalten.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudRadioGroup T="string" @bind-Value="Type">
+                        <MudRadio T="string" Value="@nameof(Faction)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                        <MudRadio T="string" Value="@nameof(PersonGroup)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+                    </MudRadioGroup>
+                    <MudAutocomplete T="AffiliationDialog.RecordHit" Label="Fraktion / Gruppe (verknüpft)"
+                                     @bind-Value="_target" SearchFunc="@Search" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)"
+                                     HelperText="Bestehende Akte verknüpfen – oder leer lassen und unten Freitext nutzen.">
+                        <ItemTemplate Context="a">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@(IsFaction ? Icons.Material.Filled.Groups : Icons.Material.Filled.Diversity3)" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@a.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    @if (_target is not null)
+                    {
+                        <MudCheckBox T="bool" @bind-Value="_asMember" Color="Color.Primary" Dense="true"
+                                     Label="Person als Mitglied dieser Akte eintragen" />
+                    }
+                }
+                <MudTextField @bind-Value="_input.Faction" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined"
+                              HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
+                <MudTextField @bind-Value="_input.ReceivedInformation" Label="Erhaltene Informationen" Lines="3" Variant="Variant.Outlined" />
+                <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">@(IsEdit ? "Änderungen speichern" : "Dok speichern")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Beim Bearbeiten gesetzt: vorhandene Werte zum Vorbefüllen. Null = Anlegen.</summary>
+    [Parameter] public PersonDocInput? Exists { get; set; }
+
+    /// <summary>Steuert, ob auch Verschlusssachen in der Org-Suche erscheinen.</summary>
+    [Parameter] public bool IsLeadership { get; set; }
+
+    /// <summary>Beim Bearbeiten: bereits aufgelöster Name/Aktenzeichen der verknüpften Org (zum Vorbefüllen der Suche).</summary>
+    [Parameter] public string? ExistsOrgName { get; set; }
+    [Parameter] public string? ExistsOrgCaseNumber { get; set; }
+
+    private bool IsEdit => Exists is not null;
+
+    private MudForm _form = default!;
+    private readonly PersonDocInput _input = new();
+    private DateTime? _date = DateTime.Now;
+    private TimeSpan? _time = DateTime.Now.TimeOfDay;
+
+    private string _orgType = nameof(Faction);
+    private string Type
+    {
+        get => _orgType;
+        // Typwechsel verwirft die bisherige Auswahl (Fraktion- und Gruppen-Treffer sind nicht austauschbar).
+        set { if (_orgType != value) { _orgType = value; _target = null; } }
+    }
+    private bool IsFaction => _orgType == nameof(Faction);
+    private AffiliationDialog.RecordHit? _target;
+    private bool _asMember;
+    // True, wenn die bestehende Verknüpfung für den Nutzer nicht auflösbar ist (Verschlusssache/gelöscht) –
+    // dann bleibt sie unverändert erhalten, statt durch das leere Picker-Feld gelöscht zu werden.
+    private bool _orgHidden;
+
+    // Vorlagen-Picker (nur im Anlegen-Modus): aktive Vorlagen + aktuell gewählte.
+    private List<DocTemplate> _templates = new();
+    private DocTemplate? _selectedTemplate;
+
+    private async Task<IEnumerable<AffiliationDialog.RecordHit>> Search(string value, CancellationToken token)
+    {
+        if (IsFaction)
+        {
+            var hit = await FactionService.SearchAsync(value, IsLeadership, 20, token);
+            return hit.Select(f => new AffiliationDialog.RecordHit(f.Id, f.Name, f.CaseNumber));
+        }
+        var groups = await GroupService.SearchAsync(value, IsLeadership, 20, token);
+        return groups.Select(g => new AffiliationDialog.RecordHit(g.Id, g.Name, g.CaseNumber));
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Exists is null)
+        {
+            // Anlegen-Modus: aktive Vorlagen für den Picker laden.
+            _templates = await TemplateService.GetActiveAsync();
+            return;
+        }
+        // Edit-Modus: Felder sowie Datum/Uhrzeit (in Ortszeit) aus den vorhandenen Werten übernehmen.
+        _input.Reason = Exists.Reason;
+        _input.Faction = Exists.Faction;
+        _input.ReceivedInformation = Exists.ReceivedInformation;
+        _input.TruthSerum = Exists.TruthSerum;
+        _input.Outcome = Exists.Outcome;
+        var local = Exists.Timestamp.ToLocalTime();
+        _date = local.Date;
+        _time = local.TimeOfDay;
+        // Verknüpfung vorbefüllen – der Name stammt aus der bereits aufgelösten Anzeige (kein Extra-Roundtrip).
+        if (!string.IsNullOrWhiteSpace(Exists.OrgId) && !string.IsNullOrWhiteSpace(Exists.OrgType))
+        {
+            _orgType = Exists.OrgType;
+            if (!string.IsNullOrWhiteSpace(ExistsOrgName))
+            {
+                _target = new AffiliationDialog.RecordHit(Exists.OrgId, ExistsOrgName, ExistsOrgCaseNumber ?? string.Empty);
+            }
+            else
+            {
+                // Verknüpfte Akte ist nicht auflösbar (Verschlusssache/gelöscht) → erhalten, nicht still löschen.
+                _orgHidden = true;
+            }
+        }
+    }
+
+    /// <summary>Übernimmt die Vorgaben der gewählten Vorlage in das Formular (frei editierbar).
+    /// Zeitpunkt und Org-Verknüpfung bleiben unberührt (instanzspezifisch).</summary>
+    private void TemplateApply(DocTemplate? template)
+    {
+        _selectedTemplate = template;
+        if (template is null)
+        {
+            return;
+        }
+        _input.Reason = template.DefaultReason;
+        _input.Faction = template.DefaultFaction;
+        _input.ReceivedInformation = template.DefaultReceivedInformation;
+        _input.TruthSerum = template.DefaultTruthSerum;
+        _input.Outcome = template.DefaultOutcome;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        var date = (_date ?? DateTime.Now).Date;
+        var time = _time ?? TimeSpan.Zero;
+        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen. ACHTUNG: In Blazor Server ist
+        // „Local" die SERVER-Zeitzone, nicht die des Browsers. Damit RP-Zeiten (Erfassung via DokDialog,
+        // Anzeige via ToLocalTime) stimmen und das 20-Min-Tot-Fenster korrekt liegt, muss der VPS in der
+        // Zeitzone der Nutzer laufen (Deployment: TZ=Europe/Berlin). Eine browserunabhängige Lösung
+        // erforderte die Browser-Zeitzone per JS-Interop (bewusst späterer Schritt).
+        _input.Timestamp = DateTime.SpecifyKind(date + time, DateTimeKind.Local).ToUniversalTime();
+        if (_orgHidden)
+        {
+            // Nicht sichtbare Verknüpfung unverändert übernehmen (kein stilles Löschen durch das leere Feld).
+            _input.OrgId = Exists!.OrgId;
+            _input.OrgType = Exists.OrgType;
+            _input.AsMember = false;
+        }
+        else
+        {
+            // Verknüpfung übernehmen; ohne Auswahl bleibt nur der Freitext.
+            _input.OrgId = _target?.Id;
+            _input.OrgType = _target is null ? null : _orgType;
+            _input.AsMember = _target is not null && _asMember;
+        }
+        MudDialog.Close(DialogResult.Ok(_input));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert die Eingabe oder null bei Abbruch.</summary>
+    public static async Task<PersonDocInput?> ShowAsync(IDialogService dialog, bool isLeadership)
+    {
+        var parameters = new DialogParameters<DocDialog> { { x => x.IsLeadership, isLeadership } };
+        var reference = await dialog.ShowAsync<DocDialog>("Neues Dok", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: PersonDocInput e } ? e : null;
+    }
+
+    /// <summary>Zeigt den Dialog im Bearbeiten-Modus (vorbefüllt) und liefert die geänderte Eingabe oder null bei Abbruch.</summary>
+    public static async Task<PersonDocInput?> ShowToEditAsync(IDialogService dialog, PersonDoc doc, bool isLeadership,
+        string? orgName, string? orgCaseNumber)
+    {
+        var exists = new PersonDocInput
+        {
+            Timestamp = doc.Timestamp,
+            Reason = doc.Reason,
+            Faction = doc.Faction,
+            OrgType = doc.OrgType,
+            OrgId = doc.OrgId,
+            ReceivedInformation = doc.ReceivedInformation,
+            TruthSerum = doc.TruthSerum,
+            Outcome = doc.Outcome,
+        };
+        var parameters = new DialogParameters<DocDialog>
+        {
+            { x => x.Exists, exists },
+            { x => x.IsLeadership, isLeadership },
+            { x => x.ExistsOrgName, orgName },
+            { x => x.ExistsOrgCaseNumber, orgCaseNumber },
+        };
+        var reference = await dialog.ShowAsync<DocDialog>("Dok bearbeiten", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: PersonDocInput e } ? e : null;
+    }
+}

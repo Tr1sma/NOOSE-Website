@@ -1,0 +1,157 @@
+@* Liste der Personen-Doks + Anlegen (Dialog) + Löschen. *@
+@inject IPersonDocService DocService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IPersonService PersonService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Doks (@_docs.Count)</MudText>
+        @if (_mayWrite)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">Neues Dok</MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_docs.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Doks erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var display in _docs)
+        {
+            var doc = display.Doc;
+            <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => OpenAsync(display))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">
+                        <b>@doc.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @MeasureOutcomeDisplay.Name(doc.Outcome)
+                    </MudText>
+                    @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
+                    @if (_mayWrite)
+                    {
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(display))" aria-label="Dok löschen" />
+                        </div>
+                    }
+                </MudStack>
+                @if (!string.IsNullOrWhiteSpace(doc.Reason))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1"><b>Grund:</b> @doc.Reason</MudText>
+                }
+                @* Verknüpfte Fraktion/Gruppe als Link; sonst Freitext-Fallback. *@
+                @if (display.OrgRoute is not null)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Fraktion: <MudLink Href="@display.OrgRoute" Typo="Typo.caption">@display.OrgName</MudLink>
+                    </MudText>
+                }
+                else if (!string.IsNullOrWhiteSpace(doc.Faction))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Fraktion: @doc.Faction</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(doc.ReceivedInformation))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1">@doc.ReceivedInformation</MudText>
+                }
+                <MudStack Row="true" Spacing="2" Class="mt-2">
+                    @if (doc.TruthSerum)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Science">Wahrheitsserum</MudChip>
+                    }
+                    @if (doc.MemoryDeleted)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Psychology">Gedächtnisverlust</MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback PersonChanged { get; set; }
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private List<PersonDocDisplay> _docs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    // Klick auf eine Dok-Karte öffnet die Detailansicht (lesen + bearbeiten); man ist bereits in der Akte.
+    private async Task OpenAsync(PersonDocDisplay display)
+    {
+        var modified = await DocDetailDialog.ShowAsync(DialogService, display, User, showToRecord: false);
+        if (modified)
+        {
+            await LoadAsync();
+            // Der Maßnahme-Ausgang kann den Lebensstatus geändert haben → Eltern neu laden.
+            await PersonChanged.InvokeAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _docs = await DocService.GetForPersonAsync(PersonId, User.IsLeadership());
+        _load = false;
+    }
+
+    private async Task NewAsync()
+    {
+        var input = await DocDialog.ShowAsync(DialogService, User.IsLeadership());
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await DocService.CreateAsync(PersonId, input, User);
+            Snackbar.Add("Dok gespeichert.", Severity.Success);
+            // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
+            await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, PersonId, input, User);
+            await LoadAsync();
+            // Der Maßnahme-Ausgang kann den Lebensstatus geändert haben → Eltern neu laden.
+            await PersonChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(PersonDocDisplay display)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Dok löschen?",
+            "Das Dok wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await DocService.DeleteAsync(display.Doc.Id, User);
+            Snackbar.Add("Dok gelöscht.", Severity.Success);
+            await LoadAsync();
+            // Löschen eines „Erschossen"-Doks kann den Lebensstatus zurücksetzen → Eltern neu laden.
+            await PersonChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

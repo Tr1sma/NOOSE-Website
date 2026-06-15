@@ -1,0 +1,49 @@
+@* Identitäts-/Steckkarte der Partei: Name, Einstufung, Mitgliederzahl. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Party.Name</MudText>
+                @if (Party.IsClassified)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Party.CaseNumber</MudText>
+        </div>
+
+        <ClassificationBadge Value="Party.Classification" />
+
+        <InvestigationLeadDisplay Names="InvestigationLead" />
+
+        <MudDivider />
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.subtitle2">Mitglieder</MudText>
+            <MudText Typo="Typo.body2">@MemberCount</MudText>
+        </MudStack>
+
+        <MudDivider />
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <RecencyIndicator RecordsType="@nameof(Party)" ReferenceDateUtc="@(Party.ModifiedAt ?? Party.CreatedAt)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Party.ModifiedAt ?? Party.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Party Party { get; set; } = default!;
+    [Parameter] public int MemberCount { get; set; }
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
+}

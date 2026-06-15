@@ -15,27 +15,27 @@ public interface IWatchlistService
     /// einer nicht sichtbaren Akte (Verschlusssache ohne Führung, Papierkorb, oder Personalakte für Nicht-Führung)
     /// kann nicht gefolgt werden.
     /// </summary>
-    Task FolgenAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task FollowAsync(string entityType, string entityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Der Aufrufer entfolgt der Akte (Soft-Delete der aktiven Zeile; no-op, wenn nicht gefolgt).</summary>
-    Task EntfolgenAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task UnfollowAsync(string entityType, string entityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>True, wenn der Aufrufer der Akte aktuell folgt.</summary>
-    Task<bool> IstGefolgtAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task<bool> IsFollowedAsync(string entityType, string entityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Die aktiven Folge-Einträge des Aufrufers (für „Meine beobachteten Akten"), neueste zuerst.</summary>
-    Task<List<WatchlistEintrag>> GetGefolgteAsync(ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task<List<WatchlistEntry>> GetFollowedAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Die gefolgten Akten des Aufrufers – bereits zu Anzeigename + Href aufgelöst und aus dessen Sicht
     /// Verschlusssache-/Papierkorb-geprüft (nicht mehr zugängliche bleiben in der Liste, aber ohne Name/Link, damit
     /// man sie entfolgen kann). Für die Seite „Meine beobachteten Akten".
     /// </summary>
-    Task<List<GefolgteAkte>> GetGefolgteAufgeloestAsync(ClaimsPrincipal handelnder, CancellationToken cancellationToken = default);
+    Task<List<FollowedRecord>> GetFollowedResolvedAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Agent-Ids aller aktiven Folger einer Akte (für den Benachrichtigungs-Fan-out).</summary>
-    Task<List<string>> GetFollowerIdsAsync(string entitaetTyp, string entitaetId, CancellationToken cancellationToken = default);
+    Task<List<string>> GetFollowerIdsAsync(string entityType, string entityId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Eine gefolgte Akte, aufgelöst für die Anzeige in „Meine beobachteten Akten".</summary>
-public sealed record GefolgteAkte(string Typ, string Id, string Anzeige, string? Href, DateTime ErstelltAm, bool Zugaenglich);
+public sealed record FollowedRecord(string Type, string Id, string Display, string? Href, DateTime CreatedAt, bool Accessible);

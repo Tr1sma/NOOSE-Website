@@ -1,0 +1,111 @@
+@* Dem Termin zugeteilte NOOSE-Teilnehmer: Liste + Zuteilen/Entfernen. Verwalten darf der Ersteller oder die
+   Führung (über das Flag <see cref="KannVerwalten"/>). Vorlage: AufgabeAgentePanel. *@
+@inject IAppointmentService AppointmentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Teilnehmer (@_participant.Count)</MudText>
+        @if (CanManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AssignAsync">
+                Teilnehmer hinzufügen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_participant.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch niemand zugeteilt.</MudText>
+    }
+    else
+    {
+        @foreach (var z in _participant)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@z.Agent?.Codename</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(z.Agent?.Rank)</MudChip>
+                    </MudStack>
+                    @if (CanManage)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveAsync(z))" aria-label="Teilnahme aufheben" />
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string AppointmentId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Darf der Aufrufer zuteilen/entfernen (Ersteller oder Führung)? Vom Detail berechnet.</summary>
+    [Parameter] public bool CanManage { get; set; }
+
+    /// <summary>Wird nach jeder Änderung der Teilnehmer ausgelöst.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private List<AppointmentAssignment> _participant = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _participant = await AppointmentService.GetParticipantAsync(AppointmentId);
+        _load = false;
+    }
+
+    private async Task AssignAsync()
+    {
+        var exclusion = _participant.Select(z => z.AgentId).ToList();
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), false);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await AppointmentService.AgentAssignAsync(AppointmentId, choice.AgentId, User);
+            Snackbar.Add("Teilnehmer hinzugefügt.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(AppointmentAssignment z)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Teilnahme aufheben?",
+            $"„{z.Agent?.Codename}“ ist diesem Termin nicht mehr zugeteilt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await AppointmentService.AgentRemoveAsync(z.Id, User);
+            Snackbar.Add("Teilnahme aufgehoben.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

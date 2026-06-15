@@ -1,0 +1,152 @@
+@* Der Taskforce zugeteilte NOOSE-Agents: Mitglieder + Leitung (Chefermittler/CID-Lead/TRU-Lead).
+   Liste + Zuteilen/Entfernen (Führung oder Leitung) + Rollenvergabe (nur Führung).
+   Komponentenname bewusst „TaskforceAgentePanel" wegen globaler @using-Tag-Auflösung der Shared-Ordner. *@
+@inject ITaskforceService TaskforceService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Zugeteilte Agents (@_agents.Count)</MudText>
+        @if (_canManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="AllocateAsync">
+                Agent zuteilen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_agents.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Agents zugeteilt.</MudText>
+    }
+    else
+    {
+        @foreach (var a in _agents)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@(TaskforceRoleDisplay.IsLead(a.Role) ? Icons.Material.Filled.LocalPolice : Icons.Material.Filled.Person)"
+                                 Color="@(TaskforceRoleDisplay.IsLead(a.Role) ? Color.Warning : Color.Primary)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(a.Agent?.Rank)</MudChip>
+                        @if (TaskforceRoleDisplay.IsLead(a.Role))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.LocalPolice">@TaskforceRoleDisplay.Name(a.Role)</MudChip>
+                        }
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        @if (_isLeadership)
+                        {
+                            <MudMenu Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small" Dense="true"
+                                     Color="@(TaskforceRoleDisplay.IsLead(a.Role) ? Color.Warning : Color.Default)"
+                                     AriaLabel="Rolle ändern">
+                                @foreach (var r in TaskforceRoleDisplay.All)
+                                {
+                                    <MudMenuItem Disabled="@(r == a.Role)" OnClick="@(() => RoleSetAsync(a, r))">@TaskforceRoleDisplay.Name(r)</MudMenuItem>
+                                }
+                            </MudMenu>
+                        }
+                        @if (_canManage)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => RemoveAsync(a))" aria-label="Agent entfernen" />
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Wird nach jeder Änderung der Zuteilungen/Rollen ausgelöst (Steckkarte aktualisieren).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private bool _isLeadership;
+    private bool _canManage;
+    private List<TaskforceAgent> _agents = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLeadership = User.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _agents = await TaskforceService.GetAgentsAsync(TaskforceId);
+        // Verwalten (zuteilen/entfernen) darf die Führung oder die Leitung (Rolle != Mitglied) dieser Akte.
+        var myId = User.GetAgentId();
+        _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && TaskforceRoleDisplay.IsLead(a.Role));
+        _load = false;
+    }
+
+    private async Task AllocateAsync()
+    {
+        var exclusion = _agents.Select(a => a.AgentId).ToList();
+        // Rolle (Leitung) wird nicht im Dialog gesetzt – neue Agents kommen als Mitglied, Rolle danach per Menü (Führung).
+        var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), mayInvestigationLeadSet: false);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await TaskforceService.AgentAllocateAsync(TaskforceId, choice.AgentId, User);
+            Snackbar.Add("Agent zugeteilt.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RoleSetAsync(TaskforceAgent a, TaskforceRole role)
+    {
+        try
+        {
+            await TaskforceService.RoleSetAsync(a.Id, role, User);
+            Snackbar.Add($"Rolle gesetzt: {TaskforceRoleDisplay.Name(role)}.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(TaskforceAgent a)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Zuteilung aufheben?",
+            $"„{a.Agent?.Codename}“ wird der Taskforce nicht mehr zugeteilt.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await TaskforceService.AgentRemoveAsync(a.Id, User);
+            Snackbar.Add("Zuteilung aufgehoben.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

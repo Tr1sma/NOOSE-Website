@@ -23,19 +23,19 @@ public class AgentClaimsPrincipalFactory(
         var identity = await base.GenerateClaimsAsync(user);
 
         identity.AddClaim(new Claim(AgentClaimTypes.Codename, user.Codename ?? string.Empty));
-        identity.AddClaim(new Claim(AgentClaimTypes.Dienstnummer, user.Dienstnummer ?? string.Empty));
+        identity.AddClaim(new Claim(AgentClaimTypes.BadgeNumber, user.BadgeNumber ?? string.Empty));
         identity.AddClaim(new Claim(AgentClaimTypes.Status, user.Status.ToString()));
-        identity.AddClaim(new Claim(AgentClaimTypes.IstAdmin, user.IstAdmin ? "true" : "false"));
-        identity.AddClaim(new Claim(AgentClaimTypes.IstTRU, user.IstTRU ? "true" : "false"));
-        identity.AddClaim(new Claim(AgentClaimTypes.IstHRB, user.IstHRB ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IsAdmin, user.IsAdmin ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IsTRU, user.IsTRU ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IsHRB, user.IsHRB ? "true" : "false"));
         // TeamLeitung ist nun ein Claim: Die Nur-Lese-Aufsichtsrolle (TeamLeitung ohne Admin) entscheidet
         // über Policies/UI rein aus den Claims. Das Umschalten erneuert den SecurityStamp (siehe
         // AgentVerwaltungService.TeamLeitungSetzenAsync), damit der Claim beim nächsten Login aktuell ist.
-        identity.AddClaim(new Claim(AgentClaimTypes.IstTeamLeitung, user.IstTeamLeitung ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IsTeamLead, user.IsTeamLead ? "true" : "false"));
 
-        if (user.Dienstgrad is not null)
+        if (user.Rank is not null)
         {
-            identity.AddClaim(new Claim(AgentClaimTypes.Dienstgrad, ((int)user.Dienstgrad.Value).ToString()));
+            identity.AddClaim(new Claim(AgentClaimTypes.Rank, ((int)user.Rank.Value).ToString()));
         }
 
         return identity;

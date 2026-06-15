@@ -1,6 +1,6 @@
 @page "/admin/tags"
 @page "/tags"
-@attribute [Authorize(Policy = Policies.FuehrungSeite)]
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject ITagService TagService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -11,7 +11,7 @@
     <MudIcon Icon="@Icons.Material.Filled.Label" Color="Color.Primary" Size="Size.Large" />
     <MudText Typo="Typo.h4">Tags</MudText>
     <MudSpacer />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NeuAsync">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
         Neuer Tag
     </MudButton>
 </MudStack>
@@ -20,35 +20,35 @@
     verwaltet (anlegen, umbenennen, einfärben, löschen). Beim Löschen verschwindet das Tag von allen Akten.
 </MudText>
 
-@if (_laden)
+@if (_load)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
 else
 {
-    <MudTable Items="_eintraege" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+    <MudTable Items="_entries" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
-            <MudTh><MudTableSortLabel T="TagVerwendung" SortBy="@(x => x.Tag.Name)">Tag</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="TagVerwendung" SortBy="@(x => x.Tag.Farbe)">Farbe</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel T="TagVerwendung" SortBy="@(x => x.Anzahl)">Verwendungen</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="TagUsage" SortBy="@(x => x.Tag.Name)">Tag</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="TagUsage" SortBy="@(x => x.Tag.Colour)">Farbe</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="TagUsage" SortBy="@(x => x.Count)">Verwendungen</MudTableSortLabel></MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Tag">
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@FarbeVon(context.Tag.Farbe)">@context.Tag.Name</MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@ColourBy(context.Tag.Colour)">@context.Tag.Name</MudChip>
             </MudTd>
             <MudTd DataLabel="Farbe">
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.Tag.Farbe ?? "Standard")</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.Tag.Colour ?? "Standard")</MudText>
             </MudTd>
             <MudTd DataLabel="Verwendungen">
-                <MudText Typo="Typo.body2">@context.Anzahl</MudText>
+                <MudText Typo="Typo.body2">@context.Count</MudText>
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
-                                   OnClick="@(() => BearbeitenAsync(context))" aria-label="Tag bearbeiten" />
+                                   OnClick="@(() => EditAsync(context))" aria-label="Tag bearbeiten" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => LoeschenAsync(context))" aria-label="Tag löschen" />
+                                   OnClick="@(() => DeleteAsync(context))" aria-label="Tag löschen" />
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -61,35 +61,35 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
-    private bool _laden = true;
-    private List<TagVerwendung> _eintraege = new();
+    private bool _load = true;
+    private List<TagUsage> _entries = new();
     private ClaimsPrincipal _user = default!;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        await LadenAsync();
+        await LoadAsync();
     }
 
-    private async Task LadenAsync()
+    private async Task LoadAsync()
     {
-        _laden = true;
-        _eintraege = await TagService.GetMitVerwendungAsync();
-        _laden = false;
+        _load = true;
+        _entries = await TagService.GetWithUsageAsync();
+        _load = false;
     }
 
-    private async Task NeuAsync()
+    private async Task NewAsync()
     {
-        var eingabe = await TagDialog.ZeigenAsync(DialogService, "Neuer Tag");
-        if (eingabe is null)
+        var input = await TagDialog.ShowAsync(DialogService, "Neuer Tag");
+        if (input is null)
         {
             return;
         }
         try
         {
-            await TagService.ErstellenAsync(eingabe.Name, eingabe.Farbe, _user);
-            Snackbar.Add($"Tag „{eingabe.Name}“ angelegt.", Severity.Success);
-            await LadenAsync();
+            await TagService.CreateAsync(input.Name, input.Colour, _user);
+            Snackbar.Add($"Tag „{input.Name}“ angelegt.", Severity.Success);
+            await LoadAsync();
         }
         catch (Exception ex)
         {
@@ -97,18 +97,18 @@ else
         }
     }
 
-    private async Task BearbeitenAsync(TagVerwendung eintrag)
+    private async Task EditAsync(TagUsage entry)
     {
-        var eingabe = await TagDialog.ZeigenAsync(DialogService, "Tag bearbeiten", eintrag.Tag.Name, eintrag.Tag.Farbe);
-        if (eingabe is null)
+        var input = await TagDialog.ShowAsync(DialogService, "Tag bearbeiten", entry.Tag.Name, entry.Tag.Colour);
+        if (input is null)
         {
             return;
         }
         try
         {
-            await TagService.AktualisierenAsync(eintrag.Tag.Id, eingabe.Name, eingabe.Farbe, _user);
+            await TagService.RefreshAsync(entry.Tag.Id, input.Name, input.Colour, _user);
             Snackbar.Add("Tag gespeichert.", Severity.Success);
-            await LadenAsync();
+            await LoadAsync();
         }
         catch (Exception ex)
         {
@@ -116,20 +116,20 @@ else
         }
     }
 
-    private async Task LoeschenAsync(TagVerwendung eintrag)
+    private async Task DeleteAsync(TagUsage entry)
     {
-        var text = eintrag.Anzahl > 0
-            ? $"„{eintrag.Tag.Name}“ wird gelöscht und von {eintrag.Anzahl} Akte(n) entfernt."
-            : $"„{eintrag.Tag.Name}“ wird gelöscht.";
-        var ok = await BestaetigenDialog.ZeigenAsync(DialogService, "Tag löschen?", text);
+        var text = entry.Count > 0
+            ? $"„{entry.Tag.Name}“ wird gelöscht und von {entry.Count} Akte(n) entfernt."
+            : $"„{entry.Tag.Name}“ wird gelöscht.";
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Tag löschen?", text);
         if (!ok)
         {
             return;
         }
-        await TagService.LoeschenAsync(eintrag.Tag.Id, _user);
+        await TagService.DeleteAsync(entry.Tag.Id, _user);
         Snackbar.Add("Tag gelöscht.", Severity.Success);
-        await LadenAsync();
+        await LoadAsync();
     }
 
-    private static Color FarbeVon(string? farbe) => Enum.TryParse<Color>(farbe, out var c) ? c : Color.Default;
+    private static Color ColourBy(string? colour) => Enum.TryParse<Color>(colour, out var c) ? c : Color.Default;
 }

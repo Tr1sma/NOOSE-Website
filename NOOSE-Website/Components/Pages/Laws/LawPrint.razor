@@ -1,0 +1,67 @@
+@* Druckansicht eines Paragrafen (Gesetzbuch-Modul, Phase 7). *@
+@page "/gesetze/{Id}/druck"
+@layout PrintLayout
+@inject ILawService LawService
+@inject ILinkService LinkService
+
+<PageTitle>@(_law is null ? "Druckansicht" : $"{_law.Paragraph} {_law.Title}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_law is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dieser Paragraf existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"{_law.Paragraph} {_law.Title}")" BackHref="@($"/gesetze/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="false"
+                 Footer="NOOSE-Wissensbasis · Rechtsgrundlagen">
+        <section>
+            <h2>Rechtsgrundlage</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Gesetzbuch</th><td>@_law.LawBook</td></tr>
+                    <tr><th>Paragraf</th><td>@_law.Paragraph</td></tr>
+                    <tr><th>Titel</th><td>@_law.Title</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_law.Sentence))
+                    {
+                        <tr><th>Strafmaß / Rechtsfolge</th><td>@_law.Sentence</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Gesetzestext</h2>
+            <div class="druck-mehrzeilig">@_law.Text</div>
+        </section>
+
+        <PrintLinks Entries="_links" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Law? _law;
+    private List<LinkDisplay> _links = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+
+        _law = await LawService.GetAsync(Id);
+        if (_law is not null)
+        {
+            _links = await LinkService.GetForRecordAsync(nameof(Law), Id, user.IsLeadership(), user.GetAgentId());
+        }
+        _load = false;
+    }
+}

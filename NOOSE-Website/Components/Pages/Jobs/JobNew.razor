@@ -1,0 +1,181 @@
+@page "/aufgaben/neu"
+@inject IJobService JobService
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Neue Aufgabe · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/aufgaben" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Neue Aufgabe anlegen</MudText>
+</MudStack>
+
+<MudForm @ref="_form">
+    <JobForm Input="_input" ShowAssignment="true" @bind-AgentIds="_agentIds" />
+</MudForm>
+
+@* Bezug / Verknüpfungen: hier schon beim Anlegen Akten verknüpfen, auf die sich die Aufgabe bezieht. *@
+<MudPaper Class="pa-4 mt-4" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudText Typo="Typo.subtitle1">Bezug / Verknüpfte Akten (optional)</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="ReferenceAddAsync">
+            Akte verknüpfen
+        </MudButton>
+    </MudStack>
+    @if (_references.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Verknüpfe z. B. die Person, Operation oder den Vorgang, auf die sich die Aufgabe bezieht.
+        </MudText>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap" style="gap:.5rem;">
+            @foreach (var b in _references)
+            {
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Icon="@TypeIcon(b.TargetType)"
+                         OnClose="@(() => ReferenceRemove(b))">
+                    @TypeDisplay(b.TargetType): @(b.Display ?? b.TargetId)
+                </MudChip>
+            }
+        </div>
+    }
+</MudPaper>
+
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Anlegen</MudButton>
+    <MudButton Variant="Variant.Text" Href="/aufgaben">Abbrechen</MudButton>
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "bezugTyp")] public string? ReferenceType { get; set; }
+    [SupplyParameterFromQuery(Name = "bezugId")] public string? ReferenceId { get; set; }
+
+    private MudForm _form = default!;
+    private readonly JobInput _input = new();
+    private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
+    private readonly List<LinkInput> _references = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _saves;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+
+        // Vom „Aufgabe erstellen"-Button einer Akte vorausgefüllt: als Bezug vormerken (nur wenn zugänglich).
+        if (!string.IsNullOrWhiteSpace(ReferenceType) && !string.IsNullOrWhiteSpace(ReferenceId))
+        {
+            var name = await JobService.ReferenceDisplayAsync(ReferenceType, ReferenceId, _user);
+            if (name is not null)
+            {
+                _references.Add(new LinkInput { TargetType = ReferenceType, TargetId = ReferenceId, Display = name });
+            }
+        }
+    }
+
+    private async Task ReferenceAddAsync()
+    {
+        var choice = await LinkDialog.ShowAsync(DialogService, _user.IsLeadership());
+        if (choice is null)
+        {
+            return;
+        }
+        // Dubletten vermeiden (gleiches Ziel nicht doppelt verknüpfen).
+        if (_references.Any(b => b.TargetType == choice.TargetType && b.TargetId == choice.TargetId))
+        {
+            return;
+        }
+        _references.Add(choice);
+    }
+
+    private void ReferenceRemove(LinkInput b) => _references.Remove(b);
+
+    private async Task SaveAsync()
+    {
+        if (_saves)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var job = await JobService.CreateAsync(_input, _agentIds.ToList(), _user);
+
+            // Gewählte Bezüge verknüpfen – ein Fehler einzelner Verknüpfungen bricht das Anlegen nicht ab;
+            // die konkreten Fehlertexte werden gesammelt und angezeigt.
+            var error = new List<string>();
+            foreach (var b in _references)
+            {
+                try
+                {
+                    await LinkService.CreateAsync(nameof(Job), job.Id, b.TargetType, b.TargetId, b.Label, _user, LinkKind.Default);
+                }
+                catch (Exception ex)
+                {
+                    error.Add($"{TypeDisplay(b.TargetType)} ({b.Display ?? b.TargetId}): {ex.Message}");
+                }
+            }
+
+            if (error.Count > 0)
+            {
+                Snackbar.Add($"Aufgabe {job.CaseNumber} angelegt, aber {error.Count} Verknüpfung(en) schlugen fehl: {string.Join("; ", error)}", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add($"Aufgabe {job.CaseNumber} angelegt.", Severity.Success);
+            }
+            Nav.NavigateTo($"/aufgaben/{job.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private static string TypeDisplay(string type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Personengruppe",
+        nameof(Party) => "Partei",
+        nameof(Operation) => "Operation",
+        nameof(Case) => "Vorgang",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Agent) => "Personalakte",
+        nameof(PersonDoc) => "Personen-Dok",
+        nameof(Observation) => "Observation",
+        nameof(Job) => "Aufgabe",
+        _ => "Akte",
+    };
+
+    private static string TypeIcon(string type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Agent) => Icons.Material.Filled.Person,
+        nameof(PersonDoc) => Icons.Material.Filled.Description,
+        nameof(Observation) => Icons.Material.Filled.Visibility,
+        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
+        _ => Icons.Material.Filled.Hub,
+    };
+}

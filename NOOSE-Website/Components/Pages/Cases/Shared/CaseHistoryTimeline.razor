@@ -1,0 +1,81 @@
+@* Akten-Historie des Vorgangs: Audit-Einträge des Vorgangs, Agent-Zuteilungen und Verknüpfungen. *@
+@inject ICaseService CaseService
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_logs.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Historie vorhanden.</MudText>
+}
+else
+{
+    <MudTimeline TimelinePosition="TimelinePosition.Start">
+        @foreach (var log in _logs)
+        {
+            <MudTimelineItem Color="@Colour(log.Action)" Size="Size.Small">
+                <MudText Typo="Typo.body2"><b>@ActionText(log)</b></MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @log.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(log.AgentName ?? "System")
+                </MudText>
+                @{
+                    var changes = AuditDisplay.Parse(log.ChangesJson);
+                }
+                @if (changes.Count > 0)
+                {
+                    <MudStack Spacing="0" Class="mt-1">
+                        @foreach (var a in changes)
+                        {
+                            <MudText Typo="Typo.caption">
+                                <b>@a.Field:</b> <span class="mud-text-secondary">@a.Alt → @a.New</span>
+                            </MudText>
+                        }
+                    </MudStack>
+                }
+            </MudTimelineItem>
+        }
+    </MudTimeline>
+}
+
+@code {
+    [Parameter, EditorRequired] public string CaseId { get; set; } = default!;
+    [Parameter] public bool IsLeadership { get; set; }
+
+    private bool _load = true;
+    private List<AuditLog> _logs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _logs = await CaseService.GetHistoryAsync(CaseId, IsLeadership);
+        _load = false;
+    }
+
+    private static string ActionText(AuditLog log)
+    {
+        var type = log.EntityType switch
+        {
+            nameof(CaseAgent) => "Agent-Zuteilung",
+            nameof(Link) => "Verknüpfung",
+            _ => "Vorgang",
+        };
+        var action = log.Action switch
+        {
+            AuditAction.Created => "erstellt",
+            AuditAction.Modified => "geändert",
+            AuditAction.Deleted => "entfernt",
+            AuditAction.Restored => "wiederhergestellt",
+            _ => log.Action.ToString(),
+        };
+        return $"{type} {action}";
+    }
+
+    private static Color Colour(AuditAction a) => a switch
+    {
+        AuditAction.Created => Color.Success,
+        AuditAction.Modified => Color.Info,
+        AuditAction.Deleted => Color.Error,
+        AuditAction.Restored => Color.Warning,
+        _ => Color.Default,
+    };
+}

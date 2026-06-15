@@ -1,0 +1,122 @@
+@page "/fraktionen/{Id}/bearbeiten"
+@inject IFactionService FactionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Fraktion bearbeiten · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Fraktion nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/fraktionen/{Id}")" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Fraktion bearbeiten</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <FactionForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" />
+    </MudForm>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+    </MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Href="@($"/fraktionen/{Id}")">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private MudForm _form = default!;
+    private FactionInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+    }
+
+    // Diese Seite wird bei /fraktionen/{A}/bearbeiten → /fraktionen/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
+    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _input = null;
+        var f = await FactionService.GetDetailAsync(Id, _user.MayClassifiedRead());
+        if (f is not null)
+        {
+            _input = new FactionInput
+            {
+                Name = f.Name,
+                Kind = f.Kind,
+                Radio = f.Radio,
+                Darkchat = f.Darkchat,
+                IssuingTimes = f.IssuingTimes,
+                Estate = f.Estate,
+                RecognitionColor = f.RecognitionColor,
+                Targets = f.Targets,
+                Description = f.Description,
+                Classification = f.Classification,
+                IsClassified = f.IsClassified,
+                IsStateFaction = f.IsStateFaction,
+                EstimatedMemberCount = f.EstimatedMemberCount,
+                Ranks = f.Ranks.OrderBy(r => r.Order).Select(r => new RankInput { Designation = r.Designation }).ToList(),
+                WeaponStock = f.WeaponStock.Select(w => new StockInput { Designation = w.Designation, Quantity = w.Quantity }).ToList(),
+                Inventory = f.Inventory.Select(l => new StockInput { Designation = l.Designation, Quantity = l.Quantity }).ToList(),
+                // Drogenrouten teilen BestandEingabe; das Menge-Feld trägt hier die Notiz.
+                DrugRoutes = f.DrugRoutes.Select(d => new StockInput { Designation = d.Designation, Quantity = d.Note }).ToList(),
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            await FactionService.RefreshAsync(Id, _input, _user);
+            Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/fraktionen/{Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

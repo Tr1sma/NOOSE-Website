@@ -1,0 +1,97 @@
+@* Rendert einen StatistikReport als druckfreundliche Tabellen (Kennzahlen, Verteilungen, 12-Monats-Verlauf,
+   Top-Listen). Geteilt von der Statistik-Druckansicht und der Lagebericht-Detailansicht – beide betten die
+   Tabellen in einen DruckRahmen ein. Nutzt die globalen .druck-*-Klassen (s. wwwroot/app.css). *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+
+@if (Report is { } r)
+{
+    <section>
+        <h2>Kennzahlen</h2>
+        <table class="druck-felder">
+            <tbody>
+                <tr><th>Personen-Akten</th><td>@r.Metrics.People</td></tr>
+                <tr><th>Organisationen (Fraktionen, Gruppen, Parteien)</th><td>@r.Metrics.FactionsAndGroups</td></tr>
+                <tr><th>Operationen</th><td>@r.Metrics.Operations</td></tr>
+                <tr><th>Offene Vorgänge</th><td>@r.Metrics.OpenCases</td></tr>
+                <tr><th>Offene Anträge</th><td>@r.Metrics.OpenRequests</td></tr>
+                <tr><th>Veraltete Akten</th><td>@r.Metrics.StaleRecords</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    @DistributionTable("Personen nach Einstufung", r.PeopleByClassification)
+    @DistributionTable("Personen nach Gefährdung", r.PeopleByHazard)
+    @DistributionTable("Personen nach Lebensstatus", r.PeopleByLifeStatus)
+    @DistributionTable("Fraktionen nach Gefährdung", r.FactionsByHazard)
+    @DistributionTable("Maßnahme-Ausgänge", r.MeasureOutcomes)
+    @DistributionTable("Vorgänge nach Status", r.CasesByStatus)
+
+    <section>
+        <h2>Verlauf der letzten 12 Monate</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr><th>Monat</th><th>Maßnahmen</th><th>Neuzugänge</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var m in r.TimeSeries)
+                {
+                    <tr><td>@m.Label</td><td>@m.Measures</td><td>@m.NewEntries</td></tr>
+                }
+            </tbody>
+        </table>
+    </section>
+
+    @TopTable("Gefährlichste Personen", r.TopPeople)
+    @TopTable("Gefährlichste Fraktionen", r.TopFactions)
+}
+
+@code {
+    /// <summary>Der zu rendernde Auswertungs-Schnappschuss.</summary>
+    [Parameter, EditorRequired] public StatisticsReport? Report { get; set; }
+
+    private RenderFragment DistributionTable(string title, IReadOnlyList<DistributionSegment> segments) =>@<section>
+        <h2>@title</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr><th>Kategorie</th><th>Anzahl</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var s in segments)
+                {
+                    <tr><td>@s.Designation</td><td>@s.Count</td></tr>
+                }
+            </tbody>
+        </table>
+    </section>;
+
+    private RenderFragment TopTable(string title, IReadOnlyList<StatisticsTopEntry> entries) =>@<section>
+        <h2>@title</h2>
+        @if (entries.Count == 0)
+        {
+            <p>Noch keine bewerteten Akten.</p>
+        }
+        else
+        {
+            <table class="druck-tabelle">
+                <thead>
+                    <tr><th>#</th><th>Name</th><th>Aktenzeichen</th><th>Score</th><th>Stufe</th></tr>
+                </thead>
+                <tbody>
+                    @{ var rank = 0; }
+                    @foreach (var e in entries)
+                    {
+                        rank++;
+                        <tr>
+                            <td>@rank</td>
+                            <td>@e.Name</td>
+                            <td>@e.CaseNumber</td>
+                            <td>@e.Score</td>
+                            <td>@HazardLevelLogic.Name(e.Level)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>;
+}

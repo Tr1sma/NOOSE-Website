@@ -1,0 +1,111 @@
+@* Dialog zum Anlegen/Bearbeiten einer Custom-Feld-Definition (Zusatzfeld). Liefert eine CustomFeldDefinitionEingabe zurück. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_input.Name" Label="Feld-Name" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Name ist erforderlich" AutoFocus="true" Immediate="true"
+                              HelperText="Label des Felds, z. B. „Decknamen-Quelle“ oder „Risiko-Einschätzung“." />
+
+                <MudSelect T="string" Label="Aktentyp" @bind-Value="_input.EntityType" Variant="Variant.Outlined"
+                           Required="true" RequiredError="Aktentyp ist erforderlich"
+                           HelperText="Auf welchem Aktentyp das Feld erscheint.">
+                    @foreach (var t in CustomFieldRecordTypes.All)
+                    {
+                        <MudSelectItem Value="@t.TypeName">@t.Display</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudSelect T="CustomFieldType" Label="Feld-Typ" @bind-Value="_input.FieldType" Variant="Variant.Outlined">
+                    @foreach (var ft in CustomFieldTypeDisplay.All)
+                    {
+                        <MudSelectItem Value="ft">@CustomFieldTypeDisplay.Name(ft)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_input.FieldType == CustomFieldType.Selection)
+                {
+                    <MudTextField @bind-Value="_input.Options" Label="Auswahl-Optionen" Lines="4" Variant="Variant.Outlined"
+                                  HelperText="Eine Option pro Zeile." />
+                }
+
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudSwitch T="bool" @bind-Value="_input.Mandatory" Color="Color.Warning" Label="Pflichtfeld" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudSwitch T="bool" @bind-Value="_input.IsActive" Color="Color.Primary" Label="Aktiv (sichtbar)" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField T="int" @bind-Value="_input.Order" Label="Reihenfolge" Variant="Variant.Outlined"
+                                         HelperText="Kleinere Werte zuerst." />
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Beim Bearbeiten gesetzt: vorhandene Definition zum Vorbefüllen. Null = Anlegen.</summary>
+    [Parameter] public CustomFieldDefinition? Exists { get; set; }
+
+    /// <summary>Beim Anlegen optional vorausgewählter Aktentyp.</summary>
+    [Parameter] public string? DefaultType { get; set; }
+
+    private MudForm _form = default!;
+    private readonly CustomFieldDefinitionInput _input = new();
+
+    protected override void OnInitialized()
+    {
+        if (Exists is null)
+        {
+            if (!string.IsNullOrWhiteSpace(DefaultType))
+            {
+                _input.EntityType = DefaultType;
+            }
+            return;
+        }
+        _input.Name = Exists.Name;
+        _input.EntityType = Exists.EntityType;
+        _input.FieldType = Exists.FieldType;
+        _input.Options = Exists.Options;
+        _input.Mandatory = Exists.Mandatory;
+        _input.Order = Exists.Order;
+        _input.IsActive = Exists.IsActive;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        _input.Name = _input.Name.Trim();
+        MudDialog.Close(DialogResult.Ok(_input));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Definition). Liefert null bei Abbruch.</summary>
+    public static async Task<CustomFieldDefinitionInput?> ShowAsync(IDialogService dialog, string title,
+        CustomFieldDefinition? exists = null, string? defaultType = null)
+    {
+        var parameters = new DialogParameters<CustomFieldDefinitionDialog>
+        {
+            { x => x.Exists, exists },
+            { x => x.DefaultType, defaultType },
+        };
+        var reference = await dialog.ShowAsync<CustomFieldDefinitionDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: CustomFieldDefinitionInput e } ? e : null;
+    }
+}

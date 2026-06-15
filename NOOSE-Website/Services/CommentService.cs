@@ -1,0 +1,80 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Models.Common;
+
+namespace NOOSE_Website.Services;
+
+/// <inheritdoc cref="IKommentarService" />
+public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : ICommentService
+{
+    public async Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, isLeadership, cancellationToken))
+        {
+            return new();
+        }
+
+        return await db.Comments
+            .Where(k => k.EntityType == entityType && k.EntityId == entityId)
+            .OrderByDescending(k => k.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Comment> CreateAsync(string entityType, string entityId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        text = (text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new InvalidOperationException("Der Kommentar darf nicht leer sein.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Schreiben nur, wenn die Eltern-Akte für den Aufrufer sichtbar ist (VS-/Agent-Gate serverseitig erzwingen).
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.IsLeadership(), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
+        var comment = new Comment
+        {
+            EntityType = entityType,
+            EntityId = entityId,
+            Text = text,
+            AuthorName = actor.GetCodename(),
+        };
+        db.Comments.Add(comment);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // Phase 6: erwähnte Agenten benachrichtigen (best-effort, Verschlusssache-gefiltert im Dienst).
+        try
+        {
+            var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
+            await notifications.NotifyMentionedAsync(text, $"{who} hat dich in einem Vermerk erwähnt.",
+                SearchNavigation.Route(entityType, entityId), entityType, entityId, actor, cancellationToken);
+        }
+        catch { /* Benachrichtigung ist nachrangig. */ }
+
+        return comment;
+    }
+
+    public async Task DeleteAsync(string commentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var comment = await db.Comments.FirstOrDefaultAsync(k => k.Id == commentId, cancellationToken);
+        if (comment is null)
+        {
+            return;
+        }
+        // Löschen darf der Verfasser selbst oder die Führung – serverseitig erzwingen, nicht nur in der UI.
+        if (!actor.IsLeadership() && comment.CreatedById != actor.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Diesen Kommentar darf nur der Verfasser oder die Führung löschen.");
+        }
+        db.Comments.Remove(comment); // Soft-Delete via Interceptor
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}

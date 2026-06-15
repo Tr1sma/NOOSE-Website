@@ -1,0 +1,113 @@
+@* Glocke in der Topbar: Badge mit Anzahl ungelesener Benachrichtigungen + Dropdown der neuesten. Klick markiert
+   als gelesen und navigiert zum Ziel. Live-Aktualisierung über den NotificationBroadcaster (Muster TaskforceChatPanel). *@
+@implements IAsyncDisposable
+@inject INotificationService NotificationService
+@inject NotificationBroadcaster Broadcaster
+@inject NavigationManager Nav
+
+<MudBadge Content="_unread" Color="Color.Error" Overlap="true" Bordered="true" Visible="@(_unread > 0)">
+    <MudMenu Icon="@(_unread > 0 ? Icons.Material.Filled.Notifications : Icons.Material.Filled.NotificationsNone)"
+             Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+             Dense="true" aria-label="Benachrichtigungen" title="Benachrichtigungen">
+        <div style="min-width:320px;max-width:380px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="px-3 py-2">
+                <MudText Typo="Typo.subtitle2">Benachrichtigungen</MudText>
+                <MudSpacer />
+                @if (_unread > 0)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="AllReadAsync">Alle als gelesen</MudButton>
+                }
+            </MudStack>
+            <MudDivider />
+            @if (_load)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-2" />
+            }
+            else if (_list.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary pa-3">Keine Benachrichtigungen.</MudText>
+            }
+            else
+            {
+                <div style="max-height:420px;overflow-y:auto;">
+                    @foreach (var n in _list)
+                    {
+                        var unread = n.ReadAt is null;
+                        <MudMenuItem Icon="@NotificationTypeDisplay.Icon(n.Type)"
+                                     IconColor="@(unread ? Color.Primary : Color.Default)"
+                                     OnClick="@(() => OpenAsync(n))">
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body2" Style="@(unread ? "font-weight:600;" : "")">@n.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @n.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                </MudText>
+                            </MudStack>
+                        </MudMenuItem>
+                    }
+                </div>
+            }
+        </div>
+    </MudMenu>
+</MudBadge>
+
+@code {
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private string? _agentId;
+    private bool _load = true;
+    private int _unread;
+    private List<Notification> _list = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _agentId = User.GetAgentId();
+        Broadcaster.Received += OnReceived;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_agentId))
+        {
+            _load = false;
+            return;
+        }
+        _unread = await NotificationService.GetUnreadCountAsync(User);
+        _list = await NotificationService.GetOwnAsync(User, 20);
+        _load = false;
+    }
+
+    private async Task OpenAsync(Notification n)
+    {
+        await NotificationService.AsReadMarkAsync(n.Id, User); // Broadcaster lädt die Glocke neu.
+        if (!string.IsNullOrWhiteSpace(n.Href))
+        {
+            Nav.NavigateTo(n.Href);
+        }
+    }
+
+    private async Task AllReadAsync()
+    {
+        await NotificationService.AllAsReadAsync(User); // Broadcaster lädt die Glocke neu.
+    }
+
+    // Live-Signal (ggf. aus anderem Circuit) → nur für die eigene Empfänger-Id in den eigenen Circuit marshallen.
+    private void OnReceived(string recipientId)
+    {
+        if (recipientId != _agentId)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Broadcaster.Received -= OnReceived;
+        return ValueTask.CompletedTask;
+    }
+}

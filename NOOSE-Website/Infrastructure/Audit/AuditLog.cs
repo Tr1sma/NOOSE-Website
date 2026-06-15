@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Infrastructure.Audit;
 
@@ -6,10 +7,12 @@ namespace NOOSE_Website.Infrastructure.Audit;
 /// Unveränderlicher Änderungs-Protokolleintrag: Wer hat Wann an welcher Entität Was geändert.
 /// Wird automatisch vom <see cref="AuditSaveChangesInterceptor"/> geschrieben.
 /// </summary>
+[Table("AuditLogs")]
 public class AuditLog
 {
     public long Id { get; set; }
-    public DateTime Zeitpunkt { get; set; }
+    [Column("Zeitpunkt")]
+    public DateTime Timestamp { get; set; }
 
     /// <summary>Agent-Id (Identity-Key) des Verursachers; null bei System-/Hintergrundaktionen.</summary>
     public string? AgentId { get; set; }
@@ -18,13 +21,17 @@ public class AuditLog
     public string? AgentName { get; set; }
 
     /// <summary>CLR-Typname der betroffenen Entität (z. B. "Person").</summary>
-    public string EntitaetTyp { get; set; } = string.Empty;
+    [Column("EntitaetTyp")]
+    public string EntityType { get; set; } = string.Empty;
 
     /// <summary>Primärschlüssel der betroffenen Entität als Text.</summary>
-    public string EntitaetId { get; set; } = string.Empty;
+    [Column("EntitaetId")]
+    public string EntityId { get; set; } = string.Empty;
 
-    public AuditAktion Aktion { get; set; }
+    [Column("Aktion")]
+    public AuditAction Action { get; set; }
 
     /// <summary>JSON mit den geänderten Feldern (alt → neu). Null bei reinen Erstellungen.</summary>
-    public string? AenderungenJson { get; set; }
+    [Column("AenderungenJson")]
+    public string? ChangesJson { get; set; }
 }

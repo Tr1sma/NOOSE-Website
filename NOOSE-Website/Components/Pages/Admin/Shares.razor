@@ -1,0 +1,527 @@
+@page "/admin/freigaben"
+@* Posteingang: Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ (Policy HoechsteEinstufung);
+   die vier übrigen Bereiche bleiben der Führung vorbehalten und sind unten gekapselt. *@
+@attribute [Authorize(Policy = Policies.HighestClassificationPage)]
+@inject IAgentManagementService AgentService
+@inject ITaskforceService TaskforceService
+@inject IPersonnelFileService PersonnelFileService
+@inject IRequestService RequestService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject SharesBroadcaster SharesBroadcaster
+
+<PageTitle>Freigaben · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Freigabe-Posteingang</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Hochstufungs-Anträge sowie – für die Führung – neu registrierte Discord-Konten, beantragte
+    Stammdatenänderungen, Taskforce- und Beförderungsanträge warten hier auf Entscheidung.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudText Typo="Typo.h6" Class="mb-2">Hochstufungs-Anträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Anträge auf die Einstufung „Gesichert staatsgefährdend“. Die Entscheidung trifft Senior Special Agent
+        aufwärts bzw. ein Admin; bei Genehmigung wird die Einstufung der Akte gesetzt und im Verlauf protokolliert.
+    </MudText>
+    @if (_openUpgrades.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Hochstufungs-Anträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_openUpgrades" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.TargetDesignation)">Ziel-Akte</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.TargetClassification)">Gewünscht</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.Justification)">Begründung</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.CreatedAt)">Beantragt</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Ziel-Akte">
+                    <MudLink Href="@SearchNavigation.Route(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Gewünscht"><ClassificationBadge Value="context.TargetClassification" /></MudTd>
+                <MudTd DataLabel="Begründung">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Justification) ? "—" : context.Justification)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => UpgradeDecide(context, true)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => UpgradeDecide(context, false)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <AuthorizeView Policy="@Policies.Leadership" Context="fuehrung">
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Registrierungen</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Beim Freischalten wird ein Dienstgrad vergeben; danach erhält der Agent beim nächsten Login Zugriff.
+    </MudText>
+    @if (_pending.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine ausstehenden Registrierungen.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_pending" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => DisplayName(x))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.DiscordUsername ?? x.DiscordId)">Discord</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.RegisteredAt)">Registriert</MudTableSortLabel></MudTh>
+                <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => (int)Selection(x.Id).Degree)">Dienstgrad</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Selection(x.Id).Tru)">TRU</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Selection(x.Id).Hrb)">HRB</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Agent">
+                    <MudText Typo="Typo.body2">@DisplayName(context)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Discord">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.DiscordUsername ?? context.DiscordId)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Registriert">
+                    <MudText Typo="Typo.caption">@context.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Dienstgrad">
+                    <MudSelect T="Rank" @bind-Value="Selection(context.Id).Degree" Dense="true" Margin="Margin.Dense"
+                               Variant="Variant.Outlined">
+                        @foreach (var dg in RankDisplay.All)
+                        {
+                            <MudSelectItem Value="dg">@RankDisplay.Name(dg)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTd>
+                <MudTd DataLabel="TRU">
+                    <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Tru" Color="Color.Primary" />
+                </MudTd>
+                <MudTd DataLabel="HRB">
+                    <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Hrb" Color="Color.Info" />
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => Release(context)">Freigeben</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => Reject(context)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Namensänderungen</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Selbst beantragte Stammdatenänderungen von Agenten unterhalb Supervisory. Beim Genehmigen werden die
+        Werte übernommen; der Agent sieht den neuen Namen beim nächsten Login.
+    </MudText>
+    @if (_nameChanges.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Namensänderungen.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_nameChanges" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => DisplayName(x))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.NameChangeRequestedAt)">Beantragt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Changes(x).Count)">Änderungen</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Agent">
+                    <MudText Typo="Typo.body2">@DisplayName(context)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption">@(context.NameChangeRequestedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</MudText>
+                </MudTd>
+                <MudTd DataLabel="Änderungen">
+                    <MudStack Spacing="0">
+                        @foreach (var field in Changes(context))
+                        {
+                            <MudText Typo="Typo.caption">
+                                <b>@field.Label:</b> <span>@field.Alt → @field.New</span>
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => NamesApprove(context)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => NamesReject(context)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Taskforce-Anträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Beantragte Taskforces warten auf Genehmigung. Beim Genehmigen wird die Einsatzgruppe aktiv; beim Ablehnen wird der Antrag abgelehnt.
+    </MudText>
+    @if (_requestedTaskforces.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Taskforce-Anträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_requestedTaskforces" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.CaseNumber)">Aktenzeichen</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => TaskforceScopeDisplay.Name(x.Scope))">Geltungsbereich</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Taskforce" SortBy="@(x => x.CreatedAt)">Beantragt</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.caption" Class="mud-text-secondary">@context.CaseNumber</MudText></MudTd>
+                <MudTd DataLabel="Name">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudLink Href="@($"/taskforces/{context.Id}")" Typo="Typo.body2">@context.Name</MudLink>
+                        @if (context.IsClassified)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Geltungsbereich">
+                    <MudText Typo="Typo.caption">@TaskforceScopeDisplay.Name(context.Scope)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption">@context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => TaskforceApprove(context)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => TaskforceReject(context)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Beförderungsanträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Beantragte Beförderungen. Die Entscheidung trifft Deputy Director aufwärts bzw. ein Admin; bei Genehmigung
+        wird der Rang gesetzt und der betroffene Agent muss sich neu anmelden.
+    </MudText>
+    @if (_openPromotions.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Beförderungsanträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_openPromotions" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel T="AgentPromotionRequest" SortBy="@(x => AgentName(x.AgentId))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="AgentPromotionRequest" SortBy="@(x => x.TargetRank)">Ziel-Dienstgrad</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="AgentPromotionRequest" SortBy="@(x => x.Justification)">Begründung</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="AgentPromotionRequest" SortBy="@(x => x.CreatedAt)">Beantragt</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Agent">
+                    <MudLink Href="@($"/personal/{context.AgentId}")" Typo="Typo.body2">@AgentName(context.AgentId)</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Ziel-Dienstgrad"><MudText Typo="Typo.body2">@RankDisplay.Name(context.TargetRank)</MudText></MudTd>
+                <MudTd DataLabel="Begründung"><MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Justification) ? "—" : context.Justification)</MudText></MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <AuthorizeView Policy="@Policies.PromotionDecide" Context="auth">
+                        <Authorized>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                       StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                                       OnClick="() => PromotionDecide(context, true)">Genehmigen</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                       StartIcon="@Icons.Material.Filled.Close"
+                                       OnClick="() => PromotionDecide(context, false)">Ablehnen</MudButton>
+                        </Authorized>
+                        <NotAuthorized>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Entscheidung: Deputy Director+/Admin</MudText>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+    </AuthorizeView>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _isLeadership;
+    private List<Request> _openUpgrades = new();
+    private List<Agent> _pending = new();
+    private List<Agent> _nameChanges = new();
+    private List<Taskforce> _requestedTaskforces = new();
+    private List<AgentPromotionRequest> _openPromotions = new();
+    private Dictionary<string, string> _agentNames = new();
+    private ClaimsPrincipal _user = default!;
+    private readonly Dictionary<string, SelectionState> _selection = new();
+
+    private sealed class SelectionState
+    {
+        public Rank Degree { get; set; } = Rank.JuniorAgent;
+        public bool Tru { get; set; }
+        public bool Hrb { get; set; }
+    }
+
+    private SelectionState Selection(string agentId)
+    {
+        if (!_selection.TryGetValue(agentId, out var state))
+        {
+            state = new SelectionState();
+            _selection[agentId] = state;
+        }
+        return state;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _isLeadership = _user.IsLeadership();
+
+        // Hochstufungs-Anträge sieht/entscheidet bereits Senior Special Agent+ (breiter als die Führung).
+        _openUpgrades = await RequestService.GetOpenAsync(_isLeadership);
+
+        // Die übrigen vier Posteingangs-Bereiche sind der Führung vorbehalten.
+        if (_isLeadership)
+        {
+            _pending = await AgentService.GetPendingAsync();
+            _nameChanges = await AgentService.GetPendingNameChangesAsync();
+            _requestedTaskforces = await TaskforceService.GetRequestedAsync();
+            _openPromotions = await PersonnelFileService.GetOpenPromotionRequestsAsync();
+            _agentNames = (await AgentService.GetAllAsync())
+                .ToDictionary(a => a.Id, a => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename);
+            foreach (var agent in _pending)
+            {
+                _ = Selection(agent.Id);
+            }
+        }
+        _load = false;
+
+        // Nach jeder Entscheidung (alle Aktionen rufen LadenAsync auf) den NavMenu-Badge live neu zählen lassen.
+        SharesBroadcaster.Report();
+    }
+
+    private async Task UpgradeDecide(Request request, bool approved)
+    {
+        var note = await ReasonDialog.ShowAsync(DialogService,
+            approved ? $"Hochstufung von {request.TargetDesignation} genehmigen?" : $"Hochstufung von {request.TargetDesignation} ablehnen?",
+            approved
+                ? "Die Akte wird auf „Gesichert staatsgefährdend“ eingestuft. Eine Notiz ist optional."
+                : "Der Antrag wird abgelehnt. Eine Notiz ist optional.",
+            confirmText: approved ? "Genehmigen" : "Ablehnen",
+            label: "Notiz (optional)",
+            colour: approved ? Color.Success : Color.Error);
+        if (note is null)
+        {
+            return; // Abgebrochen
+        }
+        try
+        {
+            await RequestService.DecideAsync(request.Id, approved, string.IsNullOrWhiteSpace(note) ? null : note, _user);
+            Snackbar.Add(approved
+                ? $"Hochstufung von {request.TargetDesignation} genehmigt."
+                : $"Hochstufungs-Antrag von {request.TargetDesignation} abgelehnt.", approved ? Severity.Success : Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task Release(Agent agent)
+    {
+        var selection = Selection(agent.Id);
+        try
+        {
+            await AgentService.ReleaseAsync(agent.Id, selection.Degree, selection.Tru, selection.Hrb, _user);
+            Snackbar.Add($"{DisplayName(agent)} als {RankDisplay.Name(selection.Degree)} freigegeben.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task Reject(Agent agent)
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService,
+            $"{DisplayName(agent)} ablehnen?",
+            "Das Konto wird abgelehnt (gesperrt). Die Begründung wird protokolliert.",
+            confirmText: "Ablehnen", label: "Begründung (optional)", colour: Color.Error);
+        if (reason is null)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.RejectAsync(agent.Id, string.IsNullOrWhiteSpace(reason) ? "Registrierung abgelehnt" : reason, _user);
+            Snackbar.Add($"{DisplayName(agent)} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task NamesApprove(Agent agent)
+    {
+        try
+        {
+            await AgentService.NameChangeApproveAsync(agent.Id, _user);
+            Snackbar.Add($"Namensänderung von {DisplayName(agent)} genehmigt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task NamesReject(Agent agent)
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService,
+            $"Namensänderung von {DisplayName(agent)} ablehnen?",
+            "Der Antrag wird verworfen. Die Begründung wird protokolliert.",
+            confirmText: "Ablehnen", label: "Begründung (optional)", colour: Color.Error);
+        if (reason is null)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.NameChangeRejectAsync(agent.Id, string.IsNullOrWhiteSpace(reason) ? "Namensänderung abgelehnt" : reason, _user);
+            Snackbar.Add($"Namensänderung von {DisplayName(agent)} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task TaskforceApprove(Taskforce taskforce)
+    {
+        try
+        {
+            await TaskforceService.ApprovalSetAsync(taskforce.Id, TaskforceStatus.Approved, _user);
+            Snackbar.Add($"Taskforce {taskforce.CaseNumber} genehmigt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task TaskforceReject(Taskforce taskforce)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService,
+            $"Taskforce {taskforce.CaseNumber} ablehnen?",
+            $"Der Antrag „{taskforce.Name}“ wird abgelehnt. Die Statusänderung wird protokolliert.",
+            "Ablehnen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await TaskforceService.ApprovalSetAsync(taskforce.Id, TaskforceStatus.Rejected, _user);
+            Snackbar.Add($"Taskforce {taskforce.CaseNumber} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private string AgentName(string agentId) => _agentNames.GetValueOrDefault(agentId) ?? "Agent";
+
+    private async Task PromotionDecide(AgentPromotionRequest request, bool approved)
+    {
+        try
+        {
+            await AgentService.PromotionDecideAsync(request.Id, approved, null, _user);
+            Snackbar.Add(approved
+                ? $"Beförderung von {AgentName(request.AgentId)} genehmigt."
+                : $"Beförderungsantrag von {AgentName(request.AgentId)} abgelehnt.", approved ? Severity.Success : Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    // Liefert nur die tatsächlich geänderten Felder als „alt → neu". Die Seite ist Führungs-gated, und die
+    // Führungsebene darf den Klarnamen sehen (DarfKlarnameSehen) – daher hier keine Maskierung nötig.
+    private static List<FieldChange> Changes(Agent a)
+    {
+        var list = new List<FieldChange>();
+        void Check(string label, string? alt, string? @new)
+        {
+            if (!string.Equals(alt ?? string.Empty, @new ?? string.Empty, StringComparison.Ordinal))
+            {
+                list.Add(new FieldChange(label, Display(alt), Display(@new)));
+            }
+        }
+        Check("Codename", a.Codename, a.PendingCodename);
+        Check("Klarname", a.RealName, a.PendingRealName);
+        Check("Dienstnummer", a.BadgeNumber, a.PendingBadgeNumber);
+        return list;
+    }
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private sealed record FieldChange(string Label, string Alt, string New);
+
+    // Neu registrierte Konten haben noch keinen Codenamen – zur Identifikation dient die Discord-Spalte.
+    private static string DisplayName(Agent agent)
+        => string.IsNullOrWhiteSpace(agent.Codename) ? "Neuer Agent" : agent.Codename;
+}

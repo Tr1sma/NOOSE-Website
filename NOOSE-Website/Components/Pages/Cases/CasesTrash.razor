@@ -1,0 +1,80 @@
+@page "/vorgaenge/papierkorb"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject ICaseService CaseService
+@inject ISnackbar Snackbar
+
+<PageTitle>Papierkorb – Vorgänge · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/vorgaenge" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Papierkorb – Vorgänge</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Gelöschte Vorgänge. Die Führung kann sie wiederherstellen; sie erscheinen dann wieder in der Liste.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_cases.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Der Papierkorb ist leer.</MudAlert>
+}
+else
+{
+    <MudTable Items="_cases" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="Case" SortBy="@(x => x.CaseNumber)">Aktenzeichen</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Case" SortBy="@(x => x.Title)">Titel</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Case" SortBy="@(x => x.DeletedAt)" InitialDirection="SortDirection.Descending">Gelöscht am</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.body2">@context.CaseNumber</MudText></MudTd>
+            <MudTd DataLabel="Titel"><MudText Typo="Typo.body2">@context.Title</MudText></MudTd>
+            <MudTd DataLabel="Gelöscht am">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.DeletedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Restore"
+                           OnClick="@(() => RestoreAsync(context))">Wiederherstellen</MudButton>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private List<Case> _cases = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _cases = await CaseService.GetTrashAsync();
+        _load = false;
+    }
+
+    private async Task RestoreAsync(Case @case)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await CaseService.RestoreAsync(@case.Id, user);
+            Snackbar.Add($"Vorgang {@case.CaseNumber} wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+}

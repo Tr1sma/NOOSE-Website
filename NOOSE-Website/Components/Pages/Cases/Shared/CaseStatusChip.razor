@@ -1,0 +1,30 @@
+@* Farbiger Status-Chip eines Vorgangs (Offen/In Bearbeitung/Ruht/Abgeschlossen/Archiviert). Zentralisiert
+   Beschriftung und Farbgebung für Karte, Liste und Detailseite. *@
+<MudChip T="string" Size="@Size" Variant="Variant.Filled" Color="@Colour(Status)" Icon="@Symbol(Status)">
+    @CaseStatusDisplay.Name(Status)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public CaseStatus Status { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private static Color Colour(CaseStatus status) => status switch
+    {
+        CaseStatus.Open => Color.Info,
+        CaseStatus.InProcessing => Color.Warning,
+        CaseStatus.Dormant => Color.Default,
+        CaseStatus.Completed => Color.Success,
+        CaseStatus.Archived => Color.Dark,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(CaseStatus status) => status switch
+    {
+        CaseStatus.Open => Icons.Material.Filled.FolderOpen,
+        CaseStatus.InProcessing => Icons.Material.Filled.Autorenew,
+        CaseStatus.Dormant => Icons.Material.Filled.Pause,
+        CaseStatus.Completed => Icons.Material.Filled.CheckCircle,
+        CaseStatus.Archived => Icons.Material.Filled.Inventory2,
+        _ => Icons.Material.Filled.HelpOutline,
+    };
+}

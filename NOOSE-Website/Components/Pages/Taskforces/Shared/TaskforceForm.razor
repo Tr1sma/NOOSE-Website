@@ -3,22 +3,22 @@
 
 <MudGrid>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Eingabe.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
+        <MudTextField @bind-Value="Input.Name" Label="Name" Required="true" RequiredError="Name ist erforderlich"
                       Variant="Variant.Outlined" />
     </MudItem>
 
     <MudItem xs="12" md="6">
-        <MudSelect T="TaskforceGeltungsbereich" @bind-Value="Eingabe.Geltungsbereich" Label="Geltungsbereich" Variant="Variant.Outlined">
-            @foreach (var b in TaskforceGeltungsbereichAnzeige.Alle)
+        <MudSelect T="TaskforceScope" @bind-Value="Input.Scope" Label="Geltungsbereich" Variant="Variant.Outlined">
+            @foreach (var b in TaskforceScopeDisplay.All)
             {
-                <MudSelectItem Value="b">@TaskforceGeltungsbereichAnzeige.Name(b)</MudSelectItem>
+                <MudSelectItem Value="b">@TaskforceScopeDisplay.Name(b)</MudSelectItem>
             }
         </MudSelect>
     </MudItem>
     <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
-        <MudSwitch T="bool" @bind-Value="Eingabe.IstVerschlusssache" Color="Color.Warning"
+        <MudSwitch T="bool" @bind-Value="Input.IsClassified" Color="Color.Warning"
                    Label="Verschlusssache (nur Führung sichtbar)" />
-        @if (Eingabe.IstVerschlusssache && !IstFuehrung)
+        @if (Input.IsClassified && !IsLeadership)
         {
             <MudText Typo="Typo.caption" Color="Color.Warning">
                 Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
@@ -27,16 +27,16 @@
     </MudItem>
 
     <MudItem xs="12">
-        <MudTextField @bind-Value="Eingabe.Zweck" Label="Sinn / Zweck" Lines="4" Variant="Variant.Outlined"
+        <MudTextField @bind-Value="Input.Purpose" Label="Sinn / Zweck" Lines="4" Variant="Variant.Outlined"
                       HelperText="Auftrag und Ziel der Taskforce." />
     </MudItem>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Eingabe.Bemerkungen" Label="Bemerkungen" Lines="3" Variant="Variant.Outlined"
+        <MudTextField @bind-Value="Input.Remarks" Label="Bemerkungen" Lines="3" Variant="Variant.Outlined"
                       HelperText="Interne Vermerke." />
     </MudItem>
 </MudGrid>
 
 @code {
-    [Parameter, EditorRequired] public TaskforceEingabe Eingabe { get; set; } = default!;
-    [Parameter] public bool IstFuehrung { get; set; }
+    [Parameter, EditorRequired] public TaskforceInput Input { get; set; } = default!;
+    [Parameter] public bool IsLeadership { get; set; }
 }

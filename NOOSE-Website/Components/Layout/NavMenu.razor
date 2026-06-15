@@ -7,9 +7,9 @@
     <MudNavLink Href="/personal" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Personal</MudNavLink>
     <MudNavLink Href="/brett" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Campaign">
         Schwarzes Brett
-        @if (_offeneQuittierungen > 0)
+        @if (_openAcknowledgments > 0)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_offeneQuittierungen</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_openAcknowledgments</MudChip>
         }
     </MudNavLink>
 
@@ -36,17 +36,17 @@
     @* Den Freigabe-Posteingang erreicht bereits Senior Special Agent+ (entscheidet Hochstufungen);
        die übrigen Verwaltungs-Links bleiben Führung bzw. Admin vorbehalten. Die *Seite-Policies lassen
        zusätzlich die Nur-Lese-Aufsicht (TeamLeitung ohne Admin) zum reinen Lesen herein. *@
-    <AuthorizeView Policy="@Policies.HoechsteEinstufungSeite" Context="posteingang">
+    <AuthorizeView Policy="@Policies.HighestClassificationPage" Context="posteingang">
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">VERWALTUNG</MudText>
         <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
             Freigaben
-            @if (_offeneFreigaben > 0)
+            @if (_openShares > 0)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_offeneFreigaben</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_openShares</MudChip>
             }
         </MudNavLink>
-        <AuthorizeView Policy="@Policies.FuehrungSeite" Context="fuehrung">
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="fuehrung">
             <MudNavLink Href="/admin/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
                 Tags
             </MudNavLink>
@@ -71,7 +71,7 @@
             <MudNavLink Href="/admin/basisdaten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Storage">
                 Basisdaten
             </MudNavLink>
-            <AuthorizeView Policy="@Policies.AdminSeite" Context="adminInner">
+            <AuthorizeView Policy="@Policies.AdminPage" Context="adminInner">
                 <MudNavLink Href="/admin/system" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications">
                     System
                 </MudNavLink>
@@ -86,18 +86,18 @@
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
-    [Inject] private IAgentVerwaltungService AgentService { get; set; } = default!;
+    [Inject] private IAgentManagementService AgentService { get; set; } = default!;
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
-    [Inject] private IPersonalakteService PersonalakteService { get; set; } = default!;
-    [Inject] private IAntragService AntragService { get; set; } = default!;
-    [Inject] private IAnkuendigungService BrettService { get; set; } = default!;
-    [Inject] private FreigabenBroadcaster FreigabenBroadcaster { get; set; } = default!;
-    [Inject] private QuittierungBroadcaster QuittierungBroadcaster { get; set; } = default!;
+    [Inject] private IPersonnelFileService PersonnelFileService { get; set; } = default!;
+    [Inject] private IRequestService RequestService { get; set; } = default!;
+    [Inject] private IAnnouncementService BoardService { get; set; } = default!;
+    [Inject] private SharesBroadcaster SharesBroadcaster { get; set; } = default!;
+    [Inject] private AcknowledgmentBroadcaster AcknowledgmentBroadcaster { get; set; } = default!;
     [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
     private ClaimsPrincipal? _user;
-    private int _offeneFreigaben;
-    private int _offeneQuittierungen;
+    private int _openShares;
+    private int _openAcknowledgments;
 
     protected override async Task OnInitializedAsync()
     {
@@ -105,16 +105,16 @@
 
         // Beide Badges melden sich nach einer Aktion über ihren Broadcaster → live neu zählen. Ohne diese Abos
         // blieben die Zahlen bis zum nächsten kompletten Seiten-Reload eingefroren.
-        FreigabenBroadcaster.Geaendert += OnFreigabenGeaendert;
-        QuittierungBroadcaster.Geaendert += OnQuittierungGeaendert;
-        await LadeFreigabenAsync();
-        await LadeQuittierungenAsync();
+        SharesBroadcaster.Modified += OnSharesModified;
+        AcknowledgmentBroadcaster.Modified += OnAcknowledgmentModified;
+        await LoadSharesAsync();
+        await LoadAcknowledgmentsAsync();
     }
 
     // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
     // Defensiv: Die Badges sind dekorativ – ein DB-Fehler hier darf weder das Prerender (→ generische
     // Fehlerseite) noch den Circuit (Broadcaster-Handler) reißen. Im Fehlerfall bleibt der Zähler stehen.
-    private async Task LadeQuittierungenAsync()
+    private async Task LoadAcknowledgmentsAsync()
     {
         if (_user is null)
         {
@@ -122,7 +122,7 @@
         }
         try
         {
-            _offeneQuittierungen = await BrettService.GetOffeneQuittierungenAnzahlAsync(_user);
+            _openAcknowledgments = await BoardService.GetOpenAcknowledgmentsCountAsync(_user);
         }
         catch (Exception ex)
         {
@@ -132,7 +132,7 @@
 
     // Summiert die offenen Posteingangs-Vorgänge (dieselben Quellen wie die Freigaben-Seite). Wird beim Start und
     // nach jedem Broadcaster-Signal aufgerufen; setzt den Wert jedes Mal frisch (kein +=).
-    private async Task LadeFreigabenAsync()
+    private async Task LoadSharesAsync()
     {
         if (_user is null)
         {
@@ -140,23 +140,23 @@
         }
         try
         {
-            var offen = 0;
+            var open = 0;
 
             // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
-            if (_user.DarfHoechsteEinstufung())
+            if (_user.MayHighestClassification())
             {
-                offen += await AntragService.GetOffeneAnzahlAsync(_user.IstFuehrung());
+                open += await RequestService.GetOpenCountAsync(_user.IsLeadership());
             }
 
             // Registrierungen + Namensänderungen + Taskforce- + Beförderungsanträge sind der Führung vorbehalten.
-            if (_user.IstFuehrung())
+            if (_user.IsLeadership())
             {
-                offen += (await AgentService.GetAusstehendeAsync()).Count
-                    + (await AgentService.GetAusstehendeNamensaenderungenAsync()).Count
-                    + (await TaskforceService.GetBeantragteAsync()).Count
-                    + (await PersonalakteService.GetOffeneBefoerderungsantraegeAsync()).Count;
+                open += (await AgentService.GetPendingAsync()).Count
+                    + (await AgentService.GetPendingNameChangesAsync()).Count
+                    + (await TaskforceService.GetRequestedAsync()).Count
+                    + (await PersonnelFileService.GetOpenPromotionRequestsAsync()).Count;
             }
-            _offeneFreigaben = offen;
+            _openShares = open;
         }
         catch (Exception ex)
         {
@@ -166,15 +166,15 @@
     }
 
     // Live-Signal (aus der Freigaben-Seite desselben Circuits) → in den Circuit marshallen und neu zählen.
-    private void OnFreigabenGeaendert()
+    private void OnSharesModified()
         => _ = InvokeAsync(async () =>
         {
-            await LadeFreigabenAsync();
+            await LoadSharesAsync();
             StateHasChanged();
         });
 
     // Live-Signal nach einer Quittierung – nur für die eigene Agent-Id in den eigenen Circuit marshallen.
-    private void OnQuittierungGeaendert(string agentId)
+    private void OnAcknowledgmentModified(string agentId)
     {
         if (agentId != _user?.GetAgentId())
         {
@@ -182,14 +182,14 @@
         }
         _ = InvokeAsync(async () =>
         {
-            await LadeQuittierungenAsync();
+            await LoadAcknowledgmentsAsync();
             StateHasChanged();
         });
     }
 
     public void Dispose()
     {
-        FreigabenBroadcaster.Geaendert -= OnFreigabenGeaendert;
-        QuittierungBroadcaster.Geaendert -= OnQuittierungGeaendert;
+        SharesBroadcaster.Modified -= OnSharesModified;
+        AcknowledgmentBroadcaster.Modified -= OnAcknowledgmentModified;
     }
 }

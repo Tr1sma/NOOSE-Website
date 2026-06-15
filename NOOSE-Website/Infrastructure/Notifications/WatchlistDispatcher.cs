@@ -13,9 +13,9 @@ namespace NOOSE_Website.Infrastructure.Notifications;
 /// </summary>
 public sealed class WatchlistDispatcher(IServiceScopeFactory scopeFactory, ILogger<WatchlistDispatcher> logger)
 {
-    public void Verteile(string? akteurId, IReadOnlyCollection<(string Typ, string Id)> akten)
+    public void Distribute(string? actorId, IReadOnlyCollection<(string Type, string Id)> records)
     {
-        if (akten.Count == 0)
+        if (records.Count == 0)
         {
             return;
         }
@@ -26,7 +26,7 @@ public sealed class WatchlistDispatcher(IServiceScopeFactory scopeFactory, ILogg
             {
                 using var scope = scopeFactory.CreateScope();
                 var fanout = scope.ServiceProvider.GetRequiredService<WatchlistFanout>();
-                await fanout.VerarbeiteAsync(akteurId, akten, CancellationToken.None);
+                await fanout.ProcessAsync(actorId, records, CancellationToken.None);
             }
             catch (Exception ex)
             {

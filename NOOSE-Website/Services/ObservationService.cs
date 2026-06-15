@@ -2,59 +2,59 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Fraktionen;
-using NOOSE_Website.Data.Entities.Gruppen;
-using NOOSE_Website.Data.Entities.Personen;
-using NOOSE_Website.Models.Personen;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IObservationService" />
-public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IBedrohungsScoreService bedrohung) : IObservationService
+public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IObservationService
 {
-    public async Task<List<ObservationAnzeige>> GetFuerPersonAsync(string personId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<ObservationDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Eigenständige Sichtbarkeitsprüfung der Eltern-Person (nicht nur auf den Aufrufer verlassen).
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Person), personId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
         {
             return new();
         }
-        var eintraege = await db.Observationen
+        var entries = await db.Observations
             .Where(o => o.PersonId == personId)
-            .OrderByDescending(o => o.Beginn)
+            .OrderByDescending(o => o.Start)
             .ToListAsync(cancellationToken);
-        return await ZuAnzeigeAsync(db, eintraege, istFuehrung, cancellationToken);
+        return await ToDisplayAsync(db, entries, isLeadership, cancellationToken);
     }
 
-    public async Task<List<ObservationAnzeige>> GetAlleAsync(bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<ObservationDisplay>> GetAllAsync(bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var eintraege = await db.Observationen
+        var entries = await db.Observations
             .Include(o => o.Person)
             // Der Soft-Delete-Filter setzt Person bei gelöschten Akten auf null → solche Einträge ausblenden.
-            .Where(o => o.Person != null && (istFuehrung || !o.Person.IstVerschlusssache))
-            .OrderByDescending(o => o.Beginn)
+            .Where(o => o.Person != null && (isLeadership || !o.Person.IsClassified))
+            .OrderByDescending(o => o.Start)
             .ToListAsync(cancellationToken);
-        return await ZuAnzeigeAsync(db, eintraege, istFuehrung, cancellationToken);
+        return await ToDisplayAsync(db, entries, isLeadership, cancellationToken);
     }
 
-    public async Task<List<ObservationAnzeige>> GetFuerOrgAsync(string orgTyp, string orgId, bool istFuehrung, CancellationToken cancellationToken = default)
+    public async Task<List<ObservationDisplay>> GetForOrgAsync(string orgType, string orgId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Sichtbarkeit der Organisations-Akte selbst prüfen.
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, orgTyp, orgId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, orgType, orgId, isLeadership, cancellationToken))
         {
             return new();
         }
-        var eintraege = await db.Observationen
+        var entries = await db.Observations
             .Include(o => o.Person)
             // Person == null → Akte im Papierkorb; Verschlusssache-Personen nur für Führung.
-            .Where(o => o.OrgTyp == orgTyp && o.OrgId == orgId
-                && o.Person != null && (istFuehrung || !o.Person.IstVerschlusssache))
-            .OrderByDescending(o => o.Beginn)
+            .Where(o => o.OrgType == orgType && o.OrgId == orgId
+                && o.Person != null && (isLeadership || !o.Person.IsClassified))
+            .OrderByDescending(o => o.Start)
             .ToListAsync(cancellationToken);
-        return await ZuAnzeigeAsync(db, eintraege, istFuehrung, cancellationToken);
+        return await ToDisplayAsync(db, entries, isLeadership, cancellationToken);
     }
 
     /// <summary>
@@ -63,138 +63,138 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IBedr
     /// Organisationen sind Verschlusssache-gefiltert (<paramref name="istFuehrung"/>), gelöschte werden vom
     /// globalen Soft-Delete-Filter ausgeblendet. Nicht (mehr) auflösbare Verknüpfungen erhalten leere Felder.
     /// </summary>
-    private static async Task<List<ObservationAnzeige>> ZuAnzeigeAsync(AppDbContext db, List<Observation> eintraege, bool istFuehrung, CancellationToken cancellationToken)
+    private static async Task<List<ObservationDisplay>> ToDisplayAsync(AppDbContext db, List<Observation> entries, bool isLeadership, CancellationToken cancellationToken)
     {
         // Beobachtende Agents (Deckname) auflösen.
-        var agentIds = eintraege.Where(o => o.BeobachtenderAgentId is not null).Select(o => o.BeobachtenderAgentId!).Distinct().ToList();
-        var agenten = new Dictionary<string, string>();
+        var agentIds = entries.Where(o => o.ObservingAgentId is not null).Select(o => o.ObservingAgentId!).Distinct().ToList();
+        var agents = new Dictionary<string, string>();
         if (agentIds.Count > 0)
         {
-            agenten = await db.Users
+            agents = await db.Users
                 .Where(u => agentIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.Codename })
                 .ToDictionaryAsync(u => u.Id, u => u.Codename, cancellationToken);
         }
 
-        var fraktionIds = eintraege.Where(o => o.OrgTyp == nameof(Fraktion) && o.OrgId is not null).Select(o => o.OrgId!).Distinct().ToList();
-        var gruppenIds = eintraege.Where(o => o.OrgTyp == nameof(Personengruppe) && o.OrgId is not null).Select(o => o.OrgId!).Distinct().ToList();
+        var factionIds = entries.Where(o => o.OrgType == nameof(Faction) && o.OrgId is not null).Select(o => o.OrgId!).Distinct().ToList();
+        var groupsIds = entries.Where(o => o.OrgType == nameof(PersonGroup) && o.OrgId is not null).Select(o => o.OrgId!).Distinct().ToList();
 
-        var fraktionen = new Dictionary<string, (string Name, string Aktenzeichen)>();
-        if (fraktionIds.Count > 0)
+        var factions = new Dictionary<string, (string Name, string CaseNumber)>();
+        if (factionIds.Count > 0)
         {
-            fraktionen = await db.Fraktionen
-                .Where(f => fraktionIds.Contains(f.Id) && (istFuehrung || !f.IstVerschlusssache))
-                .Select(f => new { f.Id, f.Name, f.Aktenzeichen })
-                .ToDictionaryAsync(f => f.Id, f => (f.Name, f.Aktenzeichen), cancellationToken);
+            factions = await db.Factions
+                .Where(f => factionIds.Contains(f.Id) && (isLeadership || !f.IsClassified))
+                .Select(f => new { f.Id, f.Name, f.CaseNumber })
+                .ToDictionaryAsync(f => f.Id, f => (f.Name, f.CaseNumber), cancellationToken);
         }
 
-        var gruppen = new Dictionary<string, (string Name, string Aktenzeichen)>();
-        if (gruppenIds.Count > 0)
+        var groups = new Dictionary<string, (string Name, string CaseNumber)>();
+        if (groupsIds.Count > 0)
         {
-            gruppen = await db.Personengruppen
-                .Where(g => gruppenIds.Contains(g.Id) && (istFuehrung || !g.IstVerschlusssache))
-                .Select(g => new { g.Id, g.Name, g.Aktenzeichen })
-                .ToDictionaryAsync(g => g.Id, g => (g.Name, g.Aktenzeichen), cancellationToken);
+            groups = await db.PersonGroups
+                .Where(g => groupsIds.Contains(g.Id) && (isLeadership || !g.IsClassified))
+                .Select(g => new { g.Id, g.Name, g.CaseNumber })
+                .ToDictionaryAsync(g => g.Id, g => (g.Name, g.CaseNumber), cancellationToken);
         }
 
-        return eintraege.Select(o =>
+        return entries.Select(o =>
         {
-            string? agentName = o.BeobachtenderAgentId is not null
-                && agenten.TryGetValue(o.BeobachtenderAgentId, out var cn) && !string.IsNullOrWhiteSpace(cn)
+            string? agentName = o.ObservingAgentId is not null
+                && agents.TryGetValue(o.ObservingAgentId, out var cn) && !string.IsNullOrWhiteSpace(cn)
                 ? cn : null;
-            if (o.OrgId is not null && o.OrgTyp == nameof(Fraktion) && fraktionen.TryGetValue(o.OrgId, out var f))
+            if (o.OrgId is not null && o.OrgType == nameof(Faction) && factions.TryGetValue(o.OrgId, out var f))
             {
-                return new ObservationAnzeige(o, agentName, f.Name, f.Aktenzeichen, $"/fraktionen/{o.OrgId}");
+                return new ObservationDisplay(o, agentName, f.Name, f.CaseNumber, $"/fraktionen/{o.OrgId}");
             }
-            if (o.OrgId is not null && o.OrgTyp == nameof(Personengruppe) && gruppen.TryGetValue(o.OrgId, out var g))
+            if (o.OrgId is not null && o.OrgType == nameof(PersonGroup) && groups.TryGetValue(o.OrgId, out var g))
             {
-                return new ObservationAnzeige(o, agentName, g.Name, g.Aktenzeichen, $"/personengruppen/{o.OrgId}");
+                return new ObservationDisplay(o, agentName, g.Name, g.CaseNumber, $"/personengruppen/{o.OrgId}");
             }
-            return new ObservationAnzeige(o, agentName, null, null, null);
+            return new ObservationDisplay(o, agentName, null, null, null);
         }).ToList();
     }
 
-    public async Task<Observation> ErstellenAsync(string personId, ObservationEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<Observation> CreateAsync(string personId, ObservationInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var person = await db.Personen.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
+        var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
-        if (person.IstVerschlusssache && !handelnder.IstFuehrung())
+        if (person.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        var orgId = Leer(eingabe.OrgId);
+        var orgId = Empty(input.OrgId);
         var obs = new Observation
         {
             PersonId = personId,
-            Beginn = eingabe.Beginn,
-            Ende = eingabe.Ende,
-            Ort = Leer(eingabe.Ort),
-            Beobachtung = Leer(eingabe.Beobachtung),
-            Ergebnis = Leer(eingabe.Ergebnis),
-            BeobachtenderAgentId = Leer(eingabe.BeobachtenderAgentId),
+            Start = input.Start,
+            End = input.End,
+            Location = Empty(input.Location),
+            Sighting = Empty(input.Sighting),
+            Result = Empty(input.Result),
+            ObservingAgentId = Empty(input.ObservingAgentId),
             OrgId = orgId,
             // Kein verwaister Typ ohne Id.
-            OrgTyp = orgId is null ? null : Leer(eingabe.OrgTyp),
+            OrgType = orgId is null ? null : Empty(input.OrgType),
         };
 
-        db.Observationen.Add(obs);
+        db.Observations.Add(obs);
         // Audit setzt ErstelltAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
         // Observationen fließen in den Person-Score (P3) → neu berechnen.
-        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
+        await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
         return obs;
     }
 
-    public async Task<Observation> AktualisierenAsync(string observationId, ObservationEingabe eingabe, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<Observation> RefreshAsync(string observationId, ObservationInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var obs = await db.Observationen
+        var obs = await db.Observations
             .Include(o => o.Person)
             .FirstOrDefaultAsync(o => o.Id == observationId, cancellationToken)
             ?? throw new InvalidOperationException($"Observation '{observationId}' nicht gefunden.");
 
-        if (obs.Person?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        if (obs.Person?.IsClassified == true && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        obs.Beginn = eingabe.Beginn;
-        obs.Ende = eingabe.Ende;
-        obs.Ort = Leer(eingabe.Ort);
-        obs.Beobachtung = Leer(eingabe.Beobachtung);
-        obs.Ergebnis = Leer(eingabe.Ergebnis);
-        obs.BeobachtenderAgentId = Leer(eingabe.BeobachtenderAgentId);
-        var orgId = Leer(eingabe.OrgId);
+        obs.Start = input.Start;
+        obs.End = input.End;
+        obs.Location = Empty(input.Location);
+        obs.Sighting = Empty(input.Sighting);
+        obs.Result = Empty(input.Result);
+        obs.ObservingAgentId = Empty(input.ObservingAgentId);
+        var orgId = Empty(input.OrgId);
         obs.OrgId = orgId;
-        obs.OrgTyp = orgId is null ? null : Leer(eingabe.OrgTyp);
+        obs.OrgType = orgId is null ? null : Empty(input.OrgType);
 
         // Audit setzt GeaendertAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
-        await bedrohung.NeuBerechnenPersonScoreAsync(obs.PersonId, cancellationToken);
+        await threat.NewCalculatePersonScoreAsync(obs.PersonId, cancellationToken);
         return obs;
     }
 
-    public async Task LoeschenAsync(string observationId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string observationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var obs = await db.Observationen.Include(o => o.Person).FirstOrDefaultAsync(o => o.Id == observationId, cancellationToken);
+        var obs = await db.Observations.Include(o => o.Person).FirstOrDefaultAsync(o => o.Id == observationId, cancellationToken);
         if (obs is null)
         {
             return;
         }
-        if (obs.Person?.IstVerschlusssache == true && !handelnder.IstFuehrung())
+        if (obs.Person?.IsClassified == true && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
         var personId = obs.PersonId;
         // Soft-Delete via Interceptor.
-        db.Observationen.Remove(obs);
+        db.Observations.Remove(obs);
         await db.SaveChangesAsync(cancellationToken);
-        await bedrohung.NeuBerechnenPersonScoreAsync(personId, cancellationToken);
+        await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
-    private static string? Leer(string? s) => s.TrimToNull();
+    private static string? Empty(string? s) => s.TrimToNull();
 }

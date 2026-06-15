@@ -1,0 +1,45 @@
+@* Rendert einen bereits aufgelösten Mention-Text (Segmente) inline: Klartext + klickbare Verweise/Chips.
+   Verschlusssachen ohne Berechtigung erscheinen als neutraler Schloss-Chip ohne Name/Link. Reiner Renderer –
+   die Auflösung (DB) macht der Aufrufer (bei Listen gebündelt via IMentionService.AufloesenVieleAsync). *@
+<span style="white-space:pre-wrap;word-break:break-word;">
+@foreach (var seg in Segments)
+{
+    if (!seg.IsReference)
+    {
+        @seg.Text
+    }
+    else if (seg.Hidden)
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                 Icon="@Icons.Material.Filled.Lock" Class="mx-1">Verschlusssache</MudChip>
+    }
+    else if (!string.IsNullOrEmpty(seg.Href))
+    {
+        <MudLink Href="@seg.Href" Class="mx-1">
+            <MudIcon Icon="@Symbol(seg.Type)" Size="Size.Small" Class="mr-1" />@seg.Text
+        </MudLink>
+    }
+    else
+    {
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                 Icon="@Symbol(seg.Type)" Class="mx-1">@seg.Text</MudChip>
+    }
+}
+</span>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<MentionSegment> Segments { get; set; } = Array.Empty<MentionSegment>();
+
+    private static string Symbol(string? type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Source) => Icons.Material.Filled.AttachFile,
+        nameof(Agent) => Icons.Material.Filled.Person,
+        _ => Icons.Material.Filled.Link,
+    };
+}

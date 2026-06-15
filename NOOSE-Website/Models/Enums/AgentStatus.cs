@@ -7,7 +7,7 @@ namespace NOOSE_Website.Models.Enums;
 /// </summary>
 public enum AgentStatus
 {
-    Ausstehend = 0,
-    Aktiv = 1,
-    Gesperrt = 2,
+    Pending = 0,
+    Active = 1,
+    Blocked = 2,
 }

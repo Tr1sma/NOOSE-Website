@@ -1,0 +1,28 @@
+@* Farbiger Status-Chip einer Aufgabe (Offen/In Bearbeitung/Erledigt/Abgebrochen). Zentralisiert
+   Beschriftung und Farbgebung für Liste, Karte und Detailseite. *@
+<MudChip T="string" Size="@Size" Variant="Variant.Filled" Color="@Colour(Status)" Icon="@Symbol(Status)">
+    @JobStatusDisplay.Name(Status)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public JobStatus Status { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private static Color Colour(JobStatus status) => status switch
+    {
+        JobStatus.Open => Color.Info,
+        JobStatus.InProcessing => Color.Warning,
+        JobStatus.Done => Color.Success,
+        JobStatus.Aborted => Color.Dark,
+        _ => Color.Default,
+    };
+
+    private static string Symbol(JobStatus status) => status switch
+    {
+        JobStatus.Open => Icons.Material.Filled.RadioButtonUnchecked,
+        JobStatus.InProcessing => Icons.Material.Filled.Autorenew,
+        JobStatus.Done => Icons.Material.Filled.CheckCircle,
+        JobStatus.Aborted => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline,
+    };
+}

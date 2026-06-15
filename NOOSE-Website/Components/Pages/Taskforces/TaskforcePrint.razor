@@ -1,0 +1,93 @@
+@* Druckansicht der Taskforce-Akte (Phase 7): komplette Akte als strukturiertes Dokument. *@
+@page "/taskforces/{Id}/druck"
+@layout PrintLayout
+@inject ITaskforceService TaskforceService
+@inject ILinkService LinkService
+@inject ICommentService CommentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_taskforce is null ? "Druckansicht" : $"Taskforce-Akte {_taskforce.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_taskforce is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Taskforce-Akte {_taskforce.CaseNumber}")" BackHref="@($"/taskforces/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="_taskforce.IsClassified">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Name</th><td>@_taskforce.Name</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_taskforce.CaseNumber</td></tr>
+                    <tr><th>Status</th><td>@TaskforceStatusDisplay.Name(_taskforce.Status)</td></tr>
+                    <tr><th>Geltungsbereich</th><td>@TaskforceScopeDisplay.Name(_taskforce.Scope)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_taskforce.Purpose))
+                    {
+                        <tr><th>Zweck</th><td class="druck-mehrzeilig">@_taskforce.Purpose</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_taskforce.Remarks))
+                    {
+                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig">@_taskforce.Remarks</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_taskforce.ModifiedAt ?? _taskforce.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (_taskforce.Agents.Count > 0)
+        {
+            <section>
+                <h2>Besetzung (@_taskforce.Agents.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Rolle</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _taskforce.Agents)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@TaskforceRoleDisplay.Name(a.Role)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <PrintLinks Entries="_links" />
+        <PrintComments Entries="_comments" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Taskforce? _taskforce;
+    private List<LinkDisplay> _links = new();
+    private List<Comment> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+
+        // Sichtbarkeit wie auf der Detailseite: Führung/Aufsicht sehen alles, sonst nur als Mitglied.
+        _taskforce = await TaskforceService.GetDetailAsync(Id, user.MayAllTaskforcesSee(), user.GetAgentId());
+        if (_taskforce is not null)
+        {
+            _links = await LinkService.GetForRecordAsync(nameof(Taskforce), Id, user.MayAllTaskforcesSee(), user.GetAgentId());
+            _comments = await CommentService.GetForRecordAsync(nameof(Taskforce), Id, user.IsLeadership());
+            await AccessLog.LogViewAsync(nameof(Taskforce), Id);
+        }
+        _load = false;
+    }
+}

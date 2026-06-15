@@ -1,0 +1,136 @@
+@* Konflikte und Bündnisse einer Organisation (Fraktion/Personengruppe) zu anderen Organisationen –
+   über die generische Verknüpfungs-Engine, getrennt nach VerknuepfungArt. Ziele typübergreifend. *@
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="6">
+    @foreach (var s in Sections)
+    {
+        var list = _lists.TryGetValue(s.Kind, out var l) ? l : new();
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle1" Color="s.Colour">@s.Title (@list.Count)</MudText>
+                @if (_mayWrite)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="s.Colour" StartIcon="@s.Icon" OnClick="@(() => AddAsync(s))">
+                        @s.AddText
+                    </MudButton>
+                }
+            </MudStack>
+
+            @if (_load)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (list.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@s.EmptyText</MudText>
+            }
+            else
+            {
+                @foreach (var v in list)
+                {
+                    <MudPaper Class="pa-3" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@s.Icon" Color="s.Colour" Size="Size.Small" />
+                                <MudLink Href="@SearchNavigation.Route(v.OtherType, v.OtherId)" Typo="Typo.body2"><b>@v.OtherDesignation</b></MudLink>
+                                @if (!string.IsNullOrWhiteSpace(v.Label))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
+                                }
+                            </MudStack>
+                            @if (_mayWrite)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => RemoveAsync(s, v))" aria-label="@($"{s.Designation} entfernen")" />
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        </MudStack>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private readonly Dictionary<LinkKind, List<LinkDisplay>> _lists = new();
+
+    private sealed record Section(LinkKind Kind, string Title, string Designation, string AddText, string EmptyText, Color Colour, string Icon);
+
+    private static readonly Section[] Sections =
+    {
+        new(LinkKind.Conflict, "Konflikte", "Konflikt", "Konflikt hinzufügen", "Keine Konflikte erfasst.",
+            Color.Error, Icons.Material.Filled.Bolt),
+        new(LinkKind.Alliance, "Bündnisse", "Bündnis", "Bündnis hinzufügen", "Keine Bündnisse erfasst.",
+            Color.Success, Icons.Material.Filled.Handshake),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var isLeadership = User.IsLeadership();
+        foreach (var s in Sections)
+        {
+            _lists[s.Kind] = await LinkService.GetForRecordAsync(EntityType, EntityId, isLeadership, User.GetAgentId(), s.Kind);
+        }
+        _load = false;
+    }
+
+    private async Task AddAsync(Section s)
+    {
+        // Bereits verknüpfte Ziele (beide Arten) + die eigene Akte ausschließen.
+        var all = _lists.Values.SelectMany(l => l).ToList();
+        var factionFrom = all.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
+        var groupsFrom = all.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
+        var partyFrom = all.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();
+        switch (EntityType)
+        {
+            case nameof(Faction): factionFrom.Add(EntityId); break;
+            case nameof(PersonGroup): groupsFrom.Add(EntityId); break;
+            case nameof(Party): partyFrom.Add(EntityId); break;
+        }
+
+        var choice = await OrgRelationDialog.ShowAsync(DialogService, s.Designation, User.IsLeadership(), factionFrom, groupsFrom, partyFrom);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(EntityType, EntityId, choice.TargetType, choice.TargetId, choice.Note, User, s.Kind);
+            Snackbar.Add($"{s.Designation} gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RemoveAsync(Section s, LinkDisplay v)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, $"{s.Designation} löschen?",
+            $"Die Beziehung zu „{v.OtherDesignation}“ wird entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        await LinkService.RemoveAsync(v.LinkId, User);
+        Snackbar.Add($"{s.Designation} gelöscht.", Severity.Success);
+        await LoadAsync();
+    }
+}

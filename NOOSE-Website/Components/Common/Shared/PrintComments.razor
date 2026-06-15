@@ -1,0 +1,24 @@
+@* Druck-Sektion „Vermerke/Kommentare" (gemeinsam für alle Druckansichten; rendert nichts bei leer). *@
+@if (Entries.Count > 0)
+{
+    <section>
+        <h2>Vermerke</h2>
+        @foreach (var k in Entries)
+        {
+            <div class="druck-eintrag">
+                <div class="druck-eintrag-kopf">
+                    <b>@k.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                    @if (!string.IsNullOrWhiteSpace(k.AuthorName))
+                    {
+                        <text> · @k.AuthorName</text>
+                    }
+                </div>
+                <div class="druck-mehrzeilig">@k.Text</div>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<Comment> Entries { get; set; } = new();
+}

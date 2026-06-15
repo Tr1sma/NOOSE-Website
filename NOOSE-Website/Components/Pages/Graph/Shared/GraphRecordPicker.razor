@@ -1,0 +1,139 @@
+@* Auswahl einer Akte (Aktentyp + Autocomplete) für den Beziehungsgraph – Fokusknoten bzw. Pfad-Endpunkt.
+   Nutzt die vorhandenen, sichtbarkeitsgefilterten SucheAsync-Dienste (wie VerknuepfungDialog). *@
+@inject IPersonService PersonService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IPartyService PartyService
+@inject IOperationService OperationService
+@inject ICaseService CaseService
+@inject ITaskforceService TaskforceService
+
+<MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+    <MudSelect T="string" @bind-Value="_type" @bind-Value:after="TypeSwitchedAsync" Label="Typ" Dense="true"
+               Variant="Variant.Outlined" Style="min-width:160px;" Margin="Margin.Dense">
+        @foreach (var t in _types)
+        {
+            <MudSelectItem Value="@t.Value">@t.Display</MudSelectItem>
+        }
+    </MudSelect>
+
+    @switch (_type)
+    {
+        case nameof(Person):
+            <MudAutocomplete T="Person" Label="@Label" @bind-Value="_person" @bind-Value:after="Emit"
+                             SearchFunc="@SearchPerson" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch" />
+            break;
+        case nameof(Faction):
+            <MudAutocomplete T="Faction" Label="@Label" @bind-Value="_faction" @bind-Value:after="Emit"
+                             SearchFunc="@SearchFaction" ToStringFunc="@(f => f?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups" />
+            break;
+        case nameof(PersonGroup):
+            <MudAutocomplete T="PersonGroup" Label="@Label" @bind-Value="_group" @bind-Value:after="Emit"
+                             SearchFunc="@SearchGroup" ToStringFunc="@(g => g?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Diversity3" />
+            break;
+        case nameof(Party):
+            <MudAutocomplete T="Party" Label="@Label" @bind-Value="_party" @bind-Value:after="Emit"
+                             SearchFunc="@SearchParty" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AccountBalance" />
+            break;
+        case nameof(Operation):
+            <MudAutocomplete T="Operation" Label="@Label" @bind-Value="_operation" @bind-Value:after="Emit"
+                             SearchFunc="@SearchOperation" ToStringFunc="@(o => o?.Title ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Radar" />
+            break;
+        case nameof(Case):
+            <MudAutocomplete T="Case" Label="@Label" @bind-Value="_case" @bind-Value:after="Emit"
+                             SearchFunc="@SearchCase" ToStringFunc="@(v => v?.Title ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.FolderSpecial" />
+            break;
+        case nameof(Taskforce):
+            <MudAutocomplete T="Taskforce" Label="@Label" @bind-Value="_taskforce" @bind-Value:after="Emit"
+                             SearchFunc="@SearchTaskforce" ToStringFunc="@(t => t?.Name ?? string.Empty)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Clearable="true" CoerceText="false"
+                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true" Style="min-width:240px;"
+                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups2" />
+            break;
+    }
+</MudStack>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Akte suchen";
+    [Parameter] public bool IsLeadership { get; set; }
+    [Parameter] public string? MeId { get; set; }
+    [Parameter] public bool MayAllTf { get; set; }
+    /// <summary>Wird bei jeder Auswahländerung gefeuert (null = Auswahl geleert).</summary>
+    [Parameter] public EventCallback<GraphRecordChoice?> Selected { get; set; }
+
+    private record TypeOption(string Value, string Display);
+    private static readonly TypeOption[] _types =
+    {
+        new(nameof(Person), "Person"),
+        new(nameof(Faction), "Fraktion"),
+        new(nameof(PersonGroup), "Personengruppe"),
+        new(nameof(Party), "Partei"),
+        new(nameof(Operation), "Operation"),
+        new(nameof(Case), "Vorgang"),
+        new(nameof(Taskforce), "Taskforce"),
+    };
+
+    private string _type = nameof(Person);
+    private Person? _person;
+    private Faction? _faction;
+    private PersonGroup? _group;
+    private Party? _party;
+    private Operation? _operation;
+    private Case? _case;
+    private Taskforce? _taskforce;
+
+    private async Task<IEnumerable<Person>> SearchPerson(string value, CancellationToken token)
+        => await PersonService.SearchAsync(value, IsLeadership, 20, token);
+    private async Task<IEnumerable<Faction>> SearchFaction(string value, CancellationToken token)
+        => await FactionService.SearchAsync(value, IsLeadership, 20, token);
+    private async Task<IEnumerable<PersonGroup>> SearchGroup(string value, CancellationToken token)
+        => await GroupService.SearchAsync(value, IsLeadership, 20, token);
+    private async Task<IEnumerable<Party>> SearchParty(string value, CancellationToken token)
+        => await PartyService.SearchAsync(value, IsLeadership, 20, token);
+    private async Task<IEnumerable<Operation>> SearchOperation(string value, CancellationToken token)
+        => await OperationService.SearchAsync(value, IsLeadership, 20, token);
+    private async Task<IEnumerable<Case>> SearchCase(string value, CancellationToken token)
+        => await CaseService.SearchAsync(value, IsLeadership, 20, token);
+    private async Task<IEnumerable<Taskforce>> SearchTaskforce(string value, CancellationToken token)
+        => await TaskforceService.SearchAsync(value, MayAllTf, MeId, 20, token);
+
+    private async Task TypeSwitchedAsync()
+    {
+        _person = null; _faction = null; _group = null; _party = null; _operation = null; _case = null; _taskforce = null;
+        await Emit();
+    }
+
+    private async Task Emit()
+    {
+        var choice = _type switch
+        {
+            nameof(Person) when _person is not null => new GraphRecordChoice(nameof(Person), _person.Id, _person.Name),
+            nameof(Faction) when _faction is not null => new GraphRecordChoice(nameof(Faction), _faction.Id, _faction.Name),
+            nameof(PersonGroup) when _group is not null => new GraphRecordChoice(nameof(PersonGroup), _group.Id, _group.Name),
+            nameof(Party) when _party is not null => new GraphRecordChoice(nameof(Party), _party.Id, _party.Name),
+            nameof(Operation) when _operation is not null => new GraphRecordChoice(nameof(Operation), _operation.Id, _operation.Title),
+            nameof(Case) when _case is not null => new GraphRecordChoice(nameof(Case), _case.Id, _case.Title),
+            nameof(Taskforce) when _taskforce is not null => new GraphRecordChoice(nameof(Taskforce), _taskforce.Id, _taskforce.Name),
+            _ => (GraphRecordChoice?)null,
+        };
+        await Selected.InvokeAsync(choice);
+    }
+}

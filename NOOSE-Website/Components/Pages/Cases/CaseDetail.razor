@@ -1,0 +1,223 @@
+@page "/vorgaenge/{Id}"
+@inject ICaseService CaseService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_case?.Title ?? "Vorgang") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_case is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Vorgang nicht gefunden oder nicht zugänglich (ggf. Verschlusssache).
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/vorgaenge" aria-label="Zurück" />
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/vorgaenge/{Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <FollowButton EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+        <JobCreateButton EntityType="@nameof(Case)" EntityId="@_case.Id" />
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton Href="@($"/vorgaenge/{_case.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <CaseCard Case="_case" CaseLead="_caseLead" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="3">
+                        @if (!string.IsNullOrWhiteSpace(_case.Description))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Sachverhalt / Beschreibung</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_case.Description</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_case.Summary))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Aktueller Stand</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_case.Summary</MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_case.ClosingNote))
+                        {
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Abschlussvermerk</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_case.ClosingNote</MudText>
+                            </div>
+                        }
+                        @if (string.IsNullOrWhiteSpace(_case.Description) && string.IsNullOrWhiteSpace(_case.Summary) && string.IsNullOrWhiteSpace(_case.ClosingNote))
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
+                        }
+                    </MudStack>
+                </MudTabPanel>
+                <MudTabPanel Text="Inhalt" Icon="@Icons.Material.Filled.Hub">
+                    <CaseContentPanel CaseId="@_case.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                    <CaseAgentsPanel CaseId="@_case.Id" User="_user" Changed="CaseLeadRefreshAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                    <ClassificationPanel Current="_case.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
+                                     EntityType="@nameof(Case)" EntityId="@_case.Id" TargetDesignation="@($"{_case.Title} ({_case.CaseNumber})")" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <SourcesPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                    <FollowupPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <CommentPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                    <CustomFieldsPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <TimelinePanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" @key="_historyKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Case? _case;
+    private List<string> _caseLead = new();
+    private List<ClassificationHistory> _classificationHistory = new();
+    private ClaimsPrincipal _user = default!;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _activeTab;
+    private static readonly string[] _tabs =
+    {
+        "stammdaten", "inhalt", "agents", "einstufung",
+        "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    // Diese Seite wird bei Navigation /vorgaenge/{A} → /vorgaenge/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
+    // Akte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch. Tab-/Query-Wechsel: Id
+    // bleibt gleich → kein Neuladen.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _case = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
+        if (_case is not null)
+        {
+            await AccessLog.LogViewAsync(nameof(Case), _case.Id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
+        var mayClassifiedRead = _user.MayClassifiedRead();
+        _case = await CaseService.GetDetailAsync(Id, mayClassifiedRead);
+        if (_case is not null)
+        {
+            _classificationHistory = await CaseService.GetClassificationHistoryAsync(_case.Id, mayClassifiedRead);
+            await CaseLeadLoadAsync();
+        }
+        _load = false;
+    }
+
+    private async Task CaseLeadLoadAsync()
+    {
+        if (_case is null)
+        {
+            return;
+        }
+        var ff = await CaseService.GetCaseLeadAsync(_case.Id);
+        _caseLead = ff.Select(a => a.Agent?.Codename ?? "?").ToList();
+    }
+
+    private async Task CaseLeadRefreshAsync()
+    {
+        await CaseLeadLoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task NewLoadAsync()
+    {
+        await LoadAsync();
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task ClassificationSetAsync((Classification New, string? Justification) input)
+    {
+        if (_case is null)
+        {
+            return;
+        }
+        await CaseService.ClassificationSetAsync(_case.Id, input.New, input.Justification, _user);
+        await NewLoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_case is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Vorgang löschen?",
+            "Der Vorgang wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await CaseService.DeleteAsync(_case.Id, _user);
+        Snackbar.Add("Vorgang in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/vorgaenge");
+    }
+}

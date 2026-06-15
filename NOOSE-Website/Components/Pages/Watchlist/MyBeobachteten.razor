@@ -1,0 +1,123 @@
+@page "/watchlist"
+@inject IWatchlistService WatchlistService
+@inject ISnackbar Snackbar
+
+<PageTitle>Beobachtete Akten · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Beobachtete Akten</MudText>
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_records.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Du folgst noch keiner Akte. Öffne eine Akte und klicke auf „Folgen", um bei Änderungen benachrichtigt zu werden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Spacing="2">
+        @foreach (var a in _records)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <div class="d-flex align-center" style="gap:.75rem">
+                    <MudIcon Icon="@TypeIcon(a.Type)" Color="Color.Primary" />
+                    <div class="flex-grow-1">
+                        @if (a.Accessible && !string.IsNullOrEmpty(a.Href))
+                        {
+                            <MudLink Href="@a.Href" Typo="Typo.body1">@a.Display</MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@a.Display</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            @TypeName(a.Type) · folgt seit @a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")
+                        </MudText>
+                    </div>
+                    <MudTooltip Text="Nicht mehr folgen">
+                        <MudIconButton Icon="@Icons.Material.Filled.Star" Color="Color.Warning"
+                                       aria-label="Nicht mehr folgen" Disabled="_busy"
+                                       OnClick="@(() => UnfollowAsync(a))" />
+                    </MudTooltip>
+                </div>
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _busy;
+    private List<FollowedRecord> _records = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _records = await WatchlistService.GetFollowedResolvedAsync(_user);
+        _load = false;
+    }
+
+    private async Task UnfollowAsync(FollowedRecord a)
+    {
+        if (_busy)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await WatchlistService.UnfollowAsync(a.Type, a.Id, _user);
+            _records.Remove(a);
+            Snackbar.Add("Du folgst dieser Akte nicht mehr.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string TypeIcon(string type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Agent) => Icons.Material.Filled.People,
+        _ => Icons.Material.Filled.Article,
+    };
+
+    private static string TypeName(string type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Personengruppe",
+        nameof(Party) => "Partei",
+        nameof(Operation) => "Operation",
+        nameof(Case) => "Vorgang",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Agent) => "Personalakte",
+        _ => type,
+    };
+}

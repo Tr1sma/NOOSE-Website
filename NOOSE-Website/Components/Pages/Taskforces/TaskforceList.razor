@@ -1,0 +1,157 @@
+@page "/taskforces"
+@inject ITaskforceService TaskforceService
+@inject IRecencyService Recency
+@inject NavigationManager Nav
+
+<PageTitle>Taskforces · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Groups2" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Taskforces</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Leadership">
+        <MudButton Href="/taskforces/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        <MudButton Href="/taskforces/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Taskforce</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Einsatzgruppen mit Leitung (Chefermittler/CID-Lead/TRU-Lead), zugeteilten Agents, Geltungsbereich und Genehmigungsstatus.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="TaskforceRow" Items="_rows" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Open(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_search" Placeholder="Suchen (Name, Aktenzeichen)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="TaskforceStatus?" Value="_statusFilter" ValueChanged="StatusSelected" Label="Status" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:220px;">
+                <MudSelectItem T="TaskforceStatus?" Value="@((TaskforceStatus?)null)">Alle</MudSelectItem>
+                @foreach (var s in TaskforceStatusDisplay.All)
+                {
+                    <MudSelectItem T="TaskforceStatus?" Value="@s">@TaskforceStatusDisplay.Name(s)</MudSelectItem>
+                }
+            </MudSelect>
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
+            <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
+                <CellTemplate>
+                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    <MudLink Href="@($"/taskforces/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Scope" Title="Geltungsbereich" />
+            <TemplateColumn Sortable="true" Title="Status" SortBy="x => x.Status">
+                <CellTemplate>
+                    <TaskforceStatusChip Status="context.Item.Status" />
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Verschluss" SortBy="x => x.IsClassified">
+                <CellTemplate>
+                    @if (context.Item.IsClassified)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Level">
+                <CellTemplate>
+                    <RecencyIndicator Level="context.Item.Level" ReferenceDateUtc="context.Item.RefreshedUtc" />
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Refreshed" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
+        </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Groups2" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Taskforces – lege die erste an.</MudText>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                    <MudButton Href="/taskforces/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Taskforce</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="TaskforceRow" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string _search = string.Empty;
+    private TaskforceStatus? _statusFilter;
+    private List<TaskforceRow> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        // Nur zugeteilte Taskforces; Führung/Admin sehen alle.
+        var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId());
+        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Taskforce));
+        var now = DateTime.UtcNow;
+        _rows = taskforces.Select(t =>
+        {
+            var referenceUtc = t.ModifiedAt ?? t.CreatedAt;
+            return new TaskforceRow
+            {
+                Id = t.Id,
+                CaseNumber = t.CaseNumber,
+                Name = t.Name,
+                Scope = TaskforceScopeDisplay.Name(t.Scope),
+                Status = t.Status,
+                IsClassified = t.IsClassified,
+                RefreshedUtc = referenceUtc,
+                Refreshed = referenceUtc.ToLocalTime(),
+                Level = RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+            };
+        }).ToList();
+        _load = false;
+    }
+
+    private void StatusSelected(TaskforceStatus? status)
+    {
+        _statusFilter = status;
+        StateHasChanged();
+    }
+
+    private bool Filter(TaskforceRow z)
+    {
+        if (_statusFilter is not null && z.Status != _statusFilter)
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            return true;
+        }
+        var s = _search.Trim();
+        return z.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Open(TaskforceRow z) => Nav.NavigateTo($"/taskforces/{z.Id}");
+
+    private sealed class TaskforceRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string CaseNumber { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public TaskforceStatus Status { get; set; }
+        public bool IsClassified { get; set; }
+        public DateTime RefreshedUtc { get; set; }
+        public DateTime Refreshed { get; set; }
+        public RecencyLevel Level { get; set; }
+    }
+}

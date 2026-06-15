@@ -1,0 +1,119 @@
+@page "/personal/{AgentId}"
+@inject IAgentManagementService AgentService
+@inject NavigationManager Nav
+
+<PageTitle>@(_agent?.Codename ?? "Personalakte") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_agent is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Agent nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personal" aria-label="Zurück" />
+        <MudText Typo="Typo.h5">Personalakte</MudText>
+        @* Folgen nur für die Führung: Personalakten gelten in der Sichtbarkeit als Führungs-Inhalt (Sichtbarkeit(Agent)=istFuehrung). *@
+        @if (_isLeadership)
+        {
+            <MudSpacer />
+            <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/personal/{AgentId}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+            <FollowButton EntityType="@nameof(Agent)" EntityId="@_agent.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(Agent)" EntityId="@_agent.Id" />
+        }
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <AgentProfileCard Agent="_agent" MayRealName="_mayRealName" />
+            </div>
+        </MudItem>
+
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Dienstgrad-Verlauf" Icon="@Icons.Material.Filled.TrendingUp">
+                    <RankHistoryPanel AgentId="@_agent.Id" @key="_reloadKey" />
+                </MudTabPanel>
+                <MudTabPanel Text="Belobigungen" Icon="@Icons.Material.Filled.EmojiEvents">
+                    <NotesPanel AgentId="@_agent.Id" Kind="AgentNoteKind.Commendation" />
+                </MudTabPanel>
+                <MudTabPanel Text="Disziplinarisches" Icon="@Icons.Material.Filled.Gavel">
+                    <NotesPanel AgentId="@_agent.Id" Kind="AgentNoteKind.Disciplinary" />
+                </MudTabPanel>
+                <MudTabPanel Text="Beförderungen" Icon="@Icons.Material.Filled.MilitaryTech">
+                    <PromotionPanel Agent="_agent" Changed="TargetDecisionAsync" />
+                </MudTabPanel>
+                @if (_isLeadership)
+                {
+                    <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                        <CommentPanel EntityType="@nameof(Agent)" EntityId="@_agent.Id" User="_user" />
+                    </MudTabPanel>
+                }
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string AgentId { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _isLeadership;
+    private bool _mayRealName;
+    private Agent? _agent;
+    private ClaimsPrincipal _user = default!;
+    private Guid _reloadKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    private int _activeTab;
+    // Reihenfolge muss den MudTabPanels entsprechen; der Kommentare-Tab existiert nur für die Führung.
+    private string[] _tabs = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Betrachter-abhängige (für alle Personalakten gleiche) Werte einmalig setzen.
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        _mayRealName = _user.MayRealNameSee();
+        _tabs = _isLeadership
+            ? new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "kommentare" }
+            : new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen" };
+    }
+
+    // Diese Seite wird bei Navigation /personal/{A} → /personal/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den AgentId-Wechsel reagieren – sonst bliebe die alte
+    // Personalakte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == AgentId)
+        {
+            return;
+        }
+        _loadedId = AgentId;
+        _load = true;
+        _agent = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        _agent = await AgentService.FindAsync(AgentId);
+        _load = false;
+    }
+
+    private async Task TargetDecisionAsync()
+    {
+        // Eine genehmigte Beförderung ändert den Rang → Agent + Verlauf neu laden.
+        _agent = await AgentService.FindAsync(AgentId);
+        _reloadKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+}

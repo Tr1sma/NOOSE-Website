@@ -9,7 +9,7 @@ namespace NOOSE_Website.Infrastructure.Chat;
 public sealed class TaskforceChatBroadcaster
 {
     /// <summary>Wird mit der betroffenen TaskforceId ausgelöst, sobald sich deren Chat ändert.</summary>
-    public event Action<string>? Geaendert;
+    public event Action<string>? Modified;
 
-    public void Melde(string taskforceId) => Geaendert?.Invoke(taskforceId);
+    public void Report(string taskforceId) => Modified?.Invoke(taskforceId);
 }

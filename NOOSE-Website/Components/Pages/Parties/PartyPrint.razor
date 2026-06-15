@@ -1,0 +1,124 @@
+@* Druckansicht der Parteiakte (Phase 7): komplette Akte als strukturiertes Dokument. *@
+@page "/parteien/{Id}/druck"
+@layout PrintLayout
+@inject IPartyService PartyService
+@inject ILinkService LinkService
+@inject ICommentService CommentService
+@inject IAccessLogService AccessLog
+
+<PageTitle>@(_party is null ? "Druckansicht" : $"Parteiakte {_party.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_party is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr) oder ist nicht sichtbar.</MudAlert>
+}
+else
+{
+    <PrintFrame Title="@($"Parteiakte {_party.CaseNumber}")" BackHref="@($"/parteien/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="_party.IsClassified">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Name</th><td>@_party.Name</td></tr>
+                    <tr><th>Aktenzeichen</th><td>@_party.CaseNumber</td></tr>
+                    <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_party.Classification)</td></tr>
+                    @if (!string.IsNullOrWhiteSpace(_party.Targets))
+                    {
+                        <tr><th>Ziele</th><td class="druck-mehrzeilig">@_party.Targets</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_party.Description))
+                    {
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_party.Description</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_party.Remarks))
+                    {
+                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig">@_party.Remarks</td></tr>
+                    }
+                    <tr><th>Zuletzt aktualisiert</th><td>@((_party.ModifiedAt ?? _party.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        @if (_members.Count > 0)
+        {
+            <section>
+                <h2>Mitglieder (@_members.Count)</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Name</th><th>Rolle</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _members)
+                        {
+                            <tr>
+                                <td>@(m.Person?.Name ?? "—")@(m.IsLead ? " (Leitung)" : "")</td>
+                                <td>@(string.IsNullOrWhiteSpace(m.Role) ? "—" : m.Role)</td>
+                                <td>@m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (_agents.Count > 0)
+        {
+            <section>
+                <h2>Zugeteilte Agenten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Agent</th><th>Funktion</th><th>Seit</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _agents)
+                        {
+                            <tr>
+                                <td>@(a.Agent?.Codename ?? "—")</td>
+                                <td>@(a.IsInvestigationLead ? "Ermittlungsleiter" : "Zugeteilt")</td>
+                                <td>@a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <PrintClassificationHistory Entries="_classificationHistory" />
+        <PrintLinks Entries="_links" />
+        <PrintComments Entries="_comments" />
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private Party? _party;
+    private List<PartyMember> _members = new();
+    private List<PartyAgent> _agents = new();
+    private List<ClassificationHistory> _classificationHistory = new();
+    private List<LinkDisplay> _links = new();
+    private List<Comment> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var isLeadership = user.IsLeadership();
+        _printBy = user.GetCodename();
+
+        _party = await PartyService.GetDetailAsync(Id, isLeadership);
+        if (_party is not null)
+        {
+            _members = await PartyService.GetMembersAsync(Id, isLeadership);
+            _agents = await PartyService.GetAgentsAsync(Id);
+            _classificationHistory = await PartyService.GetClassificationHistoryAsync(Id, isLeadership);
+            _links = await LinkService.GetForRecordAsync(nameof(Party), Id, isLeadership, user.GetAgentId());
+            _comments = await CommentService.GetForRecordAsync(nameof(Party), Id, isLeadership);
+            await AccessLog.LogViewAsync(nameof(Party), Id);
+        }
+        _load = false;
+    }
+}

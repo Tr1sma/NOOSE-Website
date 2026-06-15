@@ -1,0 +1,41 @@
+@* Dienstgrad-Verlauf eines Agents (Timeline, neueste zuerst). Für alle Agenten sichtbar. *@
+@inject IPersonnelFileService PersonnelFileService
+
+<MudStack Spacing="2">
+    <MudText Typo="Typo.subtitle1">Dienstgrad-Verlauf</MudText>
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_history.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Rangänderungen erfasst.</MudText>
+    }
+    else
+    {
+        <MudTimeline TimelinePosition="TimelinePosition.Start">
+            @foreach (var v in _history)
+            {
+                <MudTimelineItem Color="Color.Info" Size="Size.Small">
+                    <MudText Typo="Typo.body2"><b>@RankDisplay.Name(v.Alt) → @RankDisplay.Name(v.New)</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @v.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(v.ActorName ?? "System")@(string.IsNullOrWhiteSpace(v.Reason) ? "" : " · " + v.Reason)
+                    </MudText>
+                </MudTimelineItem>
+            }
+        </MudTimeline>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string AgentId { get; set; } = default!;
+
+    private bool _load = true;
+    private List<AgentRankHistory> _history = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _history = await PersonnelFileService.GetRankHistoryAsync(AgentId);
+        _load = false;
+    }
+}

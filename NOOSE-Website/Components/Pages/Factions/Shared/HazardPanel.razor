@@ -1,0 +1,119 @@
+@* Gefährdungs-Panel: Bedrohungs-Score einer Fraktion mit Konfidenz und nachvollziehbarer Aufschlüsselung (Phase 8/Block D). *@
+@using System.Text.Json
+
+<MudStack Spacing="4">
+    @if (_detail?.Excluded is { } exception)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Vom Bedrohungs-Score ausgenommen (@exception).
+        </MudAlert>
+    }
+    else if (Score is null && _detail is null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Noch nicht berechnet – wird beim nächsten Schreibvorgang oder dem täglichen Lauf gesetzt.
+        </MudText>
+    }
+    else
+    {
+        var level = HazardLevelLogic.From(Score);
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4" Class="flex-wrap">
+            <div>
+                <MudText Typo="Typo.h3">@(Score?.ToString() ?? "—")</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">von 100</MudText>
+            </div>
+            <MudChip T="string" Color="@LevelColour(level)" Variant="Variant.Filled" Size="Size.Large">
+                @HazardLevelLogic.Name(level)
+            </MudChip>
+            @if (Confidence is { } k)
+            {
+                <MudTooltip Text="Daten-Konfidenz: wie gut die Fraktion erfasst ist. Niedrige Konfidenz senkt den Score nie – sie markiert Nacherfassungsbedarf.">
+                    <MudChip T="string" Color="@ConfidenceColour(k)" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.FactCheck">
+                        Konfidenz @k&nbsp;%
+                    </MudChip>
+                </MudTooltip>
+            }
+        </MudStack>
+
+        @if (_detail is not null)
+        {
+            @if (!string.IsNullOrWhiteSpace(_detail.BandHint))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_detail.BandHint</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(_detail.TriageHint))
+            {
+                <MudAlert Severity="@(_detail.TriageFlag ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined" Dense="true">
+                    @_detail.TriageHint
+                </MudAlert>
+            }
+
+            <MudStack Spacing="3">
+                @foreach (var t in _detail.PartialScores)
+                {
+                    <div>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle2">@t.Name</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">+@t.Points.ToString("0.#") / @t.Cap.ToString("0")</MudText>
+                        </MudStack>
+                        <MudProgressLinear Color="Color.Primary" Rounded="true" Value="@Share(t)" Class="my-1" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Join(" · ", t.Driver)</MudText>
+                    </div>
+                }
+            </MudStack>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Inhalt @_detail.Content.ToString("0") / 100 · Einstufung @_detail.ClassificationName (Band ab @_detail.Base)
+            </MudText>
+            @if (_detail.CalculatedAtUtc != default)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Zuletzt berechnet: @_detail.CalculatedAtUtc.ToLocalTime().ToString("g")
+                </MudText>
+            }
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter] public int? Score { get; set; }
+    [Parameter] public int? Confidence { get; set; }
+    [Parameter] public string? DetailJson { get; set; }
+
+    private ThreatScoreDetail? _detail;
+    private string? _parsedJson;
+
+    protected override void OnParametersSet()
+    {
+        if (_parsedJson == DetailJson)
+        {
+            return;
+        }
+        _parsedJson = DetailJson;
+        _detail = null;
+        if (!string.IsNullOrWhiteSpace(DetailJson))
+        {
+            try
+            {
+                _detail = JsonSerializer.Deserialize<ThreatScoreDetail>(DetailJson, ThreatScoreService.JsonOptions);
+            }
+            catch (JsonException)
+            {
+                _detail = null; // defekter Altbestand → wie „nicht berechnet" behandeln
+            }
+        }
+    }
+
+    private static double Share(ThreatPartialScore t) => t.Cap <= 0 ? 0 : Math.Clamp(t.Points / t.Cap * 100, 0, 100);
+
+    private static Color LevelColour(HazardLevel s) => s switch
+    {
+        HazardLevel.Critical => Color.Error,
+        HazardLevel.High => Color.Error,
+        HazardLevel.Medium => Color.Warning,
+        HazardLevel.Low => Color.Info,
+        _ => Color.Default,
+    };
+
+    private static Color ConfidenceColour(int k) => k >= 67 ? Color.Success : k >= 34 ? Color.Warning : Color.Error;
+}

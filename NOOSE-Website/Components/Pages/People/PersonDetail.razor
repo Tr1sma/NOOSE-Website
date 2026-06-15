@@ -1,0 +1,257 @@
+@page "/personen/{Id}"
+@inject IPersonService PersonService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<PageTitle>@(_person?.Name ?? "Akte") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_person is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Akte nicht gefunden oder nicht zugänglich (ggf. Verschlusssache).
+    </MudAlert>
+}
+else
+{
+    @* Schlanke Aktionsleiste: Zurück links, Aktionen rechts. Name/Status leben in der Steckkarte. *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
+        <MudSpacer />
+        @* Strukturierte Druckansicht der ganzen Akte (eigene Seite, öffnet im neuen Tab). *@
+        <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
+                           Href="@($"/personen/{_person.Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <FollowButton EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+        <JobCreateButton EntityType="@nameof(Person)" EntityId="@_person.Id" />
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton Href="@($"/personen/{_person.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @* Tags der Akte – ohne Tab-Wechsel sichtbar und vergebbar. *@
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+    </MudPaper>
+
+    <MudGrid>
+        @* Links: feste Identitäts-/Steckkarte (auf Desktop klebend). *@
+        <MudItem xs="12" md="4" lg="3">
+            <div class="akte-steckkarte">
+                <IdentityCard Person="_person" Affiliations="_affiliations" />
+            </div>
+        </MudItem>
+
+        @* Rechts: die bestehenden Inhalte als Tabs. *@
+        <MudItem xs="12" md="8" lg="9">
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
+                     @bind-ActivePanelIndex="_activeTab"
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
+                    @{
+                        var hasProfile = !string.IsNullOrWhiteSpace(_person.Description)
+                            || _person.Aliases.Count > 0 || _person.PhoneNumbers.Count > 0
+                            || _person.Vehicles.Count > 0 || _person.Weapons.Count > 0 || _person.Locations.Count > 0;
+                    }
+                    @if (!hasProfile)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Steckbrief-Daten erfasst.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="3">
+                            @if (!string.IsNullOrWhiteSpace(_person.Description))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_person.Description</MudText>
+                                </div>
+                            }
+                            <MudStack Spacing="2">
+                                <ProfileList Title="Aliases" Values="AliasTexts()" />
+                                <ProfileList Title="PhoneNumbers" Values="PhoneTexts()" />
+                                <ProfileList Title="Vehicles" Values="VehicleTexts()" />
+                                <ProfileList Title="Weapons" Values="WeaponsTexts()" />
+                                <ProfileList Title="Bekannte Orte" Values="LocationTexts()" />
+                            </MudStack>
+                        </MudStack>
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                    <DocPanel PersonId="@_person.Id" User="_user" PersonChanged="NewLoadAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Überwachung" Icon="@Icons.Material.Filled.Visibility">
+                    <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                    <ClassificationPanel Current="_person.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
+                                     EntityType="@nameof(Person)" EntityId="@_person.Id" TargetDesignation="@($"{_person.Name} ({_person.CaseNumber})")" />
+                </MudTabPanel>
+                <MudTabPanel Text="Gefährdung" Icon="@Icons.Material.Filled.Warning">
+                    @if (LifeStatusLogic.IsDeadWindow(_person.LifeStatus, _person.DeadUntil, DateTime.UtcNow)
+                         && LifeStatusLogic.RemainingMinutes(_person.DeadUntil, DateTime.UtcNow) is { } restMin)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                            Aktuell „Tot" (temporär) – Respawn in ca. @restMin&nbsp;Min. Der Score wertet den Tod statusneutral.
+                        </MudAlert>
+                    }
+                    <HazardPanel Score="_person.ThreatScore" Confidence="_person.ThreatConfidence"
+                                      DetailJson="@_person.ThreatDetailJson" />
+                </MudTabPanel>
+                <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                    <PhotoGallery PersonId="@_person.Id" Photos="_person.Photos" User="_user" Changed="NewLoadAsync" />
+                </MudTabPanel>
+                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                    <SourcesPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                    <FollowupPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
+                    <LinkPanel PersonId="@_person.Id" User="_user" />
+                    <MudDivider Class="my-4" />
+                    <LinkSuggestionPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
+                    <AffiliationsPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" @key="_historyKey" />
+                </MudTabPanel>
+                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                    <CommentPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                    <CustomFieldsPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                </MudTabPanel>
+                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                    <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
+                </MudTabPanel>
+            </MudTabs>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private Person? _person;
+    private List<ClassificationHistory> _classificationHistory = new();
+    private List<PersonAffiliation> _affiliations = new();
+    private ClaimsPrincipal _user = default!;
+    private Timer? _timer;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    private int _activeTab;
+    private static readonly string[] _tabs =
+    {
+        "steckbrief", "doks", "ueberwachung", "einstufung", "gefaehrdung", "fotos", "quellen", "wiedervorlagen",
+        "verknuepfungen", "zugehoerigkeit", "kommentare", "zusatzfelder", "historie",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // Hält den Tot-Countdown aktuell (rein anzeigeseitig, kein Hintergrund-Job).
+        _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    // Diese Seite wird bei Navigation /personen/{A} → /personen/{B} WIEDERVERWENDET (gleiche Komponente);
+    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
+    // Akte stehen. Das kurze _laden=true entfernt den Tab-Baum und mountet ihn frisch (auch die Kind-Panels, die
+    // ihrerseits in OnInitialized laden). Bei reinem Tab-/Query-Wechsel bleibt Id gleich → kein Neuladen.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _person = null;
+        _activeTab = TabUrlState.Read(Nav, _tabs);
+        await LoadAsync();
+        if (_person is not null)
+        {
+            await AccessLog.LogViewAsync(nameof(Person), _person.Id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
+        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
+        // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
+        var mayClassifiedRead = _user.MayClassifiedRead();
+        _person = await PersonService.GetDetailAsync(Id, mayClassifiedRead);
+        _classificationHistory = _person is null
+            ? new()
+            : await PersonService.GetClassificationHistoryAsync(_person.Id, mayClassifiedRead);
+        // Aktive Zugehörigkeiten für die Übersichtskarte (Verschlusssache-gefiltert via darfVsLesen).
+        _affiliations = _person is null
+            ? new()
+            : await PersonService.GetAffiliationsAsync(_person.Id, mayClassifiedRead);
+        _load = false;
+    }
+
+    private async Task ClassificationSetAsync((Classification New, string? Justification) input)
+    {
+        if (_person is null)
+        {
+            return;
+        }
+        await PersonService.ClassificationSetAsync(_person.Id, input.New, input.Justification, _user);
+        await NewLoadAsync();
+    }
+
+    private IEnumerable<string> AliasTexts() => _person!.Aliases.Select(a => a.AliasName);
+    private IEnumerable<string> WeaponsTexts() => _person!.Weapons.Select(w => w.Text);
+    private IEnumerable<string> PhoneTexts()
+        => _person!.PhoneNumbers.Select(t => t.Designation is null ? t.Number : $"{t.Number} ({t.Designation})");
+    private IEnumerable<string> VehicleTexts()
+        => _person!.Vehicles.Select(f => f.LicensePlate is null ? f.Designation : $"{f.Designation} – {f.LicensePlate}");
+    private IEnumerable<string> LocationTexts()
+        => _person!.Locations.Select(o => o.Note is null ? o.Text : $"{o.Text} ({o.Note})");
+
+    private async Task NewLoadAsync()
+    {
+        await LoadAsync();
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_person is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Akte löschen?",
+            "Die Akte wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await PersonService.DeleteAsync(_person.Id, _user);
+        Snackbar.Add("Akte in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/personen");
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _timer?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

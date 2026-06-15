@@ -1,0 +1,106 @@
+@* Verwaltung der Dokument-Vorlagen (HTML-Body mit Platzhaltern). Anlegen/Bearbeiten öffnet den
+   Volltext-Editor; Löschen erfolgt inline. Eingebettet als Reiter in /admin/vorlagen. *@
+@inject IDocumentTemplateService TemplateService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudText Typo="Typo.h6">Dokument-Vorlagen</MudText>
+    <MudSpacer />
+    <MudButton Href="/admin/vorlagen/dokument-vorlage/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+        Neue Vorlage
+    </MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Vorlagen für Bibliotheks-Dokumente: ein formatierter Text mit optionalen Platzhaltern (z. B.
+    <code>{{Name}}</code>, <code>{{Aktenzeichen}}</code>), der beim Anlegen eines Dokuments übernommen und
+    mit den Kontextdaten gefüllt wird.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_templates" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="DocumentTemplate" SortBy="@(x => x.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DocumentTemplate" SortBy="@(x => x.Description)">Beschreibung</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DocumentTemplate" SortBy="@(x => x.Category)">Kategorie</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="DocumentTemplate" SortBy="@(x => x.IsActive)">Status</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Beschreibung">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Description) ? "—" : context.Description)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Kategorie">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Category) ? "—" : context.Category)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Aktiv</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inaktiv</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   Href="@($"/admin/vorlagen/dokument-vorlage/{context.Id}/bearbeiten")" aria-label="Vorlage bearbeiten" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteAsync(context))" aria-label="Vorlage löschen" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Dokument-Vorlagen angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private List<DocumentTemplate> _templates = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _templates = await TemplateService.GetAllAsync();
+        _load = false;
+    }
+
+    private async Task DeleteAsync(DocumentTemplate template)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Vorlage löschen?",
+            $"„{template.Name}“ wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await TemplateService.DeleteAsync(template.Id, _user);
+            Snackbar.Add("Vorlage gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -11,47 +11,47 @@ public static class AuthorizationRegistration
 {
     public static IServiceCollection AddNooseAuthorization(this IServiceCollection services)
     {
-        services.AddScoped<IAuthorizationHandler, DienstgradAuthorizationHandler>();
-        services.AddScoped<IAuthorizationHandler, VerschlusssacheAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, RankAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, ClassifiedAuthorizationHandler>();
 
         services.AddAuthorizationBuilder()
-            .AddPolicy(Policies.AktiverAgent, p => p
+            .AddPolicy(Policies.ActiveAgent, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.GetStatus() == AgentStatus.Aktiv))
-            .AddPolicy(Policies.Fuehrung, p => p
+                .RequireAssertion(ctx => ctx.User.GetStatus() == AgentStatus.Active))
+            .AddPolicy(Policies.Leadership, p => p
                 .RequireAuthenticatedUser()
-                .AddRequirements(new DienstgradRequirement(Dienstgrad.SupervisorySpecialAgent)))
+                .AddRequirements(new RankRequirement(Rank.SupervisorySpecialAgent)))
             .AddPolicy(Policies.Admin, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.IstAdmin()))
+                .RequireAssertion(ctx => ctx.User.IsAdmin()))
             // Schreibrecht / Nur-Lese-Aufsicht: steuern Mutations-Controls bzw. den Nur-Lese-Banner.
-            .AddPolicy(Policies.Schreibrecht, p => p
+            .AddPolicy(Policies.WriteAccess, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.DarfSchreiben()))
-            .AddPolicy(Policies.NurLeseModus, p => p
+                .RequireAssertion(ctx => ctx.User.MayWrite()))
+            .AddPolicy(Policies.OnlyReadMode, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.IstNurLeser()))
+                .RequireAssertion(ctx => ctx.User.IsOnlyReader()))
             // Seiten-Zugang: lassen zusätzlich die Nur-Lese-Aufsicht zum reinen Lesen zu. Bewusst als
             // RequireAssertion (kein DienstgradRequirement), damit der DienstgradAuthorizationHandler – und
             // damit die an die Rang-Policies gebundenen Button-AuthorizeViews – unberührt bleibt.
-            .AddPolicy(Policies.FuehrungSeite, p => p
+            .AddPolicy(Policies.LeadershipPage, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.IstFuehrung() || ctx.User.IstNurLeser()))
-            .AddPolicy(Policies.HoechsteEinstufungSeite, p => p
+                .RequireAssertion(ctx => ctx.User.IsLeadership() || ctx.User.IsOnlyReader()))
+            .AddPolicy(Policies.HighestClassificationPage, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.DarfHoechsteEinstufung() || ctx.User.IstNurLeser()))
-            .AddPolicy(Policies.AdminSeite, p => p
+                .RequireAssertion(ctx => ctx.User.MayHighestClassification() || ctx.User.IsOnlyReader()))
+            .AddPolicy(Policies.AdminPage, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.IstAdmin() || ctx.User.IstNurLeser()))
-            .AddPolicy(Policies.HoechsteEinstufung, p => p
+                .RequireAssertion(ctx => ctx.User.IsAdmin() || ctx.User.IsOnlyReader()))
+            .AddPolicy(Policies.HighestClassification, p => p
                 .RequireAuthenticatedUser()
-                .AddRequirements(new DienstgradRequirement(Dienstgrad.SeniorSpecialAgent)))
-            .AddPolicy(Policies.BefoerderungEntscheiden, p => p
+                .AddRequirements(new RankRequirement(Rank.SeniorSpecialAgent)))
+            .AddPolicy(Policies.PromotionDecide, p => p
                 .RequireAuthenticatedUser()
-                .AddRequirements(new DienstgradRequirement(Dienstgrad.DeputyDirector)))
-            .AddPolicy(Policies.Verschlusssache, p => p
+                .AddRequirements(new RankRequirement(Rank.DeputyDirector)))
+            .AddPolicy(Policies.Classified, p => p
                 .RequireAuthenticatedUser()
-                .AddRequirements(new VerschlusssacheRequirement()));
+                .AddRequirements(new ClassifiedRequirement()));
 
         return services;
     }

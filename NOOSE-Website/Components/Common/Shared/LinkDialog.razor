@@ -1,0 +1,470 @@
+@* Dialog zum Anlegen einer Verknüpfung auf eine beliebige Akte: Aktentyp wählen, Ziel suchen, optionaler Label. *@
+@inject IPersonService PersonService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IPartyService PartyService
+@inject IAgentManagementService AgentService
+@inject IPersonDocService DocService
+@inject IObservationService ObservationService
+@inject IOperationService OperationService
+@inject ITaskforceService TaskforceService
+@inject ICaseService CaseService
+@inject IJobService JobService
+@inject ILawService LawService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:380px;">
+            <MudSelect T="string" Label="Aktentyp" @bind-Value="_targetType" @bind-Value:after="TypeSwitchedAsync"
+                       Variant="Variant.Outlined" Dense="true"
+                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category">
+                @foreach (var t in _types)
+                {
+                    <MudSelectItem Value="@t.Value">@t.Display</MudSelectItem>
+                }
+            </MudSelect>
+
+            @switch (_targetType)
+            {
+                case nameof(Person):
+                    <MudAutocomplete T="Person" Label="Person" @bind-Value="_person" AutoFocus="true"
+                                     SearchFunc="@SearchPeople" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch">
+                        <ItemTemplate Context="p">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@p.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Faction):
+                    <MudAutocomplete T="Faction" Label="Fraktion" @bind-Value="_faction" AutoFocus="true"
+                                     SearchFunc="@SearchFactions" ToStringFunc="@(f => f?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups">
+                        <ItemTemplate Context="f">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@f.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(PersonGroup):
+                    <MudAutocomplete T="PersonGroup" Label="Personengruppe" @bind-Value="_group" AutoFocus="true"
+                                     SearchFunc="@SearchGroups" ToStringFunc="@(g => g?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Diversity3">
+                        <ItemTemplate Context="g">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Diversity3" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@g.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@g.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Party):
+                    <MudAutocomplete T="Party" Label="Partei" @bind-Value="_party" AutoFocus="true"
+                                     SearchFunc="@SearchParties" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AccountBalance">
+                        <ItemTemplate Context="p">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@p.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Operation):
+                    <MudAutocomplete T="Operation" Label="Operation" @bind-Value="_operation" AutoFocus="true"
+                                     SearchFunc="@SearchOperations" ToStringFunc="@(o => o?.Title ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Radar">
+                        <ItemTemplate Context="o">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Radar" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@o.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@o.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Taskforce):
+                    <MudAutocomplete T="Taskforce" Label="Taskforce" @bind-Value="_taskforce" AutoFocus="true"
+                                     SearchFunc="@SearchTaskforces" ToStringFunc="@(t => t?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups2">
+                        <ItemTemplate Context="t">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups2" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@t.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@t.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Case):
+                    <MudAutocomplete T="Case" Label="Vorgang" @bind-Value="_case" AutoFocus="true"
+                                     SearchFunc="@SearchCases" ToStringFunc="@(v => v?.Title ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.FolderSpecial">
+                        <ItemTemplate Context="v">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@v.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@v.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Job):
+                    <MudAutocomplete T="Job" Label="Aufgabe" @bind-Value="_job" AutoFocus="true"
+                                     SearchFunc="@SearchJobs" ToStringFunc="@(a => a?.Title ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AssignmentTurnedIn">
+                        <ItemTemplate Context="a">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@a.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Agent):
+                    <MudAutocomplete T="Agent" Label="Agent" @bind-Value="_agent" AutoFocus="true"
+                                     SearchFunc="@SearchAgents" ToStringFunc="@(a => a?.Codename ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.ManageAccounts">
+                        <ItemTemplate Context="a">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@a.Codename</MudText>
+                                @if (IsLeadership && !string.IsNullOrWhiteSpace(a.RealName))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">(@a.RealName)</MudText>
+                                }
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@RankDisplay.Name(a.Rank)</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(PersonDoc):
+                    <MudAutocomplete T="PersonDocDisplay" Label="Personen-Dok" @bind-Value="_doc" AutoFocus="true"
+                                     SearchFunc="@SearchDocs" ToStringFunc="@DocText"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Description">
+                        <ItemTemplate Context="d">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@d.Doc.Person?.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@d.Doc.Timestamp.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                                @if (!string.IsNullOrWhiteSpace(d.Doc.Reason))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">· @d.Doc.Reason</MudText>
+                                }
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Observation):
+                    <MudAutocomplete T="ObservationDisplay" Label="Observation" @bind-Value="_observation" AutoFocus="true"
+                                     SearchFunc="@SearchObservations" ToStringFunc="@ObsText"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Visibility">
+                        <ItemTemplate Context="o">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@o.Obs.Person?.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@o.Obs.Start.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                                @if (!string.IsNullOrWhiteSpace(o.Obs.Location))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">· @o.Obs.Location</MudText>
+                                }
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+
+                case nameof(Law):
+                    <MudAutocomplete T="Law" Label="Paragraf" @bind-Value="_law" AutoFocus="true"
+                                     SearchFunc="@SearchLaws" ToStringFunc="@(g => g is null ? string.Empty : $"{g.Paragraph} {g.Title} ({g.LawBook})")"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Gavel">
+                        <ItemTemplate Context="g">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Gavel" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@g.Paragraph @g.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@g.LawBook</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
+            }
+
+            <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. siehe auch / Quelle für" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(CurrentTargetId is null)">Verknüpfen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    [Parameter] public bool IsLeadership { get; set; }
+    /// <summary>Diese Person (die aktuelle Akte) wird aus der Personen-Auswahl ausgeschlossen.</summary>
+    [Parameter] public string? ExclusionPersonId { get; set; }
+
+    // Betrachter-Kontext für die Sichtbarkeit in den Suchen (Taskforce-Mitgliedschaft, eingeschränkte Aufgaben).
+    private string? _meId;
+    private bool _mayAllTf;
+    private bool _mayClassified;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var user = (await AuthStateTask).User;
+            _meId = user.GetAgentId();
+            _mayAllTf = user.MayAllTaskforcesSee();
+            _mayClassified = user.MayClassifiedRead();
+        }
+    }
+
+    private record TypeOption(string Value, string Display);
+    private static readonly TypeOption[] _types =
+    {
+        new(nameof(Person), "Person"),
+        new(nameof(Faction), "Fraktion"),
+        new(nameof(PersonGroup), "Personengruppe"),
+        new(nameof(Party), "Partei"),
+        new(nameof(Operation), "Operation"),
+        new(nameof(Taskforce), "Taskforce"),
+        new(nameof(Case), "Vorgang"),
+        new(nameof(Job), "Aufgabe"),
+        new(nameof(Agent), "Agent"),
+        new(nameof(PersonDoc), "Personen-Dok"),
+        new(nameof(Observation), "Observation"),
+        new(nameof(Law), "Gesetz/Paragraf"),
+    };
+
+    private string _targetType = nameof(Person);
+    private string? _label;
+
+    private Person? _person;
+    private Faction? _faction;
+    private PersonGroup? _group;
+    private Party? _party;
+    private Operation? _operation;
+    private Taskforce? _taskforce;
+    private Case? _case;
+    private Job? _job;
+    private Agent? _agent;
+    private PersonDocDisplay? _doc;
+    private ObservationDisplay? _observation;
+    private Law? _law;
+
+    // Agent-/Dok-/Observations-Listen werden bei Bedarf einmalig geladen (clientseitige Suche).
+    private List<Agent>? _allAgents;
+    private List<PersonDocDisplay>? _allDocs;
+    private List<ObservationDisplay>? _allObservations;
+
+    private string? CurrentTargetId => _targetType switch
+    {
+        nameof(Person) => _person?.Id,
+        nameof(Faction) => _faction?.Id,
+        nameof(PersonGroup) => _group?.Id,
+        nameof(Party) => _party?.Id,
+        nameof(Operation) => _operation?.Id,
+        nameof(Taskforce) => _taskforce?.Id,
+        nameof(Case) => _case?.Id,
+        nameof(Job) => _job?.Id,
+        nameof(Agent) => _agent?.Id,
+        nameof(PersonDoc) => _doc?.Doc.Id,
+        nameof(Observation) => _observation?.Obs.Id,
+        nameof(Law) => _law?.Id,
+        _ => null,
+    };
+
+    private async Task TypeSwitchedAsync()
+    {
+        // Auswahl der vorherigen Art verwerfen, Listen für client-seitige Suche bei Bedarf laden.
+        _person = null; _faction = null; _group = null; _party = null; _operation = null; _taskforce = null;
+        _case = null; _job = null; _agent = null; _doc = null; _observation = null; _law = null;
+        if (_targetType == nameof(Agent) && _allAgents is null)
+        {
+            _allAgents = (await AgentService.GetAllAsync()).Where(a => a.Status == AgentStatus.Active).ToList();
+        }
+        if (_targetType == nameof(PersonDoc) && _allDocs is null)
+        {
+            _allDocs = await DocService.GetAllAsync(IsLeadership);
+        }
+        if (_targetType == nameof(Observation) && _allObservations is null)
+        {
+            _allObservations = await ObservationService.GetAllAsync(IsLeadership);
+        }
+    }
+
+    private async Task<IEnumerable<Person>> SearchPeople(string value, CancellationToken token)
+    {
+        var hit = await PersonService.SearchAsync(value, IsLeadership, 20, token);
+        return ExclusionPersonId is null ? hit : hit.Where(p => p.Id != ExclusionPersonId);
+    }
+
+    private async Task<IEnumerable<Faction>> SearchFactions(string value, CancellationToken token)
+        => await FactionService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task<IEnumerable<PersonGroup>> SearchGroups(string value, CancellationToken token)
+        => await GroupService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task<IEnumerable<Party>> SearchParties(string value, CancellationToken token)
+        => await PartyService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task<IEnumerable<Operation>> SearchOperations(string value, CancellationToken token)
+        => await OperationService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task<IEnumerable<Taskforce>> SearchTaskforces(string value, CancellationToken token)
+        => await TaskforceService.SearchAsync(value, _mayAllTf, _meId, 20, token);
+
+    private async Task<IEnumerable<Case>> SearchCases(string value, CancellationToken token)
+        => await CaseService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task<IEnumerable<Law>> SearchLaws(string value, CancellationToken token)
+        => await LawService.SearchAsync(value, 20, token);
+
+    private async Task<IEnumerable<Job>> SearchJobs(string value, CancellationToken token)
+        => await JobService.SearchAsync(value, _mayClassified, _meId, 20, token);
+
+    private Task<IEnumerable<Agent>> SearchAgents(string value, CancellationToken token)
+    {
+        var all = (IEnumerable<Agent>?)_allAgents ?? Array.Empty<Agent>();
+        var s = value?.Trim();
+        if (!string.IsNullOrWhiteSpace(s))
+        {
+            all = all.Where(a => a.Codename.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                || (IsLeadership && (a.RealName ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)));
+        }
+        return Task.FromResult(all);
+    }
+
+    private Task<IEnumerable<PersonDocDisplay>> SearchDocs(string value, CancellationToken token)
+    {
+        var all = (IEnumerable<PersonDocDisplay>?)_allDocs ?? Array.Empty<PersonDocDisplay>();
+        var s = value?.Trim();
+        if (!string.IsNullOrWhiteSpace(s))
+        {
+            all = all.Where(d => (d.Doc.Person?.Name ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
+                                || (d.Doc.Person?.CaseNumber ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
+                                || (d.Doc.Reason ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+        return Task.FromResult(all);
+    }
+
+    private static string DocText(PersonDocDisplay? d)
+        => d is null ? string.Empty : $"{d.Doc.Person?.Name} – {d.Doc.Timestamp.ToLocalTime():dd.MM.yyyy}";
+
+    private Task<IEnumerable<ObservationDisplay>> SearchObservations(string value, CancellationToken token)
+    {
+        var all = (IEnumerable<ObservationDisplay>?)_allObservations ?? Array.Empty<ObservationDisplay>();
+        var s = value?.Trim();
+        if (!string.IsNullOrWhiteSpace(s))
+        {
+            all = all.Where(o => (o.Obs.Person?.Name ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
+                                || (o.Obs.Person?.CaseNumber ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
+                                || (o.Obs.Location ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+        return Task.FromResult(all);
+    }
+
+    private static string ObsText(ObservationDisplay? o)
+        => o is null ? string.Empty : $"{o.Obs.Person?.Name} – {o.Obs.Start.ToLocalTime():dd.MM.yyyy}";
+
+    private string? CurrentDisplay => _targetType switch
+    {
+        nameof(Person) => _person?.Name,
+        nameof(Faction) => _faction?.Name,
+        nameof(PersonGroup) => _group?.Name,
+        nameof(Party) => _party?.Name,
+        nameof(Operation) => _operation?.Title,
+        nameof(Taskforce) => _taskforce?.Name,
+        nameof(Case) => _case?.Title,
+        nameof(Job) => _job?.Title,
+        nameof(Agent) => _agent?.Codename,
+        nameof(PersonDoc) => DocText(_doc),
+        nameof(Observation) => ObsText(_observation),
+        _ => null,
+    };
+
+    private void Save()
+    {
+        var id = CurrentTargetId;
+        if (id is null)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new LinkInput { TargetType = _targetType, TargetId = id, Label = _label, Display = CurrentDisplay }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Zeigt den Dialog und liefert die Eingabe (inkl. Zieltyp) oder null bei Abbruch.</summary>
+    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string exclusionPersonId)
+    {
+        var parameters = new DialogParameters<LinkDialog>
+        {
+            { x => x.IsLeadership, isLeadership },
+            { x => x.ExclusionPersonId, exclusionPersonId },
+        };
+        var reference = await dialog.ShowAsync<LinkDialog>("Verknüpfung hinzufügen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: LinkInput e } ? e : null;
+    }
+
+    /// <summary>
+    /// Überladung ohne Personen-Ausschluss – für Akten, die selbst keine Person sind (z. B. Vorgangsakte).
+    /// </summary>
+    public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership)
+    {
+        var parameters = new DialogParameters<LinkDialog>
+        {
+            { x => x.IsLeadership, isLeadership },
+        };
+        var reference = await dialog.ShowAsync<LinkDialog>("Verknüpfung hinzufügen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: LinkInput e } ? e : null;
+    }
+}

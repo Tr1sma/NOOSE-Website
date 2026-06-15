@@ -1,0 +1,146 @@
+@* Liste der Observationen einer Person + Anlegen (Dialog) + Löschen. *@
+@inject IObservationService ObservationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.subtitle1">Observationen (@_entries.Count)</MudText>
+        @if (_mayWrite)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">Neue Observation</MudButton>
+        }
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_entries.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Observationen erfasst.</MudText>
+    }
+    else
+    {
+        @foreach (var display in _entries)
+        {
+            var obs = display.Obs;
+            <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => OpenAsync(display))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">
+                        <b>@obs.Start.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                        @if (obs.End is { } end)
+                        {
+                            <span> – @end.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(display.AgentCodename))
+                        {
+                            <span class="mud-text-secondary"> · @display.AgentCodename</span>
+                        }
+                    </MudText>
+                    @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
+                    @if (_mayWrite)
+                    {
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(display))" aria-label="Observation löschen" />
+                        </div>
+                    }
+                </MudStack>
+                @if (!string.IsNullOrWhiteSpace(obs.Location))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Ort: @obs.Location</MudText>
+                }
+                @if (display.OrgRoute is not null)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Verknüpft: <MudLink Href="@display.OrgRoute" Typo="Typo.caption">@display.OrgName</MudLink>
+                    </MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(obs.Sighting))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1">@obs.Sighting</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(obs.Result))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1"><b>Ergebnis:</b> @obs.Result</MudText>
+                }
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private List<ObservationDisplay> _entries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _entries = await ObservationService.GetForPersonAsync(PersonId, User.IsLeadership());
+        _load = false;
+    }
+
+    // Klick auf eine Karte öffnet die Detailansicht (lesen + bearbeiten); man ist bereits in der Akte.
+    private async Task OpenAsync(ObservationDisplay display)
+    {
+        var modified = await ObservationDetailDialog.ShowAsync(DialogService, display, User, showToRecord: false);
+        if (modified)
+        {
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+    }
+
+    private async Task NewAsync()
+    {
+        var input = await ObservationDialog.ShowAsync(DialogService, User.IsLeadership(), User.GetAgentId());
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await ObservationService.CreateAsync(PersonId, input, User);
+            Snackbar.Add("Observation gespeichert.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(ObservationDisplay display)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Observation löschen?",
+            "Der Eintrag wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await ObservationService.DeleteAsync(display.Obs.Id, User);
+            Snackbar.Add("Observation gelöscht.", Severity.Success);
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -15,11 +15,11 @@ public interface IGraphService
     /// Liefert den Graph für die Anfrage. Ohne Fokus den (auf die wichtigsten Knoten gedeckelten)
     /// Gesamtgraph, mit Fokus den Umkreis des Fokusknotens bis zur gewünschten Tiefe.
     /// </summary>
-    Task<GraphDaten> GetGraphAsync(GraphAnfrage anfrage, ClaimsPrincipal betrachter, CancellationToken cancellationToken = default);
+    Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sucht den kürzesten (sichtbaren) Pfad zwischen zwei Akten („Wie hängen A und B zusammen?").
     /// Liefert <see cref="PfadErgebnis.Gefunden"/> = false, wenn es keine Verbindung gibt.
     /// </summary>
-    Task<PfadErgebnis> FindePfadAsync(string vonTyp, string vonId, string nachTyp, string nachId, ClaimsPrincipal betrachter, CancellationToken cancellationToken = default);
+    Task<PathResult> FindPathAsync(string sourceType, string sourceId, string targetType, string targetId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 }

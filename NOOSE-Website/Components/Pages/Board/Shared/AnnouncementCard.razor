@@ -1,0 +1,63 @@
+@* Eine Ankündigungs-Karte fürs Schwarze Brett. Titel verlinkt auf die Detailseite; Inhalt mit aufgelösten
+   @-Erwähnungen (MentionText, Verschlusssachen für Nicht-Führung verborgen). „Wichtig" = gelber Rand + Stern.
+   Bei Quittierungspflicht: „Kenntnis nehmen"-Button bzw. Status; Verwalter sehen den Fortschritt X/Y. *@
+
+<MudPaper Class="pa-4" Elevation="2" Style="@(Row.Important ? "border-left:4px solid var(--mud-palette-warning);" : "")">
+    <MudStack Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            @if (Row.Important)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Small" />
+            }
+            <MudLink Href="@($"/brett/{Row.Id}")" Typo="Typo.h6" Color="Color.Primary">@Row.Title</MudLink>
+            @if (Row.AsBroadcast)
+            {
+                <MudTooltip Text="Als Broadcast in die Glocke gesendet">
+                    <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" Size="Size.Small" />
+                </MudTooltip>
+            }
+            <MudSpacer />
+            <AnnouncementAudienceChip Audience="Row.Audience" Display="@Row.TargetDisplay" />
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(Row.Content))
+        {
+            <MentionText Segments="Segments" />
+        }
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @Row.CaseNumber · @Row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(Row.CreatorCodename ?? "System")
+            </MudText>
+            <MudSpacer />
+            @if (Row.AcknowledgmentRequired)
+            {
+                @if (Row.MayManage)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.FactCheck">
+                        @Row.AcknowledgedCount/@Row.TotalCount quittiert
+                    </MudChip>
+                }
+                @if (Row.MustAcknowledge)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.DoneOutline" OnClick="OnAcknowledge">Kenntnis nehmen</MudButton>
+                }
+                else if (Row.AlreadyAcknowledged)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text" Icon="@Icons.Material.Filled.CheckCircle">Quittiert</MudChip>
+                }
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public AnnouncementRow Row { get; set; } = default!;
+
+    /// <summary>Aufgelöste Inhalts-Segmente (Mentions) – vom Brett vorab in einer Sammelabfrage ermittelt.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<MentionSegment> Segments { get; set; } = Array.Empty<MentionSegment>();
+
+    /// <summary>Wird ausgelöst, wenn der Empfänger „Kenntnis nehmen" klickt.</summary>
+    [Parameter] public EventCallback OnAcknowledge { get; set; }
+}

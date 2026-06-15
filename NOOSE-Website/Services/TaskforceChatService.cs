@@ -11,82 +11,82 @@ namespace NOOSE_Website.Services;
 public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, TaskforceChatBroadcaster broadcaster,
     INotificationService notifications) : ITaskforceChatService
 {
-    public async Task<List<TaskforceNachricht>> GetNachrichtenAsync(string taskforceId, bool istFuehrung, int limit = 100, DateTime? aelterAls = null, CancellationToken cancellationToken = default)
+    public async Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, bool isLeadership, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Taskforce), taskforceId, istFuehrung, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, isLeadership, cancellationToken))
         {
             return new();
         }
 
-        var query = db.TaskforceNachrichten.Where(n => n.TaskforceId == taskforceId);
-        if (aelterAls is not null)
+        var query = db.TaskforceMessages.Where(n => n.TaskforceId == taskforceId);
+        if (olderAs is not null)
         {
-            query = query.Where(n => n.ErstelltAm < aelterAls.Value);
+            query = query.Where(n => n.CreatedAt < olderAs.Value);
         }
         // Jüngste `limit` laden, dann für die Anzeige chronologisch aufsteigend kehren.
-        var juengste = await query
-            .OrderByDescending(n => n.ErstelltAm)
+        var latest = await query
+            .OrderByDescending(n => n.CreatedAt)
             .Take(Math.Clamp(limit, 1, 500))
             .ToListAsync(cancellationToken);
-        juengste.Reverse();
-        return juengste;
+        latest.Reverse();
+        return latest;
     }
 
-    public async Task<TaskforceNachricht> SendenAsync(string taskforceId, string text, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task<TaskforceMessage> SendAsync(string taskforceId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        var inhalt = text?.Trim();
-        if (string.IsNullOrEmpty(inhalt))
+        var content = text?.Trim();
+        if (string.IsNullOrEmpty(content))
         {
             throw new InvalidOperationException("Die Nachricht darf nicht leer sein.");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Schreiben darf nur, wer die Taskforce sehen darf (Verschlusssache → nur Führung).
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, nameof(Taskforce), taskforceId, handelnder.IstFuehrung(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Taskforce ist für dich nicht zugänglich.");
         }
 
-        var nachricht = new TaskforceNachricht
+        var message = new TaskforceMessage
         {
             TaskforceId = taskforceId,
-            Text = inhalt,
-            AutorName = handelnder.GetCodename(),
+            Text = content,
+            AuthorName = actor.GetCodename(),
         };
-        db.TaskforceNachrichten.Add(nachricht);
+        db.TaskforceMessages.Add(message);
         await db.SaveChangesAsync(cancellationToken);
 
-        broadcaster.Melde(taskforceId);
+        broadcaster.Report(taskforceId);
 
         // Phase 6: erwähnte Agenten benachrichtigen (best-effort, Verschlusssache-gefiltert im Dienst).
         try
         {
-            var wer = string.IsNullOrWhiteSpace(handelnder.GetCodename()) ? "Ein Agent" : handelnder.GetCodename();
-            await notifications.BenachrichtigeErwaehnteAsync(inhalt, $"{wer} hat dich im Taskforce-Chat erwähnt.",
-                $"/taskforces/{taskforceId}", nameof(Taskforce), taskforceId, handelnder, cancellationToken);
+            var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
+            await notifications.NotifyMentionedAsync(content, $"{who} hat dich im Taskforce-Chat erwähnt.",
+                $"/taskforces/{taskforceId}", nameof(Taskforce), taskforceId, actor, cancellationToken);
         }
         catch { /* Benachrichtigung ist nachrangig. */ }
 
-        return nachricht;
+        return message;
     }
 
-    public async Task LoeschenAsync(string nachrichtId, ClaimsPrincipal handelnder, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string messageId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var nachricht = await db.TaskforceNachrichten.FirstOrDefaultAsync(n => n.Id == nachrichtId, cancellationToken);
-        if (nachricht is null)
+        var message = await db.TaskforceMessages.FirstOrDefaultAsync(n => n.Id == messageId, cancellationToken);
+        if (message is null)
         {
             return;
         }
         // Nur der Autor oder die Führung darf zurückziehen.
-        if (!handelnder.IstFuehrung() && nachricht.ErstelltVonId != handelnder.GetAgentId())
+        if (!actor.IsLeadership() && message.CreatedById != actor.GetAgentId())
         {
             throw new UnauthorizedAccessException("Nur der Autor oder die Führung kann eine Nachricht zurückziehen.");
         }
-        db.TaskforceNachrichten.Remove(nachricht); // Soft-Delete via Interceptor
+        db.TaskforceMessages.Remove(message); // Soft-Delete via Interceptor
         await db.SaveChangesAsync(cancellationToken);
 
-        broadcaster.Melde(nachricht.TaskforceId);
+        broadcaster.Report(message.TaskforceId);
     }
 }

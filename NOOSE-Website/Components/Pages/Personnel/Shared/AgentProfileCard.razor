@@ -1,0 +1,65 @@
+@* Steckkarte der Personalakte: Codename, Dienstgrad, Status, TRU/HRB/Admin, Dienstnummer; Klarname nur für Führung. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.Badge" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudText Typo="Typo.h5">@(string.IsNullOrWhiteSpace(Agent.Codename) ? "Unbenannter Agent" : Agent.Codename)</MudText>
+            @if (MayRealName && !string.IsNullOrWhiteSpace(Agent.RealName))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Agent.RealName</MudText>
+            }
+            @if (!string.IsNullOrWhiteSpace(Agent.BadgeNumber))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Dienstnummer: @Agent.BadgeNumber</MudText>
+            }
+        </div>
+
+        <MudStack Row="true" Spacing="2" Class="flex-wrap" AlignItems="AlignItems.Center">
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.MilitaryTech">@RankDisplay.Name(Agent.Rank)</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColour(Agent.Status)" Variant="Variant.Outlined">@StatusName(Agent.Status)</MudChip>
+            @if (Agent.IsTRU)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">TRU</MudChip>
+            }
+            @if (Agent.IsHRB)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">HRB</MudChip>
+            }
+            @if (Agent.IsAdmin)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">Admin</MudChip>
+            }
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(Agent.DiscordUsername) && MayRealName)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Discord: @Agent.DiscordUsername</MudText>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Agent Agent { get; set; } = default!;
+    [Parameter] public bool MayRealName { get; set; }
+
+    private static string StatusName(AgentStatus s) => s switch
+    {
+        AgentStatus.Active => "Aktiv",
+        AgentStatus.Pending => "Ausstehend",
+        AgentStatus.Blocked => "Gesperrt",
+        _ => "—",
+    };
+
+    private static Color StatusColour(AgentStatus s) => s switch
+    {
+        AgentStatus.Active => Color.Success,
+        AgentStatus.Pending => Color.Warning,
+        AgentStatus.Blocked => Color.Error,
+        _ => Color.Default,
+    };
+}

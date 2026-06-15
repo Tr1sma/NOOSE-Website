@@ -1,0 +1,84 @@
+@* Identitäts-/Steckkarte der Personengruppe: Name, Einstufung, Erfassungsfortschritt x/y. *@
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <MudStack AlignItems="AlignItems.Center" Class="py-2">
+            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                <MudIcon Icon="@Icons.Material.Filled.Diversity3" Style="font-size:3rem;" />
+            </MudAvatar>
+        </MudStack>
+
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h5">@Group.Name</MudText>
+                @if (Group.IsClassified)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Group.CaseNumber</MudText>
+        </div>
+
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled"
+                 Icon="@KindIcon(Group.Kind)" Class="align-self-start">
+            @GroupsKindDisplay.Name(Group.Kind)
+        </MudChip>
+
+        <ClassificationBadge Value="Group.Classification" />
+
+        <InvestigationLeadDisplay Names="InvestigationLead" />
+
+        <MudDivider />
+
+        @* Erfassungsfortschritt x/y *@
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle2">Erfassungsfortschritt</MudText>
+                <MudText Typo="Typo.body2">@Progress.Captured / @(Progress.Estimated?.ToString() ?? "?")</MudText>
+            </MudStack>
+            @if (Progress.Estimated is > 0)
+            {
+                <MudProgressLinear Color="Color.Primary" Value="@Percent()" Class="mt-1" Rounded="true" Size="Size.Medium" />
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @Progress.Captured Mitglied(er) erfasst – keine geschätzte Gesamtgröße hinterlegt.
+                </MudText>
+            }
+        </div>
+
+        <MudDivider />
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <RecencyIndicator RecordsType="@nameof(PersonGroup)" ReferenceDateUtc="@(Group.ModifiedAt ?? Group.CreatedAt)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt aktualisiert: @((Group.ModifiedAt ?? Group.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+            </MudText>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public PersonGroup Group { get; set; } = default!;
+    [Parameter, EditorRequired] public PersonGroupProgress Progress { get; set; } = default!;
+
+    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
+
+    private double Percent()
+    {
+        if (Progress.Estimated is not > 0)
+        {
+            return 0;
+        }
+        var p = (double)Progress.Captured / Progress.Estimated.Value * 100;
+        return Math.Clamp(p, 0, 100);
+    }
+
+    private static string KindIcon(GroupsKind kind) => kind switch
+    {
+        GroupsKind.Personality => Icons.Material.Filled.Star,
+        GroupsKind.PersonOfInterest => Icons.Material.Filled.PersonSearch,
+        _ => Icons.Material.Filled.Diversity3,
+    };
+}

@@ -1,0 +1,117 @@
+@* Upload-/Bearbeiten-Dialog der Datei-Bibliothek (Phase 7). Beim Bearbeiten (Vorbelegung gesetzt)
+   wird keine neue Datei gewählt, nur Titel/Kategorie/Verschlusssache geändert. *@
+@inject ILibraryStorageService Storage
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!IsProcessing)
+            {
+                <MudFileUpload T="IBrowserFile" FilesChanged="FileSelected">
+                    <CustomContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
+                                   OnClick="@context.OpenFilePickerAsync">
+                            @(_file is null ? "Datei wählen…" : _file.Name)
+                        </MudButton>
+                    </CustomContent>
+                </MudFileUpload>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Erlaubt: PDF, Bilder, Office-Dokumente, Text, ZIP – max. @(Storage.MaxBytes / (1024 * 1024)) MB.
+                </MudText>
+                @if (_warning is not null)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">@_warning</MudAlert>
+                }
+            }
+            <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                          RequiredError="Titel ist erforderlich" />
+            <MudTextField @bind-Value="_category" Label="Kategorie (optional)" Variant="Variant.Outlined"
+                          Placeholder="z. B. Formular, SOP, Vorlage" />
+            @if (MayClassified)
+            {
+                <MudSwitch T="bool" @bind-Value="_isClassified" Color="Color.Warning"
+                           Label="Verschlusssache (nur Führung sichtbar)" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(string.IsNullOrWhiteSpace(_title) || (!IsProcessing && _file is null))">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public bool MayClassified { get; set; }
+    [Parameter] public LibraryFile? Preset { get; set; }
+
+    private bool IsProcessing => Preset is not null;
+
+    private IBrowserFile? _file;
+    private string? _warning;
+    private string _title = string.Empty;
+    private string? _category;
+    private bool _isClassified;
+
+    protected override void OnParametersSet()
+    {
+        if (Preset is not null && string.IsNullOrEmpty(_title))
+        {
+            _title = Preset.Title;
+            _category = Preset.Category;
+            _isClassified = Preset.IsClassified;
+        }
+    }
+
+    private void FileSelected(IBrowserFile? file)
+    {
+        _warning = null;
+        if (file is null)
+        {
+            _file = null;
+            return;
+        }
+        if (file.Size > Storage.MaxBytes)
+        {
+            _warning = $"Die Datei ist zu groß (max. {Storage.MaxBytes / (1024 * 1024)} MB).";
+            return;
+        }
+        if (!Storage.IsAllowedType(file.ContentType))
+        {
+            _warning = "Dieser Dateityp ist nicht erlaubt.";
+            return;
+        }
+        _file = file;
+        if (string.IsNullOrWhiteSpace(_title))
+        {
+            // Titel aus dem Dateinamen vorbelegen (ohne Endung).
+            _title = Path.GetFileNameWithoutExtension(file.Name);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+        => MudDialog.Close(DialogResult.Ok(new Result(_title.Trim(), _category, _isClassified, _file)));
+
+    /// <summary>Dialog-Ergebnis: Metadaten + (nur beim Upload) die gewählte Datei.</summary>
+    public sealed record Result(string Title, string? Category, bool IsClassified, IBrowserFile? File);
+
+    /// <summary>Zeigt den Dialog; liefert das Ergebnis oder <c>null</c> bei Abbruch.</summary>
+    public static async Task<Result?> ShowAsync(IDialogService dialog, string title, bool mayClassified, LibraryFile? preset = null)
+    {
+        var parameters = new DialogParameters<LibraryFileDialog>
+        {
+            { x => x.MayClassified, mayClassified },
+            { x => x.Preset, preset },
+        };
+        var reference = await dialog.ShowAsync<LibraryFileDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Result e } ? e : null;
+    }
+}

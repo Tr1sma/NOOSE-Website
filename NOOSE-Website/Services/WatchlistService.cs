@@ -10,10 +10,10 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IWatchlistService" />
 public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatchlistService
 {
-    public async Task FolgenAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder,
+    public async Task FollowAsync(string entityType, string entityId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        var agentId = handelnder.GetAgentId();
+        var agentId = actor.GetAgentId();
         if (string.IsNullOrWhiteSpace(agentId))
         {
             return;
@@ -22,151 +22,151 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         // Nur folgen, was der Aufrufer auch sehen darf (Verschlusssache/Papierkorb/Personalakte-Gate serverseitig).
-        if (!await Sichtbarkeit.IstAkteSichtbarAsync(db, entitaetTyp, entitaetId, handelnder.IstFuehrung(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
 
         // Bereits aktiv gefolgt → nichts zu tun.
-        var aktiv = await db.Watchlisten
-            .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntitaetTyp == entitaetTyp && w.EntitaetId == entitaetId,
+        var active = await db.Watchlists
+            .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntityType == entityType && w.EntityId == entityId,
                 cancellationToken);
-        if (aktiv is not null)
+        if (active is not null)
         {
             return;
         }
 
         // Eine früher entfolgte (soft-gelöschte) Zeile reaktivieren statt eine zweite anzulegen.
-        var alt = await db.Watchlisten.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntitaetTyp == entitaetTyp && w.EntitaetId == entitaetId
-                                      && w.IstGeloescht, cancellationToken);
+        var alt = await db.Watchlists.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntityType == entityType && w.EntityId == entityId
+                                      && w.IsDeleted, cancellationToken);
         if (alt is not null)
         {
-            alt.IstGeloescht = false;
-            alt.GeloeschtAm = null;
-            alt.GeloeschtVonId = null;
+            alt.IsDeleted = false;
+            alt.DeletedAt = null;
+            alt.DeletedById = null;
         }
         else
         {
-            db.Watchlisten.Add(new WatchlistEintrag
+            db.Watchlists.Add(new WatchlistEntry
             {
                 AgentId = agentId,
-                EntitaetTyp = entitaetTyp,
-                EntitaetId = entitaetId,
+                EntityType = entityType,
+                EntityId = entityId,
             });
         }
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task EntfolgenAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder,
+    public async Task UnfollowAsync(string entityType, string entityId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        var agentId = handelnder.GetAgentId();
+        var agentId = actor.GetAgentId();
         if (string.IsNullOrWhiteSpace(agentId))
         {
             return;
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var eintrag = await db.Watchlisten
-            .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntitaetTyp == entitaetTyp && w.EntitaetId == entitaetId,
+        var entry = await db.Watchlists
+            .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntityType == entityType && w.EntityId == entityId,
                 cancellationToken);
-        if (eintrag is null)
+        if (entry is null)
         {
             return;
         }
         // Hard-Delete → der Audit-Interceptor wandelt es in einen Soft-Delete um.
-        db.Watchlisten.Remove(eintrag);
+        db.Watchlists.Remove(entry);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> IstGefolgtAsync(string entitaetTyp, string entitaetId, ClaimsPrincipal handelnder,
+    public async Task<bool> IsFollowedAsync(string entityType, string entityId, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        var agentId = handelnder.GetAgentId();
+        var agentId = actor.GetAgentId();
         if (string.IsNullOrWhiteSpace(agentId))
         {
             return false;
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Watchlisten
-            .AnyAsync(w => w.AgentId == agentId && w.EntitaetTyp == entitaetTyp && w.EntitaetId == entitaetId,
+        return await db.Watchlists
+            .AnyAsync(w => w.AgentId == agentId && w.EntityType == entityType && w.EntityId == entityId,
                 cancellationToken);
     }
 
-    public async Task<List<WatchlistEintrag>> GetGefolgteAsync(ClaimsPrincipal handelnder,
+    public async Task<List<WatchlistEntry>> GetFollowedAsync(ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        var agentId = handelnder.GetAgentId();
+        var agentId = actor.GetAgentId();
         if (string.IsNullOrWhiteSpace(agentId))
         {
             return new();
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Watchlisten
+        return await db.Watchlists
             .Where(w => w.AgentId == agentId)
-            .OrderByDescending(w => w.ErstelltAm)
+            .OrderByDescending(w => w.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<GefolgteAkte>> GetGefolgteAufgeloestAsync(ClaimsPrincipal handelnder,
+    public async Task<List<FollowedRecord>> GetFollowedResolvedAsync(ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        var agentId = handelnder.GetAgentId();
+        var agentId = actor.GetAgentId();
         if (string.IsNullOrWhiteSpace(agentId))
         {
             return new();
         }
         // Lese-Gate: die Nur-Lese-Aufsicht darf gefolgte VS-Akten einsehen (DarfVerschlusssacheLesen).
-        var istFuehrung = handelnder.DarfVerschlusssacheLesen();
+        var isLeadership = actor.MayClassifiedRead();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var eintraege = await db.Watchlisten
+        var entries = await db.Watchlists
             .Where(w => w.AgentId == agentId)
-            .OrderByDescending(w => w.ErstelltAm)
-            .Select(w => new { w.EntitaetTyp, w.EntitaetId, w.ErstelltAm })
+            .OrderByDescending(w => w.CreatedAt)
+            .Select(w => new { w.EntityType, w.EntityId, w.CreatedAt })
             .ToListAsync(cancellationToken);
-        if (eintraege.Count == 0)
+        if (entries.Count == 0)
         {
             return new();
         }
 
-        var refs = eintraege.Select(e => (e.EntitaetTyp, e.EntitaetId)).Distinct().ToList();
+        var refs = entries.Select(e => (e.EntityType, e.EntityId)).Distinct().ToList();
         // Gefolgte Taskforces nur auflösen, wenn der Aufrufer zugeteilt ist (oder alle sehen darf).
-        var aufgeloest = await AktenReferenz.AufloesenAsync(db, refs, cancellationToken,
-            darfAlleTaskforces: handelnder.DarfAlleTaskforcesSehen(), meId: agentId);
+        var resolved = await RecordsReference.ResolveAsync(db, refs, cancellationToken,
+            mayAllTaskforces: actor.MayAllTaskforcesSee(), meId: agentId);
 
-        var ergebnis = new List<GefolgteAkte>(eintraege.Count);
-        foreach (var e in eintraege)
+        var result = new List<FollowedRecord>(entries.Count);
+        foreach (var e in entries)
         {
             // Sichtbarkeit ohne zusätzliche DB-Abfrage je Eintrag: AktenReferenz hat das Verschlusssache-Flag bereits
             // mitgeladen (nicht auflösbar = Papierkorb/unbekannt → nicht zugänglich). Personalakten (Agent) gelten als
             // Führungs-Inhalt (entspricht Sichtbarkeit.IstAkteSichtbarAsync). Spiegelt die Logik dort 1:1, nur in-memory.
-            bool zugaenglich;
-            if (aufgeloest.TryGetValue((e.EntitaetTyp, e.EntitaetId), out var a))
+            bool accessible;
+            if (resolved.TryGetValue((e.EntityType, e.EntityId), out var a))
             {
-                zugaenglich = e.EntitaetTyp == nameof(Agent) ? istFuehrung : (!a.Verschluss || istFuehrung);
+                accessible = e.EntityType == nameof(Agent) ? isLeadership : (!a.Classified || isLeadership);
             }
             else
             {
-                zugaenglich = false;
+                accessible = false;
             }
-            ergebnis.Add(new GefolgteAkte(
-                e.EntitaetTyp, e.EntitaetId,
-                zugaenglich ? a.Anzeige : "(nicht mehr zugänglich)",
-                zugaenglich ? a.Href : null,
-                e.ErstelltAm,
-                zugaenglich));
+            result.Add(new FollowedRecord(
+                e.EntityType, e.EntityId,
+                accessible ? a.Display : "(nicht mehr zugänglich)",
+                accessible ? a.Href : null,
+                e.CreatedAt,
+                accessible));
         }
-        return ergebnis;
+        return result;
     }
 
-    public async Task<List<string>> GetFollowerIdsAsync(string entitaetTyp, string entitaetId,
+    public async Task<List<string>> GetFollowerIdsAsync(string entityType, string entityId,
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Watchlisten
-            .Where(w => w.EntitaetTyp == entitaetTyp && w.EntitaetId == entitaetId)
+        return await db.Watchlists
+            .Where(w => w.EntityType == entityType && w.EntityId == entityId)
             .Select(w => w.AgentId)
             .Distinct()
             .ToListAsync(cancellationToken);

@@ -1,5 +1,6 @@
 using NOOSE_Website.Models.Abstractions;
 using NOOSE_Website.Models.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Taskforces;
 
@@ -10,6 +11,7 @@ namespace NOOSE_Website.Data.Entities.Taskforces;
 /// Leitung (Chefermittler/CID-Lead/TRU-Lead) handelt; jede Rolle ungleich <see cref="TaskforceRolle.Mitglied"/>
 /// berechtigt – wie die Führung – zur Verwaltung der Zuteilungen.
 /// </summary>
+[Table("TaskforceAgenten")]
 public class TaskforceAgent : IAuditable
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -21,11 +23,16 @@ public class TaskforceAgent : IAuditable
     public Agent? Agent { get; set; }
 
     /// <summary>Rolle des Agents in der Taskforce; Leitung = jede Rolle ungleich <see cref="TaskforceRolle.Mitglied"/>.</summary>
-    public TaskforceRolle Rolle { get; set; } = TaskforceRolle.Mitglied;
+    [Column("Rolle")]
+    public TaskforceRole Role { get; set; } = TaskforceRole.Member;
 
     // ---- IAuditable ----
-    public DateTime ErstelltAm { get; set; }
-    public string? ErstelltVonId { get; set; }
-    public DateTime? GeaendertAm { get; set; }
-    public string? GeaendertVonId { get; set; }
+    [Column("ErstelltAm")]
+    public DateTime CreatedAt { get; set; }
+    [Column("ErstelltVonId")]
+    public string? CreatedById { get; set; }
+    [Column("GeaendertAm")]
+    public DateTime? ModifiedAt { get; set; }
+    [Column("GeaendertVonId")]
+    public string? ModifiedById { get; set; }
 }
