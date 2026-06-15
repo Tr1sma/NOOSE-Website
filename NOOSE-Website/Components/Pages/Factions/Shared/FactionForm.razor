@@ -79,14 +79,20 @@
 
 <MudDivider Class="my-4" />
 <MudGrid>
-    @* Ränge als einfache Zeilen (Reihenfolge = Listenreihenfolge). *@
+    @* Ränge als einfache Zeilen (Reihenfolge = Listenreihenfolge; per Pfeiltasten verschiebbar). *@
     <MudItem xs="12" md="6">
         <MudStack Spacing="1">
             <MudText Typo="Typo.subtitle2">Ränge</MudText>
-            @foreach (var r in Input.Ranks)
+            @for (var i = 0; i < Input.Ranks.Count; i++)
             {
+                var index = i;
+                var r = Input.Ranks[index];
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudTextField @bind-Value="r.Designation" Placeholder="Rang-Bezeichnung" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@(index == 0)"
+                                   OnClick="@(() => RankMove(index, -1))" aria-label="Nach oben" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(index == Input.Ranks.Count - 1)"
+                                   OnClick="@(() => RankMove(index, 1))" aria-label="Nach unten" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                    OnClick="@(() => Input.Ranks.Remove(r))" aria-label="Entfernen" />
                 </MudStack>
@@ -180,6 +186,17 @@
             ? _kindSuggestions
             : _kindSuggestions.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(hit);
+    }
+
+    /// <summary>Verschiebt einen Rang in der Liste (delta -1 = nach oben, +1 = nach unten); die Reihenfolge wird beim Speichern übernommen.</summary>
+    private void RankMove(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= Input.Ranks.Count)
+        {
+            return;
+        }
+        (Input.Ranks[index], Input.Ranks[target]) = (Input.Ranks[target], Input.Ranks[index]);
     }
 
     private void ColourSet(MudColor? colour)
