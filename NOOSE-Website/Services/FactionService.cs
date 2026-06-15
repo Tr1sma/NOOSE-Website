@@ -214,6 +214,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         faction.IsStateFaction = input.IsStateFaction;
         faction.EstimatedMemberCount = input.EstimatedMemberCount;
 
+        // Umbenennungen erkennen, BEVOR die alten Ränge ersetzt werden: je bestehender Rang-Id die alte Bezeichnung,
+        // damit der denormalisierte Rang-Name in der Mitgliederliste nachgezogen werden kann (siehe unten).
+        var renames = RankRenamesDetect(faction.Ranks, input.Ranks);
+
         // Strukturierte Listen vollständig ersetzen (Mitglieder bleiben unangetastet – eigene Endpunkte).
         db.FactionRanks.RemoveRange(faction.Ranks);
         db.FactionWeaponStocks.RemoveRange(faction.WeaponStock);
@@ -221,6 +225,21 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         db.FactionDrugRoutes.RemoveRange(faction.DrugRoutes);
         ChildrenMap(faction, input);
         await SuggestionsStageAsync(db, faction, cancellationToken);
+
+        // Umbenannte Ränge in der Mitgliederliste mitziehen (Rang ist dort eine denormalisierte Kopie der Bezeichnung).
+        if (renames.Count > 0)
+        {
+            var members = await db.FactionMembers
+                .Where(m => m.FactionId == id && m.Rank != null)
+                .ToListAsync(cancellationToken);
+            foreach (var m in members)
+            {
+                if (m.Rank is not null && renames.TryGetValue(m.Rank, out var newName))
+                {
+                    m.Rank = newName;
+                }
+            }
+        }
 
         await db.SaveChangesAsync(cancellationToken);
         // Stammdaten (Mitgliederzahl/Anwesen/Staatsfraktion/Bestände) wirken auf den Score.
@@ -742,6 +761,30 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
     }
 
     // ---- Helfer ----
+
+    /// <summary>
+    /// Ermittelt Rang-Umbenennungen (alte Bezeichnung → neue Bezeichnung) anhand der stabilen Rang-Id.
+    /// Nur Einträge, deren Id einem bestehenden Rang entspricht und deren getrimmte Bezeichnung sich tatsächlich
+    /// geändert hat, werden berücksichtigt – neu hinzugefügte oder gelöschte Ränge erzeugen keine Umbenennung.
+    /// </summary>
+    private static Dictionary<string, string> RankRenamesDetect(IEnumerable<FactionRank> existing, IEnumerable<RankInput> input)
+    {
+        var oldById = existing.ToDictionary(r => r.Id, r => r.Designation);
+        var renames = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var ri in input)
+        {
+            if (string.IsNullOrWhiteSpace(ri.Id) || !oldById.TryGetValue(ri.Id, out var oldName))
+            {
+                continue;
+            }
+            var newName = ri.Designation?.Trim();
+            if (!string.IsNullOrWhiteSpace(newName) && !string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                renames[oldName] = newName;
+            }
+        }
+        return renames;
+    }
 
     private static void ChildrenMap(Faction faction, FactionInput input)
     {

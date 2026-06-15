@@ -43,6 +43,11 @@ public class FactionInput
 /// <summary>Ein Rang-Eintrag im Bearbeiten-Formular (Bezeichnung; Sortierung folgt der Reihenfolge in der Liste).</summary>
 public class RankInput
 {
+    /// <summary>
+    /// Id des bestehenden Rangs (leer bei neu hinzugefügten Rängen). Dient ausschließlich der Umbenennungs-Erkennung
+    /// beim Speichern, damit der denormalisierte Rang-Name in der Mitgliederliste mitgezogen werden kann.
+    /// </summary>
+    public string? Id { get; set; }
     public string Designation { get; set; } = string.Empty;
 }
 

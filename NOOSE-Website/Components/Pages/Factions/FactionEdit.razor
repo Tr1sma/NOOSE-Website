@@ -84,7 +84,7 @@ else
                 IsClassified = f.IsClassified,
                 IsStateFaction = f.IsStateFaction,
                 EstimatedMemberCount = f.EstimatedMemberCount,
-                Ranks = f.Ranks.OrderBy(r => r.Order).Select(r => new RankInput { Designation = r.Designation }).ToList(),
+                Ranks = f.Ranks.OrderBy(r => r.Order).Select(r => new RankInput { Id = r.Id, Designation = r.Designation }).ToList(),
                 WeaponStock = f.WeaponStock.Select(w => new StockInput { Designation = w.Designation, Quantity = w.Quantity }).ToList(),
                 Inventory = f.Inventory.Select(l => new StockInput { Designation = l.Designation, Quantity = l.Quantity }).ToList(),
                 // Drogenrouten teilen BestandEingabe; das Menge-Feld trägt hier die Notiz.
