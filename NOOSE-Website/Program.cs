@@ -242,6 +242,8 @@ builder.Services.AddSingleton<TaskforceChatBroadcaster>();
 builder.Services.AddScoped<IObservationService, ObservationService>();
 // Phase 5e: Personalakte je Agent (Verlauf, Vermerke, Beförderungsanträge).
 builder.Services.AddScoped<IPersonnelFileService, PersonnelFileService>();
+// Phase 22: Ausbildungsmodule (Katalog, Admin) + Abschluss je Agent (Personalakte, Führung).
+builder.Services.AddScoped<ITrainingModuleService, TrainingModuleService>();
 // Phase 5: generischer Antrags-/Posteingang-Workflow (Hochstufungs-Anträge).
 builder.Services.AddScoped<IRequestService, RequestService>();
 // Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.

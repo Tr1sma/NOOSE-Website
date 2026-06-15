@@ -1,0 +1,156 @@
+@page "/admin/module"
+@attribute [Authorize(Policy = Policies.AdminPage)]
+@inject ITrainingModuleService ModuleService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Ausbildungsmodule · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.School" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Ausbildungsmodule</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Admin">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+            Neues Modul
+        </MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Module sind kleine Schulungen, die Agenten absolvieren können. Hier werden sie zentral verwaltet (anlegen,
+    bearbeiten, aktivieren, löschen). Aktive Module lassen sich anschließend in der Personalakte eines Agenten
+    als abgeschlossen markieren. Beim Löschen verschwindet das Modul samt aller Abschlüsse aus den Akten.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_modules" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel T="TrainingModule" SortBy="@(x => x.Sorting)">#</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="TrainingModule" SortBy="@(x => x.Name)">Modul</MudTableSortLabel></MudTh>
+            <MudTh>Beschreibung</MudTh>
+            <MudTh><MudTableSortLabel T="TrainingModule" SortBy="@(x => x.IsActive)">Status</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="#">@context.Sorting</MudTd>
+            <MudTd DataLabel="Modul"><MudText Typo="Typo.body2">@context.Name</MudText></MudTd>
+            <MudTd DataLabel="Beschreibung">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-wrap;">@context.Description</MudText>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Aktiv</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inaktiv</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <AuthorizeView Policy="@Policies.Admin" Context="adminCtx">
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => EditAsync(context))" aria-label="Modul bearbeiten" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteAsync(context))" aria-label="Modul löschen" />
+                    </MudStack>
+                </AuthorizeView>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Module angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private List<TrainingModule> _modules = new();
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _modules = await ModuleService.GetAllAsync();
+        _load = false;
+    }
+
+    private async Task NewAsync()
+    {
+        var input = await ModuleDialog.ShowAsync(DialogService, "Neues Modul");
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await ModuleService.CreateAsync(input, _user);
+            Snackbar.Add($"Modul „{input.Name}“ angelegt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EditAsync(TrainingModule module)
+    {
+        var current = new ModuleInput
+        {
+            Name = module.Name,
+            Description = module.Description,
+            IsActive = module.IsActive,
+            Sorting = module.Sorting,
+        };
+        var input = await ModuleDialog.ShowAsync(DialogService, "Modul bearbeiten", current);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await ModuleService.UpdateAsync(module.Id, input, _user);
+            Snackbar.Add("Modul gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(TrainingModule module)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Modul löschen?",
+            $"„{module.Name}“ wird gelöscht und aus allen Personalakten entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await ModuleService.DeleteAsync(module.Id, _user);
+            Snackbar.Add("Modul gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

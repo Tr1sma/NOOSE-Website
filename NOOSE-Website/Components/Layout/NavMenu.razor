@@ -72,6 +72,9 @@
                 Basisdaten
             </MudNavLink>
             <AuthorizeView Policy="@Policies.AdminPage" Context="adminInner">
+                <MudNavLink Href="/admin/module" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.School">
+                    Ausbildungsmodule
+                </MudNavLink>
                 <MudNavLink Href="/admin/system" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications">
                     System
                 </MudNavLink>

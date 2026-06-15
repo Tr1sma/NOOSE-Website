@@ -54,6 +54,9 @@ else
                 <MudTabPanel Text="Beförderungen" Icon="@Icons.Material.Filled.MilitaryTech">
                     <PromotionPanel Agent="_agent" Changed="TargetDecisionAsync" />
                 </MudTabPanel>
+                <MudTabPanel Text="Module" Icon="@Icons.Material.Filled.School">
+                    <ModulesPanel AgentId="@_agent.Id" />
+                </MudTabPanel>
                 @if (_isLeadership)
                 {
                     <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
@@ -88,8 +91,8 @@ else
         _isLeadership = _user.IsLeadership();
         _mayRealName = _user.MayRealNameSee();
         _tabs = _isLeadership
-            ? new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "kommentare" }
-            : new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen" };
+            ? new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "module", "kommentare" }
+            : new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "module" };
     }
 
     // Diese Seite wird bei Navigation /personal/{A} → /personal/{B} WIEDERVERWENDET (gleiche Komponente);

@@ -1,0 +1,133 @@
+@* Ausbildungsmodule (Schulungen) eines Agenten samt Abschluss-Status. Für alle Agenten sichtbar;
+   Abschließen/Zurücksetzen nur durch die Führung (UI + Service-Gate). Module pflegt der Admin unter
+   /admin/module. Vorlage: NotesPanel. *@
+@inject ITrainingModuleService ModuleService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.subtitle1">Ausbildungsmodule (@_completedCount / @_modules.Count)</MudText>
+        <MudSpacer />
+        <AuthorizeView Policy="@Policies.Admin">
+            <MudTooltip Text="Module zentral verwalten">
+                <MudIconButton Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Href="/admin/module"
+                               aria-label="Module verwalten" />
+            </MudTooltip>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_modules.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Es sind keine Module hinterlegt.</MudText>
+    }
+    else
+    {
+        @foreach (var m in _modules)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Class="flex-grow-1">
+                        <MudCheckBox T="bool" Value="m.IsCompleted" ReadOnly="@(!_isLeadership || _busy)"
+                                     Color="Color.Success" Dense="true"
+                                     ValueChanged="@(v => ToggleAsync(m, v))" />
+                        <div>
+                            <MudText Typo="Typo.body1">@m.Module.Name</MudText>
+                            @if (!string.IsNullOrWhiteSpace(m.Module.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-wrap;">@m.Module.Description</MudText>
+                            }
+                            @if (m.IsCompleted)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Abgeschlossen am @m.CompletedAt!.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                    @(string.IsNullOrWhiteSpace(m.CompleterName) ? "" : $" · {m.CompleterName}")
+                                </MudText>
+                                @if (!string.IsNullOrWhiteSpace(m.Note))
+                                {
+                                    <MudText Typo="Typo.caption" Style="white-space:pre-wrap;">Notiz: @m.Note</MudText>
+                                }
+                            }
+                            @if (!m.Module.IsActive)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="mt-1">Modul inaktiv</MudChip>
+                            }
+                        </div>
+                    </MudStack>
+                    @if (m.IsCompleted)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">Abgeschlossen</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Offen</MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string AgentId { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _busy;
+    private bool _isLeadership;
+    private ClaimsPrincipal _user = default!;
+    private List<AgentModuleStatus> _modules = new();
+
+    private int _completedCount => _modules.Count(m => m.IsCompleted);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _modules = await ModuleService.GetStatusForAgentAsync(AgentId);
+        _load = false;
+    }
+
+    private async Task ToggleAsync(AgentModuleStatus status, bool completed)
+    {
+        if (!_isLeadership || _busy || completed == status.IsCompleted)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            if (completed)
+            {
+                await ModuleService.MarkCompletedAsync(AgentId, status.Module.Id, null, _user);
+                Snackbar.Add($"„{status.Module.Name}“ als abgeschlossen markiert.", Severity.Success);
+            }
+            else
+            {
+                var ok = await ConfirmDialog.ShowAsync(DialogService, "Abschluss zurücksetzen?",
+                    $"Der Abschluss von „{status.Module.Name}“ wird entfernt.");
+                if (ok)
+                {
+                    await ModuleService.UnmarkCompletedAsync(status.CompletionId!, _user);
+                    Snackbar.Add($"Abschluss von „{status.Module.Name}“ zurückgesetzt.", Severity.Info);
+                }
+            }
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _busy = false;
+    }
+}
