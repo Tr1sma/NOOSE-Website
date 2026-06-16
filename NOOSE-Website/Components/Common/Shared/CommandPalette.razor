@@ -41,8 +41,7 @@
 
     private bool _open;
     private bool _isLeadership;
-    private bool _mayClassifiedRead;
-    private string? _meId;
+    private ViewerScope _scope;
     private MudAutocomplete<PaletteItem> _auto = default!;
     private IJSObjectReference? _module;
     private DotNetObjectReference<CommandPalette>? _ref;
@@ -53,8 +52,24 @@
     {
         var user = (await AuthStateTask).User;
         _isLeadership = user.IsLeadership();
-        _mayClassifiedRead = user.MayClassifiedRead();
-        _meId = user.GetAgentId();
+        _scope = ViewerScope.From(user);
+        if (user.IsPartner())
+        {
+            // partners: only released-record areas + global search
+            _commands = new List<PaletteItem>
+            {
+                new("Personen-Akten", "Liste", Icons.Material.Filled.Badge, "/personen"),
+                new("Fraktionen", "Liste", Icons.Material.Filled.Groups, "/fraktionen"),
+                new("Personengruppen", "Liste", Icons.Material.Filled.Diversity3, "/personengruppen"),
+                new("Parteien", "Liste", Icons.Material.Filled.AccountBalance, "/parteien"),
+                new("Operationen", "Liste", Icons.Material.Filled.Radar, "/operationen"),
+                new("Vorgänge", "Liste", Icons.Material.Filled.FolderSpecial, "/vorgaenge"),
+                new("Dokumente", "Bibliothek", Icons.Material.Filled.MenuBook, "/dokumente"),
+                new("Gesetzbuch", "Rechtsgrundlagen", Icons.Material.Filled.Gavel, "/gesetze"),
+                new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
+            };
+            return;
+        }
         _commands = new List<PaletteItem>
         {
             new("Personen-Akten", "Liste", Icons.Material.Filled.Badge, "/personen"),
@@ -126,7 +141,7 @@
         {
             try
             {
-                var hit = await SearchService.QuickSearchAsync(v, _mayClassifiedRead, _meId, 8, token);
+                var hit = await SearchService.QuickSearchAsync(v, _scope, 8, token);
                 result.AddRange(hit.Select(t => new PaletteItem(t.Name, t.CaseNumber, PaletteIcon(t.Category), SearchNavigation.Route(t.Category, t.TargetId))));
             }
             catch (Exception ex)

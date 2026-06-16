@@ -97,7 +97,7 @@ else
         _loadedId = Id;
         _load = true;
         _input = null;
-        var p = await PersonService.GetDetailAsync(Id, _user.MayClassifiedRead());
+        var p = await PersonService.GetDetailAsync(Id, ViewerScope.From(_user));
         if (p is not null)
         {
             _input = new PersonInput

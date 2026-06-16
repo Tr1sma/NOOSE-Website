@@ -44,7 +44,7 @@ public static class LibraryFileEndpointRouteBuilderExtensions
             // auto-disposed
             return Results.File(stream, file.ContentType, file.OriginalName, enableRangeProcessing: true);
         })
-        .RequireAuthorization(Policies.ActiveAgent);
+        .RequireAuthorization(Policies.ActiveAgent, Policies.InternalAgent);
 
         return group;
     }

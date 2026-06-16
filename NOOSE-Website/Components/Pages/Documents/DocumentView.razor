@@ -46,6 +46,9 @@ else
         {
             <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
         }
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Document)" EntityId="@_document.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/dokumente/{_document.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
@@ -75,6 +78,9 @@ else
                     </MudText>
                 }
 
+                @* attachments fan-out: internal only *@
+                @if (!_isPartner)
+                {
                 <MudDivider Class="my-3" />
                 <MudText Typo="Typo.subtitle2" Class="mb-2">Angehängt an (@_attachments.Count)</MudText>
                 @if (_attachments.Count == 0)
@@ -99,6 +105,7 @@ else
                         }
                     </MudStack>
                 }
+                }
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -109,6 +116,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Document? _document;
     private List<DocumentAttachment> _attachments = new();
     private bool _mayDelete;
@@ -131,9 +139,11 @@ else
     {
         _load = true;
         _isLeadership = _user.IsLeadership();
-        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(_user));
-        if (_document is not null)
+        _isPartner = _user.IsPartner();
+        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
+        if (_document is not null && !_isPartner)
         {
+            // partners: skip attachment fan-out
             _attachments = await DocumentService.GetAttachmentsAsync(Id, _isLeadership, _user.GetAgentId());
             _mayDelete = _isLeadership
                 || (_document.CreatedById is not null && _document.CreatedById == _user.GetAgentId());

@@ -66,7 +66,7 @@ else
         _loadedId = Id;
         _load = true;
         _input = null;
-        var g = await GroupService.GetDetailAsync(Id, _user.MayClassifiedRead());
+        var g = await GroupService.GetDetailAsync(Id, ViewerScope.From(_user));
         if (g is not null)
         {
             _input = new PersonGroupInput

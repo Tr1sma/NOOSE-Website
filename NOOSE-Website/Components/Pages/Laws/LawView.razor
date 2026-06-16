@@ -27,6 +27,9 @@ else
                            Href="@($"/gesetze/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Law)" EntityId="@_law.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.Leadership" Context="fuehrung">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
                        OnClick="EditAsync">Bearbeiten</MudButton>
@@ -49,6 +52,9 @@ else
         </MudStack>
     </MudPaper>
 
+    @* linked records fan-out: internal only *@
+    @if (!_isPartner)
+    {
     <MudPaper Class="pa-4" Elevation="2">
         <MudStack Spacing="3">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -97,6 +103,7 @@ else
             }
         </MudStack>
     </MudPaper>
+    }
 }
 
 @code {
@@ -104,6 +111,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Law? _law;
     private List<LinkDisplay> _links = new();
     private ClaimsPrincipal _user = default!;
@@ -111,14 +119,16 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _load = true;
-        _law = await LawService.GetAsync(Id);
-        if (_law is not null)
+        _law = await LawService.GetAsync(Id, partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
+        // partners: skip link fan-out
+        if (_law is not null && !_isPartner)
         {
             _links = await LinkService.GetForRecordAsync(nameof(Law), Id, _user.IsLeadership(), _user.GetAgentId());
         }

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -12,14 +13,14 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IDocumentService
 {
-    /// <summary>Alle für den Aufrufer sichtbaren Dokumente (Verschlusssache-gefiltert), neueste zuerst.</summary>
-    Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default);
+    /// <summary>Visible documents, newest first; classified-filtered, or released-only when partnerAgency is set.</summary>
+    Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
 
     /// <summary>Typeahead-Suche über Titel/Kategorie für die Auswahl beim Anhängen.</summary>
     Task<List<DocumentListItem>> SearchAsync(string? searchText, DocumentViewerScope scope, int max = 20, CancellationToken cancellationToken = default);
 
-    /// <summary>Ein einzelnes Dokument inkl. HTML-Body, oder null wenn nicht vorhanden/nicht sichtbar.</summary>
-    Task<Document?> GetAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default);
+    /// <summary>Single document with HTML body, or null if missing/not visible; released-only when partnerAgency is set.</summary>
+    Task<Document?> GetAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
 
     Task<Document> CreateAsync(DocumentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

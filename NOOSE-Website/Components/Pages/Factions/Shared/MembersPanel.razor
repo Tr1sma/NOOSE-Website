@@ -78,7 +78,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _members = await FactionService.GetMembersAsync(FactionId, User.IsLeadership());
+        _members = await FactionService.GetMembersAsync(FactionId, ViewerScope.From(User));
         _load = false;
     }
 

@@ -16,20 +16,19 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IFraktionService" />
 public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion, IPersonService personService, IFactionPhotoStorageService photoStorage, IThreatScoreService threat) : IFactionService
 {
-    public async Task<List<Faction>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<Faction>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht
         // (gelöschte/Verschlusssache-Personen werden dort wie hier ausgeblendet).
-        return await db.Factions
-            .Where(f => isLeadership || !f.IsClassified)
+        return await VisibleFactions(db, scope)
             .Include(f => f.Members).ThenInclude(m => m.Person)
             .Include(f => f.Photos)
             .OrderByDescending(f => f.ModifiedAt ?? f.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Faction?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<Faction?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var faction = await db.Factions
@@ -41,7 +40,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .AsSplitQuery()
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
 
-        if (faction is null || (faction.IsClassified && !isLeadership))
+        if (faction is null || !await Visibility.IsRecordVisibleAsync(db, nameof(Faction), id, scope, cancellationToken))
         {
             return null;
         }
@@ -293,10 +292,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await threat.NewCalculateAsync(id, cancellationToken);
     }
 
-    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Faction), id, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Faction), id, scope, cancellationToken))
         {
             return new();
         }
@@ -306,7 +305,13 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<FactionMember>> GetMembersAsync(string factionId, bool isLeadership, CancellationToken cancellationToken = default)
+    // scope-filtered faction query
+    private static IQueryable<Faction> VisibleFactions(AppDbContext db, ViewerScope scope)
+        => scope.PartnerAgency is { } agency
+            ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
+            : db.Factions.Where(f => scope.MayClassifiedRead || !f.IsClassified);
+
+    public async Task<List<FactionMember>> GetMembersAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var members = await db.FactionMembers
@@ -316,8 +321,17 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
 
         // Person == null → Akte im Papierkorb (Soft-Delete-Filter greift auf die Navigation); ausblenden.
         // Verschlusssachen-Personen nur für Führung sichtbar.
-        return members
-            .Where(m => m.Person is not null && (isLeadership || !m.Person.IsClassified))
+        var visible = members
+            .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
+            .ToList();
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: only members whose person is released
+            var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person),
+                visible.Select(m => m.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
+            visible = visible.Where(m => released.Contains(m.PersonId)).ToList();
+        }
+        return visible
             .OrderByDescending(m => m.IsLead)
             .ThenBy(m => m.Person!.Name)
             .ToList();
@@ -550,18 +564,23 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
 
     // ---- Aktivitäten (Zeitstrahl) ----
 
-    public async Task<List<FactionActivity>> GetActivitiesAsync(string factionId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<FactionActivity>> GetActivitiesAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Defense in depth: an Aktivitäten einer Verschlusssache-Fraktion kommt nur die Führung.
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Faction), factionId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Faction), factionId, scope, cancellationToken))
         {
             return new();
         }
-        return await db.FactionActivities
+        var activities = await db.FactionActivities
             .Where(a => a.FactionId == factionId)
             .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
+        if (scope.PartnerAgency is { } agency)
+        {
+            activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), factionId, nameof(FactionActivity), activities, a => a.Id, agency, scope.MeId, cancellationToken);
+        }
+        return activities;
     }
 
     public async Task ActivityAddAsync(string factionId, ActivityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -666,10 +685,22 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<FactionPhoto?> GetPhotoWithFactionAsync(string photoId, CancellationToken cancellationToken = default)
+    public async Task<FactionPhoto?> GetPhotoWithFactionAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.FactionPhotos.Include(f => f.Faction).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        var photo = await db.FactionPhotos.Include(f => f.Faction).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        if (photo?.Faction is null)
+        {
+            return null;
+        }
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: parent visible AND (whole-record or this photo released)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Faction), photo.FactionId, nameof(FactionPhoto), photoId, agency, scope.MeId, cancellationToken)
+                ? photo
+                : null;
+        }
+        return photo.Faction.IsClassified && !scope.MayClassifiedRead ? null : photo;
     }
 
     public async Task<FactionPhoto> PhotoAddAsync(string factionId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

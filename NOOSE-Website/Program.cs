@@ -237,10 +237,13 @@ builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 // system settings
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
+// per partner-rank visibility config
+builder.Services.AddScoped<IPartnerVisibilityPolicyService, PartnerVisibilityPolicyService>();
 builder.Services.AddScoped<ILawService, LawService>();
 builder.Services.AddScoped<ILibraryStorageService, LibraryStorageService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<IPersonMergeService, PersonMergeService>();
+builder.Services.AddScoped<IPartnerShareService, PartnerShareService>();
 
 // rate limit
 builder.Services.AddRateLimiter(options =>

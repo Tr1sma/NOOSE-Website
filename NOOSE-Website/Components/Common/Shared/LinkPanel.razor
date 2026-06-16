@@ -198,14 +198,14 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var isLeadership = User.IsLeadership();
-        _relations = await RelationService.GetForPersonAsync(PersonId, isLeadership);
+        var scope = ViewerScope.From(User);
+        _relations = await RelationService.GetForPersonAsync(PersonId, scope);
         // Standard-Verknüpfungen aufteilen: automatische Kollegen wandern zu den Beziehungen,
         // manuell angelegte bleiben unter „Verknüpfte Akten".
-        var @default = await LinkService.GetForRecordAsync(nameof(Person), PersonId, isLeadership, User.GetAgentId(), LinkKind.Default);
+        var @default = await LinkService.GetForRecordAsync(nameof(Person), PersonId, scope, LinkKind.Default);
         _manual = @default.Where(v => !v.Automatic).ToList();
         _colleagues = @default.Where(v => v.Automatic).ToList();
-        _derived = await PersonService.GetDerivedRelationsAsync(PersonId, isLeadership);
+        _derived = await PersonService.GetDerivedRelationsAsync(PersonId, scope);
         _load = false;
     }
 

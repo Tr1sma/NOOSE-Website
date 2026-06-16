@@ -14,8 +14,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IPersonGroupService
 {
-    Task<List<PersonGroup>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default);
-    Task<PersonGroup?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<PersonGroup>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<PersonGroup?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<PersonGroup>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<PersonGroup>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
@@ -26,10 +26,10 @@ public interface IPersonGroupService
 
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>Mitglieder der Gruppe inkl. Person; Verschlusssachen-Personen nur für Führung.</summary>
-    Task<List<PersonGroupMember>> GetMembersAsync(string groupId, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<PersonGroupMember>> GetMembersAsync(string groupId, ViewerScope scope, CancellationToken cancellationToken = default);
     Task MemberAddAsync(string groupId, GroupMemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task MemberChangeAsync(string memberId, string? role, bool isLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task MemberRemoveAsync(string memberId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

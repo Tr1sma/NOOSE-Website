@@ -10,17 +10,14 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IPersonDocService
 {
-    /// <summary>Doks einer Person inkl. aufgelöster (Verschlusssache-gefilterter) Verknüpfungs-Anzeige.</summary>
-    Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Docs of a person with resolved (visibility-filtered) link display; partner-filtered when scope is a partner.</summary>
+    Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>Alle Doks (übergreifend) inkl. zugehöriger Person und aufgelöster Verknüpfung; respektiert den Verschlusssachen-Filter.</summary>
     Task<List<PersonDocDisplay>> GetAllAsync(bool isLeadership, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Doks, die mit einer Organisation (Fraktion/Personengruppe) verknüpft sind (Rück-Verknüpfung).
-    /// <paramref name="orgTyp"/> ist <c>nameof(Fraktion)</c> bzw. <c>nameof(Personengruppe)</c>; Verschlusssache-gefiltert.
-    /// </summary>
-    Task<List<PersonDocDisplay>> GetForOrgAsync(string orgType, string orgId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Docs linked to an org (faction/group); visibility-filtered, partner-filtered when scope is a partner.</summary>
+    Task<List<PersonDocDisplay>> GetForOrgAsync(string orgType, string orgId, ViewerScope scope, CancellationToken cancellationToken = default);
 
     Task<PersonDoc> CreateAsync(string personId, PersonDocInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

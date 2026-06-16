@@ -32,6 +32,11 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
     public async Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
+        // partners: no graph access
+        if (viewer.IsPartner())
+        {
+            return new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
+        }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var isLeadership = viewer.IsLeadership();
         var meId = viewer.GetAgentId();
@@ -116,6 +121,11 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
     public async Task<PathResult> FindPathAsync(string sourceType, string sourceId, string targetType, string targetId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
+        // partners: no graph access
+        if (viewer.IsPartner())
+        {
+            return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
+        }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var isLeadership = viewer.IsLeadership();
         var meId = viewer.GetAgentId();

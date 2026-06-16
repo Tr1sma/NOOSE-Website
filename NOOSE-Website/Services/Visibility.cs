@@ -17,6 +17,17 @@ namespace NOOSE_Website.Services;
 /// <summary>Central visibility check for records.</summary>
 public static class Visibility
 {
+    /// <summary>True if record is visible to the viewer; partners see only released, non-classified records.</summary>
+    public static Task<bool> IsRecordVisibleAsync(
+        AppDbContext db, string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default)
+    {
+        if (scope.PartnerAgency is { } agency)
+        {
+            return PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, scope.MeId, cancellationToken);
+        }
+        return IsRecordVisibleAsync(db, entityType, entityId, scope.MayClassifiedRead, cancellationToken, scope.MeId);
+    }
+
     /// <summary>True if record is visible to caller.</summary>
     public static async Task<bool> IsRecordVisibleAsync(
         AppDbContext db, string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default, string? meId = null)

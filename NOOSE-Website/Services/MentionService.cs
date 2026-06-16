@@ -105,7 +105,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         // 1) Akten (Person/Fraktion/Gruppe/Partei/Operation/Taskforce) über die Schnellsuche – VS-gefiltert;
         //    Taskforces zusätzlich Mitgliedschafts-gefiltert (meId).
-        var records = await search.QuickSearchAsync(s, mayClassifiedRead, meId, 8, cancellationToken);
+        var records = await search.QuickSearchAsync(s, new ViewerScope(mayClassifiedRead, mayClassifiedRead, meId, null), 8, cancellationToken);
         hit.AddRange(records.Select(a => new MentionHit(a.Category, a.TargetId, a.Name, a.CaseNumber)));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

@@ -99,9 +99,9 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var isLeadership = User.IsLeadership();
-        _affiliations = await PersonService.GetAffiliationsAsync(PersonId, isLeadership);
-        _former = await PersonService.GetFormerAffiliationsAsync(PersonId, isLeadership);
+        var scope = ViewerScope.From(User);
+        _affiliations = await PersonService.GetAffiliationsAsync(PersonId, scope);
+        _former = await PersonService.GetFormerAffiliationsAsync(PersonId, scope);
         _load = false;
     }
 

@@ -108,12 +108,17 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _case = await CaseService.GetDetailAsync(Id, isLeadership);
+        var scope = ViewerScope.From(user);
+        _case = await CaseService.GetDetailAsync(Id, scope);
         if (_case is not null)
         {
-            _classificationHistory = await CaseService.GetClassificationHistoryAsync(Id, isLeadership);
-            _links = await LinkService.GetForRecordAsync(nameof(Case), Id, isLeadership, user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(Case), Id, isLeadership);
+            _classificationHistory = await CaseService.GetClassificationHistoryAsync(Id, scope);
+            // partners: core only
+            if (!user.IsPartner())
+            {
+                _links = await LinkService.GetForRecordAsync(nameof(Case), Id, isLeadership, user.GetAgentId());
+                _comments = await CommentService.GetForRecordAsync(nameof(Case), Id, isLeadership);
+            }
             await AccessLog.LogViewAsync(nameof(Case), Id);
         }
         _load = false;

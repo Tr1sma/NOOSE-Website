@@ -1,6 +1,8 @@
 @* Minimal-Layout für Druckansichten (Phase 7): helles Theme, weißer Grund, keine Navigation –
    die Seite selbst IST das Dokument. Genutzt von /personen/{id}/druck. *@
 @inherits LayoutComponentBase
+@inject NavigationManager Nav
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="false" />
 <MudPopoverProvider />
@@ -8,5 +10,46 @@
 <MudSnackbarProvider />
 
 <div class="druck-seite">
-    @Body
+    @if (PartnerBlocked(Nav.ToBaseRelativePath(Nav.Uri)))
+    {
+        <p>Kein Zugriff – dieser Bereich ist für Partnerbehörden nicht freigegeben.</p>
+    }
+    else
+    {
+        @Body
+    }
 </div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private bool _isPartner;
+    private IReadOnlySet<string>? _allowedPartnerTypes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var user = (await AuthStateTask).User;
+            _isPartner = user.IsPartner();
+            if (_isPartner)
+            {
+                _allowedPartnerTypes = await PartnerPolicy.GetAllowedTypesAsync(user);
+            }
+        }
+    }
+
+    private bool PartnerBlocked(string path)
+    {
+        if (!_isPartner)
+        {
+            return false;
+        }
+        if (!PartnerRoutes.IsAllowed(path))
+        {
+            return true;
+        }
+        var typeKey = PartnerTabCatalog.TypeKeyForPath(path);
+        return typeKey is not null && _allowedPartnerTypes is not null && !_allowedPartnerTypes.Contains(typeKey);
+    }
+}

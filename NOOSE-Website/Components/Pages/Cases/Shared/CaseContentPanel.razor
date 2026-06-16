@@ -8,9 +8,12 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Gebündelte Akten (@_list.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
-            Akte hinzufügen
-        </MudButton>
+        @if (User.MayWrite())
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
+                Akte hinzufügen
+            </MudButton>
+        }
     </MudStack>
 
     @if (_load)
@@ -50,8 +53,11 @@
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
                                 }
                             </MudStack>
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                           OnClick="@(() => RemoveAsync(v))" aria-label="Akte aus dem Vorgang entfernen" />
+                            @if (User.MayWrite())
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => RemoveAsync(v))" aria-label="Akte aus dem Vorgang entfernen" />
+                            }
                         </MudStack>
                     </MudPaper>
                 }
@@ -84,7 +90,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var all = await LinkService.GetForRecordAsync(nameof(Case), CaseId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        var all = await LinkService.GetForRecordAsync(nameof(Case), CaseId, ViewerScope.From(User), LinkKind.Default);
         // Nur manuell gebündelte Akten zeigen (ein Vorgang hat keine automatischen Verknüpfungen).
         _list = all.Where(v => !v.Automatic).ToList();
         _load = false;

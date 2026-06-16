@@ -76,7 +76,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _members = await GroupService.GetMembersAsync(GroupId, User.IsLeadership());
+        _members = await GroupService.GetMembersAsync(GroupId, ViewerScope.From(User));
         _load = false;
     }
 

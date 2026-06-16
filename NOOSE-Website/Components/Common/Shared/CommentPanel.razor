@@ -4,6 +4,7 @@
 @inject IMentionService MentionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IPartnerShareService PartnerShareService
 
 <MudStack Spacing="3">
     <MudText Typo="Typo.subtitle1">Kommentare (@_entries.Count)</MudText>
@@ -44,11 +45,14 @@
                             · @e.K.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                         </MudText>
                     </MudStack>
-                    @if (_mayWrite && MayDelete(e.K))
-                    {
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => DeleteAsync(e.K))" aria-label="Kommentar löschen" />
-                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Comment)" ChildId="@e.K.Id" />
+                        @if (_mayWrite && MayDelete(e.K))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(e.K))" aria-label="Kommentar löschen" />
+                        }
+                    </MudStack>
                 </MudStack>
                 <div class="mt-1">
                     <MentionText Segments="e.Segments" />
@@ -70,6 +74,7 @@
     private bool _mayClassifiedRead;
     private bool _mayRealName;
     private bool _mayWrite;
+    private bool _canShareChildren;
     private string _newText = string.Empty;
     private List<Entry> _entries = new();
 
@@ -81,13 +86,19 @@
         _mayClassifiedRead = User.MayClassifiedRead();
         _mayRealName = User.MayRealNameSee();
         _mayWrite = User.MayWrite();
+        // leadership: per-item release only matters when the record is shell-released
+        if (_isLeadership)
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(EntityType, EntityId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _load = true;
-        var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, _mayClassifiedRead);
+        var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User));
         // Alle Kommentar-Texte in EINER Sammelabfrage auflösen (@-Tokens → anzeigefertige Segmente, VS-/Klarname-gefiltert).
         var segments = await MentionService.ResolveManyAsync(
             comments.Select(k => (string?)k.Text).ToList(), _mayClassifiedRead, User.GetAgentId());

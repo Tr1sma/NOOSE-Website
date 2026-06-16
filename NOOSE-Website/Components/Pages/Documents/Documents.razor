@@ -125,10 +125,13 @@ else
 }
 
 </MudTabPanel>
+@if (!_isPartner)
+{
 <MudTabPanel Icon="@Icons.Material.Filled.FolderOpen" Text="Dateien">
-    @* Datei-Bibliothek (Phase 7): hochgeladene Formulare/SOPs/Vorlagen. *@
+    @* internal file library *@
     <LibraryPanel />
 </MudTabPanel>
+}
 </MudTabs>
 
 @code {
@@ -136,6 +139,7 @@ else
 
     private bool _load = true;
     private bool _isLeadership;
+    private bool _isPartner;
     private string _search = string.Empty;
     private ClaimsPrincipal _user = default!;
     private List<DocumentListItem> _rows = new();      // Nicht angepinnte – im Grid darunter.
@@ -145,12 +149,13 @@ else
     {
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
+        _isPartner = _user.IsPartner();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
-        var all = await DocumentService.GetListAsync(DocumentViewerScope.From(_user));
+        var all = await DocumentService.GetListAsync(DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
         _pinned = all.Where(d => d.Pinned).ToList();
         _rows = all.Where(d => !d.Pinned).ToList();
         _load = false;

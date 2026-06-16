@@ -152,6 +152,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Law> Laws => Set<Law>();
     public DbSet<LibraryFile> LibraryFiles => Set<LibraryFile>();
 
+    // ---- partner record releases ----
+    public DbSet<PartnerShare> PartnerShares => Set<PartnerShare>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -933,6 +936,15 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(d => d.Title);
             b.HasIndex(d => d.Category);
             b.HasIndex(d => d.IsClassified);
+        });
+
+        modelBuilder.Entity<PartnerShare>(b =>
+        {
+            b.Property(s => s.EntityType).HasMaxLength(128).IsRequired();
+            b.Property(s => s.EntityId).HasMaxLength(64).IsRequired();
+            b.Property(s => s.PartnerAgentId).HasMaxLength(64);
+            b.HasIndex(s => new { s.EntityType, s.EntityId });
+            b.HasIndex(s => new { s.Agency, s.EntityType, s.EntityId });
         });
 
         // global soft-delete filter

@@ -226,15 +226,20 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _faction = await FactionService.GetDetailAsync(Id, isLeadership);
+        var scope = ViewerScope.From(user);
+        _faction = await FactionService.GetDetailAsync(Id, scope);
         if (_faction is not null)
         {
-            _members = await FactionService.GetMembersAsync(Id, isLeadership);
-            _agents = await FactionService.GetAgentsAsync(Id);
-            _activities = await FactionService.GetActivitiesAsync(Id, isLeadership);
-            _classificationHistory = await FactionService.GetClassificationHistoryAsync(Id, isLeadership);
-            _links = await LinkService.GetForRecordAsync(nameof(Faction), Id, isLeadership, user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(Faction), Id, isLeadership);
+            _classificationHistory = await FactionService.GetClassificationHistoryAsync(Id, scope);
+            // partners: core only
+            if (!user.IsPartner())
+            {
+                _members = await FactionService.GetMembersAsync(Id, scope);
+                _agents = await FactionService.GetAgentsAsync(Id);
+                _activities = await FactionService.GetActivitiesAsync(Id, scope);
+                _links = await LinkService.GetForRecordAsync(nameof(Faction), Id, isLeadership, user.GetAgentId());
+                _comments = await CommentService.GetForRecordAsync(nameof(Faction), Id, isLeadership);
+            }
             await AccessLog.LogViewAsync(nameof(Faction), Id);
         }
         _load = false;

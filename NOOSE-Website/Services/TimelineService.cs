@@ -32,12 +32,15 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
+        var scope = ViewerScope.From(viewer);
+        var agency = scope.PartnerAgency;
+        var isPartner = agency is not null;
         var mayClassified = viewer.MayClassifiedRead();
         var mayAllTf = viewer.MayAllTaskforcesSee();
         var meId = viewer.GetAgentId();
 
         // visibility gate
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, mayClassified, cancellationToken, meId))
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, scope, cancellationToken))
         {
             return Array.Empty<TimelineEntry>();
         }
@@ -64,7 +67,18 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         var actorIds = new HashSet<string>();
 
         // ---- 1) audit base ----
-        var (types, auditIds) = await AuditSourceAsync(db, entityType, entityId, cancellationToken);
+        string[] types;
+        HashSet<string> auditIds;
+        if (isPartner)
+        {
+            // record-self audit only, no child fan-out
+            types = new[] { entityType };
+            auditIds = new HashSet<string> { entityId };
+        }
+        else
+        {
+            (types, auditIds) = await AuditSourceAsync(db, entityType, entityId, cancellationToken);
+        }
         foreach (var log in await db.AuditLogs
             .Where(a => types.Contains(a.EntityType) && auditIds.Contains(a.EntityId)
                 && a.EntityType != nameof(Link))
@@ -87,20 +101,32 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         }
 
         // ---- 3) comments ----
-        foreach (var k in await db.Comments
+        var comments = await db.Comments
             .Where(k => k.EntityType == entityType && k.EntityId == entityId)
-            .Select(k => new { k.Text, k.AuthorName, k.CreatedAt })
-            .ToListAsync(cancellationToken))
+            .Select(k => new { k.Id, k.Text, k.AuthorName, k.CreatedAt })
+            .ToListAsync(cancellationToken);
+        if (isPartner)
+        {
+            comments = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Comment), comments, k => k.Id, agency!.Value, meId, cancellationToken);
+        }
+        foreach (var k in comments)
         {
             raw.Add(new Raw(k.CreatedAt, TimelineCategory.Comment,
                 "Kommentar", Truncate(k.Text), k.AuthorName, null, null, null));
         }
 
         // ---- 4) sources/attachments ----
-        foreach (var q in await db.Sources
+        var sources = await db.Sources
             .Where(q => q.EntityType == entityType && q.EntityId == entityId)
-            .Select(q => new { q.Title, q.Type, q.CreatedAt, q.CreatedById })
-            .ToListAsync(cancellationToken))
+            .Select(q => new { q.Id, q.Title, q.Type, q.CreatedAt, q.CreatedById })
+            .ToListAsync(cancellationToken);
+        if (isPartner)
+        {
+            // drop cross-ref source types, then child-release filter
+            sources = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
+            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency!.Value, meId, cancellationToken);
+        }
+        foreach (var q in sources)
         {
             Remember(actorIds, q.CreatedById);
             var title = string.IsNullOrWhiteSpace(q.Title) ? "Quelle hinzugefügt" : $"Quelle hinzugefügt: {q.Title}";
@@ -109,10 +135,15 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         }
 
         // ---- 5) followups ----
-        foreach (var w in await db.Followups
+        var followups = await db.Followups
             .Where(w => w.EntityType == entityType && w.EntityId == entityId)
-            .Select(w => new { w.DueAt, w.Note, w.Done, w.DoneAt, w.DoneById, w.CreatedAt, w.CreatedById })
-            .ToListAsync(cancellationToken))
+            .Select(w => new { w.Id, w.DueAt, w.Note, w.Done, w.DoneAt, w.DoneById, w.CreatedAt, w.CreatedById })
+            .ToListAsync(cancellationToken);
+        if (isPartner)
+        {
+            followups = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Followup), followups, w => w.Id, agency!.Value, meId, cancellationToken);
+        }
+        foreach (var w in followups)
         {
             Remember(actorIds, w.CreatedById);
             var due = w.DueAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
@@ -128,13 +159,14 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         }
 
         // ---- 6) links ----
-        var link = await db.Links.IgnoreQueryFilters()
+        // cross-ref: skip for partners
+        var link = isPartner ? null : await db.Links.IgnoreQueryFilters()
             .Where(v => !v.Automatic
                 && ((v.SourceType == entityType && v.SourceId == entityId)
                  || (v.TargetType == entityType && v.TargetId == entityId)))
             .Select(v => new { v.SourceType, v.SourceId, v.TargetType, v.TargetId, v.Label, v.CreatedAt, v.CreatedById, v.IsDeleted, v.DeletedAt, v.DeletedById })
             .ToListAsync(cancellationToken);
-        if (link.Count > 0)
+        if (link is { Count: > 0 })
         {
             (string, string) Counterpart(string sourceType, string sourceId, string targetType, string targetId)
                 => sourceType == entityType && sourceId == entityId ? (targetType, targetId) : (sourceType, sourceId);
@@ -159,10 +191,15 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         // ---- 7) person-specific ----
         if (entityType == nameof(Person))
         {
-            foreach (var o in await db.Observations
+            var observations = await db.Observations
                 .Where(o => o.PersonId == entityId)
-                .Select(o => new { o.Start, o.Location, o.Sighting, o.CreatedById })
-                .ToListAsync(cancellationToken))
+                .Select(o => new { o.Id, o.Start, o.Location, o.Sighting, o.CreatedById })
+                .ToListAsync(cancellationToken);
+            if (isPartner)
+            {
+                observations = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(Observation), observations, o => o.Id, agency!.Value, meId, cancellationToken);
+            }
+            foreach (var o in observations)
             {
                 Remember(actorIds, o.CreatedById);
                 var title = string.IsNullOrWhiteSpace(o.Location) ? "Observation" : $"Observation – {o.Location}";
@@ -170,21 +207,27 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                     Truncate(o.Sighting), null, o.CreatedById, null, null));
             }
 
-            foreach (var f in await db.PersonPhotos
+            var photos = await db.PersonPhotos
                 .Where(f => f.PersonId == entityId)
-                .Select(f => new { f.OriginalName, f.CreatedAt, f.CreatedById })
-                .ToListAsync(cancellationToken))
+                .Select(f => new { f.Id, f.OriginalName, f.CreatedAt, f.CreatedById })
+                .ToListAsync(cancellationToken);
+            if (isPartner)
+            {
+                photos = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(PersonPhoto), photos, f => f.Id, agency!.Value, meId, cancellationToken);
+            }
+            foreach (var f in photos)
             {
                 Remember(actorIds, f.CreatedById);
                 raw.Add(new Raw(f.CreatedAt, TimelineCategory.Photo, "Foto hinzugefügt",
                     f.OriginalName, null, f.CreatedById, null, null));
             }
 
-            var bez = await db.PersonRelations
+            // cross-ref: skip for partners
+            var bez = isPartner ? null : await db.PersonRelations
                 .Where(b => b.PersonAId == entityId || b.PersonBId == entityId)
                 .Select(b => new { b.PersonAId, b.PersonBId, b.Type, b.Note, b.CreatedAt, b.CreatedById })
                 .ToListAsync(cancellationToken);
-            if (bez.Count > 0)
+            if (bez is { Count: > 0 })
             {
                 var refs = bez.Select(b => (nameof(Person), b.PersonAId == entityId ? b.PersonBId : b.PersonAId))
                     .Distinct().ToList();
@@ -203,10 +246,15 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         // ---- 8) faction-specific ----
         if (entityType == nameof(Faction))
         {
-            foreach (var a in await db.FactionActivities
+            var activities = await db.FactionActivities
                 .Where(a => a.FactionId == entityId)
-                .Select(a => new { a.Title, a.Kind, a.Timestamp, a.Description, a.Location, a.CreatedById })
-                .ToListAsync(cancellationToken))
+                .Select(a => new { a.Id, a.Title, a.Kind, a.Timestamp, a.Description, a.Location, a.CreatedById })
+                .ToListAsync(cancellationToken);
+            if (isPartner)
+            {
+                activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), entityId, nameof(FactionActivity), activities, a => a.Id, agency!.Value, meId, cancellationToken);
+            }
+            foreach (var a in activities)
             {
                 Remember(actorIds, a.CreatedById);
                 var title = string.IsNullOrWhiteSpace(a.Kind) ? $"Aktivität: {a.Title}" : $"Aktivität ({a.Kind}): {a.Title}";

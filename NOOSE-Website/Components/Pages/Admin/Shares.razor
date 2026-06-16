@@ -75,6 +75,7 @@ else
     <MudText Typo="Typo.h6" Class="mb-2">Registrierungen</MudText>
     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
         Beim Freischalten wird ein Dienstgrad vergeben; danach erhält der Agent beim nächsten Login Zugriff.
+        Wird stattdessen eine Partnerbehörde gewählt, erhält das Konto nur lesenden Partner-Zugriff (kein Rang).
     </MudText>
     @if (_pending.Count == 0)
     {
@@ -90,6 +91,7 @@ else
                 <MudTh Style="min-width:220px;"><MudTableSortLabel T="Agent" SortBy="@(x => (int)Selection(x.Id).Degree)">Dienstgrad</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Selection(x.Id).Tru)">TRU</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => Selection(x.Id).Hrb)">HRB</MudTableSortLabel></MudTh>
+                <MudTh Style="min-width:170px;">Partner</MudTh>
                 <MudTh Style="text-align:right;">Aktion</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -116,6 +118,25 @@ else
                 </MudTd>
                 <MudTd DataLabel="HRB">
                     <MudCheckBox T="bool" @bind-Value="Selection(context.Id).Hrb" Color="Color.Info" />
+                </MudTd>
+                <MudTd DataLabel="Partner">
+                    <MudSelect T="PartnerAgency?" @bind-Value="Selection(context.Id).Partner" Dense="true" Margin="Margin.Dense"
+                               Variant="Variant.Outlined" Clearable="true" Placeholder="— (interner Agent)">
+                        @foreach (var agency in PartnerAgencyDisplay.All)
+                        {
+                            <MudSelectItem T="PartnerAgency?" Value="@((PartnerAgency?)agency)">@PartnerAgencyDisplay.Name(agency)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (Selection(context.Id).Partner is not null)
+                    {
+                        <MudSelect T="PartnerRank" @bind-Value="Selection(context.Id).PartnerDegree" Dense="true" Margin="Margin.Dense"
+                                   Variant="Variant.Outlined" Class="mt-1">
+                            @foreach (var pr in PartnerRankDisplay.All)
+                            {
+                                <MudSelectItem Value="pr">@(PartnerRankDisplay.Suffix(pr) is { Length: > 0 } s ? s : "Standard")</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Aktion" Style="text-align:right;">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
@@ -298,6 +319,9 @@ else
         public Rank Degree { get; set; } = Rank.JuniorAgent;
         public bool Tru { get; set; }
         public bool Hrb { get; set; }
+        // non-null = release as partner
+        public PartnerAgency? Partner { get; set; }
+        public PartnerRank PartnerDegree { get; set; } = PartnerRank.Member;
     }
 
     private SelectionState Selection(string agentId)
@@ -377,8 +401,16 @@ else
         var selection = Selection(agent.Id);
         try
         {
-            await AgentService.ReleaseAsync(agent.Id, selection.Degree, selection.Tru, selection.Hrb, _user);
-            Snackbar.Add($"{DisplayName(agent)} als {RankDisplay.Name(selection.Degree)} freigegeben.", Severity.Success);
+            if (selection.Partner is { } agency)
+            {
+                await AgentService.ReleaseAsPartnerAsync(agent.Id, agency, selection.PartnerDegree, _user);
+                Snackbar.Add($"{DisplayName(agent)} als Partner ({PartnerRankDisplay.Full(agency, selection.PartnerDegree)}) freigegeben.", Severity.Success);
+            }
+            else
+            {
+                await AgentService.ReleaseAsync(agent.Id, selection.Degree, selection.Tru, selection.Hrb, _user);
+                Snackbar.Add($"{DisplayName(agent)} als {RankDisplay.Name(selection.Degree)} freigegeben.", Severity.Success);
+            }
         }
         catch (Exception ex)
         {

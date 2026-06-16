@@ -22,6 +22,12 @@ public static class Policies
     /// <summary>Nur-Lese-Aufsicht aktiv (TeamLeitung ohne Admin). Für den globalen Nur-Lese-Hinweis-Banner.</summary>
     public const string OnlyReadMode = "NurLeseModus";
 
+    /// <summary>External partner (DoJ/LSPD/LSMD): reduced read-only navigation and views.</summary>
+    public const string PartnerView = "PartnerAnsicht";
+
+    /// <summary>Internal NOOSE agent (not a partner): full navigation and internal pages.</summary>
+    public const string InternalAgent = "InternerAgent";
+
     /// <summary>Seiten-Zugang Führungsbereich: Führung ODER Nur-Lese-Aufsicht (öffnet die Seite read-only,
     /// ohne Schreib-Buttons – diese bleiben an <see cref="Fuehrung"/> gebunden).</summary>
     public const string LeadershipPage = "FuehrungSeite";

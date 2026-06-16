@@ -61,9 +61,33 @@ public static class AgentPrincipalExtensions
     public static bool IsOnlyReader(this ClaimsPrincipal user)
         => user.IsTeamLead() && !user.IsAdmin();
 
-    /// <summary>Darf überhaupt Daten schreiben/ändern. Nur-Leser (Aufsicht) dürfen das nie. Einzige Quelle
-    /// der Schreib-Sichtbarkeitsregel für die UI – Mutations-Controls hierüber aus-/einblenden.</summary>
-    public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader();
+    /// <summary>External partner agency from claim, or null for internal NOOSE agents.</summary>
+    public static PartnerAgency? GetPartnerAgency(this ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue(AgentClaimTypes.PartnerAgency);
+        return int.TryParse(raw, out var value) && Enum.IsDefined(typeof(PartnerAgency), value)
+            ? (PartnerAgency)value
+            : null;
+    }
+
+    /// <summary>Partner rank tier from claim, or null for internal NOOSE agents.</summary>
+    public static PartnerRank? GetPartnerRank(this ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue(AgentClaimTypes.PartnerRank);
+        return int.TryParse(raw, out var value) && Enum.IsDefined(typeof(PartnerRank), value)
+            ? (PartnerRank)value
+            : null;
+    }
+
+    /// <summary>External partner (DoJ/LSPD/LSMD): read-only, sees only released non-classified content.</summary>
+    public static bool IsPartner(this ClaimsPrincipal user) => user.GetPartnerAgency() is not null;
+
+    /// <summary>True if the viewer is a partner of the given agency at or above the given rank tier.</summary>
+    public static bool HasPartnerRank(this ClaimsPrincipal user, PartnerAgency agency, PartnerRank minimum)
+        => user.GetPartnerAgency() == agency && user.GetPartnerRank() is { } rank && rank >= minimum;
+
+    /// <summary>May write at all; false for read-only supervisors and partners. Sole source for write-control visibility.</summary>
+    public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader() && !user.IsPartner();
 
     /// <summary>Führung = Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
     public static bool IsLeadership(this ClaimsPrincipal user)

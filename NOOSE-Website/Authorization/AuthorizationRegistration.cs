@@ -9,6 +9,8 @@ public static class AuthorizationRegistration
     public static IServiceCollection AddNooseAuthorization(this IServiceCollection services)
     {
         services.AddScoped<IAuthorizationHandler, RankAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, ClassifiedAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, PartnerRankAuthorizationHandler>();
 
         services.AddAuthorizationBuilder()
             .AddPolicy(Policies.ActiveAgent, p => p
@@ -27,6 +29,13 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.OnlyReadMode, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsOnlyReader()))
+            // partner/internal split
+            .AddPolicy(Policies.PartnerView, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IsPartner()))
+            .AddPolicy(Policies.InternalAgent, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => !ctx.User.IsPartner()))
             // page access
             .AddPolicy(Policies.LeadershipPage, p => p
                 .RequireAuthenticatedUser()

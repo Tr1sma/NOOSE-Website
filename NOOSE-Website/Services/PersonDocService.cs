@@ -13,11 +13,11 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IPersonDokService" />
 public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPersonService personService, IThreatScoreService threat) : IPersonDocService
 {
-    public async Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Eigenständige Sichtbarkeitsprüfung der Eltern-Person (nicht nur auf den Aufrufer verlassen).
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
         }
@@ -25,25 +25,35 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             .Where(d => d.PersonId == personId)
             .OrderByDescending(d => d.Timestamp)
             .ToListAsync(cancellationToken);
-        return await ToDisplayAsync(db, docs, isLeadership, cancellationToken);
+        if (scope.PartnerAgency is { } agency)
+        {
+            docs = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), personId, nameof(PersonDoc), docs, d => d.Id, agency, scope.MeId, cancellationToken);
+        }
+        return await ToDisplayAsync(db, docs, scope.MayClassifiedRead, cancellationToken);
     }
 
-    public async Task<List<PersonDocDisplay>> GetForOrgAsync(string orgType, string orgId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<PersonDocDisplay>> GetForOrgAsync(string orgType, string orgId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Sichtbarkeit der Organisations-Akte selbst prüfen.
-        if (!await Visibility.IsRecordVisibleAsync(db, orgType, orgId, isLeadership, cancellationToken))
+        // check org record visibility
+        if (!await Visibility.IsRecordVisibleAsync(db, orgType, orgId, scope, cancellationToken))
         {
             return new();
         }
         var docs = await db.PersonDocs
             .Include(d => d.Person)
-            // Person == null → Akte im Papierkorb; Verschlusssache-Personen nur für Führung.
+            // null person trashed; classified leadership-only
             .Where(d => d.OrgType == orgType && d.OrgId == orgId
-                && d.Person != null && (isLeadership || !d.Person.IsClassified))
+                && d.Person != null && (scope.MayClassifiedRead || !d.Person.IsClassified))
             .OrderByDescending(d => d.Timestamp)
             .ToListAsync(cancellationToken);
-        return await ToDisplayAsync(db, docs, isLeadership, cancellationToken);
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: only released persons
+            var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person), docs.Select(d => d.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
+            docs = docs.Where(d => released.Contains(d.PersonId)).ToList();
+        }
+        return await ToDisplayAsync(db, docs, scope.MayClassifiedRead, cancellationToken);
     }
 
     public async Task<List<PersonDocDisplay>> GetAllAsync(bool isLeadership, CancellationToken cancellationToken = default)

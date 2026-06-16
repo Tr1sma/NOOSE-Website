@@ -89,7 +89,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _fields = await ValueService.GetForRecordAsync(EntityType, EntityId);
+        _fields = await ValueService.GetForRecordAsync(EntityType, EntityId, scope: ViewerScope.From(User));
         _values.Clear();
         foreach (var f in _fields)
         {

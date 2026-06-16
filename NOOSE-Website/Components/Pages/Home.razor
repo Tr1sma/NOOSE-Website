@@ -18,6 +18,24 @@
     Überblick über den aktuellen Bestand und die jüngsten Aktivitäten im Dienst.
 </MudText>
 
+@if (_isPartner)
+{
+    <MudPaper Class="pa-6" Elevation="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Partner-Lesezugriff</MudText>
+        </MudStack>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            Willkommen. Sie sehen ausschließlich die für Ihre Behörde freigegebenen Akten – schreibgeschützt.
+        </MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Href="/personen" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Badge">Personen-Akten</MudButton>
+            <MudButton Href="/fraktionen" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Groups">Fraktionen</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+else
+{
 <MudGrid>
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Elevation="2">
@@ -315,6 +333,7 @@ else if (_distributions is { } v)
         </MudItem>
     </MudGrid>
 }
+}
 </div>
 
 @code {
@@ -322,6 +341,7 @@ else if (_distributions is { } v)
 
     private bool _load = true;
     private bool _isLeadership;
+    private bool _isPartner;
     private DashboardMetrics? _metrics;
     private DashboardDistributions? _distributions;
     private List<DashboardChange> _changes = new();
@@ -339,6 +359,13 @@ else if (_distributions is { } v)
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
+        _isPartner = user.IsPartner();
+        if (_isPartner)
+        {
+            // partner-safe landing
+            _load = false;
+            return;
+        }
         _isLeadership = user.IsLeadership();
         var meId = user.GetAgentId(); // für die Taskforce-Mitgliedschafts-Sichtbarkeit der Kennzahlen/Listen
         _metrics = await Dashboard.GetMetricsAsync(_isLeadership, meId);

@@ -32,7 +32,7 @@ public static class DocMembership
         try
         {
             // dedup
-            var existing = await personService.GetAffiliationsAsync(personId, actor.IsLeadership(), cancellationToken);
+            var existing = await personService.GetAffiliationsAsync(personId, ViewerScope.From(actor), cancellationToken);
             if (existing.Any(z => z.Type == input.OrgType && z.Id == input.OrgId))
             {
                 snackbar.Add("Person ist bereits Mitglied.", Severity.Info);

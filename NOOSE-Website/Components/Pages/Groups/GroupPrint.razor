@@ -110,14 +110,19 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _group = await GroupService.GetDetailAsync(Id, isLeadership);
+        var scope = ViewerScope.From(user);
+        _group = await GroupService.GetDetailAsync(Id, scope);
         if (_group is not null)
         {
-            _members = await GroupService.GetMembersAsync(Id, isLeadership);
-            _agents = await GroupService.GetAgentsAsync(Id);
-            _classificationHistory = await GroupService.GetClassificationHistoryAsync(Id, isLeadership);
-            _links = await LinkService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership, user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership);
+            _classificationHistory = await GroupService.GetClassificationHistoryAsync(Id, scope);
+            // partners: core only
+            if (!user.IsPartner())
+            {
+                _members = await GroupService.GetMembersAsync(Id, scope);
+                _agents = await GroupService.GetAgentsAsync(Id);
+                _links = await LinkService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership, user.GetAgentId());
+                _comments = await CommentService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership);
+            }
             await AccessLog.LogViewAsync(nameof(PersonGroup), Id);
         }
         _load = false;

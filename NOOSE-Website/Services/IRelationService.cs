@@ -11,7 +11,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IRelationService
 {
-    Task<List<RelationDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Person-to-person relations from one person's view; partners see only relations to released persons.</summary>
+    Task<List<RelationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
     Task CreateAsync(string personAId, string personBId, RelationType type, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

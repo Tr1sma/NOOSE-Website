@@ -24,6 +24,10 @@ public interface IAgentManagementService
     /// <summary>Ausstehenden Account freischalten und Rang/TRU/HRB vergeben → Status Aktiv.</summary>
     Task ReleaseAsync(string agentId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor);
 
+    /// <summary>Ausstehenden Account als externen Partner (DoJ/LSPD/LSMD) freischalten → Status Aktiv, kein Rang,
+    /// keine internen Flags. Partner haben nur Lesezugriff auf freigegebene Akten.</summary>
+    Task ReleaseAsPartnerAsync(string agentId, PartnerAgency agency, PartnerRank partnerRank, ClaimsPrincipal actor);
+
     /// <summary>Registrierung ablehnen → Status Gesperrt mit Begründung.</summary>
     Task RejectAsync(string agentId, string reason, ClaimsPrincipal actor);
 
@@ -47,6 +51,9 @@ public interface IAgentManagementService
     Task NameChangeRejectAsync(string agentId, string reason, ClaimsPrincipal actor);
 
     Task RankChangeAsync(string agentId, Rank rank, ClaimsPrincipal actor);
+
+    /// <summary>Ändert den Partner-Rang eines Partner-Kontos (Member/Special/Chief). Erneuert die Claims.</summary>
+    Task SetPartnerRankAsync(string agentId, PartnerRank partnerRank, ClaimsPrincipal actor);
 
     /// <summary>Entscheidet über einen Beförderungsantrag (Deputy Director+/Admin). Bei Genehmigung wird der
     /// Rang gesetzt, im Dienstgrad-Verlauf protokolliert und der SecurityStamp erneuert.</summary>

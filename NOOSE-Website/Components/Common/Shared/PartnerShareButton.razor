@@ -1,0 +1,14 @@
+@* Toolbar action that opens the partner-release dialog; place inside a leadership AuthorizeView. *@
+@inject IDialogService DialogService
+
+<MudTooltip Text="Akte für Partnerbehörden freigeben">
+    <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Share"
+               OnClick="OpenAsync">Partner-Freigabe</MudButton>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+
+    private Task OpenAsync() => PartnerShareDialog.ShowAsync(DialogService, EntityType, EntityId);
+}

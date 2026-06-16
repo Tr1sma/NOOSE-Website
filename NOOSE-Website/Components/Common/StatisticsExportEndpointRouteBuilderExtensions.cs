@@ -20,7 +20,7 @@ public static class StatisticsExportEndpointRouteBuilderExtensions
 {
     public static IEndpointConventionBuilder MapNooseStatisticsExportEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/statistik/export").RequireAuthorization(Policies.ActiveAgent);
+        var group = endpoints.MapGroup("/statistik/export").RequireAuthorization(Policies.ActiveAgent, Policies.InternalAgent);
 
         // ---- Alle Verteilungen + Zeitreihe als long-form Tabelle (Datensatz; Kategorie; Anzahl) ----
         group.MapGet("/verteilungen.csv", async (

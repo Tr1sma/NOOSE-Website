@@ -14,8 +14,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IPartyService
 {
-    Task<List<Party>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default);
-    Task<Party?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<Party?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Party>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Party>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
@@ -26,10 +26,10 @@ public interface IPartyService
 
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>Mitglieder der Partei inkl. Person; Verschlusssachen-Personen nur für Führung.</summary>
-    Task<List<PartyMember>> GetMembersAsync(string partyId, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<PartyMember>> GetMembersAsync(string partyId, ViewerScope scope, CancellationToken cancellationToken = default);
     Task MemberAddAsync(string partyId, PartyMemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task MemberChangeAsync(string memberId, string? role, bool isLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task MemberRemoveAsync(string memberId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

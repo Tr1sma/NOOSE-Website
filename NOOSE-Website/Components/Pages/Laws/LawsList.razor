@@ -101,7 +101,7 @@ else
     private async Task LoadAsync()
     {
         _load = true;
-        _laws = await LawService.GetListAsync();
+        _laws = await LawService.GetListAsync(partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
         _load = false;
     }
 

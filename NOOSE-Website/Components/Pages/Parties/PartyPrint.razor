@@ -109,14 +109,19 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _party = await PartyService.GetDetailAsync(Id, isLeadership);
+        var scope = ViewerScope.From(user);
+        _party = await PartyService.GetDetailAsync(Id, scope);
         if (_party is not null)
         {
-            _members = await PartyService.GetMembersAsync(Id, isLeadership);
-            _agents = await PartyService.GetAgentsAsync(Id);
-            _classificationHistory = await PartyService.GetClassificationHistoryAsync(Id, isLeadership);
-            _links = await LinkService.GetForRecordAsync(nameof(Party), Id, isLeadership, user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(Party), Id, isLeadership);
+            _classificationHistory = await PartyService.GetClassificationHistoryAsync(Id, scope);
+            // partners: core only
+            if (!user.IsPartner())
+            {
+                _members = await PartyService.GetMembersAsync(Id, scope);
+                _agents = await PartyService.GetAgentsAsync(Id);
+                _links = await LinkService.GetForRecordAsync(nameof(Party), Id, isLeadership, user.GetAgentId());
+                _comments = await CommentService.GetForRecordAsync(nameof(Party), Id, isLeadership);
+            }
             await AccessLog.LogViewAsync(nameof(Party), Id);
         }
         _load = false;

@@ -73,6 +73,31 @@ public class AgentManagementService(
         catch { /* best effort */ }
     }
 
+    public async Task ReleaseAsPartnerAsync(string agentId, PartnerAgency agency, PartnerRank partnerRank, ClaimsPrincipal actor)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(agentId);
+        agent.Status = AgentStatus.Active;
+        agent.PartnerAgency = agency;
+        agent.PartnerRank = partnerRank;
+        // no internal rank/flags
+        agent.Rank = null;
+        agent.IsTRU = false;
+        agent.IsHRB = false;
+        agent.IsTeamLead = false;
+        agent.IsAdmin = false;
+        agent.ReleasedAt = DateTime.UtcNow;
+        agent.ReleasedById = actor.GetAgentId();
+        agent.BlockedReason = null;
+
+        Audit(agent, AuditAction.Modified, actor, $"Als Partner freigegeben ({PartnerRankDisplay.Full(agency, partnerRank)})");
+        await Save(agent, newStamp: true);
+
+        try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Dein Partner-Zugang wurde freigegeben.", "/"); }
+        catch { /* best effort */ }
+    }
+
     public async Task RejectAsync(string agentId, string reason, ClaimsPrincipal actor)
     {
         var agent = await GetOrThrow(agentId);
@@ -187,6 +212,21 @@ public class AgentManagementService(
             HistoryEntryAdd(agent.Id, alt, rank, actor, "Rangänderung");
         }
         Audit(agent, AuditAction.Modified, actor, $"Dienstgrad {alt?.ToString() ?? "—"} → {rank}");
+        await Save(agent, newStamp: true);
+    }
+
+    public async Task SetPartnerRankAsync(string agentId, PartnerRank partnerRank, ClaimsPrincipal actor)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(agentId);
+        if (agent.PartnerAgency is not { } agency)
+        {
+            throw new InvalidOperationException("Dieser Account ist kein Partner-Konto.");
+        }
+        agent.PartnerRank = partnerRank;
+
+        Audit(agent, AuditAction.Modified, actor, $"Partner-Rang → {PartnerRankDisplay.Full(agency, partnerRank)}");
         await Save(agent, newStamp: true);
     }
 

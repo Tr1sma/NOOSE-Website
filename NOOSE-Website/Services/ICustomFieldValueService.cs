@@ -6,8 +6,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Liest und speichert die Custom-Feld-Werte einer einzelnen Akte (polymorph).</summary>
 public interface ICustomFieldValueService
 {
-    /// <summary>Aktive Definitionen des Aktentyps samt aktuellem Wert der Akte, in Anzeigereihenfolge.</summary>
-    Task<List<CustomFieldValueDisplay>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default);
+    /// <summary>Active definitions of the record type with the record's current values, in display order; partner-gated when scope is a partner.</summary>
+    Task<List<CustomFieldValueDisplay>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default, ViewerScope? scope = null);
 
     /// <summary>Speichert die Werte (Upsert; leere Werte werden entfernt). Prüft Pflichtfelder.</summary>
     /// <param name="werteJeDefinition">Definition-Id → Wert (String; null/leer = nicht gesetzt).</param>

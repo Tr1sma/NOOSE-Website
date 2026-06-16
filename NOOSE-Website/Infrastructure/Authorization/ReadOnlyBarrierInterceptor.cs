@@ -6,7 +6,7 @@ using NOOSE_Website.Infrastructure.CurrentUser;
 
 namespace NOOSE_Website.Infrastructure.Authorization;
 
-/// <summary>Blocks all writes for read-only supervisors; registered first in the interceptor chain.</summary>
+/// <summary>Blocks all writes for read-only supervisors and partners; registered first in the interceptor chain.</summary>
 public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
     // read-side entities
@@ -35,7 +35,7 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
 
     private static void Require(DbContext? context, CurrentUserInfo user)
     {
-        if (context is null || !user.IsOnlyReader)
+        if (context is null || (!user.IsOnlyReader && !user.IsPartner))
         {
             return;
         }

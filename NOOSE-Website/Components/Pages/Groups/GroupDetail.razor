@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 
 <PageTitle>@(_group?.Name ?? "Personengruppe") · NOOSE</PageTitle>
 
@@ -27,8 +28,14 @@ else
                            Href="@($"/personengruppen/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FollowButton EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-        <JobCreateButton EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" />
+        @if (!_isPartner)
+        {
+            <FollowButton EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" />
+        }
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/personengruppen/{_group.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
@@ -37,9 +44,12 @@ else
         </AuthorizeView>
     </MudStack>
 
-    <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-    </MudPaper>
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-2 mb-4" Elevation="1">
+            <TagChips EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
+        </MudPaper>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
@@ -49,9 +59,19 @@ else
         </MudItem>
 
         <MudItem xs="12" md="8" lg="9">
+            @if (_renderTabs.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Für Ihren Zugang sind in dieser Akte keine Bereiche freigegeben.
+                </MudAlert>
+            }
+            else
+            {
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _renderTabs, _activeTab))">
+                @if (TabOn("stammdaten"))
+                {
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_group.Targets))
@@ -74,38 +94,73 @@ else
                         }
                     </MudStack>
                 </MudTabPanel>
+                }
+                @if (TabOn("mitglieder"))
+                {
                 <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Group">
                     <GroupMembersPanel GroupId="@_group.Id" User="_user" Changed="ProgressRefreshAsync" />
                 </MudTabPanel>
+                }
+                @* assigned NOOSE agents: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <AgentsPanel GroupId="@_group.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
                 </MudTabPanel>
+                }
+                @if (TabOn("einstufung"))
+                {
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_group.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" TargetDesignation="@($"{_group.Name} ({_group.CaseNumber})")" />
                 </MudTabPanel>
+                }
+                @if (TabOn("doks"))
+                {
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDocsPanel OrgType="@nameof(PersonGroup)" OrgId="@_group.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @* partner-safe child services *@
+                @if (TabOn("beziehungen"))
+                {
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgRelationsPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("quellen"))
+                {
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("wiedervorlagen"))
+                {
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("kommentare"))
+                {
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("zusatzfelder"))
+                {
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @* partner-safe: timeline filters cross-refs for partners *@
+                @if (TabOn("historie"))
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
+            }
         </MudItem>
     </MudGrid>
 }
@@ -115,6 +170,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private PersonGroup? _group;
     private PersonGroupProgress _progress = new(0, null);
     private List<string> _investigationLead = new();
@@ -131,9 +187,16 @@ else
         "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 
+    // partner tab gating: null = no restriction (internal/unconfigured/individually released)
+    private IReadOnlySet<string>? _visibleTabs;
+    private List<string> _renderTabs = new();
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+    private void RebuildRenderTabs() => _renderTabs = _tabs.Where(s => (s != "agents" || !_isPartner) && TabOn(s)).ToList();
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
     }
 
     // Diese Seite wird bei Navigation /personengruppen/{A} → /personengruppen/{B} WIEDERVERWENDET (gleiche
@@ -149,8 +212,8 @@ else
         _loadedId = Id;
         _load = true;
         _group = null;
-        _activeTab = TabUrlState.Read(Nav, _tabs);
         await LoadAsync();
+        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_group is not null)
         {
             await AccessLog.LogViewAsync(nameof(PersonGroup), _group.Id);
@@ -162,14 +225,22 @@ else
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
         // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
-        var mayClassifiedRead = _user.MayClassifiedRead();
-        _group = await GroupService.GetDetailAsync(Id, mayClassifiedRead);
+        var scope = ViewerScope.From(_user);
+        _group = await GroupService.GetDetailAsync(Id, scope);
         if (_group is not null)
         {
-            _classificationHistory = await GroupService.GetClassificationHistoryAsync(_group.Id, mayClassifiedRead);
-            _progress = await GroupService.GetProgressAsync(_group.Id);
-            await InvestigationLeadLoadAsync();
+            _classificationHistory = await GroupService.GetClassificationHistoryAsync(_group.Id, scope);
+            // partners: skip progress/agent fan-out
+            if (!_isPartner)
+            {
+                _progress = await GroupService.GetProgressAsync(_group.Id);
+                await InvestigationLeadLoadAsync();
+            }
         }
+        _visibleTabs = _isPartner && _group is not null
+            ? await PartnerPolicy.GetVisibleTabsAsync(_user, nameof(PersonGroup), _group.Id)
+            : null;
+        RebuildRenderTabs();
         _load = false;
     }
 

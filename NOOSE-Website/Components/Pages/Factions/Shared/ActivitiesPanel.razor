@@ -2,6 +2,7 @@
 @inject IFactionService FactionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IPartnerShareService PartnerShareService
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -37,15 +38,18 @@
                                     <MudChip T="string" Size="Size.Small" Color="@Colour(a.Kind)" Variant="Variant.Outlined">@a.Kind</MudChip>
                                 }
                             </MudStack>
-                            @if (_mayWrite)
-                            {
-                                <MudStack Row="true" Spacing="0">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
-                                                   OnClick="@(() => EditAsync(a))" aria-label="Aktivität bearbeiten" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                                   OnClick="@(() => RemoveAsync(a))" aria-label="Aktivität löschen" />
-                                </MudStack>
-                            }
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(FactionActivity)" ChildId="@a.Id" />
+                                @if (_mayWrite)
+                                {
+                                    <MudStack Row="true" Spacing="0">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
+                                                       OnClick="@(() => EditAsync(a))" aria-label="Aktivität bearbeiten" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                                       OnClick="@(() => RemoveAsync(a))" aria-label="Aktivität löschen" />
+                                    </MudStack>
+                                }
+                            </MudStack>
                         </MudStack>
 
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="flex-wrap">
@@ -90,6 +94,7 @@
 
     private bool _load = true;
     private bool _mayWrite;
+    private bool _canShareChildren;
     private List<FactionActivity> _activities = new();
     private List<string> _kinds = new();
     private readonly HashSet<string> _open = new();
@@ -97,13 +102,19 @@
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
+        // leadership: per-item release only matters when the record is shell-released
+        if (User.IsLeadership())
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(Faction), FactionId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _load = true;
-        _activities = await FactionService.GetActivitiesAsync(FactionId, User.IsLeadership());
+        _activities = await FactionService.GetActivitiesAsync(FactionId, ViewerScope.From(User));
         _kinds = await FactionService.GetActivityKindsAsync();
         _load = false;
     }

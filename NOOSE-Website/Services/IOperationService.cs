@@ -15,8 +15,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IOperationService
 {
-    Task<List<Operation>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default);
-    Task<Operation?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<Operation>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<Operation?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Operation>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Operation>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
@@ -27,7 +27,7 @@ public interface IOperationService
 
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>Der Operation zugeteilte (beteiligte) NOOSE-Agents (inkl. Agent-Daten; Ermittlungsleiter zuerst).</summary>
     Task<List<OperationAgent>> GetAgentsAsync(string operationId, CancellationToken cancellationToken = default);

@@ -11,8 +11,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IObservationService
 {
-    /// <summary>Observationen einer Person inkl. aufgelöstem Agent-Deckname und (Verschlusssache-gefilterter) Org-Anzeige.</summary>
-    Task<List<ObservationDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Observations of a person with resolved agent codename and (visibility-filtered) org display; partner-filtered when scope is a partner.</summary>
+    Task<List<ObservationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>Alle Observationen (übergreifend) inkl. zugehöriger Person; respektiert den Verschlusssachen-Filter.</summary>
     Task<List<ObservationDisplay>> GetAllAsync(bool isLeadership, CancellationToken cancellationToken = default);

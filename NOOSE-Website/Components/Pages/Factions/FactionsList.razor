@@ -116,7 +116,8 @@ else
     {
         var user = (await AuthStateTask).User;
         var mayClassifiedRead = user.MayClassifiedRead();
-        var factions = await FactionService.GetListAsync(mayClassifiedRead);
+        var isPartner = user.IsPartner();
+        var factions = await FactionService.GetListAsync(ViewerScope.From(user));
         var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Faction));
         var now = DateTime.UtcNow;
         _rows = factions.Select(f =>
@@ -129,7 +130,8 @@ else
                 Name = f.Name,
                 Kind = f.Kind ?? "—",
                 // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
-                MemberCount = f.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
+                // partners: hide member count
+                MemberCount = isPartner ? 0 : f.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 TitleImagePhotoId = f.Photos.FirstOrDefault(x => x.IsTitleImage)?.Id,
                 Classification = f.Classification,
                 ThreatScore = f.IsStateFaction ? null : f.ThreatScore,

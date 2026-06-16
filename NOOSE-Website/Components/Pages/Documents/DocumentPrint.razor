@@ -75,10 +75,14 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(user));
+        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(user), partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         if (_document is not null)
         {
-            _attachments = await DocumentService.GetAttachmentsAsync(Id, isLeadership, user.GetAgentId());
+            // partners: skip attachment fan-out
+            if (!user.IsPartner())
+            {
+                _attachments = await DocumentService.GetAttachmentsAsync(Id, isLeadership, user.GetAgentId());
+            }
             await AccessLog.LogViewAsync(nameof(Document), Id);
         }
         _load = false;
