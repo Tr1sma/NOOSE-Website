@@ -3,6 +3,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject ISearchService SearchService
+@inject INavPreferencesService NavPrefs
 @inject Microsoft.Extensions.Logging.ILogger<CommandPalette> Logger
 @implements IAsyncDisposable
 
@@ -42,17 +43,21 @@
     private bool _open;
     private bool _isLeadership;
     private ViewerScope _scope;
+    private string? _agentId;
     private MudAutocomplete<PaletteItem> _auto = default!;
     private IJSObjectReference? _module;
     private DotNetObjectReference<CommandPalette>? _ref;
     private readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
     private List<PaletteItem> _commands = new();
+    private List<PaletteItem> _favorites = new();
+    private List<PaletteItem> _recents = new();
 
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
         _isLeadership = user.IsLeadership();
         _scope = ViewerScope.From(user);
+        _agentId = user.GetAgentId();
         if (user.IsPartner())
         {
             // partners: only released-record areas + global search
@@ -123,19 +128,53 @@
     }
 
     [JSInvokable]
-    public Task Open()
+    public async Task Open()
     {
+        await LoadQuickAccessAsync();
         _open = true;
-        return InvokeAsync(StateHasChanged);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // refresh favorites + recents each time the palette opens
+    private async Task LoadQuickAccessAsync()
+    {
+        if (string.IsNullOrEmpty(_agentId))
+        {
+            return;
+        }
+        try
+        {
+            var prefs = await NavPrefs.GetAsync(_agentId);
+            _favorites = prefs.Favorites.Select(f => new PaletteItem(f.Label, "Favorit", f.Icon, f.Route)).ToList();
+            var favRoutes = prefs.Favorites.Select(f => f.Route).ToHashSet(StringComparer.Ordinal);
+            _recents = prefs.Recents
+                .Where(r => !favRoutes.Contains(r.Route))
+                .Take(8)
+                .Select(r => new PaletteItem(r.Label, "Zuletzt", r.Icon, r.Route))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Favoriten/Verlauf für die Command-Palette konnten nicht geladen werden.");
+        }
     }
 
     private async Task<IEnumerable<PaletteItem>> Search(string value, CancellationToken token)
     {
         var v = value?.Trim() ?? string.Empty;
         var result = new List<PaletteItem>();
-        result.AddRange(string.IsNullOrEmpty(v)
-            ? _commands
-            : _commands.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
+        if (string.IsNullOrEmpty(v))
+        {
+            // empty query: favorites and recents first, then the command list
+            result.AddRange(_favorites);
+            result.AddRange(_recents);
+            result.AddRange(_commands);
+        }
+        else
+        {
+            result.AddRange(_favorites.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
+            result.AddRange(_commands.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
+        }
 
         if (!string.IsNullOrEmpty(v))
         {

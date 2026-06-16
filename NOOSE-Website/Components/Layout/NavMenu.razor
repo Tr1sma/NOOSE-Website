@@ -1,95 +1,64 @@
 @implements IDisposable
+@using NOOSE_Website.Navigation
+@using NOOSE_Website.Models.Navigation
+@using NOOSE_Website.Components.Common.Navigation
+@inject INavPreferencesService NavPrefs
+@inject IDialogService DialogService
 
 <MudNavMenu Color="Color.Primary" Bordered="true">
-    <AuthorizeView Policy="@Policies.InternalAgent" Context="internalNav">
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.SpaceDashboard">Dashboard</MudNavLink>
-    <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
-    <MudNavLink Href="/watchlist" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Star">Beobachtete Akten</MudNavLink>
-    <MudNavLink Href="/personal" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Personal</MudNavLink>
-    <MudNavLink Href="/brett" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Campaign">
-        Schwarzes Brett
-        @if (_openAcknowledgments > 0)
+    <div class="d-flex align-center px-3 py-2">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">NAVIGATION</MudText>
+        <MudSpacer />
+        <MudTooltip Text="Navigation anpassen">
+            <MudIconButton Icon="@Icons.Material.Filled.Tune" Size="Size.Small" OnClick="OpenCustomizeAsync" aria-label="Navigation anpassen" />
+        </MudTooltip>
+    </div>
+
+    @if (_prefs.Favorites.Count > 0)
+    {
+        <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">FAVORITEN</MudText>
+        @foreach (var fav in _prefs.Favorites)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_openAcknowledgments</MudChip>
+            @Favorite(fav)
         }
-    </MudNavLink>
-
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">AKTEN</MudText>
-    <MudNavLink Href="/personen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Badge">Personen-Akten</MudNavLink>
-    <MudNavLink Href="/doks" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Description">Personen-Doks</MudNavLink>
-    <MudNavLink Href="/dokumente" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook">Dokumente</MudNavLink>
-    <MudNavLink Href="/observationen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Visibility">Observationen</MudNavLink>
-    <MudNavLink Href="/fraktionen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups">Fraktionen</MudNavLink>
-    <MudNavLink Href="/personengruppen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Diversity3">Personengruppen</MudNavLink>
-    <MudNavLink Href="/parteien" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalance">Parteien</MudNavLink>
-    <MudNavLink Href="/operationen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Radar">Operationen</MudNavLink>
-    <MudNavLink Href="/taskforces" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups2">Taskforces</MudNavLink>
-    <MudNavLink Href="/vorgaenge" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderSpecial">Vorgänge</MudNavLink>
-    <MudNavLink Href="/aufgaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AssignmentTurnedIn">Aufgaben</MudNavLink>
-    <MudNavLink Href="/gesetze" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Gesetzbuch</MudNavLink>
-    <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
-    <MudNavLink Href="/graph" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Hub">Beziehungsgraph</MudNavLink>
-    <MudNavLink Href="/organigramm" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree">Organigramm</MudNavLink>
-    <MudNavLink Href="/kalender" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CalendarMonth">Kalender</MudNavLink>
-    <MudNavLink Href="/statistik" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.QueryStats">Statistik</MudNavLink>
-
-    @* Den Freigabe-Posteingang erreicht bereits Senior Special Agent+ (entscheidet Hochstufungen);
-       die übrigen Verwaltungs-Links bleiben Führung bzw. Admin vorbehalten. Die *Seite-Policies lassen
-       zusätzlich die Nur-Lese-Aufsicht (TeamLeitung ohne Admin) zum reinen Lesen herein. *@
-    <AuthorizeView Policy="@Policies.HighestClassificationPage" Context="posteingang">
         <MudDivider Class="my-2" />
-        <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">VERWALTUNG</MudText>
-        <MudNavLink Href="/admin/freigaben" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HowToReg">
-            Freigaben
-            @if (_openShares > 0)
+    }
+
+    <AuthorizeView Policy="@Policies.InternalAgent" Context="internalNav">
+    @foreach (var entry in SectionEntries(NavSection.Primary))
+    {
+        @NavLink(entry)
+    }
+
+    <MudNavGroup Title="Akten" Icon="@Icons.Material.Filled.FolderCopy"
+                 Expanded="@(!IsCollapsed("Akten"))" ExpandedChanged="@(v => GroupToggledAsync("Akten", v))">
+        @foreach (var entry in SectionEntries(NavSection.Akten))
+        {
+            @NavLink(entry)
+        }
+    </MudNavGroup>
+
+    @* Senior Special Agent+ reaches the release inbox; the rest stays leadership/admin (Page-policies also let read-only oversight in). *@
+    <AuthorizeView Policy="@Policies.HighestClassificationPage" Context="posteingang">
+        <MudNavGroup Title="Verwaltung" Icon="@Icons.Material.Filled.AdminPanelSettings"
+                     Expanded="@(!IsCollapsed("Verwaltung"))" ExpandedChanged="@(v => GroupToggledAsync("Verwaltung", v))">
+            @foreach (var entry in SectionEntries(NavSection.VerwaltungFreigaben))
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_openShares</MudChip>
+                @NavLink(entry)
             }
-        </MudNavLink>
-        <AuthorizeView Policy="@Policies.LeadershipPage" Context="fuehrung">
-            <MudNavLink Href="/admin/tags" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Label">
-                Tags
-            </MudNavLink>
-            <MudNavLink Href="/admin/vorlagen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dvr">
-                Vorlagen
-            </MudNavLink>
-            <MudNavLink Href="/admin/custom-felder" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Tune">
-                Custom-Felder
-            </MudNavLink>
-            <MudNavLink Href="/admin/aktualitaet" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Timelapse">
-                Aktualität
-            </MudNavLink>
-            <MudNavLink Href="/admin/bedrohungs-score" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Speed">
-                Bedrohungs-Score
-            </MudNavLink>
-            <MudNavLink Href="/lageberichte" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Assessment">
-                Lageberichte
-            </MudNavLink>
-            <MudNavLink Href="/admin/agenten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
-                Agenten-Verwaltung
-            </MudNavLink>
-            <MudNavLink Href="/admin/basisdaten" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Storage">
-                Basisdaten
-            </MudNavLink>
-            <AuthorizeView Policy="@Policies.AdminPage" Context="adminInner">
-                <MudNavLink Href="/admin/module" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.School">
-                    Ausbildungsmodule
-                </MudNavLink>
-                <MudNavLink Href="/admin/partner-sichtbarkeit" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Handshake">
-                    Partner-Sichtbarkeit
-                </MudNavLink>
-                <MudNavLink Href="/admin/partner-freigabe" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderShared">
-                    Partner-Freigabe
-                </MudNavLink>
-                <MudNavLink Href="/admin/system" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications">
-                    System
-                </MudNavLink>
-                <MudNavLink Href="/status" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MonitorHeart">
-                    System-Status
-                </MudNavLink>
+            <AuthorizeView Policy="@Policies.LeadershipPage" Context="fuehrung">
+                @foreach (var entry in SectionEntries(NavSection.VerwaltungFuehrung))
+                {
+                    @NavLink(entry)
+                }
+                <AuthorizeView Policy="@Policies.AdminPage" Context="adminInner">
+                    @foreach (var entry in SectionEntries(NavSection.VerwaltungAdmin))
+                    {
+                        @NavLink(entry)
+                    }
+                </AuthorizeView>
             </AuthorizeView>
-        </AuthorizeView>
+        </MudNavGroup>
     </AuthorizeView>
     </AuthorizeView>
 
@@ -99,12 +68,9 @@
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">FREIGEGEBENE AKTEN</MudText>
         @* record-type links filtered by the rank's allowed types (null = no restriction) *@
-        @foreach (var t in PartnerTabCatalog.All)
+        @foreach (var entry in NavPersonalization.Apply(NavCatalog.PartnerRecordEntries(_allowedPartnerTypes), _prefs))
         {
-            @if (_allowedPartnerTypes is null || _allowedPartnerTypes.Contains(t.TypeKey))
-            {
-                <MudNavLink Href="@($"/{t.RoutePrefix}")" Match="NavLinkMatch.Prefix" Icon="@PartnerIcon(t.TypeKey)">@t.DisplayName</MudNavLink>
-            }
+            <MudNavLink Href="@entry.Route" Match="NavLinkMatch.Prefix" Icon="@entry.Icon">@entry.Label</MudNavLink>
         }
         <MudDivider Class="my-2" />
         <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
@@ -125,13 +91,87 @@
     [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
     private ClaimsPrincipal? _user;
+    private string? _agentId;
+    private NavPreferences _prefs = new();
     private int _openShares;
     private int _openAcknowledgments;
     private IReadOnlySet<string>? _allowedPartnerTypes;
 
+    // catalog-driven entries per policy-gated section, personalized (hidden/order)
+    private IEnumerable<NavEntry> SectionEntries(NavSection section) => NavPersonalization.Apply(NavCatalog.Section(section), _prefs);
+
+    private RenderFragment NavLink(NavEntry entry) =>@<MudNavLink Href="@entry.Route" Match="@entry.Match" Icon="@entry.Icon">
+        @entry.Label
+        @if (entry.BadgeKey == "acknowledgments" && _openAcknowledgments > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-2">@_openAcknowledgments</MudChip>
+        }
+        @if (entry.BadgeKey == "shares" && _openShares > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_openShares</MudChip>
+        }
+    </MudNavLink>;
+
+    // page favorites gate by their section policy; partner page favorites gate by allowed types; records re-check on click
+    private RenderFragment Favorite(NavFavorite fav) => __builder =>
+    {
+        if (fav.Kind == "page" && NavCatalog.ByKey(fav.Key ?? string.Empty) is { } e)
+        {
+            <AuthorizeView Policy="@NavSectionPolicy.For(e.Section)" Context="favCtx">
+                <MudNavLink Href="@e.Route" Match="NavLinkMatch.Prefix" Icon="@e.Icon">@e.Label</MudNavLink>
+            </AuthorizeView>
+        }
+        else if (fav.Kind == "page" && _user?.IsPartner() == true && PartnerTypeAllowed(fav.Key))
+        {
+            <MudNavLink Href="@fav.Route" Match="NavLinkMatch.Prefix" Icon="@fav.Icon">@fav.Label</MudNavLink>
+        }
+        else if (fav.Kind == "record")
+        {
+            <MudNavLink Href="@fav.Route" Match="NavLinkMatch.Prefix" Icon="@fav.Icon">@fav.Label</MudNavLink>
+        }
+    };
+
+    // partner page favorite "partner.<Type>" still within the rank's allowed set
+    private bool PartnerTypeAllowed(string? key)
+    {
+        if (key is null || !key.StartsWith("partner.", StringComparison.Ordinal))
+        {
+            return false;
+        }
+        var typeKey = key["partner.".Length..];
+        return _allowedPartnerTypes is null || _allowedPartnerTypes.Contains(typeKey);
+    }
+
+    private Task OpenCustomizeAsync() => NavCustomizeDialog.ShowAsync(DialogService);
+
+    private bool IsCollapsed(string key) => _prefs.CollapsedGroups.Contains(key);
+
+    // keep local prefs in sync (drives Expanded), then persist
+    private async Task GroupToggledAsync(string key, bool expanded)
+    {
+        if (expanded)
+        {
+            _prefs.CollapsedGroups.Remove(key);
+        }
+        else
+        {
+            _prefs.CollapsedGroups.Add(key);
+        }
+        if (!string.IsNullOrEmpty(_agentId))
+        {
+            await NavPrefs.SetGroupCollapsedAsync(_agentId, key, !expanded);
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _agentId = _user.GetAgentId();
+        NavPrefs.Changed += OnPrefsChanged;
+        if (!string.IsNullOrEmpty(_agentId))
+        {
+            _prefs = await NavPrefs.GetAsync(_agentId);
+        }
 
         // partners: skip leadership calls, restrict record-type links by rank
         if (_user?.IsPartner() == true)
@@ -147,6 +187,17 @@
         await LoadSharesAsync();
         await LoadAcknowledgmentsAsync();
     }
+
+    // reload personalized menu after the customizer saved (same circuit)
+    private void OnPrefsChanged()
+        => _ = InvokeAsync(async () =>
+        {
+            if (!string.IsNullOrEmpty(_agentId))
+            {
+                _prefs = await NavPrefs.GetAsync(_agentId);
+                StateHasChanged();
+            }
+        });
 
     // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
     // Defensiv: Die Badges sind dekorativ – ein DB-Fehler hier darf weder das Prerender (→ generische
@@ -224,22 +275,9 @@
         });
     }
 
-    // icon per record type (kept in the nav; the catalog stays UI-agnostic)
-    private static string PartnerIcon(string typeKey) => typeKey switch
-    {
-        nameof(Person) => Icons.Material.Filled.Badge,
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        nameof(Case) => Icons.Material.Filled.FolderSpecial,
-        nameof(Document) => Icons.Material.Filled.MenuBook,
-        nameof(Law) => Icons.Material.Filled.Gavel,
-        _ => Icons.Material.Filled.Folder,
-    };
-
     public void Dispose()
     {
+        NavPrefs.Changed -= OnPrefsChanged;
         SharesBroadcaster.Modified -= OnSharesModified;
         AcknowledgmentBroadcaster.Modified -= OnAcknowledgmentModified;
     }

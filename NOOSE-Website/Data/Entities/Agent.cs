@@ -90,4 +90,8 @@ public class Agent : IdentityUser
     /// <summary>Name change requested at.</summary>
     [Column("NamensaenderungBeantragtAm")]
     public DateTime? NameChangeRequestedAt { get; set; }
+
+    /// <summary>Per-user navigation preferences (favorites, hidden/order, recents) as JSON.</summary>
+    [Column("NavEinstellungen")]
+    public string? NavPreferencesJson { get; set; }
 }

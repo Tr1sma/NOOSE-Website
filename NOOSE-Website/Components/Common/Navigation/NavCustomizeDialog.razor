@@ -1,0 +1,238 @@
+@* Per-account navigation customizer: hide/show, drag-reorder, favorites, start page. *@
+@using NOOSE_Website.Navigation
+@using NOOSE_Website.Models.Navigation
+@inject INavPreferencesService NavPrefs
+@inject IPartnerVisibilityPolicyService PartnerPolicy
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="mt-1">
+                <MudTabPanel Text="Menü" Icon="@Icons.Material.Filled.Reorder">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                        Blende nicht genutzte Einträge mit dem Auge aus, ziehe Einträge in deine Wunsch-Reihenfolge
+                        und markiere häufig genutzte mit dem Stern als Favorit.
+                    </MudText>
+                    <MudDropContainer T="NavEntry" @ref="_menuContainer" Items="_menuItems"
+                                      ItemsSelector="@((item, zone) => item.Section.ToString() == zone)"
+                                      CanDrop="@((item, zone) => item.Section.ToString() == zone)"
+                                      ItemDropped="OnMenuDropAsync">
+                        <ChildContent>
+                            @if (_isPartner)
+                            {
+                                @MenuZone(NavSection.Partner)
+                            }
+                            else
+                            {
+                                <AuthorizeView Policy="@Policies.InternalAgent" Context="ia">
+                                    @MenuZone(NavSection.Primary)
+                                    @MenuZone(NavSection.Akten)
+                                    <AuthorizeView Policy="@Policies.HighestClassificationPage" Context="hc">
+                                        @MenuZone(NavSection.VerwaltungFreigaben)
+                                        <AuthorizeView Policy="@Policies.LeadershipPage" Context="lp">
+                                            @MenuZone(NavSection.VerwaltungFuehrung)
+                                            <AuthorizeView Policy="@Policies.AdminPage" Context="ap">
+                                                @MenuZone(NavSection.VerwaltungAdmin)
+                                            </AuthorizeView>
+                                        </AuthorizeView>
+                                    </AuthorizeView>
+                                </AuthorizeView>
+                            }
+                        </ChildContent>
+                        <ItemRenderer>
+                            <MudPaper Class="d-flex align-center pa-2 mb-1" Elevation="1" Style="@(IsHidden(context) ? "opacity:.45;" : null)">
+                                <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mr-2 mud-text-secondary" Size="Size.Small" />
+                                <MudIcon Icon="@context.Icon" Class="mr-2" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">@context.Label</MudText>
+                                <MudSpacer />
+                                <MudIconButton Icon="@(IsFavorite(context) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
+                                               Color="@(IsFavorite(context) ? Color.Warning : Color.Default)" Size="Size.Small"
+                                               OnClick="@(() => ToggleFavoriteAsync(context))" aria-label="Als Favorit markieren" />
+                                <MudIconButton Icon="@(IsHidden(context) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                               Size="Size.Small" OnClick="@(() => ToggleHiddenAsync(context))" aria-label="Ein- oder ausblenden" />
+                            </MudPaper>
+                        </ItemRenderer>
+                    </MudDropContainer>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Favoriten" Icon="@Icons.Material.Filled.Star">
+                    @if (_favItems.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Noch keine Favoriten. Markiere Einträge im Tab „Menü" mit dem Stern oder hefte eine Akte direkt an.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Ziehe Favoriten in die gewünschte Reihenfolge.</MudText>
+                        <MudDropContainer T="NavFavorite" @ref="_favContainer" Items="_favItems"
+                                          ItemsSelector="@((item, zone) => true)" ItemDropped="OnFavoriteDropAsync">
+                            <ChildContent>
+                                <MudDropZone T="NavFavorite" Identifier="favorites" AllowReorder="true" Class="pa-1" />
+                            </ChildContent>
+                            <ItemRenderer>
+                                <MudPaper Class="d-flex align-center pa-2 mb-1" Elevation="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mr-2 mud-text-secondary" Size="Size.Small" />
+                                    <MudIcon Icon="@context.Icon" Class="mr-2" Size="Size.Small" />
+                                    <MudText Typo="Typo.body2">@context.Label</MudText>
+                                    <MudSpacer />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   OnClick="@(() => RemoveFavoriteAsync(context))" aria-label="Favorit entfernen" />
+                                </MudPaper>
+                            </ItemRenderer>
+                        </MudDropContainer>
+                    }
+                </MudTabPanel>
+
+                <MudTabPanel Text="Startseite" Icon="@Icons.Material.Filled.Home">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Welche Seite soll nach dem Login zuerst geöffnet werden?</MudText>
+                    <MudSelect T="string" Value="@(_prefs.StartRoute ?? "/")" ValueChanged="OnStartRouteChangedAsync"
+                               Label="Startseite" Dense="true" Variant="Variant.Outlined" Style="max-width:360px;">
+                        <MudSelectItem T="string" Value="@("/")">Dashboard (Standard)</MudSelectItem>
+                        @foreach (var e in _startOptions)
+                        {
+                            <MudSelectItem T="string" Value="@e.Route">@e.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _isPartner;
+    private string _agentId = string.Empty;
+    private ClaimsPrincipal _user = default!;
+    private NavPreferences _prefs = new();
+    private IReadOnlySet<string>? _allowedPartnerTypes;
+    private List<NavEntry> _menuItems = new();
+    private List<NavFavorite> _favItems = new();
+    private List<NavEntry> _startOptions = new();
+    private MudDropContainer<NavEntry>? _menuContainer;
+    private MudDropContainer<NavFavorite>? _favContainer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _user = (await AuthStateTask).User;
+            _agentId = _user.GetAgentId() ?? string.Empty;
+            _isPartner = _user.IsPartner();
+            if (_isPartner)
+            {
+                _allowedPartnerTypes = await PartnerPolicy.GetAllowedTypesAsync(_user);
+            }
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            // surface instead of killing the circuit
+            Snackbar.Add($"Navigation konnte nicht geladen werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _prefs = await NavPrefs.GetAsync(_agentId);
+        _menuItems = _isPartner
+            ? NavPersonalization.Ordered(NavCatalog.PartnerRecordEntries(_allowedPartnerTypes), _prefs).ToList()
+            : NavSectionPolicy.InternalSections.SelectMany(s => NavPersonalization.Ordered(NavCatalog.Section(s), _prefs)).ToList();
+        _favItems = _prefs.Favorites.ToList();
+        _startOptions = _isPartner
+            ? NavCatalog.PartnerRecordEntries(_allowedPartnerTypes).ToList()
+            : NavCatalog.Section(NavSection.Primary).Concat(NavCatalog.Section(NavSection.Akten)).ToList();
+        _menuContainer?.Refresh();
+        _favContainer?.Refresh();
+    }
+
+    private RenderFragment MenuZone(NavSection section) =>@<div class="mb-2">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@NavSectionPolicy.Name(section)</MudText>
+        <MudDropZone T="NavEntry" Identifier="@section.ToString()" AllowReorder="true" Class="pa-1" />
+    </div>;
+
+    private bool IsFavorite(NavEntry e) => _prefs.Favorites.Any(f => f.Kind == "page" && f.Key == e.Key);
+    private bool IsHidden(NavEntry e) => _prefs.HiddenKeys.Contains(e.Key);
+
+    private Task ToggleFavoriteAsync(NavEntry e)
+        => RunAsync(() => NavPrefs.ToggleFavoriteAsync(_agentId,
+            new NavFavorite("page", e.Key, null, null, e.Label, e.Route, e.Icon)));
+
+    private Task ToggleHiddenAsync(NavEntry e)
+        => RunAsync(() => NavPrefs.SetHiddenAsync(_agentId, e.Key, !IsHidden(e)));
+
+    private Task RemoveFavoriteAsync(NavFavorite f)
+        => RunAsync(() => NavPrefs.ToggleFavoriteAsync(_agentId, f));
+
+    private Task OnStartRouteChangedAsync(string route)
+        => RunAsync(() => NavPrefs.SetStartRouteAsync(_agentId, route == "/" ? null : route));
+
+    private async Task OnMenuDropAsync(MudItemDropInfo<NavEntry> info)
+    {
+        if (info.Item is not { } item)
+        {
+            return;
+        }
+        var sectionItems = _menuItems.Where(e => e.Section == item.Section).ToList();
+        sectionItems.Remove(item);
+        sectionItems.Insert(Math.Clamp(info.IndexInZone, 0, sectionItems.Count), item);
+
+        var sections = _isPartner ? new[] { NavSection.Partner } : NavSectionPolicy.InternalSections;
+        var ordered = new List<string>();
+        foreach (var s in sections)
+        {
+            var items = s == item.Section ? sectionItems : _menuItems.Where(e => e.Section == s).ToList();
+            ordered.AddRange(items.Select(e => e.Key));
+        }
+        await RunAsync(() => NavPrefs.SetOrderAsync(_agentId, ordered));
+    }
+
+    private async Task OnFavoriteDropAsync(MudItemDropInfo<NavFavorite> info)
+    {
+        if (info.Item is not { } item)
+        {
+            return;
+        }
+        var ordered = _favItems.ToList();
+        ordered.Remove(item);
+        ordered.Insert(Math.Clamp(info.IndexInZone, 0, ordered.Count), item);
+        await RunAsync(() => NavPrefs.ReorderFavoritesAsync(_agentId, ordered.Select(INavPreferencesService.FavoriteId).ToList()));
+    }
+
+    // run a persist op, reload, surface errors
+    private async Task RunAsync(Func<Task> op)
+    {
+        try
+        {
+            await op();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    public static Task ShowAsync(IDialogService dialog)
+        => dialog.ShowAsync<NavCustomizeDialog>("Navigation anpassen",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true });
+}

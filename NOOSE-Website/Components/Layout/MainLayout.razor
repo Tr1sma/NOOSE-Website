@@ -2,6 +2,7 @@
 @inject NavigationManager Nav
 @inject ISystemSettingService SettingService
 @inject IPartnerVisibilityPolicyService PartnerPolicy
+@inject INavPreferencesService NavPrefs
 @inject IDialogService DialogService
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
@@ -110,6 +111,7 @@
             }
             else
             {
+                <NavBreadcrumbs />
                 @* safety net: a single page error must not kill the whole circuit *@
                 <ErrorBoundary @key="CurrentPath">
                     <ChildContent>
@@ -143,6 +145,7 @@
     <AuthorizeView>
         <Authorized Context="cp">
             <CommandPalette />
+            <RecentsTracker />
         </Authorized>
     </AuthorizeView>
 </MudLayout>
@@ -157,6 +160,7 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     private bool _drawerOpen = true;
+    private string? _agentId;
     private string _search = string.Empty;
     private SystemConfiguration? _configuration;
     private MudTheme _theme = NooseTheme.Theme;
@@ -181,6 +185,13 @@
             if (_isPartner)
             {
                 _allowedPartnerTypes = await PartnerPolicy.GetAllowedTypesAsync(user);
+            }
+
+            // remembered drawer state (read at prerender → no post-hydration flicker)
+            _agentId = user.GetAgentId();
+            if (!string.IsNullOrEmpty(_agentId))
+            {
+                _drawerOpen = (await NavPrefs.GetAsync(_agentId)).DrawerOpen;
             }
         }
     }
@@ -209,7 +220,15 @@
 
     private Task QuickAddAsync() => QuickAddDialog.ShowAsync(DialogService);
 
-    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+        if (!string.IsNullOrEmpty(_agentId))
+        {
+            // remember preference (fire-and-forget)
+            _ = NavPrefs.SetDrawerOpenAsync(_agentId, _drawerOpen);
+        }
+    }
 
     private void SearchKeyDown(KeyboardEventArgs e)
     {

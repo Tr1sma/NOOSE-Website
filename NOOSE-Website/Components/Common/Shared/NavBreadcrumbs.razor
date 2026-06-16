@@ -1,0 +1,103 @@
+@* Breadcrumb trail derived from the route + a record-name lookup; hosts the universal "pin record" button. *@
+@implements IDisposable
+@using NOOSE_Website.Models.Navigation
+@using Microsoft.AspNetCore.Components.Routing
+@inject INavLabelService LabelService
+@inject INavPreferencesService NavPrefs
+@inject NavigationManager Nav
+
+@if (_items.Count > 1)
+{
+    <div class="d-flex align-center mb-3 no-print">
+        <MudBreadcrumbs Items="_items" Class="pa-0" />
+        @if (_location.IsRecord && !string.IsNullOrEmpty(_agentId))
+        {
+            <MudSpacer />
+            <MudTooltip Text="@(_isFavorite ? "Aus Favoriten entfernen" : "An Favoriten anheften")">
+                <MudIconButton Icon="@(_isFavorite ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
+                               Color="@(_isFavorite ? Color.Warning : Color.Default)" Size="Size.Small"
+                               OnClick="ToggleFavoriteAsync" aria-label="An Favoriten anheften" />
+            </MudTooltip>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private List<BreadcrumbItem> _items = new();
+    private NavLocation _location;
+    private bool _isFavorite;
+    private string? _agentId;
+    private ViewerScope _scope;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var user = (await AuthStateTask).User;
+            _agentId = user.GetAgentId();
+            _scope = ViewerScope.From(user);
+        }
+        Nav.LocationChanged += OnLocationChanged;
+        await BuildAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+        => _ = InvokeAsync(async () =>
+        {
+            await BuildAsync();
+            StateHasChanged();
+        });
+
+    private async Task BuildAsync()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri);
+        _location = await LabelService.ResolveAsync(path, _scope);
+
+        var items = new List<BreadcrumbItem> { new("Lagezentrum", "/") };
+        if (_location.Section is { } sec && sec.Key != "dashboard")
+        {
+            if (_location.IsRecord)
+            {
+                items.Add(new BreadcrumbItem(sec.Label, href: sec.Route));
+                items.Add(new BreadcrumbItem(_location.RecordName ?? "Akte", href: null, disabled: true));
+            }
+            else
+            {
+                // current list/section page
+                items.Add(new BreadcrumbItem(sec.Label, href: null, disabled: true));
+            }
+        }
+        _items = items;
+
+        _isFavorite = false;
+        if (_location.IsRecord && !string.IsNullOrEmpty(_agentId))
+        {
+            var prefs = await NavPrefs.GetAsync(_agentId);
+            _isFavorite = prefs.Favorites.Any(f =>
+                f.Kind == "record" && f.EntityType == _location.EntityType && f.EntityId == _location.EntityId);
+        }
+    }
+
+    private async Task ToggleFavoriteAsync()
+    {
+        if (string.IsNullOrEmpty(_agentId) || !_location.IsRecord)
+        {
+            return;
+        }
+        var fav = new NavFavorite("record", null, _location.EntityType, _location.EntityId,
+            _location.RecordName ?? "Akte", _location.Route, _location.RecordIcon);
+        try
+        {
+            await NavPrefs.ToggleFavoriteAsync(_agentId, fav);
+            _isFavorite = !_isFavorite;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

@@ -168,6 +168,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.DiscordUsername).HasMaxLength(64);
             b.Property(a => a.AvatarUrl).HasMaxLength(512);
             b.Property(a => a.BlockedReason).HasMaxLength(512);
+            // longtext for JSON
+            b.Property(a => a.NavPreferencesJson).HasColumnType("longtext");
             b.HasIndex(a => a.DiscordId).IsUnique();
         });
 

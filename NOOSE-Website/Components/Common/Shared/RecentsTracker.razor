@@ -1,0 +1,83 @@
+@* No-render: records recently visited list/detail pages on navigation (cheap, deduped). *@
+@implements IDisposable
+@using NOOSE_Website.Models.Navigation
+@using Microsoft.AspNetCore.Components.Routing
+@inject INavLabelService LabelService
+@inject INavPreferencesService NavPrefs
+@inject NavigationManager Nav
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? _agentId;
+    private string? _lastPath;
+    private ViewerScope _scope;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var user = (await AuthStateTask).User;
+            _agentId = user.GetAgentId();
+            _scope = ViewerScope.From(user);
+        }
+        Nav.LocationChanged += OnLocationChanged;
+        await TrackAsync();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(TrackAsync);
+
+    private async Task TrackAsync()
+    {
+        if (string.IsNullOrEmpty(_agentId))
+        {
+            return;
+        }
+        var path = Nav.ToBaseRelativePath(Nav.Uri);
+        var key = path.Split('?')[0];
+        if (key == _lastPath || ShouldSkip(key))
+        {
+            return;
+        }
+        _lastPath = key;
+
+        var loc = await LabelService.ResolveAsync(path, _scope);
+        // unknown route, or a record we cannot name (deleted/not visible) → skip
+        if (loc.Section is null && !loc.IsRecord)
+        {
+            return;
+        }
+        if (loc.IsRecord && loc.RecordName is null)
+        {
+            return;
+        }
+
+        var item = loc.IsRecord
+            ? new RecentItem(loc.Route, loc.RecordName!, loc.RecordIcon, loc.EntityType, loc.EntityId, DateTime.UtcNow)
+            : new RecentItem(loc.Section!.Route, loc.Section!.Label, loc.Section!.Icon, null, null, DateTime.UtcNow);
+        try
+        {
+            await NavPrefs.PushRecentAsync(_agentId, item);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    // don't record search/edit/admin churn
+    private static bool ShouldSkip(string path)
+    {
+        var p = path.Trim('/').ToLowerInvariant();
+        if (p.Length == 0)
+        {
+            return true;
+        }
+        return p == "suche" || p.StartsWith("suche/", StringComparison.Ordinal)
+            || p.EndsWith("/neu", StringComparison.Ordinal) || p.EndsWith("/bearbeiten", StringComparison.Ordinal)
+            || p.EndsWith("/druck", StringComparison.Ordinal) || p.EndsWith("/papierkorb", StringComparison.Ordinal)
+            || p.StartsWith("admin/", StringComparison.Ordinal) || p.StartsWith("account/", StringComparison.Ordinal);
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

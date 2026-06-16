@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Navigation;
 
 namespace NOOSE_Website.Components.Account;
 
@@ -85,6 +86,11 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             {
                 case AgentStatus.Active:
                     await signInManager.SignInAsync(agent, isPersistent: true);
+                    // honor an explicit deep link; otherwise use the user's custom start page
+                    if (returnUrl == "/" && TryGetStartRoute(agent, out var startRoute))
+                    {
+                        return Results.LocalRedirect(startRoute);
+                    }
                     return Results.LocalRedirect(returnUrl);
                 case AgentStatus.Pending:
                     return Results.Redirect("/Account/Ausstehend");
@@ -107,6 +113,32 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
 
     private static IResult RedirectToLoginPage(string error)
         => Results.Redirect($"/Account/Login?fehler={Uri.EscapeDataString(error)}");
+
+    /// <summary>Reads the user's custom start route from saved nav preferences; guards against open redirects.</summary>
+    private static bool TryGetStartRoute(Agent agent, out string route)
+    {
+        route = "/";
+        if (string.IsNullOrWhiteSpace(agent.NavPreferencesJson))
+        {
+            return false;
+        }
+        try
+        {
+            var prefs = System.Text.Json.JsonSerializer.Deserialize<NavPreferences>(agent.NavPreferencesJson);
+            var start = prefs?.StartRoute;
+            // local relative path only
+            if (!string.IsNullOrWhiteSpace(start) && start.StartsWith('/') && !start.StartsWith("//"))
+            {
+                route = start;
+                return true;
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
+        return false;
+    }
 
     /// <summary>
     /// Liest alle Bootstrap-Admin-Discord-IDs aus der Konfiguration. Berücksichtigt sowohl den

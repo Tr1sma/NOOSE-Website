@@ -243,6 +243,10 @@ builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 // system settings
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
+// per-user navigation preferences
+builder.Services.AddScoped<INavPreferencesService, NavPreferencesService>();
+// route → section/record label resolution (breadcrumbs, recents)
+builder.Services.AddScoped<INavLabelService, NavLabelService>();
 // per partner-rank visibility config
 builder.Services.AddScoped<IPartnerVisibilityPolicyService, PartnerVisibilityPolicyService>();
 builder.Services.AddScoped<ILawService, LawService>();
