@@ -112,7 +112,14 @@ else
         <NoRecordsContent>
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
                 <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Default" Size="Size.Large" />
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Dokumente – lege das erste an.</MudText>
+                <AuthorizeView Policy="@Policies.PartnerView" Context="partnerEmpty">
+                    <Authorized>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Für Ihre Behörde wurde noch kein Dokument freigegeben.</MudText>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Dokumente – lege das erste an.</MudText>
+                    </NotAuthorized>
+                </AuthorizeView>
                 <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
                     <MudButton Href="/dokumente/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neues Dokument</MudButton>
                 </AuthorizeView>

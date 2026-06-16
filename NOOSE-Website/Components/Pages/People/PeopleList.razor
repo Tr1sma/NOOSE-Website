@@ -89,7 +89,14 @@ else
         <NoRecordsContent>
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
                 <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Default" Size="Size.Large" />
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Personen-Akten – lege die erste an.</MudText>
+                <AuthorizeView Policy="@Policies.PartnerView" Context="partnerEmpty">
+                    <Authorized>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Für Ihre Behörde wurde noch keine Personen-Akte freigegeben.</MudText>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Personen-Akten – lege die erste an.</MudText>
+                    </NotAuthorized>
+                </AuthorizeView>
                 <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
                     <MudButton Href="/personen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd">Neue Person</MudButton>
                 </AuthorizeView>

@@ -12,6 +12,9 @@ public record PartnerIndividualShareState(string AgentId, string Codename, Partn
 /// <summary>Selectable partner account for an individual release.</summary>
 public record PartnerAccountOption(string AgentId, string Codename, PartnerAgency Agency, PartnerRank? Rank);
 
+/// <summary>Release coverage of one record type for an agency: total records and how many are released agency-wide.</summary>
+public record PartnerTypeShareSummary(string TypeKey, string DisplayName, int TotalRecords, int SharedRecords);
+
 /// <summary>Leadership-only partner releases: one active row per (entity, agency, account), whole-record or per child.</summary>
 public interface IPartnerShareService
 {
@@ -35,4 +38,10 @@ public interface IPartnerShareService
 
     /// <summary>Set/clear the parent release for a single partner account; agency is taken from the account.</summary>
     Task SetIndividualParentAsync(string entityType, string entityId, string partnerAgentId, bool released, bool includesChildren, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Release coverage per releasable type for one agency (agency-wide shares only).</summary>
+    Task<IReadOnlyList<PartnerTypeShareSummary>> GetTypeSummariesAsync(PartnerAgency agency, CancellationToken cancellationToken = default);
+
+    /// <summary>Release or withdraw a whole record type for one agency at once; returns how many records were newly released (or withdrawn).</summary>
+    Task<int> SetTypeAsync(string entityType, PartnerAgency agency, bool released, bool includesChildren, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

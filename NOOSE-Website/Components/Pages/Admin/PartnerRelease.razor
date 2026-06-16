@@ -1,0 +1,124 @@
+@page "/admin/partner-freigabe"
+@attribute [Authorize(Policy = Policies.AdminPage)]
+@inject IPartnerShareService ShareService
+@inject ISnackbar Snackbar
+
+<PageTitle>Partner-Freigabe · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.FolderShared" Color="Color.Info" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Partner-Freigabe</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+    Gib alle Akten eines Typs auf einen Klick für eine Partnerbehörde frei. Das legt behördenweite
+    Freigaben an – der Partner sieht damit alle nicht als Verschlusssache eingestuften Akten dieses Typs.
+    Welche Tabs darin sichtbar sind, steuerst du je Rang unter
+    <MudLink Href="/admin/partner-sichtbarkeit">Partner-Sichtbarkeit</MudLink>.
+</MudText>
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-6">
+    Hinweis: Später neu angelegte Akten musst du erneut freigeben. Einzelne Akten gibst du weiterhin
+    über den „Freigegeben“-Schalter auf der jeweiligen Detailseite frei.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudSelect T="PartnerAgency" Value="_agency" ValueChanged="AgencyChangedAsync" Label="Behörde"
+               Dense="true" Variant="Variant.Outlined" Style="min-width:160px;">
+        @foreach (var a in PartnerAgencyDisplay.All)
+        {
+            <MudSelectItem T="PartnerAgency" Value="@a">@PartnerAgencyDisplay.Name(a)</MudSelectItem>
+        }
+    </MudSelect>
+</MudPaper>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (var t in _summaries)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.subtitle1">@t.DisplayName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @t.SharedRecords von @t.TotalRecords für @PartnerAgencyDisplay.Name(_agency) freigegeben
+                            </MudText>
+                        </div>
+                        <MudCheckBox T="bool" Value="@_wholeRecord.GetValueOrDefault(t.TypeKey)"
+                                     ValueChanged="@(v => _wholeRecord[t.TypeKey] = v)" Dense="true"
+                                     Color="Color.Primary" Label="Ganze Akte" />
+                    </MudStack>
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.LockOpen" Disabled="@(_busy || t.TotalRecords == 0)"
+                                   OnClick="@(() => ReleaseAsync(t.TypeKey, true))">Alle freigeben</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.LockReset" Disabled="@(_busy || t.SharedRecords == 0)"
+                                   OnClick="@(() => ReleaseAsync(t.TypeKey, false))">Freigaben entfernen</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _busy;
+    private PartnerAgency _agency = PartnerAgency.DoJ;
+    private IReadOnlyList<PartnerTypeShareSummary> _summaries = new List<PartnerTypeShareSummary>();
+    private readonly Dictionary<string, bool> _wholeRecord = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _summaries = await ShareService.GetTypeSummariesAsync(_agency);
+        foreach (var t in _summaries)
+        {
+            _wholeRecord.TryAdd(t.TypeKey, false);
+        }
+        _load = false;
+    }
+
+    private async Task AgencyChangedAsync(PartnerAgency agency)
+    {
+        _agency = agency;
+        await LoadAsync();
+    }
+
+    private async Task ReleaseAsync(string typeKey, bool released)
+    {
+        _busy = true;
+        try
+        {
+            var whole = _wholeRecord.GetValueOrDefault(typeKey);
+            var count = await ShareService.SetTypeAsync(typeKey, _agency, released, whole, _user);
+            var name = _summaries.FirstOrDefault(s => s.TypeKey == typeKey)?.DisplayName ?? typeKey;
+            Snackbar.Add(released
+                ? $"{count} {name} für {PartnerAgencyDisplay.Name(_agency)} freigegeben."
+                : $"{count} Freigabe(n) entfernt ({name}).", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

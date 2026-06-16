@@ -67,7 +67,14 @@ else
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Paragrafen erfasst.</MudText>
+            <AuthorizeView Policy="@Policies.PartnerView" Context="partnerEmpty">
+                <Authorized>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Für Ihre Behörde wurde noch kein Paragraf freigegeben.</MudText>
+                </Authorized>
+                <NotAuthorized>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Paragrafen erfasst.</MudText>
+                </NotAuthorized>
+            </AuthorizeView>
         </NoRecordsContent>
         <PagerContent>
             <MudTablePager />
