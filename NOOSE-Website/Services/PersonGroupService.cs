@@ -73,8 +73,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         {
             CaseNumber = await caseNumber.NextAsync(db, "G", cancellationToken),
             Name = input.Name.Trim(),
-            Description = Empty(input.Description),
-            Targets = Empty(input.Targets),
+            Description = input.Description.TrimToNull(),
+            Targets = input.Targets.TrimToNull(),
             Kind = input.Kind,
             Classification = input.Classification,
             EstimatedMemberCount = input.EstimatedMemberCount,
@@ -131,7 +131,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
                 {
                     PersonGroupId = group.Id,
                     PersonId = pid,
-                    Role = Empty(m.Role),
+                    Role = m.Role.TrimToNull(),
                     IsLead = m.IsLead,
                 });
                 added.Add(pid);
@@ -175,8 +175,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         }
 
         group.Name = input.Name.Trim();
-        group.Description = Empty(input.Description);
-        group.Targets = Empty(input.Targets);
+        group.Description = input.Description.TrimToNull();
+        group.Targets = input.Targets.TrimToNull();
         group.Kind = input.Kind;
         group.EstimatedMemberCount = input.EstimatedMemberCount;
         group.IsClassified = input.IsClassified;
@@ -294,7 +294,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         {
             PersonGroupId = groupId,
             PersonId = personId,
-            Role = Empty(input.Role),
+            Role = input.Role.TrimToNull(),
             IsLead = input.IsLead,
         });
         await db.SaveChangesAsync(cancellationToken);
@@ -320,7 +320,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        member.Role = Empty(role);
+        member.Role = role.TrimToNull();
         member.IsLead = isLead;
         await db.SaveChangesAsync(cancellationToken);
         await threat.NewCalculatePersonScoreAsync(member.PersonId, cancellationToken);
@@ -525,5 +525,5 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         await ColleaguesSync.SyncAsync(db, personId, ColleaguesSync.GroupColleague, should, cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

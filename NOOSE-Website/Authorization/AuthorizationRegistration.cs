@@ -51,10 +51,7 @@ public static class AuthorizationRegistration
                 .AddRequirements(new RankRequirement(Rank.SeniorSpecialAgent)))
             .AddPolicy(Policies.PromotionDecide, p => p
                 .RequireAuthenticatedUser()
-                .AddRequirements(new RankRequirement(Rank.DeputyDirector)))
-            .AddPolicy(Policies.Classified, p => p
-                .RequireAuthenticatedUser()
-                .AddRequirements(new ClassifiedRequirement()));
+                .AddRequirements(new RankRequirement(Rank.DeputyDirector)));
 
         return services;
     }

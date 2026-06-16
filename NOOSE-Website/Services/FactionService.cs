@@ -84,14 +84,14 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             CaseNumber = await caseNumber.NextAsync(db, "F", cancellationToken),
             Name = input.Name.Trim(),
-            Kind = Empty(input.Kind),
-            Radio = Empty(input.Radio),
-            Darkchat = Empty(input.Darkchat),
-            IssuingTimes = Empty(input.IssuingTimes),
-            Estate = Empty(input.Estate),
-            RecognitionColor = Empty(input.RecognitionColor),
-            Targets = Empty(input.Targets),
-            Description = Empty(input.Description),
+            Kind = input.Kind.TrimToNull(),
+            Radio = input.Radio.TrimToNull(),
+            Darkchat = input.Darkchat.TrimToNull(),
+            IssuingTimes = input.IssuingTimes.TrimToNull(),
+            Estate = input.Estate.TrimToNull(),
+            RecognitionColor = input.RecognitionColor.TrimToNull(),
+            Targets = input.Targets.TrimToNull(),
+            Description = input.Description.TrimToNull(),
             Classification = input.Classification,
             IsClassified = input.IsClassified,
             IsStateFaction = input.IsStateFaction,
@@ -149,7 +149,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
                 {
                     FactionId = faction.Id,
                     PersonId = pid,
-                    Rank = Empty(m.Rank),
+                    Rank = m.Rank.TrimToNull(),
                     IsLead = m.IsLead,
                 });
                 added.Add(pid);
@@ -201,14 +201,14 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         }
 
         faction.Name = input.Name.Trim();
-        faction.Kind = Empty(input.Kind);
-        faction.Radio = Empty(input.Radio);
-        faction.Darkchat = Empty(input.Darkchat);
-        faction.IssuingTimes = Empty(input.IssuingTimes);
-        faction.Estate = Empty(input.Estate);
-        faction.RecognitionColor = Empty(input.RecognitionColor);
-        faction.Targets = Empty(input.Targets);
-        faction.Description = Empty(input.Description);
+        faction.Kind = input.Kind.TrimToNull();
+        faction.Radio = input.Radio.TrimToNull();
+        faction.Darkchat = input.Darkchat.TrimToNull();
+        faction.IssuingTimes = input.IssuingTimes.TrimToNull();
+        faction.Estate = input.Estate.TrimToNull();
+        faction.RecognitionColor = input.RecognitionColor.TrimToNull();
+        faction.Targets = input.Targets.TrimToNull();
+        faction.Description = input.Description.TrimToNull();
         faction.IsClassified = input.IsClassified;
         faction.IsStateFaction = input.IsStateFaction;
         faction.EstimatedMemberCount = input.EstimatedMemberCount;
@@ -360,7 +360,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             FactionId = factionId,
             PersonId = personId,
-            Rank = Empty(input.Rank),
+            Rank = input.Rank.TrimToNull(),
             IsLead = input.IsLead,
         });
         await db.SaveChangesAsync(cancellationToken);
@@ -388,7 +388,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        member.Rank = Empty(rank);
+        member.Rank = rank.TrimToNull();
         member.IsLead = isLead;
         await db.SaveChangesAsync(cancellationToken);
         // Leitungs-Flag fließt in S2 (Struktur) der Fraktion und in P4 (Leitungsrolle) der Person → beide neu berechnen.
@@ -603,11 +603,11 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             FactionId = factionId,
             Title = title,
-            Kind = Empty(input.Kind),
+            Kind = input.Kind.TrimToNull(),
             // Vom Nutzer gewählter Zeitpunkt (lokal erfasst) → als UTC speichern (App-Konvention, vgl. Wiedervorlagen).
             Timestamp = input.Timestamp.ToUniversalTime(),
-            Description = Empty(input.Description),
-            Location = Empty(input.Location),
+            Description = input.Description.TrimToNull(),
+            Location = input.Location.TrimToNull(),
         });
         await db.SaveChangesAsync(cancellationToken);
         // Aktivität = datierter Vorfall → Kern des S1-Heat → neu berechnen.
@@ -631,10 +631,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         }
 
         activity.Title = title;
-        activity.Kind = Empty(input.Kind);
+        activity.Kind = input.Kind.TrimToNull();
         activity.Timestamp = input.Timestamp.ToUniversalTime();
-        activity.Description = Empty(input.Description);
-        activity.Location = Empty(input.Location);
+        activity.Description = input.Description.TrimToNull();
+        activity.Location = input.Location.TrimToNull();
         await db.SaveChangesAsync(cancellationToken);
         // Art/Zeitpunkt einer Aktivität wirken auf S1 → neu berechnen.
         await threat.NewCalculateAsync(activity.FactionId, cancellationToken);
@@ -825,16 +825,16 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToList();
         faction.WeaponStock = input.WeaponStock
             .Where(w => !string.IsNullOrWhiteSpace(w.Designation))
-            .Select(w => new FactionWeaponStock { FactionId = faction.Id, Designation = w.Designation.Trim(), Quantity = Empty(w.Quantity) })
+            .Select(w => new FactionWeaponStock { FactionId = faction.Id, Designation = w.Designation.Trim(), Quantity = w.Quantity.TrimToNull() })
             .ToList();
         faction.Inventory = input.Inventory
             .Where(l => !string.IsNullOrWhiteSpace(l.Designation))
-            .Select(l => new FactionInventory { FactionId = faction.Id, Designation = l.Designation.Trim(), Quantity = Empty(l.Quantity) })
+            .Select(l => new FactionInventory { FactionId = faction.Id, Designation = l.Designation.Trim(), Quantity = l.Quantity.TrimToNull() })
             .ToList();
         // Drogenrouten teilen das generische BestandEingabe; dessen Menge-/Zusatzfeld trägt hier die Notiz.
         faction.DrugRoutes = input.DrugRoutes
             .Where(d => !string.IsNullOrWhiteSpace(d.Designation))
-            .Select(d => new FactionDrugRoute { FactionId = faction.Id, Designation = d.Designation.Trim(), Note = Empty(d.Quantity) })
+            .Select(d => new FactionDrugRoute { FactionId = faction.Id, Designation = d.Designation.Trim(), Note = d.Quantity.TrimToNull() })
             .ToList();
     }
 
@@ -890,5 +890,5 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await ColleaguesSync.SyncAsync(db, personId, ColleaguesSync.FactionColleague, should, cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

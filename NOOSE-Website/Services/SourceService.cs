@@ -45,13 +45,19 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             throw new InvalidOperationException("Ein Titel ist erforderlich.");
         }
 
+        await using var visDb = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await Visibility.IsRecordVisibleAsync(visDb, entityType, entityId, actor.IsLeadership(), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
+
         var source = new Source
         {
             EntityType = entityType,
             EntityId = entityId,
             Type = input.Type,
             Title = title,
-            Description = Empty(input.Description),
+            Description = input.Description.TrimToNull(),
         };
 
         switch (input.Type)
@@ -152,6 +158,10 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         {
             return;
         }
+        if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, actor.IsLeadership(), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
         // Soft-Delete via Interceptor. Die physische Datei bleibt erhalten (Wiederherstellung möglich);
         // endgültiges Entfernen erst beim Hard-Delete (späterer Cleanup, siehe Plan).
         db.Sources.Remove(source);
@@ -166,16 +176,18 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         Permission.RequireWriteAccess(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Bewusst per ExecuteUpdate statt Laden+SaveChanges: setzt nur das Flag, ohne über den Audit-
-        // Interceptor GeaendertAm/GeaendertVonId zu verändern (Anpinnen ist keine inhaltliche Bearbeitung).
-        // Der Soft-Delete-Query-Filter greift weiterhin → Papierkorb-Quellen werden nicht angefasst.
-        var affected = await db.Sources
+        // Source laden, um EntityType/EntityId für den VS-Check zu kennen.
+        var source = await db.Sources.FirstOrDefaultAsync(q => q.Id == sourceId, cancellationToken)
+            ?? throw new InvalidOperationException("Quelle nicht gefunden.");
+        if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, actor.IsLeadership(), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
+        // Bewusst per ExecuteUpdate statt SaveChanges: setzt nur das Flag ohne Audit-Interceptor
+        // (Anpinnen ist keine inhaltliche Bearbeitung → kein GeaendertAm/Von-Stempel).
+        await db.Sources
             .Where(q => q.Id == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(q => q.Pinned, pinned), cancellationToken);
-        if (affected == 0)
-        {
-            throw new InvalidOperationException("Quelle nicht gefunden.");
-        }
     }
 
     public async Task<Source?> GetForDownloadAsync(string sourceId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -203,5 +215,4 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         => Uri.TryCreate(url, UriKind.Absolute, out var uri)
            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
-    private static string? Empty(string? s) => s.TrimToNull();
 }

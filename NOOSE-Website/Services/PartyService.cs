@@ -73,9 +73,9 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         {
             CaseNumber = await caseNumber.NextAsync(db, "PT", cancellationToken),
             Name = input.Name.Trim(),
-            Description = Empty(input.Description),
-            Targets = Empty(input.Targets),
-            Remarks = Empty(input.Remarks),
+            Description = input.Description.TrimToNull(),
+            Targets = input.Targets.TrimToNull(),
+            Remarks = input.Remarks.TrimToNull(),
             Classification = input.Classification,
             IsClassified = input.IsClassified,
         };
@@ -130,7 +130,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
                 {
                     PartyId = party.Id,
                     PersonId = pid,
-                    Role = Empty(m.Role),
+                    Role = m.Role.TrimToNull(),
                     IsLead = m.IsLead,
                 });
                 added.Add(pid);
@@ -175,9 +175,9 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         }
 
         party.Name = input.Name.Trim();
-        party.Description = Empty(input.Description);
-        party.Targets = Empty(input.Targets);
-        party.Remarks = Empty(input.Remarks);
+        party.Description = input.Description.TrimToNull();
+        party.Targets = input.Targets.TrimToNull();
+        party.Remarks = input.Remarks.TrimToNull();
         party.IsClassified = input.IsClassified;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -293,7 +293,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         {
             PartyId = partyId,
             PersonId = personId,
-            Role = Empty(input.Role),
+            Role = input.Role.TrimToNull(),
             IsLead = input.IsLead,
         });
         await SuggestionsStageAsync(db, party.IsClassified, new[] { input.Role }, cancellationToken);
@@ -319,7 +319,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        member.Role = Empty(role);
+        member.Role = role.TrimToNull();
         member.IsLead = isLead;
         await SuggestionsStageAsync(db, member.Party?.IsClassified == true, new[] { role }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -525,5 +525,5 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await suggestion.StageAsync(db, SuggestionType.PartyRole, roles.Where(r => r is not null).Select(r => r!), cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

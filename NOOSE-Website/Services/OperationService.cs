@@ -70,14 +70,14 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             CaseNumber = await caseNumber.NextAsync(db, "OP", cancellationToken),
             Title = input.Title.Trim(),
-            Type = Empty(input.Type),
+            Type = input.Type.TrimToNull(),
             Status = input.Status,
-            Location = Empty(input.Location),
+            Location = input.Location.TrimToNull(),
             Start = input.Start,
             End = input.End,
-            Expiry = Empty(input.Expiry),
-            Result = Empty(input.Result),
-            Remarks = Empty(input.Remarks),
+            Expiry = input.Expiry.TrimToNull(),
+            Result = input.Result.TrimToNull(),
+            Remarks = input.Remarks.TrimToNull(),
             Classification = input.Classification,
             IsClassified = input.IsClassified,
         };
@@ -121,14 +121,14 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
 
         operation.Title = input.Title.Trim();
-        operation.Type = Empty(input.Type);
+        operation.Type = input.Type.TrimToNull();
         operation.Status = input.Status;
-        operation.Location = Empty(input.Location);
+        operation.Location = input.Location.TrimToNull();
         operation.Start = input.Start;
         operation.End = input.End;
-        operation.Expiry = Empty(input.Expiry);
-        operation.Result = Empty(input.Result);
-        operation.Remarks = Empty(input.Remarks);
+        operation.Expiry = input.Expiry.TrimToNull();
+        operation.Result = input.Result.TrimToNull();
+        operation.Remarks = input.Remarks.TrimToNull();
         operation.IsClassified = input.IsClassified;
 
         await SuggestionsStageAsync(db, operation.IsClassified, input.Type, cancellationToken);
@@ -346,5 +346,5 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         await suggestion.StageAsync(db, SuggestionType.OperationType, new[] { type }, cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

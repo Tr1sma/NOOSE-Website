@@ -40,7 +40,7 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
             throw new InvalidOperationException($"Ein Tag „{name}“ existiert bereits.");
         }
 
-        var tag = new Tag { Name = name, Colour = Empty(colour) };
+        var tag = new Tag { Name = name, Colour = colour.TrimToNull() };
         db.Tags.Add(tag);
         await db.SaveChangesAsync(cancellationToken);
         return tag;
@@ -65,7 +65,7 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         }
 
         tag.Name = name;
-        tag.Colour = Empty(colour);
+        tag.Colour = colour.TrimToNull();
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -120,5 +120,5 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

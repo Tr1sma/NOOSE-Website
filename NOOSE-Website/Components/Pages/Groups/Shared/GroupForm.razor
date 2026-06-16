@@ -1,6 +1,7 @@
 @* Gemeinsames Formular für Anlegen/Bearbeiten einer Personengruppe. Beim Anlegen können bereits Mitglieder
    erfasst werden (ZeigeMitglieder); zugeteilte Agents laufen weiterhin nur über die Akte. *@
 @inject IDialogService DialogService
+@inject IPersonService PersonService
 
 <MudGrid>
     <MudItem xs="12" md="8">
@@ -108,6 +109,10 @@
         var exclusion = Input.Members.Select(m => m.PersonId).ToList();
         var @new = await GroupMemberDialog.ShowAsync(DialogService, IsLeadership, exclusion);
         if (@new is null)
+        {
+            return;
+        }
+        if (!await DuplicateCheck.MayNewRecordCreateAsync(DialogService, PersonService, @new.NewPersonName, IsLeadership))
         {
             return;
         }
