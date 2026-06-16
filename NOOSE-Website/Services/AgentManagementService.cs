@@ -232,6 +232,71 @@ public class AgentManagementService(
         await Save(agent, newStamp: true);
     }
 
+    public async Task ConvertToPartnerAsync(string agentId, PartnerAgency agency, PartnerRank partnerRank, ClaimsPrincipal actor)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(agentId);
+        if (agent.Status != AgentStatus.Active)
+        {
+            throw new InvalidOperationException("Die Zugehörigkeit kann nur für aktive Konten geändert werden.");
+        }
+
+        // admin-strip guards
+        if (agent.IsAdmin)
+        {
+            if (actor.GetAgentId() == agentId)
+            {
+                throw new InvalidOperationException("Du kannst deine eigene Zugehörigkeit hier nicht ändern.");
+            }
+            if (await db.Users.CountAsync(u => u.IsAdmin) <= 1)
+            {
+                throw new InvalidOperationException("Der letzte verbliebene Admin kann nicht zu einem Partner umgewandelt werden.");
+            }
+        }
+
+        agent.PartnerAgency = agency;
+        agent.PartnerRank = partnerRank;
+        // partners hold no internal rank/flags
+        agent.Rank = null;
+        agent.IsTRU = false;
+        agent.IsHRB = false;
+        agent.IsTeamLead = false;
+        agent.IsAdmin = false;
+
+        Audit(agent, AuditAction.Modified, actor, $"Zugehörigkeit → Partner ({PartnerRankDisplay.Full(agency, partnerRank)})");
+        await Save(agent, newStamp: true);
+
+        try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Zugehörigkeit wurde auf einen Partner-Zugang umgestellt.", "/"); }
+        catch { /* best effort */ }
+    }
+
+    public async Task ConvertToInternalAsync(string agentId, Rank rank, ClaimsPrincipal actor)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(agentId);
+        if (agent.Status != AgentStatus.Active)
+        {
+            throw new InvalidOperationException("Die Zugehörigkeit kann nur für aktive Konten geändert werden.");
+        }
+        if (agent.PartnerAgency is null)
+        {
+            throw new InvalidOperationException("Dieser Account ist bereits ein interner NOOSE-Agent.");
+        }
+
+        agent.PartnerAgency = null;
+        agent.PartnerRank = null;
+        agent.Rank = rank;
+
+        HistoryEntryAdd(agent.Id, null, rank, actor, "Von Partner zu intern");
+        Audit(agent, AuditAction.Modified, actor, $"Zugehörigkeit → intern NOOSE ({rank})");
+        await Save(agent, newStamp: true);
+
+        try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Zugehörigkeit wurde auf einen internen NOOSE-Zugang umgestellt.", "/"); }
+        catch { /* best effort */ }
+    }
+
     public async Task PromotionDecideAsync(string requestId, bool approved, string? note, ClaimsPrincipal actor)
     {
         Permission.RequirePromotionDecide(actor);

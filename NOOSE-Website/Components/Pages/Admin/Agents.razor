@@ -154,6 +154,14 @@ else
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
                                        OnClick="() => Edit(context)" aria-label="Stammdaten bearbeiten" />
                     </MudTooltip>
+                    @if (context.Status == AgentStatus.Active)
+                    {
+                        <MudTooltip Text="Zugehörigkeit ändern (intern NOOSE ↔ Partnerbehörde)">
+                            <MudIconButton Icon="@Icons.Material.Filled.SwapHoriz" Size="Size.Small" Color="Color.Info"
+                                           Disabled="@(context.Id == _myId)"
+                                           OnClick="() => ChangeAffiliation(context)" aria-label="Zugehörigkeit ändern" />
+                        </MudTooltip>
+                    }
                     @if (context.Status == AgentStatus.Blocked)
                     {
                         <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
@@ -273,6 +281,34 @@ else
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    private async Task ChangeAffiliation(Agent agent)
+    {
+        var result = await AgentAffiliationDialog.ShowAsync(DialogService, agent);
+        if (result is null)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            if (result.Agency is { } agency)
+            {
+                await AgentService.ConvertToPartnerAsync(agent.Id, agency, result.PartnerRank, user);
+                Snackbar.Add($"{DisplayName(agent)}: Zugehörigkeit auf {PartnerRankDisplay.Full(agency, result.PartnerRank)} gesetzt.", Severity.Success);
+            }
+            else
+            {
+                await AgentService.ConvertToInternalAsync(agent.Id, result.Rank, user);
+                Snackbar.Add($"{DisplayName(agent)}: Zugehörigkeit auf interner NOOSE-Agent ({RankDisplay.Name(result.Rank)}) gesetzt.", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
     }
 
     private async Task RankChange(Agent agent, Rank degree)

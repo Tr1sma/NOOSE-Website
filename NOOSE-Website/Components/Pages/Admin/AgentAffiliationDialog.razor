@@ -1,0 +1,92 @@
+@* Dialog to change an active account's affiliation: internal NOOSE agent (with rank) or a partner
+   agency (DoJ/LSPD/LSMD) with a partner rank. Switching to a partner clears the internal rank/flags. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                Beim Wechsel zu einer Partnerbehörde verliert das Konto Dienstgrad, TRU/HRB, Teamleitung
+                und Admin-Rechte und erhält nur noch Lesezugriff auf freigegebene Akten. Beim Wechsel zu
+                einem internen NOOSE-Agenten wird die Partner-Zugehörigkeit entfernt und ein Dienstgrad
+                vergeben. In beiden Fällen muss sich der Agent neu anmelden.
+            </MudAlert>
+
+            <MudRadioGroup @bind-Value="_isPartner">
+                <MudRadio T="bool" Value="@false" Color="Color.Primary">Interner NOOSE-Agent</MudRadio>
+                <MudRadio T="bool" Value="@true" Color="Color.Info">Partnerbehörde</MudRadio>
+            </MudRadioGroup>
+
+            @if (_isPartner)
+            {
+                <MudSelect T="PartnerAgency" @bind-Value="_agency" Label="Behörde" Variant="Variant.Outlined" Dense="true">
+                    @foreach (var ag in PartnerAgencyDisplay.All)
+                    {
+                        <MudSelectItem Value="ag">@PartnerAgencyDisplay.Name(ag)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="PartnerRank" @bind-Value="_partnerRank" Label="Partner-Rang" Variant="Variant.Outlined" Dense="true">
+                    @foreach (var pr in PartnerRankDisplay.All)
+                    {
+                        <MudSelectItem Value="pr">@PartnerRankDisplay.Full(_agency, pr)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <MudSelect T="Rank" @bind-Value="_rank" Label="Dienstgrad" Variant="Variant.Outlined" Dense="true">
+                    @foreach (var dg in RankDisplay.All)
+                    {
+                        <MudSelectItem Value="dg">@RankDisplay.Name(dg)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">Übernehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public PartnerAgency? CurrentAgency { get; set; }
+    [Parameter] public PartnerRank? CurrentPartnerRank { get; set; }
+    [Parameter] public Rank? CurrentRank { get; set; }
+
+    private bool _isPartner;
+    private PartnerAgency _agency = PartnerAgency.DoJ;
+    private PartnerRank _partnerRank = PartnerRank.Member;
+    private Rank _rank = Rank.JuniorAgent;
+
+    protected override void OnInitialized()
+    {
+        _isPartner = CurrentAgency is not null;
+        _agency = CurrentAgency ?? PartnerAgency.DoJ;
+        _partnerRank = CurrentPartnerRank ?? PartnerRank.Member;
+        _rank = CurrentRank ?? Rank.JuniorAgent;
+    }
+
+    private void Confirm()
+        => MudDialog.Close(DialogResult.Ok(new AgentAffiliation(_isPartner ? _agency : null, _partnerRank, _rank)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Show the affiliation dialog; returns the chosen affiliation or null if cancelled.</summary>
+    public static async Task<AgentAffiliation?> ShowAsync(IDialogService dialog, Agent agent)
+    {
+        var parameters = new DialogParameters<AgentAffiliationDialog>
+        {
+            { x => x.CurrentAgency, agent.PartnerAgency },
+            { x => x.CurrentPartnerRank, agent.PartnerRank },
+            { x => x.CurrentRank, agent.Rank },
+        };
+        var reference = await dialog.ShowAsync<AgentAffiliationDialog>("Zugehörigkeit ändern", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: AgentAffiliation a } ? a : null;
+    }
+
+    /// <summary>Result of the affiliation dialog. Agency null = internal NOOSE agent (Rank applies).</summary>
+    public record AgentAffiliation(PartnerAgency? Agency, PartnerRank PartnerRank, Rank Rank);
+}

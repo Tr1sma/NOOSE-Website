@@ -55,6 +55,13 @@ public interface IAgentManagementService
     /// <summary>Ändert den Partner-Rang eines Partner-Kontos (Member/Special/Chief). Erneuert die Claims.</summary>
     Task SetPartnerRankAsync(string agentId, PartnerRank partnerRank, ClaimsPrincipal actor);
 
+    /// <summary>Switch an active account to a partner agency (also used to change the agency of an existing
+    /// partner). Clears the internal rank and TRU/HRB/team-lead/admin flags; forces re-login.</summary>
+    Task ConvertToPartnerAsync(string agentId, PartnerAgency agency, PartnerRank partnerRank, ClaimsPrincipal actor);
+
+    /// <summary>Switch an active partner account back to an internal NOOSE agent with the given rank; forces re-login.</summary>
+    Task ConvertToInternalAsync(string agentId, Rank rank, ClaimsPrincipal actor);
+
     /// <summary>Entscheidet über einen Beförderungsantrag (Deputy Director+/Admin). Bei Genehmigung wird der
     /// Rang gesetzt, im Dienstgrad-Verlauf protokolliert und der SecurityStamp erneuert.</summary>
     Task PromotionDecideAsync(string requestId, bool approved, string? note, ClaimsPrincipal actor);
