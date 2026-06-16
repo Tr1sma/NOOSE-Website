@@ -14,6 +14,7 @@ public static class PartnerRoutes
         "vorgaenge",
         "dokumente",
         "gesetze",
+        "suche",
     };
 
     private static readonly string[] BlockedSuffixes = { "/neu", "/bearbeiten", "/papierkorb" };

@@ -3,6 +3,7 @@
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
 @inject IPersonService PersonService
+@inject IPartnerShareService PartnerShareService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -34,13 +35,16 @@
                         <b>@doc.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @MeasureOutcomeDisplay.Name(doc.Outcome)
                     </MudText>
                     @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
-                    @if (_mayWrite)
-                    {
-                        <div @onclick:stopPropagation="true">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                           OnClick="@(() => DeleteAsync(display))" aria-label="Dok löschen" />
-                        </div>
-                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(PersonDoc)" ChildId="@doc.Id" />
+                        @if (_mayWrite)
+                        {
+                            <div @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => DeleteAsync(display))" aria-label="Dok löschen" />
+                            </div>
+                        }
+                    </MudStack>
                 </MudStack>
                 @if (!string.IsNullOrWhiteSpace(doc.Reason))
                 {
@@ -83,11 +87,18 @@
 
     private bool _load = true;
     private bool _mayWrite;
+    private bool _canShareChildren;
     private List<PersonDocDisplay> _docs = new();
 
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
+        // leadership: per-item release only matters when the record is shell-released
+        if (User.IsLeadership())
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(Person), PersonId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
         await LoadAsync();
     }
 

@@ -1,0 +1,83 @@
+@* Leadership-only: release a single child item to partner agencies (DoJ/LSPD/LSMD). *@
+@inject IPartnerShareService ShareService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Geben Sie diesen einzelnen Eintrag gezielt für Partnerbehörden frei. Wirksam, sobald die
+            übergeordnete Akte als Hülle (ohne „Ganze Akte") für die jeweilige Behörde freigegeben ist.
+        </MudText>
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            @foreach (var st in _states)
+            {
+                <MudPaper Class="pa-3 mb-2" Outlined="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.subtitle2">@PartnerAgencyDisplay.Name(st.Agency)</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@PartnerAgencyDisplay.LongName(st.Agency)</MudText>
+                        </div>
+                        <MudSwitch T="bool" Value="st.Released" ValueChanged="@(v => ReleasedChanged(st, v))"
+                                   Color="Color.Primary" Label="Freigegeben" />
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string ChildType { get; set; } = default!;
+    [Parameter, EditorRequired] public string ChildId { get; set; } = default!;
+
+    private bool _load = true;
+    private ClaimsPrincipal _user = default!;
+    private List<PartnerShareState> _states = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await ReloadAsync();
+        _load = false;
+    }
+
+    private async Task ReloadAsync()
+        => _states = (await ShareService.GetForChildAsync(ChildType, ChildId)).ToList();
+
+    private async Task ReleasedChanged(PartnerShareState st, bool released)
+    {
+        try
+        {
+            await ShareService.SetChildAsync(ChildType, ChildId, st.Agency, released, _user);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    public static Task ShowAsync(IDialogService dialog, string childType, string childId)
+    {
+        var parameters = new DialogParameters<PartnerChildShareDialog>
+        {
+            { x => x.ChildType, childType },
+            { x => x.ChildId, childId },
+        };
+        return dialog.ShowAsync<PartnerChildShareDialog>("Einzel-Freigabe für Partner", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+}

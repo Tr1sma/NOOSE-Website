@@ -337,7 +337,7 @@ else
             if (!user.IsPartner())
             {
                 _affiliations = await PersonService.GetAffiliationsAsync(Id, scope);
-                _relations = await RelationService.GetForPersonAsync(Id, isLeadership);
+                _relations = await RelationService.GetForPersonAsync(Id, scope);
                 _docs = await DocService.GetForPersonAsync(Id, scope);
                 _observations = await ObservationService.GetForPersonAsync(Id, scope);
                 _links = await LinkService.GetForRecordAsync(nameof(Person), Id, isLeadership, user.GetAgentId());

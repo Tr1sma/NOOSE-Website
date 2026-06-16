@@ -249,11 +249,6 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             return new();
         }
-        // partners: hide cross-refs
-        if (scope.IsPartner)
-        {
-            return new();
-        }
         var isLeadership = scope.MayClassifiedRead;
         // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
         // Der globale Soft-Delete-Filter blendet beendete Mitgliedschaften aus → nur aktive (BeendetAm = null).
@@ -275,18 +270,13 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             select new PersonAffiliation(nameof(PersonGroup), m.Id, g.Id, g.Name, g.CaseNumber, m.Role, m.IsLead, m.CreatedAt, (DateTime?)null))
             .ToListAsync(cancellationToken);
 
-        return factions.Concat(groups).ToList();
+        return await OnlyReleasedOrgsAsync(db, factions.Concat(groups).ToList(), scope, cancellationToken);
     }
 
     public async Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
-        {
-            return new();
-        }
-        // partners: hide cross-refs
-        if (scope.IsPartner)
         {
             return new();
         }
@@ -310,7 +300,22 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToListAsync(cancellationToken);
 
         // Neueste Beendigung zuerst (typübergreifend).
-        return factions.Concat(groups).OrderByDescending(z => z.EndedAt).ToList();
+        return await OnlyReleasedOrgsAsync(db, factions.Concat(groups).OrderByDescending(z => z.EndedAt).ToList(), scope, cancellationToken);
+    }
+
+    // for partners, keep only affiliations whose org (faction/group) is released to the agency
+    private static async Task<List<PersonAffiliation>> OnlyReleasedOrgsAsync(AppDbContext db, List<PersonAffiliation> items, ViewerScope scope, CancellationToken cancellationToken)
+    {
+        if (scope.PartnerAgency is not { } agency || items.Count == 0)
+        {
+            return items;
+        }
+        var relF = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Faction),
+            items.Where(z => z.Type == nameof(Faction)).Select(z => z.Id).ToList(), agency, cancellationToken);
+        var relG = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(PersonGroup),
+            items.Where(z => z.Type == nameof(PersonGroup)).Select(z => z.Id).ToList(), agency, cancellationToken);
+        return items.Where(z => (z.Type == nameof(Faction) && relF.Contains(z.Id))
+                             || (z.Type == nameof(PersonGroup) && relG.Contains(z.Id))).ToList();
     }
 
     public async Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)

@@ -3,6 +3,7 @@
 @inject IDialogService DialogService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IPartnerShareService PartnerShareService
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -40,6 +41,7 @@
                     @if (_mayWrite)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                            <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Source)" ChildId="@q.Id" />
                             <MudIconButton Size="Size.Small"
                                            Icon="@(q.Pinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
                                            Color="@(q.Pinned ? Color.Primary : Color.Default)"
@@ -96,11 +98,18 @@
 
     private bool _load = true;
     private bool _mayWrite;
+    private bool _canShareChildren;
     private List<Source> _sources = new();
 
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
+        // leadership: per-item release only matters when the record is shell-released
+        if (User.IsLeadership())
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(EntityType, EntityId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
         await LoadAsync();
     }
 

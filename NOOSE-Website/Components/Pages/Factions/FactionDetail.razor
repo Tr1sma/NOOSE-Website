@@ -148,13 +148,10 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
                 </MudTabPanel>
-                @* fan-out tabs: internal only *@
-                @if (!_isPartner)
-                {
+                @* partner-safe: timeline filters cross-refs for partners *@
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
-                }
             </MudTabs>
         </MudItem>
     </MudGrid>

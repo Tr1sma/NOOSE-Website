@@ -90,12 +90,12 @@ else
                         }
                     </MudStack>
                 </MudTabPanel>
-                @* fan-out tabs: internal only *@
-                @if (!_isPartner)
-                {
                 <MudTabPanel Text="Inhalt" Icon="@Icons.Material.Filled.Hub">
                     <CaseContentPanel CaseId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                @* assigned NOOSE agents: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <CaseAgentsPanel CaseId="@_case.Id" User="_user" Changed="CaseLeadRefreshAsync" />
                 </MudTabPanel>
@@ -118,13 +118,10 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
-                @* fan-out tab: internal only *@
-                @if (!_isPartner)
-                {
+                @* partner-safe: timeline filters cross-refs for partners *@
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
-                }
             </MudTabs>
         </MudItem>
     </MudGrid>

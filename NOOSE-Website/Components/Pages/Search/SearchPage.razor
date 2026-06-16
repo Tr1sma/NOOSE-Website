@@ -159,7 +159,11 @@ else
         _user = (await AuthStateTask).User;
         _agentId = _user.GetAgentId();
         _mayClassifiedRead = _user.MayClassifiedRead();
-        _tags = await TagService.GetAllAsync();
+        // partners: no internal tag vocabulary
+        if (!_user.IsPartner())
+        {
+            _tags = await TagService.GetAllAsync();
+        }
         await SavedLoadAsync();
     }
 
@@ -256,7 +260,7 @@ else
             do
             {
                 _againSearch = false;
-                _groups = await SearchService.SearchAsync(BuildCriteria(), _mayClassifiedRead, _agentId);
+                _groups = await SearchService.SearchAsync(BuildCriteria(), ViewerScope.From(_user));
                 _searched = true;
             }
             while (_againSearch);

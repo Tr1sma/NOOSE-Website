@@ -3,6 +3,7 @@
 @inject IFactionPhotoStorageService FileStorage
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IPartnerShareService PartnerShareService
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -50,9 +51,10 @@
                         <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                             @photo.OriginalName
                         </MudText>
-                        @if (_mayWrite)
-                        {
-                            <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                        <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                            <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(FactionPhoto)" ChildId="@photo.Id" />
+                            @if (_mayWrite)
+                            {
                                 @if (!photo.IsTitleImage)
                                 {
                                     <MudIconButton Icon="@Icons.Material.Outlined.StarBorder" Color="Color.Primary" Size="Size.Small"
@@ -60,8 +62,8 @@
                                 }
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                                OnClick="@(() => RemoveAsync(photo))" aria-label="Foto löschen" />
-                            </MudStack>
-                        }
+                            }
+                        </MudStack>
                     </MudStack>
                 </MudPaper>
             }
@@ -77,10 +79,17 @@
     private List<FactionPhoto> _photos = new();
     private bool _load;
     private bool _mayWrite;
+    private bool _canShareChildren;
 
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
+        // leadership: per-item release only matters when the record is shell-released
+        if (User.IsLeadership())
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(Faction), FactionId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
         await LoadAsync();
     }
 

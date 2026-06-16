@@ -2,6 +2,7 @@
 @inject IFollowupService FollowupService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IPartnerShareService PartnerShareService
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -36,17 +37,18 @@
                                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">überfällig</MudChip>
                             }
                         </MudStack>
-                        @if (w.MayEdit)
-                        {
-                            <MudStack Row="true" Spacing="0">
+                        <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                            <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Followup)" ChildId="@w.Id" />
+                            @if (w.MayEdit)
+                            {
                                 <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
                                                OnClick="@(() => CompleteAsync(w))" aria-label="Als erledigt markieren" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Default" Size="Size.Small"
                                                OnClick="@(() => EditAsync(w))" aria-label="Bearbeiten" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                                OnClick="@(() => DeleteAsync(w))" aria-label="Löschen" />
-                            </MudStack>
-                        }
+                            }
+                        </MudStack>
                     </MudStack>
 
                     @if (!string.IsNullOrWhiteSpace(w.Note))
@@ -106,10 +108,20 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private bool _load = true;
+    private bool _canShareChildren;
     private List<FollowupItem> _open = new();
     private List<FollowupItem> _done = new();
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        // leadership: per-item release only matters when the record is shell-released
+        if (User.IsLeadership())
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(EntityType, EntityId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {

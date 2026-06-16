@@ -129,18 +129,18 @@ else
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
-                @* fan-out tabs: internal only *@
-                @if (!_isPartner)
-                {
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <LinkPanel PersonId="@_person.Id" User="_user" />
-                    <MudDivider Class="my-4" />
-                    <LinkSuggestionPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                    @* link suggestions reveal other records: internal only *@
+                    @if (!_isPartner)
+                    {
+                        <MudDivider Class="my-4" />
+                        <LinkSuggestionPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                    }
                 </MudTabPanel>
                 <MudTabPanel Text="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
                     <AffiliationsPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" @key="_historyKey" />
                 </MudTabPanel>
-                }
                 @* partner-safe child services *@
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
@@ -148,13 +148,10 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
-                @* fan-out tabs: internal only *@
-                @if (!_isPartner)
-                {
+                @* partner-safe: timeline filters cross-refs for partners *@
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
-                }
             </MudTabs>
         </MudItem>
     </MudGrid>

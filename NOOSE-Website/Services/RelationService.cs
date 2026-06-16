@@ -10,7 +10,7 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IBeziehungService" />
 public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IRelationService
 {
-    public async Task<List<RelationDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<RelationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var raw = await db.PersonRelations
@@ -19,6 +19,15 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
             .Where(b => b.PersonAId == personId || b.PersonBId == personId)
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync(cancellationToken);
+
+        var isLeadership = scope.MayClassifiedRead;
+        // partners: only relations to released persons
+        HashSet<string>? releasedOthers = null;
+        if (scope.PartnerAgency is { } agency)
+        {
+            var otherIds = raw.Select(b => b.PersonAId == personId ? b.PersonBId : b.PersonAId).Distinct().ToList();
+            releasedOthers = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person), otherIds, agency, cancellationToken);
+        }
 
         var result = new List<RelationDisplay>();
         foreach (var b in raw)
@@ -30,6 +39,10 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
                 continue; // Gegenseite im Papierkorb (Query-Filter) → ausblenden.
             }
             if (other.IsClassified && !isLeadership)
+            {
+                continue;
+            }
+            if (releasedOthers is not null && !releasedOthers.Contains(other.Id))
             {
                 continue;
             }

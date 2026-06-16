@@ -1,0 +1,20 @@
+@* Per-item partner release; render only when Show is set (leadership + the record has a shell release). *@
+@inject IDialogService DialogService
+
+@if (Show)
+{
+    <MudTooltip Text="Diesen Eintrag einzeln für Partner freigeben">
+        <MudIconButton Icon="@Icons.Material.Filled.Share" Size="Size.Small" Color="Color.Default"
+                       OnClick="OpenAsync" aria-label="Einzeln für Partner freigeben" />
+    </MudTooltip>
+}
+
+@code {
+    [Parameter, EditorRequired] public string ChildType { get; set; } = default!;
+    [Parameter, EditorRequired] public string ChildId { get; set; } = default!;
+
+    // gate set by the host panel: true only for leadership when a shell release exists
+    [Parameter] public bool Show { get; set; }
+
+    private Task OpenAsync() => PartnerChildShareDialog.ShowAsync(DialogService, ChildType, ChildId);
+}

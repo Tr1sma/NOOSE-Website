@@ -8,9 +8,12 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Beteiligte Personen &amp; Organisationen (@_list.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
-            Beteiligten hinzufügen
-        </MudButton>
+        @if (User.MayWrite())
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
+                Beteiligten hinzufügen
+            </MudButton>
+        }
     </MudStack>
 
     @if (_load)
@@ -44,8 +47,11 @@
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
                         }
                     </MudStack>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                   OnClick="@(() => RemoveAsync(v))" aria-label="Beteiligten entfernen" />
+                    @if (User.MayWrite())
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveAsync(v))" aria-label="Beteiligten entfernen" />
+                    }
                 </MudStack>
             </MudPaper>
         }
@@ -64,7 +70,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _list = await LinkService.GetForRecordAsync(nameof(Operation), OperationId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        _list = await LinkService.GetForRecordAsync(nameof(Operation), OperationId, ViewerScope.From(User), LinkKind.Default);
         _load = false;
     }
 

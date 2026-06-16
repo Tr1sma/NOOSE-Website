@@ -1,5 +1,6 @@
 @* Liste der Observationen einer Person + Anlegen (Dialog) + Löschen. *@
 @inject IObservationService ObservationService
+@inject IPartnerShareService PartnerShareService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -39,13 +40,16 @@
                         }
                     </MudText>
                     @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
-                    @if (_mayWrite)
-                    {
-                        <div @onclick:stopPropagation="true">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                           OnClick="@(() => DeleteAsync(display))" aria-label="Observation löschen" />
-                        </div>
-                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Observation)" ChildId="@obs.Id" />
+                        @if (_mayWrite)
+                        {
+                            <div @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => DeleteAsync(display))" aria-label="Observation löschen" />
+                            </div>
+                        }
+                    </MudStack>
                 </MudStack>
                 @if (!string.IsNullOrWhiteSpace(obs.Location))
                 {
@@ -77,11 +81,18 @@
 
     private bool _load = true;
     private bool _mayWrite;
+    private bool _canShareChildren;
     private List<ObservationDisplay> _entries = new();
 
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
+        // leadership: per-item release only matters when the record is shell-released
+        if (User.IsLeadership())
+        {
+            _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(Person), PersonId))
+                .Any(s => s.Released && !s.IncludesChildren);
+        }
         await LoadAsync();
     }
 

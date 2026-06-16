@@ -90,16 +90,16 @@ else
                         }
                     </MudStack>
                 </MudTabPanel>
-                @* fan-out tabs: internal only *@
+                @* assigned NOOSE agents: internal only *@
                 @if (!_isPartner)
                 {
                 <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <OperationAgentsPanel OperationId="@_operation.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
                 </MudTabPanel>
+                }
                 <MudTabPanel Text="Beteiligte / Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OperationInvolvedPanel OperationId="@_operation.Id" User="_user" />
                 </MudTabPanel>
-                }
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_operation.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Operation)" EntityId="@_operation.Id" TargetDesignation="@($"{_operation.Title} ({_operation.CaseNumber})")" />
@@ -118,13 +118,10 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
                 </MudTabPanel>
-                @* fan-out tab: internal only *@
-                @if (!_isPartner)
-                {
+                @* partner-safe: timeline filters cross-refs for partners *@
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
-                }
             </MudTabs>
         </MudItem>
     </MudGrid>

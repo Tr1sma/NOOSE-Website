@@ -22,9 +22,16 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
     /// <summary>Obergrenze der in-memory geprüften Fuzzy-Kandidaten je Kategorie (Schutz vor Last bei großen Datenmengen).</summary>
     private const int FuzzyCandidatesMax = 2000;
 
-    public async Task<List<SearchResultGroup>> SearchAsync(SearchCriteria criteria, bool isLeadership, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<SearchResultGroup>> SearchAsync(SearchCriteria criteria, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        if (scope.PartnerAgency is { } agency)
+        {
+            return await SearchPartnerAsync(db, criteria, agency, cancellationToken);
+        }
+        var isLeadership = scope.MayClassifiedRead;
+        var meId = scope.MeId;
 
         var s = criteria.Text?.Trim();
         var hasText = !string.IsNullOrEmpty(s);
@@ -495,7 +502,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         return groups;
     }
 
-    public async Task<List<QuickHit>> QuickSearchAsync(string text, bool isLeadership, string? meId, int max = 8, CancellationToken cancellationToken = default)
+    public async Task<List<QuickHit>> QuickSearchAsync(string text, ViewerScope scope, int max = 8, CancellationToken cancellationToken = default)
     {
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
@@ -503,6 +510,13 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             return new List<QuickHit>();
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        if (scope.PartnerAgency is { } agency)
+        {
+            return await QuickSearchPartnerAsync(db, s, agency, max, cancellationToken);
+        }
+        var isLeadership = scope.MayClassifiedRead;
+        var meId = scope.MeId;
 
         var people = await db.People
             .Where(p => (isLeadership || !p.IsClassified) && (p.Name.Contains(s) || p.CaseNumber.Contains(s)))
@@ -610,6 +624,200 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
         return Shuffle(people, factions, groups, parties, operations, taskforces, cases, jobs).Take(max).ToList();
+    }
+
+    // ---- partner search: only released, non-classified releasable records ----
+
+    /// <summary>Quick lookup for partners: released, non-classified records of releasable types only.</summary>
+    private async Task<List<QuickHit>> QuickSearchPartnerAsync(AppDbContext db, string s, PartnerAgency agency, int max, CancellationToken cancellationToken)
+    {
+        var people = await db.People.OnlyPartnerVisible(db, agency)
+            .Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s))
+            .OrderBy(p => p.Name).Take(max)
+            .Select(p => new QuickHit(nameof(Person), p.Id, p.Name, p.CaseNumber)).ToListAsync(cancellationToken);
+        var factions = await db.Factions.OnlyPartnerVisible(db, agency)
+            .Where(f => f.Name.Contains(s) || f.CaseNumber.Contains(s))
+            .OrderBy(f => f.Name).Take(max)
+            .Select(f => new QuickHit(nameof(Faction), f.Id, f.Name, f.CaseNumber)).ToListAsync(cancellationToken);
+        var groups = await db.PersonGroups.OnlyPartnerVisible(db, agency)
+            .Where(g => g.Name.Contains(s) || g.CaseNumber.Contains(s))
+            .OrderBy(g => g.Name).Take(max)
+            .Select(g => new QuickHit(nameof(PersonGroup), g.Id, g.Name, g.CaseNumber)).ToListAsync(cancellationToken);
+        var parties = await db.Parties.OnlyPartnerVisible(db, agency)
+            .Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s))
+            .OrderBy(p => p.Name).Take(max)
+            .Select(p => new QuickHit(nameof(Party), p.Id, p.Name, p.CaseNumber)).ToListAsync(cancellationToken);
+        var operations = await db.Operations.OnlyPartnerVisible(db, agency)
+            .Where(o => o.Title.Contains(s) || o.CaseNumber.Contains(s))
+            .OrderBy(o => o.Title).Take(max)
+            .Select(o => new QuickHit(nameof(Operation), o.Id, o.Title, o.CaseNumber)).ToListAsync(cancellationToken);
+        var cases = await db.Cases.OnlyPartnerVisible(db, agency)
+            .Where(v => v.Title.Contains(s) || v.CaseNumber.Contains(s))
+            .OrderBy(v => v.Title).Take(max)
+            .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber)).ToListAsync(cancellationToken);
+        return Shuffle(people, factions, groups, parties, operations, cases).Take(max).ToList();
+    }
+
+    /// <summary>Global search for partners: released, non-classified releasable records; no content/taskforce/job categories.</summary>
+    private async Task<List<SearchResultGroup>> SearchPartnerAsync(AppDbContext db, SearchCriteria criteria, PartnerAgency agency, CancellationToken cancellationToken)
+    {
+        var s = criteria.Text?.Trim();
+        var hasText = !string.IsNullOrEmpty(s);
+        var tagIds = criteria.TagIds ?? new();
+        var hasTags = tagIds.Count > 0;
+        var categories = criteria.Categories is { Count: > 0 } ? criteria.Categories.ToHashSet() : null;
+        bool Active(string kat) => categories is null || categories.Contains(kat);
+
+        var groups = new List<SearchResultGroup>();
+
+        if (Active(nameof(Person)))
+        {
+            var q = db.People.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
+                    || (p.Description != null && p.Description.Contains(s!))
+                    || p.Aliases.Any(a => a.AliasName.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
+                .Select(p => new SearchHit(nameof(Person), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Person), "Personen", hit));
+            }
+        }
+
+        if (Active(nameof(Faction)))
+        {
+            var q = db.Factions.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(f => f.Name.Contains(s!) || f.CaseNumber.Contains(s!)
+                    || (f.Kind != null && f.Kind.Contains(s!))
+                    || (f.Description != null && f.Description.Contains(s!))
+                    || (f.Targets != null && f.Targets.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(f => db.TagMappings.Any(z => z.EntityType == nameof(Faction) && z.EntityId == f.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(f => f.Name).Take(MaxPerCategory)
+                .Select(f => new SearchHit(nameof(Faction), f.Id, f.Name, f.Kind ?? string.Empty, f.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Faction), "Fraktionen", hit));
+            }
+        }
+
+        if (Active(nameof(PersonGroup)))
+        {
+            var q = db.PersonGroups.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(g => g.Name.Contains(s!) || g.CaseNumber.Contains(s!)
+                    || (g.Description != null && g.Description.Contains(s!))
+                    || (g.Targets != null && g.Targets.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(g => db.TagMappings.Any(z => z.EntityType == nameof(PersonGroup) && z.EntityId == g.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(g => g.Name).Take(MaxPerCategory)
+                .Select(g => new SearchHit(nameof(PersonGroup), g.Id, g.Name, g.Description ?? string.Empty, g.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(PersonGroup), "Personengruppen", hit));
+            }
+        }
+
+        if (Active(nameof(Party)))
+        {
+            var q = db.Parties.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
+                    || (p.Description != null && p.Description.Contains(s!))
+                    || (p.Targets != null && p.Targets.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Party) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
+                .Select(p => new SearchHit(nameof(Party), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Party), "Parteien", hit));
+            }
+        }
+
+        if (Active(nameof(Operation)))
+        {
+            var q = db.Operations.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(o => o.Title.Contains(s!) || o.CaseNumber.Contains(s!)
+                    || (o.Result != null && o.Result.Contains(s!))
+                    || (o.Location != null && o.Location.Contains(s!))
+                    || (o.Type != null && o.Type.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(o => db.TagMappings.Any(z => z.EntityType == nameof(Operation) && z.EntityId == o.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(o => o.Title).Take(MaxPerCategory)
+                .Select(o => new SearchHit(nameof(Operation), o.Id, o.Title, o.Type ?? string.Empty, o.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
+            }
+        }
+
+        if (Active(nameof(Case)))
+        {
+            var q = db.Cases.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(v => v.Title.Contains(s!) || v.CaseNumber.Contains(s!)
+                    || (v.Type != null && v.Type.Contains(s!))
+                    || (v.Description != null && v.Description.Contains(s!))
+                    || (v.Summary != null && v.Summary.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(v => db.TagMappings.Any(z => z.EntityType == nameof(Case) && z.EntityId == v.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(v => v.Title).Take(MaxPerCategory)
+                .Select(v => new SearchHit(nameof(Case), v.Id, v.Title, v.Description ?? v.Type ?? string.Empty, v.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Case), "Vorgänge", hit));
+            }
+        }
+
+        if (Active(nameof(Law)) && !hasTags)
+        {
+            var q = db.Laws.OnlyPartnerVisible(db, agency);
+            if (hasText)
+            {
+                q = q.Where(g => g.Title.Contains(s!) || g.Paragraph.Contains(s!)
+                    || g.LawBook.Contains(s!) || g.Text.Contains(s!)
+                    || (g.Sentence != null && g.Sentence.Contains(s!)));
+            }
+            var rawLaws = await q.OrderBy(g => g.LawBook).ThenBy(g => g.Paragraph).Take(MaxPerCategory)
+                .Select(g => new { g.Id, g.Paragraph, g.Title, g.LawBook }).ToListAsync(cancellationToken);
+            if (rawLaws.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Law), "Gesetze",
+                    rawLaws.Select(g => new SearchHit(nameof(Law), g.Id, $"{g.Paragraph} {g.Title}", g.LawBook, g.Paragraph)).ToList()));
+            }
+        }
+
+        return groups;
     }
 
     /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
