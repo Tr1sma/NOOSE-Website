@@ -124,19 +124,19 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        var orgId = Empty(input.OrgId);
+        var orgId = input.OrgId.TrimToNull();
         var obs = new Observation
         {
             PersonId = personId,
             Start = input.Start,
             End = input.End,
-            Location = Empty(input.Location),
-            Sighting = Empty(input.Sighting),
-            Result = Empty(input.Result),
-            ObservingAgentId = Empty(input.ObservingAgentId),
+            Location = input.Location.TrimToNull(),
+            Sighting = input.Sighting.TrimToNull(),
+            Result = input.Result.TrimToNull(),
+            ObservingAgentId = input.ObservingAgentId.TrimToNull(),
             OrgId = orgId,
             // Kein verwaister Typ ohne Id.
-            OrgType = orgId is null ? null : Empty(input.OrgType),
+            OrgType = orgId is null ? null : input.OrgType.TrimToNull(),
         };
 
         db.Observations.Add(obs);
@@ -162,13 +162,13 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
 
         obs.Start = input.Start;
         obs.End = input.End;
-        obs.Location = Empty(input.Location);
-        obs.Sighting = Empty(input.Sighting);
-        obs.Result = Empty(input.Result);
-        obs.ObservingAgentId = Empty(input.ObservingAgentId);
-        var orgId = Empty(input.OrgId);
+        obs.Location = input.Location.TrimToNull();
+        obs.Sighting = input.Sighting.TrimToNull();
+        obs.Result = input.Result.TrimToNull();
+        obs.ObservingAgentId = input.ObservingAgentId.TrimToNull();
+        var orgId = input.OrgId.TrimToNull();
         obs.OrgId = orgId;
-        obs.OrgType = orgId is null ? null : Empty(input.OrgType);
+        obs.OrgType = orgId is null ? null : input.OrgType.TrimToNull();
 
         // Audit setzt GeaendertAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
@@ -196,5 +196,5 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

@@ -38,11 +38,4 @@ public static class Policies
 
     /// <summary>Beförderung entscheiden: Dienstgrad ≥ Deputy Director oder Admin.</summary>
     public const string PromotionDecide = "BefoerderungEntscheiden";
-
-    /// <summary>
-    /// Verschlusssachen sehen. Derzeit ungenutzt: Die VS-Durchsetzung läuft serverseitig in der
-    /// Service-Schicht (siehe <c>Sichtbarkeit</c> und die VS-Guards). Diese Policy bleibt als künftiges
-    /// ressourcenbasiertes UI-Gate reserviert (volle Prüfung inkl. ausdrücklicher Agent-Zuweisung).
-    /// </summary>
-    public const string Classified = "Verschlusssache";
 }

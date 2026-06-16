@@ -154,13 +154,13 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         var altTimestamp = doc.Timestamp;
 
         doc.Timestamp = input.Timestamp;
-        doc.Reason = Empty(input.Reason);
-        doc.Faction = Empty(input.Faction);
-        var aktOrgId = Empty(input.OrgId);
+        doc.Reason = input.Reason.TrimToNull();
+        doc.Faction = input.Faction.TrimToNull();
+        var aktOrgId = input.OrgId.TrimToNull();
         doc.OrgId = aktOrgId;
         // Kein verwaister Typ ohne Id (Freitext-Fallback).
-        doc.OrgType = aktOrgId is null ? null : Empty(input.OrgType);
-        doc.ReceivedInformation = Empty(input.ReceivedInformation);
+        doc.OrgType = aktOrgId is null ? null : input.OrgType.TrimToNull();
+        doc.ReceivedInformation = input.ReceivedInformation.TrimToNull();
         doc.TruthSerum = input.TruthSerum;
         doc.Outcome = input.Outcome;
         // Gedächtnisverlust folgt dem Ausgang (Amnestie-Spritze).
@@ -216,17 +216,17 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
 
     private async Task<PersonDoc> CreateDocAsync(AppDbContext db, string personId, PersonDocInput input, CancellationToken cancellationToken)
     {
-        var orgId = Empty(input.OrgId);
+        var orgId = input.OrgId.TrimToNull();
         var doc = new PersonDoc
         {
             PersonId = personId,
             Timestamp = input.Timestamp,
-            Reason = Empty(input.Reason),
-            Faction = Empty(input.Faction),
+            Reason = input.Reason.TrimToNull(),
+            Faction = input.Faction.TrimToNull(),
             OrgId = orgId,
             // Kein verwaister Typ ohne Id (Freitext-Fallback).
-            OrgType = orgId is null ? null : Empty(input.OrgType),
-            ReceivedInformation = Empty(input.ReceivedInformation),
+            OrgType = orgId is null ? null : input.OrgType.TrimToNull(),
+            ReceivedInformation = input.ReceivedInformation.TrimToNull(),
             TruthSerum = input.TruthSerum,
             Outcome = input.Outcome,
         };
@@ -294,5 +294,5 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

@@ -84,10 +84,10 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             CaseNumber = await caseNumber.NextAsync(db, "TF", cancellationToken),
             Name = input.Name.Trim(),
-            Purpose = Empty(input.Purpose),
+            Purpose = input.Purpose.TrimToNull(),
             Scope = input.Scope,
             Status = TaskforceStatus.Requested,
-            Remarks = Empty(input.Remarks),
+            Remarks = input.Remarks.TrimToNull(),
             IsClassified = input.IsClassified,
         };
 
@@ -123,9 +123,9 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
 
         taskforce.Name = input.Name.Trim();
-        taskforce.Purpose = Empty(input.Purpose);
+        taskforce.Purpose = input.Purpose.TrimToNull();
         taskforce.Scope = input.Scope;
-        taskforce.Remarks = Empty(input.Remarks);
+        taskforce.Remarks = input.Remarks.TrimToNull();
         taskforce.IsClassified = input.IsClassified;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -301,5 +301,5 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .ToListAsync(cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

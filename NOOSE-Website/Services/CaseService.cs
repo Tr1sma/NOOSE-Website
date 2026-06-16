@@ -72,11 +72,11 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         {
             CaseNumber = await caseNumber.NextAsync(db, "V", cancellationToken),
             Title = input.Title.Trim(),
-            Type = Empty(input.Type),
+            Type = input.Type.TrimToNull(),
             Status = input.Status,
-            Description = Empty(input.Description),
-            Summary = Empty(input.Summary),
-            ClosingNote = Empty(input.ClosingNote),
+            Description = input.Description.TrimToNull(),
+            Summary = input.Summary.TrimToNull(),
+            ClosingNote = input.ClosingNote.TrimToNull(),
             CompletedAt = isCompleted ? DateTime.UtcNow : null,
             Classification = input.Classification,
             IsClassified = input.IsClassified,
@@ -126,11 +126,11 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         var isCompleted = CaseStatusDisplay.IsCompleted(input.Status);
 
         @case.Title = input.Title.Trim();
-        @case.Type = Empty(input.Type);
+        @case.Type = input.Type.TrimToNull();
         @case.Status = input.Status;
-        @case.Description = Empty(input.Description);
-        @case.Summary = Empty(input.Summary);
-        @case.ClosingNote = Empty(input.ClosingNote);
+        @case.Description = input.Description.TrimToNull();
+        @case.Summary = input.Summary.TrimToNull();
+        @case.ClosingNote = input.ClosingNote.TrimToNull();
         @case.IsClassified = input.IsClassified;
 
         if (isCompleted && !wasCompleted)
@@ -350,5 +350,5 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         await suggestion.StageAsync(db, SuggestionType.CaseType, new[] { type }, cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }
