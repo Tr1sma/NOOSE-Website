@@ -199,6 +199,4 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         await db.SaveChangesAsync(cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

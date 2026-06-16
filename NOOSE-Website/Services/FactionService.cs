@@ -889,6 +889,4 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
 
         await ColleaguesSync.SyncAsync(db, personId, ColleaguesSync.FactionColleague, should, cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

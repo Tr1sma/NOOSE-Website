@@ -524,6 +524,4 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         }
         await suggestion.StageAsync(db, SuggestionType.PartyRole, roles.Where(r => r is not null).Select(r => r!), cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

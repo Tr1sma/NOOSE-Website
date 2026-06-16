@@ -354,6 +354,4 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         }
         await suggestion.StageAsync(db, SuggestionType.CaseType, new[] { type }, cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

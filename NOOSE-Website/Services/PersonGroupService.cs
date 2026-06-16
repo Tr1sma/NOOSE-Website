@@ -524,6 +524,4 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
 
         await ColleaguesSync.SyncAsync(db, personId, ColleaguesSync.GroupColleague, should, cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

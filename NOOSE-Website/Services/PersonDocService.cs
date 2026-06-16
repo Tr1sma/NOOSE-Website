@@ -303,6 +303,4 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         await threat.NewCalculateForPersonAsync(personId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

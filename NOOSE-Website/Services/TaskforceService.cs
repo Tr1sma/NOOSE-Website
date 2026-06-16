@@ -300,6 +300,4 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

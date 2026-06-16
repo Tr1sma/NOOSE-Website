@@ -119,6 +119,4 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         db.TagMappings.AddRange(toSupplement);
         await db.SaveChangesAsync(cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }

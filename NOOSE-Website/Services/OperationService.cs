@@ -345,6 +345,4 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
         await suggestion.StageAsync(db, SuggestionType.OperationType, new[] { type }, cancellationToken);
     }
-
-    private static string? string? s.TrimToNull() => s.TrimToNull();
 }
