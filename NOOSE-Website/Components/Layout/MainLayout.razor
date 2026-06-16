@@ -110,7 +110,18 @@
             }
             else
             {
-                @Body
+                @* safety net: a single page error must not kill the whole circuit *@
+                <ErrorBoundary @key="CurrentPath">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent>
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="my-4">
+                            Ein unerwarteter Fehler ist aufgetreten – die Aktion wurde abgebrochen.
+                            <MudLink Href="@($"/{CurrentPath}")" Color="Color.Inherit"><b>Seite neu laden</b></MudLink>
+                        </MudAlert>
+                    </ErrorContent>
+                </ErrorBoundary>
             }
         </MudContainer>
 

@@ -51,7 +51,8 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromQuery] string? remoteError) =>
         {
             var logger = loggerFactory.CreateLogger("NOOSE.ExternalLogin");
-            returnUrl ??= "/";
+            // empty (not just null) would make LocalRedirect throw
+            returnUrl = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
 
             if (remoteError is not null)
             {
@@ -98,7 +99,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromForm] string? returnUrl) =>
         {
             await signInManager.SignOutAsync();
-            return Results.LocalRedirect(returnUrl ?? "/Account/Login");
+            return Results.LocalRedirect(string.IsNullOrWhiteSpace(returnUrl) ? "/Account/Login" : returnUrl);
         });
 
         return group;

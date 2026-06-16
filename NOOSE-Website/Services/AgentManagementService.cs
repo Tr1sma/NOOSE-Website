@@ -110,6 +110,7 @@ public class AgentManagementService(
 
     public async Task MasterDataChangeAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor)
     {
+        Permission.RequireWriteAccess(actor);
         codename = codename?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(codename))
         {
@@ -130,6 +131,7 @@ public class AgentManagementService(
 
     public async Task NameChangeRequestAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor)
     {
+        Permission.RequireWriteAccess(actor);
         codename = codename?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(codename))
         {

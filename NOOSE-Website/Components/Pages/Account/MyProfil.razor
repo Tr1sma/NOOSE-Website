@@ -14,14 +14,17 @@
     <MudText Typo="Typo.h4">Mein Profil</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Hier änderst du deine eigenen Stammdaten.
-    @if (_isLeadership)
+    @if (!_mayWrite)
     {
-        <span>Als Führungskraft greifen deine Änderungen <b>sofort</b>.</span>
+        <span>Hier siehst du deine Stammdaten. Änderungen sind in deiner Rolle nicht möglich.</span>
+    }
+    else if (_isLeadership)
+    {
+        <span>Hier änderst du deine eigenen Stammdaten. Als Führungskraft greifen deine Änderungen <b>sofort</b>.</span>
     }
     else
     {
-        <span>Deine Änderungen müssen von der Führung <b>freigegeben</b> werden, bevor sie wirksam werden.</span>
+        <span>Hier änderst du deine eigenen Stammdaten. Deine Änderungen müssen von der Führung <b>freigegeben</b> werden, bevor sie wirksam werden.</span>
     }
 </MudText>
 
@@ -58,26 +61,37 @@ else
                     }
                 </MudAlert>
 
+                @if (!_mayWrite)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">
+                        @(_isPartner ? "Als Partnerbehörde" : "In der Aufsichtsrolle") können Sie Ihre Stammdaten nur einsehen, nicht ändern.
+                    </MudAlert>
+                }
+
                 <MudTextField @bind-Value="_realName" Label="Klarname (echter Name)" Variant="Variant.Outlined"
-                              AutoFocus="true"
+                              AutoFocus="@_mayWrite" ReadOnly="@(!_mayWrite)"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.VisibilityOff"
                               HelperText="Nur für die Führungsebene sichtbar – wird rangniedrigeren Nutzern nie angezeigt." />
 
                 <MudTextField @bind-Value="_codename" Label="Codename (Deckname)" Variant="Variant.Outlined"
-                              Required="true" RequiredError="Der Codename darf nicht leer sein."
+                              Required="true" RequiredError="Der Codename darf nicht leer sein." ReadOnly="@(!_mayWrite)"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge"
                               HelperText="Für alle Nutzer sichtbar – dein überall angezeigter Name." />
 
                 <MudTextField @bind-Value="_badgeNumber" Label="Dienstnummer" Variant="Variant.Outlined"
+                              ReadOnly="@(!_mayWrite)"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Numbers"
                               HelperText="Für alle Nutzer sichtbar (Freitext, optional)." />
 
-                <MudStack Row="true" Justify="Justify.FlexEnd">
-                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
-                               Disabled="_save" StartIcon="@(_isLeadership ? Icons.Material.Filled.Save : Icons.Material.Filled.Send)">
-                        @(_isLeadership ? "Speichern" : "Zur Freigabe einreichen")
-                    </MudButton>
-                </MudStack>
+                @if (_mayWrite)
+                {
+                    <MudStack Row="true" Justify="Justify.FlexEnd">
+                        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
+                                   Disabled="_save" StartIcon="@(_isLeadership ? Icons.Material.Filled.Save : Icons.Material.Filled.Send)">
+                            @(_isLeadership ? "Speichern" : "Zur Freigabe einreichen")
+                        </MudButton>
+                    </MudStack>
+                }
             </MudStack>
         </MudForm>
     </MudPaper>
@@ -115,6 +129,8 @@ else
     private bool _load = true;
     private bool _save;
     private bool _isLeadership;
+    private bool _mayWrite;
+    private bool _isPartner;
     private ClaimsPrincipal _user = default!;
     private Agent? _agent;
     private List<Request> _myRequests = new();
@@ -128,6 +144,8 @@ else
     {
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
+        _isPartner = _user.IsPartner();
+        _mayWrite = _user.MayWrite();
 
         var id = _user.GetAgentId();
         _agent = string.IsNullOrWhiteSpace(id) ? null : await AgentService.FindAsync(id);
@@ -198,8 +216,9 @@ else
                 FieldsPrefill();
             }
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
+            // never let a write-block or service error kill the circuit
             Snackbar.Add(ex.Message, Severity.Error);
         }
         finally
