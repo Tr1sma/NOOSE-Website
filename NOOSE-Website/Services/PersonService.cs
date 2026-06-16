@@ -103,7 +103,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             CaseNumber = await caseNumber.NextAsync(db, "P", cancellationToken),
             Name = input.Name.Trim(),
-            Description = Empty(input.Description),
+            Description = input.Description.TrimToNull(),
             LifeStatus = input.LifeStatus,
             DeadUntil = input.LifeStatus == LifeStatus.Dead ? LifeStatusLogic.DeadUntilFrom(DateTime.UtcNow) : null,
             Classification = input.Classification,
@@ -148,7 +148,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         var altDeadUntil = person.DeadUntil;
 
         person.Name = input.Name.Trim();
-        person.Description = Empty(input.Description);
+        person.Description = input.Description.TrimToNull();
         person.IsClassified = input.IsClassified;
         person.LifeStatus = input.LifeStatus;
         if (input.LifeStatus == LifeStatus.Dead)
@@ -562,15 +562,15 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToList();
         person.PhoneNumbers = input.PhoneNumbers
             .Where(t => !string.IsNullOrWhiteSpace(t.Number))
-            .Select(t => new PersonPhone { PersonId = person.Id, Number = t.Number.Trim(), Designation = Empty(t.Designation) })
+            .Select(t => new PersonPhone { PersonId = person.Id, Number = t.Number.Trim(), Designation = t.Designation.TrimToNull() })
             .ToList();
         person.Vehicles = input.Vehicles
             .Where(f => !string.IsNullOrWhiteSpace(f.Designation) || !string.IsNullOrWhiteSpace(f.LicensePlate))
-            .Select(f => new PersonVehicle { PersonId = person.Id, Designation = (f.Designation ?? string.Empty).Trim(), LicensePlate = Empty(f.LicensePlate) })
+            .Select(f => new PersonVehicle { PersonId = person.Id, Designation = (f.Designation ?? string.Empty).Trim(), LicensePlate = f.LicensePlate.TrimToNull() })
             .ToList();
         person.Locations = input.Locations
             .Where(o => !string.IsNullOrWhiteSpace(o.Text))
-            .Select(o => new PersonLocation { PersonId = person.Id, Text = o.Text.Trim(), Note = Empty(o.Note) })
+            .Select(o => new PersonLocation { PersonId = person.Id, Text = o.Text.Trim(), Note = o.Note.TrimToNull() })
             .ToList();
         person.Weapons = input.Weapons
             .Where(w => !string.IsNullOrWhiteSpace(w.Text))
@@ -594,5 +594,5 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await suggestion.StageAsync(db, SuggestionType.Location, person.Locations.Select(o => o.Text), cancellationToken);
     }
 
-    private static string? Empty(string? s) => s.TrimToNull();
+    private static string? string? s.TrimToNull() => s.TrimToNull();
 }
