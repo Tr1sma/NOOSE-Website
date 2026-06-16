@@ -2,22 +2,18 @@ using MudBlazor;
 
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Sichtbarkeitsstufe eines Termins – Phase 8 (Block C, Erweiterung). Steuert, wer ihn sieht und in welchem
-/// Kalender er erscheint. Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>) sieht alle Stufen.
-/// Bewusst anders benannt als der Dienst <c>TerminSichtbarkeit</c> (Namenskollision).
-/// </summary>
+/// <summary>Appointment visibility level.</summary>
 public enum AppointmentVisibilityLevel
 {
-    /// <summary>Öffentlich: erscheint im Behörden-Kalender, für alle aktiven Agenten sichtbar.</summary>
+    /// <summary>Visible to all agents.</summary>
     Public = 0,
-    /// <summary>Eingeschränkt: nur Ersteller, zugeteilte Teilnehmer und die Aufsicht.</summary>
+    /// <summary>Creator, attendees, leadership.</summary>
     Restricted = 1,
-    /// <summary>Privat: nur der Ersteller (und die Aufsicht).</summary>
+    /// <summary>Creator and leadership only.</summary>
     Private = 2,
 }
 
-/// <summary>Anzeige-Helfer für die Termin-Sichtbarkeitsstufe.</summary>
+/// <summary>Display labels.</summary>
 public static class AppointmentVisibilityLevelDisplay
 {
     public static string Name(AppointmentVisibilityLevel level) => level switch

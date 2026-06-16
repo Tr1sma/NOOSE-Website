@@ -6,11 +6,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Factions;
 
-/// <summary>
-/// Geschützte Datei-Endpoints der Fraktions-Akten. Fotos liegen außerhalb von wwwroot und werden nur
-/// an eingeloggte Agenten ausgeliefert; Fotos von Verschlusssachen nur an die Führung. Auslieferung
-/// erfolgt ausschließlich über den in der DB gespeicherten Dateinamen (kein User-Pfad).
-/// </summary>
+/// <summary>Protected faction photo endpoints; classified only for leadership.</summary>
 public static class FactionsFileEndpointRouteBuilderExtensions
 {
     public static IEndpointConventionBuilder MapNooseFactionsFileEndpoints(this IEndpointRouteBuilder endpoints)
@@ -26,19 +22,19 @@ public static class FactionsFileEndpointRouteBuilderExtensions
             CancellationToken cancellationToken) =>
         {
             var photo = await factionService.GetPhotoWithFactionAsync(photoId, cancellationToken);
-            // Nicht gefunden ODER zugehörige Fraktion im Papierkorb (Query-Filter liefert dann null).
+            // not found
             if (photo?.Faction is null)
             {
                 return Results.NotFound();
             }
 
-            // Verschlusssache: für Nicht-Führung wie „nicht vorhanden" behandeln (kein Existenz-Leak).
+            // hide existence
             if (photo.Faction.IsClassified && !http.User.IsLeadership())
             {
                 return Results.NotFound();
             }
 
-            // Datei öffnen, bevor protokolliert wird; fehlt sie physisch (z. B. manuell entfernt), sauber 404.
+            // open before logging
             Stream stream;
             try
             {
@@ -51,7 +47,7 @@ public static class FactionsFileEndpointRouteBuilderExtensions
 
             await access.LogViewAsync(nameof(FactionPhoto), photoId, cancellationToken);
 
-            // Results.File übernimmt und entsorgt den Stream nach dem Senden (kein using!).
+            // auto-disposed
             return Results.File(stream, photo.ContentType, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.ActiveAgent);

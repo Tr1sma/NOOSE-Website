@@ -26,7 +26,7 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
     public async Task UpgradeRequestAsync(string targetType, string targetId, string targetDesignation, Classification target,
         string justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Ein Antrag ist nur für die höchste Einstufung nötig – die darunterliegenden setzt jeder Agent direkt.
+        // top level only
         if (target != Classification.SecuredStateThreatening)
         {
             throw new InvalidOperationException("Ein Antrag ist nur für die Einstufung „Gesichert staatsgefährdend“ erforderlich.");
@@ -38,13 +38,13 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Nur auf einer für den Antragsteller sichtbaren Akte beantragbar (Verschlusssache-/Papierkorb-Schutz).
+        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, targetType, targetId, actor.IsLeadership(), cancellationToken))
         {
             throw new InvalidOperationException("Die Ziel-Akte wurde nicht gefunden.");
         }
 
-        // Dedup: pro Ziel nur ein offener Antrag.
+        // dedup
         if (await db.Requests.AnyAsync(a => a.TargetType == targetType && a.TargetId == targetId && a.Status == RequestStatus.Requested, cancellationToken))
         {
             throw new InvalidOperationException("Für diese Akte läuft bereits ein Hochstufungs-Antrag.");
@@ -72,8 +72,7 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             .OrderBy(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        // VS-Schutz: nur Anträge zurückgeben, deren Ziel-Akte für den Betrachter sichtbar ist (falls eine
-        // Akte nach Antragstellung als Verschlusssache eingestuft oder in den Papierkorb verschoben wurde).
+        // visibility filter
         var visible = new List<Request>();
         foreach (var a in open)
         {
@@ -112,9 +111,7 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             throw new InvalidOperationException("Dieser Antrag wurde bereits entschieden.");
         }
 
-        // Verschlusssache-/Papierkorb-Schutz wie in allen direkt setzenden Diensten (PersonService etc.):
-        // die Ziel-Akte muss für den Entscheider sichtbar sein. Greift, falls die Akte nach Antragstellung
-        // als Verschlusssache eingestuft oder gelöscht wurde – der schreibende Dienst setzt das selbst durch.
+        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, request.TargetType, request.TargetId, actor.IsLeadership(), cancellationToken))
         {
             throw new InvalidOperationException("Die Ziel-Akte ist nicht (mehr) für dich sichtbar.");
@@ -122,8 +119,7 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
 
         if (approved)
         {
-            // Einstufung der Ziel-Akte setzen – bewusst OHNE Rang-Gate (ein autorisierter Senior+ genehmigt) –
-            // und im polymorphen Einstufungs-Verlauf mit Antrags-Bezug protokollieren.
+            // set classification
             if (!await ClassificationOnTargetSetAsync(db, request, cancellationToken))
             {
                 throw new InvalidOperationException("Die Ziel-Akte ist nicht mehr vorhanden.");
@@ -141,18 +137,17 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
 
-        // Phase 6: den Antragsteller über die Entscheidung benachrichtigen (best-effort, eigener Context –
-        // darf die bereits committete Entscheidung nicht stören).
+        // notify requester
         try
         {
             await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
                 approved ? "Dein Hochstufungs-Antrag wurde genehmigt." : "Dein Hochstufungs-Antrag wurde abgelehnt.",
                 "/profil", cancellationToken);
         }
-        catch { /* Benachrichtigung ist nachrangig. */ }
+        catch { /* best effort */ }
     }
 
-    /// <summary>Setzt die Einstufung der polymorphen Ziel-Akte. Liefert false, wenn die Akte nicht (mehr) existiert.</summary>
+    /// <summary>Set classification on target record.</summary>
     private static async Task<bool> ClassificationOnTargetSetAsync(AppDbContext db, Request request, CancellationToken cancellationToken)
     {
         switch (request.TargetType)

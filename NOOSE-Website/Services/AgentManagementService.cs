@@ -12,22 +12,14 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IAgentVerwaltungService" />
-// SCHREIBEN: Bewusste Ausnahme von der DbContext-Factory – dieser Dienst arbeitet eng mit dem UserManager
-// zusammen, dessen Identity-Store denselben scoped AppDbContext nutzt. Agent-Änderung und der zugehörige
-// AuditLog werden in EINEM Kontext gesammelt und über UserManager.UpdateAsync gespeichert – ein eigener
-// Factory-Context würde den hier vorgemerkten AuditLog nicht mitspeichern.
-// LESEN: läuft dagegen über per-Operation-Factory-Kontexte. Grund: Die NavMenu (Layout, Freigaben-Badge)
-// und die gerouteten Seiten (PersonalListe/Freigaben/Agenten) initialisieren PARALLEL und riefen zuvor
-// Lese-Methoden auf demselben scoped Context auf → race-abhängig „A second operation was started on this
-// context instance" → während des Prerenders unbehandelt → generische Fehlerseite beim Neuladen.
+// shared context for UserManager
 public class AgentManagementService(
     UserManager<Agent> userManager,
     AppDbContext db,
     IDbContextFactory<AppDbContext> dbFactory,
     INotificationService notifications) : IAgentManagementService
 {
-    // Lese-/Anzeige-Queries: eigener kurzlebiger Factory-Context je Aufruf (parallel-sicher, s. o.).
-    // AsNoTracking bleibt: reine Anzeige-Daten brauchen kein Change-Tracking.
+    // read-only queries
     public async Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default)
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -76,10 +68,9 @@ public class AgentManagementService(
             $"Freigegeben als {rank}{(isTRU ? " (TRU)" : "")}{(isHRB ? " (HRB)" : "")}");
         await Save(agent, newStamp: true);
 
-        // Phase 6: den freigegebenen Agenten benachrichtigen (erscheint beim nächsten Login – der neue
-        // SecurityStamp beendet die bisherige Sitzung). Best-effort, eigener Context im Dienst.
+        // notify agent
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Dein Account wurde freigegeben.", "/"); }
-        catch { /* Benachrichtigung ist nachrangig. */ }
+        catch { /* best effort */ }
     }
 
     public async Task RejectAsync(string agentId, string reason, ClaimsPrincipal actor)
@@ -104,13 +95,11 @@ public class AgentManagementService(
         agent.RealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
         agent.Codename = codename;
         agent.BadgeNumber = string.IsNullOrWhiteSpace(badgeNumber) ? null : badgeNumber.Trim();
-        // Direkt gesetzte Stammdaten sind maßgeblich und lösen einen evtl. offenen Selbst-Antrag auf
-        // (z. B. Supervisory+-Selbständerung oder Admin-Eingriff), damit kein widersprüchlicher Antrag zurückbleibt.
+        // clear pending request
         PendingNameChangeEmpty(agent);
 
         Audit(agent, AuditAction.Modified, actor, $"Stammdaten geändert (Codename: {agent.Codename})");
-        // Neuer Stamp: der betroffene Agent erhält beim nächsten Login frische Claims
-        // (eigener Codename/Dienstnummer in Navbar & Begrüßung).
+        // refresh claims
         await Save(agent, newStamp: true);
     }
 
@@ -123,14 +112,14 @@ public class AgentManagementService(
         }
 
         var agent = await GetOrThrow(agentId);
-        // Vollständiger Schnappschuss des gewünschten Zielzustands; null = Feld soll bei Genehmigung geleert werden.
+        // pending snapshot
         agent.PendingCodename = codename;
         agent.PendingRealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
         agent.PendingBadgeNumber = string.IsNullOrWhiteSpace(badgeNumber) ? null : badgeNumber.Trim();
         agent.NameChangeRequestedAt = DateTime.UtcNow;
 
         Audit(agent, AuditAction.Modified, actor, $"Namensänderung beantragt (Codename: {codename})");
-        // Kein neuer Stamp: die Live-Identität ändert sich noch nicht, der Antragsteller bleibt eingeloggt.
+        // no stamp change
         await Save(agent, newStamp: false);
     }
 
@@ -150,18 +139,18 @@ public class AgentManagementService(
             throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
         }
 
-        // Beantragten Schnappschuss übernehmen (inkl. Leeren von Klarname/Dienstnummer).
+        // apply snapshot
         agent.Codename = agent.PendingCodename ?? string.Empty;
         agent.RealName = agent.PendingRealName;
         agent.BadgeNumber = agent.PendingBadgeNumber;
         PendingNameChangeEmpty(agent);
 
         Audit(agent, AuditAction.Modified, actor, $"Namensänderung genehmigt (Codename: {agent.Codename})");
-        // Neuer Stamp: der betroffene Agent erhält beim nächsten Login frische Claims (neuer Codename in Navbar).
+        // refresh claims
         await Save(agent, newStamp: true);
 
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Namensänderung wurde genehmigt.", "/profil"); }
-        catch { /* Benachrichtigung ist nachrangig. */ }
+        catch { /* best effort */ }
     }
 
     public async Task NameChangeRejectAsync(string agentId, string reason, ClaimsPrincipal actor)
@@ -178,11 +167,11 @@ public class AgentManagementService(
         var hint = string.IsNullOrWhiteSpace(reason) ? "ohne Angabe" : reason.Trim();
         Audit(agent, AuditAction.Modified, actor,
             $"Namensänderung abgelehnt (beantragter Codename: {requestedCodename}): {hint}");
-        // Kein neuer Stamp: die Live-Identität wurde nicht verändert.
+        // no stamp change
         await Save(agent, newStamp: false);
 
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Namensänderung wurde abgelehnt.", "/profil"); }
-        catch { /* Benachrichtigung ist nachrangig. */ }
+        catch { /* best effort */ }
     }
 
     public async Task RankChangeAsync(string agentId, Rank rank, ClaimsPrincipal actor)
@@ -228,14 +217,14 @@ public class AgentManagementService(
             }
             Audit(agent, AuditAction.Modified, actor,
                 $"Beförderung genehmigt: {alt?.ToString() ?? "—"} → {request.TargetRank}");
-            // Speichern persistiert Agent + Antrag + Verlauf + Audit im geteilten Context und erneuert den Stamp.
+            // save all
             await Save(agent, newStamp: true);
         }
         else
         {
             Audit(agent, AuditAction.Modified, actor,
                 $"Beförderungsantrag abgelehnt (Ziel: {request.TargetRank})");
-            // Kein Agent-Update → nur den Antrag (+ Audit) im geteilten Context speichern.
+            // save request only
             await db.SaveChangesAsync();
         }
     }
@@ -272,21 +261,18 @@ public class AgentManagementService(
 
         Audit(agent, AuditAction.Modified, actor,
             isTeamLead ? "Als Teamleitung markiert" : "Teamleitung-Markierung entfernt");
-        // Neuer SecurityStamp: TeamLeitung ist jetzt ein Claim (steuert die Nur-Lese-Aufsichtsrolle). Die
-        // Stamp-Rotation beendet die Sitzungen des Betroffenen, damit der geänderte Claim – und damit der
-        // Lese-/Schreibumfang – beim nächsten Login wirksam wird.
+        // refresh claims
         await Save(agent, newStamp: true);
     }
 
     public async Task AdminSetAsync(string agentId, bool isAdmin, ClaimsPrincipal actor)
     {
-        // Admin-Rechte vergeben/entziehen ist ausschließlich Admins vorbehalten – die Führung erreicht diese
-        // Seite zwar, darf aber niemanden zum Admin machen. Harte serverseitige Garantie (nicht nur via UI).
+        // admin only
         Permission.RequireAdmin(actor);
 
         var agent = await GetOrThrow(agentId);
 
-        // Selbst-Aussperrung und das Entfernen des letzten Admins serverseitig verhindern (nicht nur via UI).
+        // self-lockout guard
         if (!isAdmin && agent.IsAdmin)
         {
             if (actor.GetAgentId() == agentId)
@@ -309,7 +295,7 @@ public class AgentManagementService(
     {
         Permission.RequireLeadership(actor);
 
-        // Sich selbst zu sperren würde die eigene Sitzung sofort beenden – das ist fast immer ein Fehlgriff.
+        // no self-block
         if (actor.GetAgentId() == agentId)
         {
             throw new InvalidOperationException("Du kannst dich nicht selbst sperren.");
@@ -335,10 +321,7 @@ public class AgentManagementService(
         await Save(agent, newStamp: true);
     }
 
-    // Lädt den Agenten für eine Mutation. Da der geteilte Context (Blazor-Circuit) langlebig ist und
-    // evtl. noch eine getrackte Instanz aus einer früheren Operation hält, wird der Datensatz frisch
-    // aus der DB nachgeladen (ReloadAsync) – sonst entschiede eine Mutation evtl. auf veraltetem Stand
-    // (z. B. „kein Namensänderungs-Antrag", obwohl in der DB längst einer vorliegt).
+    // fresh reload
     private async Task<Agent> GetOrThrow(string agentId)
     {
         var agent = await db.Users.FirstOrDefaultAsync(a => a.Id == agentId)
@@ -355,7 +338,7 @@ public class AgentManagementService(
         agent.NameChangeRequestedAt = null;
     }
 
-    // Schreibt einen Dienstgrad-Verlaufseintrag in den geteilten Context (wird mit Speichern/SaveChanges persistiert).
+    // rank history
     private void HistoryEntryAdd(string agentId, Rank? alt, Rank @new, ClaimsPrincipal actor, string reason)
         => db.AgentRankHistories.Add(new AgentRankHistory
         {
@@ -379,15 +362,10 @@ public class AgentManagementService(
             ChangesJson = JsonSerializer.Serialize(new { target = target.Codename, hint }),
         });
 
-    /// <summary>
-    /// Persistiert den Agent (samt offenem AuditLog im selben Kontext). Bei <paramref name="neuerStamp"/>
-    /// wird zusätzlich der SecurityStamp erneuert – das invalidiert alle bestehenden Cookies des
-    /// Agents (Sitzungen enden) und erzwingt beim nächsten Login frische Claims/Rechte.
-    /// </summary>
+    /// <summary>Persist agent; rotate stamp if needed.</summary>
     private async Task Save(Agent agent, bool newStamp)
     {
-        // IdentityResult auswerten – sonst meldet die UI „gespeichert", obwohl das Update fehlschlug
-        // (besonders kritisch beim Kill-Switch). Bei Fehlern als Exception eskalieren.
+        // check result
         var result = await userManager.UpdateAsync(agent);
         if (!result.Succeeded)
         {

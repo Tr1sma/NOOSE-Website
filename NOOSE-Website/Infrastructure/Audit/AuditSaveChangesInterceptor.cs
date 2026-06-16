@@ -9,22 +9,10 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Infrastructure.Audit;
 
-/// <summary>
-/// Querschnitts-Interceptor für alle Speichervorgänge:
-/// <list type="bullet">
-///   <item>stempelt <see cref="IAuditable"/>-Entitäten (ErstelltAm/Von, GeaendertAm/Von),</item>
-///   <item>wandelt physisches Löschen von <see cref="ISoftDelete"/>-Entitäten in Soft-Delete um,</item>
-///   <item>schreibt einen <see cref="AuditLog"/>-Eintrag pro betroffener Akte (mit final aufgelöstem
-///   Schlüssel, daher zweiphasig: sammeln in <c>SavingChanges</c>, schreiben in <c>SavedChanges</c>).</item>
-/// </list>
-/// Greift produktiv ab Phase 2, sobald Akten diese Interfaces implementieren. In Phase 1 existieren
-/// noch keine auditierbaren Entitäten – das Gerüst ist aber vollständig verdrahtet.
-/// </summary>
+/// <summary>Stamps auditable entities, converts hard-deletes to soft-deletes, and writes audit logs (two-phase).</summary>
 public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
-    // Mit der DbContext-Factory teilt sich ein (scoped) Interceptor mehrere kurzlebige Contexts pro
-    // Circuit. Die noch ausstehenden Audit-Einträge daher pro Context halten, statt in einem Feld –
-    // sonst überschreiben sich gleichzeitige Speichervorgänge gegenseitig.
+    // per-context entries
     private readonly ConditionalWeakTable<DbContext, List<PendingAudit>> _pending = new();
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -44,8 +32,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
     {
         if (eventData.Context is not null)
         {
-            // Synchroner Pfad: den Agent synchron (HttpContext-only) ermitteln, statt blockierend auf den
-            // async AuthenticationStateProvider zu warten (Deadlock-/Starvation-Risiko).
+            // sync path
             var user = currentUserService.Get();
             _pending.AddOrUpdate(eventData.Context, StampAndCollect(eventData.Context, user));
         }
@@ -62,7 +49,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
     {
-        // Synchroner Pfad: Audit-Einträge ebenfalls synchron schreiben (kein Blocking auf async SaveChanges).
+        // sync path
         WritePending(eventData.Context);
         return base.SavedChanges(eventData, result);
     }
@@ -74,7 +61,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
             return;
         }
         ctx.Set<AuditLog>().AddRange(logs);
-        // Erneutes Speichern; löst keine Rekursion aus, da AuditLog weder IAuditable noch ISoftDelete ist.
+        // no recursion
         await ctx.SaveChangesAsync(cancellationToken);
     }
 
@@ -88,10 +75,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
         ctx.SaveChanges();
     }
 
-    /// <summary>
-    /// Entnimmt die ausstehenden Audit-Einträge eines Contexts (einmalig). Pro Context nur einmal verarbeitet –
-    /// auch der re-entrante AuditLog-Save landet hier (dann mit leerer Liste) und wird so sauber abgeräumt.
-    /// </summary>
+    /// <summary>Takes pending audit entries for a context exactly once; re-entrant saves return an empty list.</summary>
     private bool TryTakePending(DbContext? context, out DbContext ctx, out List<AuditLog> logs)
     {
         ctx = context!;
@@ -117,7 +101,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
         foreach (var entry in context.ChangeTracker.Entries())
         {
-            // Die Protokoll-Tabellen selbst werden nicht auditiert.
+            // skip log tables
             if (entry.Entity is AuditLog or AccessLog)
             {
                 continue;
@@ -142,7 +126,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
             var isRestoration = false;
             if (originalState == EntityState.Deleted && entry.Entity is ISoftDelete soft)
             {
-                // Hard-Delete → Soft-Delete umwandeln.
+                // soft delete
                 entry.State = EntityState.Modified;
                 soft.IsDeleted = true;
                 soft.DeletedAt = now;
@@ -179,10 +163,7 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
         return pending;
     }
 
-    /// <summary>
-    /// Hält einen Eintrag fest, dessen finaler Primärschlüssel erst nach dem Speichern feststeht.
-    /// Geänderte Felder werden bereits beim Sammeln (alt → neu) erfasst.
-    /// </summary>
+    /// <summary>Captures changed fields before save; resolves the final primary key after save.</summary>
     private sealed class PendingAudit
     {
         private readonly EntityEntry _entry;

@@ -2,41 +2,38 @@ using MudBlazor;
 
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Art einer In-App-Benachrichtigung (Glocke). Bewusst erweiterbar – die Watchlist („gefolgte Akte geändert"),
-/// Aufgaben-Zuteilungen und Behörden-Broadcasts kommen in späteren Phase-6-Teilprojekten hinzu.
-/// </summary>
+/// <summary>In-app notification type.</summary>
 public enum NotificationType
 {
-    /// <summary>Ein vom Empfänger gestellter Antrag (z. B. Hochstufung) wurde genehmigt oder abgelehnt.</summary>
+    /// <summary>Request approved or rejected.</summary>
     RequestDecided = 0,
 
-    /// <summary>Der Empfänger wurde in einem Vermerk/Kommentar oder Taskforce-Chat per @ erwähnt.</summary>
+    /// <summary>User mentioned via @.</summary>
     Mention = 1,
 
-    /// <summary>Ein Konto-Ereignis betrifft den Empfänger (Freigabe, Namensänderung genehmigt/abgelehnt).</summary>
+    /// <summary>Account event occurred.</summary>
     Account = 2,
 
-    /// <summary>Eine vom Empfänger beobachtete (gefolgte) Akte wurde geändert (Watchlist).</summary>
+    /// <summary>Watched record changed.</summary>
     RecordModified = 3,
 
-    /// <summary>Dem Empfänger wurde eine Aufgabe zugewiesen (bzw. eine eigene Aufgabe wurde erledigt).</summary>
+    /// <summary>Task assigned to user.</summary>
     JobAssigned = 4,
 
-    /// <summary>Eine an den Empfänger gerichtete Ankündigung/Behörden-Broadcast wurde veröffentlicht.</summary>
+    /// <summary>Announcement published.</summary>
     Announcement = 5,
 
-    /// <summary>Eine Wiedervorlage an einer Akte ist fällig (Empfänger = Zuständiger oder Folger der Akte).</summary>
+    /// <summary>Follow-up date due.</summary>
     Followup = 6,
 
-    /// <summary>Dem Empfänger wurde ein Termin als Teilnehmer zugeteilt (Kalender, Phase 8 – Block C).</summary>
+    /// <summary>Appointment assigned.</summary>
     AppointmentAssigned = 7,
 
-    /// <summary>Ein neuer automatischer Monats-Lagebericht wurde erzeugt (Empfänger = Führung; Phase 8 – Block D).</summary>
+    /// <summary>New situation report.</summary>
     SituationReport = 8,
 }
 
-/// <summary>Anzeige-Helfer für <see cref="NotificationTyp"/> (UI-frei bis auf das Icon).</summary>
+/// <summary>Display labels and icons.</summary>
 public static class NotificationTypeDisplay
 {
     public static string Name(NotificationType type) => type switch
@@ -53,7 +50,7 @@ public static class NotificationTypeDisplay
         _ => "Benachrichtigung",
     };
 
-    /// <summary>Material-Icon je Typ für die Glocken-Liste.</summary>
+    /// <summary>Icon per notification type.</summary>
     public static string Icon(NotificationType type) => type switch
     {
         NotificationType.RequestDecided => Icons.Material.Filled.Gavel,

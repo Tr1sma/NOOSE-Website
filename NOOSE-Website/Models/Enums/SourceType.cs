@@ -1,25 +1,25 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>Art einer Quelle/eines Anhangs an einer Akte.</summary>
+/// <summary>Source/attachment type.</summary>
 public enum SourceType
 {
-    /// <summary>Hochgeladene Datei (geschützt außerhalb wwwroot abgelegt).</summary>
+    /// <summary>Uploaded file.</summary>
     Upload = 0,
 
-    /// <summary>Externer Web-Link (Discord, Webseite …).</summary>
+    /// <summary>External web link.</summary>
     Link = 1,
 
-    /// <summary>Interne Verknüpfung auf eine andere Akte.</summary>
+    /// <summary>Internal record link.</summary>
     Internal = 2,
 
-    /// <summary>Reiner Freitext-Vermerk.</summary>
+    /// <summary>Free-text note.</summary>
     FreeText = 3,
 
-    /// <summary>Verweis auf ein Bibliotheks-Dokument (Ziel über <c>ZielTyp</c>/<c>ZielId</c>).</summary>
+    /// <summary>Library document reference.</summary>
     Document = 4,
 }
 
-/// <summary>Anzeigetexte für den Quellen-Typ (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class SourceTypeDisplay
 {
     public static string Name(SourceType type) => type switch

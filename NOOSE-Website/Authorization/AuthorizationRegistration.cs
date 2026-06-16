@@ -3,10 +3,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Authorization;
 
-/// <summary>
-/// Registriert alle NOOSE-Authorization-Policies und -Handler an einem Ort (von <c>Program.cs</c>
-/// aufgerufen). Spiegelt die Rechte-Matrix aus <c>Plan.md</c> §6 wider.
-/// </summary>
+/// <summary>Registers all authorization policies.</summary>
 public static class AuthorizationRegistration
 {
     public static IServiceCollection AddNooseAuthorization(this IServiceCollection services)
@@ -24,16 +21,14 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.Admin, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsAdmin()))
-            // Schreibrecht / Nur-Lese-Aufsicht: steuern Mutations-Controls bzw. den Nur-Lese-Banner.
+            // write guards
             .AddPolicy(Policies.WriteAccess, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.MayWrite()))
             .AddPolicy(Policies.OnlyReadMode, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsOnlyReader()))
-            // Seiten-Zugang: lassen zusätzlich die Nur-Lese-Aufsicht zum reinen Lesen zu. Bewusst als
-            // RequireAssertion (kein DienstgradRequirement), damit der DienstgradAuthorizationHandler – und
-            // damit die an die Rang-Policies gebundenen Button-AuthorizeViews – unberührt bleibt.
+            // page access
             .AddPolicy(Policies.LeadershipPage, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsLeadership() || ctx.User.IsOnlyReader()))

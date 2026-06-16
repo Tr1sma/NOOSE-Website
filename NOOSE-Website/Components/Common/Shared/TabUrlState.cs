@@ -3,17 +3,12 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace NOOSE_Website.Components.Common.Shared;
 
-/// <summary>
-/// Hält den aktiven Tab einer Detailseite in der Adresse (?tab=…) fest, damit er nach dem
-/// Speichern, nach F5/Neuladen, über den Zurück-Button und beim Teilen eines Links erhalten bleibt.
-/// Die Slugs übergibt jede Seite in Panel-Reihenfolge; ein fehlender oder unbekannter Wert
-/// führt zum ersten Tab.
-/// </summary>
+/// <summary>Syncs active tab to URL query param.</summary>
 public static class TabUrlState
 {
     private const string ParameterName = "tab";
 
-    /// <summary>Liest den aktiven Panel-Index aus der aktuellen URL (0, falls nicht vorhanden oder unbekannt).</summary>
+    /// <summary>Reads active tab index.</summary>
     public static int Read(NavigationManager nav, IReadOnlyList<string> slugs)
     {
         var query = QueryHelpers.ParseQuery(new Uri(nav.Uri).Query);
@@ -28,7 +23,7 @@ public static class TabUrlState
         return 0;
     }
 
-    /// <summary>Schreibt den Slug des aktiven Panels in die URL und ersetzt dabei den Verlaufseintrag (kein History-Spam).</summary>
+    /// <summary>Writes active tab slug.</summary>
     public static void Write(NavigationManager nav, IReadOnlyList<string> slugs, int index)
     {
         if (index < 0 || index >= slugs.Count)

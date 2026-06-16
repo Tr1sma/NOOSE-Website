@@ -4,22 +4,17 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Eine generische Quelle/ein Anhang an einer beliebigen Akte (Person; ab Phase 4 auch Fraktion/Gruppe …).
-/// Die Zuordnung erfolgt polymorph über <see cref="EntitaetTyp"/> + <see cref="EntitaetId"/> – analog zum
-/// Audit-/Zugriffs-Log, daher ohne FK-Navigation. Vier Ausprägungen über <see cref="Typ"/>:
-/// Datei-Upload, Web-Link, interne Verknüpfung oder Freitext. Voll auditiert und papierkorbfähig.
-/// </summary>
+/// <summary>Generic source/attachment; polymorphic by entity type and id.</summary>
 [Table("Quellen")]
 public class Source : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Typ der Eltern-Akte, z. B. <c>nameof(Person)</c>.</summary>
+    /// <summary>Parent entity type.</summary>
     [Column("EntitaetTyp")]
     public string EntityType { get; set; } = string.Empty;
 
-    /// <summary>Schlüssel der Eltern-Akte.</summary>
+    /// <summary>Parent entity key.</summary>
     [Column("EntitaetId")]
     public string EntityId { get; set; } = string.Empty;
 
@@ -29,27 +24,26 @@ public class Source : IAuditable, ISoftDelete
     [Column("Titel")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>Angepinnt: erscheint in der Quellenliste der Akte ganz oben (vor allen nicht
-    /// angepinnten). Steuert nur die Anzeige-Reihenfolge, kein „zuletzt bearbeitet"-Bezug.</summary>
+    /// <summary>Pinned; shown first.</summary>
     [Column("Angepinnt")]
     public bool Pinned { get; set; }
 
-    /// <summary>Freitext-Inhalt bzw. Notiz zur Quelle.</summary>
+    /// <summary>Free-text notes.</summary>
     [Column("Beschreibung")]
     public string? Description { get; set; }
 
-    /// <summary>Ziel-URL bei <see cref="QuelleTyp.Link"/>.</summary>
+    /// <summary>Link URL.</summary>
     public string? Url { get; set; }
 
-    /// <summary>Verweis-Typ bei <see cref="QuelleTyp.Intern"/> (z. B. <c>nameof(Person)</c>).</summary>
+    /// <summary>Internal link target type.</summary>
     [Column("ZielTyp")]
     public string? TargetType { get; set; }
 
-    /// <summary>Verweis-Schlüssel bei <see cref="QuelleTyp.Intern"/>.</summary>
+    /// <summary>Internal link target key.</summary>
     [Column("ZielId")]
     public string? TargetId { get; set; }
 
-    // ---- Datei-Metadaten bei QuelleTyp.Upload (Datei liegt geschützt außerhalb wwwroot) ----
+    // ---- file metadata ----
     [Column("DateinameGespeichert")]
     public string? FileNameSaved { get; set; }
     public string? OriginalName { get; set; }

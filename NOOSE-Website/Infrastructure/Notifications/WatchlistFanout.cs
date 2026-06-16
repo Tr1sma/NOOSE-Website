@@ -5,12 +5,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
 
-/// <summary>
-/// Versendet je betroffener Akte eine „Beobachtete Akte geändert"-Benachrichtigung an deren aktive Folger – ohne
-/// den Auslöser selbst, dedupliziert (Coalescing) und aus EMPFÄNGER-Sicht Verschlusssache-/Personalakte-geprüft
-/// (kein Akten-/VS-Leck). Eigener, kurzlebiger Factory-Context (läuft im Hintergrund-Scope des
-/// <see cref="WatchlistDispatcher"/>). Scoped.
-/// </summary>
+/// <summary>Sends record-changed notifications to active followers, deduplicated and recipient-visibility-checked.</summary>
 public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications)
 {
     public async Task ProcessAsync(string? actorId, IReadOnlyCollection<(string Type, string Id)> records,
@@ -18,10 +13,7 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Anzeigename (öffentlich, NIE Klarname) + Href je Akte in einer Sammelabfrage. Akten im Papierkorb bzw.
-        // unbekannte Verweise lösen sich NICHT auf → werden übersprungen (bewusst keine „gelöscht"-Meldung).
-        // Hier (Hintergrund, viele Empfänger) ALLE Taskforce-Namen auflösen (Standard); die Mitgliedschaftsprüfung
-        // erfolgt pro Folger unten über IstAkteSichtbarAsync mit dessen Id.
+        // resolve targets
         var resolved = await RecordsReference.ResolveAsync(db, records, cancellationToken);
 
         foreach (var (type, id) in records.Distinct())
@@ -43,7 +35,7 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 continue;
             }
 
-            // Nur aktive Folger (Gesperrte/Ausstehende sehen ohnehin nichts).
+            // active followers only
             var follower = await db.Users
                 .Where(u => followerIds.Contains(u.Id) && u.Status == AgentStatus.Active)
                 .Select(u => new { u.Id, u.IsAdmin, u.Rank })
@@ -53,7 +45,7 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 continue;
             }
 
-            // Coalescing: wer zu dieser Akte schon eine UNGELESENE Meldung hat, bekommt keine zweite.
+            // coalesce unread
             var alreadyOpen = new HashSet<string>();
             if (!string.IsNullOrWhiteSpace(aufl.Href))
             {
@@ -71,8 +63,7 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 {
                     continue;
                 }
-                // Verschlusssache-/Personalakte-/Taskforce-Schutz aus Sicht des EMPFÄNGERS (kein Leck an
-                // Nicht-Berechtigte). Bei Taskforces zählt die Mitgliedschaft → die Folger-Id (f.Id) mitgeben.
+                // recipient check
                 var isLeadership = f.IsAdmin || f.Rank is >= Rank.SupervisorySpecialAgent;
                 if (!await Visibility.IsRecordVisibleAsync(db, type, id, isLeadership, cancellationToken, f.Id))
                 {

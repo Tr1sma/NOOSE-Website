@@ -16,27 +16,13 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Zentrale Auflösung von Objekt-Verweisen (Typ + Id) zu Anzeigename, Verschlusssache-Flag und Navigations-Href.
-/// Spiegelt die Typ→(Bezeichnung, VS, Href)-Auflösung aus <see cref="VerknuepfungService"/>, ergänzt um
-/// <see cref="Quelle"/> und <see cref="Agent"/>; dient den @-Mentions (siehe MentionService). Liefert das ECHTE
-/// Verschlusssache-Flag – das Ausblenden für Nicht-Führung übernimmt der Aufrufer, damit sensible Namen
-/// serverseitig bleiben (Blazor Server serialisiert verborgene Werte nie zum Client).
-/// </summary>
+/// <summary>Resolves (type, id) references to display name, classification flag, and href.</summary>
 public static class RecordsReference
 {
     public readonly record struct Resolution(string Display, bool Classified, string? Href);
 
-    /// <summary>Löst alle angegebenen (Typ, Id)-Verweise in einer Sammelabfrage je Typ auf.
-    /// Taskforces werden NUR aufgelöst, wenn der Betrachter sie sehen darf (<paramref name="darfAlleTaskforces"/>
-    /// = Führung/Admin/Aufsicht, sonst muss er via <paramref name="meId"/> zugeteilt sein); nicht sichtbare
-    /// Taskforce-Verweise fehlen im Ergebnis (Aufrufer zeigen sie dann als „(nicht verfügbar)"/gar nicht).
-    /// Hintergrund-Fan-out-Dienste, die für viele Empfänger EINMAL auflösen, übergeben
-    /// (darfAlleTaskforces: true, meId: null) und filtern die Zustellung separat pro Empfänger.</summary>
-    // Standard (darfAlleTaskforces: true) = ALLE Taskforces auflösen (bisheriges Verhalten). Betrachter-bezogene
-    // Aufrufer MÜSSEN den echten Kontext (darfAlleTaskforces=DarfAlleTaskforcesSehen, meId) übergeben, damit fremde
-    // Taskforces gar nicht erst aufgelöst werden. Hintergrund-Fan-out (viele Empfänger) bleibt beim Standard und
-    // filtert pro Empfänger separat (IstAkteSichtbarAsync mit Empfänger-Id).
+    /// <summary>Batch-resolves all (type, id) refs; respects taskforce visibility.</summary>
+    // resolve all or own
     public static async Task<Dictionary<(string Type, string Id), Resolution>> ResolveAsync(
         AppDbContext db, IReadOnlyCollection<(string Type, string Id)> refs, CancellationToken ct = default,
         bool mayAllTaskforces = true, string? meId = null)
@@ -49,14 +35,14 @@ public static class RecordsReference
 
         await ResolveRecordsAsync(db, refs, map, mayAllTaskforces, meId, ct);
 
-        // Quellen: Anzeige = Titel; Verschlusssache + Route von der Eltern-Akte abgeleitet.
+        // resolve sources
         var sourceIds = refs.Where(r => r.Type == nameof(Source)).Select(r => r.Id).Distinct().ToList();
         if (sourceIds.Count > 0)
         {
             var sources = await db.Sources.Where(q => sourceIds.Contains(q.Id))
                 .Select(q => new { q.Id, q.Title, q.Type, q.Url, q.EntityType, q.EntityId })
                 .ToListAsync(ct);
-            // Eltern-Akten der Quellen auflösen (für VS + Route), falls nicht ohnehin schon aufgelöst.
+            // resolve parents
             var parentsRefs = sources.Select(q => (q.EntityType, q.EntityId)).Distinct().ToList();
             await ResolveRecordsAsync(db, parentsRefs, map, mayAllTaskforces, meId, ct);
             foreach (var q in sources)
@@ -138,17 +124,14 @@ public static class RecordsReference
         var taskforceIds = OpenIds(nameof(Taskforce));
         if (taskforceIds.Count > 0)
         {
-            // Nur die für den Betrachter sichtbaren Taskforces auflösen (zugeteilt oder darf alle sehen);
-            // die übrigen bleiben unaufgelöst → Aufrufer zeigen sie als „(nicht verfügbar)"/gar nicht.
+            // visible only
             var visible = await TaskforceVisibility.VisibleIdsAsync(db, taskforceIds, mayAllTaskforces, meId, ct);
             if (visible.Count > 0)
             {
                 foreach (var x in await db.Taskforces.Where(t => visible.Contains(t.Id))
                     .Select(t => new { t.Id, t.Name, t.CaseNumber }).ToListAsync(ct))
                 {
-                    // Verschluss bewusst false: Die Mitgliedschaft hat die Sichtbarkeit bereits entschieden (nicht
-                    // sichtbare Taskforces sind gar nicht in `sichtbar`). So verbergen nachgelagerte VS-Prüfungen
-                    // der Aufrufer einem zugeteilten Mitglied NICHT fälschlich den Namen seiner VS-Taskforce.
+                    // classified=false intentional
                     map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Taskforce), x.Id));
                 }
             }
@@ -164,10 +147,7 @@ public static class RecordsReference
             }
         }
 
-        // Aufgabe: kein Verschlusssache-Konzept (Team-Board), ABER „eingeschränkte" Aufgaben sind nur für
-        // Beteiligte (Ersteller/Zugeteilte) bzw. die Aufsicht sichtbar. darfAlleTaskforces trägt hier denselben
-        // „Aufsicht darf alles"-Wert (DarfAlleTaskforcesSehen == DarfVerschlusssacheLesen); nicht sichtbare
-        // Aufgaben bleiben unaufgelöst → Aufrufer zeigen sie als „(nicht verfügbar)"/gar nicht. Verschluss fest false.
+        // jobs visibility
         var jobIds = OpenIds(nameof(Job));
         if (jobIds.Count > 0)
         {
@@ -182,9 +162,7 @@ public static class RecordsReference
             }
         }
 
-        // Termin (Phase 8 – Block C): wie Aufgabe – kein Verschlusssache-Konzept, ABER „eingeschränkte"
-        // Termine sind nur für Beteiligte (Ersteller/Teilnehmer) bzw. die Aufsicht sichtbar. Nicht sichtbare
-        // Termine bleiben unaufgelöst → Aufrufer zeigen sie als „(nicht verfügbar)"/gar nicht. Verschluss fest false.
+        // appointments visibility
         var appointmentIds = OpenIds(nameof(Appointment));
         if (appointmentIds.Count > 0)
         {
@@ -199,9 +177,7 @@ public static class RecordsReference
             }
         }
 
-        // Bibliotheks-Dokument: Anzeige = Titel, Route auf den Viewer. Jede Verschluss-Stufe (Führung/TRU/HRB)
-        // gilt hier als Verschlusssache → der Titel bleibt in fremden Akten-/Verweis-Kontexten der Führung
-        // vorbehalten (kein Namens-Leak an Dritte).
+        // documents classified
         var documentIds = OpenIds(nameof(Document));
         if (documentIds.Count > 0)
         {
@@ -214,8 +190,7 @@ public static class RecordsReference
             }
         }
 
-        // Agent: kein Verschlusssache-Konzept; Verweis auf die Personalakte (/personal/{id}, für jeden aktiven
-        // Agenten zugänglich) – nur der Codename als Anzeigename (Klarname bleibt verborgen).
+        // codename only
         var agentIds = OpenIds(nameof(Agent));
         if (agentIds.Count > 0)
         {

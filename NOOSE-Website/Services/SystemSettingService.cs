@@ -20,7 +20,7 @@ public partial class SystemSettingService(
     private const string CacheKey = "SystemKonfiguration";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
 
-    // Logo liegt – wie alle Uploads – außerhalb von wwwroot und wird über /system/logo ausgeliefert.
+    // served via endpoint
     private string LogoBasePath => Path.Combine(env.ContentRootPath, "App_Data", "uploads", "system");
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
@@ -52,8 +52,7 @@ public partial class SystemSettingService(
         }
         catch (Exception)
         {
-            // Die Konfiguration wird in jedem Layout-Render gebraucht – ein DB-Schluckauf darf die App
-            // nicht reißen. Standardwerte liefern und NICHT cachen (nächster Aufruf probiert es erneut).
+            // return defaults
             return Default();
         }
 
@@ -104,7 +103,7 @@ public partial class SystemSettingService(
             throw new InvalidOperationException($"Das Logo ist zu groß (max. {options.MaxBytes / (1024 * 1024)} MB).");
         }
 
-        // Neuer, zufälliger Dateiname je Upload → Browser-Caches des alten Logos laufen ins Leere.
+        // randomize filename
         var extension = Path.GetExtension(originalName);
         if (string.IsNullOrEmpty(extension) || extension.Length > 12 || extension.Skip(1).Any(c => !char.IsLetterOrDigit(c)))
         {
@@ -195,7 +194,7 @@ public partial class SystemSettingService(
         }
         catch (IOException)
         {
-            // Aufräum-Fehler sind unkritisch (verwaiste Datei bleibt liegen).
+            // ignore cleanup errors
         }
     }
 }

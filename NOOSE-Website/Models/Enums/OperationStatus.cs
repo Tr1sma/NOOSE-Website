@@ -1,22 +1,19 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Lebenszyklus-Status einer Operation/eines Einsatzberichts – Phase 5b. Steuert die Anzeige (Chip) auf
-/// Karte und Detailseite sowie den Filter auf der Listenseite. Default ist <see cref="Geplant"/>.
-/// </summary>
+/// <summary>Operation lifecycle status.</summary>
 public enum OperationStatus
 {
-    /// <summary>Geplant, noch nicht begonnen.</summary>
+    /// <summary>Planned, not started.</summary>
     Planned = 0,
-    /// <summary>Laufend (im Einsatz).</summary>
+    /// <summary>Currently running.</summary>
     Running = 1,
-    /// <summary>Abgeschlossen (regulär beendet).</summary>
+    /// <summary>Successfully completed.</summary>
     Completed = 2,
-    /// <summary>Abgebrochen (vorzeitig beendet).</summary>
+    /// <summary>Terminated early.</summary>
     Aborted = 3,
 }
 
-/// <summary>Anzeigetexte für den Operations-Status (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class OperationStatusDisplay
 {
     public static string Name(OperationStatus status) => status switch

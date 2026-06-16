@@ -2,14 +2,7 @@ using NOOSE_Website.Services.Statistics;
 
 namespace NOOSE_Website.Infrastructure.Statistics;
 
-/// <summary>
-/// Erzeugt den automatischen Monats-Lagebericht (Phase 8 / Block D, Schritt 2). Tickt täglich und prüft, ob für
-/// den zuletzt abgeschlossenen Monat (Vormonat) bereits ein Bericht existiert; falls nicht, wird er erzeugt und
-/// archiviert. Die Existenz des Berichts ist zugleich der Merker – kein separater Zustand nötig, idempotent.
-/// Beim ersten Start nach dem Deploy entsteht so sofort der Bericht des Vormonats. Best-effort: ein Fehler wird
-/// nur geloggt, der Dienst läuft weiter. Eigener DI-Scope je Durchlauf (Singleton-HostedService darf keine
-/// Scoped-Dienste injizieren).
-/// </summary>
+/// <summary>Daily worker that generates the previous month's situation report if it does not yet exist (idempotent).</summary>
 public sealed class SituationReportWorker(IServiceScopeFactory scopeFactory, ILogger<SituationReportWorker> logger)
     : BackgroundService
 {
@@ -17,7 +10,7 @@ public sealed class SituationReportWorker(IServiceScopeFactory scopeFactory, ILo
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Kurze Anlaufverzögerung (DB-Verbindung/Migration sicher abgeschlossen), dann sofort einmal prüfen.
+        // startup delay
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(90), stoppingToken);

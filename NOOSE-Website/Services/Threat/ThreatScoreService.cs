@@ -14,26 +14,18 @@ namespace NOOSE_Website.Services;
 public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreConfigService configService)
     : IThreatScoreService
 {
-    /// <summary>Serialisierungs-Optionen für <c>BedrohungsDetailJson</c> – auch beim Deserialisieren in der UI nutzen.</summary>
+    /// <summary>JSON serializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        // Umlaute lesbar in der DB ablegen (kein ü).
+        // Readable encoding.
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    // =====================================================================================
-    //  Reine FRAKTION-Berechnung (deterministisch, ohne DB) – verifizierbar gegen das „Vagos"-
-    //  Beispiel in AlgoPlan.md (Inhalt ≈ 71, Score ≈ 86 / Kritisch, Konfidenz ~85 %).
-    //  Alle Stellschrauben kommen aus der übergebenen Konfiguration (k); k.Default == bisherige consts.
-    // =====================================================================================
+    // faction score
 
-    /// <summary>
-    /// Berechnet Score (0–100), Daten-Konfidenz und die Aufschlüsselung einer Fraktion aus den geladenen Rohdaten.
-    /// Schichten: (1) gesättigte Inhalts-Teilscores S1+S2+S3+S4 = Inhalt 0–100, (2) Einstufungs-Band-Projektion,
-    /// (3) separate Konfidenz. Staatsfraktion → Score/Konfidenz <c>null</c> (ausgenommen).
-    /// </summary>
+    /// <summary>Calculate faction score.</summary>
     public static ThreatScoreResult Calculate(ThreatScoreInput e, DateTime nowUtc, ThreatScoreConfiguration k)
     {
         if (e.IsStateFaction)
@@ -47,7 +39,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             });
         }
 
-        // ---- S1: Aktivitäts- & Maßnahmen-Heat ----
+        // ---- S1: activity heat ----
         double aktHeat = 0;
         foreach (var a in e.Activities)
         {
@@ -68,7 +60,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         double rawS1 = aktHeat + k.DocHeatWeight * docHeat;
         double s1 = Saturate(rawS1, k.CapS1, k.S1Denominator);
 
-        // ---- S2: Organisation & Reichweite (Sub-Caps summieren auf CapS2) ----
+        // ---- S2: org/reach ----
         double size = Math.Max(e.EstimatedMemberCount ?? 0, e.ActiveMembersCount);
         double sizePkt = Saturate(size, k.CapSize, k.SizeDenominator);
         double structurePkt = Math.Min(k.RanksMaxPoints, e.RanksCount)
@@ -79,11 +71,11 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         double infraPkt = Saturate(infraRaw, k.CapInfra, k.InfraDenominator);
         double s2 = Math.Min(k.CapS2, sizePkt + structurePkt + weaponsPkt + infraPkt);
 
-        // ---- S3: Konflikt & Bündnis ----
+        // ---- S3: conflict/alliance ----
         double rawS3 = k.ConflictWeight * e.ConflictCount + k.AllianceWeight * e.AllianceCount;
         double s3 = Saturate(rawS3, k.CapS3, k.S3Denominator);
 
-        // ---- S4: Netzwerk-Zentralität (manuelle Standard-Verknüpfungen; disjunkt zu S3, orthogonal zu S2) ----
+        // ---- S4: network centrality ----
         double rawS4 = e.DefaultEdgesDegree;
         double s4 = Saturate(rawS4, k.CapS4, k.S4Denominator);
 
@@ -91,7 +83,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         int @base = ThreatScoreConstants.Base(e.Classification);
         int score = BandScore(content, @base);
 
-        // ---- Daten-Konfidenz (separat, senkt den Score NIE) ----
+        // ---- Confidence ----
         bool hasDocs = docCount > 0;
         bool hasStocks = (e.DistinctWeaponsCount + e.InventoryCount + e.DrugRoutesCount) > 0;
         double konf = 0.30 * Bit(e.Activities.Count > 0 || hasDocs)
@@ -117,15 +109,12 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             BuildDetail(partialScores, content, e.Classification, @base, score, confidence, triage, triageHint, nowUtc));
     }
 
-    // =====================================================================================
-    //  Reine PERSON-Berechnung (P1–P5, Band-Projektion, separate Konfidenz). Nur person-eigene
-    //  Daten → keine Zirkularität mit dem Fraktion-Score.
-    // =====================================================================================
+    // person score
 
-    /// <summary>Berechnet Score/Konfidenz/Aufschlüsselung einer Person. Lebensstatus on-read via <c>LebensstatusLogic.Effektiv</c>.</summary>
+    /// <summary>Calculate person score.</summary>
     public static ThreatScoreResult CalculatePerson(PersonThreatScoreInput e, DateTime nowUtc, ThreatScoreConfiguration k)
     {
-        // ---- P1: Maßnahmen-Heat (person-eigene Doks) ----
+        // ---- P1: measure heat ----
         double rawP1 = 0;
         foreach (var d in e.Docs)
         {
@@ -133,13 +122,13 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         }
         double p1 = Saturate(rawP1, k.CapP1, k.P1Denominator);
 
-        // ---- P2: Bewaffnung & Eskalation (Sub-Caps PersonCapWaffen + FluechtigPunkte = CapP2) ----
+        // ---- P2: weapons/fugitive ----
         var effective = LifeStatusLogic.Effective(e.LifeStatus, e.DeadUntil, nowUtc);
         double weaponsPkt = Saturate(e.DistinctWeaponsCount, k.PersonCapWeapons, k.PersonWeaponsDenominator);
         double fugitivePkt = effective == LifeStatus.Fugitive ? k.FugitivePoints : 0;
         double p2 = Math.Min(k.CapP2, weaponsPkt + fugitivePkt);
 
-        // ---- P3: Observations-Heat (laufend wiegt mehr, beide zeit-abklingend) ----
+        // ---- P3: observation heat ----
         double rawP3 = 0;
         foreach (var o in e.Observations)
         {
@@ -148,19 +137,19 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         }
         double p3 = Saturate(rawP3, k.CapP3, k.P3Denominator);
 
-        // ---- P4: Soziale Gefahr (typisierte Beziehungen + Leitungsrollen) ----
+        // ---- P4: social risk ----
         double rawP4 = k.EnemyWeight * e.EnemyCount + k.AllyWeight * e.AllyCount
                      + k.GpWeight * e.BusinessPartnerCount + k.LeadWeight * e.LeadershipRolesCount;
         double p4 = Saturate(rawP4, k.CapP4, k.P4Denominator);
 
-        // ---- P5: Netzwerk-Zentralität (manuelle Standard-Verknüpfungen) ----
+        // ---- P5: network centrality ----
         double p5 = Saturate(e.DefaultEdgesDegree, k.CapP5, k.P5Denominator);
 
         double content = p1 + p2 + p3 + p4 + p5; // Caps 40+22+18+12+8 = 100 (Default)
         int @base = ThreatScoreConstants.Base(e.Classification);
         int score = BandScore(content, @base);
 
-        // ---- Person-Konfidenz (eigene Buckets, Summe = 1; senkt den Score NIE) ----
+        // ---- Person confidence ----
         double konf = 0.30 * Bit(e.Docs.Count > 0 || e.Observations.Count > 0)
                     + 0.15 * Bit(e.DistinctWeaponsCount > 0)
                     + 0.10 * Bit(e.Classification != Classification.Unknown)
@@ -182,12 +171,12 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             new("Netzwerk-Zentralität", R1(e.DefaultEdgesDegree), R1(p5), k.CapP5, P5DriverPerson(e)),
         };
 
-        // Hinweis: Tot-Respawn-Countdown bewusst NICHT ins JSON (sonst eingefroren) – die UI rendert ihn on-read.
+        // UI renders live.
         return new ThreatScoreResult(score, confidence,
             BuildDetail(partialScores, content, e.Classification, @base, score, confidence, triage, triageHint, nowUtc));
     }
 
-    // ---- Gemeinsame reine Helfer ----
+    // ---- Shared helpers ----
 
     private static double Saturate(double raw, double cap, double denominator)
         => denominator <= 0 ? 0 : cap * (1 - Math.Exp(-raw / denominator));
@@ -204,7 +193,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         {
             return 1.0;
         }
-        var alterDays = Math.Max(0, (nowUtc - timestamp).TotalDays); // Zukunfts-Zeitpunkte → Alter 0
+        var alterDays = Math.Max(0, (nowUtc - timestamp).TotalDays); // future → age 0
         return Math.Pow(0.5, alterDays / halfLifeDays);
     }
 
@@ -337,10 +326,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             ? new[] { $"{e.DefaultEdgesDegree} sonstige Verknüpfung(en) im Netzwerk" }
             : new[] { "nicht vernetzt (keine sonstigen Verknüpfungen)" };
 
-    // =====================================================================================
-    //  DB-Anbindung: Rohdaten flach laden (WHERE FK IN), berechnen, via ExecuteUpdate persistieren.
-    //  Die Konfiguration wird je öffentlichem Aufruf EINMAL geladen (gecacht) und durchgereicht.
-    // =====================================================================================
+    // db layer
 
     public async Task NewCalculateAsync(string factionId, CancellationToken cancellationToken = default)
     {
@@ -353,7 +339,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Alle je-Mitgliedschaften (inkl. ausgetretener) → austritts-stabil, da eine alte Tat weiterzählt.
+        // All memberships ever.
         var factionIds = await db.FactionMembers.IgnoreQueryFilters()
             .Where(m => m.PersonId == personId)
             .Select(m => m.FactionId)
@@ -369,7 +355,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var ids = await db.Factions.Select(f => f.Id).ToListAsync(cancellationToken); // Soft-Delete-Filter aktiv
+        var ids = await db.Factions.Select(f => f.Id).ToListAsync(cancellationToken); // soft-delete active
         foreach (var id in ids)
         {
             await CalculateFactionAsync(db, id, config, cancellationToken);
@@ -388,7 +374,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var ids = await db.People.Select(p => p.Id).ToListAsync(cancellationToken); // Soft-Delete-Filter aktiv
+        var ids = await db.People.Select(p => p.Id).ToListAsync(cancellationToken); // soft-delete active
         foreach (var id in ids)
         {
             await CalculatePersonAsync(db, id, config, cancellationToken);
@@ -398,7 +384,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
 
     private static async Task CalculateFactionAsync(AppDbContext db, string factionId, ThreatScoreConfiguration config, CancellationToken ct)
     {
-        // Scalar-Felder der Fraktion (Soft-Delete-Filter blendet gelöschte aus → kein Treffer → kein Recompute).
+        // Load faction scalars.
         var f = await db.Factions
             .Where(x => x.Id == factionId)
             .Select(x => new
@@ -449,7 +435,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
     private static async Task<ThreatScoreInput> LoadInputAsync(AppDbContext db, string factionId,
         Classification classification, int? estimated, bool hasEstate, DateTime factionCapturedUtc, CancellationToken ct)
     {
-        // Aktive Mitglieder (= nicht ausgetreten; globaler Soft-Delete-Filter greift).
+        // Active members.
         var activeMembers = await db.FactionMembers
             .Where(m => m.FactionId == factionId)
             .Select(m => new { m.IsLead, m.CreatedAt, m.ModifiedAt })
@@ -467,7 +453,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             .ToListAsync(ct);
         var activities = activitiesRows.Select(a => new ThreatActivity(a.Kind, a.Timestamp)).ToList();
 
-        // Mitgliedschafts-Perioden inkl. ausgetretener (IgnoreQueryFilters) → austritts-stabiler Heat.
+        // Membership periods incl. former.
         var periods = await db.FactionMembers.IgnoreQueryFilters()
             .Where(m => m.FactionId == factionId && m.PersonId != "")
             .Select(m => new { m.PersonId, Joined = m.CreatedAt, Departure = m.DeletedAt })
@@ -576,7 +562,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             .Select(b => b.Type)
             .ToListAsync(ct);
 
-        // Leitungsrollen + Mitgliedschaften über alle drei Mitglied-Tabellen (aktiv = Soft-Delete-Filter).
+        // Lead + membership counts.
         int leadFr = await db.FactionMembers.Where(m => m.PersonId == personId && m.IsLead).CountAsync(ct);
         int leadGr = await db.PersonGroupMembers.Where(m => m.PersonId == personId && m.IsLead).CountAsync(ct);
         int leadPa = await db.PartyMembers.Where(m => m.PersonId == personId && m.IsLead).CountAsync(ct);
@@ -596,7 +582,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         int phones = await db.PersonPhones.Where(t => t.PersonId == personId).CountAsync(ct);
         int locations = await db.PersonLocations.Where(o => o.PersonId == personId).CountAsync(ct);
 
-        // Jüngste *Erfassung* (Erfassungszeit, nicht RP-Zeit): Person + jüngstes Dok/Observation.
+        // Latest capture time.
         DateTime? latest = personCapturedUtc;
         foreach (var d in docRows)
         {
@@ -629,8 +615,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
     private static async Task PersistFactionAsync(AppDbContext db, string factionId, ThreatScoreResult erg, CancellationToken ct)
     {
         var json = JsonSerializer.Serialize(erg.Detail, JsonOptions);
-        // Bewusst per ExecuteUpdate am Audit-Interceptor vorbei: kein GeaendertAm-Stempel (sonst verfälschte
-        // Aktualitäts-Ampel) und keine AuditLog-Zeile je Recompute. Der Soft-Delete-Filter greift weiterhin.
+        // Bypass audit interceptor.
         await db.Factions
             .Where(f => f.Id == factionId)
             .ExecuteUpdateAsync(s => s

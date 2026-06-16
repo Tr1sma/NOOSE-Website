@@ -1,6 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>Art einer Person-zu-Person-Beziehung.</summary>
+/// <summary>Person-to-person relation type.</summary>
 public enum RelationType
 {
     Family = 0,
@@ -11,7 +11,7 @@ public enum RelationType
     Misc = 5,
 }
 
-/// <summary>Anzeigetexte für den Beziehungstyp (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class RelationTypeDisplay
 {
     public static string Name(RelationType type) => type switch

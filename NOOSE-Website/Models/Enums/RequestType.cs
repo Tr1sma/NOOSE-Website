@@ -1,18 +1,13 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Art eines Antrags im Posteingang-Workflow (Phase 5). Aktuell nur <see cref="Hochstufung"/> – die
-/// Einstufung „Gesichert staatsgefährdend" für Agenten unterhalb Senior Special Agent läuft über einen
-/// Antrag. Der Enum ist bewusst erweiterbar, falls künftig weitere Antragsarten über die generische
-/// <c>Antrag</c>-Entität vereinheitlicht werden sollen.
-/// </summary>
+/// <summary>Inbox request type.</summary>
 public enum RequestType
 {
-    /// <summary>Hochstufung einer Akte auf „Gesichert staatsgefährdend" (Entscheidung: Senior Special Agent+).</summary>
+    /// <summary>Classification upgrade request.</summary>
     Upgrade = 0,
 }
 
-/// <summary>Anzeigetexte für die Antragsart (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class RequestTypeDisplay
 {
     public static string Name(RequestType type) => type switch

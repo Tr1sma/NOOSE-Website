@@ -22,12 +22,7 @@ using NOOSE_Website.Models.Abstractions;
 
 namespace NOOSE_Website.Data;
 
-/// <summary>
-/// Zentraler EF-Core-Kontext der NOOSE-Website.
-/// Ab Phase 1 ein <see cref="IdentityDbContext{TUser}"/> für ASP.NET Core Identity
-/// (Nutzer = <see cref="Agent"/>) plus die Querschnitts-Tabellen Audit-/Zugriffs-Log.
-/// Domänen-Akten (Person, Personen-Dok, ...) kommen ab Phase 2 hinzu.
-/// </summary>
+/// <summary>Central EF-Core context.</summary>
 public class AppDbContext : IdentityDbContext<Agent>
 {
     public AppDbContext(DbContextOptions<AppDbContext> options)
@@ -51,13 +46,13 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<ProfileSuggestion> ProfileSuggestions => Set<ProfileSuggestion>();
     public DbSet<CaseNumberCounter> CaseNumberCounter => Set<CaseNumberCounter>();
 
-    // ---- Phase 3a: Querschnitt (Tags, Kommentare, Quellen) – generisch über EntitaetTyp/EntitaetId ----
+    // ---- cross-cutting: tags, comments, sources ----
     public DbSet<Source> Sources => Set<Source>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TagMapping> TagMappings => Set<TagMapping>();
     public DbSet<Comment> Comments => Set<Comment>();
 
-    // ---- Phase 3b: Verknüpfungs-Engine (generisch) + Person-Beziehungen (typisiert) ----
+    // ---- links and relations ----
     public DbSet<Link> Links => Set<Link>();
     public DbSet<PersonRelation> PersonRelations => Set<PersonRelation>();
 
@@ -100,7 +95,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Phase 5d: Taskforce-Chat ----
     public DbSet<TaskforceMessage> TaskforceMessages => Set<TaskforceMessage>();
 
-    // ---- Phase 5: Observationen (Überwachungseinträge an Personen) ----
+    // ---- observations ----
     public DbSet<Observation> Observations => Set<Observation>();
 
     // ---- Phase 5e: Personalakte je Agent ----
@@ -129,7 +124,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentAssignment> AppointmentAssignments => Set<AppointmentAssignment>();
 
-    // ---- Phase 6: News/Schwarzes Brett + Behörden-Broadcast ----
+    // ---- announcements ----
     public DbSet<Announcement> Announcements => Set<Announcement>();
     public DbSet<AnnouncementAcknowledgment> AnnouncementAcknowledgments => Set<AnnouncementAcknowledgment>();
 
@@ -144,7 +139,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentTemplate> DocumentTemplates => Set<DocumentTemplate>();
 
-    // ---- Phase 7: Aktualitäts-Ampel (Schwellwerte je Aktentyp) + Wiedervorlagen ----
+    // ---- recency + followups ----
     public DbSet<RecencyThreshold> RecencyThresholds => Set<RecencyThreshold>();
     public DbSet<ThreatScoreConfig> ThreatScoreConfigs => Set<ThreatScoreConfig>();
     public DbSet<Followup> Followups => Set<Followup>();
@@ -197,7 +192,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(p => p.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(p => p.Name).HasMaxLength(200).IsRequired();
-            // Bedrohungs-Score-Aufschlüsselung (Phase 8/Block D): JSON beliebiger Länge → longtext (wie bei Fraktion).
+            // longtext for JSON
             b.Property(p => p.ThreatDetailJson).HasColumnType("longtext");
             b.HasIndex(p => p.CaseNumber).IsUnique();
             b.HasIndex(p => p.Name);
@@ -243,7 +238,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<ProfileSuggestion>(b =>
         {
             b.Property(v => v.Value).HasMaxLength(300).IsRequired();
-            // Eindeutig je Typ+Wert (case-insensitiv über die DB-Collation) → keine doppelten Vorschläge.
+            // unique per type+value
             b.HasIndex(v => new { v.Type, v.Value }).IsUnique();
         });
 
@@ -269,27 +264,26 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<PersonDoc>(b =>
         {
             b.Property(d => d.Faction).HasMaxLength(200);
-            // Lose Verknüpfung zu Fraktion/Personengruppe (kein FK – analog EntitaetTyp/EntitaetId).
+            // soft FK
             b.Property(d => d.OrgType).HasMaxLength(128);
             b.Property(d => d.OrgId).HasMaxLength(64);
             b.HasIndex(d => d.PersonId);
             b.HasIndex(d => new { d.OrgType, d.OrgId });
         });
 
-        // Observation (Überwachungseintrag an einer Person) – Kind der Person wie PersonDok.
+        // observation entity
         modelBuilder.Entity<Observation>(b =>
         {
             b.Property(o => o.Location).HasMaxLength(300);
             b.Property(o => o.Sighting).HasMaxLength(4000);
             b.Property(o => o.Result).HasMaxLength(4000);
-            // Lose Verknüpfung zu Fraktion/Personengruppe (kein FK – analog EntitaetTyp/EntitaetId).
+            // soft FK
             b.Property(o => o.OrgType).HasMaxLength(128);
             b.Property(o => o.OrgId).HasMaxLength(64);
             b.HasIndex(o => o.PersonId);
             b.HasIndex(o => o.Start);
             b.HasIndex(o => new { o.OrgType, o.OrgId });
-            // FK auf den beobachtenden Identity-Agent: SetNull, damit ein gelöschter Agent die Observation
-            // nicht mitlöscht (die Beziehung zur Person ist im Person-Block mit Cascade konfiguriert).
+            // SetNull on delete
             b.HasOne(o => o.ObservingAgent).WithMany()
                 .HasForeignKey(o => o.ObservingAgentId).OnDelete(DeleteBehavior.SetNull);
             b.HasIndex(o => o.ObservingAgentId);
@@ -297,17 +291,15 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<CaseNumberCounter>(b =>
         {
-            // Zusammengesetzter Schlüssel (Praefix, Jahr) → eine eigene Sequenz je Aktentyp und Jahr.
+            // composite key
             b.HasKey(z => new { z.Prefix, z.Year });
             b.Property(z => z.Prefix).HasMaxLength(8);
-            // Jahr ist eine echte Jahreszahl (kein Auto-Increment) – wird beim Insert explizit gesetzt.
+            // explicit year
             b.Property(z => z.Year).ValueGeneratedNever();
         });
 
         // ---- Phase 3a: Querschnitt ----
-        // Generische Assoziationen (Quelle/Tag-Zuordnung/Kommentar) verweisen polymorph per
-        // EntitaetTyp+EntitaetId auf ihre Eltern-Akte (wie Audit-/Zugriffs-Log) – kein FK, daher
-        // ist der kombinierte Index der schnelle Lade-Pfad „alle X einer Akte".
+        // soft FK
         modelBuilder.Entity<Source>(b =>
         {
             b.Property(q => q.EntityType).HasMaxLength(128);
@@ -337,9 +329,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.DefaultReason).HasMaxLength(2000);
             b.Property(v => v.DefaultFaction).HasMaxLength(200);
             b.Property(v => v.DefaultReceivedInformation).HasMaxLength(4000);
-            // Kein Unique-Index: Soft-Delete würde sonst die Wieder-Anlage eines gelöschten Namens
-            // blockieren (gelöschte Zeile belegt den Namen). Eindeutigkeit wird in DokVorlageService
-            // geprüft (respektiert den Soft-Delete-Filter).
+            // no unique: soft-delete safe
             b.HasIndex(v => v.Name);
             b.HasIndex(v => v.IsActive);
         });
@@ -350,8 +340,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(d => d.EntityType).HasMaxLength(128).IsRequired();
             b.Property(d => d.Name).HasMaxLength(120).IsRequired();
             b.Property(d => d.Options).HasMaxLength(2000);
-            // Kein Unique-Index (Soft-Delete würde Wieder-Anlage blockieren); Eindeutigkeit je
-            // Aktentyp prüft CustomFeldDefinitionService (respektiert den Soft-Delete-Filter).
+            // no unique: soft-delete safe
             b.HasIndex(d => new { d.EntityType, d.IsActive });
         });
 
@@ -371,7 +360,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(d => d.Title).HasMaxLength(300).IsRequired();
             b.Property(d => d.Category).HasMaxLength(120);
-            // Formatierter HTML-Body kann beliebig lang werden → longtext (wie CustomFeldWert.Wert).
+            // longtext for HTML
             b.Property(d => d.ContentHtml).HasColumnType("longtext");
             b.HasIndex(d => d.Title);
             b.HasIndex(d => d.Category);
@@ -384,16 +373,15 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.Description).HasMaxLength(500);
             b.Property(v => v.Category).HasMaxLength(120);
             b.Property(v => v.ContentHtml).HasColumnType("longtext");
-            // Kein Unique-Index (Soft-Delete würde die Wieder-Anlage eines gelöschten Namens blockieren);
-            // Eindeutigkeit prüft DokumentVorlageService (respektiert den Soft-Delete-Filter).
+            // no unique: soft-delete safe
             b.HasIndex(v => v.Name);
             b.HasIndex(v => v.IsActive);
         });
 
-        // ---- Phase 7: Aktualitäts-Ampel + Wiedervorlagen ----
+        // ---- recency + followups ----
         modelBuilder.Entity<RecencyThreshold>(b =>
         {
-            // Eine Konfig-Zeile je Aktentyp (z. B. nameof(Person)) → Aktentyp ist der Primärschlüssel.
+            // one row per type
             b.HasKey(s => s.RecordsType);
             b.Property(s => s.RecordsType).HasMaxLength(64);
         });
@@ -411,9 +399,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(l => l.Title).HasMaxLength(200).IsRequired();
             b.Property(l => l.SnapshotJson).HasColumnType("longtext");
-            // Archiv-Liste sortiert nach Berichtsmonat (neueste zuerst) – Index ist der schnelle Pfad.
-            // KEIN Unique-Index auf (Jahr, Monat): Neu-Erzeugung ersetzt per Soft-Delete (alter Bericht bleibt
-            // als gelöschte Zeile bestehen); die Aktiv-Eindeutigkeit prüft der LageberichtService.
+            // sorted archive index
             b.HasIndex(l => new { l.Year, l.Month });
         });
 
@@ -424,12 +410,11 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(w => w.Note).HasMaxLength(500);
             b.Property(w => w.ResponsibleAgentId).HasMaxLength(64);
             b.Property(w => w.DoneById).HasMaxLength(64);
-            // Schneller Lade-Pfad „alle Wiedervorlagen einer Akte".
+            // entity index
             b.HasIndex(w => new { w.EntityType, w.EntityId });
-            // Job-Query: offene, fällige, noch nicht gemeldete Wiedervorlagen.
+            // due followup query
             b.HasIndex(w => new { w.DueAt, w.Done, w.NotifiedAt });
-            // FK auf den zuständigen Identity-Agent: SetNull, damit ein gelöschter Agent die Wiedervorlage
-            // nicht mitlöscht (Feld ist nullable).
+            // SetNull on delete
             b.HasOne<Agent>().WithMany()
                 .HasForeignKey(w => w.ResponsibleAgentId).OnDelete(DeleteBehavior.SetNull);
         });
@@ -440,7 +425,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(z => z.EntityId).HasMaxLength(64);
             b.HasOne(z => z.Tag).WithMany().HasForeignKey(z => z.TagId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(z => new { z.EntityType, z.EntityId });
-            // Verhindert Doppel-Tagging derselben Akte mit demselben Tag.
+            // no duplicate tags
             b.HasIndex(z => new { z.TagId, z.EntityType, z.EntityId }).IsUnique();
         });
 
@@ -452,7 +437,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(k => new { k.EntityType, k.EntityId });
         });
 
-        // ---- Phase 3b: Verknüpfungen + Person-Beziehungen ----
+        // ---- links and relations ----
         modelBuilder.Entity<Link>(b =>
         {
             b.Property(v => v.SourceType).HasMaxLength(128);
@@ -468,7 +453,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<PersonRelation>(b =>
         {
             b.Property(x => x.Note).HasMaxLength(500);
-            // Zwei FKs auf dieselbe Tabelle (Personen) → Restrict statt Cascade (sonst „multiple cascade paths").
+            // restrict: avoid cascade
             b.HasOne(x => x.PersonA).WithMany()
                 .HasForeignKey(x => x.PersonAId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.PersonB).WithMany()
@@ -498,7 +483,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.RecognitionColor).HasMaxLength(32);
             b.Property(f => f.Targets).HasMaxLength(2000);
             b.Property(f => f.Description).HasMaxLength(2000);
-            // Bedrohungs-Score-Aufschlüsselung (Phase 8/Block D): JSON beliebiger Länge → longtext (wie CustomFeldWert.Wert).
+            // longtext for JSON
             b.Property(f => f.ThreatDetailJson).HasColumnType("longtext");
             b.HasIndex(f => f.CaseNumber).IsUnique();
             b.HasIndex(f => f.Name);
@@ -529,13 +514,13 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.Location).HasMaxLength(200);
             b.Property(a => a.Description).HasMaxLength(4000);
             b.HasIndex(a => a.FactionId);
-            // Index auf Art für die Vorschlags-Abfrage (Distinct über vorhandene Arten).
+            // index for suggestions
             b.HasIndex(a => a.Kind);
         });
 
         modelBuilder.Entity<FactionPhoto>(b =>
         {
-            // Spiegelt die PersonFoto-Konfiguration (Metadaten; Datei liegt außerhalb wwwroot).
+            // file metadata
             b.Property(f => f.FileNameSaved).HasMaxLength(128);
             b.Property(f => f.OriginalName).HasMaxLength(260);
             b.Property(f => f.ContentType).HasMaxLength(100);
@@ -575,11 +560,10 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<FactionMember>(b =>
         {
             b.Property(m => m.Rank).HasMaxLength(100);
-            // FK auf Person mit Restrict (Fraktion cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
+            // restrict: avoid cascade
             b.HasOne(m => m.Person).WithMany()
                 .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
-            // Kein Unique-Index: Mitgliedschaften sind soft-deletebar (Verlauf), und ein Wiedereintritt legt
-            // eine neue aktive Zeile neben der beendeten an. Aktiv-Eindeutigkeit prüft FraktionService.
+            // unique check in service
             b.HasIndex(m => new { m.FactionId, m.PersonId });
             b.HasIndex(m => m.PersonId);
         });
@@ -604,10 +588,10 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<PersonGroupMember>(b =>
         {
             b.Property(m => m.Role).HasMaxLength(100);
-            // FK auf Person mit Restrict (Gruppe cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
+            // restrict: avoid cascade
             b.HasOne(m => m.Person).WithMany()
                 .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
-            // Kein Unique-Index: soft-deletebar (Verlauf) + Wiedereintritt; Aktiv-Eindeutigkeit prüft PersonengruppeService.
+            // no unique: soft-delete safe
             b.HasIndex(m => new { m.PersonGroupId, m.PersonId });
             b.HasIndex(m => m.PersonId);
         });
@@ -642,10 +626,10 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<PartyMember>(b =>
         {
             b.Property(m => m.Role).HasMaxLength(100);
-            // FK auf Person mit Restrict (Partei cascadet bereits auf diese Tabelle → sonst „multiple cascade paths").
+            // restrict: avoid cascade
             b.HasOne(m => m.Person).WithMany()
                 .HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Restrict);
-            // Kein Unique-Index: soft-deletebar (Verlauf) + Wiedereintritt; Aktiv-Eindeutigkeit prüft ParteiService.
+            // no unique: soft-delete safe
             b.HasIndex(m => new { m.PartyId, m.PersonId });
             b.HasIndex(m => m.PersonId);
         });
@@ -750,7 +734,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(t => t.Title);
             b.HasIndex(t => t.Category);
             b.HasIndex(t => t.Status);
-            // Kalender lädt je sichtbarem Fenster über den Beginn → Index ist der schnelle Pfad.
+            // index by start
             b.HasIndex(t => t.Start);
             b.HasIndex(t => t.Visibility);
 
@@ -767,15 +751,15 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(z => z.AgentId);
         });
 
-        // ---- Phase 6: News/Schwarzes Brett + Behörden-Broadcast ----
+        // ---- announcements ----
         modelBuilder.Entity<Announcement>(b =>
         {
             b.Property(a => a.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(a => a.Title).HasMaxLength(200).IsRequired();
             b.Property(a => a.TargetId).HasMaxLength(64);
-            // Inhalt bewusst ohne HasMaxLength (longtext) – trägt @{Typ:Id}-Erwähnungstokens.
+            // longtext body
             b.HasIndex(a => a.CaseNumber).IsUnique();
-            // Brett-Sortierung (Wichtig zuerst, dann neueste) und Zielgruppen-Filter.
+            // sort index
             b.HasIndex(a => new { a.Important, a.CreatedAt });
             b.HasIndex(a => a.Audience);
 
@@ -815,7 +799,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(n => n.Title).HasMaxLength(300);
             b.Property(n => n.Href).HasMaxLength(512);
             b.Property(n => n.CreatedById).HasMaxLength(64);
-            // Schneller Lade-Pfad „(ungelesene) Benachrichtigungen eines Empfängers".
+            // recipient index
             b.HasIndex(n => new { n.RecipientId, n.ReadAt });
         });
 
@@ -828,11 +812,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(w => w.CreatedById).HasMaxLength(64);
             // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
             b.HasOne<Agent>().WithMany().HasForeignKey(w => w.AgentId).OnDelete(DeleteBehavior.Restrict);
-            // Schneller Lade-Pfad „Folger einer Akte" (Fan-out) und „meine beobachteten Akten".
+            // entity + agent indexes
             b.HasIndex(w => new { w.EntityType, w.EntityId });
             b.HasIndex(w => new { w.AgentId, w.IsDeleted });
-            // Bewusst KEIN Unique-Index: Entfolgen = Soft-Delete, erneutes Folgen reaktiviert die Zeile
-            // (Aktiv-Eindeutigkeit prüft der WatchlistService per Aktiv-Abfrage – analog FraktionMitglied).
+            // no unique: soft-delete safe
         });
 
         // ---- Phase 5c: Taskforces ----
@@ -865,7 +848,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(n => n.Text).HasMaxLength(4000).IsRequired();
             b.Property(n => n.AuthorName).HasMaxLength(128);
-            // Chronologisches Laden je Taskforce (jüngste zuerst).
+            // chronological index
             b.HasIndex(n => new { n.TaskforceId, n.CreatedAt });
             b.HasOne(n => n.Taskforce).WithMany()
                 .HasForeignKey(n => n.TaskforceId).OnDelete(DeleteBehavior.Cascade);
@@ -926,7 +909,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.HasKey(e => e.Key);
             b.Property(e => e.Key).HasMaxLength(128);
-            // Wert bewusst ohne HasMaxLength (longtext) – trägt auch längere Banner-/Wartungstexte.
+            // longtext value
         });
 
         modelBuilder.Entity<Law>(b =>
@@ -935,7 +918,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(g => g.Paragraph).HasMaxLength(32).IsRequired();
             b.Property(g => g.Title).HasMaxLength(256).IsRequired();
             b.Property(g => g.Sentence).HasMaxLength(512);
-            // Text bewusst ohne HasMaxLength (longtext).
+            // longtext body
             b.HasIndex(g => g.LawBook);
             b.HasIndex(g => g.Title);
         });
@@ -952,9 +935,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(d => d.IsClassified);
         });
 
-        // Globaler Soft-Delete-Filter: jede Entität, die ISoftDelete implementiert, wird
-        // standardmäßig ohne die als gelöscht markierten Datensätze abgefragt. Greift ab
-        // Phase 2 (sobald Akten ISoftDelete nutzen) – das Plumbing steht hier bereits.
+        // global soft-delete filter
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
                      .Where(t => typeof(ISoftDelete).IsAssignableFrom(t.ClrType))
                      .ToList())

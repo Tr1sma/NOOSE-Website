@@ -1,23 +1,19 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Genehmigungs-/Lebenszyklus-Status einer Taskforce – Phase 5c. Eine neu angelegte Taskforce ist zunächst
-/// <see cref="Beantragt"/>; die Führung genehmigt, lehnt ab oder löst sie auf. Steuert die Anzeige (Chip) auf
-/// Karte und Detailseite sowie den Filter auf der Listenseite.
-/// </summary>
+/// <summary>Taskforce approval status.</summary>
 public enum TaskforceStatus
 {
-    /// <summary>Beantragt – wartet auf Genehmigung durch die Führung.</summary>
+    /// <summary>Awaiting leadership approval.</summary>
     Requested = 0,
-    /// <summary>Genehmigt – aktive Taskforce.</summary>
+    /// <summary>Active, approved.</summary>
     Approved = 1,
-    /// <summary>Abgelehnt – Antrag von der Führung abgelehnt.</summary>
+    /// <summary>Denied by leadership.</summary>
     Rejected = 2,
-    /// <summary>Aufgelöst – ehemals aktive Taskforce, regulär beendet.</summary>
+    /// <summary>Dissolved, concluded.</summary>
     Resolved = 3,
 }
 
-/// <summary>Anzeigetexte für den Taskforce-Status (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class TaskforceStatusDisplay
 {
     public static string Name(TaskforceStatus status) => status switch

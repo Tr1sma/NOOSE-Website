@@ -4,15 +4,10 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Serverseitige Durchsetzung der Rechte-Matrix (Plan.md §6) in der Service-Schicht. <c>AuthorizeView</c>
-/// in Razor versteckt nur die UI – die schreibenden Dienste müssen Rang/Eigentum selbst prüfen. Diese
-/// Guards werfen <see cref="UnauthorizedAccessException"/> mit einer für den Nutzer verständlichen
-/// Meldung (die UI fängt Service-Ausnahmen ab und zeigt sie als Snackbar).
-/// </summary>
+/// <summary>Server-side permission guards.</summary>
 public static class Permission
 {
-    /// <summary>Wirft, wenn der Handelnde nicht der Führung (Supervisory Special Agent+) oder Admin angehört.</summary>
+    /// <summary>Require leadership or admin.</summary>
     public static void RequireLeadership(ClaimsPrincipal actor)
     {
         if (!actor.IsLeadership())
@@ -22,12 +17,7 @@ public static class Permission
         }
     }
 
-    /// <summary>
-    /// Wirft, wenn der Handelnde keine Schreibrechte hat (Nur-Lese-Aufsicht = TeamLeitung ohne Admin).
-    /// Ergänzt die zentrale EF-Schreibsperre (<c>ReadOnlyBarrierInterceptor</c>) dort, wo Schreibpfade den
-    /// SaveChanges-Interceptor umgehen (Roh-SQL/Bulk wie <c>ExecuteUpdate</c>) oder wo ein hochrangiger
-    /// Nur-Leser sonst einen rang-basierten Guard (<see cref="VerlangeFuehrung"/>) bestehen würde.
-    /// </summary>
+    /// <summary>Require write access.</summary>
     public static void RequireWriteAccess(ClaimsPrincipal actor)
     {
         if (actor.IsOnlyReader())
@@ -37,8 +27,7 @@ public static class Permission
         }
     }
 
-    /// <summary>Wirft, wenn der Handelnde kein Admin ist (technische Systemverwaltung: Custom-Felder,
-    /// Theming, Wartungsmodus – Plan.md §6).</summary>
+    /// <summary>Require admin.</summary>
     public static void RequireAdmin(ClaimsPrincipal actor)
     {
         if (!actor.IsAdmin())
@@ -48,9 +37,7 @@ public static class Permission
         }
     }
 
-    /// <summary>Wirft, wenn der Handelnde die gewünschte Dokument-Verschluss-Stufe nicht vergeben darf.
-    /// Führung darf jede Stufe setzen; TRU-/HRB-Angehörige nur die eigene; „Keine" ist für jeden
-    /// Schreibberechtigten erlaubt (die Schreibsperre greift separat über <see cref="RequireWriteAccess"/>).</summary>
+    /// <summary>Require classification permission.</summary>
     public static void RequireMayAssignClassification(ClaimsPrincipal actor, DocumentClassification classification)
     {
         if (classification == DocumentClassification.None)
@@ -64,7 +51,7 @@ public static class Permission
         }
     }
 
-    /// <summary>Wirft, wenn der Handelnde Beförderungen nicht entscheiden darf (Deputy Director+ oder Admin).</summary>
+    /// <summary>Require promotion authority.</summary>
     public static void RequirePromotionDecide(ClaimsPrincipal actor)
     {
         if (!actor.MayPromotionDecide())
@@ -74,8 +61,7 @@ public static class Permission
         }
     }
 
-    /// <summary>Wirft, wenn der Handelnde die höchste Einstufung nicht setzen/entscheiden darf
-    /// (Senior Special Agent+ oder Admin) – u. a. die Entscheidung über Hochstufungs-Anträge.</summary>
+    /// <summary>Require highest classification right.</summary>
     public static void RequireHighestClassification(ClaimsPrincipal actor)
     {
         if (!actor.MayHighestClassification())

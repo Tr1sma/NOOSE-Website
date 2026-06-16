@@ -1,13 +1,8 @@
-// NOOSE Kalender-Interop (Phase 8, Block C). FullCalendar wird selbst gehostet unter /lib/fullcalendar und –
-// wie vis-network im Beziehungsgraph – NUR auf der Kalender-Seite GEGUARDET nachgeladen, damit andere Seiten
-// unbelastet bleiben. Schlaegt das Laden fehl, wirft render() einen Fehler, den die Blazor-Seite faengt
-// (Fehlerhinweis statt Circuit-Abriss). Bei Aenderungen an dieser Datei die ?v=-Versionsnummer im import()
-// der Razor-Seite hochzaehlen (dynamische Imports laufen nicht durch das Asset-Fingerprinting).
+// fullcalendar interop
 
 let fcLadenPromise = null;
 
-// Farbe je Kalender-Quelle (Reihenfolge = enum KalenderQuelle; Blazor serialisiert das Enum als Zahl).
-// Muss zu KalenderAnzeige.Farbe (C#) passen.
+// source colors
 const QUELLE_FARBE = {
     0: '#3FB950', // Termin
     1: '#F0883E', // Operation
@@ -18,7 +13,7 @@ const QUELLE_FARBE = {
     6: '#A371F7', // Personen-Dok
 };
 
-const instanzen = new Map(); // containerId -> { cal, dotnetRef }
+const instanzen = new Map(); // id → instance
 
 function ladeFullCalendar() {
     if (window.FullCalendar && window.FullCalendar.Calendar) {
@@ -31,7 +26,7 @@ function ladeFullCalendar() {
         const core = document.createElement('script');
         core.src = 'lib/fullcalendar/index.global.min.js';
         core.onload = () => {
-            // Deutsche Locale optional nachladen (nicht fatal – die UI-Texte setzen wir zusaetzlich inline).
+            // german locale
             const loc = document.createElement('script');
             loc.src = 'lib/fullcalendar/locales/de.global.min.js';
             loc.onload = () => resolve();
@@ -44,7 +39,7 @@ function ladeFullCalendar() {
     return fcLadenPromise;
 }
 
-// Einmalig FullCalendar an das dunkle NOOSE-/MudBlazor-Theme angleichen (FC-Default passt sonst nicht).
+// theme styles
 function stilSicherstellen() {
     if (document.querySelector('style[data-noose-kal]')) {
         return;
@@ -75,7 +70,7 @@ function stilSicherstellen() {
 .fc-theme-standard td, .fc-theme-standard th { border-color: var(--mud-palette-lines-default); }
 .fc .fc-day-today .fc-col-header-cell-cushion { color: var(--mud-palette-primary); font-weight: 700; }
 .fc .fc-timegrid-slot-minor { border-top-style: dotted; }
-/* Buttons an MudBlazor angleichen */
+/* buttons */
 .fc .fc-button-primary {
     background-color: var(--mud-palette-surface);
     border-color: var(--mud-palette-lines-default);
@@ -96,7 +91,7 @@ function stilSicherstellen() {
     border-color: var(--mud-palette-primary);
     color: var(--mud-palette-primary-text);
 }
-/* Ereignisse: dezent abgerundet + etwas Luft */
+/* events */
 .fc .fc-event { border-radius: 6px; border: none; font-size: 0.76rem; }
 .fc .fc-timegrid-event { box-shadow: none; }
 .fc .fc-timegrid-event .fc-event-main { padding: 1px 5px; }
@@ -104,7 +99,7 @@ function stilSicherstellen() {
 .fc .fc-h-event .fc-event-title, .fc .fc-event-title { font-weight: 600; }
 .fc .fc-list-event:hover td { background: var(--mud-palette-action-default-hover); }
 .noose-kal-hinfaellig { opacity: .6; text-decoration: line-through; }
-/* Scrollbalken dezenter */
+/* scrollbar */
 .fc .fc-scroller::-webkit-scrollbar { width: 10px; height: 10px; }
 .fc .fc-scroller::-webkit-scrollbar-thumb { background: var(--mud-palette-lines-default); border-radius: 6px; }
 .fc .fc-scroller::-webkit-scrollbar-track { background: transparent; }
@@ -112,7 +107,6 @@ function stilSicherstellen() {
     document.head.appendChild(st);
 }
 
-// Lokale ISO-Datumszeichenkette (YYYY-MM-DD) n Tage spaeter – fuer das EXKLUSIVE Ende ganztaegiger Eintraege.
 function addTage(iso, n) {
     const d = new Date(iso);
     if (isNaN(d.getTime())) {
@@ -128,7 +122,7 @@ function mapEreignis(e) {
     const ev = {
         id: e.id,
         title: e.title,
-        // Ganztaegig: Start auf das reine Datum normalisieren, damit eine evtl. mitgegebene Uhrzeit nie stört.
+        // normalize date
         start: e.wholeDay ? addTage(e.startLocal, 0) : e.startLocal,
         allDay: !!e.wholeDay,
         backgroundColor: farbe,
@@ -136,7 +130,7 @@ function mapEreignis(e) {
         extendedProps: { href: e.href || null },
     };
     if (e.endLocal) {
-        // Ganztaegig: FullCalendar interpretiert das Ende EXKLUSIV → einen Tag dazurechnen, damit der Endtag mitzaehlt.
+        // exclusive end
         ev.end = e.wholeDay ? addTage(e.endLocal, 1) : e.endLocal;
     }
     if (e.obsolete) {
@@ -155,19 +149,17 @@ export async function render(containerId, eintraege, dotnetRef, locale) {
     zerstoere(containerId);
 
     const cal = new window.FullCalendar.Calendar(el, {
-        // Standard = Wochenansicht mit Stunden-Rastern (in sich scrollbar) + roter „Jetzt"-Linie (wie Outlook).
         initialView: 'timeGridWeek',
         locale: locale || 'de',
         firstDay: 1,
         timeZone: 'local',
-        // Feste Höhe → der Stunden-Raster scrollt in sich (statt die ganze Seite zu strecken).
         height: '78vh',
         nowIndicator: true,
         scrollTime: '07:00:00',
         slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
         eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek,dayGridMonth,listWeek' },
-        // Deutsche UI-Texte (greifen auch ohne separate Locale-Datei).
+        // german labels
         buttonText: { today: 'Heute', month: 'Monat', week: 'Woche', day: 'Tag', list: 'Liste' },
         allDayText: 'Ganztägig',
         noEventsText: 'Keine Einträge in diesem Zeitraum',
@@ -176,24 +168,23 @@ export async function render(containerId, eintraege, dotnetRef, locale) {
         dayMaxEvents: true,
         navLinks: false,
         events: (eintraege || []).map(mapEreignis),
-        // Klick auf einen Eintrag → in .NET zur Akte navigieren (NICHT FullCalendars natives url-Handling).
+        // navigate on click
         eventClick: (info) => {
             info.jsEvent.preventDefault();
             const href = info.event.extendedProps && info.event.extendedProps.href;
             if (href) {
-                try { dotnetRef.invokeMethodAsync('OnEventClick', href); } catch (e) { /* Circuit weg */ }
+                try { dotnetRef.invokeMethodAsync('OnEventClick', href); } catch (e) { /* ignore */ }
             }
         },
-        // Sichtbarer Zeitraum geaendert (Initial-Render + Monatswechsel) → Fenster in .NET nachladen.
+        // date range changed
         datesSet: (arg) => {
-            try { dotnetRef.invokeMethodAsync('OnDateRange', arg.startStr, arg.endStr); } catch (e) { /* Circuit weg */ }
+            try { dotnetRef.invokeMethodAsync('OnDateRange', arg.startStr, arg.endStr); } catch (e) { /* ignore */ }
         },
     });
     cal.render();
     instanzen.set(containerId, { cal, dotnetRef });
 }
 
-// Ersetzt die Eintragsmenge (Fensterwechsel) ohne Neuaufbau des Kalenders.
 export function setzeEreignisse(containerId, eintraege) {
     const inst = instanzen.get(containerId);
     if (!inst) {

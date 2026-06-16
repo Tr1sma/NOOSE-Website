@@ -6,6 +6,14 @@ durch eine zentrale, durchsuchbare, bidirektional verlinkte Akten-Datenbank: pro
 Fraktion eine Akte, in der alles zusammenläuft. **Codebase ist anglisiert (englische Identifier),
 aber Domänen-Vokabular, UI-Texte, Kommentare und Planungsdocs sind Deutsch.** Live: https://noose.info
 
+## Rules for comments
+- **English only** — no German, ever
+- **Inline `//`** — 2–3 words; describe the *why*, not the what
+- **`catch { }` blocks** — `/* best effort */` or `/* ignore */`
+- **XML `/// <summary>`** — one short English line: `/// <summary>Set classification on target.</summary>`
+- **No block comments** — collapse multi-line explanations to a single short line or delete them
+- **No "Phase X" references** in comments — just describe what the code does
+
 ## Tech-Stack
 
 - **.NET 10** (`net10.0`), Single-Project-Solution (`NOOSE-Website.slnx` → `NOOSE-Website/NOOSE-Website.csproj`)

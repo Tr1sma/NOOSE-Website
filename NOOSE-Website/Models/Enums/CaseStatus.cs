@@ -1,26 +1,21 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Lebenszyklus-Status einer Vorgangs-/Fallakte – Phase 5. Steuert die Anzeige (Chip) auf Karte und
-/// Detailseite sowie den Filter auf der Listenseite. Default ist <see cref="Offen"/>. „Ruht" deckt
-/// wartende/auf-Wiedervorlage liegende Vorgänge ab; „Archiviert" trennt abgelegte von gerade
-/// abgeschlossenen Fällen.
-/// </summary>
+/// <summary>Case lifecycle status.</summary>
 public enum CaseStatus
 {
-    /// <summary>Eröffnet, aber noch nicht in aktiver Bearbeitung.</summary>
+    /// <summary>Opened, not yet active.</summary>
     Open = 0,
-    /// <summary>Aktiv in Bearbeitung.</summary>
+    /// <summary>Actively being worked.</summary>
     InProcessing = 1,
-    /// <summary>Ruht (z. B. auf Wiedervorlage, wartend auf Zuarbeit).</summary>
+    /// <summary>Dormant, awaiting input.</summary>
     Dormant = 2,
-    /// <summary>Abgeschlossen (regulär beendet).</summary>
+    /// <summary>Closed successfully.</summary>
     Completed = 3,
-    /// <summary>Archiviert (abgelegt, nicht mehr aktiv).</summary>
+    /// <summary>Filed away, inactive.</summary>
     Archived = 4,
 }
 
-/// <summary>Anzeigetexte für den Vorgangs-Status (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class CaseStatusDisplay
 {
     public static string Name(CaseStatus status) => status switch
@@ -33,11 +28,11 @@ public static class CaseStatusDisplay
         _ => "—",
     };
 
-    /// <summary>Status, die einen „offenen" (noch nicht erledigten) Vorgang kennzeichnen – für Zähler/Filter.</summary>
+    /// <summary>Not yet finished.</summary>
     public static bool IsOpen(CaseStatus status)
         => status is CaseStatus.Open or CaseStatus.InProcessing or CaseStatus.Dormant;
 
-    /// <summary>Status, bei denen der Abschluss-Zeitpunkt gesetzt wird.</summary>
+    /// <summary>Completion timestamp applies.</summary>
     public static bool IsCompleted(CaseStatus status)
         => status is CaseStatus.Completed or CaseStatus.Archived;
 

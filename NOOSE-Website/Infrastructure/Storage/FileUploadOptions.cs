@@ -1,33 +1,33 @@
 namespace NOOSE_Website.Infrastructure.Storage;
 
-/// <summary>Konfiguration für den Datei-/Foto-Upload (Sektion „FileUpload" in appsettings.json).</summary>
+/// <summary>File upload config.</summary>
 public class FileUploadOptions
 {
-    /// <summary>Zielordner relativ zum ContentRoot (außerhalb von wwwroot) oder absoluter Pfad.</summary>
+    /// <summary>People upload path.</summary>
     public string PeoplePath { get; set; } = "App_Data/uploads/personen";
 
-    /// <summary>Zielordner für Fraktions-Fotos (eigener Bereich, sonst gleiche Bild-Regeln wie Personen).</summary>
+    /// <summary>Factions upload path.</summary>
     public string FactionsPath { get; set; } = "App_Data/uploads/fraktionen";
 
-    /// <summary>Maximale Dateigröße in Bytes (Standard 10 MB).</summary>
+    /// <summary>Max file size.</summary>
     public long MaxBytes { get; set; } = 10 * 1024 * 1024;
 
-    /// <summary>Erlaubte Content-Types (nur Bilder).</summary>
+    /// <summary>Allowed image types.</summary>
     public string[] AllowedContentTypes { get; set; } =
         ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-    // ---- Quellen/Anhänge (Phase 3a): eigener Bereich, breiteres Typ-Set (Dokumente) ----
+    // ---- Attachments ----
 
-    /// <summary>Zielordner für Quellen-Anhänge relativ zum ContentRoot (außerhalb von wwwroot) oder absoluter Pfad.</summary>
+    /// <summary>Sources upload path.</summary>
     public string SourcesPath { get; set; } = "App_Data/uploads/quellen";
 
-    /// <summary>Maximale Dateigröße für Quellen-Anhänge in Bytes (Standard 25 MB).</summary>
+    /// <summary>Max sources size.</summary>
     public long SourcesMaxBytes { get; set; } = 25 * 1024 * 1024;
 
-    /// <summary>Zielordner für Dateien der zentralen Datei-Bibliothek (Phase 7); gleiche Typ-/Größen-Regeln wie Quellen.</summary>
+    /// <summary>Library upload path.</summary>
     public string LibraryPath { get; set; } = "App_Data/uploads/bibliothek";
 
-    /// <summary>Erlaubte Content-Types für Quellen-Anhänge (Dokumente + Bilder + Archive).</summary>
+    /// <summary>Allowed sources types.</summary>
     public string[] AllowedSourcesContentTypes { get; set; } =
     [
         "application/pdf",

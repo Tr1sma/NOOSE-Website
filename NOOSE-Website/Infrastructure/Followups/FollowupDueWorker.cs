@@ -5,13 +5,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Infrastructure.Followups;
 
-/// <summary>
-/// Wiederkehrender Hintergrund-Dienst, der fällige, noch nicht gemeldete Wiedervorlagen erkennt und je Eintrag eine
-/// „Wiedervorlage fällig"-Benachrichtigung an den Zuständigen sowie die Follower der Akte verschickt – aus deren
-/// Sicht Verschlusssache-geprüft (kein Leck an Nicht-Berechtigte). Der <see cref="Wiedervorlage.BenachrichtigtAm"/>-
-/// Stempel verhindert Doppel-Meldungen. Best-effort: ein Fehler in einem Durchlauf wird nur geloggt, der Dienst
-/// läuft weiter. Eigener DI-Scope je Durchlauf (Singleton-HostedService darf keine Scoped-Dienste injizieren).
-/// </summary>
+/// <summary>Background worker that detects due follow-ups and notifies assignees and followers with visibility checks.</summary>
 public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger<FollowupDueWorker> logger)
     : BackgroundService
 {
@@ -19,7 +13,7 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Kurze Anlaufverzögerung, damit Start/DB-Verbindung sicher stehen.
+        // startup delay
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
@@ -70,7 +64,7 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
 
-        // Offen + fällig + noch nicht gemeldet (Soft-Delete-Filter blendet Gelöschte automatisch aus).
+        // due items
         var due = await db.Followups
             .Where(w => !w.Done && w.DueAt <= now && w.NotifiedAt == null)
             .OrderBy(w => w.DueAt)
@@ -80,20 +74,20 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
             return;
         }
 
-        // Akten-Namen (öffentlich, nie Klarname) + VS-Flag + Href in einer Sammelabfrage.
+        // resolve targets
         var refs = due.Select(w => (w.EntityType, w.EntityId)).Distinct().ToList();
         var resolved = await RecordsReference.ResolveAsync(db, refs, cancellationToken);
 
         foreach (var w in due)
         {
-            // Akte im Papierkorb/unbekannt → nicht melden, aber stempeln (kein Dauer-Reprocessing je Durchlauf).
+            // skip deleted
             if (!resolved.TryGetValue((w.EntityType, w.EntityId), out var record))
             {
                 w.NotifiedAt = now;
                 continue;
             }
 
-            // Empfänger = Zuständiger + aktive Follower der Akte.
+            // assignee + followers
             var recipientIds = new HashSet<string>(StringComparer.Ordinal);
             if (!string.IsNullOrEmpty(w.ResponsibleAgentId))
             {
@@ -106,8 +100,7 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
 
             if (recipientIds.Count > 0)
             {
-                // Nur aktive Empfänger, und je Empfänger geprüft: Verschlusssache nur an die Führung,
-                // Taskforces nur an Zugeteilte (Mitgliedschaft) – über IstAkteSichtbarAsync mit der Empfänger-Id.
+                // visibility check
                 var active = await db.Users
                     .Where(u => recipientIds.Contains(u.Id) && u.Status == AgentStatus.Active)
                     .Select(u => new { u.Id, u.IsAdmin, u.Rank })
@@ -143,7 +136,7 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
         {
             title += $" – {note.Trim()}";
         }
-        // Benachrichtigung.Titel ist auf 300 Zeichen begrenzt.
+        // 300 char limit
         return title.Length > 300 ? title[..297] + "…" : title;
     }
 }

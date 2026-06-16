@@ -2,17 +2,13 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Threat;
 
-/// <summary>Eine datierte Fraktions-Aktivität, reduziert auf das für den Score Nötige (Art + Zeitpunkt).</summary>
+/// <summary>Faction activity for scoring.</summary>
 public sealed record ThreatActivity(string? Kind, DateTime Timestamp);
 
-/// <summary>Ein Maßnahmen-Dok eines Mitglieds, reduziert auf das für den Score Nötige (Ausgang + Zeitpunkt).</summary>
+/// <summary>Member measure doc for scoring.</summary>
 public sealed record ThreatDoc(MeasureOutcome Outcome, DateTime Timestamp);
 
-/// <summary>
-/// Reine, EF-freie Eingabe für die Score-Berechnung einer Fraktion. Der <c>BedrohungsScoreService</c> lädt die
-/// Rohdaten flach aus der DB und befüllt dieses Objekt; <see cref="BedrohungsScoreService.Berechne"/> ist damit
-/// eine pure Funktion (deterministisch, ohne DB) und gegen das durchgerechnete „Vagos"-Beispiel verifizierbar.
-/// </summary>
+/// <summary>Pure EF-free input for faction score calculation.</summary>
 public sealed class ThreatScoreInput
 {
     public bool IsStateFaction { get; init; }
@@ -24,11 +20,11 @@ public sealed class ThreatScoreInput
     public int RanksCount { get; init; }
     public bool HasEstate { get; init; }
 
-    /// <summary>Distinkte, nicht-leere Bezeichnungen im Waffenbestand.</summary>
+    /// <summary>Distinct weapon entries.</summary>
     public int DistinctWeaponsCount { get; init; }
-    /// <summary>Distinkte, nicht-leere Bezeichnungen im Lagerbestand.</summary>
+    /// <summary>Distinct inventory entries.</summary>
     public int InventoryCount { get; init; }
-    /// <summary>Distinkte, nicht-leere Bezeichnungen der Drogenrouten.</summary>
+    /// <summary>Distinct drug routes.</summary>
     public int DrugRoutesCount { get; init; }
 
     public IReadOnlyList<ThreatActivity> Activities { get; init; } = [];

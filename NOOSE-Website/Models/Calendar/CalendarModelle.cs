@@ -1,9 +1,6 @@
 namespace NOOSE_Website.Models.Calendar;
 
-/// <summary>
-/// Quelle/Herkunft eines Kalendereintrags – steuert Farbe und Legende. <see cref="Termin"/> ist die eigene
-/// Termin-Akte; die übrigen werden aus bestehenden datierten Akten aggregiert (rein lesend).
-/// </summary>
+/// <summary>Calendar entry source; controls colour and legend.</summary>
 public enum CalendarSource
 {
     Appointment = 0,
@@ -15,21 +12,16 @@ public enum CalendarSource
     PersonDoc = 6,
 }
 
-/// <summary>Welche Kalender-Sicht angefragt wird.</summary>
+/// <summary>Requested calendar view.</summary>
 public enum CalendarMode
 {
-    /// <summary>Persönliche Agenda: eigene Termine + zugewiesene Aufgaben + eigene Wiedervorlagen.</summary>
+    /// <summary>Personal agenda.</summary>
     My = 0,
-    /// <summary>Behörden-weit (für alle): öffentliche Termine + operative Akten inkl. Personen-Doks.</summary>
+    /// <summary>Agency-wide view.</summary>
     Authority = 1,
 }
 
-/// <summary>
-/// Ein einzelner Kalendereintrag (wird an FullCalendar übergeben). <see cref="Id"/> ist global eindeutig
-/// (quellen-präfixiert, z. B. „tm:…"/„op:…"). Zeiten sind LOKALE Wandzeit (RP-Zeit) – FullCalendar rendert mit
-/// timeZone:'local'. <see cref="EndeLokal"/> = null bedeutet punktförmig/offenes Ende. <see cref="Hinfaellig"/>
-/// (abgesagt/verschoben/abgebrochen) wird gedämpft dargestellt.
-/// </summary>
+/// <summary>Single calendar entry passed to FullCalendar.</summary>
 public record CalendarEntry(
     string Id,
     string Title,
@@ -40,7 +32,7 @@ public record CalendarEntry(
     string? Href,
     bool Obsolete = false);
 
-/// <summary>Anzeige-Helfer (Farbe + Name je Quelle); Farben konsistent zur graph.js-Palette.</summary>
+/// <summary>Display helper; colour per source.</summary>
 public static class CalendarDisplay
 {
     public static string Colour(CalendarSource source) => source switch

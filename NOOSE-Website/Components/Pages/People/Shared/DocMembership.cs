@@ -10,12 +10,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Pages.People.Shared;
 
-/// <summary>
-/// Trägt – aus den Dok-Dialogen heraus – eine Person als aktives Mitglied der im Dok verknüpften
-/// Fraktion/Personengruppe ein, sofern „Als Mitglied eintragen" gewählt und eine Akte verknüpft wurde.
-/// Eine bereits bestehende Mitgliedschaft wird übersprungen; ein Fehler bleibt folgenlos für das
-/// bereits gespeicherte Dok (nur Snackbar-Hinweis).
-/// </summary>
+/// <summary>Auto-enrolls linked person as member on doc save.</summary>
 public static class DocMembership
 {
     public static async Task EnterAsync(
@@ -28,7 +23,7 @@ public static class DocMembership
         ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        // Nur bei aktiver Checkbox und verknüpfter Akte (kein Eintrag aus reinem Freitext).
+        // checkbox + record
         if (!input.AsMember || string.IsNullOrWhiteSpace(input.OrgId) || string.IsNullOrWhiteSpace(input.OrgType))
         {
             return;
@@ -36,7 +31,7 @@ public static class DocMembership
 
         try
         {
-            // Doppelte Mitgliedschaft vermeiden – sonst wirft der jeweilige Dienst.
+            // dedup
             var existing = await personService.GetAffiliationsAsync(personId, actor.IsLeadership(), cancellationToken);
             if (existing.Any(z => z.Type == input.OrgType && z.Id == input.OrgId))
             {
@@ -56,7 +51,7 @@ public static class DocMembership
         }
         catch (Exception ex)
         {
-            // Das Dok ist bereits gespeichert; die Mitgliedschaft ist nur ein Zusatz – Fehler nicht eskalieren.
+            // best effort
             snackbar.Add($"Mitgliedschaft nicht eingetragen: {ex.Message}", Severity.Warning);
         }
     }

@@ -20,15 +20,14 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IGraphService" />
 public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphService
 {
-    /// <summary>Obergrenze der Knoten im Gesamtgraph (ohne Fokus). Darüber wird auf die Knoten mit dem
-    /// höchsten Grad reduziert und das Ergebnis als „abgeschnitten" markiert.</summary>
+    /// <summary>Max node limit.</summary>
     private const int MaxNode = 250;
 
-    /// <summary>Sicherheitsnetz der Pfadsuche: maximale Hop-Tiefe und maximale Zahl besuchter Knoten.</summary>
+    /// <summary>Path search limits.</summary>
     private const int MaxPathDepth = 12;
     private const int MaxVisited = 8000;
 
-    /// <summary>Roh-Kante zwischen zwei Graph-Schlüsseln, vor Sichtbarkeits-/Typ-Filterung.</summary>
+    /// <summary>Raw edge.</summary>
     private readonly record struct RawEdge(string Source, string Target, string? Label, LinkKind Kind, bool Automatic);
 
     public async Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
@@ -39,7 +38,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
         var rawEdges = await LoadRawEdgesAsync(db, query.KindFilter, cancellationToken);
 
-        // Alle vorkommenden Knoten einsammeln (+ den Fokusknoten, falls er kantenlos ist).
+        // Collect all nodes.
         var keys = new HashSet<string>();
         foreach (var k in rawEdges)
         {
@@ -51,10 +50,10 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             keys.Add($"{query.FocusType}:{query.FocusId}");
         }
 
-        // Knoten sichtbarkeitsgeprüft auflösen; nicht sichtbare fallen hier bereits weg.
+        // Resolve visible nodes.
         var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
-        // Typ-Filter (falls gesetzt) auf die aufgelösten Knoten anwenden.
+        // Apply type filter.
         if (query.TypeFilter is { Count: > 0 })
         {
             var allowed = query.TypeFilter.ToHashSet();
@@ -67,7 +66,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // Kanten auf Paare sichtbarer/erlaubter Knoten reduzieren (Selbstkanten raus).
+        // Filter edges to visible nodes.
         var edges = rawEdges
             .Where(k => k.Source != k.Target && node.ContainsKey(k.Source) && node.ContainsKey(k.Target))
             .ToList();
@@ -80,7 +79,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             var focusKey = $"{query.FocusType}:{query.FocusId}";
             if (!node.ContainsKey(focusKey))
             {
-                // Fokusakte nicht sichtbar/vorhanden → leerer Graph.
+                // Focus not visible.
                 return new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
             }
             keep = Radius(focusKey, edges, Math.Clamp(query.Depth, 1, 3));
@@ -133,7 +132,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         }
         var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
-        // Start oder Ziel nicht sichtbar/vorhanden → kein Pfad.
+        // Source/target not visible.
         if (!node.ContainsKey(sourceKey) || !node.ContainsKey(targetKey))
         {
             return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
@@ -143,7 +142,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             return new PathResult(true, new[] { node[sourceKey] }, Array.Empty<GraphEdge>());
         }
 
-        // Adjazenz nur unter sichtbaren Knoten aufbauen.
+        // Build adjacency.
         var adj = new Dictionary<string, List<RawEdge>>();
         void Connect(string a, RawEdge k)
         {
@@ -164,7 +163,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             Connect(k.Target, k);
         }
 
-        // Breitensuche mit Vorgänger-Tabelle (Knoten → benutzte Kante).
+        // BFS with predecessors.
         var predecessor = new Dictionary<string, RawEdge>();
         var depth = new Dictionary<string, int> { [sourceKey] = 0 };
         var queue = new Queue<string>();
@@ -202,7 +201,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
         }
 
-        // Pfad vom Ziel zurück zum Start rekonstruieren und umdrehen.
+        // Reconstruct path.
         var nodePath = new List<string> { targetKey };
         var edgesPath = new List<RawEdge>();
         var cursor = targetKey;
@@ -222,14 +221,11 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             edgesPath.Select(k => new GraphEdge(k.Source, k.Target, k.Label, k.Kind, k.Automatic)).ToList());
     }
 
-    // ---- Kanten laden (beide Quellen, optional auf eine Art gefiltert) ----
+    // ---- Load edges ----
 
     private static async Task<List<RawEdge>> LoadRawEdgesAsync(AppDbContext db, LinkKind? kindFilter, CancellationToken cancellationToken)
     {
-        // Automatische „Kollegen"-Verknüpfungen (KollegenSync: Mitglied↔Mitglied einer Organisation)
-        // bilden eine Clique (O(n²)) und werden im Graph NICHT als Kante gezeichnet – stattdessen wird
-        // die Mitgliedschaft als Stern-Kante Mitglied→Organisation ergänzt (siehe unten). Die Clique-
-        // Daten bleiben in der DB erhalten (Listen im VerknuepfungPanel).
+        // Skip clique edges.
         var vq = db.Links.Where(v => !v.Automatic);
         if (kindFilter is not null)
         {
@@ -245,7 +241,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             edges.Add(new RawEdge($"{v.SourceType}:{v.SourceId}", $"{v.TargetType}:{v.TargetId}", v.Label, v.Kind, v.Automatic));
         }
 
-        // Person-zu-Person-Beziehungen auf eine Verknüpfungs-Art mappen (Feind→Konflikt, Verbündeter→Bündnis).
+        // Map person relations.
         var bez = await db.PersonRelations
             .Select(b => new { b.PersonAId, b.PersonBId, b.Type })
             .ToListAsync(cancellationToken);
@@ -269,9 +265,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
                 false));
         }
 
-        // Stern-Topologie: Mitgliedschaften als Kante Mitglied → Organisation (Org als Hub) – ersetzt die
-        // weggelassene Mitglied↔Mitglied-Clique. Als „Automatisch" markiert (→ dezent gestrichelt). Nur
-        // wenn der Art-Filter Standard zulässt (bei Konflikt/Bündnis werden Mitgliedschaften ausgeblendet).
+        // Star topology: memberships.
         if (kindFilter is null || kindFilter == LinkKind.Default)
         {
             foreach (var m in await db.FactionMembers
@@ -297,14 +291,12 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         return edges;
     }
 
-    // ---- Knoten-Auflösung (verallgemeinert aus VerknuepfungService.GetFuerAkteAsync) ----
-    // Je Aktentyp eine Sammelabfrage; nicht sichtbare Akten (Verschlusssache/fremde Taskforce/Papierkorb)
-    // werden gar nicht erst aufgenommen, sodass die anhängenden Kanten später automatisch wegfallen.
+    // ---- Resolve nodes ----
 
     private static async Task<Dictionary<string, GraphNode>> ResolveNodeAsync(
         AppDbContext db, IEnumerable<string> keys, bool isLeadership, string? meId, CancellationToken cancellationToken)
     {
-        // Schlüssel nach Typ gruppieren.
+        // Group keys by type.
         var targetType = new Dictionary<string, HashSet<string>>();
         foreach (var key in keys)
         {
@@ -329,7 +321,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
         List<string> Ids(string type) => targetType.TryGetValue(type, out var s) ? s.ToList() : new();
 
-        // ---- Person (mit Einstufungs-Farbe + Foto-Thumbnail) ----
+        // ---- Person ----
         var personIds = Ids(nameof(Person));
         if (personIds.Count > 0)
         {
@@ -363,7 +355,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Fraktion ----
+        // ---- Faction ----
         var factionIds = Ids(nameof(Faction));
         if (factionIds.Count > 0)
         {
@@ -378,7 +370,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Personengruppe ----
+        // ---- Person group ----
         var groupsIds = Ids(nameof(PersonGroup));
         if (groupsIds.Count > 0)
         {
@@ -393,7 +385,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Partei ----
+        // ---- Party ----
         var partyIds = Ids(nameof(Party));
         if (partyIds.Count > 0)
         {
@@ -423,7 +415,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Vorgang ----
+        // ---- Case ----
         var caseIds = Ids(nameof(Case));
         if (caseIds.Count > 0)
         {
@@ -438,7 +430,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Taskforce (nur sichtbare auflösen) ----
+        // ---- Taskforce ----
         var taskforceIds = Ids(nameof(Taskforce));
         if (taskforceIds.Count > 0)
         {
@@ -450,7 +442,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Aufgabe (kein Verschlusssache-Konzept) ----
+        // ---- Job ----
         var jobIds = Ids(nameof(Job));
         if (jobIds.Count > 0)
         {
@@ -461,7 +453,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Agent (Codename, keine eigene Detailseite) ----
+        // ---- Agent ----
         var agentIds = Ids(nameof(Agent));
         if (agentIds.Count > 0)
         {
@@ -473,7 +465,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Gesetz (Wissensbasis, keine Verschlusssache) ----
+        // ---- Law ----
         var lawIds = Ids(nameof(Law));
         if (lawIds.Count > 0)
         {
@@ -484,7 +476,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Personen-Dok (erbt Sichtbarkeit der Person; Navigation auf den Doks-Tab) ----
+        // ---- Person doc ----
         var docIds = Ids(nameof(PersonDoc));
         if (docIds.Count > 0)
         {
@@ -503,7 +495,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // ---- Observation (erbt Sichtbarkeit der Person; Navigation auf den Überwachungs-Tab) ----
+        // ---- Observation ----
         var observationIds = Ids(nameof(Observation));
         if (observationIds.Count > 0)
         {
@@ -525,9 +517,9 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         return result;
     }
 
-    // ---- Graph-Hilfen ----
+    // ---- Graph helpers ----
 
-    /// <summary>Knotengrad (Anzahl anliegender Kanten) je Knoten.</summary>
+    /// <summary>Node degree count.</summary>
     private static Dictionary<string, int> DegreeCount(IEnumerable<RawEdge> edges)
     {
         var degree = new Dictionary<string, int>();
@@ -539,7 +531,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         return degree;
     }
 
-    /// <summary>Alle Knoten im Umkreis von <paramref name="start"/> bis <paramref name="tiefe"/> Hops (inkl. Start).</summary>
+    /// <summary>BFS radius set.</summary>
     private static HashSet<string> Radius(string start, IEnumerable<RawEdge> edges, int depth)
     {
         var adj = new Dictionary<string, List<string>>();

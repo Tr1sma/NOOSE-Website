@@ -4,17 +4,13 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Bereitet das <c>AenderungenJson</c> eines Audit-Eintrags für die Anzeige auf: macht aus dem rohen
-/// „Feld → [alt, neu]"-JSON eine Liste lesbarer Feldänderungen mit deutschen Labels. Technische Felder
-/// (Audit-/Soft-Delete-Plumbing) werden ausgeblendet; Enums/Datumswerte werden in Klartext übersetzt.
-/// </summary>
+/// <summary>Formats audit entry JSON into readable field changes.</summary>
 public static class AuditDisplay
 {
-    /// <summary>Eine einzelne Feldänderung „alt → neu" für die Timeline.</summary>
+    /// <summary>Single field change record.</summary>
     public record FieldChange(string Field, string Alt, string New);
 
-    // Audit-/Soft-Delete-/Fremdschlüssel-Felder interessieren den Leser nicht.
+    // skip meta fields
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
         "ErstelltAm", "ErstelltVonId", "GeaendertAm", "GeaendertVonId",
@@ -39,7 +35,7 @@ public static class AuditDisplay
         ["Codename"] = "Codename", ["Klarname"] = "Klarname", ["Dienstnummer"] = "Dienstnummer",
     };
 
-    /// <summary>Parst das JSON in lesbare Feldänderungen; bei null/ungültig eine leere Liste.</summary>
+    /// <summary>Parses JSON into field changes; empty on null/invalid.</summary>
     public static IReadOnlyList<FieldChange> Parse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -93,7 +89,7 @@ public static class AuditDisplay
                 {
                     return "—";
                 }
-                // ISO-Datumswerte (Zeitpunkt/TotBis) lesbar machen.
+                // format dates
                 if ((field is "Zeitpunkt" or "TotBis")
                     && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
                 {
@@ -105,7 +101,7 @@ public static class AuditDisplay
         }
     }
 
-    // Bekannte Enum-Felder als Klartext; sonst die rohe Zahl.
+    // enum to string
     private static string FormatEnum(string field, int n) => field switch
     {
         "Einstufung" => ClassificationDisplay.Name((Classification)n),

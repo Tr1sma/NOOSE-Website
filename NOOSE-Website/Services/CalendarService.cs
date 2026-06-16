@@ -12,14 +12,7 @@ using NOOSE_Website.Models.Calendar;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Stellt die Kalender-Einträge eines Zeitfensters zusammen – rein lesend, zwei Sichten
-/// (<see cref="KalenderModus"/>). „Mein" = persönliche Agenda (eigene Termine + zugewiesene Aufgaben + eigene
-/// Wiedervorlagen). „Behörde" = behördenweit (öffentliche Termine + Operationen + Überwachungsfenster +
-/// Personen-Doks + Fraktions-Aktivitäten). Wie <see cref="ZeitstrahlService"/>: alle Abfragen sequenziell auf
-/// EINEM kurzlebigen Context, flache <c>WHERE</c>-Filter (kein SelectMany/CROSS APPLY), je Quelle gedeckelt.
-/// Jede Quelle behält ihre kanonische Sichtbarkeit; UTC wird erst beim DTO-Bau in lokale RP-Zeit umgerechnet.
-/// </summary>
+/// <summary>Builds calendar entries for a time window in two views.</summary>
 public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalendarService
 {
     private const int PerSourceMax = 500;
@@ -45,16 +38,16 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         return entries;
     }
 
-    // ---- „Mein Kalender": eigene Termine + mir zugewiesene Aufgaben + meine Wiedervorlagen ----
+    // ---- my calendar ----
     private async Task LoadMyAsync(AppDbContext db, DateTime sourceUtc, DateTime untilUtc, bool mayClassified, string? meId,
         List<CalendarEntry> entries, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(meId))
         {
-            return; // ohne Agent-Kontext keine persönliche Agenda
+            return; // no agent context
         }
 
-        // Termine, an denen ich beteiligt bin (Ersteller oder Teilnehmer) – jede Stufe.
+        // own appointments
         foreach (var t in await db.Appointments.OnlyOwn(db, meId)
             .Where(t => t.Start <= untilUtc && (t.End ?? t.Start) >= sourceUtc)
             .OrderBy(t => t.Start).Take(PerSourceMax)
@@ -65,7 +58,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 t.AllDay, CalendarSource.Appointment, $"/kalender/{t.Id}", AppointmentStatusDisplay.IsObsolete(t.Status)));
         }
 
-        // Mir zugewiesene (oder selbst erstellte) Aufgaben mit Fälligkeit.
+        // assigned jobs
         foreach (var a in await db.Jobs
             .Where(a => (a.CreatedById == meId || db.JobAssignments.Any(z => z.JobId == a.Id && z.AgentId == meId))
                 && a.DueDate != null && a.DueDate >= sourceUtc && a.DueDate <= untilUtc)
@@ -77,7 +70,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 false, CalendarSource.Job, $"/aufgaben/{a.Id}", JobStatusDisplay.IsCompleted(a.Status)));
         }
 
-        // Meine offenen Wiedervorlagen (zuständig oder selbst erstellt).
+        // open followups
         var wvs = await db.Followups
             .Where(w => !w.Done && (w.ResponsibleAgentId == meId || w.CreatedById == meId)
                 && w.DueAt >= sourceUtc && w.DueAt <= untilUtc)
@@ -91,7 +84,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             foreach (var w in wvs)
             {
                 map.TryGetValue((w.EntityType, w.EntityId), out var parents);
-                // Es ist MEINE Wiedervorlage → immer zeigen; aber den VS-Eltern-Namen für Nicht-Führung nicht leaken.
+                // always show; hide classified parent
                 var mayName = parents.Display is not null && !(parents.Classified && !mayClassified);
                 var @base = mayName ? $"Wiedervorlage: {parents.Display}" : "Wiedervorlage fällig";
                 var title = string.IsNullOrWhiteSpace(w.Note) ? @base : $"{@base} · {w.Note}";
@@ -101,11 +94,11 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         }
     }
 
-    // ---- „Behörden-Kalender": öffentliche Termine + Operationen + Observationen + Personen-Doks + Fraktions-Aktivitäten ----
+    // ---- authority calendar ----
     private async Task LoadAuthorityAsync(AppDbContext db, DateTime sourceUtc, DateTime untilUtc, bool mayClassified,
         List<CalendarEntry> entries, CancellationToken ct)
     {
-        // Öffentliche Termine (die Aufsicht/Führung sieht zusätzlich alle Stufen).
+        // public appointments
         foreach (var t in await db.Appointments.ForAuthority(mayClassified)
             .Where(t => t.Start <= untilUtc && (t.End ?? t.Start) >= sourceUtc)
             .OrderBy(t => t.Start).Take(PerSourceMax)
@@ -116,7 +109,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 t.AllDay, CalendarSource.Appointment, $"/kalender/{t.Id}", AppointmentStatusDisplay.IsObsolete(t.Status)));
         }
 
-        // Operationen (Verschlusssache-gefiltert).
+        // operations
         foreach (var o in await db.Operations
             .Where(o => (mayClassified || !o.IsClassified)
                 && o.Start != null && o.Start <= untilUtc && (o.End ?? o.Start) >= sourceUtc)
@@ -128,7 +121,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 false, CalendarSource.Operation, $"/operationen/{o.Id}", o.Status == OperationStatus.Aborted));
         }
 
-        // Überwachungsfenster (VS erbt von der Eltern-Person via INNER JOIN über die Pflicht-Nav).
+        // observations
         foreach (var ob in await db.Observations
             .Where(ob => (mayClassified || !ob.Person!.IsClassified)
                 && ob.Start <= untilUtc && (ob.End ?? ob.Start) >= sourceUtc)
@@ -141,7 +134,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 false, CalendarSource.Observation, $"/personen/{ob.PersonId}"));
         }
 
-        // Personen-Doks (alle – auch fremde; VS erbt von der Eltern-Person, gleiches sichere INNER-JOIN-Muster).
+        // person docs
         foreach (var d in await db.PersonDocs
             .Where(d => (mayClassified || !d.Person!.IsClassified)
                 && d.Timestamp >= sourceUtc && d.Timestamp <= untilUtc)
@@ -154,7 +147,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 false, CalendarSource.PersonDoc, $"/personen/{d.PersonId}?tab=doks"));
         }
 
-        // Fraktions-Aktivitäten (VS erbt von der Eltern-Fraktion).
+        // faction activities
         foreach (var fa in await db.FactionActivities
             .Where(fa => (mayClassified || !fa.Faction!.IsClassified)
                 && fa.Timestamp >= sourceUtc && fa.Timestamp <= untilUtc)
@@ -168,7 +161,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         }
     }
 
-    // UTC (in der DB als Unspecified/Utc abgelegt) → lokale Wandzeit ohne Kind (FullCalendar liest naiv-lokal).
+    // utc to local
     private static DateTime Local(DateTime utc)
         => DateTime.SpecifyKind(DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime(), DateTimeKind.Unspecified);
 

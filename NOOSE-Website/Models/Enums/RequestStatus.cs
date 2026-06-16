@@ -1,9 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Status eines Antrags im Posteingang-Workflow (Phase 5). Beim Anlegen stets <see cref="Beantragt"/>;
-/// die Entscheidung (Senior Special Agent+/Admin) setzt <see cref="Genehmigt"/> oder <see cref="Abgelehnt"/>.
-/// </summary>
+/// <summary>Inbox request status.</summary>
 public enum RequestStatus
 {
     Requested = 0,
@@ -11,7 +8,7 @@ public enum RequestStatus
     Rejected = 2,
 }
 
-/// <summary>Anzeigetexte für den Antrags-Status (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class RequestStatusDisplay
 {
     public static string Name(RequestStatus status) => status switch
