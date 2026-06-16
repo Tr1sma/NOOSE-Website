@@ -212,7 +212,7 @@
 > **Verifiziert (ohne Discord-Login):** Build 0/0 · Migration `Phase2_PersonenAkten` angewandt (alle Tabellen + Unique-Index `Personen.Aktenzeichen`) · App startet sauber · `/health`=Healthy · `/personen`, `/personen/papierkorb`, `/dateien/personen/foto/…` → 302 auf Login (Auth + Policy greifen).
 > **Voll-Test (Auftraggeber):** nach Discord-Login Person anlegen → Aktenzeichen wird vergeben; Dok „Erschossen" → „Tot · respawnt in 20 Min", nach Ablauf wieder „Lebend"; Foto-Upload/Galerie; Einstufung + Rang-Gate; Papierkorb/Wiederherstellen; Verschlusssache.
 
-### Phase 3 – Verknüpfungen, Quellen, Suche, Tags, Kommentare
+### Phase 3 – Verknüpfungen, Quellen, Suche, Tags, Kommentare ✅ ABGESCHLOSSEN
 **Ziel:** Das Herzstück – alles wird verknüpfbar und auffindbar.
 - [X] Generisches **Quellen/Anhang-System** (Upload/Link/intern/Freitext) für jede Akte.
 - [X] **Interne Verlinkung** (bidirektional) + **Person-zu-Person-Beziehungen** mit Typen.
@@ -224,7 +224,7 @@
 
 **Abnahme:** Quelle anhängen; zwei Akten verknüpfen und in beide Richtungen navigieren; Suche findet Inhalte (nicht nur Namen); Suche speichern; per Strg+K springen; taggen & filtern; Kommentar hinterlassen.
 
-### Phase 4 – Fraktionen & Personengruppen
+### Phase 4 – Fraktionen & Personengruppen ✅ ABGESCHLOSSEN
 **Ziel:** Organisationen abbilden und mit Personen verzahnen.
 - [X] **Fraktion**-Modul (alle Felder; Bestände als strukturierte Listen; Fraktions-Ränge; Konflikte-Links; Mitglieder/Leitung verknüpft; Erkennungsfarbe; optionale Einstufung).
 - [X] **Personengruppe** (Mitglieder, Einstufung+Verlauf, zugeteilte Agents, **Erfassungsfortschritt x/y**).
@@ -232,7 +232,7 @@
 
 **Abnahme:** Fraktion mit verknüpften Mitgliedern anlegen; auf der Person erscheinen die Rück-Links; Gruppe anlegen und Fortschritt sehen.
 
-### Phase 5 – Fälle, Operationen, Personal & Antrags-Workflow
+### Phase 5 – Fälle, Operationen, Personal & Antrags-Workflow ✅ ABGESCHLOSSEN
 **Ziel:** Restliche Akten-Typen, Fallarbeit + echter Freigabe-Workflow.
 - [X] **Partei**-Modul.
 - [X] **Taskforce**-Modul (Leads, Mitglieder, Geltungsbereich, Genehmigung).
@@ -262,7 +262,7 @@
 > Brett + Broadcast (`Data/Entities/Ankuendigungen/`, `Services/AnkuendigungService.cs`, `Components/Pages/Brett/` inkl. Zielgruppe + optionaler Quittierung).
 > Migrationen: `Phase6_Benachrichtigungen`, `Phase6_Watchlist`, `Phase6_Aufgaben`, `Phase6_Ankuendigungen`.
 
-### Phase 7 – Vorlagen, Admin, Wissensbasis & Komfort
+### Phase 7 – Vorlagen, Admin, Wissensbasis & Komfort ✅ ABGESCHLOSSEN
 **Ziel:** Effizienz, Datenqualität und Anpassbarkeit.
 - [x] **Dok-Vorlagen/Templates** (admin-definierte Erfassungsmasken) – setzt eure „Vorgaben" um.
 - [x] **Konfigurierbare Custom-Felder** je Aktentyp (Admin, ohne Code).
@@ -288,8 +288,8 @@
 > Basisdaten (/admin/basisdaten: Links auf pflegbare Stammdaten + dokumentierte Wertelisten).
 > Migration: `Phase15_Phase7Abschluss` (SystemEinstellungen, Gesetze, BibliothekDateien).
 
-### Phase 8 – Visualisierungen & erweiterte Module
-**Ziel:** Die „Wow"-Features.
+### Phase 8 – Visualisierungen & erweiterte Module ✅ ABGESCHLOSSEN
+**Ziel:** Die „Wow"-Features. 
 - [x] **Beziehungs-/Netzwerk-Graph** (interaktiv, aus Verknüpfungen/Beziehungen) via JS-Interop.
 - [x] **Beziehungs-Pfad-Suche** („wie hängen A und B zusammen?").
 - [x] **Verknüpfungs-Vorschläge** (zusammenhängende Akten automatisch vorschlagen – gleiche Tags/Fraktion/Telefon).
