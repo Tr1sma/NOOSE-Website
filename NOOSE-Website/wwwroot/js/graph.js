@@ -1,14 +1,8 @@
-// NOOSE Beziehungsgraph-Interop (Phase 8, Block A). vis-network wird selbst gehostet unter
-// /lib/vis-network und – wie Quill im RichTextEditor – NUR auf der Graph-Seite GEGUARDET nachgeladen,
-// damit andere Seiten unbelastet bleiben. Schlaegt das Laden fehl, wirft render() einen Fehler, den die
-// Blazor-Seite faengt (Fehlerhinweis statt Circuit-Abriss). Bei Aenderungen an dieser Datei die
-// ?v=-Versionsnummer im import() der Razor-Seite hochzaehlen (dynamische Imports laufen nicht durch das
-// Asset-Fingerprinting).
+// vis-network interop
 
 let visLadenPromise = null;
 
-// Knotenfarbe je Aktentyp (auf das dunkle NOOSE-Theme abgestimmt). Die Schlüssel sind die englischen
-// CLR-Typnamen (nameof(...)), wie sie der GraphService liefert – nicht die deutschen Anzeigenamen.
+// node colors
 const TYP_FARBE = {
     Person: '#22D3EE',
     Faction: '#7C8CF8',
@@ -24,13 +18,13 @@ const TYP_FARBE = {
     Observation: '#58A6FF',
 };
 
-// Randfarbe je Einstufung (0 = keine -> Typfarbe; 3 = gesichert staatsgefaehrdend -> rot).
+// border by classification
 const EINSTUFUNG_RAND = { 1: '#9BA8B8', 2: '#D29922', 3: '#F85149' };
 
-// Kantenfarbe je Verknuepfungs-Art (0 = Standard, 1 = Konflikt, 2 = Buendnis).
+// edge colors
 const ART_FARBE = { 0: 'rgba(139,152,168,0.55)', 1: '#F85149', 2: '#3FB950' };
 
-const instanzen = new Map(); // containerId -> { network, nodes, edges, dotnetRef }
+const instanzen = new Map(); // id → instance
 
 function ladeVisNetwork() {
     if (window.vis && window.vis.Network) {
@@ -124,8 +118,7 @@ function mapKante(e) {
 }
 
 function optionen(knotenAnzahl, kantenAnzahl) {
-    // Große Graphen sind teuer: improvedLayout (Kamada-Kawai-Vorlayout) und dynamisches Kanten-
-    // Smoothing verursachen sekundenlange Freezes. Ab einer Schwelle bewusst abschalten/vereinfachen.
+    // skip layout for large graphs
     const gross = knotenAnzahl > 120 || kantenAnzahl > 200;
     return {
         autoResize: true,
@@ -142,9 +135,6 @@ function optionen(knotenAnzahl, kantenAnzahl) {
         },
         physics: {
             solver: 'forceAtlas2Based',
-            // Stärkere Abstoßung + geringere zentrale Anziehung → Fraktions-Sterne drücken sich weiter
-            // auseinander; höhere springConstant hält die Mitglieder eng an ihrem Hub (kompakte Cluster);
-            // avoidOverlap verhindert, dass sich Cluster überlagern.
             forceAtlas2Based: { gravitationalConstant: -75, centralGravity: 0.006, springLength: 150, springConstant: 0.12, damping: 0.5, avoidOverlap: 0.4 },
             stabilization: { enabled: true, iterations: gross ? 120 : 200, updateInterval: 25, fit: true },
         },
@@ -168,14 +158,10 @@ export async function render(containerId, datenJson, dotnetRef) {
     const opts = optionen(knotenListe.length, kantenListe.length);
     const network = new window.vis.Network(container, { nodes, edges }, opts);
 
-    // Physik bleibt AN: der Graph schwingt ein und federt beim Ziehen mit („lebendig"). Er kommt von
-    // selbst zur Ruhe, wenn die Bewegungsenergie gering ist (kein Dauer-CPU-Verbrauch im Ruhezustand).
+    // physics stays on
 
-    // Einfachklick: fokussieren/zentrieren. Doppelklick: zur Akte navigieren (in .NET).
+    // click handlers
     network.on('doubleClick', (params) => {
-        // Knoten robust bestimmen – auch wenn der zweite Klick einen (durch die laufende Physik)
-        // bewegten Knoten knapp verfehlt: erst die getroffenen Knoten, dann der Knoten unter dem
-        // Zeiger, dann der bei Klick 1 ausgewählte.
         let id = (params.nodes && params.nodes.length > 0) ? params.nodes[0] : null;
         if (!id && params.pointer && params.pointer.DOM) {
             id = network.getNodeAt(params.pointer.DOM);
@@ -185,7 +171,7 @@ export async function render(containerId, datenJson, dotnetRef) {
             if (sel && sel.length > 0) { id = sel[0]; }
         }
         if (id) {
-            try { dotnetRef.invokeMethodAsync('OnNodeClick', id); } catch (e) { /* Circuit weg */ }
+            try { dotnetRef.invokeMethodAsync('OnNodeClick', id); } catch (e) { /* ignore */ }
         }
     });
     network.on('selectNode', (params) => {
@@ -194,14 +180,11 @@ export async function render(containerId, datenJson, dotnetRef) {
         }
     });
 
-    // Die Standard-Physik (inkl. größenabhängiger Stabilisierung) merken, damit der freie Modus
-    // sie später unverändert wiederherstellen kann.
+    // save defaults
     instanzen.set(containerId, { network, nodes, edges, dotnetRef, physikStandard: opts.physics, frei: false });
 }
 
-// Physik des „freien Modus": KEINE Abstoßung und KEINE Zentralgravitation – nichts „drückt" die Knoten
-// auseinander, man kann sie frei ziehen und schieben und sie bleiben liegen (hohe Dämpfung). Eine schwache
-// Federkraft bleibt aktiv, damit verbundene Knoten sich noch ein wenig gegenseitig ziehen.
+// free mode physics
 const PHYSIK_FREI = {
     enabled: true,
     solver: 'forceAtlas2Based',
@@ -210,8 +193,6 @@ const PHYSIK_FREI = {
     minVelocity: 0.5,
 };
 
-// Schaltet zwischen dem „lebendigen" Standard und dem freien Anordnungsmodus um. Im freien Modus entfällt
-// das automatische Auseinanderdrücken/Einschwingen; der Nutzer ordnet die Knoten selbst an.
 export function setzeFreierModus(containerId, frei) {
     const inst = instanzen.get(containerId);
     if (!inst) {
@@ -221,7 +202,7 @@ export function setzeFreierModus(containerId, frei) {
     inst.network.setOptions({ physics: frei ? PHYSIK_FREI : inst.physikStandard });
 }
 
-// Hebt den gefundenen Pfad hervor und blendet den Rest aus (ausgegraut).
+// highlight path
 export function markierePfad(containerId, knotenIds, kantenSchluessel) {
     const inst = instanzen.get(containerId);
     if (!inst) {
@@ -242,7 +223,7 @@ export function markierePfad(containerId, knotenIds, kantenSchluessel) {
     }
 }
 
-// Hebt jede Hervorhebung wieder auf.
+// reset highlights
 export function zuruecksetzen(containerId) {
     const inst = instanzen.get(containerId);
     if (!inst) {
@@ -277,7 +258,7 @@ export function vollbild(containerId) {
         } else {
             container.requestFullscreen();
         }
-    } catch (e) { /* Browser ohne Fullscreen-API */ }
+    } catch (e) { /* ignore */ }
 }
 
 export function alsBildExportieren(containerId) {

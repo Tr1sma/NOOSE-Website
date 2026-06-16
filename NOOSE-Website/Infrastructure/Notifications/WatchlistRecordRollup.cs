@@ -18,20 +18,14 @@ using NOOSE_Website.Models.Abstractions;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
 
-/// <summary>
-/// Rollt eine geänderte Entität auf die Akte(n) hoch, der man folgen kann – die „Kind → Eltern"-Abbildung der
-/// Watchlist. Bewusst eine <b>Allowlist</b>: nur die hier bekannten Akten-, Kind- und Querschnitts-Typen liefern
-/// eine Eltern-Akte; alles andere (inkl. Benachrichtigung/Watchlist/AuditLog selbst) liefert nichts – damit sind
-/// Benachrichtigungs-Schleifen strukturell unmöglich. Für einen auditierbaren Typ, der hier (noch) fehlt, wird
-/// fail-loud gewarnt (nicht geworfen – der Speichervorgang darf nie gefährdet werden).
-/// </summary>
+/// <summary>Maps a changed entity to its watchable parent record(s); allowlist-based to prevent notification loops.</summary>
 public static class WatchlistRecordRollup
 {
     public static IReadOnlyList<(string Type, string Id)> Map(object entity, ILogger logger)
     {
         switch (entity)
         {
-            // ---- Akten selbst ----
+            // ---- root records ----
             case Person p: return One(nameof(Person), p.Id);
             case Faction f: return One(nameof(Faction), f.Id);
             case PersonGroup g: return One(nameof(PersonGroup), g.Id);
@@ -40,7 +34,7 @@ public static class WatchlistRecordRollup
             case Case v: return One(nameof(Case), v.Id);
             case Taskforce t: return One(nameof(Taskforce), t.Id);
 
-            // ---- Typisierte Kind-Daten → ihre Eltern-Akte ----
+            // ---- child to parent ----
             case PersonDoc d: return One(nameof(Person), d.PersonId);
             case Observation ob: return One(nameof(Person), ob.PersonId);
             case FactionMember fm: return One(nameof(Faction), fm.FactionId);
@@ -55,28 +49,24 @@ public static class WatchlistRecordRollup
             case TaskforceMessage tn: return One(nameof(Taskforce), tn.TaskforceId);
             case AgentNote av: return One(nameof(Agent), av.AgentId);
             case AgentPromotionRequest from: return One(nameof(Agent), from.AgentId);
-            // Die Personalakte IST der Agent (Identity-User): direkte Stammdaten-/Rang-/Status-Änderungen am Agent
-            // (Rang, Sperre, Codename, Admin/TRU, Namensänderung) sowie der Dienstgrad-Verlauf melden ebenfalls an
-            // dessen Folger – sonst meldete eine Beförderung per Antrag, eine per Rangänderung aber nicht.
+            // agent IS the record
             case Agent ag: return One(nameof(Agent), ag.Id);
             case AgentRankHistory adv: return One(nameof(Agent), adv.AgentId);
 
-            // ---- Querschnitt: polymorphes Ziel direkt verwenden ----
+            // ---- polymorphic target ----
             case Comment k: return One(k.EntityType, k.EntityId);
             case Source q: return One(q.EntityType, q.EntityId);
             case TagMapping tz: return One(tz.EntityType, tz.EntityId);
 
-            // ---- Beziehungen → beide Seiten ----
+            // ---- relations ----
             case Link vk: return Two((vk.SourceType, vk.SourceId), (vk.TargetType, vk.TargetId));
             case PersonRelation pb: return Two((nameof(Person), pb.PersonAId), (nameof(Person), pb.PersonBId));
 
-            // ---- Bewusst ignoriert: auditierbar, aber keine folgbare Akte (verhindert Schleifen/Rauschen) ----
-            // Aufgaben laufen über ein eigenes Team-Board (keine Watchlist) → nicht folgbar; ein Verknüpfungs-Edit
-            // Akte↔Aufgabe rollt weiter korrekt auf die andere (folgbare) Seite, die Aufgabe-Seite hat keine Folger.
+            // ---- ignored: not watchable ----
+            // jobs excluded
             case Job:
             case JobAssignment:
-            // Ankündigungen/Broadcasts laufen über das Schwarze Brett (eigene Sichtbarkeit) + die Glocke,
-            // sind aber keine folgbare Akte → nicht in die Watchlist hochrollen.
+            // announcements excluded
             case Announcement:
             case AnnouncementAcknowledgment:
             case Request:
@@ -87,7 +77,7 @@ public static class WatchlistRecordRollup
                 return Array.Empty<(string, string)>();
 
             default:
-                // Ein NEUER auditierbarer Typ, der hier fehlt, würde Folger stillschweigend nicht erreichen → warnen.
+                // warn if missing
                 if (entity is IAuditable)
                 {
                     logger.LogWarning(

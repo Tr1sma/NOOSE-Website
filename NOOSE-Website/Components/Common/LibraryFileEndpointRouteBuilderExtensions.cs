@@ -6,11 +6,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Common;
 
-/// <summary>
-/// Geschützter Download-Endpoint der Datei-Bibliothek (Phase 7). Dateien liegen außerhalb von
-/// wwwroot und werden nur an eingeloggte Agenten ausgeliefert; Verschlusssachen nur an die Führung.
-/// Auslieferung ausschließlich über den in der DB gespeicherten Dateinamen (kein User-Pfad).
-/// </summary>
+/// <summary>Protected library file endpoint; classified only for leadership.</summary>
 public static class LibraryFileEndpointRouteBuilderExtensions
 {
     public static IEndpointConventionBuilder MapNooseLibraryFileEndpoints(this IEndpointRouteBuilder endpoints)
@@ -25,14 +21,14 @@ public static class LibraryFileEndpointRouteBuilderExtensions
             HttpContext http,
             CancellationToken cancellationToken) =>
         {
-            // Der Dienst prüft Soft-Delete und Verschlusssache – liefert sonst null (kein Existenz-Leak).
+            // service checks visibility
             var file = await library.GetForDownloadAsync(fileId, DocumentViewerScope.From(http.User), cancellationToken);
             if (file is null)
             {
                 return Results.NotFound();
             }
 
-            // Datei öffnen, bevor protokolliert wird; fehlt sie physisch, sauber 404 statt 500.
+            // open before logging
             Stream stream;
             try
             {
@@ -45,7 +41,7 @@ public static class LibraryFileEndpointRouteBuilderExtensions
 
             await access.LogViewAsync(nameof(LibraryFile), fileId, cancellationToken);
 
-            // Results.File übernimmt und entsorgt den Stream nach dem Senden (kein using!).
+            // auto-disposed
             return Results.File(stream, file.ContentType, file.OriginalName, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.ActiveAgent);

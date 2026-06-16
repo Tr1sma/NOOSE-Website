@@ -1,6 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>Sicherheitseinstufung einer Akte: Prüffall → Verdachtsfall → Gesichert staatsgefährdend.</summary>
+/// <summary>Security classification level.</summary>
 public enum Classification
 {
     Unknown = 0,

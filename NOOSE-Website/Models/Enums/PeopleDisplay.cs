@@ -1,6 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>Anzeigetexte für den Lebensstatus (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class LifeStatusDisplay
 {
     public static string Name(LifeStatus status) => status switch
@@ -19,7 +19,7 @@ public static class LifeStatusDisplay
     };
 }
 
-/// <summary>Anzeigetexte für die Sicherheitseinstufung.</summary>
+/// <summary>Display labels.</summary>
 public static class ClassificationDisplay
 {
     public static string Name(Classification classification) => classification switch
@@ -40,7 +40,7 @@ public static class ClassificationDisplay
     };
 }
 
-/// <summary>Anzeigetexte für den Maßnahme-Ausgang.</summary>
+/// <summary>Display labels.</summary>
 public static class MeasureOutcomeDisplay
 {
     public static string Name(MeasureOutcome outcome) => outcome switch

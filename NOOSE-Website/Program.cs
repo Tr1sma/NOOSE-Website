@@ -30,25 +30,20 @@ using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Statistics;
 
-// Einheitlich deutsches Datums-/Zahlenformat in der gesamten App (Server-Rendering und
-// Blazor-Circuits). Ohne das hängt z. B. die Anzeige der MudBlazor-Picker und jedes
-// ToString() ohne explizites Format von der Server-Locale ab.
+// german culture
 var germanCulture = new CultureInfo("de-DE");
 CultureInfo.DefaultThreadCurrentCulture = germanCulture;
 CultureInfo.DefaultThreadCurrentUICulture = germanCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// MudBlazor UI-Dienste.
+// MudBlazor
 builder.Services.AddMudServices();
 
-// HttpContext-Zugriff (vom CurrentUserService / Audit genutzt).
+// http context
 builder.Services.AddHttpContextAccessor();
 
-// Reverse-Proxy (nginx terminiert TLS auf dem Server): die X-Forwarded-*-Header übernehmen,
-// damit die App das echte Schema (https) und die Client-IP kennt. Ohne das erzeugt der
-// Discord-OAuth-Flow http://-Redirect-URIs und die Auth-Cookies werden nicht als „secure" gesetzt.
-// Es wird nur dem lokalen nginx (Loopback) vertraut – Kestrel lauscht ausschließlich auf 127.0.0.1.
+// reverse proxy
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -56,69 +51,45 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Add(IPAddress.IPv6Loopback);
 });
 
-// Data-Protection-Schlüssel (verschlüsseln Auth-Cookies & Antiforgery-Tokens) dauerhaft ablegen.
-// Ohne persistente Schlüssel erzeugt die App bei jedem Start neue → alle Nutzer würden bei jedem
-// Neustart/Deploy ausgeloggt und Formulare/Logins schlagen fehl. Ablage unter App_Data/keys
-// (muss für den Dienst-Benutzer www-data schreibbar sein).
+// persist keys
 var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
 Directory.CreateDirectory(dataProtectionKeysPath);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
     .SetApplicationName("NOOSE-Website");
 
-// Datei-Upload-Konfiguration (Foto-Galerie der Personen-Akten).
+// file upload
 builder.Services.Configure<FileUploadOptions>(builder.Configuration.GetSection("FileUpload"));
 
-// Datenbank (MySQL 8.0 / MariaDB via Pomelo / EF Core) inkl. Audit-Interceptor.
-// Verbindungs-Strings kommen aus den User Secrets (lokal) bzw. Umgebungsvariablen (Server),
-// niemals aus appsettings.json/Code.
-//
-// Auswahl-Logik (siehe DatabaseConnectionResolver): zuerst wird die Produktiv-DB
-// (ConnectionStrings:ProductionConnection) probiert; ist sie nicht erreichbar – z. B. weil die
-// App lokal läuft und der Hosting-MySQL von außen gesperrt ist –, wird automatisch auf die lokale
-// DB (ConnectionStrings:DefaultConnection) zurückgefallen. Der Connection-String muss dadurch nie
-// zwischen Entwicklung und Server umgestellt werden.
+// database setup
 using var startupLoggerFactory = LoggerFactory.Create(lb =>
     lb.AddConfiguration(builder.Configuration.GetSection("Logging")).AddConsole());
 var (connectionString, serverVersion) = DatabaseConnectionResolver.Resolve(
     builder.Configuration, startupLoggerFactory.CreateLogger("NOOSE.Datenbank"));
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-// Zuerst: harte Schreibsperre für die Nur-Lese-Aufsicht (TeamLeitung ohne Admin).
+// write barrier
 builder.Services.AddScoped<ReadOnlyBarrierInterceptor>();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
-// Phase 6: zweiter, unabhängiger Interceptor für die Watchlist (gefolgte Akte geändert → Glocke).
+// watchlist interceptor
 builder.Services.AddScoped<WatchlistChangeInterceptor>();
 
-// Die Server-Version (lokal MariaDB/XAMPP, Produktion MySQL 8.0) wurde bereits beim Auflösen der
-// Verbindung ermittelt (DatabaseConnectionResolver) und hier wiederverwendet – spart eine zweite
-// Verbindung beim Start.
-//
-// Factory statt scoped DbContext: In Blazor Server lebt ein scoped Context den gesamten Circuit lang
-// und wird von Seite, Kind-Komponenten und Diensten geteilt. Gleichzeitige Zugriffe (parallele
-// OnInitializedAsync-Aufrufe mehrerer Komponenten, der 30-Sekunden-Status-Timer) lösen dann
-// „A second operation was started on this context instance" aus. Mit der Factory bekommt jede
-// Arbeitseinheit ihren eigenen, kurzlebigen Context. Als Scoped registriert, damit der (scoped)
-// Audit-Interceptor mit dem aktuellen Agent aufgelöst wird; AddDbContextFactory registriert
-// AppDbContext zusätzlich als scoped Service – das deckt Identity (AddEntityFrameworkStores),
-// den Health-Check und das Seeding ab.
+// db factory
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, serverVersion)
            .AddInterceptors(
                sp.GetRequiredService<ReadOnlyBarrierInterceptor>(),
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
                sp.GetRequiredService<WatchlistChangeInterceptor>())
-           // Steckbrief-Kinder (Alias/Telefon/…) werden ausschließlich über die – bereits
-           // soft-delete-gefilterte – Person geladen. Die EF-Warnung zum Zusammenspiel von
-           // Query-Filter und Pflichtnavigation ist daher für unsere Zugriffsmuster unkritisch.
+           // ignore nav filter warning
            .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)),
     ServiceLifetime.Scoped);
 
-// Health-Checks: prüft die DB-Erreichbarkeit (genutzt von /health und der Status-Seite).
+// health check
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>("database");
 
-// ---- ASP.NET Core Identity (Nutzer = Agent) ----
+// ---- Identity ----
 builder.Services.AddIdentityCore<Agent>(options =>
     {
         options.SignIn.RequireConfirmedAccount = false;
@@ -129,24 +100,21 @@ builder.Services.AddIdentityCore<Agent>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-// NOOSE-Claims (Dienstgrad/Status/TRU/HRB/Admin) ins Cookie schreiben.
+// custom claims
 builder.Services.AddScoped<IUserClaimsPrincipalFactory<Agent>, AgentClaimsPrincipalFactory>();
 
-// Kill-Switch: SecurityStamp wird oft revalidiert → Sperre greift praktisch sofort. Identisch zum
-// RevalidationInterval des IdentityRevalidatingAuthenticationStateProvider (30 s) → Worst-Case-Latenz ~30 s.
+// kill switch
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     options.ValidationInterval = TimeSpan.FromSeconds(30));
 
-// ---- Authentifizierung: Identity-Cookies + Discord-OAuth ----
+// ---- Auth ----
 var authentication = builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
 });
 
-// Discord nur registrieren, wenn konfiguriert. Der OAuth-Handler ist ein Request-Handler und
-// validiert seine ClientId bei JEDER Anfrage – mit leerer ClientId würde die App sonst bei jedem
-// Request abstürzen. So läuft die App auch ohne Secrets (Login-Seite zeigt dann einen Hinweis).
+// optional discord
 var discordClientId = builder.Configuration["Authentication:Discord:ClientId"];
 var discordClientSecret = builder.Configuration["Authentication:Discord:ClientSecret"];
 if (!string.IsNullOrWhiteSpace(discordClientId) && !string.IsNullOrWhiteSpace(discordClientSecret))
@@ -155,7 +123,7 @@ if (!string.IsNullOrWhiteSpace(discordClientId) && !string.IsNullOrWhiteSpace(di
     {
         options.ClientId = discordClientId;
         options.ClientSecret = discordClientSecret;
-        // Damit GetExternalLoginInfoAsync funktioniert, meldet der OAuth-Handler am External-Cookie an.
+        // external cookie
         options.SignInScheme = IdentityConstants.ExternalScheme;
         options.Scope.Add("email");
         options.SaveTokens = true;
@@ -164,119 +132,117 @@ if (!string.IsNullOrWhiteSpace(discordClientId) && !string.IsNullOrWhiteSpace(di
 
 authentication.AddIdentityCookies();
 
-// ---- Autorisierung: NOOSE-Policies (Rechte-Matrix Plan.md §6) ----
+// ---- Authorization ----
 builder.Services.AddNooseAuthorization();
 
-// ---- Auth-State in interaktive Komponenten + Kill-Switch-Revalidierung ----
+// ---- Auth state ----
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
 
-// Fachliche Dienste.
+// services
 builder.Services.AddScoped<IAgentManagementService, AgentManagementService>();
 builder.Services.AddScoped<IAccessLogService, AccessLogService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
-// Gemeinsame Aktenzeichen-Vergabe (Person/Fraktion/Gruppe).
+// case numbers
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
 builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>();
-// Phase 7: admin-definierte Dok-Vorlagen (Erfassungsmasken).
+// doc templates
 builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
-// Phase 7: Dokumenten-Bibliothek (WYSIWYG-Dokumente) + Dokument-Vorlagen + Platzhalter-Ersetzung.
+// documents
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IDocumentTemplateService, DocumentTemplateService>();
 builder.Services.AddScoped<IPlaceholderService, PlaceholderService>();
-// Phase 7: Aktualitäts-Ampel (Schwellwerte je Aktentyp, gecacht) + Wiedervorlagen (terminierte Erinnerungen).
+// recency
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IRecencyService, RecencyService>();
 builder.Services.AddScoped<IFollowupService, FollowupService>();
-// Wiederkehrender Fälligkeits-Check der Wiedervorlagen → Benachrichtigung an Zuständige + Follower.
+// followup worker
 builder.Services.AddHostedService<FollowupDueWorker>();
-// Phase 3a: generische Querschnitts-Dienste (Tags, Kommentare, Quellen).
+// cross-cutting
 builder.Services.AddScoped<ISourceService, SourceService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
-// Phase 7: konfigurierbare Custom-Felder je Aktentyp (Admin).
+// custom fields
 builder.Services.AddScoped<ICustomFieldDefinitionService, CustomFieldDefinitionService>();
 builder.Services.AddScoped<ICustomFieldValueService, CustomFieldValueService>();
-// Phase 3b: Verknüpfungs-Engine + Person-Beziehungen.
+// links
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IRelationService, RelationService>();
-// Phase 8 – Block A: Beziehungsgraph, Pfadsuche & Verknüpfungs-Vorschläge (rein lesend auf den o. g. Quellen).
+// graph
 builder.Services.AddScoped<IGraphService, GraphService>();
 builder.Services.AddScoped<ILinkSuggestionService, LinkSuggestionService>();
-// Phase 8 – Block B: vereinheitlichter Akten-Zeitstrahl (rein lesend; aggregiert Audit + semantische Quellen).
+// timeline
 builder.Services.AddScoped<ITimelineService, TimelineService>();
 builder.Services.AddScoped<IOrgChartService, OrgChartService>();
-// Phase 8 – Block C: Termin-Akte (CRUD) + Kalender-Aggregation (rein lesend).
+// calendar
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
-// Phase 8 – Block D: automatischer Bedrohungs-Score (Fraktionen + Personen) – berechnet & persistiert (Algorithmus „EHK-Score").
-// Konfig-Service ZUERST registrieren (Abhängigkeitsrichtung Score → Konfig; kein Zyklus).
+// threat score
 builder.Services.AddScoped<IThreatScoreConfigService, ThreatScoreConfigService>();
 builder.Services.AddScoped<IThreatScoreService, ThreatScoreService>();
-// Täglicher Sweep gegen die Zeit-Decay-Drift des Scores (+ seedet beim ersten Start alle Fraktionen).
+// score worker
 builder.Services.AddHostedService<ThreatScoreSweepWorker>();
-// Phase 3c: globale Suche + gespeicherte Suchen.
+// search
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
-// Phase 4a: Fraktionen.
+// factions
 builder.Services.AddScoped<IFactionService, FactionService>();
-// Phase 4b: Personengruppen.
+// groups
 builder.Services.AddScoped<IPersonGroupService, PersonGroupService>();
-// Phase 5a: Parteien.
+// parties
 builder.Services.AddScoped<IPartyService, PartyService>();
-// Phase 5b: Operationen.
+// operations
 builder.Services.AddScoped<IOperationService, OperationService>();
-// Phase 5: Vorgangs-/Fallakten (bündeln Personen/Operationen/Observationen/Doks).
+// cases
 builder.Services.AddScoped<ICaseService, CaseService>();
-// Phase 5c: Taskforces.
+// taskforces
 builder.Services.AddScoped<ITaskforceService, TaskforceService>();
-// Phase 5d: Taskforce-Chat mit @-Verlinkung (Mentions) + Live-Broadcaster.
+// chat
 builder.Services.AddScoped<ITaskforceChatService, TaskforceChatService>();
 builder.Services.AddScoped<IMentionService, MentionService>();
 builder.Services.AddSingleton<TaskforceChatBroadcaster>();
-// Phase 5: Observationen (Überwachungseinträge an Personen).
+// observations
 builder.Services.AddScoped<IObservationService, ObservationService>();
-// Phase 5e: Personalakte je Agent (Verlauf, Vermerke, Beförderungsanträge).
+// personnel files
 builder.Services.AddScoped<IPersonnelFileService, PersonnelFileService>();
-// Phase 22: Ausbildungsmodule (Katalog, Admin) + Abschluss je Agent (Personalakte, Führung).
+// training
 builder.Services.AddScoped<ITrainingModuleService, TrainingModuleService>();
-// Phase 5: generischer Antrags-/Posteingang-Workflow (Hochstufungs-Anträge).
+// requests
 builder.Services.AddScoped<IRequestService, RequestService>();
-// Lagezentrum (Startseite): Kennzahlen + Aktivitäts-Feed.
+// dashboard
 builder.Services.AddScoped<IDashboardService, DashboardService>();
-// Phase 8 – Block D: Statistik-Seite (aggregierte Auswertungen, rein lesend; baut auf DashboardService auf).
+// statistics
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
-// Phase 8 – Block D, Schritt 2: archivierte Monats-Lageberichte (Schnappschuss) + automatischer Erzeugungs-Dienst.
+// situation reports
 builder.Services.AddScoped<ISituationReportService, SituationReportService>();
 builder.Services.AddHostedService<SituationReportWorker>();
-// Phase 6: In-App-Benachrichtigungen (Glocke) + Live-Broadcaster.
+// notifications
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
-// Live-Aktualisierung des „Freigaben"-Badges in der NavMenu nach jeder Posteingangs-Entscheidung.
+// shares badge
 builder.Services.AddSingleton<SharesBroadcaster>();
-// Live-Aktualisierung des „Schwarzes Brett"-Badges (offene Quittierungen) nach einer Quittierung.
+// board badge
 builder.Services.AddSingleton<AcknowledgmentBroadcaster>();
-// Phase 6: Watchlist (Akten folgen → „gefolgte Akte geändert"). Fan-out entkoppelt über den Singleton-Dispatcher.
+// watchlist
 builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<WatchlistFanout>();
 builder.Services.AddSingleton<WatchlistDispatcher>();
-// Phase 6: Aufgaben/To-Dos & Zuweisungen (Team-Board; Zuweisung/Erledigung → Glocke).
+// jobs
 builder.Services.AddScoped<IJobService, JobService>();
-// Phase 6: News/Schwarzes Brett + Behörden-Broadcast (Brett für alle; Broadcast/Quittierung nur Führung → Glocke).
+// announcements
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
-// Phase 7 (Abschluss): Systemeinstellungen (Wartungsmodus/Banner/Theming/Logo), Gesetzbuch,
-// Datei-Bibliothek und Duplikat-Zusammenführung von Personenakten.
+// system settings
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
 builder.Services.AddScoped<ILawService, LawService>();
 builder.Services.AddScoped<ILibraryStorageService, LibraryStorageService>();
 builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<IPersonMergeService, PersonMergeService>();
 
-// Rate-Limit auf den Login-Start (Brute-Force-/Spam-Schutz).
+// rate limit
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -288,36 +254,31 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
-// Blazor (Interactive Server).
+// Blazor
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddHubOptions(options =>
     {
-        // Default ist 32 KB. Der WYSIWYG-Editor (RichTextEditor) schickt den KOMPLETTEN HTML-Inhalt
-        // ueber SignalR (laufend beim Tippen via OnHtmlChanged und beim Speichern via getHtml). Lange
-        // Dokumente (~30 KB+) sprengen sonst das Limit -> Circuit-Abriss -> leerer Speichervorgang.
-        // Inhalt ist serverseitig sanitisierter Text (keine eingebetteten Bilder); 5 MB ist grosszuegig
-        // und bleibt zugleich eine sinnvolle DoS-Grenze.
+        // large message limit
         options.MaximumReceiveMessageSize = 5 * 1024 * 1024;
     });
 
 var app = builder.Build();
 
-// Muss VOR allem anderen laufen, damit nachfolgende Middleware (HTTPS-Redirect, Auth, Cookies)
-// bereits das vom nginx weitergereichte Schema/Client-IP sieht.
+// forwarded headers first
 app.UseForwardedHeaders();
 
-// Jede Anfrage fest auf de-DE pinnen – unabhängig vom Accept-Language-Header des Browsers.
+// force de-DE
 app.UseRequestLocalization(new RequestLocalizationOptions()
     .SetDefaultCulture("de-DE")
     .AddSupportedCultures("de-DE")
     .AddSupportedUICultures("de-DE"));
 
-// Configure the HTTP request pipeline.
+// pipeline
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    // hsts
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
@@ -340,16 +301,14 @@ app.MapNooseLibraryFileEndpoints();
 app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
 
-// Start-up: ausstehende EF-Migrationen anwenden und die technische "Admin"-Rolle sicherstellen.
+// startup
 using (var scope = app.Services.CreateScope())
 {
-    // Schema automatisch auf den neuesten Stand bringen. Greift auf die beim Start gewählte DB
-    // (Produktiv auf dem Server, lokal zu Hause) und legt beim ersten Deploy das gesamte Schema
-    // in der noch leeren Produktiv-DB an – kein manuelles 'dotnet ef database update' gegen Produktiv nötig.
+    // auto migrate
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 
-    // Admin-Rolle anlegen (für spätere Nutzung; Admin-Rechte laufen aktuell über das IstAdmin-Flag des Agents).
+    // ensure admin role
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     if (!await roleManager.RoleExistsAsync("Admin"))
     {

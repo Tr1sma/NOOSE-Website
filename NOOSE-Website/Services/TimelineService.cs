@@ -17,19 +17,10 @@ using NOOSE_Website.Models.Timeline;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Baut den vereinheitlichten Akten-Zeitstrahl aus mehreren Quellen zusammen. Basis sind die strukturellen
-/// Audit-Einträge (Akte + Doks/Mitglieder/Zuteilungen – exakt die Whitelist der bisherigen <c>GetHistorieAsync</c>),
-/// ergänzt um die semantischen Quellen, die das reine Audit nicht schön abbildet (Einstufungs-Verlauf, Kommentare,
-/// Quellen, Wiedervorlagen, Verknüpfungen, sowie Person-/Fraktion-spezifische Ereignisse). Verknüpfungen werden –
-/// anders als im alten Audit – einheitlich semantisch mit aufgelöstem Gegenseiten-Namen dargestellt und sind daher
-/// aus dem Audit-Teil ausgenommen (keine Doppelungen). Alle Abfragen laufen sequenziell auf einem Context
-/// (DbContext ist nicht thread-safe); flache <c>WHERE</c>-Filter, kein SelectMany/CROSS APPLY (Pomelo/MySQL).
-/// </summary>
+/// <summary>Builds unified timeline from audit and semantic sources.</summary>
 public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimelineService
 {
-    // Zwischenform: wie ZeitstrahlEintrag, aber mit optionaler Akteur-Id, deren Codename am Ende in einem
-    // Rutsch aufgelöst wird (Quellen ohne denormalisierten Namen tragen nur die ErstelltVon-/GeloeschtVon-Id).
+    // internal DTO
     private sealed record Raw(
         DateTime Timestamp, TimelineCategory Category, string Title, string? Detail,
         string? ActorName, string? ActorId, string? Href,
@@ -45,12 +36,12 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         var mayAllTf = viewer.MayAllTaskforcesSee();
         var meId = viewer.GetAgentId();
 
-        // Gate = Detailseiten-Sichtbarkeit (Verschlusssache/Papierkorb/Taskforce-Zuteilung).
+        // visibility gate
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, mayClassified, cancellationToken, meId))
         {
             return Array.Empty<TimelineEntry>();
         }
-        // Aufgabe zusätzlich auf „eingeschränkt" prüfen – Sichtbarkeit stuft Aufgaben sonst immer als sichtbar ein.
+        // check job restriction
         if (entityType == nameof(Job))
         {
             var visible = await JobVisibility.VisibleIdsAsync(db, new[] { entityId }, mayAllTf, meId, cancellationToken);
@@ -59,7 +50,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 return Array.Empty<TimelineEntry>();
             }
         }
-        // Termin analog: Sichtbarkeit stuft Termine immer als sichtbar ein → „eingeschränkt" separat prüfen.
+        // check appointment restriction
         if (entityType == nameof(Appointment))
         {
             var visible = await AppointmentVisibility.VisibleIdsAsync(db, new[] { entityId }, mayAllTf, meId, cancellationToken);
@@ -72,7 +63,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         var raw = new List<Raw>();
         var actorIds = new HashSet<string>();
 
-        // ---- 1) Audit-Basis: Akte + Doks/Mitglieder/Zuteilungen (Verknüpfungen bewusst NICHT – siehe unten) ----
+        // ---- 1) audit base ----
         var (types, auditIds) = await AuditSourceAsync(db, entityType, entityId, cancellationToken);
         foreach (var log in await db.AuditLogs
             .Where(a => types.Contains(a.EntityType) && auditIds.Contains(a.EntityId)
@@ -85,7 +76,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 AuditDisplay.Parse(log.ChangesJson)));
         }
 
-        // ---- 2) Einstufungs-Verlauf (Person/Fraktion/Gruppe/Partei/Operation/Vorgang; sonst leer) ----
+        // ---- 2) classification history ----
         foreach (var e in await db.ClassificationHistory
             .Where(e => e.EntityType == entityType && e.EntityId == entityId)
             .Select(e => new { e.Value, e.Justification, e.Timestamp, e.AgentName })
@@ -95,7 +86,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 $"Einstufung: {ClassificationDisplay.Name(e.Value)}", e.Justification, e.AgentName, null, null, null));
         }
 
-        // ---- 3) Kommentare ----
+        // ---- 3) comments ----
         foreach (var k in await db.Comments
             .Where(k => k.EntityType == entityType && k.EntityId == entityId)
             .Select(k => new { k.Text, k.AuthorName, k.CreatedAt })
@@ -105,7 +96,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 "Kommentar", Truncate(k.Text), k.AuthorName, null, null, null));
         }
 
-        // ---- 4) Quellen/Anhänge ----
+        // ---- 4) sources/attachments ----
         foreach (var q in await db.Sources
             .Where(q => q.EntityType == entityType && q.EntityId == entityId)
             .Select(q => new { q.Title, q.Type, q.CreatedAt, q.CreatedById })
@@ -117,7 +108,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 SourceTypeDisplay.Name(q.Type), null, q.CreatedById, null, null));
         }
 
-        // ---- 5) Wiedervorlagen (Anlage + Erledigung) ----
+        // ---- 5) followups ----
         foreach (var w in await db.Followups
             .Where(w => w.EntityType == entityType && w.EntityId == entityId)
             .Select(w => new { w.DueAt, w.Note, w.Done, w.DoneAt, w.DoneById, w.CreatedAt, w.CreatedById })
@@ -136,7 +127,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             }
         }
 
-        // ---- 6) Verknüpfungen (beidseitig, inkl. entfernter; Gegenseite sichtbarkeitsgeprüft auflösen) ----
+        // ---- 6) links ----
         var link = await db.Links.IgnoreQueryFilters()
             .Where(v => !v.Automatic
                 && ((v.SourceType == entityType && v.SourceId == entityId)
@@ -165,7 +156,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             }
         }
 
-        // ---- 7) Person-spezifisch: Observationen, Fotos, Beziehungen ----
+        // ---- 7) person-specific ----
         if (entityType == nameof(Person))
         {
             foreach (var o in await db.Observations
@@ -209,7 +200,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             }
         }
 
-        // ---- 8) Fraktion-spezifisch: Aktivitäten-Zeitstrahl ----
+        // ---- 8) faction-specific ----
         if (entityType == nameof(Faction))
         {
             foreach (var a in await db.FactionActivities
@@ -228,7 +219,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             }
         }
 
-        // ---- Akteur-Codenamen für die per-Id markierten Ereignisse auflösen ----
+        // ---- resolve actor names ----
         var names = actorIds.Count == 0
             ? new Dictionary<string, string?>()
             : await db.Users.Where(u => actorIds.Contains(u.Id))
@@ -242,10 +233,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .ToList();
     }
 
-    // Ermittelt die Audit-Quelle (Entitätstypen-Whitelist + zugehörige Ids) je Akte – exakt die Bündel der
-    // bisherigen GetHistorieAsync, jedoch OHNE Verknüpfung (die wird einheitlich semantisch dargestellt).
-    // IgnoreQueryFilters: auch bereits entfernte Sub-Einträge (z. B. ausgetretene Mitglieder) liefern ihre
-    // Beitritts-/Austritts-Audit-Einträge in den Zeitstrahl.
+    // audit sources
     private static async Task<(string[] Types, HashSet<string> Ids)> AuditSourceAsync(
         AppDbContext db, string type, string id, CancellationToken ct)
     {
@@ -287,8 +275,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         }
     }
 
-    // Bildet einen Audit-Eintrag auf Kategorie + lesbaren Titel ab. Sub-Entitäten (Dok/Mitglied/Zuteilung)
-    // erhalten eigene Kategorien; die Hauptakte Anlage/Änderung/Löschung/Wiederherstellung.
+    // map audit entry
     private static (TimelineCategory Kat, string Title) MapAudit(string entityType, AuditAction action)
     {
         string Verb(string created, string deleted) => action switch
@@ -325,8 +312,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         return (kat, $"Akte {Verb("angelegt", "gelöscht")}");
     }
 
-    // Liefert Anzeigename + Href der Verknüpfungs-/Beziehungs-Gegenseite. Nicht aufgelöst → „nicht verfügbar";
-    // Verschlusssache (für Nicht-Führung) → „verdeckt", jeweils ohne Link.
+    // resolve target
     private static (string Name, string? Href) CounterpartDisplay(
         Dictionary<(string, string), RecordsReference.Resolution> map, (string, string) target, string covertNoun)
     {

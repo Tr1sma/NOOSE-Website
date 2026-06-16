@@ -25,7 +25,7 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
     }
 
     public Task<ThreatScoreConfiguration> GetEditableAsync(CancellationToken cancellationToken = default)
-        => LoadAsync(cancellationToken); // immer frische Instanz (nicht gecacht), damit die UI gefahrlos editieren kann
+        => LoadAsync(cancellationToken); // always fresh
 
     private async Task<ThreatScoreConfiguration> LoadAsync(CancellationToken cancellationToken)
     {
@@ -38,7 +38,7 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
         }
         try
         {
-            // Fehlende Felder (älterer Stand) fallen auf die Initializer-Defaults zurück → vorwärtskompatibel.
+            // Missing fields use defaults.
             return JsonSerializer.Deserialize<ThreatScoreConfiguration>(json, ThreatScoreService.JsonOptions)
                    ?? ThreatScoreConfiguration.Default();
         }
@@ -69,10 +69,7 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
         cache.Remove(CacheKey);
     }
 
-    /// <summary>
-    /// Erzwingt die Invarianten, an die der Algorithmus gebunden ist: Caps summieren je Subjekt auf 100,
-    /// Sub-Caps stimmen mit der Code-Struktur überein, Nenner &gt; 0, Schwere-Tiers monoton und nie 0.
-    /// </summary>
+    /// <summary>Validate config invariants.</summary>
     public static void Validate(ThreatScoreConfiguration k)
     {
         const double tol = 1e-9;
@@ -108,7 +105,7 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
         if (k.TriageThreshold is < 0 or > 100) throw new InvalidOperationException("Triage-Schwelle muss zwischen 0 und 100 liegen.");
         if (k.RanksMaxPoints < 0) throw new InvalidOperationException("Ränge-Max-Punkte darf nicht negativ sein.");
 
-        // Schwere-Tiers: monoton fallend und nie unter 1 (eine erfasste Tat ist immer Signal).
+        // Severity tiers: monotone.
         if (!(k.KindWeightHeavy >= k.KindWeightMedium && k.KindWeightMedium >= k.KindWeightLight && k.KindWeightLight >= 1))
             throw new InvalidOperationException("Schwere-Gewichte müssen erfüllen: schwer ≥ mittel ≥ leicht ≥ 1.");
         NotNegative(k.OutcomeShot, "Ausgang Erschossen");
@@ -116,7 +113,7 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
         NotNegative(k.OutcomeRunningStill, "Ausgang läuft noch");
         NotNegative(k.OutcomeReleased, "Ausgang entlassen");
 
-        // Caps & Gewichte nicht negativ.
+        // Caps non-negative.
         foreach (var (value, name) in new (double, string)[]
         {
             (k.CapS1, "Cap S1"), (k.CapS2, "Cap S2"), (k.CapS3, "Cap S3"), (k.CapS4, "Cap S4"),
@@ -134,13 +131,13 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
             NotNegative(value, name);
         }
 
-        // Caps summieren je Subjekt auf 100 (sonst kann der Score nicht 100 erreichen / Reskalierung wäre nötig).
+        // Caps must sum to 100.
         SumEqual(k.CapS1 + k.CapS2 + k.CapS3 + k.CapS4, 100, "Die Fraktion-Caps (S1–S4)");
         SumEqual(k.CapP1 + k.CapP2 + k.CapP3 + k.CapP4 + k.CapP5, 100, "Die Person-Caps (P1–P5)");
-        // S2-Sub-Caps exakt an die Code-Struktur (strukturPkt = Ränge-Max + Leitung + Anwesen).
+        // S2 sub-caps.
         SumEqual(k.CapSize + (k.RanksMaxPoints + k.LeadPoints + k.EstatePoints) + k.CapWeapons + k.CapInfra,
             k.CapS2, "Die S2-Sub-Caps (Größe + Struktur + Waffen + Infrastruktur)");
-        // P2-Sub-Caps (Waffen + Flüchtig).
+        // P2 sub-caps.
         SumEqual(k.PersonCapWeapons + k.FugitivePoints, k.CapP2, "Die P2-Sub-Caps (Waffen + Flüchtig)");
     }
 }

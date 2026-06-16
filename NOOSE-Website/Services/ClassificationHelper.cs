@@ -5,13 +5,10 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Gemeinsame Einstufungs-Logik für alle Akten (Person/Fraktion/Personengruppe): das Rang-Gate für
-/// „Gesichert staatsgefährdend" und die Erzeugung eines polymorphen Verlauf-Eintrags.
-/// </summary>
+/// <summary>Shared classification logic.</summary>
 public static class ClassificationHelper
 {
-    /// <summary>Wirft, wenn „Gesichert staatsgefährdend" ohne Senior Special Agent/Admin gesetzt würde.</summary>
+    /// <summary>Enforce rank gate.</summary>
     public static void CheckRankGate(Classification @new, ClaimsPrincipal actor)
     {
         if (@new == Classification.SecuredStateThreatening && !actor.MayHighestClassification())
@@ -21,7 +18,7 @@ public static class ClassificationHelper
         }
     }
 
-    /// <summary>Baut einen (append-only) Verlauf-Eintrag für die Akte <paramref name="entitaetTyp"/>/<paramref name="entitaetId"/>.</summary>
+    /// <summary>Build history entry.</summary>
     public static ClassificationHistory Entry(string entityType, string entityId, Classification value, string? justification, ClaimsPrincipal actor)
         => new()
         {

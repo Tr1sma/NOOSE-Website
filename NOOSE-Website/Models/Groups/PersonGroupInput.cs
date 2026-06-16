@@ -2,14 +2,14 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Groups;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen und Bearbeiten einer Personengruppe.</summary>
+/// <summary>Create/edit person group.</summary>
 public class PersonGroupInput
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Targets { get; set; }
 
-    /// <summary>Kategorie der Gruppen-Akte (Persönlichkeit/Gruppierung/Person of Interest).</summary>
+    /// <summary>Group category kind.</summary>
     public GroupsKind Kind { get; set; } = GroupsKind.Grouping;
 
     public Classification Classification { get; set; } = Classification.Unknown;
@@ -17,26 +17,23 @@ public class PersonGroupInput
     public int? EstimatedMemberCount { get; set; }
     public bool IsClassified { get; set; }
 
-    /// <summary>Mitglieder, die bereits beim Anlegen erfasst werden (auf der Detailseite weiter pflegbar).</summary>
+    /// <summary>Initial members list.</summary>
     public List<GroupMemberInput> Members { get; set; } = new();
 }
 
-/// <summary>Eingabe zum Hinzufügen/Ändern einer Gruppen-Mitgliedschaft.</summary>
+/// <summary>Add/edit group membership.</summary>
 public class GroupMemberInput
 {
     public string PersonId { get; set; } = string.Empty;
     public string? Role { get; set; }
     public bool IsLead { get; set; }
 
-    /// <summary>Nur für die Anzeige im Anlege-Formular; vom Dienst ignoriert.</summary>
+    /// <summary>Display only; ignored by service.</summary>
     public string? PersonName { get; set; }
 
-    /// <summary>
-    /// Ist <see cref="PersonId"/> leer und dies gesetzt, wird beim Hinzufügen automatisch eine neue
-    /// Personen-Akte mit diesem Namen angelegt und als Mitglied verknüpft.
-    /// </summary>
+    /// <summary>Auto-creates new person if PersonId is empty.</summary>
     public string? NewPersonName { get; set; }
 }
 
-/// <summary>Erfassungsfortschritt einer Gruppe: erfasste Mitglieder (x) gegenüber geschätzter Gesamtgröße (y).</summary>
+/// <summary>Group capture progress: captured vs estimated.</summary>
 public record PersonGroupProgress(int Captured, int? Estimated);

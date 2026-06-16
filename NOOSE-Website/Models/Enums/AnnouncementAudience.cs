@@ -1,25 +1,21 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Zielgruppe einer Ankündigung/eines Behörden-Broadcasts – Phase 6. Steuert sowohl, wer den Eintrag am
-/// Schwarzen Brett sieht, als auch (bei Broadcast) wer eine Glocken-Meldung erhält. Eine gezielte Zielgruppe
-/// (alles außer <see cref="AlleAktiven"/>) ist der Führung vorbehalten.
-/// </summary>
+/// <summary>Announcement target audience.</summary>
 public enum AnnouncementAudience
 {
-    /// <summary>Alle aktiven Agenten (Standard, auch für offene Brett-Notizen).</summary>
+    /// <summary>All active agents.</summary>
     AllActive = 0,
-    /// <summary>Nur die einer bestimmten Taskforce zugeteilten Agenten (Ziel-Id = Taskforce-Id).</summary>
+    /// <summary>Specific taskforce members.</summary>
     Taskforce = 1,
-    /// <summary>Nur Agenten der TRU-Einheit (<see cref="Data.Entities.Agent.IstTRU"/>).</summary>
+    /// <summary>TRU unit only.</summary>
     TruUnit = 2,
-    /// <summary>Nur Agenten ab einem Mindest-Dienstgrad (Ziel = <c>MinDienstgrad</c>).</summary>
+    /// <summary>Agents from minimum rank.</summary>
     FromRank = 3,
-    /// <summary>Nur Agenten der HRB-Einheit (<see cref="Data.Entities.Agent.IstHRB"/>).</summary>
+    /// <summary>HRB unit only.</summary>
     HrbUnit = 4,
 }
 
-/// <summary>Anzeigetexte für die Ankündigungs-Zielgruppe (UI-frei).</summary>
+/// <summary>Display labels.</summary>
 public static class AnnouncementAudienceDisplay
 {
     public static string Name(AnnouncementAudience audience) => audience switch

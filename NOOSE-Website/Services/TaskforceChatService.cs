@@ -24,7 +24,7 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         {
             query = query.Where(n => n.CreatedAt < olderAs.Value);
         }
-        // Jüngste `limit` laden, dann für die Anzeige chronologisch aufsteigend kehren.
+        // newest first, reverse
         var latest = await query
             .OrderByDescending(n => n.CreatedAt)
             .Take(Math.Clamp(limit, 1, 500))
@@ -42,7 +42,7 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Schreiben darf nur, wer die Taskforce sehen darf (Verschlusssache → nur Führung).
+        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Taskforce ist für dich nicht zugänglich.");
@@ -59,14 +59,14 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
 
         broadcaster.Report(taskforceId);
 
-        // Phase 6: erwähnte Agenten benachrichtigen (best-effort, Verschlusssache-gefiltert im Dienst).
+        // notify mentions
         try
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
             await notifications.NotifyMentionedAsync(content, $"{who} hat dich im Taskforce-Chat erwähnt.",
                 $"/taskforces/{taskforceId}", nameof(Taskforce), taskforceId, actor, cancellationToken);
         }
-        catch { /* Benachrichtigung ist nachrangig. */ }
+        catch { /* best effort */ }
 
         return message;
     }
@@ -79,12 +79,12 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         {
             return;
         }
-        // Nur der Autor oder die Führung darf zurückziehen.
+        // author or leadership
         if (!actor.IsLeadership() && message.CreatedById != actor.GetAgentId())
         {
             throw new UnauthorizedAccessException("Nur der Autor oder die Führung kann eine Nachricht zurückziehen.");
         }
-        db.TaskforceMessages.Remove(message); // Soft-Delete via Interceptor
+        db.TaskforceMessages.Remove(message); // soft delete
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(message.TaskforceId);

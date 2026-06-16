@@ -1,22 +1,19 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Lebenszyklus-Status einer Aufgabe/To-Do – Phase 6. Steuert Chip-Anzeige und Listenfilter. Default ist
-/// <see cref="Offen"/>. „Erledigt" und „Abgebrochen" gelten als abgeschlossen (setzen den Erledigt-Zeitpunkt).
-/// </summary>
+/// <summary>Task lifecycle status.</summary>
 public enum JobStatus
 {
-    /// <summary>Angelegt, aber noch nicht in Bearbeitung.</summary>
+    /// <summary>Created, not started.</summary>
     Open = 0,
-    /// <summary>Aktiv in Bearbeitung.</summary>
+    /// <summary>Actively in progress.</summary>
     InProcessing = 1,
-    /// <summary>Erfolgreich erledigt.</summary>
+    /// <summary>Successfully completed.</summary>
     Done = 2,
-    /// <summary>Abgebrochen/verworfen (nicht ausgeführt).</summary>
+    /// <summary>Abandoned, not executed.</summary>
     Aborted = 3,
 }
 
-/// <summary>Anzeigetexte für den Aufgaben-Status (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class JobStatusDisplay
 {
     public static string Name(JobStatus status) => status switch
@@ -28,11 +25,11 @@ public static class JobStatusDisplay
         _ => "—",
     };
 
-    /// <summary>Status, die eine noch nicht abgeschlossene Aufgabe kennzeichnen – für Zähler/Filter/Überfällig.</summary>
+    /// <summary>Not yet finished.</summary>
     public static bool IsOpen(JobStatus status)
         => status is JobStatus.Open or JobStatus.InProcessing;
 
-    /// <summary>Status, bei denen der Erledigt-Zeitpunkt gesetzt wird.</summary>
+    /// <summary>Completion timestamp applies.</summary>
     public static bool IsCompleted(JobStatus status)
         => status is JobStatus.Done or JobStatus.Aborted;
 

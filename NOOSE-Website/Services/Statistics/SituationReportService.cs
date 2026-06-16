@@ -28,7 +28,7 @@ public class SituationReportService(
 
     public async Task<bool> GenerateDueAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
     {
-        // Zuletzt abgeschlossener Monat = Vormonat relativ zu jetzt.
+        // previous month
         var previousMonth = new DateTime(nowUtc.Year, nowUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-1);
         var bulletin = await GenerateMonthAsync(previousMonth.Year, previousMonth.Month, replaceExisting: false,
             triggerId: null, cancellationToken);
@@ -40,7 +40,7 @@ public class SituationReportService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Aktive Berichte des Monats (Soft-Delete-Filter greift). Höchstens einer – defensiv als Liste behandelt.
+        // active reports
         var existing = await db.SituationReports
             .Where(l => l.Year == year && l.Month == month)
             .ToListAsync(cancellationToken);
@@ -50,7 +50,7 @@ public class SituationReportService(
             {
                 return null;
             }
-            // Ersetzen: alte aktive Berichte des Monats in den Papierkorb verschieben.
+            // soft delete old
             foreach (var alt in existing)
             {
                 alt.IsDeleted = true;
@@ -59,8 +59,7 @@ public class SituationReportService(
             }
         }
 
-        // Vollständige Lage als Schnappschuss (istFuehrung: true → inkl. VS-Aggregate; Bericht ist Führung
-        // vorbehalten). meId: null genügt – die Führung sieht ohnehin alle Taskforces.
+        // full snapshot
         var report = await statistics.GetReportAsync(isLeadership: true, meId: null, cancellationToken: cancellationToken);
         var title = $"Lagebericht {new DateTime(year, month, 1).ToString("MMMM yyyy", DeDe)}";
 
@@ -88,7 +87,7 @@ public class SituationReportService(
             .Select(l => new { l.Id, l.Year, l.Month, l.Title, l.CreatedAt, l.CreatedById })
             .ToListAsync(cancellationToken);
 
-        // Ersteller-Codenamen (öffentlich, nie Klarname) in einem Rutsch auflösen.
+        // resolve codenames
         var creatorIds = rows.Where(r => !string.IsNullOrEmpty(r.CreatedById))
             .Select(r => r.CreatedById!).Distinct().ToList();
         var names = creatorIds.Count == 0
@@ -148,9 +147,7 @@ public class SituationReportService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    // Glocken-Benachrichtigung an die (rang-basierte) Führung – best-effort, nach dem Commit. Rein rollen-
-    // basierte Admins (ohne Führungs-Dienstgrad) sind bewusst nicht enthalten; ein fehlgeschlagener Push
-    // darf die Erzeugung nie scheitern lassen.
+    // notify leadership
     private async Task NotifyLeadershipAsync(AppDbContext db, SituationReport bulletin, string title,
         string? triggerId, CancellationToken cancellationToken)
     {

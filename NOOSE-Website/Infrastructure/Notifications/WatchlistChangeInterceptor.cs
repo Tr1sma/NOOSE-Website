@@ -6,20 +6,7 @@ using NOOSE_Website.Infrastructure.CurrentUser;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
 
-/// <summary>
-/// Zweiter, vom <c>AuditSaveChangesInterceptor</c> UNABHÄNGIGER Speichervorgang-Interceptor: erkennt zentral jede
-/// Änderung an einer folgbaren Akte (über <see cref="WatchlistAkteRollup"/>, inkl. Kind→Eltern-Hochrollung) und
-/// stößt nach erfolgreichem Commit den Watchlist-Fan-out an. STRIKT read-only über den ChangeTracker (keine State-/
-/// Property-Änderung) – damit der Audit-Interceptor unberührt bleibt.
-/// <para>
-/// Robust gegen den Re-Entry durch den zweiten SaveChanges des Audit-Interceptors (das Schreiben der AuditLog-Zeilen):
-/// dieser Durchlauf enthält nur AuditLog/ZugriffsLog → leere Akten-Menge. Eine leere Menge überschreibt daher NIE eine
-/// bereits gemerkte (echte) Menge; verarbeitet (entnommen + versendet) wird in SavedChanges, aufgeräumt in
-/// SaveChangesFailed. Dadurch ist das Verhalten unabhängig von der Interceptor-Reihenfolge.
-/// </para>
-/// Scoped (wie der Audit-Interceptor) – teilt sich mit der DbContext-Factory mehrere kurzlebige Contexts pro Circuit,
-/// daher das Pending pro Context in einer <see cref="ConditionalWeakTable{TKey,TValue}"/>.
-/// </summary>
+/// <summary>Detects watchable record changes and triggers fan-out after commit; strictly read-only over ChangeTracker.</summary>
 public sealed class WatchlistChangeInterceptor(
     ICurrentUserService currentUserService,
     WatchlistDispatcher dispatcher,
@@ -63,8 +50,7 @@ public sealed class WatchlistChangeInterceptor(
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
-        // Fehlgeschlagener Save → keine Benachrichtigung; das gemerkte Pending verwerfen, damit es nicht beim
-        // nächsten (evtl. leeren) Save fälschlich versendet wird.
+        // failed save
         if (eventData.Context is not null)
         {
             _pending.Remove(eventData.Context);
@@ -84,7 +70,7 @@ public sealed class WatchlistChangeInterceptor(
     private void Remember(DbContext context, string? actorId)
     {
         var records = Collect(context);
-        // Eine leere Menge (z. B. der reine AuditLog-Zweitsave) überschreibt eine bereits gemerkte echte Menge NICHT.
+        // keep existing
         if (records.Count == 0)
         {
             return;
@@ -104,8 +90,7 @@ public sealed class WatchlistChangeInterceptor(
 
     private HashSet<(string, string)> Collect(DbContext context)
     {
-        // Read-only: KEIN State/keine Property ändern. DetectChanges ist idempotent (der Audit-Interceptor ruft es
-        // bereits) und stellt sicher, dass Kind-FKs (PersonId, …) auch bei navigations-eingefügten Kindern gesetzt sind.
+        // read only
         context.ChangeTracker.DetectChanges();
         var records = new HashSet<(string, string)>();
         foreach (var entry in context.ChangeTracker.Entries())

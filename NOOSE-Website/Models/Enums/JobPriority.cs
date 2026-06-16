@@ -1,8 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Priorität einer Aufgabe/To-Do – Phase 6. Steuert Sortierung und Chip-Farbe. Default ist <see cref="Normal"/>.
-/// </summary>
+/// <summary>Task priority level.</summary>
 public enum JobPriority
 {
     Low = 0,
@@ -10,7 +8,7 @@ public enum JobPriority
     High = 2,
 }
 
-/// <summary>Anzeigetexte für die Aufgaben-Priorität (UI-frei, ohne MudBlazor-Abhängigkeit; Farbe im Chip).</summary>
+/// <summary>Display labels.</summary>
 public static class JobPriorityDisplay
 {
     public static string Name(JobPriority priority) => priority switch

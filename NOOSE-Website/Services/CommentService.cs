@@ -34,7 +34,7 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Schreiben nur, wenn die Eltern-Akte für den Aufrufer sichtbar ist (VS-/Agent-Gate serverseitig erzwingen).
+        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
@@ -49,14 +49,14 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         db.Comments.Add(comment);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Phase 6: erwähnte Agenten benachrichtigen (best-effort, Verschlusssache-gefiltert im Dienst).
+        // notify mentions
         try
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
             await notifications.NotifyMentionedAsync(text, $"{who} hat dich in einem Vermerk erwähnt.",
                 SearchNavigation.Route(entityType, entityId), entityType, entityId, actor, cancellationToken);
         }
-        catch { /* Benachrichtigung ist nachrangig. */ }
+        catch { /* best effort */ }
 
         return comment;
     }
@@ -69,12 +69,12 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         {
             return;
         }
-        // Löschen darf der Verfasser selbst oder die Führung – serverseitig erzwingen, nicht nur in der UI.
+        // author or leadership
         if (!actor.IsLeadership() && comment.CreatedById != actor.GetAgentId())
         {
             throw new UnauthorizedAccessException("Diesen Kommentar darf nur der Verfasser oder die Führung löschen.");
         }
-        db.Comments.Remove(comment); // Soft-Delete via Interceptor
+        db.Comments.Remove(comment); // soft delete
         await db.SaveChangesAsync(cancellationToken);
     }
 }

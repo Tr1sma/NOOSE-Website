@@ -2,29 +2,23 @@ using MudBlazor;
 
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Aktualitäts-Ampel einer Akte: Maß dafür, wie lange die letzte Änderung zurückliegt. Die Schwellwerte
-/// (Tage bis „gelb"/„rot") sind je Aktentyp konfigurierbar (siehe <c>AktualitaetService</c>).
-/// </summary>
+/// <summary>Record freshness level.</summary>
 public enum RecencyLevel
 {
-    /// <summary>Aktuell (grün) – jünger als der Warnungs-Schwellwert.</summary>
+    /// <summary>Current (green).</summary>
     Fresh = 0,
 
-    /// <summary>Wird älter (gelb) – zwischen Warnungs- und Veraltet-Schwellwert.</summary>
+    /// <summary>Aging (yellow).</summary>
     Warning = 1,
 
-    /// <summary>Veraltet (rot) – älter als der Veraltet-Schwellwert.</summary>
+    /// <summary>Outdated (red).</summary>
     Stale = 2,
 }
 
-/// <summary>Berechnet die <see cref="AktualitaetsStufe"/> aus Schwellwerten und Referenzdatum (reine Funktion).</summary>
+/// <summary>Calculates recency from thresholds.</summary>
 public static class RecencyAssessment
 {
-    /// <summary>
-    /// Bewertet eine Akte. <paramref name="referenzdatum"/> = <c>GeaendertAm ?? ErstelltAm</c>. „rot" wird vor
-    /// „gelb" geprüft, damit eine (versehentliche) Schwellwert-Vertauschung nicht zu falsch-grünen Akten führt.
-    /// </summary>
+    /// <summary>Maps age in days to recency level.</summary>
     public static RecencyLevel Level(int warningDays, int staleDays, DateTime referenceDate, DateTime now)
     {
         var alterDays = (now - referenceDate).TotalDays;
@@ -36,7 +30,7 @@ public static class RecencyAssessment
     }
 }
 
-/// <summary>Anzeige-Helfer für die <see cref="AktualitaetsStufe"/> (Name + Ampelfarbe).</summary>
+/// <summary>Display labels.</summary>
 public static class RecencyLevelDisplay
 {
     public static string Name(RecencyLevel level) => level switch

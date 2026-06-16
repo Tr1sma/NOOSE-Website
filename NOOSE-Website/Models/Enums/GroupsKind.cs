@@ -1,9 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Kategorie einer Personengruppen-Akte – was die Akte darstellt. Unabhängig von der
-/// Sicherheits-<see cref="Einstufung"/> (Prüffall/Verdachtsfall/…).
-/// </summary>
+/// <summary>Group record category.</summary>
 public enum GroupsKind
 {
     Grouping = 0,
@@ -11,7 +8,7 @@ public enum GroupsKind
     PersonOfInterest = 2,
 }
 
-/// <summary>Anzeigetexte für die Gruppen-Kategorie (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class GroupsKindDisplay
 {
     public static string Name(GroupsKind kind) => kind switch

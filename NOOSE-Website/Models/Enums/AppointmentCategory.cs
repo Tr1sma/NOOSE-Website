@@ -1,24 +1,21 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Kategorie eines Termins – Phase 8 (Block C). Steuert Anzeige (Chip/Farbe) im Kalender und auf der
-/// Detailseite sowie den Filter. Default ist <see cref="Sonstiges"/>.
-/// </summary>
+/// <summary>Appointment category type.</summary>
 public enum AppointmentCategory
 {
-    /// <summary>Gerichtstermin/Verhandlung.</summary>
+    /// <summary>Court hearing.</summary>
     CourtDate = 0,
-    /// <summary>Interne Besprechung/Meeting.</summary>
+    /// <summary>Internal meeting.</summary>
     Meeting = 1,
-    /// <summary>Geplanter Einsatz/Termin im Feld.</summary>
+    /// <summary>Field deployment.</summary>
     Deployment = 2,
-    /// <summary>Frist/Deadline.</summary>
+    /// <summary>Deadline or due date.</summary>
     Deadline = 3,
-    /// <summary>Sonstiger Termin.</summary>
+    /// <summary>Other appointment.</summary>
     Misc = 4,
 }
 
-/// <summary>Anzeigetexte für die Termin-Kategorie (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class AppointmentCategoryDisplay
 {
     public static string Name(AppointmentCategory category) => category switch

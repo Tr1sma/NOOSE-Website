@@ -1,13 +1,7 @@
-// NOOSE WYSIWYG-Interop für den RichTextEditor (Quill 1.3.7, selbst gehostet unter /lib/quill).
-// Quill + dessen CSS werden bei Bedarf nachgeladen (nur auf Editor-Seiten), damit andere Seiten
-// nicht belastet werden. Die UMD-Variante setzt window.Quill.
-//
-// Tabellen: Quill 1.3.7 hat KEINE eigene Tabellen-Funktion. Wir laden dafür das selbst gehostete
-// Modul /lib/quill/table-module.js (vendored quill1.3.7-table-module). Es wird OPTIONAL und
-// GEGUARDET geladen: schlägt es fehl, läuft der Editor ohne Tabellen-Button weiter (kein Abriss).
+// quill interop
 
 let quillLadenPromise = null;
-let tabellenModulPromise = null; // -> Promise<TableHandler|null>
+let tabellenModulPromise = null; // table handler
 
 function ladeQuill() {
     if (window.Quill) {
@@ -33,15 +27,14 @@ function ladeQuill() {
     return quillLadenPromise;
 }
 
-// Lädt + registriert das Tabellen-Modul EINMALIG. Liefert die TableHandler-Klasse oder null
-// (wenn das Modul nicht geladen/registriert werden konnte -> Editor läuft ohne Tabellen).
+// load table module
 function ladeTabellenModul() {
     if (tabellenModulPromise) {
         return tabellenModulPromise;
     }
     tabellenModulPromise = (async () => {
         try {
-            await ladeQuill(); // window.Quill muss stehen, bevor das Modul (-> ./quill-global.mjs) importiert wird
+            await ladeQuill(); // quill first
             if (!document.querySelector('link[data-quill-table-css]')) {
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
@@ -53,13 +46,13 @@ function ladeTabellenModul() {
             const TableHandler = mod.default;
             window.Quill.register({ ['modules/' + TableHandler.moduleName]: TableHandler }, true);
             if (typeof mod.rewirteFormats === 'function') {
-                // Korrigiert native Formate (Listen) für die Anzeige innerhalb von Zellen.
+                // fix list formats
                 mod.rewirteFormats();
             }
             return TableHandler;
         } catch (e) {
-            // Tabellen sind optional: bei Fehler ohne Tabellen weiter statt Editor-Abriss.
-            console.error('NOOSE: Tabellen-Modul konnte nicht geladen werden – Editor läuft ohne Tabellen.', e);
+            // fallback: no tables
+            console.error('table module failed', e);
             return null;
         }
     })();
@@ -83,12 +76,7 @@ export async function initRichText(element, dotnetRef, initialHtml) {
     ];
     const module = {};
     if (tableHandler) {
-        // Eigene Toolbar-Gruppe mit dem Tabellen-Werkzeug. WICHTIG: als SELECT konfigurieren
-        // ({ table: [] }) – NICHT als einfacher Button ([toolName]). Nur für ein <select> baut das
-        // Snow-Theme einen echten Picker mit Label + ausklappbarem .ql-picker-options; genau dort
-        // hinein hängt das Modul sein Auswahl-Raster (buildCustomSelect appended nur bei tagName
-        // 'select' in .ql-picker-options, sonst direkt in den Button). Als Button läge das 8x8-Raster
-        // sonst DAUERHAFT sichtbar in der Toolbar – und ohne Tabellen-Icon.
+        // table toolbar
         toolbarGruppen.push([{ [tableHandler.toolName]: [] }]);
         module[tableHandler.moduleName] = {
             fullWidth: false,
@@ -112,7 +100,7 @@ export async function initRichText(element, dotnetRef, initialHtml) {
         if (timer) {
             clearTimeout(timer);
         }
-        // Entprellt an .NET zurückmelden (statt einer Interop-Runde je Tastenanschlag).
+        // debounce
         timer = setTimeout(() => {
             dotnetRef.invokeMethodAsync('OnHtmlChanged', leseHtml(editor));
         }, 300);
@@ -121,8 +109,7 @@ export async function initRichText(element, dotnetRef, initialHtml) {
     element.__nooseQuill = editor;
 }
 
-// Liefert leeren String, wenn der Editor faktisch leer ist (Quill speichert sonst "<p><br></p>").
-// Ausnahme: enthält der Editor eine Tabelle, gilt er NICHT als leer (leere Zellen liefern keinen Text).
+// empty check
 function leseHtml(editor) {
     const ohneText = editor.getText().trim().length === 0;
     const ohneTabelle = editor.root.querySelector('table') === null;

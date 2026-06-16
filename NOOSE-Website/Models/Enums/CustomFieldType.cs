@@ -1,29 +1,28 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>Datentyp eines admin-definierten Custom-Felds. Bestimmt das Eingabe-Steuerelement im
-/// Zusatzfelder-Panel und wie der Wert (immer als String gespeichert) interpretiert wird.</summary>
+/// <summary>Custom field data type.</summary>
 public enum CustomFieldType
 {
-    /// <summary>Einzeiliger Text.</summary>
+    /// <summary>Single-line text.</summary>
     Text = 0,
 
-    /// <summary>Mehrzeiliger Text.</summary>
+    /// <summary>Multi-line text.</summary>
     Multiline = 1,
 
-    /// <summary>Zahl (ganz/dezimal, Invariant-Kultur gespeichert).</summary>
+    /// <summary>Numeric value.</summary>
     Number = 2,
 
-    /// <summary>Datum (als ISO <c>yyyy-MM-dd</c> gespeichert).</summary>
+    /// <summary>Date (ISO yyyy-MM-dd).</summary>
     Date = 3,
 
-    /// <summary>Ja/Nein (als <c>true</c>/<c>false</c> gespeichert).</summary>
+    /// <summary>Yes/No boolean.</summary>
     YesNo = 4,
 
-    /// <summary>Auswahl aus vorgegebenen Optionen (siehe <c>CustomFeldDefinition.Optionen</c>).</summary>
+    /// <summary>Predefined options list.</summary>
     Selection = 5,
 }
 
-/// <summary>Anzeigetexte für den Custom-Feld-Typ (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class CustomFieldTypeDisplay
 {
     public static string Name(CustomFieldType type) => type switch

@@ -10,7 +10,7 @@ namespace NOOSE_Website.Services.Statistics;
 /// <inheritdoc cref="IStatistikService" />
 public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashboardService dashboard) : IStatisticsService
 {
-    /// <summary>Wie viele Monate die Zeitreihe zurückreicht (inkl. des laufenden Monats).</summary>
+    /// <summary>Time series month count.</summary>
     private const int TimeSeriesMonths = 12;
 
     public async Task<StatisticsReport> GetReportAsync(bool isLeadership, string? meId, int topN = 10,
@@ -18,14 +18,13 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Ein Schnappschuss-Zeitpunkt für die gesamte Berechnung (wie DashboardService): hält den
-        // effektiven Lebensstatus (Tot-/Respawn-Fenster) und die Monatsgrenzen über alle Teilschritte konsistent.
+        // consistent snapshot time
         var now = DateTime.UtcNow;
 
-        // KPI-Kacheln aus dem Dashboard wiederverwenden – damit die Zahlen 1:1 zum Lagezentrum passen.
+        // reuse dashboard metrics
         var metrics = await dashboard.GetMetricsAsync(isLeadership, meId, cancellationToken);
 
-        // ---- 1) Personen nach Einstufung (flacher GroupBy-Count, alle Enum-Werte für stabile Legende) ----
+        // 1) by classification
         var personClassification = (await db.People
                 .Where(p => isLeadership || !p.IsClassified)
                 .GroupBy(p => p.Classification)
@@ -36,13 +35,11 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .Select(e => new DistributionSegment(ClassificationDisplay.Name(e), personClassification.GetValueOrDefault(e)))
             .ToList();
 
-        // ---- 2) Personen nach Gefährdung (Score flach laden, Bucketing in-memory wie im Dashboard) ----
+        // 2) by hazard
         var peopleByHazard = await HazardDistributionAsync(
             db.People.Where(p => isLeadership || !p.IsClassified).Select(p => p.ThreatScore), cancellationToken);
 
-        // ---- 3) Personen nach (effektivem) Lebensstatus ----
-        // Das Tot-/Respawn-Fenster ist on-read (keine DB-Spalte): Status + TotBis flach laden, dann
-        // mit LebensstatusLogic.Effektiv in-memory auf den tatsächlich geltenden Status abbilden.
+        // 3) by life status
         var lifeRaw = await db.People
             .Where(p => isLeadership || !p.IsClassified)
             .Select(p => new { p.LifeStatus, p.DeadUntil })
@@ -54,11 +51,11 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .Select(s => new DistributionSegment(LifeStatusDisplay.Name(s), lifeCount.GetValueOrDefault(s)))
             .ToList();
 
-        // ---- 4) Fraktionen nach Gefährdung ----
+        // 4) factions hazard
         var factionsByHazard = await HazardDistributionAsync(
             db.Factions.Where(f => isLeadership || !f.IsClassified).Select(f => f.ThreatScore), cancellationToken);
 
-        // ---- 5) Maßnahme-Ausgänge der Personen-Doks (VS über die Eltern-Person, INNER JOIN) ----
+        // 5) measure outcomes
         var outcomeCount = (await db.PersonDocs
                 .Where(d => isLeadership || !d.Person!.IsClassified)
                 .GroupBy(d => d.Outcome)
@@ -69,7 +66,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .Select(a => new DistributionSegment(MeasureOutcomeDisplay.Name(a), outcomeCount.GetValueOrDefault(a)))
             .ToList();
 
-        // ---- 6) Vorgänge nach Status ----
+        // 6) cases by status
         var statusCount = (await db.Cases
                 .Where(v => isLeadership || !v.IsClassified)
                 .GroupBy(v => v.Status)
@@ -80,7 +77,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             .Select(s => new DistributionSegment(CaseStatusDisplay.Name(s), statusCount.GetValueOrDefault(s)))
             .ToList();
 
-        // ---- 7) Top-Listen der gefährlichsten Akten (nur bewertete, Score > 0) ----
+        // 7) top threats
         var topPeopleRaw = await db.People
             .Where(p => (isLeadership || !p.IsClassified) && p.ThreatScore != null && p.ThreatScore > 0)
             .OrderByDescending(p => p.ThreatScore)
@@ -105,9 +102,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
                 f.ThreatScore ?? 0, HazardLevelLogic.From(f.ThreatScore)))
             .ToList();
 
-        // ---- 8) 12-Monats-Zeitreihe (Maßnahmen + Neuzugänge) ----
-        // Pomelo-sicher: nur die jeweilige Datumsspalte ab dem Stichtag flach laden, dann in-memory in
-        // Monats-Slots bucketen (kein GroupBy über .Year/.Month → keine CASE-Übersetzung).
+        // 8) time series
         var firstOfMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var cutoffDate = firstOfMonth.AddMonths(-(TimeSeriesMonths - 1));
 
@@ -135,8 +130,7 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             factionsByHazard, measureOutcomes, casesByStatus, topPeople, topFactions, timeSeries);
     }
 
-    // Lädt die Score-Spalte flach und bucketet sie in-memory über GefaehrdungsStufeLogic (kleine Menge,
-    // vermeidet eine CASE-Übersetzung – identisches Vorgehen wie im DashboardService).
+    // in-memory bucket
     private static async Task<List<DistributionSegment>> HazardDistributionAsync(IQueryable<int?> scores,
         CancellationToken cancellationToken)
     {

@@ -14,14 +14,14 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     public async Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // In lokale Variablen ziehen, damit EF die Verschluss-Filter als SQL-Parameter übersetzt.
+        // local filter vars
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
         var rows = await db.Documents
             .Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
                 || mayClassified
                 || (d.IsTRUClassified && isTru)
                 || (d.IsHRBClassified && isHrb))
-            // Angepinnte zuerst, danach die zuletzt geänderten. Die Seite trennt beide Gruppen optisch.
+            // pinned first
             .OrderByDescending(d => d.Pinned)
             .ThenByDescending(d => d.ModifiedAt ?? d.CreatedAt)
             .Select(d => new DocumentRow(d.Id, d.Title, d.Category, d.IsClassified, d.IsTRUClassified, d.IsHRBClassified,
@@ -54,8 +54,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         return rows.Select(ToListItem).ToList();
     }
 
-    // Roh-Projektion (nur die Spalten) – die Verschluss-Stufe wird danach im Speicher abgeleitet, damit die
-    // EF-Abfrage keine [NotMapped]-Eigenschaft bzw. enum-CASE übersetzen muss.
+    // raw projection
     private sealed record DocumentRow(string Id, string Title, string? Category,
         bool IsClassified, bool IsTRUClassified, bool IsHRBClassified, DateTime Refreshed, bool Pinned);
 
@@ -74,7 +73,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (document is null || !scope.CanSee(document.Classification))
         {
-            // Kein Existenz-Leak: nicht vorhanden oder nicht sichtbar → null.
+            // hide existence
             return null;
         }
         return document;
@@ -88,14 +87,14 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
             throw new InvalidOperationException("Ein Titel ist erforderlich.");
         }
 
-        // Nur Stufen vergeben, für die der Handelnde berechtigt ist (Führung: alle; TRU/HRB: nur die eigene).
+        // check classification permission
         Permission.RequireMayAssignClassification(actor, input.Classification);
 
         var document = new Document
         {
             Title = title,
             Category = input.Category.TrimToNull(),
-            // Maßgebliche Sicherheitskontrolle: HTML serverseitig bereinigen.
+            // sanitize HTML
             ContentHtml = HtmlCleanup.Clean(input.ContentHtml),
             Classification = input.Classification,
         };
@@ -118,13 +117,13 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Dokument nicht gefunden.");
 
-        // Verschlusssachen darf nur bearbeiten, wer die aktuelle Stufe auch sehen darf (für andere unsichtbar).
+        // check edit access
         var scope = DocumentViewerScope.From(actor);
         if (!scope.CanSee(document.Classification))
         {
             throw new UnauthorizedAccessException("Dieses Dokument ist eine Verschlusssache und dir nicht zugänglich.");
         }
-        // Eine neue Stufe darf nur vergeben werden, wenn der Handelnde dafür berechtigt ist.
+        // check new classification
         Permission.RequireMayAssignClassification(actor, input.Classification);
 
         document.Title = title;
@@ -136,16 +135,13 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
 
     public async Task PinSetAsync(string id, bool pinned, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Anpinnen ist Bibliotheks-Kuratierung → der Führung vorbehalten (betrifft die Ansicht aller).
+        // leadership only
         Permission.RequireLeadership(actor);
-        // ExecuteUpdate umgeht den SaveChanges-Interceptor → Nur-Lese-Sperre hier explizit durchsetzen
-        // (ein hochrangiger Nur-Leser bestünde sonst den VerlangeFuehrung-Guard).
+        // enforce write access
         Permission.RequireWriteAccess(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Bewusst per ExecuteUpdate statt Laden+SaveChanges: setzt nur das Flag, ohne über den Audit-
-        // Interceptor GeaendertAm/GeaendertVonId zu verändern (Anpinnen ist keine inhaltliche Bearbeitung).
-        // Der Soft-Delete-Query-Filter greift weiterhin → Papierkorb-Dokumente werden nicht angefasst.
+        // skip audit interceptor
         var affected = await db.Documents
             .Where(d => d.Id == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.Pinned, pinned), cancellationToken);
@@ -170,7 +166,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
             throw new UnauthorizedAccessException("Nur der Ersteller oder die Führung darf dieses Dokument löschen.");
         }
 
-        // Remove wird vom AuditSaveChangesInterceptor in einen Soft-Delete (Papierkorb) umgewandelt.
+        // soft delete
         db.Documents.Remove(document);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -190,7 +186,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         }
 
         var refs = sources.Select(q => (q.EntityType, q.EntityId)).ToList();
-        // Fremde Taskforces gar nicht erst auflösen (meId/Mitgliedschaft) → tauchen unten nicht auf.
+        // skip foreign taskforces
         var map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
 
         var result = new List<DocumentAttachment>();
@@ -198,7 +194,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         {
             if (map.TryGetValue((q.EntityType, q.EntityId), out var a))
             {
-                // Verschlusssachen-Eltern-Akten für Nicht-Führung ausblenden (kein Namens-Leak).
+                // hide classified
                 if (!isLeadership && a.Classified)
                 {
                     continue;

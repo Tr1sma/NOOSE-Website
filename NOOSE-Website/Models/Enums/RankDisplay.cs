@@ -1,6 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>Anzeigetexte für den NOOSE-Dienstgrad (UI-frei, ohne MudBlazor-Abhängigkeit).</summary>
+/// <summary>Display labels.</summary>
 public static class RankDisplay
 {
     public static string Name(Rank? rank) => rank switch
@@ -14,7 +14,7 @@ public static class RankDisplay
         _ => "— (kein Rang)",
     };
 
-    /// <summary>Alle Dienstgrade in aufsteigender Reihenfolge (für Auswahl-Listen).</summary>
+    /// <summary>All ranks ascending.</summary>
     public static readonly IReadOnlyList<Rank> All = new[]
     {
         Rank.JuniorAgent,
@@ -26,7 +26,7 @@ public static class RankDisplay
     };
 }
 
-/// <summary>Anzeigetexte für den Account-Status.</summary>
+/// <summary>Display labels.</summary>
 public static class AgentStatusDisplay
 {
     public static string Name(AgentStatus status) => status switch

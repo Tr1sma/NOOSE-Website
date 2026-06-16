@@ -16,7 +16,7 @@ public class FactionPhotoStorageService : IFactionPhotoStorageService
             : Path.Combine(env.ContentRootPath, _options.FactionsPath);
     }
 
-    // Gleiche Bild-Regeln wie für Personen-Fotos (Limit + erlaubte Content-Types).
+    // same as person photo
     public long MaxBytes => _options.MaxBytes;
 
     public bool IsAllowedType(string contentType)
@@ -45,7 +45,7 @@ public class FactionPhotoStorageService : IFactionPhotoStorageService
         }
     }
 
-    /// <summary>Lässt nur blanke Dateinamen zu und kombiniert sie sicher mit dem Basispfad.</summary>
+    /// <summary>Safe path builder.</summary>
     private string SafePath(string fileName) => FilePathHelper.SafePath(_basePath, fileName);
 
     private static string ExtensionFor(string contentType) => contentType.ToLowerInvariant() switch

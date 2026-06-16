@@ -1,9 +1,6 @@
 namespace NOOSE_Website.Models.Enums;
 
-/// <summary>
-/// Beendigung einer Maßnahme in einem Personen-Dok. „Erschossen" löst den temporären Tod der Person
-/// aus; die „Amnestie-Spritze" lässt die Person leben (nur Gedächtnisverlust).
-/// </summary>
+/// <summary>Measure outcome type.</summary>
 public enum MeasureOutcome
 {
     RunningStill = 0,

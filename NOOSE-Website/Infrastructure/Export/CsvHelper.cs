@@ -2,19 +2,12 @@ using System.Text;
 
 namespace NOOSE_Website.Infrastructure.Export;
 
-/// <summary>
-/// Baut CSV-Dateien für den Statistik-Export. Bewusst auf das deutsche Excel zugeschnitten:
-/// Trennzeichen <c>;</c> (DE-Excel-Standard) und ein vorangestelltes UTF-8-BOM, damit Excel die Datei
-/// als UTF-8 erkennt und Umlaute (ä/ö/ü/ß) korrekt darstellt. Felder werden nach RFC 4180 maskiert.
-/// </summary>
+/// <summary>Builds CSV files with a UTF-8 BOM and semicolon separator for German Excel; fields masked per RFC 4180.</summary>
 public static class CsvHelper
 {
     private const char Separator = ';';
 
-    /// <summary>
-    /// Erzeugt die CSV-Bytes (UTF-8 mit BOM) aus einer Kopfzeile und beliebig vielen Datenzeilen.
-    /// Jede Zeile ist eine Folge von Feldern; <c>null</c>-Felder werden als Leerstring geschrieben.
-    /// </summary>
+    /// <summary>Generates UTF-8 BOM CSV bytes from a header row and data rows; null fields become empty strings.</summary>
     public static byte[] Generate(IEnumerable<string> head, IEnumerable<IEnumerable<string>> rows)
     {
         var sb = new StringBuilder();
@@ -24,7 +17,7 @@ public static class CsvHelper
             WriteRow(sb, row);
         }
 
-        // GetBytes fügt selbst kein BOM hinzu – das stellen wir explizit voran (Preamble von UTF8Encoding(true)).
+        // explicit BOM
         var bom = new UTF8Encoding(true).GetPreamble();
         var content = Encoding.UTF8.GetBytes(sb.ToString());
         var result = new byte[bom.Length + content.Length];
@@ -45,12 +38,11 @@ public static class CsvHelper
             first = false;
             sb.Append(Mask(field));
         }
-        // Excel/CSV erwarten CRLF als Zeilenende.
+        // CRLF line ending
         sb.Append("\r\n");
     }
 
-    // RFC 4180: enthält ein Feld Trennzeichen, Anführungszeichen oder Zeilenumbruch, wird es in
-    // doppelte Anführungszeichen gesetzt; enthaltene Anführungszeichen werden verdoppelt.
+    // RFC 4180
     private static string Mask(string? field)
     {
         var s = field ?? string.Empty;
