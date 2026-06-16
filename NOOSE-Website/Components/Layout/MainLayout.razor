@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
 @inject ISystemSettingService SettingService
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @inject IDialogService DialogService
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
@@ -94,7 +95,7 @@
                     </MudText>
                 </MudStack>
             }
-            else if (_isPartner && !PartnerRoutes.IsAllowed(CurrentPath))
+            else if (PartnerBlocked(CurrentPath))
             {
                 @* partner read access: released areas only *@
                 <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-12">
@@ -150,6 +151,7 @@
     private MudTheme _theme = NooseTheme.Theme;
     private bool _isAdmin;
     private bool _isPartner;
+    private IReadOnlySet<string>? _allowedPartnerTypes;
 
     // re-evaluated each render
     private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri);
@@ -165,7 +167,26 @@
             var user = (await AuthStateTask).User;
             _isAdmin = user.IsAdmin();
             _isPartner = user.IsPartner();
+            if (_isPartner)
+            {
+                _allowedPartnerTypes = await PartnerPolicy.GetAllowedTypesAsync(user);
+            }
         }
+    }
+
+    // partner gate: allowlisted route AND (not a record type OR the rank may access that type)
+    private bool PartnerBlocked(string path)
+    {
+        if (!_isPartner)
+        {
+            return false;
+        }
+        if (!PartnerRoutes.IsAllowed(path))
+        {
+            return true;
+        }
+        var typeKey = PartnerTabCatalog.TypeKeyForPath(path);
+        return typeKey is not null && _allowedPartnerTypes is not null && !_allowedPartnerTypes.Contains(typeKey);
     }
 
     private Severity BannerSeverity => _configuration?.BannerLevel switch

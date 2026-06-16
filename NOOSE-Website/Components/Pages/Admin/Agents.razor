@@ -31,7 +31,36 @@ else
                      Text="@($"Gesperrt ({CountBlocked})")" />
         <MudTabPanel Icon="@Icons.Material.Filled.SupervisorAccount" IconColor="Color.Tertiary"
                      Text="@($"Teamleitung ({CountTeamLead})")" />
+        <MudTabPanel Icon="@Icons.Material.Filled.Handshake" IconColor="Color.Info"
+                     Text="@($"Partner ({CountPartner})")" />
     </MudTabs>
+
+    @if (_tab == 3)
+    {
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
+            <MudTextField @bind-Value="_search" Placeholder="Suchen (Codename, Klarname)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" Style="min-width:220px;" />
+            <MudSelect T="PartnerAgency?" Value="_agencyFilter" ValueChanged="@(v => _agencyFilter = v)"
+                       Label="Behörde" Clearable="true" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                       Style="min-width:160px;">
+                <MudSelectItem T="PartnerAgency?" Value="@((PartnerAgency?)null)">Alle Behörden</MudSelectItem>
+                @foreach (var ag in PartnerAgencyDisplay.All)
+                {
+                    <MudSelectItem T="PartnerAgency?" Value="@ag">@PartnerAgencyDisplay.Name(ag)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="PartnerRank?" Value="_rankFilter" ValueChanged="@(v => _rankFilter = v)"
+                       Label="Rang" Clearable="true" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                       Style="min-width:160px;">
+                <MudSelectItem T="PartnerRank?" Value="@((PartnerRank?)null)">Alle Ränge</MudSelectItem>
+                @foreach (var pr in PartnerRankDisplay.All)
+                {
+                    <MudSelectItem T="PartnerRank?" Value="@pr">@pr</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    }
 
     <MudTable Items="VisibleAgents" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
         <HeaderContent>
@@ -147,6 +176,7 @@ else
                 {
                     1 => "Keine gesperrten Agenten.",
                     2 => "Keine Teamleitungen.",
+                    3 => "Keine Partner-Konten.",
                     _ => "Keine aktiven Agenten.",
                 })
             </MudText>
@@ -163,22 +193,52 @@ else
     private string? _myId;
     private bool _amAdmin;
 
-    // Aktiver Tab: 0 = Aktive (ohne Teamleitungen), 1 = Gesperrte, 2 = Teamleitung (nur aktive Agenten mit gesetztem
-    // Teamleitung-Haken). Teamleitungen werden bewusst NUR im Teamleitung-Tab gezeigt, nicht zusätzlich unter "Aktiv".
+    // Aktiver Tab: 0 = Aktive (intern, ohne Teamleitungen/Partner), 1 = Gesperrte, 2 = Teamleitung, 3 = Partner.
+    // Partner werden bewusst NUR im Partner-Tab gezeigt, nicht zusätzlich unter "Aktiv".
     // Ausstehende Registrierungen werden hier bewusst nicht gezeigt – die laufen über die Freigaben-Seite.
     // Das Sperren/Entsperren verschiebt einen Agenten zwischen den Tabs.
     private int _tab;
+
+    // partner-tab filters
+    private string _search = string.Empty;
+    private PartnerAgency? _agencyFilter;
+    private PartnerRank? _rankFilter;
 
     private IEnumerable<Agent> VisibleAgents => _tab switch
     {
         1 => _agents.Where(a => a.Status == AgentStatus.Blocked),
         2 => _agents.Where(a => a.Status == AgentStatus.Active && a.IsTeamLead),
-        _ => _agents.Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead),
+        3 => PartnerAgents,
+        _ => _agents.Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null),
     };
 
-    private int CountActive => _agents.Count(a => a.Status == AgentStatus.Active && !a.IsTeamLead);
+    private IEnumerable<Agent> PartnerAgents
+    {
+        get
+        {
+            var query = _agents.Where(a => a.Status == AgentStatus.Active && a.PartnerAgency != null);
+            if (_agencyFilter is { } agency)
+            {
+                query = query.Where(a => a.PartnerAgency == agency);
+            }
+            if (_rankFilter is { } rank)
+            {
+                query = query.Where(a => a.PartnerRank == rank);
+            }
+            if (!string.IsNullOrWhiteSpace(_search))
+            {
+                var s = _search.Trim();
+                query = query.Where(a => (a.Codename ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase)
+                                       || (a.RealName ?? string.Empty).Contains(s, StringComparison.OrdinalIgnoreCase));
+            }
+            return query;
+        }
+    }
+
+    private int CountActive => _agents.Count(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null);
     private int CountBlocked => _agents.Count(a => a.Status == AgentStatus.Blocked);
     private int CountTeamLead => _agents.Count(a => a.Status == AgentStatus.Active && a.IsTeamLead);
+    private int CountPartner => _agents.Count(a => a.Status == AgentStatus.Active && a.PartnerAgency != null);
 
     protected override async Task OnInitializedAsync()
     {

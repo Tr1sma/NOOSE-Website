@@ -1,0 +1,215 @@
+@page "/admin/partner-sichtbarkeit"
+@attribute [Authorize(Policy = Policies.AdminPage)]
+@inject IPartnerVisibilityPolicyService Policy
+@inject ISnackbar Snackbar
+
+<PageTitle>Partner-Sichtbarkeit · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Handshake" Color="Color.Info" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Partner-Sichtbarkeit</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Lege je Partner-Rang fest, welche Akten-Bereiche und welche Tabs darin standardmäßig sichtbar sind.
+    Ohne Einschränkung sieht ein Rang alle für seine Behörde freigegebenen Akten. Einzelfreigaben an ein
+    einzelnes Konto bleiben unberührt – sie zeigen die Akte immer vollständig.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <MudSelect T="PartnerAgency" Value="_agency" ValueChanged="AgencyChangedAsync" Label="Behörde"
+                   Dense="true" Variant="Variant.Outlined" Style="min-width:160px;">
+            @foreach (var a in PartnerAgencyDisplay.All)
+            {
+                <MudSelectItem T="PartnerAgency" Value="@a">@PartnerAgencyDisplay.Name(a)</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect T="PartnerRank" Value="_rank" ValueChanged="RankChangedAsync" Label="Rang"
+                   Dense="true" Variant="Variant.Outlined" Style="min-width:160px;">
+            @foreach (var r in PartnerRankDisplay.All)
+            {
+                <MudSelectItem T="PartnerRank" Value="@r">@r</MudSelectItem>
+            }
+        </MudSelect>
+        <MudChip T="string" Color="Color.Info" Variant="Variant.Filled">@PartnerRankDisplay.Full(_agency, _rank)</MudChip>
+    </MudStack>
+</MudPaper>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudSwitch T="bool" Value="_restricted" ValueChanged="RestrictedChanged" Color="Color.Primary"
+                   Label="Sichtbarkeit für diesen Rang einschränken" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Aus: Rang sieht alle freigegebenen Akten und Tabs. Ein: nur die unten angehakten Bereiche und Tabs.
+        </MudText>
+    </MudPaper>
+
+    @if (_restricted)
+    {
+        <MudGrid Spacing="3">
+            @foreach (var type in PartnerTabCatalog.All)
+            {
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudCheckBox T="bool" Value="@_typeChecked[type.TypeKey]"
+                                     ValueChanged="@(v => TypeToggled(type.TypeKey, v))"
+                                     Color="Color.Primary" Label="@type.DisplayName" />
+                        @if (_typeChecked[type.TypeKey] && type.Tabs.Count > 0)
+                        {
+                            <MudStack Class="ml-6 mt-1" Spacing="0">
+                                @foreach (var tab in type.Tabs)
+                                {
+                                    <MudCheckBox T="bool" Dense="true" Value="@_tabChecked[type.TypeKey][tab.Slug]"
+                                                 ValueChanged="@(v => TabToggled(type.TypeKey, tab.Slug, v))"
+                                                 Color="Color.Primary" Label="@tab.Label" />
+                                }
+                            </MudStack>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+
+    <MudButton Class="mt-4" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+               OnClick="SaveAsync" Disabled="_busy">Speichern</MudButton>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _busy;
+    private PartnerAgency _agency = PartnerAgency.DoJ;
+    private PartnerRank _rank = PartnerRank.Member;
+    private bool _restricted;
+    private Dictionary<string, bool> _typeChecked = new();
+    private Dictionary<string, Dictionary<string, bool>> _tabChecked = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var entry = await Policy.GetRankAsync(_agency, _rank);
+        _restricted = entry is not null;
+        BuildState(entry);
+        _load = false;
+    }
+
+    // null entry = "sees all" → every box checked (starting point when the admin enables restriction)
+    private void BuildState(PartnerRankVisibility? entry)
+    {
+        _typeChecked = new();
+        _tabChecked = new();
+        foreach (var type in PartnerTabCatalog.All)
+        {
+            var typeOn = entry is null || entry.Types.Contains(type.TypeKey);
+            _typeChecked[type.TypeKey] = typeOn;
+
+            List<string>? slugs = null;
+            entry?.Tabs.TryGetValue(type.TypeKey, out slugs);
+
+            var tabMap = new Dictionary<string, bool>();
+            foreach (var tab in type.Tabs)
+            {
+                tabMap[tab.Slug] = entry is null
+                    ? true
+                    : (slugs is not null ? slugs.Contains(tab.Slug) : typeOn);
+            }
+            _tabChecked[type.TypeKey] = tabMap;
+        }
+    }
+
+    private async Task AgencyChangedAsync(PartnerAgency agency)
+    {
+        _agency = agency;
+        await LoadAsync();
+    }
+
+    private async Task RankChangedAsync(PartnerRank rank)
+    {
+        _rank = rank;
+        await LoadAsync();
+    }
+
+    private void RestrictedChanged(bool on)
+    {
+        _restricted = on;
+        if (on)
+        {
+            // start from "sees all" so the admin only has to subtract
+            BuildState(null);
+        }
+    }
+
+    private void TypeToggled(string typeKey, bool on)
+    {
+        _typeChecked[typeKey] = on;
+        if (on)
+        {
+            // enabling a type defaults all its tabs on
+            var map = _tabChecked[typeKey];
+            foreach (var slug in map.Keys.ToList())
+            {
+                map[slug] = true;
+            }
+        }
+    }
+
+    private void TabToggled(string typeKey, string slug, bool on) => _tabChecked[typeKey][slug] = on;
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Policy.SaveRankAsync(_agency, _rank, _restricted ? Build() : null, _user);
+            Snackbar.Add("Partner-Sichtbarkeit gespeichert – wirksam beim nächsten Seitenwechsel.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private PartnerRankVisibility Build()
+    {
+        var vis = new PartnerRankVisibility();
+        foreach (var type in PartnerTabCatalog.All)
+        {
+            if (!_typeChecked[type.TypeKey])
+            {
+                continue;
+            }
+            vis.Types.Add(type.TypeKey);
+            if (type.Tabs.Count == 0)
+            {
+                continue;
+            }
+            var map = _tabChecked[type.TypeKey];
+            var picked = type.Tabs.Where(t => map[t.Slug]).Select(t => t.Slug).ToList();
+            // all tabs picked = no restriction; a subset (incl. none) is stored explicitly
+            if (picked.Count < type.Tabs.Count)
+            {
+                vis.Tabs[type.TypeKey] = picked;
+            }
+        }
+        return vis;
+    }
+}

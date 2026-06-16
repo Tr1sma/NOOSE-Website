@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 
 <PageTitle>@(_case?.Title ?? "Vorgang") · NOOSE</PageTitle>
 
@@ -58,9 +59,19 @@ else
         </MudItem>
 
         <MudItem xs="12" md="8" lg="9">
+            @if (_renderTabs.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Für Ihren Zugang sind in dieser Akte keine Bereiche freigegeben.
+                </MudAlert>
+            }
+            else
+            {
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _renderTabs, _activeTab))">
+                @if (TabOn("stammdaten"))
+                {
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_case.Description))
@@ -90,9 +101,13 @@ else
                         }
                     </MudStack>
                 </MudTabPanel>
+                }
+                @if (TabOn("inhalt"))
+                {
                 <MudTabPanel Text="Inhalt" Icon="@Icons.Material.Filled.Hub">
                     <CaseContentPanel CaseId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                }
                 @* assigned NOOSE agents: internal only *@
                 @if (!_isPartner)
                 {
@@ -100,29 +115,48 @@ else
                     <CaseAgentsPanel CaseId="@_case.Id" User="_user" Changed="CaseLeadRefreshAsync" />
                 </MudTabPanel>
                 }
+                @if (TabOn("einstufung"))
+                {
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_case.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Case)" EntityId="@_case.Id" TargetDesignation="@($"{_case.Title} ({_case.CaseNumber})")" />
                 </MudTabPanel>
+                }
                 @* partner-safe: Sources child service is partner-safe *@
+                @if (TabOn("quellen"))
+                {
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                }
                 @* partner-safe child tabs *@
+                @if (TabOn("wiedervorlagen"))
+                {
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("kommentare"))
+                {
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("zusatzfelder"))
+                {
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                }
                 @* partner-safe: timeline filters cross-refs for partners *@
+                @if (TabOn("historie"))
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
+            }
         </MudItem>
     </MudGrid>
 }
@@ -148,6 +182,12 @@ else
         "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 
+    // partner tab gating: null = no restriction (internal/unconfigured/individually released)
+    private IReadOnlySet<string>? _visibleTabs;
+    private List<string> _renderTabs = new();
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+    private void RebuildRenderTabs() => _renderTabs = _tabs.Where(s => (s != "agents" || !_isPartner) && TabOn(s)).ToList();
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
@@ -167,8 +207,8 @@ else
         _loadedId = Id;
         _load = true;
         _case = null;
-        _activeTab = TabUrlState.Read(Nav, _tabs);
         await LoadAsync();
+        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_case is not null)
         {
             await AccessLog.LogViewAsync(nameof(Case), _case.Id);
@@ -190,6 +230,10 @@ else
                 await CaseLeadLoadAsync();
             }
         }
+        _visibleTabs = _isPartner && _case is not null
+            ? await PartnerPolicy.GetVisibleTabsAsync(_user, nameof(Case), _case.Id)
+            : null;
+        RebuildRenderTabs();
         _load = false;
     }
 

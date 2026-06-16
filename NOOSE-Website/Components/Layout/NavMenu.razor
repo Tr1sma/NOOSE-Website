@@ -76,6 +76,9 @@
                 <MudNavLink Href="/admin/module" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.School">
                     Ausbildungsmodule
                 </MudNavLink>
+                <MudNavLink Href="/admin/partner-sichtbarkeit" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Handshake">
+                    Partner-Sichtbarkeit
+                </MudNavLink>
                 <MudNavLink Href="/admin/system" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.SettingsApplications">
                     System
                 </MudNavLink>
@@ -92,14 +95,14 @@
         <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
         <MudDivider Class="my-2" />
         <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">FREIGEGEBENE AKTEN</MudText>
-        <MudNavLink Href="/personen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Badge">Personen-Akten</MudNavLink>
-        <MudNavLink Href="/fraktionen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups">Fraktionen</MudNavLink>
-        <MudNavLink Href="/personengruppen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Diversity3">Personengruppen</MudNavLink>
-        <MudNavLink Href="/parteien" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalance">Parteien</MudNavLink>
-        <MudNavLink Href="/operationen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Radar">Operationen</MudNavLink>
-        <MudNavLink Href="/vorgaenge" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderSpecial">Vorgänge</MudNavLink>
-        <MudNavLink Href="/dokumente" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook">Dokumente</MudNavLink>
-        <MudNavLink Href="/gesetze" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Gesetzbuch</MudNavLink>
+        @* record-type links filtered by the rank's allowed types (null = no restriction) *@
+        @foreach (var t in PartnerTabCatalog.All)
+        {
+            @if (_allowedPartnerTypes is null || _allowedPartnerTypes.Contains(t.TypeKey))
+            {
+                <MudNavLink Href="@($"/{t.RoutePrefix}")" Match="NavLinkMatch.Prefix" Icon="@PartnerIcon(t.TypeKey)">@t.DisplayName</MudNavLink>
+            }
+        }
         <MudDivider Class="my-2" />
         <MudNavLink Href="/suche" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">Globale Suche</MudNavLink>
     </AuthorizeView>
@@ -115,19 +118,22 @@
     [Inject] private IAnnouncementService BoardService { get; set; } = default!;
     [Inject] private SharesBroadcaster SharesBroadcaster { get; set; } = default!;
     [Inject] private AcknowledgmentBroadcaster AcknowledgmentBroadcaster { get; set; } = default!;
+    [Inject] private IPartnerVisibilityPolicyService PartnerPolicy { get; set; } = default!;
     [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
     private ClaimsPrincipal? _user;
     private int _openShares;
     private int _openAcknowledgments;
+    private IReadOnlySet<string>? _allowedPartnerTypes;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
 
-        // partners: skip leadership calls
+        // partners: skip leadership calls, restrict record-type links by rank
         if (_user?.IsPartner() == true)
         {
+            _allowedPartnerTypes = await PartnerPolicy.GetAllowedTypesAsync(_user);
             return;
         }
 
@@ -214,6 +220,20 @@
             StateHasChanged();
         });
     }
+
+    // icon per record type (kept in the nav; the catalog stays UI-agnostic)
+    private static string PartnerIcon(string typeKey) => typeKey switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Document) => Icons.Material.Filled.MenuBook,
+        nameof(Law) => Icons.Material.Filled.Gavel,
+        _ => Icons.Material.Filled.Folder,
+    };
 
     public void Dispose()
     {

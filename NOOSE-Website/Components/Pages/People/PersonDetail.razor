@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 @implements IAsyncDisposable
 
 <PageTitle>@(_person?.Name ?? "Akte") · NOOSE</PageTitle>
@@ -64,9 +65,19 @@ else
 
         @* Rechts: die bestehenden Inhalte als Tabs. *@
         <MudItem xs="12" md="8" lg="9">
+            @if (_renderTabs.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Für Ihren Zugang sind in dieser Akte keine Bereiche freigegeben.
+                </MudAlert>
+            }
+            else
+            {
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _renderTabs, _activeTab))">
+                @if (TabOn("steckbrief"))
+                {
                 <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
                     @{
                         var hasProfile = !string.IsNullOrWhiteSpace(_person.Description)
@@ -97,16 +108,28 @@ else
                         </MudStack>
                     }
                 </MudTabPanel>
+                }
+                @if (TabOn("doks"))
+                {
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <DocPanel PersonId="@_person.Id" User="_user" PersonChanged="NewLoadAsync" />
                 </MudTabPanel>
+                }
+                @if (TabOn("ueberwachung"))
+                {
                 <MudTabPanel Text="Überwachung" Icon="@Icons.Material.Filled.Visibility">
                     <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
                 </MudTabPanel>
+                }
+                @if (TabOn("einstufung"))
+                {
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_person.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Person)" EntityId="@_person.Id" TargetDesignation="@($"{_person.Name} ({_person.CaseNumber})")" />
                 </MudTabPanel>
+                }
+                @if (TabOn("gefaehrdung"))
+                {
                 <MudTabPanel Text="Gefährdung" Icon="@Icons.Material.Filled.Warning">
                     @if (LifeStatusLogic.IsDeadWindow(_person.LifeStatus, _person.DeadUntil, DateTime.UtcNow)
                          && LifeStatusLogic.RemainingMinutes(_person.DeadUntil, DateTime.UtcNow) is { } restMin)
@@ -118,17 +141,29 @@ else
                     <HazardPanel Score="_person.ThreatScore" Confidence="_person.ThreatConfidence"
                                       DetailJson="@_person.ThreatDetailJson" />
                 </MudTabPanel>
+                }
                 @* partner-safe child services *@
+                @if (TabOn("fotos"))
+                {
                 <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
                     <PhotoGallery PersonId="@_person.Id" Photos="_person.Photos" User="_user" Changed="NewLoadAsync" />
                 </MudTabPanel>
+                }
+                @if (TabOn("quellen"))
+                {
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                }
                 @* partner-safe child service *@
+                @if (TabOn("wiedervorlagen"))
+                {
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("verknuepfungen"))
+                {
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <LinkPanel PersonId="@_person.Id" User="_user" />
                     @* link suggestions reveal other records: internal only *@
@@ -138,21 +173,35 @@ else
                         <LinkSuggestionPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                     }
                 </MudTabPanel>
+                }
+                @if (TabOn("zugehoerigkeit"))
+                {
                 <MudTabPanel Text="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
                     <AffiliationsPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" @key="_historyKey" />
                 </MudTabPanel>
+                }
                 @* partner-safe child services *@
+                @if (TabOn("kommentare"))
+                {
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("zusatzfelder"))
+                {
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                }
                 @* partner-safe: timeline filters cross-refs for partners *@
+                @if (TabOn("historie"))
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
+            }
         </MudItem>
     </MudGrid>
 }
@@ -179,6 +228,12 @@ else
         "verknuepfungen", "zugehoerigkeit", "kommentare", "zusatzfelder", "historie",
     };
 
+    // partner tab gating: null = no restriction (internal/unconfigured/individually released)
+    private IReadOnlySet<string>? _visibleTabs;
+    private List<string> _renderTabs = new();
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+    private void RebuildRenderTabs() => _renderTabs = _tabs.Where(s => (s != "agents" || !_isPartner) && TabOn(s)).ToList();
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
@@ -200,8 +255,8 @@ else
         _loadedId = Id;
         _load = true;
         _person = null;
-        _activeTab = TabUrlState.Read(Nav, _tabs);
         await LoadAsync();
+        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_person is not null)
         {
             await AccessLog.LogViewAsync(nameof(Person), _person.Id);
@@ -222,6 +277,10 @@ else
         _affiliations = _person is null
             ? new()
             : await PersonService.GetAffiliationsAsync(_person.Id, scope);
+        _visibleTabs = _isPartner && _person is not null
+            ? await PartnerPolicy.GetVisibleTabsAsync(_user, nameof(Person), _person.Id)
+            : null;
+        RebuildRenderTabs();
         _load = false;
     }
 

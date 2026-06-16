@@ -26,6 +26,9 @@
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Tune" Href="/admin/custom-felder">Custom-Felder je Aktentyp</MudListItem>
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Gavel" Href="/gesetze">Gesetzbuch / Rechtsgrundlagen</MudListItem>
                 <MudListItem T="string" Icon="@Icons.Material.Filled.Timelapse" Href="/admin/aktualitaet">Aktualitäts-Schwellwerte</MudListItem>
+                <AuthorizeView Policy="@Policies.AdminPage" Context="partnerVis">
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Handshake" Href="/admin/partner-sichtbarkeit">Partner-Sichtbarkeit (je Rang)</MudListItem>
+                </AuthorizeView>
             </MudList>
         </MudPaper>
     </MudItem>
