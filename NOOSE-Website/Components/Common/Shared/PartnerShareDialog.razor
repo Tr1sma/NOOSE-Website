@@ -85,10 +85,21 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _user = (await AuthStateTask).User;
-        _partners = await ShareService.GetSelectablePartnersAsync();
-        await ReloadAsync();
-        _load = false;
+        try
+        {
+            _user = (await AuthStateTask).User;
+            _partners = await ShareService.GetSelectablePartnersAsync();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            // surface instead of killing the circuit
+            Snackbar.Add($"Partner-Freigabe konnte nicht geladen werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
     }
 
     private async Task ReloadAsync()
