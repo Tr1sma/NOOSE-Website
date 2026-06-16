@@ -67,14 +67,21 @@ using var startupLoggerFactory = LoggerFactory.Create(lb =>
 var (connectionString, serverVersion) = DatabaseConnectionResolver.Resolve(
     builder.Configuration, startupLoggerFactory.CreateLogger("NOOSE.Datenbank"));
 
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-// write barrier
-builder.Services.AddScoped<ReadOnlyBarrierInterceptor>();
-builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+// Macht den Circuit-Scope (für den AuthenticationStateProvider) app-weiten Singletons zugänglich.
+builder.Services.AddCircuitServicesAccessor();
+// Singleton, damit es in die singleton-registrierten SaveChanges-Interceptors passt (s. CurrentUserService).
+builder.Services.AddSingleton<ICurrentUserService, CurrentUserService>();
+// write barrier — Singleton: die Interceptors müssen aus dem Root-Provider der (jetzt) Singleton-DbContext-Factory
+// aufgelöst werden. Per-Context-Zustand liegt in ConditionalWeakTable, Nutzer kommt aus ICurrentUserService.
+builder.Services.AddSingleton<ReadOnlyBarrierInterceptor>();
+builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
 // watchlist interceptor
-builder.Services.AddScoped<WatchlistChangeInterceptor>();
+builder.Services.AddSingleton<WatchlistChangeInterceptor>();
 
-// db factory
+// db factory — Singleton (Default): die erzeugten Contexts hängen NICHT mehr am Circuit-Scope, der beim
+// Dialog-Öffnen/NavMenu-Refresh abgebaut wird (sonst "ObjectDisposedException: IServiceProvider").
+// AddDbContextFactory registriert AppDbContext weiterhin zusätzlich als scoped Service (für AgentManagementService,
+// Startup-Migration, Health-Check). Die Interceptors sind jetzt Singleton und werden aus dem Root-sp aufgelöst.
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
     options.UseMySql(connectionString, serverVersion)
            .AddInterceptors(
@@ -82,8 +89,7 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
                sp.GetRequiredService<WatchlistChangeInterceptor>())
            // ignore nav filter warning
-           .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)),
-    ServiceLifetime.Scoped);
+           .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
 
 // health check
 builder.Services.AddHealthChecks()

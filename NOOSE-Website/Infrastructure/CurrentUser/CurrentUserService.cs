@@ -5,7 +5,12 @@ using NOOSE_Website.Authorization;
 namespace NOOSE_Website.Infrastructure.CurrentUser;
 
 /// <summary>Resolves the current user from <see cref="HttpContext"/>, falling back to <see cref="AuthenticationStateProvider"/>.</summary>
-public class CurrentUserService(IHttpContextAccessor httpContextAccessor, IServiceProvider serviceProvider)
+/// <remarks>
+/// Registriert als Singleton (damit es in die jetzt singleton-registrierten SaveChanges-Interceptors passt).
+/// Im Blazor-Circuit gibt es keinen <c>HttpContext</c>; den dort scoped <c>AuthenticationStateProvider</c>
+/// liefert der <see cref="CircuitServicesAccessor"/> (AsyncLocal des aktuellen Circuit-Scopes).
+/// </remarks>
+public class CurrentUserService(IHttpContextAccessor httpContextAccessor, CircuitServicesAccessor circuitServices)
     : ICurrentUserService
 {
     public CurrentUserInfo Get()
@@ -22,8 +27,9 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, IServi
             return Build(httpUser);
         }
 
-        // fallback to provider
-        var authProvider = serviceProvider.GetService(typeof(AuthenticationStateProvider)) as AuthenticationStateProvider;
+        // Kein HttpContext im Circuit → den circuit-scoped AuthenticationStateProvider über den Accessor holen.
+        // (Außerhalb von Circuit + HTTP, z. B. Hintergrund-Worker, bleibt es bei System.)
+        var authProvider = circuitServices.Services?.GetService(typeof(AuthenticationStateProvider)) as AuthenticationStateProvider;
         if (authProvider is not null)
         {
             try
