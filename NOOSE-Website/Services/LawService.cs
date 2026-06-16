@@ -10,20 +10,20 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IGesetzService" />
 public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
 {
-    public async Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
+    public async Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = partnerAgency is { } agency ? db.Laws.OnlyPartnerVisible(db, agency) : db.Laws.AsQueryable();
+        var query = partnerAgency is { } agency ? db.Laws.OnlyPartnerVisible(db, agency, partnerAgentId) : db.Laws.AsQueryable();
         return await query
             .OrderBy(g => g.LawBook).ThenBy(g => g.Paragraph).ThenBy(g => g.Title)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Law?> GetAsync(string id, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
+    public async Task<Law?> GetAsync(string id, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // partners: only released laws
-        if (partnerAgency is { } agency && !await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, nameof(Law), id, agency, cancellationToken))
+        if (partnerAgency is { } agency && !await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, nameof(Law), id, agency, partnerAgentId, cancellationToken))
         {
             return null;
         }

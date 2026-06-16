@@ -171,7 +171,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             foreach (var t in new[] { nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party), nameof(Operation), nameof(Case), nameof(Law) })
             {
                 var ids = pairs.Where(p => p.OtherType == t).Select(p => p.OtherId).Distinct().ToList();
-                foreach (var id in await PartnerVisibility.ReleasedParentIdsAsync(db, t, ids, agency, cancellationToken))
+                foreach (var id in await PartnerVisibility.ReleasedParentIdsAsync(db, t, ids, agency, scope.MeId, cancellationToken))
                 {
                     releasedTargets.Add((t, id));
                 }

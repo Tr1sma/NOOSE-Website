@@ -26,7 +26,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
             .ToListAsync(cancellationToken);
         if (scope.PartnerAgency is { } agency)
         {
-            entries = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), personId, nameof(Observation), entries, o => o.Id, agency, cancellationToken);
+            entries = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), personId, nameof(Observation), entries, o => o.Id, agency, scope.MeId, cancellationToken);
         }
         return await ToDisplayAsync(db, entries, scope.MayClassifiedRead, cancellationToken);
     }

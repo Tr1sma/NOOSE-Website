@@ -28,7 +28,7 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             .ToListAsync(cancellationToken);
         if (scope.PartnerAgency is { } agency)
         {
-            comments = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Comment), comments, c => c.Id, agency, cancellationToken);
+            comments = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Comment), comments, c => c.Id, agency, scope.MeId, cancellationToken);
         }
         return comments;
     }

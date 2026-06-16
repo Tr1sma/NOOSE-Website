@@ -155,7 +155,7 @@ else
 
     private async Task LoadAsync()
     {
-        var all = await DocumentService.GetListAsync(DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency());
+        var all = await DocumentService.GetListAsync(DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
         _pinned = all.Where(d => d.Pinned).ToList();
         _rows = all.Where(d => !d.Pinned).ToList();
         _load = false;

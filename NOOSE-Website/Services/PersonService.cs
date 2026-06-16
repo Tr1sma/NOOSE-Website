@@ -311,9 +311,9 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return items;
         }
         var relF = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Faction),
-            items.Where(z => z.Type == nameof(Faction)).Select(z => z.Id).ToList(), agency, cancellationToken);
+            items.Where(z => z.Type == nameof(Faction)).Select(z => z.Id).ToList(), agency, scope.MeId, cancellationToken);
         var relG = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(PersonGroup),
-            items.Where(z => z.Type == nameof(PersonGroup)).Select(z => z.Id).ToList(), agency, cancellationToken);
+            items.Where(z => z.Type == nameof(PersonGroup)).Select(z => z.Id).ToList(), agency, scope.MeId, cancellationToken);
         return items.Where(z => (z.Type == nameof(Faction) && relF.Contains(z.Id))
                              || (z.Type == nameof(PersonGroup) && relG.Contains(z.Id))).ToList();
     }
@@ -557,7 +557,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         if (scope.PartnerAgency is { } agency)
         {
             // partners: parent visible AND (whole-record or this photo released)
-            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Person), photo.PersonId, nameof(PersonPhoto), photoId, agency, cancellationToken)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Person), photo.PersonId, nameof(PersonPhoto), photoId, agency, scope.MeId, cancellationToken)
                 ? photo
                 : null;
         }
@@ -638,6 +638,6 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     // scope-filtered people query
     private static IQueryable<Person> VisiblePeople(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
-            ? db.People.OnlyPartnerVisible(db, agency)
+            ? db.People.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.People.Where(p => scope.MayClassifiedRead || !p.IsClassified);
 }

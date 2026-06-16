@@ -140,7 +140,7 @@ else
         _load = true;
         _isLeadership = _user.IsLeadership();
         _isPartner = _user.IsPartner();
-        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency());
+        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
         if (_document is not null && !_isPartner)
         {
             // partners: skip attachment fan-out

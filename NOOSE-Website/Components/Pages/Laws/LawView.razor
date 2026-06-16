@@ -126,7 +126,7 @@ else
     private async Task LoadAsync()
     {
         _load = true;
-        _law = await LawService.GetAsync(Id, partnerAgency: _user.GetPartnerAgency());
+        _law = await LawService.GetAsync(Id, partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
         // partners: skip link fan-out
         if (_law is not null && !_isPartner)
         {

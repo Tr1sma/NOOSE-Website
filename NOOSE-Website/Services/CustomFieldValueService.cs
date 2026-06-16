@@ -15,8 +15,8 @@ public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) 
 
         // partners: only when the whole record is released
         if (scope is { PartnerAgency: { } agency }
-            && (!await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, cancellationToken)
-                || !await PartnerVisibility.ParentIncludesChildrenAsync(db, entityType, entityId, agency, cancellationToken)))
+            && (!await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, scope?.MeId, cancellationToken)
+                || !await PartnerVisibility.ParentIncludesChildrenAsync(db, entityType, entityId, agency, scope?.MeId, cancellationToken)))
         {
             return new List<CustomFieldValueDisplay>();
         }

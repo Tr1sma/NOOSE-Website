@@ -26,7 +26,7 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
         if (scope.PartnerAgency is { } agency)
         {
             var otherIds = raw.Select(b => b.PersonAId == personId ? b.PersonBId : b.PersonAId).Distinct().ToList();
-            releasedOthers = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person), otherIds, agency, cancellationToken);
+            releasedOthers = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person), otherIds, agency, scope.MeId, cancellationToken);
         }
 
         var result = new List<RelationDisplay>();

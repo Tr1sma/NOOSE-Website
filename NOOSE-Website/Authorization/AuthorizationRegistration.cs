@@ -10,6 +10,7 @@ public static class AuthorizationRegistration
     {
         services.AddScoped<IAuthorizationHandler, RankAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, ClassifiedAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, PartnerRankAuthorizationHandler>();
 
         services.AddAuthorizationBuilder()
             .AddPolicy(Policies.ActiveAgent, p => p

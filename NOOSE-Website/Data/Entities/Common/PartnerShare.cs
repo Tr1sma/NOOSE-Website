@@ -22,6 +22,10 @@ public class PartnerShare : IAuditable, ISoftDelete
     [Column("Behoerde")]
     public PartnerAgency Agency { get; set; }
 
+    /// <summary>Target partner account; null = whole agency, set = single partner only.</summary>
+    [Column("PartnerAgentId")]
+    public string? PartnerAgentId { get; set; }
+
     /// <summary>Whole record incl. all current and future children; false = shell only, children released individually.</summary>
     [Column("InklusiveKinder")]
     public bool IncludesChildren { get; set; }

@@ -27,7 +27,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             .ToListAsync(cancellationToken);
         if (scope.PartnerAgency is { } agency)
         {
-            docs = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), personId, nameof(PersonDoc), docs, d => d.Id, agency, cancellationToken);
+            docs = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), personId, nameof(PersonDoc), docs, d => d.Id, agency, scope.MeId, cancellationToken);
         }
         return await ToDisplayAsync(db, docs, scope.MayClassifiedRead, cancellationToken);
     }
@@ -50,7 +50,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         if (scope.PartnerAgency is { } agency)
         {
             // partners: only released persons
-            var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person), docs.Select(d => d.PersonId).Distinct().ToList(), agency, cancellationToken);
+            var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person), docs.Select(d => d.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
             docs = docs.Where(d => released.Contains(d.PersonId)).ToList();
         }
         return await ToDisplayAsync(db, docs, scope.MayClassifiedRead, cancellationToken);

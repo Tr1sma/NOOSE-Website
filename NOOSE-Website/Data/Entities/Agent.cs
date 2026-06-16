@@ -51,6 +51,10 @@ public class Agent : IdentityUser
     [Column("Partnerbehoerde")]
     public PartnerAgency? PartnerAgency { get; set; }
 
+    /// <summary>Partner rank tier; null = internal NOOSE agent.</summary>
+    [Column("Partnerrang")]
+    public PartnerRank? PartnerRank { get; set; }
+
     /// <summary>Account lifecycle status.</summary>
     public AgentStatus Status { get; set; } = AgentStatus.Pending;
 

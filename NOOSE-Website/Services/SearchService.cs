@@ -28,7 +28,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (scope.PartnerAgency is { } agency)
         {
-            return await SearchPartnerAsync(db, criteria, agency, cancellationToken);
+            return await SearchPartnerAsync(db, criteria, agency, scope.MeId, cancellationToken);
         }
         var isLeadership = scope.MayClassifiedRead;
         var meId = scope.MeId;
@@ -513,7 +513,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (scope.PartnerAgency is { } agency)
         {
-            return await QuickSearchPartnerAsync(db, s, agency, max, cancellationToken);
+            return await QuickSearchPartnerAsync(db, s, agency, scope.MeId, max, cancellationToken);
         }
         var isLeadership = scope.MayClassifiedRead;
         var meId = scope.MeId;
@@ -629,29 +629,29 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
     // ---- partner search: only released, non-classified releasable records ----
 
     /// <summary>Quick lookup for partners: released, non-classified records of releasable types only.</summary>
-    private async Task<List<QuickHit>> QuickSearchPartnerAsync(AppDbContext db, string s, PartnerAgency agency, int max, CancellationToken cancellationToken)
+    private async Task<List<QuickHit>> QuickSearchPartnerAsync(AppDbContext db, string s, PartnerAgency agency, string? partnerAgentId, int max, CancellationToken cancellationToken)
     {
-        var people = await db.People.OnlyPartnerVisible(db, agency)
+        var people = await db.People.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s))
             .OrderBy(p => p.Name).Take(max)
             .Select(p => new QuickHit(nameof(Person), p.Id, p.Name, p.CaseNumber)).ToListAsync(cancellationToken);
-        var factions = await db.Factions.OnlyPartnerVisible(db, agency)
+        var factions = await db.Factions.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(f => f.Name.Contains(s) || f.CaseNumber.Contains(s))
             .OrderBy(f => f.Name).Take(max)
             .Select(f => new QuickHit(nameof(Faction), f.Id, f.Name, f.CaseNumber)).ToListAsync(cancellationToken);
-        var groups = await db.PersonGroups.OnlyPartnerVisible(db, agency)
+        var groups = await db.PersonGroups.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(g => g.Name.Contains(s) || g.CaseNumber.Contains(s))
             .OrderBy(g => g.Name).Take(max)
             .Select(g => new QuickHit(nameof(PersonGroup), g.Id, g.Name, g.CaseNumber)).ToListAsync(cancellationToken);
-        var parties = await db.Parties.OnlyPartnerVisible(db, agency)
+        var parties = await db.Parties.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s))
             .OrderBy(p => p.Name).Take(max)
             .Select(p => new QuickHit(nameof(Party), p.Id, p.Name, p.CaseNumber)).ToListAsync(cancellationToken);
-        var operations = await db.Operations.OnlyPartnerVisible(db, agency)
+        var operations = await db.Operations.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(o => o.Title.Contains(s) || o.CaseNumber.Contains(s))
             .OrderBy(o => o.Title).Take(max)
             .Select(o => new QuickHit(nameof(Operation), o.Id, o.Title, o.CaseNumber)).ToListAsync(cancellationToken);
-        var cases = await db.Cases.OnlyPartnerVisible(db, agency)
+        var cases = await db.Cases.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(v => v.Title.Contains(s) || v.CaseNumber.Contains(s))
             .OrderBy(v => v.Title).Take(max)
             .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber)).ToListAsync(cancellationToken);
@@ -659,7 +659,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
     }
 
     /// <summary>Global search for partners: released, non-classified releasable records; no content/taskforce/job categories.</summary>
-    private async Task<List<SearchResultGroup>> SearchPartnerAsync(AppDbContext db, SearchCriteria criteria, PartnerAgency agency, CancellationToken cancellationToken)
+    private async Task<List<SearchResultGroup>> SearchPartnerAsync(AppDbContext db, SearchCriteria criteria, PartnerAgency agency, string? partnerAgentId, CancellationToken cancellationToken)
     {
         var s = criteria.Text?.Trim();
         var hasText = !string.IsNullOrEmpty(s);
@@ -672,7 +672,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(Person)))
         {
-            var q = db.People.OnlyPartnerVisible(db, agency);
+            var q = db.People.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
@@ -693,7 +693,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(Faction)))
         {
-            var q = db.Factions.OnlyPartnerVisible(db, agency);
+            var q = db.Factions.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(f => f.Name.Contains(s!) || f.CaseNumber.Contains(s!)
@@ -715,7 +715,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(PersonGroup)))
         {
-            var q = db.PersonGroups.OnlyPartnerVisible(db, agency);
+            var q = db.PersonGroups.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(g => g.Name.Contains(s!) || g.CaseNumber.Contains(s!)
@@ -736,7 +736,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(Party)))
         {
-            var q = db.Parties.OnlyPartnerVisible(db, agency);
+            var q = db.Parties.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
@@ -757,7 +757,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(Operation)))
         {
-            var q = db.Operations.OnlyPartnerVisible(db, agency);
+            var q = db.Operations.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(o => o.Title.Contains(s!) || o.CaseNumber.Contains(s!)
@@ -779,7 +779,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(Case)))
         {
-            var q = db.Cases.OnlyPartnerVisible(db, agency);
+            var q = db.Cases.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(v => v.Title.Contains(s!) || v.CaseNumber.Contains(s!)
@@ -801,7 +801,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (Active(nameof(Law)) && !hasTags)
         {
-            var q = db.Laws.OnlyPartnerVisible(db, agency);
+            var q = db.Laws.OnlyPartnerVisible(db, agency, partnerAgentId);
             if (hasText)
             {
                 q = q.Where(g => g.Title.Contains(s!) || g.Paragraph.Contains(s!)

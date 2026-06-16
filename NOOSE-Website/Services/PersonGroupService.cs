@@ -244,7 +244,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
     // scope-filtered group query
     private static IQueryable<PersonGroup> VisiblePersonGroups(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
-            ? db.PersonGroups.OnlyPartnerVisible(db, agency)
+            ? db.PersonGroups.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.PersonGroups.Where(g => scope.MayClassifiedRead || !g.IsClassified);
 
     public async Task<List<PersonGroupMember>> GetMembersAsync(string groupId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -263,7 +263,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         {
             // partners: only members whose person is released
             var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person),
-                visible.Select(m => m.PersonId).Distinct().ToList(), agency, cancellationToken);
+                visible.Select(m => m.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
             visible = visible.Where(m => released.Contains(m.PersonId)).ToList();
         }
         return visible

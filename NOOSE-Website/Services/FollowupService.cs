@@ -63,7 +63,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
             MayEdit: actor.MayWrite() && (isLeadership || r.CreatedById == meId || r.ResponsibleAgentId == meId))).ToList();
         if (actor.GetPartnerAgency() is { } agency)
         {
-            items = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Followup), items, i => i.Id, agency, cancellationToken);
+            items = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Followup), items, i => i.Id, agency, meId, cancellationToken);
         }
         return items;
     }

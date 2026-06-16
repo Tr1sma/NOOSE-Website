@@ -243,7 +243,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
     // scope-filtered party query
     private static IQueryable<Party> VisibleParties(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
-            ? db.Parties.OnlyPartnerVisible(db, agency)
+            ? db.Parties.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Parties.Where(p => scope.MayClassifiedRead || !p.IsClassified);
 
     public async Task<List<PartyMember>> GetMembersAsync(string partyId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -262,7 +262,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         {
             // partners: only members whose person is released
             var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person),
-                visible.Select(m => m.PersonId).Distinct().ToList(), agency, cancellationToken);
+                visible.Select(m => m.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
             visible = visible.Where(m => released.Contains(m.PersonId)).ToList();
         }
         return visible

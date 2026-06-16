@@ -942,6 +942,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(s => s.EntityType).HasMaxLength(128).IsRequired();
             b.Property(s => s.EntityId).HasMaxLength(64).IsRequired();
+            b.Property(s => s.PartnerAgentId).HasMaxLength(64);
             b.HasIndex(s => new { s.EntityType, s.EntityId });
             b.HasIndex(s => new { s.Agency, s.EntityType, s.EntityId });
         });

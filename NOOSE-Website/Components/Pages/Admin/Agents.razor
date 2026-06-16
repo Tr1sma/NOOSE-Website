@@ -58,7 +58,7 @@ else
                 }
                 @if (context.PartnerAgency is { } partnerAgency)
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mt-1">Partner · @PartnerAgencyDisplay.Name(partnerAgency)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mt-1">Partner · @PartnerRankDisplay.Full(partnerAgency, context.PartnerRank)</MudChip>
                 }
                 @if (context.Status == AgentStatus.Blocked && !string.IsNullOrWhiteSpace(context.BlockedReason))
                 {
@@ -68,7 +68,15 @@ else
             <MudTd DataLabel="Dienstgrad">
                 @if (context.PartnerAgency is { } partnerAgency)
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Partner (@PartnerAgencyDisplay.LongName(partnerAgency))</MudText>
+                    <MudSelect T="PartnerRank" Value="@(context.PartnerRank ?? PartnerRank.Member)"
+                               ValueChanged="@(pr => PartnerRankChange(context, pr))"
+                               Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                               Disabled="@(context.Status != AgentStatus.Active)">
+                        @foreach (var pr in PartnerRankDisplay.All)
+                        {
+                            <MudSelectItem Value="pr">@PartnerRankDisplay.Full(partnerAgency, pr)</MudSelectItem>
+                        }
+                    </MudSelect>
                 }
                 else
                 {
@@ -218,6 +226,25 @@ else
         {
             await AgentService.RankChangeAsync(agent.Id, degree, user);
             Snackbar.Add($"{DisplayName(agent)}: Dienstgrad auf {RankDisplay.Name(degree)} gesetzt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task PartnerRankChange(Agent agent, PartnerRank rank)
+    {
+        if (agent.PartnerRank == rank)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.SetPartnerRankAsync(agent.Id, rank, user);
+            Snackbar.Add($"{DisplayName(agent)}: Partner-Rang auf {PartnerRankDisplay.Full(agent.PartnerAgency, rank)} gesetzt.", Severity.Success);
         }
         catch (Exception ex)
         {

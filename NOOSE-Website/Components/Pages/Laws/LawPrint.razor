@@ -57,7 +57,7 @@ else
         var user = (await AuthStateTask).User;
         _printBy = user.GetCodename();
 
-        _law = await LawService.GetAsync(Id, partnerAgency: user.GetPartnerAgency());
+        _law = await LawService.GetAsync(Id, partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         if (_law is not null && !user.IsPartner())
         {
             // partners: skip link fan-out

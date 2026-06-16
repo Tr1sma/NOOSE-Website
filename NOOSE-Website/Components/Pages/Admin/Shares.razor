@@ -127,6 +127,16 @@ else
                             <MudSelectItem T="PartnerAgency?" Value="@((PartnerAgency?)agency)">@PartnerAgencyDisplay.Name(agency)</MudSelectItem>
                         }
                     </MudSelect>
+                    @if (Selection(context.Id).Partner is not null)
+                    {
+                        <MudSelect T="PartnerRank" @bind-Value="Selection(context.Id).PartnerDegree" Dense="true" Margin="Margin.Dense"
+                                   Variant="Variant.Outlined" Class="mt-1">
+                            @foreach (var pr in PartnerRankDisplay.All)
+                            {
+                                <MudSelectItem Value="pr">@(PartnerRankDisplay.Suffix(pr) is { Length: > 0 } s ? s : "Standard")</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Aktion" Style="text-align:right;">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
@@ -311,6 +321,7 @@ else
         public bool Hrb { get; set; }
         // non-null = release as partner
         public PartnerAgency? Partner { get; set; }
+        public PartnerRank PartnerDegree { get; set; } = PartnerRank.Member;
     }
 
     private SelectionState Selection(string agentId)
@@ -392,8 +403,8 @@ else
         {
             if (selection.Partner is { } agency)
             {
-                await AgentService.ReleaseAsPartnerAsync(agent.Id, agency, _user);
-                Snackbar.Add($"{DisplayName(agent)} als Partner ({PartnerAgencyDisplay.Name(agency)}) freigegeben.", Severity.Success);
+                await AgentService.ReleaseAsPartnerAsync(agent.Id, agency, selection.PartnerDegree, _user);
+                Snackbar.Add($"{DisplayName(agent)} als Partner ({PartnerRankDisplay.Full(agency, selection.PartnerDegree)}) freigegeben.", Severity.Success);
             }
             else
             {

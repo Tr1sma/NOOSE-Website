@@ -75,7 +75,7 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(user), partnerAgency: user.GetPartnerAgency());
+        _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(user), partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         if (_document is not null)
         {
             // partners: skip attachment fan-out

@@ -308,7 +308,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
     // scope-filtered faction query
     private static IQueryable<Faction> VisibleFactions(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
-            ? db.Factions.OnlyPartnerVisible(db, agency)
+            ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Factions.Where(f => scope.MayClassifiedRead || !f.IsClassified);
 
     public async Task<List<FactionMember>> GetMembersAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -328,7 +328,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             // partners: only members whose person is released
             var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person),
-                visible.Select(m => m.PersonId).Distinct().ToList(), agency, cancellationToken);
+                visible.Select(m => m.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
             visible = visible.Where(m => released.Contains(m.PersonId)).ToList();
         }
         return visible
@@ -578,7 +578,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToListAsync(cancellationToken);
         if (scope.PartnerAgency is { } agency)
         {
-            activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), factionId, nameof(FactionActivity), activities, a => a.Id, agency, cancellationToken);
+            activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), factionId, nameof(FactionActivity), activities, a => a.Id, agency, scope.MeId, cancellationToken);
         }
         return activities;
     }
@@ -696,7 +696,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         if (scope.PartnerAgency is { } agency)
         {
             // partners: parent visible AND (whole-record or this photo released)
-            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Faction), photo.FactionId, nameof(FactionPhoto), photoId, agency, cancellationToken)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Faction), photo.FactionId, nameof(FactionPhoto), photoId, agency, scope.MeId, cancellationToken)
                 ? photo
                 : null;
         }

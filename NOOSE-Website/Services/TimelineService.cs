@@ -107,7 +107,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .ToListAsync(cancellationToken);
         if (isPartner)
         {
-            comments = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Comment), comments, k => k.Id, agency!.Value, cancellationToken);
+            comments = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Comment), comments, k => k.Id, agency!.Value, meId, cancellationToken);
         }
         foreach (var k in comments)
         {
@@ -124,7 +124,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         {
             // drop cross-ref source types, then child-release filter
             sources = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
-            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency!.Value, cancellationToken);
+            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency!.Value, meId, cancellationToken);
         }
         foreach (var q in sources)
         {
@@ -141,7 +141,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .ToListAsync(cancellationToken);
         if (isPartner)
         {
-            followups = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Followup), followups, w => w.Id, agency!.Value, cancellationToken);
+            followups = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Followup), followups, w => w.Id, agency!.Value, meId, cancellationToken);
         }
         foreach (var w in followups)
         {
@@ -197,7 +197,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 .ToListAsync(cancellationToken);
             if (isPartner)
             {
-                observations = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(Observation), observations, o => o.Id, agency!.Value, cancellationToken);
+                observations = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(Observation), observations, o => o.Id, agency!.Value, meId, cancellationToken);
             }
             foreach (var o in observations)
             {
@@ -213,7 +213,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 .ToListAsync(cancellationToken);
             if (isPartner)
             {
-                photos = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(PersonPhoto), photos, f => f.Id, agency!.Value, cancellationToken);
+                photos = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(PersonPhoto), photos, f => f.Id, agency!.Value, meId, cancellationToken);
             }
             foreach (var f in photos)
             {
@@ -252,7 +252,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 .ToListAsync(cancellationToken);
             if (isPartner)
             {
-                activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), entityId, nameof(FactionActivity), activities, a => a.Id, agency!.Value, cancellationToken);
+                activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), entityId, nameof(FactionActivity), activities, a => a.Id, agency!.Value, meId, cancellationToken);
             }
             foreach (var a in activities)
             {

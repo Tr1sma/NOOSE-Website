@@ -32,7 +32,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         {
             // partners: drop cross-ref source types, then apply child-release filter
             sources = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
-            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency, cancellationToken);
+            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency, scope.MeId, cancellationToken);
         }
         return sources;
     }
@@ -189,7 +189,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         if (scope.PartnerAgency is { } agency)
         {
             // partners: parent visible AND (whole-record or this source released)
-            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, source.EntityType, source.EntityId, nameof(Source), sourceId, agency, cancellationToken)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, source.EntityType, source.EntityId, nameof(Source), sourceId, agency, scope.MeId, cancellationToken)
                 ? source
                 : null;
         }

@@ -205,7 +205,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
     // scope-filtered case query
     private static IQueryable<Case> VisibleCases(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
-            ? db.Cases.OnlyPartnerVisible(db, agency)
+            ? db.Cases.OnlyPartnerVisible(db, agency, scope.MeId)
             : db.Cases.Where(v => scope.MayClassifiedRead || !v.IsClassified);
 
     public async Task<List<CaseAgent>> GetAgentsAsync(string caseId, CancellationToken cancellationToken = default)

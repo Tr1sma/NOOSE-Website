@@ -23,7 +23,7 @@ public static class Visibility
     {
         if (scope.PartnerAgency is { } agency)
         {
-            return PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, cancellationToken);
+            return PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, scope.MeId, cancellationToken);
         }
         return IsRecordVisibleAsync(db, entityType, entityId, scope.MayClassifiedRead, cancellationToken, scope.MeId);
     }

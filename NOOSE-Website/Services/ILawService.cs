@@ -11,8 +11,8 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface ILawService
 {
-    Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null);
-    Task<Law?> GetAsync(string id, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null);
+    Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
+    Task<Law?> GetAsync(string id, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
 
     /// <summary>Suche nach Gesetzbuch/Paragraf/Titel (für Autocomplete, z. B. im Verknüpfen-Dialog).</summary>
     Task<List<Law>> SearchAsync(string? searchText, int max = 20, CancellationToken cancellationToken = default);
