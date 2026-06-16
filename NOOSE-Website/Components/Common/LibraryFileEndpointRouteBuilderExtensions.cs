@@ -13,7 +13,7 @@ public static class LibraryFileEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/dateien/bibliothek");
 
-        group.MapGet("/{dateiId}", async (
+        group.MapGet("/{fileId}", async (
             string fileId,
             [FromServices] ILibraryService library,
             [FromServices] ILibraryStorageService storage,

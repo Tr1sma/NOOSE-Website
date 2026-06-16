@@ -17,7 +17,7 @@ public static class SourcesFileEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/dateien/quellen");
 
-        group.MapGet("/{quelleId}", async (
+        group.MapGet("/{sourceId}", async (
             string sourceId,
             [FromServices] ISourceService sourceService,
             [FromServices] ISourcesStorageService storage,

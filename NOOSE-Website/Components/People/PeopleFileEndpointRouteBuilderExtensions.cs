@@ -13,7 +13,7 @@ public static class PeopleFileEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/dateien/personen");
 
-        group.MapGet("/foto/{fotoId}", async (
+        group.MapGet("/foto/{photoId}", async (
             string photoId,
             [FromServices] IPersonService personService,
             [FromServices] IFileStorageService storage,

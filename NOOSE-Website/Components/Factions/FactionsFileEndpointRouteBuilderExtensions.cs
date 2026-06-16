@@ -13,7 +13,7 @@ public static class FactionsFileEndpointRouteBuilderExtensions
     {
         var group = endpoints.MapGroup("/dateien/fraktionen");
 
-        group.MapGet("/foto/{fotoId}", async (
+        group.MapGet("/foto/{photoId}", async (
             string photoId,
             [FromServices] IFactionService factionService,
             [FromServices] IFactionPhotoStorageService storage,
