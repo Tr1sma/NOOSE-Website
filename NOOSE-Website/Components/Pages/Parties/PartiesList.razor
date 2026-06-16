@@ -87,7 +87,8 @@ else
     {
         var user = (await AuthStateTask).User;
         var mayClassifiedRead = user.MayClassifiedRead();
-        var parties = await PartyService.GetListAsync(mayClassifiedRead);
+        var isPartner = user.IsPartner();
+        var parties = await PartyService.GetListAsync(ViewerScope.From(user));
         var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Party));
         var now = DateTime.UtcNow;
         _rows = parties.Select(p =>
@@ -99,7 +100,8 @@ else
                 CaseNumber = p.CaseNumber,
                 Name = p.Name,
                 // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
-                MemberCount = p.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
+                // partners: hide member count
+                MemberCount = isPartner ? 0 : p.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 Classification = p.Classification,
                 IsClassified = p.IsClassified,
                 RefreshedUtc = referenceUtc,

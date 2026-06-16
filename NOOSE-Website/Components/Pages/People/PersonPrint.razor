@@ -328,16 +328,21 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _person = await PersonService.GetDetailAsync(Id, user.MayClassifiedRead());
+        var scope = ViewerScope.From(user);
+        _person = await PersonService.GetDetailAsync(Id, scope);
         if (_person is not null)
         {
-            _affiliations = await PersonService.GetAffiliationsAsync(Id, isLeadership);
-            _relations = await RelationService.GetForPersonAsync(Id, isLeadership);
-            _docs = await DocService.GetForPersonAsync(Id, isLeadership);
-            _observations = await ObservationService.GetForPersonAsync(Id, isLeadership);
-            _classificationHistory = await PersonService.GetClassificationHistoryAsync(Id, isLeadership);
-            _links = await LinkService.GetForRecordAsync(nameof(Person), Id, isLeadership, user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(Person), Id, isLeadership);
+            _classificationHistory = await PersonService.GetClassificationHistoryAsync(Id, scope);
+            // partners: core only
+            if (!user.IsPartner())
+            {
+                _affiliations = await PersonService.GetAffiliationsAsync(Id, scope);
+                _relations = await RelationService.GetForPersonAsync(Id, isLeadership);
+                _docs = await DocService.GetForPersonAsync(Id, scope);
+                _observations = await ObservationService.GetForPersonAsync(Id, scope);
+                _links = await LinkService.GetForRecordAsync(nameof(Person), Id, isLeadership, user.GetAgentId());
+                _comments = await CommentService.GetForRecordAsync(nameof(Person), Id, isLeadership);
+            }
 
             // Druckansicht zählt als Akteneinsicht.
             await AccessLog.LogViewAsync(nameof(Person), Id);

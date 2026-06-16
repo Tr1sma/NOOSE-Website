@@ -106,7 +106,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _docs = await DocService.GetForPersonAsync(PersonId, User.IsLeadership());
+        _docs = await DocService.GetForPersonAsync(PersonId, ViewerScope.From(User));
         _load = false;
     }
 

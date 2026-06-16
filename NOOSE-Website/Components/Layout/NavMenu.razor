@@ -1,6 +1,7 @@
 @implements IDisposable
 
 <MudNavMenu Color="Color.Primary" Bordered="true">
+    <AuthorizeView Policy="@Policies.InternalAgent" Context="internalNav">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.SpaceDashboard">Dashboard</MudNavLink>
     <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
     <MudNavLink Href="/watchlist" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Star">Beobachtete Akten</MudNavLink>
@@ -84,6 +85,22 @@
             </AuthorizeView>
         </AuthorizeView>
     </AuthorizeView>
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.PartnerView" Context="partnerNav">
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.SpaceDashboard">Dashboard</MudNavLink>
+        <MudNavLink Href="/profil" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountCircle">Mein Profil</MudNavLink>
+        <MudDivider Class="my-2" />
+        <MudText Typo="Typo.caption" Class="px-4 py-1 mud-text-secondary">FREIGEGEBENE AKTEN</MudText>
+        <MudNavLink Href="/personen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Badge">Personen-Akten</MudNavLink>
+        <MudNavLink Href="/fraktionen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Groups">Fraktionen</MudNavLink>
+        <MudNavLink Href="/personengruppen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Diversity3">Personengruppen</MudNavLink>
+        <MudNavLink Href="/parteien" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountBalance">Parteien</MudNavLink>
+        <MudNavLink Href="/operationen" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Radar">Operationen</MudNavLink>
+        <MudNavLink Href="/vorgaenge" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.FolderSpecial">Vorgänge</MudNavLink>
+        <MudNavLink Href="/dokumente" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.MenuBook">Dokumente</MudNavLink>
+        <MudNavLink Href="/gesetze" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Gavel">Gesetzbuch</MudNavLink>
+    </AuthorizeView>
 
 </MudNavMenu>
 
@@ -105,6 +122,12 @@
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+
+        // partners: skip leadership calls
+        if (_user?.IsPartner() == true)
+        {
+            return;
+        }
 
         // Beide Badges melden sich nach einer Aktion über ihren Broadcaster → live neu zählen. Ohne diese Abos
         // blieben die Zahlen bis zum nächsten kompletten Seiten-Reload eingefroren.

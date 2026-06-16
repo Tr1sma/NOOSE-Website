@@ -38,6 +38,12 @@ public class AgentClaimsPrincipalFactory(
             identity.AddClaim(new Claim(AgentClaimTypes.Rank, ((int)user.Rank.Value).ToString()));
         }
 
+        // external partner agency
+        if (user.PartnerAgency is { } agency)
+        {
+            identity.AddClaim(new Claim(AgentClaimTypes.PartnerAgency, ((int)agency).ToString()));
+        }
+
         return identity;
     }
 }

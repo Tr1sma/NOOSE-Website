@@ -57,9 +57,10 @@ else
         var user = (await AuthStateTask).User;
         _printBy = user.GetCodename();
 
-        _law = await LawService.GetAsync(Id);
-        if (_law is not null)
+        _law = await LawService.GetAsync(Id, partnerAgency: user.GetPartnerAgency());
+        if (_law is not null && !user.IsPartner())
         {
+            // partners: skip link fan-out
             _links = await LinkService.GetForRecordAsync(nameof(Law), Id, user.IsLeadership(), user.GetAgentId());
         }
         _load = false;

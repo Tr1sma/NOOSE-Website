@@ -47,7 +47,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _logs = await PersonService.GetHistoryAsync(PersonId, IsLeadership);
+        // legacy; internal scope
+        _logs = await PersonService.GetHistoryAsync(PersonId, new ViewerScope(IsLeadership, IsLeadership, null, null));
         _load = false;
     }
 

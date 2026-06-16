@@ -87,7 +87,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, _mayClassifiedRead);
+        var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User));
         // Alle Kommentar-Texte in EINER Sammelabfrage auflösen (@-Tokens → anzeigefertige Segmente, VS-/Klarname-gefiltert).
         var segments = await MentionService.ResolveManyAsync(
             comments.Select(k => (string?)k.Text).ToList(), _mayClassifiedRead, User.GetAgentId());

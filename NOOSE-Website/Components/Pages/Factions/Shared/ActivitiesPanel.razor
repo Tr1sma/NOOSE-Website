@@ -103,7 +103,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _activities = await FactionService.GetActivitiesAsync(FactionId, User.IsLeadership());
+        _activities = await FactionService.GetActivitiesAsync(FactionId, ViewerScope.From(User));
         _kinds = await FactionService.GetActivityKindsAsync();
         _load = false;
     }

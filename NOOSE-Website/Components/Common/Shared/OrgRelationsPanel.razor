@@ -82,10 +82,10 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var isLeadership = User.IsLeadership();
+        var scope = ViewerScope.From(User);
         foreach (var s in Sections)
         {
-            _lists[s.Kind] = await LinkService.GetForRecordAsync(EntityType, EntityId, isLeadership, User.GetAgentId(), s.Kind);
+            _lists[s.Kind] = await LinkService.GetForRecordAsync(EntityType, EntityId, scope, s.Kind);
         }
         _load = false;
     }

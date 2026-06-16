@@ -11,16 +11,18 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IDokumentService" />
 public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocumentService
 {
-    public async Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // local filter vars
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
-        var rows = await db.Documents
-            .Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
+        var baseQuery = partnerAgency is { } agency
+            ? db.Documents.OnlyPartnerVisible(db, agency)
+            : db.Documents.Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
                 || mayClassified
                 || (d.IsTRUClassified && isTru)
-                || (d.IsHRBClassified && isHrb))
+                || (d.IsHRBClassified && isHrb));
+        var rows = await baseQuery
             // pinned first
             .OrderByDescending(d => d.Pinned)
             .ThenByDescending(d => d.ModifiedAt ?? d.CreatedAt)
@@ -67,9 +69,16 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         return new DocumentListItem(d.Id, d.Title, d.Category, classification, d.Refreshed, d.Pinned);
     }
 
-    public async Task<Document?> GetAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<Document?> GetAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (partnerAgency is { } agency)
+        {
+            // released and not classified
+            return await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, nameof(Document), id, agency, cancellationToken)
+                ? await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
+                : null;
+        }
         var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (document is null || !scope.CanSee(document.Classification))
         {

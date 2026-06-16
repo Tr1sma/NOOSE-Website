@@ -107,8 +107,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        // meId mitgeben, damit Taskforce-Mitglieder (Nicht-Führung) ihre Quellen sehen.
-        _sources = await SourceService.GetForRecordAsync(EntityType, EntityId, User.IsLeadership(), meId: User.GetAgentId());
+        _sources = await SourceService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User));
         _load = false;
     }
 

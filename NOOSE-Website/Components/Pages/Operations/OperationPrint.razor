@@ -115,12 +115,17 @@ else
         var isLeadership = user.IsLeadership();
         _printBy = user.GetCodename();
 
-        _operation = await OperationService.GetDetailAsync(Id, isLeadership);
+        var scope = ViewerScope.From(user);
+        _operation = await OperationService.GetDetailAsync(Id, scope);
         if (_operation is not null)
         {
-            _classificationHistory = await OperationService.GetClassificationHistoryAsync(Id, isLeadership);
-            _links = await LinkService.GetForRecordAsync(nameof(Operation), Id, isLeadership, user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(Operation), Id, isLeadership);
+            _classificationHistory = await OperationService.GetClassificationHistoryAsync(Id, scope);
+            // partners: core only
+            if (!user.IsPartner())
+            {
+                _links = await LinkService.GetForRecordAsync(nameof(Operation), Id, isLeadership, user.GetAgentId());
+                _comments = await CommentService.GetForRecordAsync(nameof(Operation), Id, isLeadership);
+            }
             await AccessLog.LogViewAsync(nameof(Operation), Id);
         }
         _load = false;

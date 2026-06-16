@@ -12,11 +12,11 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IObservationService" />
 public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IObservationService
 {
-    public async Task<List<ObservationDisplay>> GetForPersonAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<ObservationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Eigenständige Sichtbarkeitsprüfung der Eltern-Person (nicht nur auf den Aufrufer verlassen).
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
         }
@@ -24,7 +24,11 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
             .Where(o => o.PersonId == personId)
             .OrderByDescending(o => o.Start)
             .ToListAsync(cancellationToken);
-        return await ToDisplayAsync(db, entries, isLeadership, cancellationToken);
+        if (scope.PartnerAgency is { } agency)
+        {
+            entries = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), personId, nameof(Observation), entries, o => o.Id, agency, cancellationToken);
+        }
+        return await ToDisplayAsync(db, entries, scope.MayClassifiedRead, cancellationToken);
     }
 
     public async Task<List<ObservationDisplay>> GetAllAsync(bool isLeadership, CancellationToken cancellationToken = default)

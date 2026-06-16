@@ -13,23 +13,28 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IQuelleService" />
 public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesStorageService storage) : ISourceService
 {
-    public async Task<List<Source>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default, string? meId = null)
+    public async Task<List<Source>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Verschlusssache-Schutz: Sichtbarkeit der Eltern-Akte prüfen (Person/Fraktion/Gruppe – keine
-        // FK-Navigation bei polymorphen Assoziationen → zentraler Sichtbarkeits-Helfer). meId mitgeben,
-        // damit Taskforce-Mitglieder (Nicht-Führung) ihre Quellen sehen (Mitgliedschafts-Sichtbarkeit).
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, isLeadership, cancellationToken, meId))
+        // parent visibility (scope carries meId for taskforce membership)
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, scope, cancellationToken))
         {
             return new();
         }
 
-        return await db.Sources
+        var sources = await db.Sources
             .Where(q => q.EntityType == entityType && q.EntityId == entityId)
             // Angepinnte zuerst, danach die zuletzt erstellten.
             .OrderByDescending(q => q.Pinned)
             .ThenByDescending(q => q.CreatedAt)
             .ToListAsync(cancellationToken);
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: drop cross-ref source types, then apply child-release filter
+            sources = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
+            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency, cancellationToken);
+        }
+        return sources;
     }
 
     public async Task<Source> CreateAsync(string entityType, string entityId, SourceInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -173,7 +178,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         }
     }
 
-    public async Task<Source?> GetForDownloadAsync(string sourceId, bool isLeadership, CancellationToken cancellationToken = default, string? meId = null)
+    public async Task<Source?> GetForDownloadAsync(string sourceId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var source = await db.Sources.FirstOrDefaultAsync(q => q.Id == sourceId, cancellationToken);
@@ -181,9 +186,14 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         {
             return null;
         }
-        // meId für Taskforce-Mitgliedschafts-Sichtbarkeit (sonst sehen Nicht-Führungs-Mitglieder ihre
-        // hochgeladenen Anhänge nicht).
-        return await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, isLeadership, cancellationToken, meId)
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: parent visible AND (whole-record or this source released)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, source.EntityType, source.EntityId, nameof(Source), sourceId, agency, cancellationToken)
+                ? source
+                : null;
+        }
+        return await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, scope, cancellationToken)
             ? source
             : null;
     }

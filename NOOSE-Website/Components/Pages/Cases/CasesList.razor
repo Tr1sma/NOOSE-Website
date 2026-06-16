@@ -101,7 +101,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        var cases = await CaseService.GetListAsync(user.MayClassifiedRead());
+        var cases = await CaseService.GetListAsync(ViewerScope.From(user));
         var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Case));
         var now = DateTime.UtcNow;
         _rows = cases.Select(v =>

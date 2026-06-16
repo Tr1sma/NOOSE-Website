@@ -65,7 +65,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _members = await PartyService.GetMembersAsync(PartyId, User.IsLeadership());
+        _members = await PartyService.GetMembersAsync(PartyId, ViewerScope.From(User));
         _load = false;
     }
 

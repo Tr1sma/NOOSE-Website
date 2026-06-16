@@ -11,18 +11,26 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IKommentarService" />
 public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : ICommentService
 {
-    public async Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default)
+    public Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default)
+        => GetForRecordAsync(entityType, entityId, new ViewerScope(isLeadership, isLeadership, null, null), cancellationToken);
+
+    public async Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, scope, cancellationToken))
         {
             return new();
         }
 
-        return await db.Comments
+        var comments = await db.Comments
             .Where(k => k.EntityType == entityType && k.EntityId == entityId)
             .OrderByDescending(k => k.CreatedAt)
             .ToListAsync(cancellationToken);
+        if (scope.PartnerAgency is { } agency)
+        {
+            comments = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Comment), comments, c => c.Id, agency, cancellationToken);
+        }
+        return comments;
     }
 
     public async Task<Comment> CreateAsync(string entityType, string entityId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

@@ -21,15 +21,9 @@ public static class FactionsFileEndpointRouteBuilderExtensions
             HttpContext http,
             CancellationToken cancellationToken) =>
         {
-            var photo = await factionService.GetPhotoWithFactionAsync(photoId, cancellationToken);
-            // not found
+            var photo = await factionService.GetPhotoWithFactionAsync(photoId, ViewerScope.From(http.User), cancellationToken);
+            // not found / not visible to viewer (partner-gated in the service)
             if (photo?.Faction is null)
-            {
-                return Results.NotFound();
-            }
-
-            // hide existence
-            if (photo.Faction.IsClassified && !http.User.IsLeadership())
             {
                 return Results.NotFound();
             }

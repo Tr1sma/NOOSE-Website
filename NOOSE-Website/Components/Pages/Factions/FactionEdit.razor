@@ -66,7 +66,7 @@ else
         _loadedId = Id;
         _load = true;
         _input = null;
-        var f = await FactionService.GetDetailAsync(Id, _user.MayClassifiedRead());
+        var f = await FactionService.GetDetailAsync(Id, ViewerScope.From(_user));
         if (f is not null)
         {
             _input = new FactionInput

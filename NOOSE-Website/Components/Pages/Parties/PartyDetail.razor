@@ -27,8 +27,14 @@ else
                            Href="@($"/parteien/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FollowButton EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-        <JobCreateButton EntityType="@nameof(Party)" EntityId="@_party.Id" />
+        @if (!_isPartner)
+        {
+            <FollowButton EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(Party)" EntityId="@_party.Id" />
+        }
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Party)" EntityId="@_party.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/parteien/{_party.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
@@ -37,9 +43,12 @@ else
         </AuthorizeView>
     </MudStack>
 
-    <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-    </MudPaper>
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-2 mb-4" Elevation="1">
+            <TagChips EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
+        </MudPaper>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
@@ -84,9 +93,13 @@ else
                 <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Group">
                     <PartyMembersPanel PartyId="@_party.Id" User="_user" Changed="MembersModifiedAsync" />
                 </MudTabPanel>
+                @* assigned NOOSE agents: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <PartyAgentsPanel PartyId="@_party.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
                 </MudTabPanel>
+                }
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_party.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Party)" EntityId="@_party.Id" TargetDesignation="@($"{_party.Name} ({_party.CaseNumber})")" />
@@ -94,6 +107,7 @@ else
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDocsPanel OrgType="@nameof(Party)" OrgId="@_party.Id" User="_user" />
                 </MudTabPanel>
+                @* partner-safe child services *@
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgRelationsPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
                 </MudTabPanel>
@@ -109,9 +123,13 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
                 </MudTabPanel>
+                @* fan-out tabs: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
         </MudItem>
     </MudGrid>
@@ -122,6 +140,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Party? _party;
     private int _memberCount;
     private List<string> _investigationLead = new();
@@ -141,6 +160,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
     }
 
     // Diese Seite wird bei Navigation /parteien/{A} → /parteien/{B} WIEDERVERWENDET (gleiche Komponente);
@@ -169,13 +189,17 @@ else
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
         // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
-        var mayClassifiedRead = _user.MayClassifiedRead();
-        _party = await PartyService.GetDetailAsync(Id, mayClassifiedRead);
+        var scope = ViewerScope.From(_user);
+        _party = await PartyService.GetDetailAsync(Id, scope);
         if (_party is not null)
         {
-            _classificationHistory = await PartyService.GetClassificationHistoryAsync(_party.Id, mayClassifiedRead);
-            _memberCount = (await PartyService.GetMembersAsync(_party.Id, mayClassifiedRead)).Count;
-            await InvestigationLeadLoadAsync();
+            _classificationHistory = await PartyService.GetClassificationHistoryAsync(_party.Id, scope);
+            // partners: skip member/agent fan-out
+            if (!_isPartner)
+            {
+                _memberCount = (await PartyService.GetMembersAsync(_party.Id, scope)).Count;
+                await InvestigationLeadLoadAsync();
+            }
         }
         _load = false;
     }
@@ -207,7 +231,7 @@ else
     {
         if (_party is not null)
         {
-            _memberCount = (await PartyService.GetMembersAsync(_party.Id, _user.MayClassifiedRead())).Count;
+            _memberCount = (await PartyService.GetMembersAsync(_party.Id, ViewerScope.From(_user))).Count;
             StateHasChanged();
         }
     }

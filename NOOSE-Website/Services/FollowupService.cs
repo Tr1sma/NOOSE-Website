@@ -19,7 +19,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
 
         // Wiedervorlagen einer Akte nur zeigen, wenn der Aufrufer die Akte sehen darf (VS/Papierkorb-Gate).
         // Lese-Gate: die Nur-Lese-Aufsicht darf VS-Akten einsehen (DarfVerschlusssacheLesen).
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.MayClassifiedRead(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, ViewerScope.From(actor), cancellationToken))
         {
             return new();
         }
@@ -50,7 +50,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
         var isLeadership = actor.IsLeadership();
         var now = DateTime.UtcNow;
 
-        return rows.Select(r => new FollowupItem(
+        var items = rows.Select(r => new FollowupItem(
             Id: r.Id,
             DueAt: r.DueAt,
             Note: r.Note,
@@ -61,6 +61,11 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
             Overdue: !r.Done && r.DueAt <= now,
             // Nur-Leser (Aufsicht) dürfen nichts bearbeiten – auch nicht eigene/zugewiesene Wiedervorlagen.
             MayEdit: actor.MayWrite() && (isLeadership || r.CreatedById == meId || r.ResponsibleAgentId == meId))).ToList();
+        if (actor.GetPartnerAgency() is { } agency)
+        {
+            items = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Followup), items, i => i.Id, agency, cancellationToken);
+        }
+        return items;
     }
 
     public async Task CreateAsync(string entityType, string entityId, FollowupInput input,

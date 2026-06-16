@@ -14,20 +14,19 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IOperationService" />
 public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion) : IOperationService
 {
-    public async Task<List<Operation>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<Operation>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Operations
-            .Where(o => isLeadership || !o.IsClassified)
+        return await VisibleOperations(db, scope)
             .OrderByDescending(o => o.ModifiedAt ?? o.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Operation?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<Operation?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
-        if (operation is null || (operation.IsClassified && !isLeadership))
+        if (operation is null || !await Visibility.IsRecordVisibleAsync(db, nameof(Operation), id, scope, cancellationToken))
         {
             return null;
         }
@@ -180,10 +179,10 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Operation), id, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Operation), id, scope, cancellationToken))
         {
             return new();
         }
@@ -192,6 +191,12 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .OrderByDescending(e => e.Timestamp)
             .ToListAsync(cancellationToken);
     }
+
+    // scope-filtered operation query
+    private static IQueryable<Operation> VisibleOperations(AppDbContext db, ViewerScope scope)
+        => scope.PartnerAgency is { } agency
+            ? db.Operations.OnlyPartnerVisible(db, agency)
+            : db.Operations.Where(o => scope.MayClassifiedRead || !o.IsClassified);
 
     public async Task<List<OperationAgent>> GetAgentsAsync(string operationId, CancellationToken cancellationToken = default)
     {

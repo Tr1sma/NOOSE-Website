@@ -9,6 +9,9 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface ICommentService
 {
+    Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default);
+
+    /// <summary>Internal-agent overload (print pages); not partner-aware.</summary>
     Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default);
 
     Task<Comment> CreateAsync(string entityType, string entityId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

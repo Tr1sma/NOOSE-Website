@@ -94,6 +94,19 @@
                     </MudText>
                 </MudStack>
             }
+            else if (_isPartner && !PartnerRoutes.IsAllowed(CurrentPath))
+            {
+                @* partner read access: released areas only *@
+                <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-12">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Style="font-size:4rem;" />
+                    <MudText Typo="Typo.h5">Kein Zugriff</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:480px;text-align:center;">
+                        Dieser Bereich ist für Partnerbehörden nicht freigegeben. Sie sehen ausschließlich die für Ihre
+                        Behörde freigegebenen Akten.
+                    </MudText>
+                    <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Home">Zur Startseite</MudButton>
+                </MudStack>
+            }
             else
             {
                 @Body
@@ -136,6 +149,10 @@
     private SystemConfiguration? _configuration;
     private MudTheme _theme = NooseTheme.Theme;
     private bool _isAdmin;
+    private bool _isPartner;
+
+    // re-evaluated each render
+    private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri);
 
     protected override async Task OnInitializedAsync()
     {
@@ -145,7 +162,9 @@
 
         if (AuthStateTask is not null)
         {
-            _isAdmin = (await AuthStateTask).User.IsAdmin();
+            var user = (await AuthStateTask).User;
+            _isAdmin = user.IsAdmin();
+            _isPartner = user.IsPartner();
         }
     }
 

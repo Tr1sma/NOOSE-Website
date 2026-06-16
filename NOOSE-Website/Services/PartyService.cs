@@ -15,22 +15,21 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IParteiService" />
 public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion, IPersonService personService, IThreatScoreService threat) : IPartyService
 {
-    public async Task<List<Party>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht.
-        return await db.Parties
-            .Where(p => isLeadership || !p.IsClassified)
+        return await VisibleParties(db, scope)
             .Include(p => p.Members).ThenInclude(m => m.Person)
             .OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Party?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<Party?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
-        if (party is null || (party.IsClassified && !isLeadership))
+        if (party is null || !await Visibility.IsRecordVisibleAsync(db, nameof(Party), id, scope, cancellationToken))
         {
             return null;
         }
@@ -228,10 +227,10 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Party), id, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Party), id, scope, cancellationToken))
         {
             return new();
         }
@@ -241,7 +240,13 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<PartyMember>> GetMembersAsync(string partyId, bool isLeadership, CancellationToken cancellationToken = default)
+    // scope-filtered party query
+    private static IQueryable<Party> VisibleParties(AppDbContext db, ViewerScope scope)
+        => scope.PartnerAgency is { } agency
+            ? db.Parties.OnlyPartnerVisible(db, agency)
+            : db.Parties.Where(p => scope.MayClassifiedRead || !p.IsClassified);
+
+    public async Task<List<PartyMember>> GetMembersAsync(string partyId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var members = await db.PartyMembers
@@ -249,9 +254,18 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             .Include(m => m.Person)
             .ToListAsync(cancellationToken);
 
-        // Person == null → Akte im Papierkorb (Soft-Delete-Filter); ausblenden. Verschlusssache nur für Führung.
-        return members
-            .Where(m => m.Person is not null && (isLeadership || !m.Person.IsClassified))
+        // Person == null → trashed; hide. Classified persons only for leadership.
+        var visible = members
+            .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
+            .ToList();
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: only members whose person is released
+            var released = await PartnerVisibility.ReleasedParentIdsAsync(db, nameof(Person),
+                visible.Select(m => m.PersonId).Distinct().ToList(), agency, cancellationToken);
+            visible = visible.Where(m => released.Contains(m.PersonId)).ToList();
+        }
+        return visible
             .OrderByDescending(m => m.IsLead)
             .ThenBy(m => m.Person!.Name)
             .ToList();

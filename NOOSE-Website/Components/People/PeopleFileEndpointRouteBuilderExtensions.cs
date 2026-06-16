@@ -21,15 +21,9 @@ public static class PeopleFileEndpointRouteBuilderExtensions
             HttpContext http,
             CancellationToken cancellationToken) =>
         {
-            var photo = await personService.GetPhotoWithPersonAsync(photoId, cancellationToken);
-            // not found
+            var photo = await personService.GetPhotoWithPersonAsync(photoId, ViewerScope.From(http.User), cancellationToken);
+            // not found / not visible to viewer (partner-gated in the service)
             if (photo?.Person is null)
-            {
-                return Results.NotFound();
-            }
-
-            // hide existence
-            if (photo.Person.IsClassified && !http.User.IsLeadership())
             {
                 return Results.NotFound();
             }

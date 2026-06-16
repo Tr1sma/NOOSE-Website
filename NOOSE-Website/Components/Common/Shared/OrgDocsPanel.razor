@@ -56,7 +56,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _docs = await DocService.GetForOrgAsync(OrgType, OrgId, User.IsLeadership());
+        _docs = await DocService.GetForOrgAsync(OrgType, OrgId, ViewerScope.From(User));
         _load = false;
     }
 

@@ -100,8 +100,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
+        var isPartner = user.IsPartner();
         var mayClassifiedRead = user.MayClassifiedRead();
-        var groups = await GroupService.GetListAsync(mayClassifiedRead);
+        var groups = await GroupService.GetListAsync(ViewerScope.From(user));
         var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(PersonGroup));
         var now = DateTime.UtcNow;
         _rows = groups.Select(g =>
@@ -113,7 +114,8 @@ else
                 CaseNumber = g.CaseNumber,
                 Name = g.Name,
                 // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
-                MemberCount = g.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
+                // partners: hide count
+                MemberCount = isPartner ? 0 : g.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 Kind = g.Kind,
                 Classification = g.Classification,
                 IsClassified = g.IsClassified,

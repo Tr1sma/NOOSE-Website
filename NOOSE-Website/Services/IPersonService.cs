@@ -13,14 +13,11 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface IPersonService
 {
-    Task<List<Person>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default);
-    Task<Person?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
+    Task<Person?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
     Task<List<Person>> GetTrashAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Sucht Personen nach Name oder Aktenzeichen (für Auswahl-/Autocomplete-Felder). Liefert die
-    /// ersten Treffer alphabetisch; respektiert den Verschlusssachen-Filter.
-    /// </summary>
+    /// <summary>Search people by name or case number for internal pickers (write path); classified-filtered.</summary>
     Task<List<Person>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Mögliche Dubletten anhand identischem Namen oder gemeinsamer Telefonnummer (Verschlusssache-gefiltert).</summary>
@@ -34,30 +31,24 @@ public interface IPersonService
     /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Append-only Einstufungs-Verlauf der Person (neueste zuerst; Verschlusssache-gefiltert).</summary>
-    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Append-only classification history of the person, newest first; visibility-filtered.</summary>
+    Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Fraktionen/Personengruppen, denen die Person aktuell angehört (Rück-Verknüpfungen, Verschlusssache-gefiltert).</summary>
-    Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Factions/person-groups the person currently belongs to (back-links); visibility-filtered.</summary>
+    Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Ehemalige (beendete) Zugehörigkeiten der Person mit Beitritts-/Austrittsdatum, neueste zuerst –
-    /// für den Mitgliedschafts-Verlauf. Verschlusssache-gefiltert; Akten im Papierkorb werden ausgeblendet.
-    /// </summary>
-    Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Former affiliations with join/leave dates, newest first; visibility-filtered, trashed parents hidden.</summary>
+    Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Abgeleitete Verbündete/Gegner: Mitglieder von Organisationen, die mit einer Organisation der Person
-    /// verbündet/verfeindet sind (berechnet, nicht gespeichert; Verschlusssache-gefiltert).
-    /// </summary>
-    Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Derived allies/enemies from allied/hostile orgs of the person's orgs (computed; visibility-filtered).</summary>
+    Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 
     Task<PersonPhoto> PhotoAddAsync(string personId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Lädt ein Foto inkl. zugehöriger Person (für Auslieferung/Sichtbarkeitsprüfung).</summary>
-    Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, CancellationToken cancellationToken = default);
+    /// <summary>Loads a photo with its person for delivery, gated to the viewer (partner: child-release gated); null if not visible.</summary>
+    Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Person und ihrer Doks (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
-    Task<List<AuditLog>> GetHistoryAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default);
+    /// <summary>Audit entries of the person and its docs (record history; visibility-filtered).</summary>
+    Task<List<AuditLog>> GetHistoryAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default);
 }

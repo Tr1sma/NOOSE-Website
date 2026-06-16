@@ -12,8 +12,10 @@ namespace NOOSE_Website.Services;
 /// </summary>
 public interface ILinkService
 {
-    /// <summary>Verknüpfungen einer Akte; mit <paramref name="art"/> auf eine Beziehungsart eingeschränkt (null = alle).
-    /// <paramref name="meId"/> = Agent-Id des Betrachters (verknüpfte fremde Taskforces werden ausgeblendet).</summary>
+    /// <summary>Links of a record, bidirectionally normalized; optionally restricted to one kind. Partners see only links to released records.</summary>
+    Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, LinkKind? kind = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Internal-agent overload (print pages and non-partner panels); not partner-aware.</summary>
     Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default);
 
     Task CreateAsync(string sourceType, string sourceId, string targetType, string targetId, string? label, ClaimsPrincipal actor, LinkKind kind = LinkKind.Default, CancellationToken cancellationToken = default);

@@ -27,8 +27,14 @@ else
                            Href="@($"/fraktionen/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FollowButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
-        <JobCreateButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
+        @if (!_isPartner)
+        {
+            <FollowButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
+        }
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/fraktionen/{_faction.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
@@ -37,9 +43,12 @@ else
         </AuthorizeView>
     </MudStack>
 
-    <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
-    </MudPaper>
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-2 mb-4" Elevation="1">
+            <TagChips EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+        </MudPaper>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
@@ -91,9 +100,13 @@ else
                 <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Groups">
                     <MembersPanel FactionId="@_faction.Id" User="_user" Ranks="_ranks" Changed="MembersModifiedAsync" />
                 </MudTabPanel>
+                @* assigned NOOSE agents: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <FactionAgentsPanel FactionId="@_faction.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
                 </MudTabPanel>
+                }
                 <MudTabPanel Text="Bestände" Icon="@Icons.Material.Filled.Inventory2">
                     <MudStack Spacing="3">
                         <ProfileList Title="WeaponStock" Values="StockTexts(_faction.WeaponStock.Select(w => (w.Designation, w.Quantity)))" />
@@ -104,6 +117,7 @@ else
                 <MudTabPanel Text="Aktivitäten" Icon="@Icons.Material.Filled.Timeline">
                     <ActivitiesPanel FactionId="@_faction.Id" User="_user" />
                 </MudTabPanel>
+                @* partner-safe child service *@
                 <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
                     <FactionPhotoGallery FactionId="@_faction.Id" User="_user" Changed="PhotosModifiedAsync" />
                 </MudTabPanel>
@@ -118,6 +132,7 @@ else
                 <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDocsPanel OrgType="@nameof(Faction)" OrgId="@_faction.Id" User="_user" />
                 </MudTabPanel>
+                @* partner-safe child services *@
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgRelationsPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
                 </MudTabPanel>
@@ -133,9 +148,13 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
                 </MudTabPanel>
+                @* fan-out tabs: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
         </MudItem>
     </MudGrid>
@@ -146,6 +165,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Faction? _faction;
     private int _memberCount;
     private List<string> _investigationLead = new();
@@ -166,6 +186,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
     }
 
     // Diese Seite wird bei Navigation /fraktionen/{A} → /fraktionen/{B} WIEDERVERWENDET (gleiche Komponente);
@@ -194,14 +215,18 @@ else
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
         // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
-        var mayClassifiedRead = _user.MayClassifiedRead();
-        _faction = await FactionService.GetDetailAsync(Id, mayClassifiedRead);
+        var scope = ViewerScope.From(_user);
+        _faction = await FactionService.GetDetailAsync(Id, scope);
         if (_faction is not null)
         {
             _ranks = _faction.Ranks.OrderBy(r => r.Order).Select(r => r.Designation).ToList();
-            _classificationHistory = await FactionService.GetClassificationHistoryAsync(_faction.Id, mayClassifiedRead);
-            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, mayClassifiedRead)).Count;
-            await InvestigationLeadLoadAsync();
+            _classificationHistory = await FactionService.GetClassificationHistoryAsync(_faction.Id, scope);
+            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, scope)).Count;
+            // partners: skip agent fan-out
+            if (!_isPartner)
+            {
+                await InvestigationLeadLoadAsync();
+            }
         }
         _load = false;
     }
@@ -233,7 +258,7 @@ else
     {
         if (_faction is not null)
         {
-            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, _user.MayClassifiedRead())).Count;
+            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, ViewerScope.From(_user))).Count;
             StateHasChanged();
         }
     }

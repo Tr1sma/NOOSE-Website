@@ -30,8 +30,14 @@ else
                            Href="@($"/personen/{_person.Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FollowButton EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
-        <JobCreateButton EntityType="@nameof(Person)" EntityId="@_person.Id" />
+        @if (!_isPartner)
+        {
+            <FollowButton EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(Person)" EntityId="@_person.Id" />
+        }
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Person)" EntityId="@_person.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/personen/{_person.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
@@ -40,10 +46,13 @@ else
         </AuthorizeView>
     </MudStack>
 
-    @* Tags der Akte – ohne Tab-Wechsel sichtbar und vergebbar. *@
-    <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
-    </MudPaper>
+    @* record tags (internal) *@
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-2 mb-4" Elevation="1">
+            <TagChips EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+        </MudPaper>
+    }
 
     <MudGrid>
         @* Links: feste Identitäts-/Steckkarte (auf Desktop klebend). *@
@@ -109,15 +118,20 @@ else
                     <HazardPanel Score="_person.ThreatScore" Confidence="_person.ThreatConfidence"
                                       DetailJson="@_person.ThreatDetailJson" />
                 </MudTabPanel>
+                @* partner-safe child services *@
                 <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
                     <PhotoGallery PersonId="@_person.Id" Photos="_person.Photos" User="_user" Changed="NewLoadAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                @* partner-safe child service *@
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                @* fan-out tabs: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <LinkPanel PersonId="@_person.Id" User="_user" />
                     <MudDivider Class="my-4" />
@@ -126,15 +140,21 @@ else
                 <MudTabPanel Text="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
                     <AffiliationsPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" @key="_historyKey" />
                 </MudTabPanel>
+                }
+                @* partner-safe child services *@
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
+                @* fan-out tabs: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
         </MudItem>
     </MudGrid>
@@ -145,6 +165,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Person? _person;
     private List<ClassificationHistory> _classificationHistory = new();
     private List<PersonAffiliation> _affiliations = new();
@@ -164,6 +185,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
         // Hält den Tot-Countdown aktuell (rein anzeigeseitig, kein Hintergrund-Job).
         _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
@@ -194,15 +216,15 @@ else
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
         // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
-        var mayClassifiedRead = _user.MayClassifiedRead();
-        _person = await PersonService.GetDetailAsync(Id, mayClassifiedRead);
+        var scope = ViewerScope.From(_user);
+        _person = await PersonService.GetDetailAsync(Id, scope);
         _classificationHistory = _person is null
             ? new()
-            : await PersonService.GetClassificationHistoryAsync(_person.Id, mayClassifiedRead);
-        // Aktive Zugehörigkeiten für die Übersichtskarte (Verschlusssache-gefiltert via darfVsLesen).
+            : await PersonService.GetClassificationHistoryAsync(_person.Id, scope);
+        // Aktive Zugehörigkeiten für die Übersichtskarte (sichtbarkeits-gefiltert; für Partner leer).
         _affiliations = _person is null
             ? new()
-            : await PersonService.GetAffiliationsAsync(_person.Id, mayClassifiedRead);
+            : await PersonService.GetAffiliationsAsync(_person.Id, scope);
         _load = false;
     }
 

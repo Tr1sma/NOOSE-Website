@@ -17,13 +17,13 @@ public static class Permission
         }
     }
 
-    /// <summary>Require write access.</summary>
+    /// <summary>Require write access; denies read-only supervisors and partners.</summary>
     public static void RequireWriteAccess(ClaimsPrincipal actor)
     {
-        if (actor.IsOnlyReader())
+        if (actor.IsOnlyReader() || actor.IsPartner())
         {
             throw new UnauthorizedAccessException(
-                "Nur-Lese-Modus: Änderungen sind in der Aufsichtsrolle nicht möglich.");
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
         }
     }
 

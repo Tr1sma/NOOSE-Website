@@ -9,9 +9,17 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="ICustomFeldWertService" />
 public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) : ICustomFieldValueService
 {
-    public async Task<List<CustomFieldValueDisplay>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default)
+    public async Task<List<CustomFieldValueDisplay>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default, ViewerScope? scope = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // partners: only when the whole record is released
+        if (scope is { PartnerAgency: { } agency }
+            && (!await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, cancellationToken)
+                || !await PartnerVisibility.ParentIncludesChildrenAsync(db, entityType, entityId, agency, cancellationToken)))
+        {
+            return new List<CustomFieldValueDisplay>();
+        }
 
         var definitions = await db.CustomFieldDefinitions
             .Where(d => d.EntityType == entityType && d.IsActive)

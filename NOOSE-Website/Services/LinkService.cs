@@ -20,11 +20,15 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IVerknuepfungService" />
 public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : ILinkService
 {
-    public async Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default)
+    public Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default)
+        => GetForRecordAsync(entityType, entityId, new ViewerScope(isLeadership, isLeadership, meId, null), kind, cancellationToken);
+
+    public async Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, LinkKind? kind = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // meId für die Taskforce-Mitgliedschafts-Sichtbarkeit (sowohl der Akte selbst als auch verknüpfter Taskforces).
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, isLeadership, cancellationToken, meId))
+        var isLeadership = scope.MayClassifiedRead;
+        var meId = scope.MeId;
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, scope, cancellationToken))
         {
             return new();
         }
@@ -159,9 +163,28 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
             nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law),
         };
+        // partners: only links to released, releasable-type records
+        HashSet<(string, string)>? releasedTargets = null;
+        if (scope.PartnerAgency is { } agency)
+        {
+            releasedTargets = new();
+            foreach (var t in new[] { nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party), nameof(Operation), nameof(Case), nameof(Law) })
+            {
+                var ids = pairs.Where(p => p.OtherType == t).Select(p => p.OtherId).Distinct().ToList();
+                foreach (var id in await PartnerVisibility.ReleasedParentIdsAsync(db, t, ids, agency, cancellationToken))
+                {
+                    releasedTargets.Add((t, id));
+                }
+            }
+        }
+
         var result = new List<LinkDisplay>();
         foreach (var p in pairs)
         {
+            if (releasedTargets is not null && !releasedTargets.Contains((p.OtherType, p.OtherId)))
+            {
+                continue;
+            }
             if (targets.TryGetValue((p.OtherType, p.OtherId), out var info))
             {
                 // Verschlusssache nur für die Führung sichtbar.

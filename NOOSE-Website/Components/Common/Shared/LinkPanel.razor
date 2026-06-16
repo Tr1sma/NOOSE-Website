@@ -205,7 +205,7 @@
         var @default = await LinkService.GetForRecordAsync(nameof(Person), PersonId, isLeadership, User.GetAgentId(), LinkKind.Default);
         _manual = @default.Where(v => !v.Automatic).ToList();
         _colleagues = @default.Where(v => v.Automatic).ToList();
-        _derived = await PersonService.GetDerivedRelationsAsync(PersonId, isLeadership);
+        _derived = await PersonService.GetDerivedRelationsAsync(PersonId, ViewerScope.From(User));
         _load = false;
     }
 

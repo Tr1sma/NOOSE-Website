@@ -88,7 +88,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _entries = await ObservationService.GetForPersonAsync(PersonId, User.IsLeadership());
+        _entries = await ObservationService.GetForPersonAsync(PersonId, ViewerScope.From(User));
         _load = false;
     }
 

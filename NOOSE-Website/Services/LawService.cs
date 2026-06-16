@@ -3,23 +3,30 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IGesetzService" />
 public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
 {
-    public async Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default)
+    public async Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Laws
+        var query = partnerAgency is { } agency ? db.Laws.OnlyPartnerVisible(db, agency) : db.Laws.AsQueryable();
+        return await query
             .OrderBy(g => g.LawBook).ThenBy(g => g.Paragraph).ThenBy(g => g.Title)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Law?> GetAsync(string id, CancellationToken cancellationToken = default)
+    public async Task<Law?> GetAsync(string id, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // partners: only released laws
+        if (partnerAgency is { } agency && !await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, nameof(Law), id, agency, cancellationToken))
+        {
+            return null;
+        }
         return await db.Laws.FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
     }
 

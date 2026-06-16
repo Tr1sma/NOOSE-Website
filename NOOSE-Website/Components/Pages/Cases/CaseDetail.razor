@@ -27,8 +27,14 @@ else
                            Href="@($"/vorgaenge/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FollowButton EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
-        <JobCreateButton EntityType="@nameof(Case)" EntityId="@_case.Id" />
+        @if (!_isPartner)
+        {
+            <FollowButton EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(Case)" EntityId="@_case.Id" />
+        }
+        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Case)" EntityId="@_case.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
             <MudButton Href="@($"/vorgaenge/{_case.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
         </AuthorizeView>
@@ -37,9 +43,12 @@ else
         </AuthorizeView>
     </MudStack>
 
-    <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
-    </MudPaper>
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-2 mb-4" Elevation="1">
+            <TagChips EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
+        </MudPaper>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
@@ -81,19 +90,25 @@ else
                         }
                     </MudStack>
                 </MudTabPanel>
+                @* fan-out tabs: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Inhalt" Icon="@Icons.Material.Filled.Hub">
                     <CaseContentPanel CaseId="@_case.Id" User="_user" />
                 </MudTabPanel>
                 <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <CaseAgentsPanel CaseId="@_case.Id" User="_user" Changed="CaseLeadRefreshAsync" />
                 </MudTabPanel>
+                }
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_case.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Case)" EntityId="@_case.Id" TargetDesignation="@($"{_case.Title} ({_case.CaseNumber})")" />
                 </MudTabPanel>
+                @* partner-safe: Sources child service is partner-safe *@
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                @* partner-safe child tabs *@
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
@@ -103,9 +118,13 @@ else
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
                 </MudTabPanel>
+                @* fan-out tab: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
         </MudItem>
     </MudGrid>
@@ -116,6 +135,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Case? _case;
     private List<string> _caseLead = new();
     private List<ClassificationHistory> _classificationHistory = new();
@@ -134,6 +154,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
     }
 
     // Diese Seite wird bei Navigation /vorgaenge/{A} → /vorgaenge/{B} WIEDERVERWENDET (gleiche Komponente);
@@ -161,12 +182,16 @@ else
     {
         // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
         // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
-        var mayClassifiedRead = _user.MayClassifiedRead();
-        _case = await CaseService.GetDetailAsync(Id, mayClassifiedRead);
+        var scope = ViewerScope.From(_user);
+        _case = await CaseService.GetDetailAsync(Id, scope);
         if (_case is not null)
         {
-            _classificationHistory = await CaseService.GetClassificationHistoryAsync(_case.Id, mayClassifiedRead);
-            await CaseLeadLoadAsync();
+            _classificationHistory = await CaseService.GetClassificationHistoryAsync(_case.Id, scope);
+            // partners: skip case-lead fan-out
+            if (!_isPartner)
+            {
+                await CaseLeadLoadAsync();
+            }
         }
         _load = false;
     }

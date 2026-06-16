@@ -56,21 +56,32 @@ else
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Class="mt-1">Teamleitung</MudChip>
                 }
+                @if (context.PartnerAgency is { } partnerAgency)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mt-1">Partner · @PartnerAgencyDisplay.Name(partnerAgency)</MudChip>
+                }
                 @if (context.Status == AgentStatus.Blocked && !string.IsNullOrWhiteSpace(context.BlockedReason))
                 {
                     <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block mt-1">Grund: @context.BlockedReason</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Dienstgrad">
-                <MudSelect T="Rank" Value="@(context.Rank ?? Rank.JuniorAgent)"
-                           ValueChanged="@(degree => RankChange(context, degree))"
-                           Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
-                           Disabled="@(context.Status != AgentStatus.Active)">
-                    @foreach (var dg in RankDisplay.All)
-                    {
-                        <MudSelectItem Value="dg">@RankDisplay.Name(dg)</MudSelectItem>
-                    }
-                </MudSelect>
+                @if (context.PartnerAgency is { } partnerAgency)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Partner (@PartnerAgencyDisplay.LongName(partnerAgency))</MudText>
+                }
+                else
+                {
+                    <MudSelect T="Rank" Value="@(context.Rank ?? Rank.JuniorAgent)"
+                               ValueChanged="@(degree => RankChange(context, degree))"
+                               Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                               Disabled="@(context.Status != AgentStatus.Active)">
+                        @foreach (var dg in RankDisplay.All)
+                        {
+                            <MudSelectItem Value="dg">@RankDisplay.Name(dg)</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
             </MudTd>
             <MudTd DataLabel="Status">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -79,18 +90,21 @@ else
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="TRU">
-                <MudSwitch T="bool" Value="context.IsTRU" ValueChanged="@(v => TruSet(context, v))" Color="Color.Primary" />
+                <MudSwitch T="bool" Value="context.IsTRU" ValueChanged="@(v => TruSet(context, v))" Color="Color.Primary"
+                           Disabled="@(context.PartnerAgency != null)" />
             </MudTd>
             <MudTd DataLabel="HRB">
-                <MudSwitch T="bool" Value="context.IsHRB" ValueChanged="@(v => HrbSet(context, v))" Color="Color.Info" />
+                <MudSwitch T="bool" Value="context.IsHRB" ValueChanged="@(v => HrbSet(context, v))" Color="Color.Info"
+                           Disabled="@(context.PartnerAgency != null)" />
             </MudTd>
             <MudTd DataLabel="Teamleitung">
-                <MudSwitch T="bool" Value="context.IsTeamLead" ValueChanged="@(v => TeamLeadSet(context, v))" Color="Color.Tertiary" />
+                <MudSwitch T="bool" Value="context.IsTeamLead" ValueChanged="@(v => TeamLeadSet(context, v))" Color="Color.Tertiary"
+                           Disabled="@(context.PartnerAgency != null)" />
             </MudTd>
             <MudTd DataLabel="Admin">
                 <MudTooltip Text="@AdminToggleHint(context)" Disabled="@(_amAdmin && context.Id != _myId)">
                     <MudSwitch T="bool" Value="context.IsAdmin" ValueChanged="@(v => AdminSet(context, v))"
-                               Color="Color.Secondary" Disabled="@(!_amAdmin || context.Id == _myId)" />
+                               Color="Color.Secondary" Disabled="@(!_amAdmin || context.Id == _myId || context.PartnerAgency != null)" />
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">

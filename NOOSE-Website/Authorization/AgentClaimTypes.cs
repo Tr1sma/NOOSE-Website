@@ -15,4 +15,5 @@ public static class AgentClaimTypes
     public const string IsTeamLead = "noose:teamleitung";
     public const string Codename = "noose:codename";
     public const string BadgeNumber = "noose:dienstnummer";
+    public const string PartnerAgency = "noose:partnerbehoerde";
 }

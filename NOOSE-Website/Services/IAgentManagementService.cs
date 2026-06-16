@@ -24,6 +24,10 @@ public interface IAgentManagementService
     /// <summary>Ausstehenden Account freischalten und Rang/TRU/HRB vergeben → Status Aktiv.</summary>
     Task ReleaseAsync(string agentId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor);
 
+    /// <summary>Ausstehenden Account als externen Partner (DoJ/LSPD/LSMD) freischalten → Status Aktiv, kein Rang,
+    /// keine internen Flags. Partner haben nur Lesezugriff auf freigegebene Akten.</summary>
+    Task ReleaseAsPartnerAsync(string agentId, PartnerAgency agency, ClaimsPrincipal actor);
+
     /// <summary>Registrierung ablehnen → Status Gesperrt mit Begründung.</summary>
     Task RejectAsync(string agentId, string reason, ClaimsPrincipal actor);
 

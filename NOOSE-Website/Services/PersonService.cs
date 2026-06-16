@@ -17,17 +17,16 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IPersonService" />
 public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, IProfileSuggestionService suggestion, ICaseNumberService caseNumber, IThreatScoreService threat) : IPersonService
 {
-    public async Task<List<Person>> GetListAsync(bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.People
-            .Where(p => isLeadership || !p.IsClassified)
+        return await VisiblePeople(db, scope)
             .Include(p => p.Aliases)
             .OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Person?> GetDetailAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<Person?> GetDetailAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.People
@@ -40,7 +39,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
-        if (person is null || (person.IsClassified && !isLeadership))
+        if (person is null || !await Visibility.IsRecordVisibleAsync(db, nameof(Person), id, scope, cancellationToken))
         {
             return null;
         }
@@ -229,11 +228,11 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
     }
 
-    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Verschlusssache-/Papierkorb-Schutz: Verlauf einer nicht sichtbaren Akte nicht ausliefern.
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), id, isLeadership, cancellationToken))
+        // gate invisible records
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), id, scope, cancellationToken))
         {
             return new();
         }
@@ -243,13 +242,19 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<PersonAffiliation>> GetAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
         }
+        // partners: hide cross-refs
+        if (scope.IsPartner)
+        {
+            return new();
+        }
+        var isLeadership = scope.MayClassifiedRead;
         // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
         // Der globale Soft-Delete-Filter blendet beendete Mitgliedschaften aus → nur aktive (BeendetAm = null).
         var factions = await (
@@ -273,13 +278,19 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         return factions.Concat(groups).ToList();
     }
 
-    public async Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<PersonAffiliation>> GetFormerAffiliationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
         }
+        // partners: hide cross-refs
+        if (scope.IsPartner)
+        {
+            return new();
+        }
+        var isLeadership = scope.MayClassifiedRead;
         // IgnoreQueryFilters: beendete (soft-gelöschte) Mitgliedschaften gezielt holen. Achtung – das schaltet
         // ALLE Filter der Query ab, auch die der Eltern-Akte → Papierkorb/Verschlusssache hier manuell nachsetzen.
         var factions = await (
@@ -302,13 +313,19 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         return factions.Concat(groups).OrderByDescending(z => z.EndedAt).ToList();
     }
 
-    public async Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<DerivedRelation>> GetDerivedRelationsAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
         }
+        // partners: hide fan-out
+        if (scope.IsPartner)
+        {
+            return new();
+        }
+        var isLeadership = scope.MayClassifiedRead;
 
         // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen + Parteien).
         var myFactions = await db.FactionMembers
@@ -524,16 +541,33 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         fileStorage.Delete(photo.FileNameSaved);
     }
 
-    public async Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, CancellationToken cancellationToken = default)
+    public async Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.PersonPhotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        var photo = await db.PersonPhotos.Include(f => f.Person).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken);
+        if (photo?.Person is null)
+        {
+            return null;
+        }
+        if (scope.PartnerAgency is { } agency)
+        {
+            // partners: parent visible AND (whole-record or this photo released)
+            return await PartnerVisibility.IsChildVisibleToPartnerAsync(db, nameof(Person), photo.PersonId, nameof(PersonPhoto), photoId, agency, cancellationToken)
+                ? photo
+                : null;
+        }
+        return photo.Person.IsClassified && !scope.MayClassifiedRead ? null : photo;
     }
 
-    public async Task<List<AuditLog>> GetHistoryAsync(string personId, bool isLeadership, CancellationToken cancellationToken = default)
+    public async Task<List<AuditLog>> GetHistoryAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
+        {
+            return new();
+        }
+        // partners: hide audit
+        if (scope.IsPartner)
         {
             return new();
         }
@@ -595,4 +629,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     }
 
     private static string? Empty(string? s) => s.TrimToNull();
+
+    // scope-filtered people query
+    private static IQueryable<Person> VisiblePeople(AppDbContext db, ViewerScope scope)
+        => scope.PartnerAgency is { } agency
+            ? db.People.OnlyPartnerVisible(db, agency)
+            : db.People.Where(p => scope.MayClassifiedRead || !p.IsClassified);
 }
