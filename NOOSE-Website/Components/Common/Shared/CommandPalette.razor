@@ -101,7 +101,7 @@
         // JS-Interop erst nach dem ersten Render verfügbar (Interactive Server).
         if (firstRender)
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=2");
             _ref = DotNetObjectReference.Create(this);
             await _module.InvokeVoidAsync("registerCommandPalette", _ref);
         }

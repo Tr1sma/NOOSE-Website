@@ -280,7 +280,7 @@
         try
         {
             // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn graph.js geändert wird.
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=7");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=8");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             await LoadAndDrawAsync();

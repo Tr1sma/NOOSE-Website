@@ -7,19 +7,20 @@
 
 let visLadenPromise = null;
 
-// Knotenfarbe je Aktentyp (auf das dunkle NOOSE-Theme abgestimmt).
+// Knotenfarbe je Aktentyp (auf das dunkle NOOSE-Theme abgestimmt). Die Schlüssel sind die englischen
+// CLR-Typnamen (nameof(...)), wie sie der GraphService liefert – nicht die deutschen Anzeigenamen.
 const TYP_FARBE = {
     Person: '#22D3EE',
-    Fraktion: '#7C8CF8',
-    Personengruppe: '#D29922',
-    Partei: '#3FB950',
+    Faction: '#7C8CF8',
+    PersonGroup: '#D29922',
+    Party: '#3FB950',
     Operation: '#F0883E',
-    Vorgang: '#A371F7',
+    Case: '#A371F7',
     Taskforce: '#2DD4BF',
-    Aufgabe: '#8B98A8',
+    Job: '#8B98A8',
     Agent: '#E6EDF3',
-    Gesetz: '#C9A227',
-    PersonDok: '#6E7681',
+    Law: '#C9A227',
+    PersonDoc: '#6E7681',
     Observation: '#58A6FF',
 };
 
@@ -56,8 +57,8 @@ function ladeVisNetwork() {
 }
 
 function knotenfarbe(k) {
-    const basis = TYP_FARBE[k.typ] || '#8B98A8';
-    const rand = EINSTUFUNG_RAND[k.einstufungStufe] || basis;
+    const basis = TYP_FARBE[k.type] || '#8B98A8';
+    const rand = EINSTUFUNG_RAND[k.classificationLevel] || basis;
     return {
         background: '#161B22',
         border: rand,
@@ -71,16 +72,16 @@ function baueTooltip(k) {
     div.className = 'noose-graph-tip';
     const typ = document.createElement('div');
     typ.style.cssText = 'font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9BA8B8;';
-    typ.textContent = k.typ + (k.istVerschluss ? ' · Verschlusssache' : '');
+    typ.textContent = k.type + (k.isClassified ? ' · Verschlusssache' : '');
     const name = document.createElement('div');
     name.style.cssText = 'font-weight:600;color:#E6EDF3;margin-top:2px;';
-    name.textContent = k.bezeichnung;
+    name.textContent = k.designation;
     div.appendChild(typ);
     div.appendChild(name);
-    if (k.untertitel) {
+    if (k.subtitle) {
         const unter = document.createElement('div');
         unter.style.cssText = 'font-size:12px;color:#9BA8B8;';
-        unter.textContent = k.untertitel;
+        unter.textContent = k.subtitle;
         div.appendChild(unter);
     }
     return div;
@@ -89,19 +90,19 @@ function baueTooltip(k) {
 function mapKnoten(k) {
     const node = {
         id: k.id,
-        label: k.bezeichnung,
+        label: k.designation,
         title: baueTooltip(k),
         color: knotenfarbe(k),
-        value: 1 + (k.grad || 0),
-        borderWidth: k.einstufungStufe >= 3 ? 3 : 2,
+        value: 1 + (k.degree || 0),
+        borderWidth: k.classificationLevel >= 3 ? 3 : 2,
         borderWidthSelected: 4,
-        shadow: k.einstufungStufe >= 3
+        shadow: k.classificationLevel >= 3
             ? { enabled: true, color: 'rgba(248,81,73,0.55)', size: 18, x: 0, y: 0 }
             : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
     };
-    if (k.fotoUrl) {
+    if (k.photoUrl) {
         node.shape = 'circularImage';
-        node.image = k.fotoUrl;
+        node.image = k.photoUrl;
         node.brokenImage = undefined;
     } else {
         node.shape = 'dot';
@@ -110,13 +111,13 @@ function mapKnoten(k) {
 }
 
 function mapKante(e) {
-    const farbe = ART_FARBE[e.art] != null ? ART_FARBE[e.art] : ART_FARBE[0];
+    const farbe = ART_FARBE[e.kind] != null ? ART_FARBE[e.kind] : ART_FARBE[0];
     return {
-        from: e.von,
-        to: e.nach,
+        from: e.source,
+        to: e.target,
         label: e.label || undefined,
-        dashes: !!e.automatisch,
-        width: e.art === 1 || e.art === 2 ? 2 : 1,
+        dashes: !!e.automatic,
+        width: e.kind === 1 || e.kind === 2 ? 2 : 1,
         color: { color: farbe, highlight: '#22D3EE', hover: '#22D3EE', opacity: 1 },
         font: { color: '#9BA8B8', size: 11, strokeWidth: 0, background: 'rgba(14,17,22,0.85)' },
     };
@@ -160,8 +161,8 @@ export async function render(containerId, datenJson, dotnetRef) {
     zerstoere(containerId);
 
     const daten = typeof datenJson === 'string' ? JSON.parse(datenJson) : datenJson;
-    const knotenListe = (daten.knoten || []).map(mapKnoten);
-    const kantenListe = (daten.kanten || []).map(mapKante);
+    const knotenListe = (daten.node || []).map(mapKnoten);
+    const kantenListe = (daten.edges || []).map(mapKante);
     const nodes = new window.vis.DataSet(knotenListe);
     const edges = new window.vis.DataSet(kantenListe);
     const opts = optionen(knotenListe.length, kantenListe.length);
@@ -184,7 +185,7 @@ export async function render(containerId, datenJson, dotnetRef) {
             if (sel && sel.length > 0) { id = sel[0]; }
         }
         if (id) {
-            try { dotnetRef.invokeMethodAsync('OnKnotenKlick', id); } catch (e) { /* Circuit weg */ }
+            try { dotnetRef.invokeMethodAsync('OnNodeClick', id); } catch (e) { /* Circuit weg */ }
         }
     });
     network.on('selectNode', (params) => {

@@ -7,7 +7,7 @@ export function registerCommandPalette(dotnetRef) {
     commandPaletteHandler = (e) => {
         if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
-            dotnetRef.invokeMethodAsync('Oeffnen');
+            dotnetRef.invokeMethodAsync('Open');
         }
     };
     window.addEventListener('keydown', commandPaletteHandler);

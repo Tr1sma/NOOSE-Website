@@ -123,7 +123,7 @@
         try
         {
             // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn kalender.js geändert wird.
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=5");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=6");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             // Leer rendern – FullCalendar meldet sofort seinen Sichtbereich (datesSet) → Daten werden nachgeladen.

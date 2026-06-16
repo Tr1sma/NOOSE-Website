@@ -124,22 +124,22 @@ function addTage(iso, n) {
 }
 
 function mapEreignis(e) {
-    const farbe = QUELLE_FARBE[e.quelle] != null ? QUELLE_FARBE[e.quelle] : '#8B98A8';
+    const farbe = QUELLE_FARBE[e.source] != null ? QUELLE_FARBE[e.source] : '#8B98A8';
     const ev = {
         id: e.id,
-        title: e.titel,
+        title: e.title,
         // Ganztaegig: Start auf das reine Datum normalisieren, damit eine evtl. mitgegebene Uhrzeit nie stört.
-        start: e.ganzTaegig ? addTage(e.startLokal, 0) : e.startLokal,
-        allDay: !!e.ganzTaegig,
+        start: e.wholeDay ? addTage(e.startLocal, 0) : e.startLocal,
+        allDay: !!e.wholeDay,
         backgroundColor: farbe,
         borderColor: farbe,
         extendedProps: { href: e.href || null },
     };
-    if (e.endeLokal) {
+    if (e.endLocal) {
         // Ganztaegig: FullCalendar interpretiert das Ende EXKLUSIV → einen Tag dazurechnen, damit der Endtag mitzaehlt.
-        ev.end = e.ganzTaegig ? addTage(e.endeLokal, 1) : e.endeLokal;
+        ev.end = e.wholeDay ? addTage(e.endLocal, 1) : e.endLocal;
     }
-    if (e.hinfaellig) {
+    if (e.obsolete) {
         ev.classNames = ['noose-kal-hinfaellig'];
     }
     return ev;
@@ -181,12 +181,12 @@ export async function render(containerId, eintraege, dotnetRef, locale) {
             info.jsEvent.preventDefault();
             const href = info.event.extendedProps && info.event.extendedProps.href;
             if (href) {
-                try { dotnetRef.invokeMethodAsync('OnEreignisKlick', href); } catch (e) { /* Circuit weg */ }
+                try { dotnetRef.invokeMethodAsync('OnEventClick', href); } catch (e) { /* Circuit weg */ }
             }
         },
         // Sichtbarer Zeitraum geaendert (Initial-Render + Monatswechsel) → Fenster in .NET nachladen.
         datesSet: (arg) => {
-            try { dotnetRef.invokeMethodAsync('OnDatumsbereich', arg.startStr, arg.endStr); } catch (e) { /* Circuit weg */ }
+            try { dotnetRef.invokeMethodAsync('OnDateRange', arg.startStr, arg.endStr); } catch (e) { /* Circuit weg */ }
         },
     });
     cal.render();
