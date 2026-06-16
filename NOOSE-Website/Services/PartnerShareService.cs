@@ -37,11 +37,12 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
     public async Task<IReadOnlyList<PartnerIndividualShareState>> GetIndividualSharesForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // order on the real column before projecting; ordering by the record's property is untranslatable
         var rows = await db.PartnerShares.AsNoTracking()
             .Where(s => s.EntityType == entityType && s.EntityId == entityId && s.PartnerAgentId != null)
-            .Join(db.Users.AsNoTracking(), s => s.PartnerAgentId, a => a.Id,
-                (s, a) => new PartnerIndividualShareState(a.Id, a.Codename, s.Agency, a.PartnerRank, s.IncludesChildren))
-            .OrderBy(s => s.Codename)
+            .Join(db.Users.AsNoTracking(), s => s.PartnerAgentId, a => a.Id, (s, a) => new { s, a })
+            .OrderBy(x => x.a.Codename)
+            .Select(x => new PartnerIndividualShareState(x.a.Id, x.a.Codename, x.s.Agency, x.a.PartnerRank, x.s.IncludesChildren))
             .ToListAsync(cancellationToken);
         return rows;
     }
