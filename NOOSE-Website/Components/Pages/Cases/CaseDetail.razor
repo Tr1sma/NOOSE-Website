@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject IPartnerVisibilityPolicyService PartnerPolicy
 
 <PageTitle>@(_case?.Title ?? "Vorgang") · NOOSE</PageTitle>
@@ -69,7 +70,7 @@ else
             {
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _renderTabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
                 @if (TabOn("stammdaten"))
                 {
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">

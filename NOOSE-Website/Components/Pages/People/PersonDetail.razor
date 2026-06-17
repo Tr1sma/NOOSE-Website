@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject IPartnerVisibilityPolicyService PartnerPolicy
 @implements IAsyncDisposable
 
@@ -75,7 +76,7 @@ else
             {
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _renderTabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
                 @if (TabOn("steckbrief"))
                 {
                 <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">

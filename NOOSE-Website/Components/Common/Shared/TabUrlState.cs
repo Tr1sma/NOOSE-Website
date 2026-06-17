@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.JSInterop;
 
 namespace NOOSE_Website.Components.Common.Shared;
 
@@ -23,15 +24,16 @@ public static class TabUrlState
         return 0;
     }
 
-    /// <summary>Writes active tab slug.</summary>
-    public static void Write(NavigationManager nav, IReadOnlyList<string> slugs, int index)
+    /// <summary>Writes active tab slug to URL without a Blazor navigation.</summary>
+    public static async Task WriteAsync(IJSRuntime js, NavigationManager nav, IReadOnlyList<string> slugs, int index)
     {
         if (index < 0 || index >= slugs.Count)
         {
             return;
         }
-        var target = nav.GetUriWithQueryParameter(ParameterName, slugs[index]);
-        nav.NavigateTo(target, forceLoad: false, replace: true);
+        var url = nav.GetUriWithQueryParameter(ParameterName, slugs[index]);
+        try { await js.InvokeVoidAsync("nooseReplaceState", url); }
+        catch (JSDisconnectedException) { /* ignore */ }
     }
 
     private static int IndexBy(IReadOnlyList<string> slugs, string? slug)

@@ -1,6 +1,7 @@
 @page "/personal/{AgentId}"
 @inject IAgentManagementService AgentService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(_agent?.Codename ?? "Personalakte") · NOOSE</PageTitle>
 
@@ -41,7 +42,7 @@ else
         <MudItem xs="12" md="8" lg="9">
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _tabs, _activeTab))">
                 <MudTabPanel Text="Dienstgrad-Verlauf" Icon="@Icons.Material.Filled.TrendingUp">
                     <RankHistoryPanel AgentId="@_agent.Id" @key="_reloadKey" />
                 </MudTabPanel>

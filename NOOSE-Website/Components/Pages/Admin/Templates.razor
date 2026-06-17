@@ -3,6 +3,7 @@
 @page "/admin/vorlagen"
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Vorlagen · NOOSE</PageTitle>
 
@@ -13,7 +14,7 @@
 
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
          @bind-ActivePanelIndex="_activeTab"
-         @bind-ActivePanelIndex:after="@(() => TabUrlState.Write(Nav, _tabs, _activeTab))">
+         @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _tabs, _activeTab))">
     <MudTabPanel Text="Dok-Vorlagen" Icon="@Icons.Material.Filled.Dvr">
         <DocTemplatesManagement />
     </MudTabPanel>
