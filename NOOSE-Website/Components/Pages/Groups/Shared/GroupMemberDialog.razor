@@ -1,4 +1,3 @@
-@* Dialog zum Hinzufügen/Bearbeiten einer Gruppen-Mitgliedschaft: Person + Rolle + Leitungs-Flag. *@
 @inject IPersonService PersonService
 
 <MudDialog>
@@ -58,7 +57,7 @@
     [Parameter] public bool IsLeadership { get; set; }
     [Parameter] public IReadOnlyList<string> ExclusionPersonIds { get; set; } = Array.Empty<string>();
 
-    // Bearbeiten-Modus (Person fix): wird durch einen gesetzten Namen signalisiert.
+    // Edit mode (fixed person) signalled by a set name
     [Parameter] public string? PersonNameExists { get; set; }
     [Parameter] public string? RoleExists { get; set; }
     [Parameter] public bool IsLeadExists { get; set; }
@@ -71,7 +70,6 @@
     private string? _role;
     private bool _isLead;
 
-    // Speichern erst möglich, wenn eine Person gewählt (oder ein neuer Name eingegeben) ist – Button sonst deaktiviert.
     private bool CanSave => IsEdit || (_modeNew ? !string.IsNullOrWhiteSpace(_newName) : _person is not null);
 
     protected override void OnInitialized()

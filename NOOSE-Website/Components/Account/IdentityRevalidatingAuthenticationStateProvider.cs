@@ -8,20 +8,14 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Components.Account;
 
-/// <summary>
-/// Trägt den Authentifizierungs-Status in die interaktiven Server-Komponenten und revalidiert ihn
-/// regelmäßig. Die Revalidierung ist zugleich der <b>Kill-Switch</b>: Stimmt der SecurityStamp nicht
-/// mehr (Sperre/Rangänderung erneuern ihn) oder ist der Agent nicht mehr <see cref="AgentStatus.Aktiv"/>,
-/// wird der Circuit getrennt und der Nutzer abgemeldet.
-/// </summary>
+/// <summary>Carries auth state into interactive server components and revalidates it; doubles as the kill-switch (stale SecurityStamp or non-active agent disconnects and signs out).</summary>
 internal sealed class IdentityRevalidatingAuthenticationStateProvider(
     ILoggerFactory loggerFactory,
     IServiceScopeFactory scopeFactory,
     IOptions<IdentityOptions> options)
     : RevalidatingServerAuthenticationStateProvider(loggerFactory)
 {
-    // Kurzes Intervall, damit eine Notfall-Sperre praktisch sofort greift. Bewusst identisch zum
-    // SecurityStampValidator-Intervall (Program.cs, 30 s) → einheitliche Worst-Case-Latenz von ~30 s.
+    // keep identical to the SecurityStampValidator interval in Program.cs (~30s worst-case lockout latency)
     protected override TimeSpan RevalidationInterval => TimeSpan.FromSeconds(30);
 
     protected override async Task<bool> ValidateAuthenticationStateAsync(

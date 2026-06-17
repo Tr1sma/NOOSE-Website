@@ -180,8 +180,7 @@
             return;
         }
 
-        // Beide Badges melden sich nach einer Aktion über ihren Broadcaster → live neu zählen. Ohne diese Abos
-        // blieben die Zahlen bis zum nächsten kompletten Seiten-Reload eingefroren.
+        // subscribe so both badges recount live on broadcaster signals
         SharesBroadcaster.Modified += OnSharesModified;
         AcknowledgmentBroadcaster.Modified += OnAcknowledgmentModified;
         await LoadSharesAsync();
@@ -199,9 +198,7 @@
             }
         });
 
-    // Offene Lesebestätigungen (Quittierungen) am Schwarzen Brett – für jeden aktiven Agenten.
-    // Defensiv: Die Badges sind dekorativ – ein DB-Fehler hier darf weder das Prerender (→ generische
-    // Fehlerseite) noch den Circuit (Broadcaster-Handler) reißen. Im Fehlerfall bleibt der Zähler stehen.
+    // decorative badge: a DB error here must not tear the prerender or the circuit
     private async Task LoadAcknowledgmentsAsync()
     {
         if (_user is null)
@@ -218,8 +215,7 @@
         }
     }
 
-    // Summiert die offenen Posteingangs-Vorgänge (dieselben Quellen wie die Freigaben-Seite). Wird beim Start und
-    // nach jedem Broadcaster-Signal aufgerufen; setzt den Wert jedes Mal frisch (kein +=).
+    // sums open inbox items (same sources as the shares page); sets the value fresh each call
     private async Task LoadSharesAsync()
     {
         if (_user is null)
@@ -230,13 +226,13 @@
         {
             var open = 0;
 
-            // Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ – sie zählen für diese Gruppe.
+            // classification-upgrade requests are decided from Senior Special Agent up
             if (_user.MayHighestClassification())
             {
                 open += await RequestService.GetOpenCountAsync(_user.IsLeadership());
             }
 
-            // Registrierungen + Namensänderungen + Taskforce- + Beförderungsanträge sind der Führung vorbehalten.
+            // registrations, name changes, taskforce and promotion requests are leadership-only
             if (_user.IsLeadership())
             {
                 open += (await AgentService.GetPendingAsync()).Count
@@ -248,12 +244,11 @@
         }
         catch (Exception ex)
         {
-            // Defensiv (s. LadeQuittierungenAsync): dekorativer Zähler, Fehler nie eskalieren.
+            /* best effort */
             Logger.LogWarning(ex, "Freigaben-Badge konnte nicht geladen werden.");
         }
     }
 
-    // Live-Signal (aus der Freigaben-Seite desselben Circuits) → in den Circuit marshallen und neu zählen.
     private void OnSharesModified()
         => _ = InvokeAsync(async () =>
         {
@@ -261,7 +256,7 @@
             StateHasChanged();
         });
 
-    // Live-Signal nach einer Quittierung – nur für die eigene Agent-Id in den eigenen Circuit marshallen.
+    // only react to this agent's own acknowledgment signal
     private void OnAcknowledgmentModified(string agentId)
     {
         if (agentId != _user?.GetAgentId())

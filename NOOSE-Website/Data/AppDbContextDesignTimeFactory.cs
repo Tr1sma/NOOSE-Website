@@ -3,15 +3,7 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace NOOSE_Website.Data;
 
-/// <summary>
-/// Design-Time-Factory für die EF-Core-Tools (<c>dotnet ef migrations add</c> /
-/// <c>dotnet ef database update</c>).
-///
-/// Nutzt bewusst IMMER die lokale Entwicklungs-DB (<c>ConnectionStrings:DefaultConnection</c>
-/// aus den User Secrets) – unabhängig von der Laufzeit-Auswahl in <see cref="DatabaseConnectionResolver"/>.
-/// So können Migrationen niemals versehentlich gegen die Produktiv-DB ausgeführt werden, und die
-/// EF-Tools brauchen keine Erreichbarkeitsprüfung gegen den Hosting-Server.
-/// </summary>
+/// <summary>Design-time factory for the EF Core tools; always uses the local DefaultConnection so migrations can never hit production.</summary>
 public sealed class AppDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)

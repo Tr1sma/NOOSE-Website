@@ -1,5 +1,4 @@
-@* Gemeinsames Formular für Anlegen/Bearbeiten einer Vorgangs-/Fallakte.
-   Der Typ ist ein Freitextfeld mit Vorschlägen aus dem gemeinsamen Katalog (wie der Operations-Typ). *@
+@* Shared create/edit form for a case file. *@
 @inject IProfileSuggestionService SuggestionService
 
 <MudGrid>
@@ -9,7 +8,6 @@
     </MudItem>
 
     <MudItem xs="12" md="6">
-        @* Wie das Operations-Typ-Feld: Autocomplete mit Vorschlägen aus dem gemeinsamen Katalog; freie Eingabe erlaubt. *@
         <MudAutocomplete T="string" @bind-Value="Input.Type" Label="Typ / Kategorie (optional)"
                          SearchFunc="@TypeSearch" Variant="Variant.Outlined"
                          CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
@@ -65,7 +63,7 @@
 
 @code {
     [Parameter, EditorRequired] public CaseInput Input { get; set; } = default!;
-    /// <summary>Einstufung im Formular zeigen (nur beim Anlegen; im Bearbeiten über den Tab „Einstufung").</summary>
+    /// <summary>Show classification in the form (create only).</summary>
     [Parameter] public bool ShowClassification { get; set; }
     [Parameter] public bool MayHighest { get; set; }
     [Parameter] public bool IsLeadership { get; set; }

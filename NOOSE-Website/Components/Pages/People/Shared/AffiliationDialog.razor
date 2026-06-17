@@ -1,4 +1,4 @@
-@* Dialog zum Zuordnen der Person zu einer Fraktion oder Personengruppe (Mitgliedschaft). *@
+@* Assign a person to a faction or person group. *@
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
 
@@ -25,7 +25,7 @@
                 </ItemTemplate>
             </MudAutocomplete>
 
-            @* Rang/Rolle + Leitung direkt hier setzbar – spart den Umweg über die Org-Akte. *@
+            @* Set rank/role here to skip the org record. *@
             <MudTextField @bind-Value="_rankRole" Label="@(IsFaction ? "Rang (optional)" : "Rolle (optional)")"
                           Variant="Variant.Outlined" />
             <MudSwitch T="bool" @bind-Value="_isLead" Color="Color.Primary"

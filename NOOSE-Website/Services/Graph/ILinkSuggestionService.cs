@@ -3,14 +3,9 @@ using NOOSE_Website.Models.Graph;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Schlägt für eine Akte verwandte, noch nicht verknüpfte Akten vor (Phase 8). Block A: personenzentriert –
-/// erkennt Kandidaten über gemeinsame Telefonnummer, Fraktion, Personengruppe, Tag und gemeinsame
-/// Verknüpfungen. Bereits Verknüpfte/Bezogene sowie nicht sichtbare Akten (Verschlusssache) werden
-/// ausgeschlossen.
-/// </summary>
+/// <summary>Suggests related, not-yet-linked person records via shared phone, faction, group, tag and links; excludes already linked and non-visible records.</summary>
 public interface ILinkSuggestionService
 {
-    /// <summary>Liefert die ranggeordneten Vorschläge für die angegebene Akte (leer, wenn keine).</summary>
+    /// <summary>Returns ranked suggestions for the given record (empty if none).</summary>
     Task<List<LinkSuggestion>> GetSuggestionsAsync(string entityType, string entityId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 }

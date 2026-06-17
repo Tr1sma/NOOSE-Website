@@ -1,4 +1,4 @@
-@* Identitäts-/Steckkarte der Operation: Titel, Status, Typ, Zeitraum, Ort, Einstufung, Ermittlungsleiter. *@
+@* Identity card for an operation. *@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
         <MudStack AlignItems="AlignItems.Center" Class="py-2">
@@ -61,7 +61,7 @@
 @code {
     [Parameter, EditorRequired] public Operation Operation { get; set; } = default!;
 
-    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
+    /// <summary>Investigation lead codenames.</summary>
     [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
 
     private string TimeRange

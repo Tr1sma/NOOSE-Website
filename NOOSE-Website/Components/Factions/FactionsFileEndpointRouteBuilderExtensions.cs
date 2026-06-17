@@ -28,7 +28,6 @@ public static class FactionsFileEndpointRouteBuilderExtensions
                 return Results.NotFound();
             }
 
-            // open before logging
             Stream stream;
             try
             {
@@ -41,7 +40,6 @@ public static class FactionsFileEndpointRouteBuilderExtensions
 
             await access.LogViewAsync(nameof(FactionPhoto), photoId, cancellationToken);
 
-            // auto-disposed
             return Results.File(stream, photo.ContentType, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.ActiveAgent);

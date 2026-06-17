@@ -1,4 +1,3 @@
-@* Gefährdungs-Panel: Bedrohungs-Score einer Fraktion mit Konfidenz und nachvollziehbarer Aufschlüsselung (Phase 8/Block D). *@
 @using System.Text.Json
 
 <MudStack Spacing="4">
@@ -99,7 +98,7 @@
             }
             catch (JsonException)
             {
-                _detail = null; // defekter Altbestand → wie „nicht berechnet" behandeln
+                _detail = null; // corrupt legacy data: treat as not computed
             }
         }
     }

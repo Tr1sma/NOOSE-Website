@@ -1,4 +1,4 @@
-/* NOOSE – layout-spezifische Feinheiten (haelt zugleich das Scoped-CSS-Bundle aktiv). */
+/* Layout-specific tweaks; also keeps the scoped-CSS bundle active. */
 .mud-appbar .mud-typography {
     white-space: nowrap;
 }

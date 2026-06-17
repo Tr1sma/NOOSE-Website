@@ -6,12 +6,7 @@ using NOOSE_Website.Data.Entities;
 
 namespace NOOSE_Website.Components.Account;
 
-/// <summary>
-/// Schreibt beim Login die NOOSE-spezifischen Claims (Dienstgrad, Status, TRU, HRB, Admin, TeamLeitung, Codename,
-/// Dienstnummer) in das Identity-Cookie. Dadurch entscheiden Policies und UI rein aus den Claims – ohne DB-Zugriff
-/// pro Anfrage. Änderungen an Rang/Status erzwingen über den SecurityStamp einen erneuten Login,
-/// sodass die Claims aktuell bleiben.
-/// </summary>
+/// <summary>Writes the NOOSE-specific claims into the identity cookie at login so policies and UI decide from claims without per-request DB hits.</summary>
 public class AgentClaimsPrincipalFactory(
     UserManager<Agent> userManager,
     RoleManager<IdentityRole> roleManager,
@@ -28,9 +23,6 @@ public class AgentClaimsPrincipalFactory(
         identity.AddClaim(new Claim(AgentClaimTypes.IsAdmin, user.IsAdmin ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsTRU, user.IsTRU ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsHRB, user.IsHRB ? "true" : "false"));
-        // TeamLeitung ist nun ein Claim: Die Nur-Lese-Aufsichtsrolle (TeamLeitung ohne Admin) entscheidet
-        // über Policies/UI rein aus den Claims. Das Umschalten erneuert den SecurityStamp (siehe
-        // AgentVerwaltungService.TeamLeitungSetzenAsync), damit der Claim beim nächsten Login aktuell ist.
         identity.AddClaim(new Claim(AgentClaimTypes.IsTeamLead, user.IsTeamLead ? "true" : "false"));
 
         if (user.Rank is not null)
@@ -38,13 +30,11 @@ public class AgentClaimsPrincipalFactory(
             identity.AddClaim(new Claim(AgentClaimTypes.Rank, ((int)user.Rank.Value).ToString()));
         }
 
-        // external partner agency
         if (user.PartnerAgency is { } agency)
         {
             identity.AddClaim(new Claim(AgentClaimTypes.PartnerAgency, ((int)agency).ToString()));
         }
 
-        // partner rank tier
         if (user.PartnerRank is { } partnerRank)
         {
             identity.AddClaim(new Claim(AgentClaimTypes.PartnerRank, ((int)partnerRank).ToString()));

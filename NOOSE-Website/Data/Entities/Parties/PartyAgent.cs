@@ -3,11 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Parties;
 
-/// <summary>
-/// Zuteilung eines NOOSE-Agents zu einer Partei (wer bearbeitet die Partei). Join-Entity mit
-/// <see cref="IAuditable"/>. FK auf den <see cref="Agent"/> (Identity-Tabelle) ist <c>Restrict</c>; FK auf
-/// die Partei ist Cascade.
-/// </summary>
+/// <summary>Assignment of a NOOSE agent to a party.</summary>
 [Table("ParteiAgenten")]
 public class PartyAgent : IAuditable
 {
@@ -20,11 +16,10 @@ public class PartyAgent : IAuditable
     public string AgentId { get; set; } = string.Empty;
     public Agent? Agent { get; set; }
 
-    /// <summary>Markiert diesen zugeteilten Agent als Ermittlungsleiter der Akte (mehrere je Akte möglich).</summary>
+    /// <summary>Marks this agent as investigation lead (multiple allowed per file).</summary>
     [Column("IstErmittlungsleiter")]
     public bool IsInvestigationLead { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

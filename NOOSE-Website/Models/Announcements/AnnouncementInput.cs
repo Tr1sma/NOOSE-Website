@@ -2,12 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Announcements;
 
-/// <summary>
-/// Formular-/Eingabemodell zum Anlegen (und Bearbeiten) einer Ankündigung. Die Broadcast-Felder
-/// (<see cref="Zielgruppe"/> ≠ Alle, <see cref="AlsBroadcast"/>, <see cref="QuittierungVerlangt"/>) sind nur für
-/// die Führung wirksam und werden ausschließlich beim Anlegen ausgewertet; beim Bearbeiten zählen nur
-/// <see cref="Titel"/>/<see cref="Inhalt"/>/<see cref="Wichtig"/>.
-/// </summary>
+/// <summary>Form model for creating/editing an announcement; broadcast fields are leadership-only and evaluated only on create.</summary>
 public class AnnouncementInput
 {
     public string Title { get; set; } = string.Empty;
@@ -15,9 +10,9 @@ public class AnnouncementInput
     public bool Important { get; set; }
 
     public AnnouncementAudience Audience { get; set; } = AnnouncementAudience.AllActive;
-    /// <summary>Taskforce-Id bei <see cref="AnkuendigungZielgruppe.Taskforce"/>.</summary>
+    /// <summary>Taskforce id when audience targets a taskforce.</summary>
     public string? TargetId { get; set; }
-    /// <summary>Mindest-Dienstgrad bei <see cref="AnkuendigungZielgruppe.AbDienstgrad"/>.</summary>
+    /// <summary>Minimum rank when audience targets a rank floor.</summary>
     public Rank? MinRank { get; set; }
 
     public bool AsBroadcast { get; set; }

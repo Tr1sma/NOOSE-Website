@@ -1,7 +1,4 @@
-@* Wiederverwendbares Zeitreihen-Diagramm (Linie/Balken) für die Statistik-Seite: rendert mehrere benannte
-   Reihen über gemeinsame Monatsetiketten. Sind alle Werte 0 (oder keine Punkte/Reihen vorhanden), erscheint
-   ein dezenter Hinweis statt eines leeren Diagramms (MudChart zeichnete sonst eine NaN-Geometrie).
-   MudBlazor 9.5: Linien/Balken nehmen die Daten als List<ChartSeries<double>> plus ChartLabels (Etiketten). *@
+@* Reusable time-series chart; shows a hint instead of an empty chart when all values are 0 (MudChart would draw NaN geometry). *@
 @using NOOSE_Website.Models.Statistics
 
 <div class="d-flex flex-column" style="width:100%;min-width:0;">
@@ -20,23 +17,20 @@
 </div>
 
 @code {
-    /// <summary>Überschrift über dem Diagramm.</summary>
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
 
-    /// <summary>Die Monatspunkte – liefern die X-Achsen-Etiketten (in fester, zeitlich aufsteigender Reihenfolge).</summary>
+    /// <summary>Month points supplying the X-axis labels.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<StatisticsMonth> Points { get; set; } = Array.Empty<StatisticsMonth>();
 
-    /// <summary>Die Datenreihen (Name + Werte je Monat); jede Werte-Liste hat so viele Einträge wie <see cref="Punkte"/>.</summary>
+    /// <summary>Data rows (name + per-month values), each as long as Points.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<(string Name, IReadOnlyList<int> Values)> Rows { get; set; }
         = Array.Empty<(string, IReadOnlyList<int>)>();
 
-    /// <summary>Hex-Farben je Reihe, in derselben Reihenfolge wie <see cref="Reihen"/>.</summary>
+    /// <summary>Hex colours per row, same order as Rows.</summary>
     [Parameter, EditorRequired] public string[] Colours { get; set; } = Array.Empty<string>();
 
-    /// <summary>Höhe des Diagramms (CSS-Wert).</summary>
     [Parameter] public string Height { get; set; } = "300px";
 
-    /// <summary>Diagrammtyp (Standard: Linie). Für Balken <see cref="ChartType.Bar"/> setzen.</summary>
     [Parameter] public ChartType DiagramType { get; set; } = ChartType.Line;
 
     private bool _empty = true;

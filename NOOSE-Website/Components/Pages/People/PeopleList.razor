@@ -40,7 +40,7 @@ else
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
             <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
-                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    @* Real link: middle/ctrl-click opens record in new tab; keyboard/screenreader-reachable. *@
                     <MudLink Href="@($"/personen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                 </CellTemplate>
             </TemplateColumn>
@@ -169,7 +169,6 @@ else
         _ => Color.Default,
     };
 
-    // Duplikat-Zusammenführen (Phase 7): nach erfolgreichem Merge direkt in die Ziel-Akte springen.
     private async Task MergeAsync()
     {
         var targetId = await PersonMergeDialog.ShowAsync(DialogService);

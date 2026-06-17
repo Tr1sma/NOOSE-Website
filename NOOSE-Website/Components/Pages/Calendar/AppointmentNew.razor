@@ -32,7 +32,7 @@
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        // Bequeme Vorbelegung: nächste volle Stunde (lokale RP-Zeit).
+        // Prefill next full hour (local RP time)
         var now = DateTime.Now;
         _input.Start = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1);
     }

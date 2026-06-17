@@ -92,7 +92,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         db.Operations.Add(operation);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        // creator auto-assigned as investigation lead (ensures at least one)
         var creatorId = actor.GetAgentId();
         if (creatorId is not null)
         {
@@ -229,7 +229,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         await RequireLeadershipOrELAsync(db, operationId, actor, cancellationToken);
-        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        // only leadership may grant the lead flag
         if (asInvestigationLead)
         {
             Permission.RequireLeadership(actor);
@@ -271,7 +271,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        // leadership-only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -281,7 +281,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Operation ist.</summary>
+    /// <summary>Throws unless the actor is leadership or an investigation lead of this operation.</summary>
     private static async Task RequireLeadershipOrELAsync(AppDbContext db, string operationId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (actor.IsLeadership())
@@ -310,8 +310,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Beziehungen (Beteiligte/Verknüpfungen), die diese Operation als Quelle oder Ziel berühren –
-        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        // manual links touching this operation, including removed ones so their delete entry shows
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic
@@ -331,12 +330,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Merkt den eingegebenen Operations-Typ im gemeinsamen Vorschlagskatalog vor (Autocomplete beim nächsten
-    /// Mal), analog zur Fraktions-Art und der Partei-Rolle. Verschlusssachen bleiben außen vor, damit keine
-    /// sensiblen Werte in die geteilte Liste gelangen. Nur vormerken – der Aufrufer speichert im selben
-    /// SaveChanges (atomar mit der Operation).
-    /// </summary>
+    /// <summary>Stage the operation type for the shared suggestion catalog; classified records excluded. Caller persists it.</summary>
     private async Task SuggestionsStageAsync(AppDbContext db, bool isClassified, string? type, CancellationToken cancellationToken)
     {
         if (isClassified || string.IsNullOrWhiteSpace(type))

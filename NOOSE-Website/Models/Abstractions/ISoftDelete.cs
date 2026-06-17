@@ -1,10 +1,6 @@
 namespace NOOSE_Website.Models.Abstractions;
 
-/// <summary>
-/// Markiert eine Entität für den Papierkorb: statt physisch gelöscht zu werden, wird sie
-/// nur als gelöscht markiert (durch den <c>AuditSaveChangesInterceptor</c>) und von einem
-/// globalen Query-Filter standardmäßig ausgeblendet. Wiederherstellbar durch Führung.
-/// </summary>
+/// <summary>Marks an entity as soft-deletable; hidden by a global query filter, restorable by leadership.</summary>
 public interface ISoftDelete
 {
     bool IsDeleted { get; set; }

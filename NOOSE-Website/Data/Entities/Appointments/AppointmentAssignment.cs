@@ -3,11 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Appointments;
 
-/// <summary>
-/// Teilnehmer eines Termins (Zuteilung an einen NOOSE-Agent) – Phase 8 (Block C). Join-Entity mit
-/// <see cref="IAuditable"/>. FK auf den <see cref="Agent"/> (Identity-Tabelle) ist <c>Restrict</c>;
-/// FK auf den Termin ist Cascade. Vorlage: <see cref="Aufgaben.AufgabeZuweisung"/>.
-/// </summary>
+/// <summary>Appointment participant. FK to Agent is Restrict; FK to Appointment is Cascade.</summary>
 [Table("TerminZuweisungen")]
 public class AppointmentAssignment : IAuditable
 {
@@ -20,7 +16,6 @@ public class AppointmentAssignment : IAuditable
     public string AgentId { get; set; } = string.Empty;
     public Agent? Agent { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

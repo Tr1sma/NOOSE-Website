@@ -1,4 +1,3 @@
-@* Der Gruppe zugeteilte NOOSE-Agents: Liste + Zuteilen/Entfernen + Ermittlungsleiter-Markierung. *@
 @inject IPersonGroupService GroupService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -62,7 +61,7 @@
     [Parameter, EditorRequired] public string GroupId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Wird nach jeder Änderung der Zuteilungen/Ermittlungsleiter ausgelöst (Steckkarte aktualisieren).</summary>
+    /// <summary>Raised after allocation/lead changes.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -82,10 +81,10 @@
     {
         _load = true;
         _agents = await GroupService.GetAgentsAsync(GroupId);
-        // Verwalten (zuteilen/entfernen) darf die Führung oder ein Ermittlungsleiter dieser Akte.
+        // Leadership or an investigation lead may manage
         var myId = User.GetAgentId();
         _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && a.IsInvestigationLead);
-        // Schreibgeschuetzte Aufsichtsrolle: keine Mutations-Steuerelemente anzeigen.
+        // Read-only oversight gets no mutation controls
         _canManage = _canManage && _mayWrite;
         _load = false;
     }

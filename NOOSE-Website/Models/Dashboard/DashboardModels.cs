@@ -2,7 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Dashboard;
 
-/// <summary>Welche Akten-Art im Lagezentrum betroffen ist (bestimmt Symbol, Label und Detail-Link).</summary>
+/// <summary>Record kind shown on the dashboard; drives icon, label and link.</summary>
 public enum DashboardRecordType
 {
     Person,
@@ -14,10 +14,7 @@ public enum DashboardRecordType
     Case,
 }
 
-/// <summary>
-/// Die Kennzahl-Kacheln des Lagezentrums. Alle Zahlen sind aus Sicht des aufrufenden Agents
-/// berechnet (Verschlusssachen-Filter), damit sie zu den jeweiligen Listenansichten passen.
-/// </summary>
+/// <summary>Dashboard metric tiles; counts are classification-filtered per calling agent.</summary>
 public record DashboardMetrics(
     int People,
     int FactionsAndGroups,
@@ -27,10 +24,7 @@ public record DashboardMetrics(
     int Classified,
     int StaleRecords);
 
-/// <summary>
-/// Eine Akte mit Aktualisierungsbedarf (Ampel gelb/rot) für die Dashboard-Liste „was muss aktualisiert werden".
-/// Aus Sicht des Aufrufers Verschlusssache-/Papierkorb-gefiltert.
-/// </summary>
+/// <summary>A record due for update; classification/trash-filtered per caller.</summary>
 public record DashboardStaleRecord(
     DashboardRecordType Type,
     string Name,
@@ -39,36 +33,24 @@ public record DashboardStaleRecord(
     RecencyLevel Level,
     DateTime ReferenceUtc);
 
-/// <summary>
-/// Eine Fraktion mit ihrer Gefährdungsstufe für die Dashboard-Liste „Fraktionen nach Gefährdung" (echte Liste,
-/// nicht aggregiert). Aus Sicht des Aufrufers VS-/Papierkorb-gefiltert; nach Gefährdung absteigend sortiert.
-/// </summary>
+/// <summary>A faction with its hazard level; classification/trash-filtered, sorted by hazard desc.</summary>
 public record DashboardFactionHazard(
     string Name,
     string CaseNumber,
     string Href,
     HazardLevel Level);
 
-/// <summary>Ein einzelnes Segment einer Dashboard-Verteilung (eine Kategorie + ihre Anzahl).</summary>
-/// <param name="Bezeichnung">Anzeigetext der Kategorie (z. B. „Verdachtsfall").</param>
-/// <param name="Anzahl">Anzahl der Akten in dieser Kategorie (bereits VS-gefiltert).</param>
+/// <summary>One segment of a dashboard distribution: a category and its count.</summary>
 public record DistributionSegment(string Designation, int Count);
 
-/// <summary>
-/// Die vier Verteilungs-Diagramme des Lagezentrums (§248). Alle Zahlen sind aus Sicht des aufrufenden
-/// Agents berechnet (Verschlusssachen-Filter), passend zu den Kennzahl-Kacheln. Die Segment-Reihenfolge ist
-/// deterministisch (Enum-Reihenfolge bzw. feste Antrags-Arten), damit die UI je Diagramm stabile Farben zuordnen kann.
-/// </summary>
+/// <summary>The four dashboard distribution charts; classification-filtered, deterministic segment order for stable colours.</summary>
 public record DashboardDistributions(
     IReadOnlyList<DistributionSegment> CasesByClassification,
     IReadOnlyList<DistributionSegment> MeasureOutcomes,
     IReadOnlyList<DistributionSegment> FactionsByHazard,
     IReadOnlyList<DistributionSegment> OpenRequestsByKind);
 
-/// <summary>
-/// Ein Eintrag des Aktivitäts-Feeds „Letzte Änderungen". Aus einem Audit-Eintrag aufgelöst und auf die
-/// zugehörige Eltern-Akte (Person/Fraktion/Personengruppe) hochgerollt – inkl. Anzeigename und Link.
-/// </summary>
+/// <summary>An activity-feed entry resolved from an audit row, rolled up to its parent record.</summary>
 public record DashboardChange(
     DateTime Timestamp,
     string? AgentName,
@@ -77,7 +59,7 @@ public record DashboardChange(
     string RecordId,
     string RecordName,
     string CaseNumber,
-    /// <summary>Bei Kind-Änderungen (Dok, Mitglied, Agent-Zuteilung) die Art des Kindes; sonst null.</summary>
+    /// <summary>Child kind for child-record changes; null otherwise.</summary>
     string? Detail,
-    /// <summary>True, wenn die Akte aktuell im Papierkorb liegt (dann keine Detail-Verlinkung).</summary>
+    /// <summary>True when the record is in the trash (no detail link).</summary>
     bool RecordDeleted);

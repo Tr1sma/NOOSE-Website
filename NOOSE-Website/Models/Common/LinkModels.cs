@@ -1,19 +1,18 @@
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Eingabe zum Anlegen einer generischen Verknüpfung auf eine beliebige Ziel-Akte.</summary>
+/// <summary>Input for a generic link to any target record.</summary>
 public class LinkInput
 {
-    /// <summary>Aktentyp des Ziels (z. B. „Person", „Fraktion", „Agent", „PersonDok"). Standard: Person.</summary>
+    /// <summary>Target record type; defaults to Person.</summary>
     public string TargetType { get; set; } = "Person";
     public string TargetId { get; set; } = string.Empty;
     public string? Label { get; set; }
 
-    /// <summary>Nur-UI: lesbarer Anzeigename des Ziels (vom Picker gesetzt, nicht persistiert).</summary>
+    /// <summary>UI-only display name set by the picker; not persisted.</summary>
     public string? Display { get; set; }
 }
 
-/// <summary>Aufbereitete Verknüpfung aus Sicht einer Akte: die jeweils „andere Seite" samt Bezeichnung.</summary>
-/// <param name="Href">Navigationsziel der anderen Seite (z. B. „/personen/{id}") oder null, wenn nicht navigierbar (z. B. Agent).</param>
+/// <summary>A link from one record's perspective: the other side plus its designation.</summary>
 public record LinkDisplay(
     string LinkId,
     string OtherType,

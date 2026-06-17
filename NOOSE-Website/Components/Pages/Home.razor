@@ -82,7 +82,7 @@ else
             <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.OpenRequests)</MudText>
         </MudPaper>
     </MudItem>
-    @* Die Anzahl klassifizierter Akten ist selbst eine Verschlusssache → Kachel nur für die Führung. *@
+    @* Classified count is itself classified; leadership-only tile. *@
     @if (_isLeadership)
     {
         <MudItem xs="12" sm="6" md="3">
@@ -115,8 +115,6 @@ else
     </MudItem>
 </MudGrid>
 
-@* Obere Reihe: die beiden Bestandsdiagramme kompakt in einer halb breiten Kachel, daneben die echte
-   Fraktionsliste nach Gefährdung (VS-gefiltert). *@
 <MudText Typo="Typo.h6" Class="mt-6 mb-2">Verteilungen</MudText>
 @if (_load)
 {
@@ -170,7 +168,6 @@ else if (_distributions is { } v)
         </MudItem>
     </MudGrid>
 
-    @* Zweite Reihe: gefährlichste Personen (Pendant zur Fraktionsliste) + Wegweiser zur vollen Statistik. *@
     <MudGrid Class="mt-1">
         <MudItem xs="12" md="6" Class="d-flex">
             <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
@@ -243,7 +240,6 @@ else if (_distributions is { } v)
     </MudPaper>
 }
 
-@* Untere Reihe: Aktualisierungsbedarf, Offene Anträge nach Art und Letzte Änderungen – gleich hoch und in sich scrollbar. *@
 @if (!_load && _distributions is { } va)
 {
     <MudGrid Class="mt-1">
@@ -350,11 +346,11 @@ else if (_distributions is { } v)
     private List<DashboardFactionHazard> _factionsHazard = new();
     private List<DashboardFactionHazard> _peopleHazard = new();
 
-    // NOOSE-Farben je Diagramm – Reihenfolge identisch zur Segment-Reihenfolge im DashboardService.
-    private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };          // Unbekannt · Prüffall · Verdachtsfall · Gesichert staatsgefährdend
-    private static readonly string[] _coloursOutcome = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };             // Läuft noch · Offiziell entlassen · Amnestie-Spritze · Erschossen
-    private static readonly string[] _coloursHazard = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" }; // Keine · Niedrig · Mittel · Hoch · Kritisch
-    private static readonly string[] _coloursRequests = { "#22D3EE", "#3FB950", "#7C8CF8", "#D29922", "#F85149" };  // Hochstufung · Registrierung · Namensänderung · Taskforce · Beförderung
+    // Colour order must match the segment order in DashboardService
+    private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };
+    private static readonly string[] _coloursOutcome = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };
+    private static readonly string[] _coloursHazard = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" };
+    private static readonly string[] _coloursRequests = { "#22D3EE", "#3FB950", "#7C8CF8", "#D29922", "#F85149" };
 
     protected override async Task OnInitializedAsync()
     {
@@ -367,7 +363,7 @@ else if (_distributions is { } v)
             return;
         }
         _isLeadership = user.IsLeadership();
-        var meId = user.GetAgentId(); // für die Taskforce-Mitgliedschafts-Sichtbarkeit der Kennzahlen/Listen
+        var meId = user.GetAgentId(); // for taskforce-membership visibility of metrics/lists
         _metrics = await Dashboard.GetMetricsAsync(_isLeadership, meId);
         _distributions = await Dashboard.GetDistributionsAsync(_isLeadership, meId);
         _changes = await Dashboard.GetLastChangesAsync(_isLeadership, meId, 50);
@@ -378,7 +374,6 @@ else if (_distributions is { } v)
         _load = false;
     }
 
-    // Ampelfarbe je Gefährdungsstufe – identisch zur Diagramm-Palette (Keine→Kritisch).
     private string HazardColour(HazardLevel level)
     {
         var i = (int)level;

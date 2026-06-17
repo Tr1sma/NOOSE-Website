@@ -54,9 +54,7 @@ else
         _isLeadership = _user.IsLeadership();
     }
 
-    // Diese Seite wird bei /taskforces/{A}/bearbeiten → /taskforces/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
-    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    // Component is reused across ids; load here with a guard since OnInitialized won't rerun
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)

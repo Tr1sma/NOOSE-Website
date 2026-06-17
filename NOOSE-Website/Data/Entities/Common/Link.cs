@@ -4,11 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Eine gerichtet gespeicherte, aber <b>bidirektional</b> dargestellte Verknüpfung zwischen zwei
-/// beliebigen Akten (polymorph über Von-/Nach-Typ + -Id). Wird nur einmal abgelegt; der Dienst
-/// normalisiert beim Laden auf „die jeweils andere Seite". Speist später Beziehungsgraph/Pfadsuche.
-/// </summary>
+/// <summary>A directionally-stored but bidirectionally-shown link between any two records (polymorphic by from/to type + id).</summary>
 [Table("Verknuepfungen")]
 public class Link : IAuditable, ISoftDelete
 {
@@ -24,21 +20,17 @@ public class Link : IAuditable, ISoftDelete
     [Column("NachId")]
     public string TargetId { get; set; } = string.Empty;
 
-    /// <summary>Optionaler Beziehungslabel/Notiz („Quelle für", „Revierkonflikt", „Waffenbruderschaft" …).</summary>
+    /// <summary>Optional relationship label/note.</summary>
     public string? Label { get; set; }
 
-    /// <summary>Art der Verknüpfung: allgemein (Standard) oder fachliche Organisations-Beziehung (Konflikt/Bündnis).</summary>
+    /// <summary>Link kind: general (default) or organizational relationship (conflict/alliance).</summary>
     [Column("Art")]
     public LinkKind Kind { get; set; } = LinkKind.Default;
 
-    /// <summary>
-    /// Automatisch erzeugte Verknüpfung (z. B. „Fraktionskollege" durch eine Fraktions-Mitgliedschaft).
-    /// Wird vom System gepflegt – nicht manuell anlegbar/löschbar – und bei Wegfall der Grundlage entfernt.
-    /// </summary>
+    /// <summary>System-maintained auto link; not manually editable, removed when its basis disappears.</summary>
     [Column("Automatisch")]
     public bool Automatic { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -48,7 +40,6 @@ public class Link : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

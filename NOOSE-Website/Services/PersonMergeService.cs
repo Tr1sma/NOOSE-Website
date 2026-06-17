@@ -13,7 +13,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
     public async Task MergeAsync(string sourceId, string targetId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLeadership(actor);
-        // ExecuteUpdate umgeht den SaveChanges-Interceptor → die Nur-Lese-Aufsicht hier explizit sperren.
+        // ExecuteUpdate bypasses the SaveChanges interceptor → gate read-only here explicitly
         Permission.RequireWriteAccess(actor);
 
         if (string.IsNullOrWhiteSpace(sourceId) || string.IsNullOrWhiteSpace(targetId) || sourceId == targetId)
@@ -34,8 +34,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             .FirstOrDefaultAsync(p => p.Id == targetId, cancellationToken)
             ?? throw new InvalidOperationException("Die Ziel-Akte wurde nicht gefunden.");
 
-        // ---- Kind-Daten ohne Dubletten-Risiko: komplett umhängen (Bulk, umgeht das Change-Tracking
-        //      der geladenen Person-Children nicht – Doks/Fotos/Observationen sind nicht geladen). ----
+        // ---- children with no duplicate risk: reassign wholesale (bulk) ----
         await db.PersonDocs.Where(d => d.PersonId == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.PersonId, targetId), cancellationToken);
         await db.Observations.Where(o => o.PersonId == sourceId)
@@ -43,7 +42,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
         await db.PersonPhotos.Where(f => f.PersonId == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(f => f.PersonId, targetId), cancellationToken);
 
-        // ---- Steckbrief-Kinder mit Dubletten-Abgleich (case-insensitiv über Trim/Lower). ----
+        // ---- profile children with case-insensitive dedup ----
         static string Norm(string? s) => (s ?? string.Empty).Trim().ToLowerInvariant();
 
         var targetAliases = target.Aliases.Select(a => Norm(a.AliasName)).ToHashSet();
@@ -59,7 +58,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
                 db.PersonAliases.Remove(alias);
             }
         }
-        // Der Name der Quell-Akte bleibt als Alias auffindbar.
+        // keep the source name findable as an alias
         if (targetAliases.Add(Norm(source.Name)))
         {
             db.PersonAliases.Add(new PersonAlias { PersonId = targetId, AliasName = source.Name });
@@ -117,7 +116,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // ---- Person-zu-Person-Beziehungen: umhängen; Selbstbezüge entfernen. ----
+        // ---- person-to-person relations: reassign; drop self-references ----
         var relations = await db.PersonRelations
             .Where(b => b.PersonAId == sourceId || b.PersonBId == sourceId)
             .ToListAsync(cancellationToken);
@@ -137,7 +136,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // ---- Mitgliedschaften (aktive): umhängen, außer das Ziel ist in derselben Akte bereits Mitglied. ----
+        // ---- active memberships: reassign unless target already belongs ----
         var targetFactions = await db.FactionMembers.Where(m => m.PersonId == targetId)
             .Select(m => m.FactionId).ToListAsync(cancellationToken);
         foreach (var member in await db.FactionMembers.Where(m => m.PersonId == sourceId).ToListAsync(cancellationToken))
@@ -180,14 +179,14 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // ---- Polymorphe Bezüge (EntitaetTyp/-Id == Person/quelleId) umhängen. ----
+        // ---- polymorphic references (EntityType/Id == Person/sourceId): reassign ----
         const string type = nameof(Person);
 
-        // Einstufungs-Verlauf (append-only) – die Historie beider Akten wird zusammengeführt.
+        // classification history is append-only; merge both records' history
         await db.ClassificationHistory.Where(e => e.EntityType == type && e.EntityId == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.EntityId, targetId), cancellationToken);
 
-        // Kommentare, Quellen, Wiedervorlagen: konfliktfrei umhängen.
+        // comments, sources, followups: conflict-free reassign
         await db.Comments.Where(k => k.EntityType == type && k.EntityId == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(k => k.EntityId, targetId), cancellationToken);
         await db.Sources.Where(q => q.EntityType == type && q.EntityId == sourceId)
@@ -197,7 +196,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
         await db.Followups.Where(w => w.EntityType == type && w.EntityId == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(w => w.EntityId, targetId), cancellationToken);
 
-        // Tags: Unique-Index (TagId, Typ, Id) → nur umhängen, was das Ziel noch nicht trägt.
+        // tags have a unique index → only reassign ones the target lacks
         var targetTagIds = await db.TagMappings.Where(z => z.EntityType == type && z.EntityId == targetId)
             .Select(z => z.TagId).ToListAsync(cancellationToken);
         foreach (var mapping in await db.TagMappings.Where(z => z.EntityType == type && z.EntityId == sourceId).ToListAsync(cancellationToken))
@@ -212,7 +211,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // Custom-Felder: Unique-Index je Definition → vorhandene Ziel-Werte haben Vorrang.
+        // custom fields have a unique index per definition → existing target values win
         var targetFieldIds = await db.CustomFieldValues.Where(w => w.EntityType == type && w.EntityId == targetId)
             .Select(w => w.CustomFieldDefinitionId).ToListAsync(cancellationToken);
         foreach (var value in await db.CustomFieldValues.Where(w => w.EntityType == type && w.EntityId == sourceId).ToListAsync(cancellationToken))
@@ -227,7 +226,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // Watchlist: je Agent nur ein aktiver Eintrag pro Akte.
+        // watchlist: one active entry per agent per record
         var targetFollower = await db.Watchlists.Where(w => w.EntityType == type && w.EntityId == targetId)
             .Select(w => w.AgentId).ToListAsync(cancellationToken);
         foreach (var entry in await db.Watchlists.Where(w => w.EntityType == type && w.EntityId == sourceId).ToListAsync(cancellationToken))
@@ -242,7 +241,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // Verknüpfungen: beide Seiten umhängen; entstehende Selbst-Verknüpfungen entfernen.
+        // links: reassign both sides; drop resulting self-links
         foreach (var link in await db.Links
                      .Where(v => (v.SourceType == type && v.SourceId == sourceId) || (v.TargetType == type && v.TargetId == sourceId))
                      .ToListAsync(cancellationToken))
@@ -261,7 +260,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             }
         }
 
-        // Offene Anträge (z. B. Hochstufung): auf die Ziel-Akte umbiegen, Bezeichnung aktualisieren.
+        // open requests: point to the target record, refresh the designation
         foreach (var request in await db.Requests
                      .Where(a => a.TargetType == type && a.TargetId == sourceId)
                      .ToListAsync(cancellationToken))
@@ -270,16 +269,16 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             request.TargetDesignation = $"{target.Name} ({target.CaseNumber})";
         }
 
-        // ---- Steckbrief: fehlende Angaben der Ziel-Akte aus der Quelle übernehmen. ----
+        // ---- profile: fill the target's missing fields from the source ----
         if (string.IsNullOrWhiteSpace(target.Description) && !string.IsNullOrWhiteSpace(source.Description))
         {
             target.Description = source.Description;
         }
-        // Verschlusssache „färbt ab": die zusammengeführte Akte enthält auch die VS-Inhalte der Quelle.
+        // classified status carries over to the merged record
         target.IsClassified = target.IsClassified || source.IsClassified;
-        // Einstufung/Lebensstatus der Ziel-Akte bleiben bewusst unangetastet (Rang-Gate der Einstufung).
+        // target's classification/life status left untouched (rank-gated)
 
-        // Nachvollziehbarkeit direkt an der Ziel-Akte (zusätzlich zum Audit-Log).
+        // leave a trail on the target record beyond the audit log
         db.Comments.Add(new Comment
         {
             EntityType = type,
@@ -288,7 +287,7 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             AuthorName = actor.GetCodename(),
         });
 
-        // ---- Quell-Akte in den Papierkorb (Interceptor wandelt Remove in Soft-Delete um). ----
+        // ---- send source record to the trash (interceptor soft-deletes) ----
         db.People.Remove(source);
 
         await db.SaveChangesAsync(cancellationToken);

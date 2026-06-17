@@ -9,7 +9,6 @@ namespace NOOSE_Website.Services;
 /// <summary>Taskforce business logic: list, detail, CRUD, approval, agents, history.</summary>
 public interface ITaskforceService
 {
-    // see all or own
     Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default);
     Task<Taskforce?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default);
     Task<List<Taskforce>> GetTrashAsync(CancellationToken cancellationToken = default);

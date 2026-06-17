@@ -3,14 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
 
-/// <summary>
-/// Entkoppelt den Watchlist-Benachrichtigungs-Fan-out vom Speichervorgang: der <c>WatchlistAenderungInterceptor</c>
-/// übergibt nach erfolgreichem Commit die betroffenen Akten; der eigentliche Versand läuft <b>fire-and-forget</b> in
-/// einem frischen DI-Scope. So blockiert das Speichern nie auf der Folger-Ermittlung, und ein Fehler beim
-/// Benachrichtigen kann die bereits committete Kernaktion niemals zurückrollen (best-effort, wie der übrige
-/// Benachrichtigungs-Pfad). Singleton – hält selbst keinen DbContext/scoped Dienst, sondern öffnet je Versand einen
-/// eigenen Scope.
-/// </summary>
+/// <summary>Decouples watchlist fan-out from the save: dispatches fire-and-forget in a fresh scope so notify errors can't roll back the committed action.</summary>
 public sealed class WatchlistDispatcher(IServiceScopeFactory scopeFactory, ILogger<WatchlistDispatcher> logger)
 {
     public void Distribute(string? actorId, IReadOnlyCollection<(string Type, string Id)> records)

@@ -3,21 +3,18 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Authorization;
 
-/// <summary>
-/// Bequemer, typsicherer Zugriff auf die NOOSE-Claims eines angemeldeten Agents.
-/// Genutzt von Policies, Services und UI-Komponenten.
-/// </summary>
+/// <summary>Typed access to the NOOSE claims of a signed-in agent.</summary>
 public static class AgentPrincipalExtensions
 {
-    /// <summary>Identity-Schlüssel (GUID) des Agents oder null, falls nicht eingeloggt.</summary>
+    /// <summary>Identity key (GUID) of the agent, or null if not signed in.</summary>
     public static string? GetAgentId(this ClaimsPrincipal user)
         => user.FindFirstValue(ClaimTypes.NameIdentifier);
 
-    /// <summary>Codename (Deckname) – der für alle Nutzer sichtbare Name.</summary>
+    /// <summary>Codename, visible to all users.</summary>
     public static string? GetCodename(this ClaimsPrincipal user)
         => user.FindFirstValue(AgentClaimTypes.Codename);
 
-    /// <summary>Dienstnummer (Freitext) – für alle Nutzer sichtbar, leer wenn nicht vergeben.</summary>
+    /// <summary>Badge number, visible to all users.</summary>
     public static string? GetBadgeNumber(this ClaimsPrincipal user)
     {
         var value = user.FindFirstValue(AgentClaimTypes.BadgeNumber);
@@ -47,17 +44,11 @@ public static class AgentPrincipalExtensions
     public static bool IsHRB(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsHRB), "true", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>TeamLeitung-Marker (FiveM-Aufsicht) aus dem Claim. Für sich genommen keine Rolle – erst in
-    /// Kombination mit dem fehlenden Admin-Haken ergibt sich die Nur-Lese-Aufsicht (<see cref="IstNurLeser"/>).</summary>
+    /// <summary>TeamLead marker (FiveM supervision); on its own grants nothing, only forms read-only supervision when combined with no admin flag.</summary>
     public static bool IsTeamLead(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTeamLead), "true", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Globale Nur-Lese-Aufsicht = TeamLeitung OHNE Admin. Darf alles lesen (inkl. aller Seiten und
-    /// Verschlusssachen, siehe <see cref="DarfVerschlusssacheLesen"/>), aber NICHTS schreiben
-    /// (<see cref="DarfSchreiben"/>) und KEINE Klarnamen sehen (<see cref="DarfKlarnameSehen"/>).
-    /// Ein TeamLeiter MIT Admin-Haken ist kein Nur-Leser und behält vollen Zugriff.
-    /// </summary>
+    /// <summary>Read-only supervision = TeamLead without admin: reads everything but writes nothing and never sees real names.</summary>
     public static bool IsOnlyReader(this ClaimsPrincipal user)
         => user.IsTeamLead() && !user.IsAdmin();
 
@@ -89,35 +80,26 @@ public static class AgentPrincipalExtensions
     /// <summary>May write at all; false for read-only supervisors and partners. Sole source for write-control visibility.</summary>
     public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader() && !user.IsPartner();
 
-    /// <summary>Führung = Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
+    /// <summary>Leadership = rank ≥ Supervisory Special Agent or admin.</summary>
     public static bool IsLeadership(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.SupervisorySpecialAgent;
 
-    /// <summary>
-    /// Darf Verschlusssachen-Inhalte LESEN = Führung oder Nur-Lese-Aufsicht. Ausschließlich für Lese-Gates
-    /// (Sichtbarkeit von VS-Akten) verwenden – NIE für Schreiben oder Klarname-Sicht (die Aufsicht darf VS
-    /// sehen, aber keine Klarnamen).
-    /// </summary>
+    /// <summary>May READ classified content = leadership or read-only supervision. Read gates only, never write/real-name.</summary>
     public static bool MayClassifiedRead(this ClaimsPrincipal user)
         => user.IsLeadership() || user.IsOnlyReader();
 
-    /// <summary>Darf ALLE Taskforces sehen (auch ohne Zuteilung) = Führung/Admin oder Nur-Lese-Aufsicht. Sonst
-    /// sieht ein Agent nur die Taskforces, denen er zugeteilt ist. Einzige Quelle dieser Regel.</summary>
+    /// <summary>May see ALL taskforces (without assignment) = leadership or read-only supervision. Sole source of this rule.</summary>
     public static bool MayAllTaskforcesSee(this ClaimsPrincipal user)
         => user.IsLeadership() || user.IsOnlyReader();
 
-    /// <summary>
-    /// Darf den (sonst verborgenen) Klarnamen sehen = Führungsebene oder Admin, ABER nie die Nur-Lese-Aufsicht.
-    /// Einzige Quelle der Klarname-Sichtbarkeitsregel – überall hierüber prüfen, statt Dienstgrad/Admin einzeln
-    /// abzufragen. Nur-Leser sehen trotz „alles lesen" bewusst keine Klarnamen (auch bei hohem Dienstgrad).
-    /// </summary>
+    /// <summary>May see the otherwise-hidden real name = leadership/admin but never read-only supervision. Sole source of the real-name rule.</summary>
     public static bool MayRealNameSee(this ClaimsPrincipal user) => user.IsLeadership() && !user.IsOnlyReader();
 
-    /// <summary>Darf „Gesichert staatsgefährdend" direkt setzen = Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
+    /// <summary>May set "secured state-threatening" directly = rank ≥ Senior Special Agent or admin.</summary>
     public static bool MayHighestClassification(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.SeniorSpecialAgent;
 
-    /// <summary>Darf Beförderungen entscheiden = Dienstgrad ≥ Deputy Director oder Admin (entspricht <c>Policies.BefoerderungEntscheiden</c>).</summary>
+    /// <summary>May decide promotions = rank ≥ Deputy Director or admin.</summary>
     public static bool MayPromotionDecide(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.DeputyDirector;
 }

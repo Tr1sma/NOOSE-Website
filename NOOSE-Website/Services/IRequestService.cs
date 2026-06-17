@@ -4,31 +4,26 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Generischer Antrags-/Posteingang-Workflow (Phase 5). Aktuell: Hochstufungs-Anträge auf die Einstufung
-/// „Gesichert staatsgefährdend". Antragsteller = Agent unterhalb Senior Special Agent; Entscheider =
-/// Senior Special Agent+ (siehe <see cref="Berechtigung.VerlangeHoechsteEinstufung"/>).
-/// </summary>
+/// <summary>Generic request/inbox workflow. Currently: upgrade requests to "secured state-threatening". Decider = Senior Special Agent+.</summary>
 public interface IRequestService
 {
-    /// <summary>True, wenn für die Ziel-Akte bereits ein offener (beantragter) Antrag existiert.</summary>
+    /// <summary>True if an open request already exists for the target record.</summary>
     Task<bool> HasOpenRequestAsync(string targetType, string targetId, CancellationToken cancellationToken = default);
 
-    /// <summary>Stellt einen Hochstufungs-Antrag für eine sichtbare Akte (Begründung erforderlich).</summary>
+    /// <summary>Files an upgrade request for a visible record (justification required).</summary>
     Task UpgradeRequestAsync(string targetType, string targetId, string targetDesignation, Classification target,
         string justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Offene Anträge für den Posteingang – nur solche, deren Ziel-Akte für den Betrachter sichtbar ist.</summary>
+    /// <summary>Open requests for the inbox - only those whose target record is visible to the viewer.</summary>
     Task<List<Request>> GetOpenAsync(bool isLeadership, CancellationToken cancellationToken = default);
 
-    /// <summary>Anzahl offener, für den Betrachter sichtbarer Anträge (NavMenu-Badge).</summary>
+    /// <summary>Count of open requests visible to the viewer (nav badge).</summary>
     Task<int> GetOpenCountAsync(bool isLeadership, CancellationToken cancellationToken = default);
 
-    /// <summary>Eigene Anträge eines Agenten (offen + entschieden) für die Profil-Ansicht.</summary>
+    /// <summary>An agent's own requests (open + decided) for the profile view.</summary>
     Task<List<Request>> GetMyAsync(string agentId, CancellationToken cancellationToken = default);
 
-    /// <summary>Entscheidet einen Antrag. Bei Genehmigung wird die Einstufung der Ziel-Akte gesetzt
-    /// und im Einstufungs-Verlauf mit Antrags-Bezug protokolliert.</summary>
+    /// <summary>Decides a request; on approval sets the target's classification and logs it with the request reference.</summary>
     Task DecideAsync(string requestId, bool approved, string? note, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
 }

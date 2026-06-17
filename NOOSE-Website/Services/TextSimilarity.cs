@@ -2,24 +2,16 @@ using System.Text;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Wortbasierte Ähnlichkeits-Hilfen (Levenshtein) für die globale Suche. Reine CPU-Logik ohne
-/// Datenbank/UI – arbeitet auf bereits geladenen Zeichenketten. MySQL/MariaDB kennt keine
-/// Editierdistanz und Pomelo übersetzt sie nicht, daher läuft die Tippfehler-Toleranz in-memory
-/// über diesen Helfer (als Ergänzung zur exakten LIKE-Suche, nicht als Ersatz).
-/// </summary>
+/// <summary>Word-based similarity helpers (Levenshtein) for global search; runs in-memory since MySQL/Pomelo cannot translate edit distance.</summary>
 public static class TextSimilarity
 {
-    /// <summary>Suchwörter kürzer als dies lösen keine Fuzzy-Treffer aus (sonst zu viel Rauschen).</summary>
+    /// <summary>Search words shorter than this do not trigger fuzzy matches.</summary>
     public const int MinWordLength = 3;
 
-    /// <summary>Erlaubte Editierdistanz je Wortlänge: kurze Wörter strenger, längere etwas toleranter.</summary>
+    /// <summary>Allowed edit distance per word length: shorter words stricter.</summary>
     public static int Threshold(int wordLength) => wordLength <= 4 ? 1 : 2;
 
-    /// <summary>
-    /// Zerlegt beliebige Texte in eindeutige, kleingeschriebene Wörter (Trennung an allem, was kein
-    /// Buchstabe/keine Ziffer ist). Umlaute bleiben erhalten. Null/Leeres wird übersprungen.
-    /// </summary>
+    /// <summary>Splits texts into distinct lowercase words at non-alphanumeric boundaries.</summary>
     public static IReadOnlyList<string> Tokens(params string?[] texts)
     {
         var quantity = new HashSet<string>(StringComparer.Ordinal);
@@ -51,12 +43,7 @@ public static class TextSimilarity
         return quantity.Count == 0 ? Array.Empty<string>() : quantity.ToList();
     }
 
-    /// <summary>
-    /// Prüft, ob ein Kandidat zum Suchbegriff „ähnlich genug" ist: JEDES Suchwort (ab
-    /// <see cref="MinWortLaenge"/> Zeichen) braucht ein Kandidatenwort innerhalb seiner Schwelle.
-    /// <paramref name="summeDistanz"/> liefert die aufsummierte Mindestdistanz für die Sortierung
-    /// (kleiner = relevanter). Gibt false zurück, wenn kein Suchwort lang genug zum Prüfen ist.
-    /// </summary>
+    /// <summary>True if every long-enough search word has a candidate within its threshold; sumDistance ranks relevance (smaller = better).</summary>
     public static bool PhraseSimilar(IReadOnlyList<string> searchWords, IReadOnlyList<string> candidateWords, out int sumDistance)
     {
         sumDistance = 0;
@@ -74,7 +61,7 @@ public static class TextSimilarity
             {
                 if (Math.Abs(candidate.Length - searchWord.Length) > threshold)
                 {
-                    continue; // Längenunterschied allein überschreitet schon die Schwelle.
+                    continue; // length gap alone exceeds threshold
                 }
                 var d = Distance(searchWord, candidate, threshold);
                 if (d < bestDistance)
@@ -88,18 +75,14 @@ public static class TextSimilarity
             }
             if (bestDistance > threshold)
             {
-                return false; // Dieses Suchwort hat kein hinreichend ähnliches Wort → kein Treffer.
+                return false; // no similar word for this term
             }
             sumDistance += bestDistance;
         }
         return someChecked;
     }
 
-    /// <summary>
-    /// Levenshtein-Distanz mit oberer Schranke <paramref name="maxDistanz"/>: Sobald eine ganze
-    /// Matrix-Zeile die Schranke überschreitet, wird vorzeitig mit <c>maxDistanz + 1</c> abgebrochen.
-    /// Zwei rollende Zeilen statt voller Matrix (Speicher O(n)).
-    /// </summary>
+    /// <summary>Levenshtein distance with an upper bound; bails out early as maxDistance + 1 when a whole row exceeds it.</summary>
     public static int Distance(string a, string b, int maxDistance = int.MaxValue)
     {
         if (a.Length == 0)

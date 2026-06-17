@@ -1,8 +1,7 @@
-@* Folgen/Entfolgen-Umschalter für eine Akte (Watchlist). Wird in die Aktionsleiste der Detailseiten gesetzt. *@
 @inject IWatchlistService WatchlistService
 @inject ISnackbar Snackbar
 
-@* Folgen ist eine Mutation (Watchlist) → für die Nur-Lese-Aufsicht ausblenden. *@
+@* hide for read-only supervisors: follow is a mutation *@
 @if (_mayWrite)
 {
     <MudButton Variant="@(_followed ? Variant.Filled : Variant.Outlined)"
@@ -24,7 +23,7 @@
     private bool _mayWrite;
     private string? _loaded;
 
-    // Wird mit der Detailseite bei /…/{A} → /…/{B} wiederverwendet → auf Typ+Id-Wechsel reagieren (Projekt-Lifecycle).
+    // react to type+id change, component is reused across detail pages
     protected override async Task OnParametersSetAsync()
     {
         _mayWrite = User.MayWrite();

@@ -29,86 +29,74 @@ public sealed class ThreatScoreInput
 
     public IReadOnlyList<ThreatActivity> Activities { get; init; } = [];
 
-    /// <summary>
-    /// Maßnahmen-Doks gebündelt je Mitgliedschaft (austritts-stabil &amp; auf die Mitgliedschaftsdauer
-    /// begrenzt): eine innere Liste je Mitgliedschafts-Periode mit den Doks, deren Zeitpunkt in
-    /// [Beitritt … Austritt] fällt. Der Pro-Mitglied-Cap wird je innerer Liste angewandt.
-    /// </summary>
+    /// <summary>Measure docs grouped per membership period; per-member cap applied per inner list.</summary>
     public IReadOnlyList<IReadOnlyList<ThreatDoc>> DocsPerMember { get; init; } = [];
 
     public int ConflictCount { get; init; }
     public int AllianceCount { get; init; }
 
-    /// <summary>Anzahl manueller, nicht-automatischer <em>Standard</em>-Verknüpfungen inzident zur Fraktion
-    /// (S4 Netzwerk-Zentralität). Disjunkt zu Konflikt/Bündnis (die in S3 zählen).</summary>
+    /// <summary>Degree of manual default links incident to the faction (S4); disjoint from conflict/alliance.</summary>
     public int DefaultEdgesDegree { get; init; }
 
-    /// <summary>Jüngster <em>Erfassungs</em>-Zeitstempel (ErstelltAm/GeaendertAm) über Fraktion + relevante
-    /// Kind-Daten – nur für die Konfidenz-Frische, NICHT für die Höhe des Scores. <c>null</c> = nichts erfasst.</summary>
+    /// <summary>Latest capture timestamp across faction + child data; confidence freshness only, not score. null = nothing captured.</summary>
     public DateTime? LatestCaptureUtc { get; init; }
 }
 
-/// <summary>Eine Observation (Überwachung), reduziert auf das für den Score Nötige (Beginn + ggf. Ende).</summary>
+/// <summary>An observation reduced to what scoring needs (start + optional end).</summary>
 public sealed record ThreatObservation(DateTime Start, DateTime? End);
 
-/// <summary>
-/// Reine, EF-freie Eingabe für die PERSON-Score-Berechnung. Analog <see cref="BedrohungsScoreEingabe"/>; nutzt
-/// ausschließlich person-eigene Daten (keine Fraktion-Live-Importe → keine Zirkularität).
-/// </summary>
+/// <summary>EF-free input for person score calculation; person-owned data only to avoid circularity.</summary>
 public sealed class PersonThreatScoreInput
 {
     public Classification Classification { get; init; }
     public LifeStatus LifeStatus { get; init; }
     public DateTime? DeadUntil { get; init; }
 
-    /// <summary>Maßnahmen-Doks der Person (P1). Wiederverwendung von <see cref="BedrohungsDok"/>.</summary>
+    /// <summary>Person measure docs (P1).</summary>
     public IReadOnlyList<ThreatDoc> Docs { get; init; } = [];
-    /// <summary>Distinkte, nicht-leere Waffen-Beschreibungen (P2).</summary>
+    /// <summary>Distinct non-empty weapon descriptions (P2).</summary>
     public int DistinctWeaponsCount { get; init; }
-    /// <summary>Observationen/Überwachungen (P3).</summary>
+    /// <summary>Observations (P3).</summary>
     public IReadOnlyList<ThreatObservation> Observations { get; init; } = [];
 
-    // P4 – soziale Gefahr (typisierte PersonBeziehung + Leitungsrollen).
+    // P4 - social danger
     public int EnemyCount { get; init; }
     public int AllyCount { get; init; }
     public int BusinessPartnerCount { get; init; }
-    /// <summary>Anzahl aktiver Mitgliedschaften MIT Leitungsrolle (Fraktion/Gruppe/Partei).</summary>
+    /// <summary>Active memberships holding a leadership role (faction/group/party).</summary>
     public int LeadershipRolesCount { get; init; }
 
-    /// <summary>Grad manueller Standard-Verknüpfungen inzident zur Person (P5).</summary>
+    /// <summary>Degree of manual default links incident to the person (P5).</summary>
     public int DefaultEdgesDegree { get; init; }
 
-    // Nur für die Konfidenz (senken den Score NIE):
+    // confidence only - never lowers the score
     public int MembershipsCount { get; init; }
-    /// <summary>Datenreichtum = Aliase + Fahrzeuge + Telefone + Orte (nur Konfidenz, nie Score).</summary>
+    /// <summary>Data richness = aliases + vehicles + phones + locations (confidence only, never score).</summary>
     public int DataRichness { get; init; }
     public DateTime? LatestCaptureUtc { get; init; }
 }
 
-/// <summary>Beitrag eines einzelnen Teilscores – für die nachvollziehbare Aufschlüsselung in der UI.</summary>
+/// <summary>Contribution of one partial score; drives the breakdown shown in the UI.</summary>
 public sealed record ThreatPartialScore(string Name, double RawValue, double Points, double Cap, IReadOnlyList<string> Driver);
 
-/// <summary>
-/// Strukturierte Aufschlüsselung eines Score-Laufs. Wird als JSON in <c>Fraktion.BedrohungsDetailJson</c>
-/// persistiert und beantwortet in der UI „warum dieser Score?" Zeile für Zeile.
-/// </summary>
+/// <summary>Structured breakdown of a score run; persisted as JSON, answers "why this score?".</summary>
 public sealed class ThreatScoreDetail
 {
     public IReadOnlyList<ThreatPartialScore> PartialScores { get; init; } = [];
-    /// <summary>Summe der Inhalts-Teilscores (0–100), vor der Einstufungs-Band-Projektion.</summary>
+    /// <summary>Sum of content partial scores (0-100), before the classification band projection.</summary>
     public double Content { get; init; }
     public string ClassificationName { get; init; } = "";
-    /// <summary>Mindest-Band durch die Einstufung (0/12/50/75).</summary>
+    /// <summary>Minimum band from the classification (0/12/50/75).</summary>
     public int Base { get; init; }
     public string BandHint { get; init; } = "";
     public int Score { get; init; }
     public int Confidence { get; init; }
     public bool TriageFlag { get; init; }
     public string? TriageHint { get; init; }
-    /// <summary>Gesetzt (z. B. „Staatsfraktion"), wenn die Fraktion vom Score ausgenommen ist (Score = null).</summary>
+    /// <summary>Set when the faction is excluded from scoring (score = null).</summary>
     public string? Excluded { get; init; }
     public DateTime CalculatedAtUtc { get; init; }
 }
 
-/// <summary>Ergebnis eines Score-Laufs: persistierte Werte (Score/Konfidenz = <c>null</c> bei Ausnahme) + Aufschlüsselung.</summary>
+/// <summary>Result of a score run: persisted values (null on exclusion) plus breakdown.</summary>
 public sealed record ThreatScoreResult(int? Score, int? Confidence, ThreatScoreDetail Detail);

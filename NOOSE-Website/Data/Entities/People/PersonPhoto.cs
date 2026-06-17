@@ -1,11 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>
-/// Ein Foto der Personen-Galerie. Die eigentliche Datei liegt geschützt außerhalb von wwwroot;
-/// hier stehen nur die Metadaten. <see cref="DateinameGespeichert"/> wird serverseitig vergeben
-/// und ist nie vom Nutzer beeinflussbar (Schutz vor Path-Traversal).
-/// </summary>
+/// <summary>Metadata for a person-gallery photo; the file lives outside wwwroot. FileNameSaved is server-assigned to prevent path traversal.</summary>
 [Table("PersonFotos")]
 public class PersonPhoto
 {

@@ -1,7 +1,5 @@
-@* Identitäts-/Steckkarte der Fraktions-Akte: Name, Erkennungsfarbe, Einstufung und Kerndaten auf einen Blick. *@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
-        @* Titelbild (falls markiert), sonst Farb-Banner in der Erkennungsfarbe bzw. neutraler Platzhalter. *@
         @if (!string.IsNullOrEmpty(TitleImagePhotoId))
         {
             <MudImage Src="@($"/dateien/fraktionen/foto/{TitleImagePhotoId}")" Alt="Titelbild"
@@ -49,7 +47,7 @@
         <MudDivider />
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            @* Staatsfraktionen können nicht veralten – feste Stufe „Frisch" hat in der Ampel Vorrang vor der Selbstberechnung. *@
+            @* state factions never go stale: forced Fresh wins *@
             <RecencyIndicator Level="@(Faction.IsStateFaction ? RecencyLevel.Fresh : (RecencyLevel?)null)"
                                RecordsType="@nameof(Faction)" ReferenceDateUtc="@(Faction.ModifiedAt ?? Faction.CreatedAt)" />
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
@@ -57,7 +55,6 @@
             </MudText>
         </MudStack>
 
-        @* Erfassungsfortschritt erfasst/geschätzt – nur wenn eine geschätzte Gesamtgröße hinterlegt ist (wie bei der Personengruppe). *@
         @if (Faction.EstimatedMemberCount is > 0)
         {
             <div>
@@ -85,10 +82,8 @@
     [Parameter, EditorRequired] public Faction Faction { get; set; } = default!;
     [Parameter] public int MemberCount { get; set; }
 
-    /// <summary>Id des als Titelbild markierten Fotos (ersetzt den Farb-Banner); null = kein Titelbild.</summary>
     [Parameter] public string? TitleImagePhotoId { get; set; }
 
-    /// <summary>Codenames der Ermittlungsleiter (für die prominente Anzeige links in der Steckkarte).</summary>
     [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
 
     private double Percent()

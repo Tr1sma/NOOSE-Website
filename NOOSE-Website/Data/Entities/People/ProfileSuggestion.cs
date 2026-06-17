@@ -3,12 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>
-/// Ein gemeinsamer Vorschlagswert für ein Steckbrief-Mehrfachfeld (Waffe/Fahrzeug/Ort). Speist das
-/// Autocomplete und wächst, sobald ein neuer Wert erfasst wird. Reine Referenzdaten – kein Audit und
-/// kein Soft-Delete. Eindeutig je (<see cref="Typ"/>, <see cref="Wert"/>); die case-insensitive
-/// DB-Collation behandelt „Karabiner" und „karabiner" als denselben Eintrag.
-/// </summary>
+/// <summary>Shared autocomplete value for a profile multi-field; unique per (type, value) via case-insensitive collation.</summary>
 [Table("SteckbriefVorschlaege")]
 public class ProfileSuggestion
 {

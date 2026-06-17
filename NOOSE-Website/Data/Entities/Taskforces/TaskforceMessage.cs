@@ -3,13 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Taskforces;
 
-/// <summary>
-/// Eine Chat-Nachricht im Team-Chat einer Taskforce (Phase 5d). <see cref="Text"/> enthält den Rohtext inklusive
-/// inline-@-Verlinkungs-Tokens (<c>@{Typ:Id}</c>), die erst beim Anzeigen aufgelöst werden. <see cref="AutorName"/>
-/// ist der Codename des Autors zum Sende-Zeitpunkt (denormalisiert, wie bei <c>Kommentar</c>). Sichtbarkeit erbt
-/// von der Eltern-Taskforce (kein eigenes Verschlusssache-Flag). Voll auditiert und papierkorbfähig
-/// (Soft-Delete = Nachricht „zurückgezogen").
-/// </summary>
+/// <summary>Taskforce team-chat message; visibility inherited from the parent taskforce.</summary>
 [Table("TaskforceNachrichten")]
 public class TaskforceMessage : IAuditable, ISoftDelete
 {
@@ -18,14 +12,12 @@ public class TaskforceMessage : IAuditable, ISoftDelete
     public string TaskforceId { get; set; } = string.Empty;
     public Taskforce? Taskforce { get; set; }
 
-    /// <summary>Rohtext der Nachricht inkl. <c>@{Typ:Id}</c>-Verlinkungs-Tokens.</summary>
+    /// <summary>Raw text incl. inline @{Type:Id} mention tokens.</summary>
     public string Text { get; set; } = string.Empty;
 
-    /// <summary>Codename des Autors zum Sende-Zeitpunkt (denormalisiert).</summary>
     [Column("AutorName")]
     public string? AuthorName { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -35,7 +27,6 @@ public class TaskforceMessage : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

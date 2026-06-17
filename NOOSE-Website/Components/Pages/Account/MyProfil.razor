@@ -1,7 +1,5 @@
 @page "/profil"
-@* Selbstbedienungs-Profil: ein Agent ändert seine eigenen Stammdaten (Codename, Klarname, Dienstnummer).
-   Supervisory+ (IstFuehrung) wirkt sofort; darunter wird die Änderung als Antrag in den Freigabe-
-   Posteingang gelegt. Authentifizierung erbt die App-weite Policy „AktiverAgent" aus _Imports.razor. *@
+@* Self-service profile edit; leadership changes apply instantly, others go to the release inbox. *@
 @inject IAgentManagementService AgentService
 @inject IRequestService RequestService
 @inject ISnackbar Snackbar
@@ -168,8 +166,7 @@ else
         _ => Color.Default,
     };
 
-    // Liegt ein offener Antrag vor, werden dessen Werte vorbefüllt (man bearbeitet den Antrag weiter);
-    // sonst die aktuellen Live-Stammdaten.
+    // Prefill from a pending request if one exists, else from live data
     private void FieldsPrefill()
     {
         if (_agent!.NameChangeRequestedAt is not null)
@@ -200,8 +197,7 @@ else
             if (_isLeadership)
             {
                 await AgentService.MasterDataChangeAsync(_agent.Id, _realName, _codename.Trim(), _badgeNumber, _user);
-                // Der erneuerte SecurityStamp invalidiert die aktuelle Sitzung. Kontrolliert zur Neuanmeldung
-                // leiten, statt den Nutzer kurz darauf vom Kill-Switch überraschend trennen zu lassen.
+                // New SecurityStamp invalidates this session; redirect to re-login cleanly
                 Nav.NavigateTo("/Account/Login", forceLoad: true);
                 return;
             }
@@ -209,7 +205,7 @@ else
             await AgentService.NameChangeRequestAsync(_agent.Id, _realName, _codename.Trim(), _badgeNumber, _user);
             Snackbar.Add("Antrag eingereicht. Die Änderung greift nach Freigabe durch die Führung.", Severity.Success);
 
-            // Frisch laden, damit der Status-Banner stimmt.
+            // Reload so the status banner is correct
             _agent = await AgentService.FindAsync(_agent.Id);
             if (_agent is not null)
             {
@@ -218,7 +214,7 @@ else
         }
         catch (Exception ex)
         {
-            // never let a write-block or service error kill the circuit
+            // Don't let a write-block or service error kill the circuit
             Snackbar.Add(ex.Message, Severity.Error);
         }
         finally

@@ -1,6 +1,3 @@
-@* Der Taskforce zugeteilte NOOSE-Agents: Mitglieder + Leitung (Chefermittler/CID-Lead/TRU-Lead).
-   Liste + Zuteilen/Entfernen (Führung oder Leitung) + Rollenvergabe (nur Führung).
-   Komponentenname bewusst „TaskforceAgentePanel" wegen globaler @using-Tag-Auflösung der Shared-Ordner. *@
 @inject ITaskforceService TaskforceService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -68,7 +65,7 @@
     [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Wird nach jeder Änderung der Zuteilungen/Rollen ausgelöst (Steckkarte aktualisieren).</summary>
+    /// <summary>Raised after allocation/role changes.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -86,7 +83,7 @@
     {
         _load = true;
         _agents = await TaskforceService.GetAgentsAsync(TaskforceId);
-        // Verwalten (zuteilen/entfernen) darf die Führung oder die Leitung (Rolle != Mitglied) dieser Akte.
+        // Leadership or this file's lead may manage
         var myId = User.GetAgentId();
         _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && TaskforceRoleDisplay.IsLead(a.Role));
         _load = false;
@@ -95,7 +92,7 @@
     private async Task AllocateAsync()
     {
         var exclusion = _agents.Select(a => a.AgentId).ToList();
-        // Rolle (Leitung) wird nicht im Dialog gesetzt – neue Agents kommen als Mitglied, Rolle danach per Menü (Führung).
+        // New agents join as member; role set afterwards
         var choice = await AgentAllocateDialog.ShowAsync(DialogService, exclusion, User.MayRealNameSee(), mayInvestigationLeadSet: false);
         if (choice is null)
         {

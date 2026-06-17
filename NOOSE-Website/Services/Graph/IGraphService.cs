@@ -3,23 +3,12 @@ using NOOSE_Website.Models.Graph;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Baut den Beziehungsgraph (Phase 8) aus den vorhandenen Kanten-Quellen <c>Verknuepfung</c> und
-/// <c>PersonBeziehung</c> auf – rein lesend, ohne eigenes Schema. Sämtliche Knoten werden gegen die
-/// zentrale Sichtbarkeit (Verschlusssache/Taskforce/Papierkorb) geprüft; nicht sichtbare Akten und die
-/// daran hängenden Kanten erscheinen weder im Graph noch in der Pfadsuche.
-/// </summary>
+/// <summary>Read-only relationship graph built from links and person relations; all nodes pass central visibility.</summary>
 public interface IGraphService
 {
-    /// <summary>
-    /// Liefert den Graph für die Anfrage. Ohne Fokus den (auf die wichtigsten Knoten gedeckelten)
-    /// Gesamtgraph, mit Fokus den Umkreis des Fokusknotens bis zur gewünschten Tiefe.
-    /// </summary>
+    /// <summary>Returns the graph: capped full graph without focus, or the focus node's neighbourhood up to the given depth.</summary>
     Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Sucht den kürzesten (sichtbaren) Pfad zwischen zwei Akten („Wie hängen A und B zusammen?").
-    /// Liefert <see cref="PfadErgebnis.Gefunden"/> = false, wenn es keine Verbindung gibt.
-    /// </summary>
+    /// <summary>Finds the shortest visible path between two records; returns not-found when none exists.</summary>
     Task<PathResult> FindPathAsync(string sourceType, string sourceId, string targetType, string targetId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 }

@@ -7,7 +7,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IGespeicherteSucheService" />
+/// <inheritdoc cref="ISavedSearchService" />
 public class SavedSearchService(IDbContextFactory<AppDbContext> dbFactory) : ISavedSearchService
 {
     public async Task<List<SavedSearch>> GetForAgentAsync(string agentId, CancellationToken cancellationToken = default)
@@ -46,7 +46,7 @@ public class SavedSearchService(IDbContextFactory<AppDbContext> dbFactory) : ISa
     public async Task DeleteAsync(string id, string agentId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Nur eigene Suchen löschbar.
+        // only own searches deletable
         var entry = await db.SavedSearch.FirstOrDefaultAsync(g => g.Id == id && g.AgentId == agentId, cancellationToken);
         if (entry is null)
         {

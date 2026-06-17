@@ -15,7 +15,6 @@ public static class HtmlCleanup
         return Generate().Sanitize(html);
     }
 
-    // fresh instance
     private static HtmlSanitizer Generate()
     {
         var s = new HtmlSanitizer();
@@ -25,7 +24,6 @@ public static class HtmlCleanup
         {
             "p", "br", "span", "b", "strong", "i", "em", "u", "s",
             "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a",
-            // table tags
             "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
         })
         {
@@ -36,7 +34,6 @@ public static class HtmlCleanup
         foreach (var attr in new[]
         {
             "href", "target", "rel", "class", "style",
-            // table attributes
             "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
             "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
             "data-row", "data-col", "data-w", "data-full",
@@ -49,7 +46,6 @@ public static class HtmlCleanup
         foreach (var prop in new[]
         {
             "color", "background-color", "text-align",
-            // cell layout
             "width", "height", "vertical-align",
             "border", "border-color", "border-style", "border-width",
         })
@@ -57,7 +53,6 @@ public static class HtmlCleanup
             s.AllowedCssProperties.Add(prop);
         }
 
-        // safe schemes only
         s.AllowedSchemes.Clear();
         s.AllowedSchemes.Add("http");
         s.AllowedSchemes.Add("https");

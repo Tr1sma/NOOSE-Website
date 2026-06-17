@@ -4,18 +4,10 @@ using NOOSE_Website.Data.Entities.Jobs;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Zentrale Sichtbarkeitsregel für Aufgaben: Nicht-eingeschränkte Aufgaben sieht jeder (Team-Board).
-/// Eine als <see cref="Aufgabe.IstEingeschraenkt"/> markierte Aufgabe sieht nur, wer ihr ZUGETEILT ist
-/// (Zeile in <c>AufgabeZuweisungen</c>), ihr ERSTELLER, oder wer ohnehin alles sehen darf
-/// (<c>ClaimsPrincipal.DarfVerschlusssacheLesen()</c> = Führung/Admin + Teamleitung/Nur-Lese-Aufsicht).
-/// Zwei Formen derselben Regel: Query-Prädikat (Board/Suche/Picker) und Batch-Check (Referenz-/Verknüpfungs-
-/// auflösung). Der Soft-Delete-/Papierkorb-Filter greift weiterhin über die globalen Query-Filter.
-/// Immer hierüber filtern, nie das Prädikat kopieren. Analog <see cref="TaskforceSichtbarkeit"/>.
-/// </summary>
+/// <summary>Central job visibility rule. Always filter through here, never copy the predicate.</summary>
 public static class JobVisibility
 {
-    /// <summary>Filtert eine Aufgaben-Query auf die für den Aufrufer sichtbaren Einträge (eingeschränkte nur für Beteiligte/Aufsicht).</summary>
+    /// <summary>Filters a job query to entries visible to the caller (restricted only for involved/supervision).</summary>
     public static IQueryable<Job> OnlyVisible(this IQueryable<Job> query, AppDbContext db, bool mayAll, string? meId)
     {
         if (mayAll)
@@ -24,7 +16,7 @@ public static class JobVisibility
         }
         if (string.IsNullOrEmpty(meId))
         {
-            // Ohne Agent-Kontext (fail-closed): nur nicht-eingeschränkte Aufgaben.
+            // fail-closed: only unrestricted jobs
             return query.Where(a => !a.IsRestricted);
         }
         return query.Where(a => !a.IsRestricted
@@ -32,7 +24,7 @@ public static class JobVisibility
             || db.JobAssignments.Any(z => z.JobId == a.Id && z.AgentId == meId));
     }
 
-    /// <summary>Aus einer Kandidatenmenge die für den Aufrufer sichtbaren Aufgaben-Ids (für Batch-Referenzauflösung).</summary>
+    /// <summary>From a candidate set, the job ids visible to the caller (for batch reference resolution).</summary>
     public static async Task<HashSet<string>> VisibleIdsAsync(AppDbContext db, IReadOnlyCollection<string> jobIds,
         bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {

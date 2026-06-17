@@ -23,7 +23,7 @@
         <AuthorizeView>
             <Authorized Context="auth">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                    @* Quick-Add (Phase 7): Schnellerfassung neuer Akten direkt aus der Topbar. *@
+                    @* Quick-add new records from the topbar. *@
                     <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
                         <MudTooltip Text="Schnellerfassung – neue Akte anlegen">
                             <MudIconButton Icon="@Icons.Material.Filled.AddCircle" Color="Color.Inherit"
@@ -34,7 +34,7 @@
                                   Margin="Margin.Dense" Variant="Variant.Outlined"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                                   OnKeyDown="SearchKeyDown" Class="d-none d-md-flex mt-0" Style="max-width:240px;" />
-                    @* Auf kleinen Screens (ohne Suchfeld/Strg+K) ein Such-Icon, das direkt zur globalen Suche führt. *@
+                    @* Search icon for small screens (no search field/Ctrl+K). *@
                     <MudIconButton Icon="@Icons.Material.Filled.Search" Color="Color.Inherit" Href="/suche"
                                    Class="d-flex d-md-none" aria-label="Suche" title="Suche" />
                     <NotificationBell User="auth.User" />
@@ -71,7 +71,7 @@
                 </MudAlert>
             </AuthorizeView>
 
-            @* Ankündigungsbanner (Phase 7): von der Führung/Admins unter /admin/system gepflegt. *@
+            @* Announcement banner, maintained by leadership/admins under /admin/system. *@
             @if (!string.IsNullOrWhiteSpace(_configuration?.BannerText))
             {
                 <MudAlert Severity="@BannerSeverity" Dense="true" Class="mb-4 no-print">@_configuration!.BannerText</MudAlert>
@@ -85,7 +85,7 @@
                 </MudAlert>
             }
 
-            @* Wartungsmodus (Phase 7): sperrt die Inhalte für alle außer Admins. *@
+            @* Maintenance mode: blocks content for everyone except admins. *@
             @if (_configuration?.MaintenanceModeActive == true && !_isAdmin)
             {
                 <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-12">
@@ -127,7 +127,7 @@
             }
         </MudContainer>
 
-        @* Rechtlicher Footer – von überall erreichbar (Impressum extern, Datenschutz intern). *@
+        @* Legal footer, reachable from anywhere. *@
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="px-4 pb-4 no-print">
             <MudDivider Class="mb-2" />
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2">
@@ -141,7 +141,7 @@
         </MudContainer>
     </MudMainContent>
 
-    @* Command-Palette (Strg+K) – nur für eingeloggte Agenten aktiv. *@
+    @* Command palette (Ctrl+K), only for signed-in agents. *@
     <AuthorizeView>
         <Authorized Context="cp">
             <CommandPalette />
@@ -173,7 +173,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Systemkonfiguration (gecacht): Theme-Farben, Logo, Banner, Wartungsmodus.
         _configuration = await SettingService.GetAsync();
         _theme = NooseTheme.WithColours(_configuration.ThemePrimary, _configuration.ThemeSecondary, _configuration.ThemeTertiary);
 

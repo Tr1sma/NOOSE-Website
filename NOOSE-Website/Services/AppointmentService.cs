@@ -9,7 +9,6 @@ using NOOSE_Website.Models.Appointments;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="ITerminService" />
 public class AppointmentService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumber,
@@ -18,7 +17,6 @@ public class AppointmentService(
     public async Task<Appointment?> GetDetailAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Eingeschränkte Termine sind nur für Beteiligte/Aufsicht zugänglich (null = „nicht gefunden/zugänglich").
         return await db.Appointments
             .OnlyVisible(db, actor.MayClassifiedRead(), actor.GetAgentId())
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
@@ -36,7 +34,6 @@ public class AppointmentService(
     public async Task<List<Appointment>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Eingeschränkte Termine tauchen im Picker nur für Beteiligte/Aufsicht auf.
         var query = db.Appointments.OnlyVisible(db, mayAll, meId);
 
         var s = searchText?.Trim();
@@ -75,7 +72,7 @@ public class AppointmentService(
         db.Appointments.Add(appointment);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Nur tatsächlich existierende, aktive Agenten zuteilen (dedupliziert).
+        // Only assign existing active agents, deduplicated.
         var valid = agentIds.Count == 0
             ? new List<string>()
             : await db.Users
@@ -93,7 +90,7 @@ public class AppointmentService(
 
         await tx.CommitAsync(cancellationToken);
 
-        // Nach dem Commit benachrichtigen (der Ersteller selbst bekommt keine Meldung).
+        // Notify after commit, creator excluded.
         var creatorId = actor.GetAgentId();
         foreach (var agentId in valid.Distinct().Where(x => x != creatorId))
         {
@@ -206,14 +203,11 @@ public class AppointmentService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    // ---- Helfer ----
-
-    /// <summary>Lokale RP-Zeit (wie eingegeben) → UTC für die Speicherung. Behandelt unspezifizierte Kinds als lokal.</summary>
+    /// <summary>Local input time to UTC; treats unspecified kinds as local.</summary>
     private static DateTime LocalByUtc(DateTime local)
         => DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
 
-    /// <summary>Prüft/normalisiert Beginn &amp; Ende der Eingabe und liefert sie als UTC. Ganztägig → auf das reine
-    /// Datum (00:00) normalisiert; das Ende darf nicht vor dem Beginn liegen.</summary>
+    /// <summary>Validates and normalizes start/end to UTC; all-day snaps to date, end may not precede start.</summary>
     private static (DateTime Start, DateTime? End) TimesFromInput(AppointmentInput input)
     {
         if (input.Start is null)

@@ -4,36 +4,22 @@ using NOOSE_Website.Models.Statistics;
 
 namespace NOOSE_Website.Services.Statistics;
 
-/// <summary>
-/// Erzeugt, archiviert und liest die automatischen Monats-Lageberichte (Phase 8 / Block D, Schritt 2).
-/// Ein Bericht friert den vollständigen <see cref="StatistikReport"/> (inkl. Verschlusssachen-Aggregate,
-/// daher Führung vorbehalten) zum Erzeugungszeitpunkt als JSON ein. Je Berichtsmonat existiert höchstens
-/// ein aktiver Bericht.
-/// </summary>
+/// <summary>Generates, archives and reads the monthly situation reports; each report freezes the full statistics snapshot as JSON. At most one active report per month.</summary>
 public interface ISituationReportService
 {
-    /// <summary>
-    /// Erzeugt den Lagebericht für den angegebenen Monat und persistiert ihn. Existiert bereits ein aktiver
-    /// Bericht für den Monat: bei <paramref name="ersetzeVorhandene"/>=false wird <c>null</c> zurückgegeben
-    /// (kein Überschreiben), sonst wird der alte per Soft-Delete ersetzt. Benachrichtigt die Führung
-    /// (best-effort). <paramref name="ausloeserId"/> = manueller Auslöser bzw. <c>null</c> beim Dienst.
-    /// </summary>
+    /// <summary>Generates and persists the report for the month; returns null if one exists and replaceExisting is false, otherwise replaces it. triggerId is the manual trigger or null for the service.</summary>
     Task<SituationReport?> GenerateMonthAsync(int year, int month, bool replaceExisting, string? triggerId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Erzeugt den Bericht des zum Zeitpunkt <paramref name="jetztUtc"/> zuletzt abgeschlossenen Monats
-    /// (Vormonat), falls dafür noch kein aktiver Bericht existiert. Für den Hintergrund-Dienst. Liefert
-    /// <c>true</c>, wenn ein Bericht neu erzeugt wurde.
-    /// </summary>
+    /// <summary>Generates the previous month's report if none exists yet; for the background service. Returns true if a new report was created.</summary>
     Task<bool> GenerateDueAsync(DateTime nowUtc, CancellationToken cancellationToken = default);
 
-    /// <summary>Alle archivierten Berichte als Kopfzeilen (neueste zuerst), ohne den JSON-Snapshot.</summary>
+    /// <summary>All archived reports as headers (newest first), without the JSON snapshot.</summary>
     Task<List<SituationReportHead>> GetArchiveAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Lädt einen Bericht inkl. deserialisiertem Snapshot für die Detailansicht; <c>null</c> wenn nicht gefunden/lesbar.</summary>
+    /// <summary>Loads a report including its deserialized snapshot; null if not found/readable.</summary>
     Task<SituationReportDisplay?> GetDisplayAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>Verschiebt einen Bericht in den Papierkorb (Soft-Delete).</summary>
+    /// <summary>Moves a report to the trash (soft delete).</summary>
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

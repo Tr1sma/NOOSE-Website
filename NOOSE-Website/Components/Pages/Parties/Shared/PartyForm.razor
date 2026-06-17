@@ -1,5 +1,3 @@
-@* Gemeinsames Formular für Anlegen/Bearbeiten einer Partei. Beim Anlegen können bereits Mitglieder
-   erfasst werden (ZeigeMitglieder); zugeteilte Agents laufen weiterhin nur über die Akte. *@
 @inject IDialogService DialogService
 
 <MudGrid>
@@ -87,10 +85,8 @@
 
 @code {
     [Parameter, EditorRequired] public PartyInput Input { get; set; } = default!;
-    /// <summary>Einstufung im Formular zeigen (nur beim Anlegen; im Bearbeiten über den Tab „Einstufung").</summary>
     [Parameter] public bool ShowClassification { get; set; }
     [Parameter] public bool MayHighest { get; set; }
-    /// <summary>Mitglieder-Sektion zeigen (nur beim Anlegen; im Bearbeiten über den Tab „Mitglieder").</summary>
     [Parameter] public bool ShowMembers { get; set; }
     [Parameter] public bool IsLeadership { get; set; }
 
@@ -102,7 +98,7 @@
         {
             return;
         }
-        // Doppelte vermeiden: gleiche bestehende Person oder gleicher neuer Name (Akte würde sonst doppelt entstehen).
+        // avoid duplicate: same existing person or same new name
         var alreadyExists =
             (!string.IsNullOrWhiteSpace(@new.PersonId) && Input.Members.Any(m => m.PersonId == @new.PersonId))
             || (!string.IsNullOrWhiteSpace(@new.NewPersonName)

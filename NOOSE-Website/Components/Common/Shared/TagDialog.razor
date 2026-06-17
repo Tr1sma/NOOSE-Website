@@ -1,5 +1,3 @@
-@* Dialog zum Anlegen/Bearbeiten eines Tags (Name + Farbe). Liefert eine TagEingabe zurück. *@
-
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form">
@@ -60,7 +58,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Werten). Liefert null bei Abbruch.</summary>
+    /// <summary>Shows the create/edit dialog; returns null on cancel.</summary>
     public static async Task<TagInput?> ShowAsync(IDialogService dialog, string title, string? name = null, string? colour = null)
     {
         var parameters = new DialogParameters<TagDialog>

@@ -1,4 +1,4 @@
-@* Druckansicht einer Aufgabe (Phase 7): Auftrag als strukturiertes Dokument. *@
+@* Print view of a job. *@
 @page "/aufgaben/{Id}/druck"
 @layout PrintLayout
 @inject IJobService JobService
@@ -90,7 +90,7 @@ else
         var user = (await AuthStateTask).User;
         _printBy = user.GetCodename();
 
-        // GetDetailAsync setzt die Sichtbarkeitsregeln eingeschränkter Aufgaben selbst durch.
+        // GetDetailAsync enforces restricted-job visibility itself.
         _job = await JobService.GetDetailAsync(Id, user);
         if (_job is not null)
         {

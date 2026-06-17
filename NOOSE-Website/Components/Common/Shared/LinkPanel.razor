@@ -1,6 +1,3 @@
-@* Verknüpfungen einer Personen-Akte. Reihenfolge: (1) Verknüpfte Akten (manuell, beliebige Aktentypen),
-   (2) Beziehungen (typisierte Person-Beziehungen + automatische Kollegen aus geteilten Organisationen),
-   (3) abgeleitete Verbündete/Gegner aus Bündnissen/Konflikten der Organisationen der Person. *@
 @inject ILinkService LinkService
 @inject IRelationService RelationService
 @inject IPersonService PersonService
@@ -8,11 +5,9 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="6">
-    @* Schneller Sprung in das interaktive Lagebild, zentriert auf diese Person (Phase 8). *@
     <MudButton Href="@($"/graph?typ={nameof(Person)}&id={PersonId}")" Variant="Variant.Filled" Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.Hub" Class="align-self-start">Im Beziehungsgraph anzeigen</MudButton>
 
-    @* ---- Verknüpfte Akten (manuell, jede Aktenart) ---- *@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudText Typo="Typo.subtitle1">Verknüpfte Akten (@_manual.Count)</MudText>
@@ -67,7 +62,6 @@
 
     <MudDivider />
 
-    @* ---- Person-Beziehungen (typisiert) + automatische Kollegen ---- *@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudText Typo="Typo.subtitle1">Beziehungen (@(_relations.Count + _colleagues.Count))</MudText>
@@ -89,7 +83,6 @@
         }
         else
         {
-            @* Manuell erfasste, typisierte Beziehungen *@
             @foreach (var b in _relations)
             {
                 <MudPaper Class="pa-3" Elevation="1">
@@ -114,7 +107,6 @@
                 </MudPaper>
             }
 
-            @* Automatische Kollegen aus geteilten Fraktionen/Gruppen/Parteien (systemgepflegt, nicht löschbar) *@
             @foreach (var k in _colleagues)
             {
                 <MudPaper Class="pa-3" Elevation="1">
@@ -141,7 +133,6 @@
 
     <MudDivider />
 
-    @* ---- Abgeleitet: Verbündete/Gegner über Bündnisse/Konflikte der eigenen Organisationen ---- *@
     <MudStack Spacing="3">
         <MudText Typo="Typo.subtitle1">Über Bündnisse &amp; Konflikte (@_derived.Count)</MudText>
         @if (!_load && _derived.Count == 0)
@@ -200,8 +191,7 @@
         _load = true;
         var scope = ViewerScope.From(User);
         _relations = await RelationService.GetForPersonAsync(PersonId, scope);
-        // Standard-Verknüpfungen aufteilen: automatische Kollegen wandern zu den Beziehungen,
-        // manuell angelegte bleiben unter „Verknüpfte Akten".
+        // split auto colleagues from manual links
         var @default = await LinkService.GetForRecordAsync(nameof(Person), PersonId, scope, LinkKind.Default);
         _manual = @default.Where(v => !v.Automatic).ToList();
         _colleagues = @default.Where(v => v.Automatic).ToList();
@@ -273,7 +263,6 @@
         await LoadAsync();
     }
 
-    // Tooltip für automatische Kollegen-Verknüpfungen je nach Quelle (Fraktion/Gruppe/Partei).
     private static string AutoTooltip(string? label) => label switch
     {
         ColleaguesSync.GroupColleague => "Automatisch durch eine gemeinsame Personengruppe – wird mit der Mitgliedschaft gepflegt.",
@@ -281,12 +270,10 @@
         _ => "Automatisch durch eine gemeinsame Fraktion – wird mit der Mitgliedschaft gepflegt.",
     };
 
-    // Tooltip für abgeleitete Verbündete/Gegner – ergeben sich aus Bündnissen/Konflikten der Organisationen.
     private static string DerivedTooltip(bool allied) => allied
         ? "Automatisch durch ein Bündnis der Organisation – wird mit dem Bündnis gepflegt."
         : "Automatisch durch einen Konflikt der Organisation – wird mit dem Konflikt gepflegt.";
 
-    // Lesbarer Aktentyp-Name für die Verknüpfungs-Chips.
     private static string TypeDisplay(string type) => type switch
     {
         nameof(Person) => "Person",

@@ -11,7 +11,7 @@ using NOOSE_Website.Models.Statistics;
 
 namespace NOOSE_Website.Services.Statistics;
 
-/// <inheritdoc cref="ILageberichtService" />
+/// <inheritdoc cref="ISituationReportService" />
 public class SituationReportService(
     IDbContextFactory<AppDbContext> dbFactory,
     IStatisticsService statistics,
@@ -28,7 +28,6 @@ public class SituationReportService(
 
     public async Task<bool> GenerateDueAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
     {
-        // previous month
         var previousMonth = new DateTime(nowUtc.Year, nowUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-1);
         var bulletin = await GenerateMonthAsync(previousMonth.Year, previousMonth.Month, replaceExisting: false,
             triggerId: null, cancellationToken);
@@ -40,7 +39,6 @@ public class SituationReportService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // active reports
         var existing = await db.SituationReports
             .Where(l => l.Year == year && l.Month == month)
             .ToListAsync(cancellationToken);
@@ -50,7 +48,6 @@ public class SituationReportService(
             {
                 return null;
             }
-            // soft delete old
             foreach (var alt in existing)
             {
                 alt.IsDeleted = true;
@@ -59,7 +56,6 @@ public class SituationReportService(
             }
         }
 
-        // full snapshot
         var report = await statistics.GetReportAsync(isLeadership: true, meId: null, cancellationToken: cancellationToken);
         var title = $"Lagebericht {new DateTime(year, month, 1).ToString("MMMM yyyy", DeDe)}";
 
@@ -87,7 +83,6 @@ public class SituationReportService(
             .Select(l => new { l.Id, l.Year, l.Month, l.Title, l.CreatedAt, l.CreatedById })
             .ToListAsync(cancellationToken);
 
-        // resolve codenames
         var creatorIds = rows.Where(r => !string.IsNullOrEmpty(r.CreatedById))
             .Select(r => r.CreatedById!).Distinct().ToList();
         var names = creatorIds.Count == 0
@@ -147,7 +142,6 @@ public class SituationReportService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    // notify leadership
     private async Task NotifyLeadershipAsync(AppDbContext db, SituationReport bulletin, string title,
         string? triggerId, CancellationToken cancellationToken)
     {

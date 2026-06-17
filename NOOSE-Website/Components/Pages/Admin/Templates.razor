@@ -1,5 +1,4 @@
-@* Zentrale Vorlagen-Verwaltung mit Reitern. Bündelt Dok-Vorlagen (Erfassungsmasken) und
-   Dokument-Vorlagen (HTML-Body) – erweiterbar um weitere Vorlagen-Typen. Nur Führung. *@
+@* Central tabbed template management bundling capture masks and document templates. *@
 @page "/admin/vorlagen"
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject NavigationManager Nav
@@ -25,7 +24,7 @@
 
 @code {
     private int _activeTab;
-    // Slugs in Panel-Reihenfolge – halten den aktiven Reiter in der URL (?tab=…).
+    // Slugs in panel order; keep active tab in the URL.
     private static readonly string[] _tabs = { "dok-vorlagen", "dokument-vorlagen" };
 
     protected override void OnInitialized() => _activeTab = TabUrlState.Read(Nav, _tabs);

@@ -1,10 +1,6 @@
 namespace NOOSE_Website.Authorization;
 
-/// <summary>
-/// Eigene Claim-Typen, die der <c>AgentClaimsPrincipalFactory</c> beim Login in das Cookie
-/// schreibt. So können Policies und UI rein aus den Claims entscheiden – ohne DB-Zugriff pro
-/// Anfrage.
-/// </summary>
+/// <summary>Custom claim types written into the cookie at login, so policies and UI decide from claims without per-request DB hits.</summary>
 public static class AgentClaimTypes
 {
     public const string Rank = "noose:dienstgrad";

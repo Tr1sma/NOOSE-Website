@@ -1,5 +1,4 @@
-@* Upload-/Bearbeiten-Dialog der Datei-Bibliothek (Phase 7). Beim Bearbeiten (Vorbelegung gesetzt)
-   wird keine neue Datei gewählt, nur Titel/Kategorie/Verschlusssache geändert. *@
+@* Upload/edit dialog for the file library. Editing changes only metadata, not the file. *@
 @inject ILibraryStorageService Storage
 
 <MudDialog>
@@ -62,8 +61,7 @@
     private string _title = string.Empty;
     private string? _category;
     private DocumentClassification _classification;
-    // Auswahlliste: die vom Agenten vergebbaren Stufen, plus – beim Bearbeiten – die bereits gesetzte Stufe,
-    // damit sie auch dann anwählbar bleibt, wenn der Agent sie nicht selbst neu vergeben dürfte (Beibehalten).
+    // Assignable levels plus the already-set level when editing, so it stays selectable even if not re-assignable.
     private List<DocumentClassification> _options = new();
 
     protected override void OnParametersSet()
@@ -106,7 +104,7 @@
         _file = file;
         if (string.IsNullOrWhiteSpace(_title))
         {
-            // Titel aus dem Dateinamen vorbelegen (ohne Endung).
+            // Prefill title from file name.
             _title = Path.GetFileNameWithoutExtension(file.Name);
         }
     }
@@ -116,10 +114,10 @@
     private void Save()
         => MudDialog.Close(DialogResult.Ok(new Result(_title.Trim(), _category, _classification, _file)));
 
-    /// <summary>Dialog-Ergebnis: Metadaten + (nur beim Upload) die gewählte Datei.</summary>
+    /// <summary>Dialog result: metadata plus the chosen file (upload only).</summary>
     public sealed record Result(string Title, string? Category, DocumentClassification Classification, IBrowserFile? File);
 
-    /// <summary>Zeigt den Dialog; liefert das Ergebnis oder <c>null</c> bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the result or <c>null</c> if cancelled.</summary>
     public static async Task<Result?> ShowAsync(IDialogService dialog, string title,
         IReadOnlyList<DocumentClassification> classificationOptions, LibraryFile? preset = null)
     {

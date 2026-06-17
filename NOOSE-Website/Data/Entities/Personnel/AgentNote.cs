@@ -4,11 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Personnel;
 
-/// <summary>
-/// Ein Personalakten-Vermerk zu einem Agent (Phase 5e): Belobigung oder Disziplinar-Eintrag. Datierter,
-/// auditierter Eintrag mit Autor (Vorlage: <c>Kommentar</c>). Für alle Agenten sichtbar; anlegen/löschen nur
-/// durch die Führung. <see cref="AutorName"/> = Codename des Verfassers (denormalisiert).
-/// </summary>
+/// <summary>A personnel-file note (commendation or disciplinary); visible to all, created/deleted by leadership only.</summary>
 [Table("AgentVermerke")]
 public class AgentNote : IAuditable, ISoftDelete
 {
@@ -21,11 +17,9 @@ public class AgentNote : IAuditable, ISoftDelete
 
     public string Text { get; set; } = string.Empty;
 
-    /// <summary>Codename des Verfassers zum Zeitpunkt (denormalisiert).</summary>
     [Column("AutorName")]
     public string? AuthorName { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -35,7 +29,6 @@ public class AgentNote : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

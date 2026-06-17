@@ -8,13 +8,11 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IDokumentService" />
 public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocumentService
 {
     public async Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // local filter vars
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
         var baseQuery = partnerAgency is { } agency
             ? db.Documents.OnlyPartnerVisible(db, agency, partnerAgentId)
@@ -23,7 +21,6 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
                 || (d.IsTRUClassified && isTru)
                 || (d.IsHRBClassified && isHrb));
         var rows = await baseQuery
-            // pinned first
             .OrderByDescending(d => d.Pinned)
             .ThenByDescending(d => d.ModifiedAt ?? d.CreatedAt)
             .Select(d => new DocumentRow(d.Id, d.Title, d.Category, d.IsClassified, d.IsTRUClassified, d.IsHRBClassified,
@@ -56,7 +53,6 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         return rows.Select(ToListItem).ToList();
     }
 
-    // raw projection
     private sealed record DocumentRow(string Id, string Title, string? Category,
         bool IsClassified, bool IsTRUClassified, bool IsHRBClassified, DateTime Refreshed, bool Pinned);
 
@@ -74,7 +70,6 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (partnerAgency is { } agency)
         {
-            // released and not classified
             return await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, nameof(Document), id, agency, partnerAgentId, cancellationToken)
                 ? await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
                 : null;
@@ -82,8 +77,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (document is null || !scope.CanSee(document.Classification))
         {
-            // hide existence
-            return null;
+            return null; // hide existence
         }
         return document;
     }
@@ -96,14 +90,12 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
             throw new InvalidOperationException("Ein Titel ist erforderlich.");
         }
 
-        // check classification permission
         Permission.RequireMayAssignClassification(actor, input.Classification);
 
         var document = new Document
         {
             Title = title,
             Category = input.Category.TrimToNull(),
-            // sanitize HTML
             ContentHtml = HtmlCleanup.Clean(input.ContentHtml),
             Classification = input.Classification,
         };
@@ -126,13 +118,11 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Dokument nicht gefunden.");
 
-        // check edit access
         var scope = DocumentViewerScope.From(actor);
         if (!scope.CanSee(document.Classification))
         {
             throw new UnauthorizedAccessException("Dieses Dokument ist eine Verschlusssache und dir nicht zugänglich.");
         }
-        // check new classification
         Permission.RequireMayAssignClassification(actor, input.Classification);
 
         document.Title = title;
@@ -144,13 +134,11 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
 
     public async Task PinSetAsync(string id, bool pinned, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // leadership only
         Permission.RequireLeadership(actor);
-        // enforce write access
         Permission.RequireWriteAccess(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // skip audit interceptor
+        // bypass audit interceptor
         var affected = await db.Documents
             .Where(d => d.Id == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.Pinned, pinned), cancellationToken);
@@ -175,7 +163,6 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
             throw new UnauthorizedAccessException("Nur der Ersteller oder die Führung darf dieses Dokument löschen.");
         }
 
-        // soft delete
         db.Documents.Remove(document);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -195,7 +182,6 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         }
 
         var refs = sources.Select(q => (q.EntityType, q.EntityId)).ToList();
-        // skip foreign taskforces
         var map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
 
         var result = new List<DocumentAttachment>();
@@ -203,7 +189,6 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         {
             if (map.TryGetValue((q.EntityType, q.EntityId), out var a))
             {
-                // hide classified
                 if (!isLeadership && a.Classified)
                 {
                     continue;

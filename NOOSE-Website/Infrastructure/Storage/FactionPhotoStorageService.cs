@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace NOOSE_Website.Infrastructure.Storage;
 
-/// <inheritdoc cref="IFraktionFotoStorageService" />
+/// <inheritdoc />
 public class FactionPhotoStorageService : IFactionPhotoStorageService
 {
     private readonly FileUploadOptions _options;
@@ -16,7 +16,6 @@ public class FactionPhotoStorageService : IFactionPhotoStorageService
             : Path.Combine(env.ContentRootPath, _options.FactionsPath);
     }
 
-    // same as person photo
     public long MaxBytes => _options.MaxBytes;
 
     public bool IsAllowedType(string contentType)
@@ -45,7 +44,6 @@ public class FactionPhotoStorageService : IFactionPhotoStorageService
         }
     }
 
-    /// <summary>Safe path builder.</summary>
     private string SafePath(string fileName) => FilePathHelper.SafePath(_basePath, fileName);
 
     private static string ExtensionFor(string contentType) => contentType.ToLowerInvariant() switch

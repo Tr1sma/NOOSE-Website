@@ -6,7 +6,6 @@ using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IDokVorlageService" />
 public class DocTemplateService(IDbContextFactory<AppDbContext> dbFactory) : IDocTemplateService
 {
     public async Task<List<DocTemplate>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -80,12 +79,12 @@ public class DocTemplateService(IDbContextFactory<AppDbContext> dbFactory) : IDo
         {
             return;
         }
-        // Remove wird vom AuditSaveChangesInterceptor in einen Soft-Delete (Papierkorb) umgewandelt.
+        // Interceptor rewrites Remove to soft-delete.
         db.DocTemplates.Remove(template);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Überträgt die editierbaren Felder der Eingabe auf die Vorlage (ohne Name – der wird vorab validiert).</summary>
+    /// <summary>Copies the editable fields; name is validated beforehand.</summary>
     private static void Apply(DocTemplate template, DocTemplateInput input)
     {
         template.Description = input.Description.TrimToNull();

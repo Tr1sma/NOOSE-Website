@@ -4,11 +4,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Typisierte Person-zu-Person-Beziehungen (Familie/Feind/…). Liefert sie aus Sicht einer Person
-/// (egal auf welcher Seite gespeichert); blendet Gegenseiten im Papierkorb sowie – für Nicht-Führung –
-/// Verschlusssachen aus.
-/// </summary>
+/// <summary>Typed person-to-person relations from one person's view (regardless of stored side); hides trashed counterparts and classified ones for non-leadership.</summary>
 public interface IRelationService
 {
     /// <summary>Person-to-person relations from one person's view; partners see only relations to released persons.</summary>

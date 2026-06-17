@@ -26,14 +26,14 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         var refs = tokens.Select(t => (t.Type, t.Id)).Distinct().ToList();
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Fremde Taskforces gar nicht erst auflösen → erscheinen als „(nicht verfügbar)"-Chip.
+        // foreign taskforces stay unresolved -> shown as unavailable chip
         var map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
         return Segment(text, tokens, map, isLeadership);
     }
 
     public async Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> ResolveManyAsync(IReadOnlyList<string?> texts, bool isLeadership, string? meId, CancellationToken cancellationToken = default)
     {
-        // Alle Tokens aller Texte einmal sammeln und in EINER Sammelabfrage auflösen.
+        // collect all tokens from all texts and resolve in one query
         var tokenPerText = texts.Select(MentionParser.Parse).ToList();
         var refs = tokenPerText.SelectMany(ts => ts).Select(t => (t.Type, t.Id)).Distinct().ToList();
 
@@ -45,7 +45,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         else
         {
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            // Fremde Taskforces gar nicht erst auflösen (s. AufloesenAsync).
+            // foreign taskforces stay unresolved
             map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
         }
 
@@ -74,14 +74,14 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             }
             if (map.TryGetValue((tok.Type, tok.Id), out var a))
             {
-                // Verschlusssache, die der Betrachter nicht sehen darf → neutraler Chip ohne Name/Link.
+                // classified the viewer can't see -> neutral chip without name/link
                 segments.Add(a.Classified && !isLeadership
                     ? new MentionSegment(true, "Verschlusssache", tok.Type, null, Hidden: true)
                     : new MentionSegment(true, a.Display, tok.Type, a.Href, false));
             }
             else
             {
-                // Ziel gelöscht/unbekannt.
+                // target deleted/unknown
                 segments.Add(new MentionSegment(true, "(nicht verfügbar)", tok.Type, null, false));
             }
             pos = tok.Start + tok.Length;
@@ -103,15 +103,13 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         var hit = new List<MentionHit>();
 
-        // 1) Akten (Person/Fraktion/Gruppe/Partei/Operation/Taskforce) über die Schnellsuche – VS-gefiltert;
-        //    Taskforces zusätzlich Mitgliedschafts-gefiltert (meId).
+        // records via quick search, classification- and taskforce-membership-filtered
         var records = await search.QuickSearchAsync(s, new ViewerScope(mayClassifiedRead, mayClassifiedRead, meId, null), 8, cancellationToken);
         hit.AddRange(records.Select(a => new MentionHit(a.Category, a.TargetId, a.Name, a.CaseNumber)));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // 2) Agenten – Codename (Klarname nur für die Führung; die Nur-Lese-Aufsicht sieht ihn NICHT, auch wenn
-        //    sie VS lesen darf). darfKlarname kommt daher getrennt vom VS-Lese-Flag herein.
+        // real name gated by mayRealName, kept separate from the classified-read flag
         var agents = await db.Users
             .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead
                 && (u.Codename.Contains(s) || (mayRealName && u.RealName != null && u.RealName.Contains(s))))
@@ -121,7 +119,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             string.IsNullOrWhiteSpace(a.Codename) ? "(unbenannter Agent)" : a.Codename,
             mayRealName ? a.RealName : null)));
 
-        // 3) Quellen – Titel-Suche; Sichtbarkeit über die Eltern-Akte (Verschlusssache + Existenz).
+        // sources by title; visibility derived from the parent record
         var sourcesRaw = await db.Sources.Where(q => q.Title.Contains(s))
             .OrderByDescending(q => q.ModifiedAt ?? q.CreatedAt).Take(20)
             .Select(q => new { q.Id, q.Title, q.EntityType, q.EntityId }).ToListAsync(cancellationToken);
@@ -134,7 +132,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             {
                 if (!parentsMap.TryGetValue((q.EntityType, q.EntityId), out var e) || (e.Classified && !mayClassifiedRead))
                 {
-                    continue; // Eltern-Akte fehlt/Papierkorb oder Verschlusssache ohne Berechtigung.
+                    continue; // parent missing/trashed or classified without access
                 }
                 hit.Add(new MentionHit(nameof(Source), q.Id, string.IsNullOrWhiteSpace(q.Title) ? "Quelle" : q.Title, e.Display));
                 if (++count >= CandidatesPerGroup)

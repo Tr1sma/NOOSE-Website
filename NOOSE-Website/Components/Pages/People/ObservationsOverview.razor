@@ -107,7 +107,6 @@ else
             || (display.AgentCodename?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    // Klick auf eine Zeile öffnet die Observation als Detail-Dialog (lesen + bearbeiten, mit „Zur Akte"-Sprung).
     private async Task Open(ObservationDisplay? display)
     {
         if (display is null)

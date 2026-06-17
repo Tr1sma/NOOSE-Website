@@ -1,25 +1,21 @@
 namespace NOOSE_Website.Authorization;
 
-/// <summary>
-/// Namens-Konstanten aller Authorization-Policies (siehe Rechte-Matrix in <c>Plan.md</c> §6).
-/// Verwendung: <c>[Authorize(Policy = Policies.Fuehrung)]</c> bzw. <c>&lt;AuthorizeView Policy="..."&gt;</c>.
-/// </summary>
+/// <summary>Name constants for all authorization policies.</summary>
 public static class Policies
 {
-    /// <summary>Eingeloggt und Status = Aktiv. App-weiter Standard (in <c>_Imports.razor</c>).</summary>
+    /// <summary>Signed in with status Active. App-wide default.</summary>
     public const string ActiveAgent = "AktiverAgent";
 
-    /// <summary>Führung: Dienstgrad ≥ Supervisory Special Agent oder Admin.</summary>
+    /// <summary>Leadership: rank ≥ Supervisory Special Agent or admin.</summary>
     public const string Leadership = "Fuehrung";
 
-    /// <summary>Technische Systemrolle.</summary>
+    /// <summary>Technical system role.</summary>
     public const string Admin = "Admin";
 
-    /// <summary>Darf überhaupt schreiben (alle außer der Nur-Lese-Aufsicht = TeamLeitung ohne Admin). Für
-    /// <c>AuthorizeView</c> um Mutations-Controls (Anlegen/Bearbeiten/Speichern).</summary>
+    /// <summary>May write at all (everyone except read-only supervision). For mutation controls in AuthorizeView.</summary>
     public const string WriteAccess = "Schreibrecht";
 
-    /// <summary>Nur-Lese-Aufsicht aktiv (TeamLeitung ohne Admin). Für den globalen Nur-Lese-Hinweis-Banner.</summary>
+    /// <summary>Read-only supervision active. For the global read-only banner.</summary>
     public const string OnlyReadMode = "NurLeseModus";
 
     /// <summary>External partner (DoJ/LSPD/LSMD): reduced read-only navigation and views.</summary>
@@ -28,20 +24,18 @@ public static class Policies
     /// <summary>Internal NOOSE agent (not a partner): full navigation and internal pages.</summary>
     public const string InternalAgent = "InternerAgent";
 
-    /// <summary>Seiten-Zugang Führungsbereich: Führung ODER Nur-Lese-Aufsicht (öffnet die Seite read-only,
-    /// ohne Schreib-Buttons – diese bleiben an <see cref="Fuehrung"/> gebunden).</summary>
+    /// <summary>Leadership page access: leadership OR read-only supervision (opens read-only; write buttons stay on Leadership).</summary>
     public const string LeadershipPage = "FuehrungSeite";
 
-    /// <summary>Seiten-Zugang „höchste Einstufung"-Bereich (Freigaben): wie <see cref="HoechsteEinstufung"/>
-    /// plus Nur-Lese-Aufsicht.</summary>
+    /// <summary>Highest-classification page access: like HighestClassification plus read-only supervision.</summary>
     public const string HighestClassificationPage = "HoechsteEinstufungSeite";
 
-    /// <summary>Seiten-Zugang Admin-Bereich: Admin ODER Nur-Lese-Aufsicht (öffnet die Seite read-only).</summary>
+    /// <summary>Admin page access: admin OR read-only supervision (opens read-only).</summary>
     public const string AdminPage = "AdminSeite";
 
-    /// <summary>"Gesichert staatsgefährdend" direkt setzen: Dienstgrad ≥ Senior Special Agent oder Admin.</summary>
+    /// <summary>Set "secured state-threatening" directly: rank ≥ Senior Special Agent or admin.</summary>
     public const string HighestClassification = "HoechsteEinstufung";
 
-    /// <summary>Beförderung entscheiden: Dienstgrad ≥ Deputy Director oder Admin.</summary>
+    /// <summary>Decide promotions: rank ≥ Deputy Director or admin.</summary>
     public const string PromotionDecide = "BefoerderungEntscheiden";
 }

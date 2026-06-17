@@ -1,7 +1,6 @@
 @inherits LayoutComponentBase
 
-@* Schlanke, öffentlich erreichbare Hülle für die Rechtstexte (Datenschutz) – ohne Navigation/Drawer,
-   mit gut lesbarer, schmaler Spalte. Static SSR, daher nur der ThemeProvider für den dunklen NOOSE-Look. *@
+@* Public shell for the legal texts (no nav/drawer, narrow column); static SSR, theme provider only. *@
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
 
 <div style="min-height:100vh;background:#0E1116;padding:32px 16px;">
@@ -36,6 +35,5 @@
 </div>
 
 @code {
-    // Hülle für /datenschutz. Bewusst ohne eigene [Authorize]/[AllowAnonymous]-Attribute – die
-    // Sichtbarkeit steuert die jeweilige Seite (Datenschutz.razor ist [AllowAnonymous]).
+    // no [Authorize]/[AllowAnonymous] here on purpose; each page controls its own visibility
 }

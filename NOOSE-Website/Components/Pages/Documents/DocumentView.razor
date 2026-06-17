@@ -1,5 +1,4 @@
-@* Read-only-Viewer eines Bibliotheks-Dokuments. Rendert den bereinigten HTML-Body und zeigt, an welche
-   Akten das Dokument angehängt ist. *@
+@* Read-only viewer for a library document and the records it is attached to. *@
 @page "/dokumente/{Id}"
 @inject IDocumentService DocumentService
 @inject IDialogService DialogService
@@ -57,7 +56,7 @@ else
     <MudGrid>
         <MudItem xs="12" md="8" lg="9">
             <MudPaper Class="pa-6" Elevation="2">
-                @* InhaltHtml wurde beim Speichern serverseitig bereinigt → sicher als MarkupString. *@
+                @* Sanitized server-side on save, so safe as MarkupString. *@
                 <div class="dokument-html">@((MarkupString)_document.ContentHtml)</div>
             </MudPaper>
         </MudItem>

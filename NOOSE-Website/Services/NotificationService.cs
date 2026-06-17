@@ -37,7 +37,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
     public async Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
         ClaimsPrincipal trigger, CancellationToken cancellationToken = default)
     {
-        // Nur Agenten-Erwähnungen, nicht den Auslöser selbst, jede Id nur einmal.
+        // exclude self, dedupe
         var triggerId = trigger.GetAgentId();
         var agentIds = MentionParser.Parse(text)
             .Where(t => t.Type == nameof(Agent) && t.Id != triggerId)
@@ -51,7 +51,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Nur aktive Empfänger laden (Gesperrte/Ausstehende sehen ohnehin nichts).
+        // active recipients only
         var recipient = await db.Users
             .Where(u => agentIds.Contains(u.Id) && u.Status == AgentStatus.Active)
             .Select(u => new { u.Id, u.IsAdmin, u.Rank })
@@ -60,8 +60,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         var notified = new List<string>();
         foreach (var e in recipient)
         {
-            // Empfänger-Perspektive: Verschlusssache-/Papierkorb-Schutz aus SICHT DES EMPFÄNGERS prüfen –
-            // wer die Ziel-Akte nicht sehen darf, wird auch nicht benachrichtigt (kein Akten-/VS-Leck).
+            // gate on recipient's own visibility, not the trigger's (no record/classification leak)
             var recipientIsLeadership = e.IsAdmin || e.Rank is >= Rank.SupervisorySpecialAgent;
             if (!await Visibility.IsRecordVisibleAsync(db, targetType, targetId, recipientIsLeadership, cancellationToken))
             {
@@ -92,7 +91,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
     public async Task NotifyManyAsync(IReadOnlyCollection<string> recipientIds, NotificationType type,
         string title, string? href, string? triggerId, CancellationToken cancellationToken = default)
     {
-        // Auslöser ausschließen, jede Empfänger-Id nur einmal, Leeres verwerfen.
+        // exclude trigger, dedupe, drop empties
         var targets = recipientIds
             .Where(id => !string.IsNullOrWhiteSpace(id) && id != triggerId)
             .Distinct()
@@ -123,8 +122,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
 
     public async Task<List<Notification>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)
     {
-        // Empfänger ist IMMER der Aufrufer selbst – die Id aus dem Principal ableiten, nie als Parameter
-        // entgegennehmen (serverseitig erzwingen, nicht UI-abhängig; analog AlsGelesenMarkierenAsync).
+        // recipient is always the caller — derive from principal, never a parameter
         var agentId = actor.GetAgentId();
         if (string.IsNullOrWhiteSpace(agentId))
         {
@@ -155,7 +153,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         var agentId = actor.GetAgentId();
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var n = await db.Notifications.FirstOrDefaultAsync(x => x.Id == notificationId, cancellationToken);
-        // Nur die eigene Benachrichtigung darf als gelesen markiert werden.
+        // only own notification may be marked read
         if (n is null || n.RecipientId != agentId || n.ReadAt is not null)
         {
             return;

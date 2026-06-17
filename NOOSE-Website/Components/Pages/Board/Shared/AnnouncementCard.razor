@@ -1,6 +1,4 @@
-@* Eine Ankündigungs-Karte fürs Schwarze Brett. Titel verlinkt auf die Detailseite; Inhalt mit aufgelösten
-   @-Erwähnungen (MentionText, Verschlusssachen für Nicht-Führung verborgen). „Wichtig" = gelber Rand + Stern.
-   Bei Quittierungspflicht: „Kenntnis nehmen"-Button bzw. Status; Verwalter sehen den Fortschritt X/Y. *@
+@* Announcement card for the board. *@
 
 <MudPaper Class="pa-4" Elevation="2" Style="@(Row.Important ? "border-left:4px solid var(--mud-palette-warning);" : "")">
     <MudStack Spacing="2">
@@ -55,9 +53,9 @@
 @code {
     [Parameter, EditorRequired] public AnnouncementRow Row { get; set; } = default!;
 
-    /// <summary>Aufgelöste Inhalts-Segmente (Mentions) – vom Brett vorab in einer Sammelabfrage ermittelt.</summary>
+    /// <summary>Pre-resolved mention segments.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<MentionSegment> Segments { get; set; } = Array.Empty<MentionSegment>();
 
-    /// <summary>Wird ausgelöst, wenn der Empfänger „Kenntnis nehmen" klickt.</summary>
+    /// <summary>Raised when the recipient acknowledges.</summary>
     [Parameter] public EventCallback OnAcknowledge { get; set; }
 }

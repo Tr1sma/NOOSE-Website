@@ -1,6 +1,3 @@
-@* Beziehungen einer Taskforce (Personen & Organisationen) über die generische Verknüpfungs-Engine
-   (VerknuepfungArt.Standard). Beidseitig klickbar; die Notiz dient als Rolle/Bezug. Taskforce-Mitglieder
-   (Agents) laufen separat über das Agent-Panel. *@
 @inject ILinkService LinkService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -70,7 +67,7 @@
 
     private async Task AddAsync()
     {
-        // Bereits verknüpfte Ziele je Typ ausschließen. Die Taskforce selbst ist kein Person/Org-Ziel → keine Selbstverknüpfung möglich.
+        // Exclude already-linked targets per type
         var factionFrom = _list.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
         var groupsFrom = _list.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
         var partyFrom = _list.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();

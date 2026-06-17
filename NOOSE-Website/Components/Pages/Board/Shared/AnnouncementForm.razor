@@ -1,6 +1,4 @@
-@* Formular zum Anlegen/Bearbeiten einer Ankündigung. Inhalt mit @-Erwähnungen. Die Broadcast-Optionen
-   (Zielgruppe/Push/Quittierung) erscheinen nur, wenn ZeigeBroadcastOptionen gesetzt ist (= Führung beim Anlegen);
-   beim Bearbeiten sind sie bewusst ausgeblendet (nach dem Anlegen fix). *@
+@* Create/edit form for an announcement. *@
 @inject ITaskforceService TaskforceService
 
 <MudGrid>
@@ -71,18 +69,18 @@
 @code {
     [Parameter, EditorRequired] public AnnouncementInput Input { get; set; } = default!;
 
-    /// <summary>Broadcast-Optionen anzeigen (nur Führung, nur beim Anlegen).</summary>
+    /// <summary>Show broadcast options (leadership, create only).</summary>
     [Parameter] public bool ShowBroadcastOptions { get; set; }
 
-    /// <summary>Steuert die Klarname-Sichtbarkeit im @-Picker (Führung).</summary>
+    /// <summary>Controls real-name visibility in the mention picker.</summary>
     [Parameter] public bool IsLeadership { get; set; }
 
-    // Platzhalter als Konstante – ein @ in einem Komponenten-Attributwert bräche sonst den Razor-Parser.
+    // constant: an inline @ in an attribute value would break the Razor parser
     private const string Placeholder = "Text der Ankündigung … (Akten/Agenten verlinken per @)";
 
     private List<Taskforce> _taskforces = new();
 
-    // MentionEingabe bindet an einen Nicht-Null-String; mit dem optionalen Inhalt synchronisieren.
+    // bind the optional content onto a non-null string
     private string _content
     {
         get => Input.Content ?? string.Empty;
@@ -93,8 +91,7 @@
     {
         if (ShowBroadcastOptions)
         {
-            // Taskforce-Ziel-Auswahl. ZeigeBroadcastOptionen ist der Führung vorbehalten → darfAlles (IstFuehrung)
-            // ist hier immer true und liefert ALLE Taskforces; meId ist daher ohne Belang (null).
+            // leadership-only path: returns all taskforces
             _taskforces = await TaskforceService.GetListAsync(IsLeadership, null);
         }
     }

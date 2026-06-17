@@ -1,4 +1,3 @@
-@* Liste der Observationen einer Person + Anlegen (Dialog) + Löschen. *@
 @inject IObservationService ObservationService
 @inject IPartnerShareService PartnerShareService
 @inject IDialogService DialogService
@@ -39,7 +38,7 @@
                             <span class="mud-text-secondary"> · @display.AgentCodename</span>
                         }
                     </MudText>
-                    @* Löschen darf den Detail-Dialog nicht mitöffnen → Klick hier stoppen. *@
+                    @* Stop click so delete doesn't also open the detail dialog. *@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                         <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Observation)" ChildId="@obs.Id" />
                         @if (_mayWrite)
@@ -103,7 +102,6 @@
         _load = false;
     }
 
-    // Klick auf eine Karte öffnet die Detailansicht (lesen + bearbeiten); man ist bereits in der Akte.
     private async Task OpenAsync(ObservationDisplay display)
     {
         var modified = await ObservationDetailDialog.ShowAsync(DialogService, display, User, showToRecord: false);

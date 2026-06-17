@@ -2,10 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.People;
 
-/// <summary>
-/// Formular-/Eingabemodell zum Anlegen und Bearbeiten einer Person. Die Mehrfach-Felder des
-/// Steckbriefs sind Listen kleiner Eingabe-Objekte (stabile Referenzen für die Inline-Bearbeitung).
-/// </summary>
+/// <summary>Form model for creating/editing a person; profile multi-fields use stable per-item objects for inline editing.</summary>
 public class PersonInput
 {
     public string Name { get; set; } = string.Empty;
@@ -22,12 +19,7 @@ public class PersonInput
     public List<WeaponInput> Weapons { get; set; } = new();
 }
 
-/// <summary>
-/// Gemeinsame Sicht auf ein Steckbrief-Mehrfachfeld: ein Hauptwert plus optionaler Zusatz. Erlaubt der
-/// generischen Chip-Eingabe (<c>SteckbriefMehrfachFeld</c>), einheitlich auf die unterschiedlich
-/// benannten Felder von Waffe/Fahrzeug/Ort zuzugreifen. Implementiert wird das Interface explizit,
-/// damit die Originalfelder (Text/Bezeichnung/Notiz/Kennzeichen) für Persistenz und Lese-Ansicht erhalten bleiben.
-/// </summary>
+/// <summary>Uniform view over a profile multi-field so the generic chip input can target differently-named fields; implemented explicitly to keep the original fields intact.</summary>
 public interface IProfileMultiple
 {
     string MainValue { get; set; }
@@ -68,6 +60,5 @@ public class WeaponInput : IProfileMultiple
     public string Text { get; set; } = string.Empty;
 
     string IProfileMultiple.MainValue { get => Text; set => Text = value; }
-    // Waffen haben kein Zusatzfeld.
     string? IProfileMultiple.Extra { get => null; set { } }
 }

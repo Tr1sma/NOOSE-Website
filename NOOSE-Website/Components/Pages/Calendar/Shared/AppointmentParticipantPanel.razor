@@ -1,5 +1,4 @@
-@* Dem Termin zugeteilte NOOSE-Teilnehmer: Liste + Zuteilen/Entfernen. Verwalten darf der Ersteller oder die
-   Führung (über das Flag <see cref="KannVerwalten"/>). Vorlage: AufgabeAgentePanel. *@
+@* Appointment participants; managing is gated by CanManage (creator or leadership). *@
 @inject IAppointmentService AppointmentService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -49,10 +48,10 @@
     [Parameter, EditorRequired] public string AppointmentId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Darf der Aufrufer zuteilen/entfernen (Ersteller oder Führung)? Vom Detail berechnet.</summary>
+    /// <summary>Whether the caller may assign/remove (creator or leadership).</summary>
     [Parameter] public bool CanManage { get; set; }
 
-    /// <summary>Wird nach jeder Änderung der Teilnehmer ausgelöst.</summary>
+    /// <summary>Raised after any participant change.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;

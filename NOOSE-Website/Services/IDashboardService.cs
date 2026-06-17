@@ -5,7 +5,6 @@ namespace NOOSE_Website.Services;
 /// <summary>Dashboard data: metrics tiles and recent activity feed.</summary>
 public interface IDashboardService
 {
-    // taskforce visibility
     /// <summary>Metrics for the four tiles.</summary>
     Task<DashboardMetrics> GetMetricsAsync(bool isLeadership, string? meId, CancellationToken cancellationToken = default);
 

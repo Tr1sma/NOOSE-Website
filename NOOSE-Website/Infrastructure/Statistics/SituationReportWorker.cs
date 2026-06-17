@@ -10,7 +10,6 @@ public sealed class SituationReportWorker(IServiceScopeFactory scopeFactory, ILo
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // startup delay
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(90), stoppingToken);

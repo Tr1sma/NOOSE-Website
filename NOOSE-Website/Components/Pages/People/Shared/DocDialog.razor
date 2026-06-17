@@ -1,4 +1,3 @@
-@* Formular-Dialog zum Anlegen eines Personen-Doks. Liefert eine PersonDokEingabe zurück. *@
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
 @inject IDocTemplateService TemplateService
@@ -49,11 +48,10 @@
                 }
                 <MudTextField @bind-Value="_input.Reason" Label="Grund" Lines="2" Variant="Variant.Outlined" />
 
-                @* Fraktionszugehörigkeit: bevorzugt eine bestehende Akte verknüpfen, sonst Freitext. *@
+                @* Prefer linking an existing record; otherwise free text. *@
                 @if (_orgHidden)
                 {
-                    @* Verknüpfte Akte ist hier nicht auflösbar (Verschlusssache/gelöscht): Picker ausblenden,
-                       damit eine harmlose Bearbeitung die bestehende Verknüpfung nicht still löscht. *@
+                    @* Linked record not resolvable (classified/deleted): hide picker so an edit doesn't silently drop it. *@
                     <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
                         Verknüpfte Akte ist hier nicht sichtbar (Verschlusssache oder gelöscht) – sie bleibt beim Speichern erhalten.
                     </MudAlert>
@@ -100,13 +98,11 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Beim Bearbeiten gesetzt: vorhandene Werte zum Vorbefüllen. Null = Anlegen.</summary>
+    /// <summary>Set when editing: existing values to prefill. Null = create.</summary>
     [Parameter] public PersonDocInput? Exists { get; set; }
 
-    /// <summary>Steuert, ob auch Verschlusssachen in der Org-Suche erscheinen.</summary>
     [Parameter] public bool IsLeadership { get; set; }
 
-    /// <summary>Beim Bearbeiten: bereits aufgelöster Name/Aktenzeichen der verknüpften Org (zum Vorbefüllen der Suche).</summary>
     [Parameter] public string? ExistsOrgName { get; set; }
     [Parameter] public string? ExistsOrgCaseNumber { get; set; }
 
@@ -121,17 +117,15 @@
     private string Type
     {
         get => _orgType;
-        // Typwechsel verwirft die bisherige Auswahl (Fraktion- und Gruppen-Treffer sind nicht austauschbar).
+        // Type change discards prior selection.
         set { if (_orgType != value) { _orgType = value; _target = null; } }
     }
     private bool IsFaction => _orgType == nameof(Faction);
     private AffiliationDialog.RecordHit? _target;
     private bool _asMember;
-    // True, wenn die bestehende Verknüpfung für den Nutzer nicht auflösbar ist (Verschlusssache/gelöscht) –
-    // dann bleibt sie unverändert erhalten, statt durch das leere Picker-Feld gelöscht zu werden.
+    // Linked record not resolvable (classified/deleted) → preserve, don't silently delete.
     private bool _orgHidden;
 
-    // Vorlagen-Picker (nur im Anlegen-Modus): aktive Vorlagen + aktuell gewählte.
     private List<DocTemplate> _templates = new();
     private DocTemplate? _selectedTemplate;
 
@@ -150,11 +144,9 @@
     {
         if (Exists is null)
         {
-            // Anlegen-Modus: aktive Vorlagen für den Picker laden.
             _templates = await TemplateService.GetActiveAsync();
             return;
         }
-        // Edit-Modus: Felder sowie Datum/Uhrzeit (in Ortszeit) aus den vorhandenen Werten übernehmen.
         _input.Reason = Exists.Reason;
         _input.Faction = Exists.Faction;
         _input.ReceivedInformation = Exists.ReceivedInformation;
@@ -163,7 +155,6 @@
         var local = Exists.Timestamp.ToLocalTime();
         _date = local.Date;
         _time = local.TimeOfDay;
-        // Verknüpfung vorbefüllen – der Name stammt aus der bereits aufgelösten Anzeige (kein Extra-Roundtrip).
         if (!string.IsNullOrWhiteSpace(Exists.OrgId) && !string.IsNullOrWhiteSpace(Exists.OrgType))
         {
             _orgType = Exists.OrgType;
@@ -173,14 +164,12 @@
             }
             else
             {
-                // Verknüpfte Akte ist nicht auflösbar (Verschlusssache/gelöscht) → erhalten, nicht still löschen.
+                // Linked record not resolvable (classified/deleted) → preserve, don't silently delete.
                 _orgHidden = true;
             }
         }
     }
 
-    /// <summary>Übernimmt die Vorgaben der gewählten Vorlage in das Formular (frei editierbar).
-    /// Zeitpunkt und Org-Verknüpfung bleiben unberührt (instanzspezifisch).</summary>
     private void TemplateApply(DocTemplate? template)
     {
         _selectedTemplate = template;
@@ -204,22 +193,17 @@
         }
         var date = (_date ?? DateTime.Now).Date;
         var time = _time ?? TimeSpan.Zero;
-        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen. ACHTUNG: In Blazor Server ist
-        // „Local" die SERVER-Zeitzone, nicht die des Browsers. Damit RP-Zeiten (Erfassung via DokDialog,
-        // Anzeige via ToLocalTime) stimmen und das 20-Min-Tot-Fenster korrekt liegt, muss der VPS in der
-        // Zeitzone der Nutzer laufen (Deployment: TZ=Europe/Berlin). Eine browserunabhängige Lösung
-        // erforderte die Browser-Zeitzone per JS-Interop (bewusst späterer Schritt).
+        // Input is local time → store as UTC. Blazor Server treats "Local" as the SERVER timezone, so the VPS must run TZ=Europe/Berlin for the 20-min death window to be correct.
         _input.Timestamp = DateTime.SpecifyKind(date + time, DateTimeKind.Local).ToUniversalTime();
         if (_orgHidden)
         {
-            // Nicht sichtbare Verknüpfung unverändert übernehmen (kein stilles Löschen durch das leere Feld).
+            // Preserve hidden link, don't silently delete.
             _input.OrgId = Exists!.OrgId;
             _input.OrgType = Exists.OrgType;
             _input.AsMember = false;
         }
         else
         {
-            // Verknüpfung übernehmen; ohne Auswahl bleibt nur der Freitext.
             _input.OrgId = _target?.Id;
             _input.OrgType = _target is null ? null : _orgType;
             _input.AsMember = _target is not null && _asMember;
@@ -229,7 +213,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert die Eingabe oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog and returns the input, or null on cancel.</summary>
     public static async Task<PersonDocInput?> ShowAsync(IDialogService dialog, bool isLeadership)
     {
         var parameters = new DialogParameters<DocDialog> { { x => x.IsLeadership, isLeadership } };
@@ -238,7 +222,7 @@
         return result is { Canceled: false, Data: PersonDocInput e } ? e : null;
     }
 
-    /// <summary>Zeigt den Dialog im Bearbeiten-Modus (vorbefüllt) und liefert die geänderte Eingabe oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog in edit mode (prefilled) and returns the changed input, or null on cancel.</summary>
     public static async Task<PersonDocInput?> ShowToEditAsync(IDialogService dialog, PersonDoc doc, bool isLeadership,
         string? orgName, string? orgCaseNumber)
     {

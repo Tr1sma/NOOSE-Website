@@ -4,13 +4,13 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Verwaltung der admin-definierten Custom-Feld-Definitionen (Zusatzfelder je Aktentyp).</summary>
+/// <summary>Management of admin-defined custom field definitions per record type.</summary>
 public interface ICustomFieldDefinitionService
 {
-    /// <summary>Alle Definitionen (Admin-Liste, inkl. inaktive), sortiert nach Aktentyp/Reihenfolge/Name.</summary>
+    /// <summary>All definitions (admin list, including inactive), sorted by record type/order/name.</summary>
     Task<List<CustomFieldDefinition>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Definitionen eines Aktentyps; <paramref name="nurAktive"/> für das Panel.</summary>
+    /// <summary>Definitions for a record type; onlyActive for the panel.</summary>
     Task<List<CustomFieldDefinition>> GetForTypeAsync(string entityType, bool onlyActive, CancellationToken cancellationToken = default);
 
     Task<CustomFieldDefinition> CreateAsync(CustomFieldDefinitionInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

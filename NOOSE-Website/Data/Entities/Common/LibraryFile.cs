@@ -4,12 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Eine hochgeladene Datei der zentralen Datei-Bibliothek (Formulare, SOPs, Vorlagen – Phase 7).
-/// Die Datei selbst liegt außerhalb von wwwroot (siehe <c>IBibliothekStorageService</c>) und wird
-/// nur über den geschützten Endpoint <c>/dateien/bibliothek/{id}</c> ausgeliefert. Verschlusssachen
-/// sind nur der Führung sichtbar. Voll auditiert und papierkorbfähig.
-/// </summary>
+/// <summary>An uploaded file in the central library; stored outside wwwroot, served only via a protected endpoint.</summary>
 [Table("BibliothekDateien")]
 public class LibraryFile : IAuditable, ISoftDelete
 {
@@ -18,14 +13,12 @@ public class LibraryFile : IAuditable, ISoftDelete
     [Column("Titel")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>Optionale Kategorie zur Gruppierung/Filterung (z. B. „Formular", „SOP").</summary>
     [Column("Kategorie")]
     public string? Category { get; set; }
 
-    /// <summary>Ursprünglicher Dateiname des Uploads (für den Download-Dateinamen).</summary>
     public string OriginalName { get; set; } = string.Empty;
 
-    /// <summary>Serverseitig vergebener Dateiname im Bibliotheks-Ordner (GUID + sichere Endung).</summary>
+    /// <summary>Server-assigned file name in the library folder (GUID + safe extension).</summary>
     [Column("DateinameGespeichert")]
     public string FileNameSaved { get; set; } = string.Empty;
 
@@ -34,22 +27,19 @@ public class LibraryFile : IAuditable, ISoftDelete
     [Column("GroesseBytes")]
     public long SizeBytes { get; set; }
 
-    /// <summary>Verschlusssache: nur für die Führung sichtbar.</summary>
+    /// <summary>Classified: leadership-only.</summary>
     [Column("IstVerschlusssache")]
     public bool IsClassified { get; set; }
 
-    /// <summary>Verschlusssache nur für die TRU (Tactical Response Unit). Schließt sich mit den übrigen
-    /// Verschluss-Stufen gegenseitig aus (gesetzt über <see cref="Classification"/>).</summary>
+    /// <summary>TRU-only classification; mutually exclusive with the other levels (set via Classification).</summary>
     [Column("IstVerschlusssacheTRU")]
     public bool IsTRUClassified { get; set; }
 
-    /// <summary>Verschlusssache nur für den HRB (Human Resources Branch). Schließt sich mit den übrigen
-    /// Verschluss-Stufen gegenseitig aus (gesetzt über <see cref="Classification"/>).</summary>
+    /// <summary>HRB-only classification; mutually exclusive with the other levels (set via Classification).</summary>
     [Column("IstVerschlusssacheHRB")]
     public bool IsHRBClassified { get; set; }
 
-    /// <summary>Einheitliche Verschluss-Stufe (Mapping auf genau eine der Bool-Spalten bzw. keine).
-    /// Führung hat beim Lesen Vorrang, falls je mehrere Flags gesetzt wären.</summary>
+    /// <summary>Unified classification level mapping to exactly one bool column (or none); leadership wins on read.</summary>
     [NotMapped]
     public DocumentClassification Classification
     {
@@ -65,11 +55,10 @@ public class LibraryFile : IAuditable, ISoftDelete
         }
     }
 
-    /// <summary>True, wenn überhaupt eine Verschluss-Stufe gesetzt ist (für die Schloss-Anzeige).</summary>
+    /// <summary>True if any classification level is set (drives the lock icon).</summary>
     [NotMapped]
     public bool IsRestricted => IsClassified || IsTRUClassified || IsHRBClassified;
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -79,7 +68,6 @@ public class LibraryFile : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

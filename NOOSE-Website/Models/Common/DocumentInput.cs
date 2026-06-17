@@ -2,15 +2,15 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen/Bearbeiten eines Bibliotheks-Dokuments.</summary>
+/// <summary>Input model for a library document.</summary>
 public class DocumentInput
 {
     public string Title { get; set; } = string.Empty;
     public string? Category { get; set; }
 
-    /// <summary>HTML aus dem WYSIWYG-Editor – wird im Dienst serverseitig bereinigt.</summary>
+    /// <summary>WYSIWYG HTML; sanitized server-side in the service.</summary>
     public string ContentHtml { get; set; } = string.Empty;
 
-    /// <summary>Verschluss-Stufe (Keine/Führung/TRU/HRB). Der Dienst prüft, ob der Handelnde sie setzen darf.</summary>
+    /// <summary>Classification level; the service checks the actor may set it.</summary>
     public DocumentClassification Classification { get; set; }
 }

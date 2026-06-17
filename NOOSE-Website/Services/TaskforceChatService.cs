@@ -24,7 +24,7 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         {
             query = query.Where(n => n.CreatedAt < olderAs.Value);
         }
-        // newest first, reverse
+        // newest first, then reverse to chronological
         var latest = await query
             .OrderByDescending(n => n.CreatedAt)
             .Take(Math.Clamp(limit, 1, 500))
@@ -42,7 +42,6 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Taskforce ist für dich nicht zugänglich.");
@@ -59,7 +58,6 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
 
         broadcaster.Report(taskforceId);
 
-        // notify mentions
         try
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
@@ -79,12 +77,11 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         {
             return;
         }
-        // author or leadership
         if (!actor.IsLeadership() && message.CreatedById != actor.GetAgentId())
         {
             throw new UnauthorizedAccessException("Nur der Autor oder die Führung kann eine Nachricht zurückziehen.");
         }
-        db.TaskforceMessages.Remove(message); // soft delete
+        db.TaskforceMessages.Remove(message);
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(message.TaskforceId);

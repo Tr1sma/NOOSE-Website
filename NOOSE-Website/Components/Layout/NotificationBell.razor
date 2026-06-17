@@ -1,5 +1,4 @@
-@* Glocke in der Topbar: Badge mit Anzahl ungelesener Benachrichtigungen + Dropdown der neuesten. Klick markiert
-   als gelesen und navigiert zum Ziel. Live-Aktualisierung über den NotificationBroadcaster (Muster TaskforceChatPanel). *@
+@* Topbar bell: unread badge + dropdown of latest; click marks read and navigates. Live updates via NotificationBroadcaster. *@
 @implements IAsyncDisposable
 @inject INotificationService NotificationService
 @inject NotificationBroadcaster Broadcaster
@@ -79,7 +78,7 @@
 
     private async Task OpenAsync(Notification n)
     {
-        await NotificationService.AsReadMarkAsync(n.Id, User); // Broadcaster lädt die Glocke neu.
+        await NotificationService.AsReadMarkAsync(n.Id, User); // broadcaster reloads the bell
         if (!string.IsNullOrWhiteSpace(n.Href))
         {
             Nav.NavigateTo(n.Href);
@@ -88,10 +87,10 @@
 
     private async Task AllReadAsync()
     {
-        await NotificationService.AllAsReadAsync(User); // Broadcaster lädt die Glocke neu.
+        await NotificationService.AllAsReadAsync(User); // broadcaster reloads the bell
     }
 
-    // Live-Signal (ggf. aus anderem Circuit) → nur für die eigene Empfänger-Id in den eigenen Circuit marshallen.
+    // only react to this recipient's own signal
     private void OnReceived(string recipientId)
     {
         if (recipientId != _agentId)

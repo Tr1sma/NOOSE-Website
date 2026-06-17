@@ -13,7 +13,6 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // startup delay
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
@@ -64,7 +63,6 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
 
-        // due items
         var due = await db.Followups
             .Where(w => !w.Done && w.DueAt <= now && w.NotifiedAt == null)
             .OrderBy(w => w.DueAt)
@@ -74,20 +72,17 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
             return;
         }
 
-        // resolve targets
         var refs = due.Select(w => (w.EntityType, w.EntityId)).Distinct().ToList();
         var resolved = await RecordsReference.ResolveAsync(db, refs, cancellationToken);
 
         foreach (var w in due)
         {
-            // skip deleted
             if (!resolved.TryGetValue((w.EntityType, w.EntityId), out var record))
             {
                 w.NotifiedAt = now;
                 continue;
             }
 
-            // assignee + followers
             var recipientIds = new HashSet<string>(StringComparer.Ordinal);
             if (!string.IsNullOrEmpty(w.ResponsibleAgentId))
             {
@@ -100,7 +95,6 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
 
             if (recipientIds.Count > 0)
             {
-                // visibility check
                 var active = await db.Users
                     .Where(u => recipientIds.Contains(u.Id) && u.Status == AgentStatus.Active)
                     .Select(u => new { u.Id, u.IsAdmin, u.Rank })
@@ -136,7 +130,6 @@ public sealed class FollowupDueWorker(IServiceScopeFactory scopeFactory, ILogger
         {
             title += $" – {note.Trim()}";
         }
-        // 300 char limit
         return title.Length > 300 ? title[..297] + "…" : title;
     }
 }

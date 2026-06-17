@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>Ein Fahrzeug einer Person inkl. optionalem Kennzeichen (Steckbrief-Kind).</summary>
+/// <summary>A person's vehicle with optional license plate.</summary>
 [Table("PersonFahrzeuge")]
 public class PersonVehicle
 {

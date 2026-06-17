@@ -3,11 +3,7 @@ using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Models.Factions;
 
-/// <summary>
-/// Formular-/Eingabemodell zum Anlegen und Bearbeiten einer Fraktion. Stammdaten + strukturierte
-/// Listen (Ränge, Waffen-/Lagerbestand). Mitglieder werden NICHT hierüber gepflegt, sondern über
-/// eigene Endpunkte (eigene Join-Tabelle mit Audit-Zeitstempel).
-/// </summary>
+/// <summary>Create/edit faction input; members are maintained via their own endpoints, not here.</summary>
 public class FactionInput
 {
     public string Name { get; set; } = string.Empty;
@@ -23,37 +19,29 @@ public class FactionInput
     public string? ClassificationJustification { get; set; }
     public bool IsClassified { get; set; }
 
-    /// <summary>Staatsfraktion: kann nicht „veraltet" werden (Aktualitäts-Ampel bleibt dauerhaft „Aktuell").</summary>
+    /// <summary>State faction; never goes stale (recency stays "current").</summary>
     public bool IsStateFaction { get; set; }
 
-    /// <summary>Geschätzte Gesamtgröße der Fraktion (= y im Erfassungsfortschritt x/y); optional.</summary>
     public int? EstimatedMemberCount { get; set; }
 
     public List<RankInput> Ranks { get; set; } = new();
     public List<StockInput> WeaponStock { get; set; } = new();
     public List<StockInput> Inventory { get; set; } = new();
 
-    /// <summary>Drogenrouten als generisches Mehrfachfeld; das Zusatzfeld (<see cref="BestandEingabe.Menge"/>) trägt hier die Notiz.</summary>
+    /// <summary>Drug routes as a generic multi-field; the extra field carries the note.</summary>
     public List<StockInput> DrugRoutes { get; set; } = new();
 
-    /// <summary>Mitglieder, die bereits beim Anlegen erfasst werden (auf der Detailseite weiter pflegbar).</summary>
+    /// <summary>Members captured at creation time; further maintained on the detail page.</summary>
     public List<MemberInput> Members { get; set; } = new();
 }
 
-/// <summary>Ein Rang-Eintrag im Bearbeiten-Formular (Bezeichnung; Sortierung folgt der Reihenfolge in der Liste).</summary>
 public class RankInput
 {
-    /// <summary>
-    /// Id des bestehenden Rangs (leer bei neu hinzugefügten Rängen). Dient ausschließlich der Umbenennungs-Erkennung
-    /// beim Speichern, damit der denormalisierte Rang-Name in der Mitgliederliste mitgezogen werden kann.
-    /// </summary>
+    /// <summary>Existing rank id; empty for new ranks. Drives rename detection on save.</summary>
     public string? Id { get; set; }
     public string Designation { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Ein Bestands-Eintrag (Waffen-/Lagerbestand) als generisches Mehrfachfeld: Bezeichnung + optionale Menge.
-/// </summary>
 public class StockInput : IProfileMultiple
 {
     public string Designation { get; set; } = string.Empty;
@@ -63,19 +51,16 @@ public class StockInput : IProfileMultiple
     string? IProfileMultiple.Extra { get => Quantity; set => Quantity = value; }
 }
 
-/// <summary>Eingabe zum Hinzufügen/Ändern einer Fraktions-Mitgliedschaft.</summary>
+/// <summary>Add/edit faction membership.</summary>
 public class MemberInput
 {
     public string PersonId { get; set; } = string.Empty;
     public string? Rank { get; set; }
     public bool IsLead { get; set; }
 
-    /// <summary>Nur für die Anzeige im Anlege-Formular; vom Dienst ignoriert.</summary>
+    /// <summary>Display only; ignored by service.</summary>
     public string? PersonName { get; set; }
 
-    /// <summary>
-    /// Ist <see cref="PersonId"/> leer und dies gesetzt, wird beim Hinzufügen automatisch eine neue
-    /// Personen-Akte mit diesem Namen angelegt und als Mitglied verknüpft.
-    /// </summary>
+    /// <summary>Auto-creates a new person if PersonId is empty.</summary>
     public string? NewPersonName { get; set; }
 }

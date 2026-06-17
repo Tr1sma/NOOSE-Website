@@ -18,7 +18,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
     public async Task<List<PersonGroup>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht.
+        // include members so the list count matches the detail view
         return await VisiblePersonGroups(db, scope)
             .Include(g => g.Members).ThenInclude(m => m.Person)
             .OrderByDescending(g => g.ModifiedAt ?? g.CreatedAt)
@@ -89,8 +89,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         db.PersonGroups.Add(group);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Im Anlege-Formular erfasste Mitglieder übernehmen (bestehende Personen + automatisch angelegte
-        // neue Akten, dedupliziert) und anschließend die Gruppenkollegen-Verknüpfungen aufbauen.
+        // import members from the create form, then build colleague links
         if (input.Members.Count > 0)
         {
             var existingIds = input.Members
@@ -115,7 +114,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
                 }
                 else if (string.IsNullOrWhiteSpace(m.PersonId) && !string.IsNullOrWhiteSpace(m.NewPersonName))
                 {
-                    // Derselbe neue Name im selben Formular → nur EINE Akte anlegen (keine Dubletten).
+                    // same new name within one form creates only one record
                     if (!seenNewNames.Add(m.NewPersonName.Trim()))
                     {
                         continue;
@@ -146,7 +145,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             }
         }
 
-        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        // creator auto-assigned as investigation lead (ensures at least one)
         var creatorId = actor.GetAgentId();
         if (creatorId is not null)
         {
@@ -255,7 +254,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             .Include(m => m.Person)
             .ToListAsync(cancellationToken);
 
-        // Person == null → Akte im Papierkorb (Soft-Delete-Filter); ausblenden. Verschlusssache nur für Führung.
+        // null person = trashed; classified persons leadership-only
         var visible = members
             .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
             .ToList();
@@ -288,7 +287,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Gruppe.");
         }
 
-        // Mitgliedschaft + automatische Gruppenkollegen-Verknüpfungen in EINER Transaktion.
+        // membership + colleague links in one transaction
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PersonGroupMembers.Add(new PersonGroupMember
         {
@@ -300,14 +299,11 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         await db.SaveChangesAsync(cancellationToken);
         await GroupColleaguesSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
-        // Mitgliedschaft/Leitungsrolle wirkt auf den Person-Score (P4).
+        // membership/lead role affects the person score
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
-    /// <summary>
-    /// Liefert die Personen-Id: bestehende (mit Existenzprüfung) oder – bei nur neuem Namen – eine frisch
-    /// angelegte Personen-Akte (committet, eigenes Aktenzeichen).
-    /// </summary>
+    /// <summary>Resolves an existing person id, or creates a fresh record when only a new name is given.</summary>
     private Task<string> PersonIdDetermineAsync(AppDbContext db, string? personId, string? newName, ClaimsPrincipal actor, CancellationToken cancellationToken)
         => MemberHelper.PersonIdDetermineAsync(db, personService, personId, newName, actor, cancellationToken);
 
@@ -339,8 +335,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         var personId = member.PersonId;
-        // Austritt + Kollegen-Verknüpfungen in EINER Transaktion. Soft-Delete (ISoftDelete): der Interceptor setzt
-        // GeloeschtAm (= Austrittsdatum) statt hart zu löschen → Mitgliedschaft bleibt als Verlaufseintrag erhalten.
+        // soft-delete keeps the membership as a history entry (exit date)
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PersonGroupMembers.Remove(member);
         await db.SaveChangesAsync(cancellationToken);
@@ -380,7 +375,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         await RequireLeadershipOrELAsync(db, groupId, actor, cancellationToken);
-        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        // only leadership may grant the lead flag
         if (asInvestigationLead)
         {
             Permission.RequireLeadership(actor);
@@ -422,7 +417,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
 
     public async Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        // leadership-only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -432,7 +427,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Gruppe ist.</summary>
+    /// <summary>Throws unless the actor is leadership or an investigation lead of this group.</summary>
     private static async Task RequireLeadershipOrELAsync(AppDbContext db, string groupId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (actor.IsLeadership())
@@ -452,7 +447,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
     public async Task<PersonGroupProgress> GetProgressAsync(string groupId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Join auf Personen → der globale Soft-Delete-Filter zählt nur Mitglieder mit lebender Akte (x).
+        // join to People so the soft-delete filter counts only members with a live record
         var captured = await db.PersonGroupMembers
             .Where(m => m.PersonGroupId == groupId)
             .Join(db.People, m => m.PersonId, p => p.Id, (m, p) => m.Id)
@@ -480,8 +475,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Beziehungen (Konflikte/Bündnisse), die diese Gruppe als Quelle oder Ziel berühren –
-        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        // manual links touching this group, including removed ones so their delete entry shows
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic
@@ -501,11 +495,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Synchronisiert die automatischen „Gruppenkollege"-Verknüpfungen der Person (analog zu den
-    /// Fraktionskollegen): zwischen P und Q soll genau dann eine bestehen, wenn beide mindestens eine
-    /// Personengruppe teilen. Wird nach jeder Mitglieder-Änderung für die betroffene Person aufgerufen.
-    /// </summary>
+    /// <summary>Syncs the person's automatic group-colleague links: one exists iff two people share a group.</summary>
     private static async Task GroupColleaguesSyncAsync(AppDbContext db, string personId, CancellationToken cancellationToken)
     {
         var myGroups = await db.PersonGroupMembers

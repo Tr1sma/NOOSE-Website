@@ -1,6 +1,4 @@
-@* Dem Vorgang zugeteilte (beteiligte) NOOSE-Agents: Liste + Zuteilen/Entfernen + Fallführer-Markierung.
-   Komponentenname bewusst „VorgangAgentePanel" (nicht „AgentePanel"), um Tag-Auflösungs-Kollisionen mit
-   den gleichnamigen Komponenten anderer Module zu vermeiden (alle Shared-Ordner sind global @using). *@
+@* Agents assigned to a case: list, assign/remove, case-lead marking. *@
 @inject ICaseService CaseService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -64,7 +62,7 @@
     [Parameter, EditorRequired] public string CaseId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Wird nach jeder Änderung der Zuteilungen/Fallführer ausgelöst (Steckkarte aktualisieren).</summary>
+    /// <summary>Raised after any assignment/case-lead change.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -82,7 +80,6 @@
     {
         _load = true;
         _agents = await CaseService.GetAgentsAsync(CaseId);
-        // Verwalten (zuteilen/entfernen) darf die Führung oder ein Fallführer dieser Akte.
         var myId = User.GetAgentId();
         _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && a.IsCaseLead);
         _load = false;

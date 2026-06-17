@@ -1,12 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Factions;
 
-/// <summary>
-/// Ein Foto der Fraktions-Galerie. Die eigentliche Datei liegt geschützt außerhalb von wwwroot;
-/// hier stehen nur die Metadaten. <see cref="DateinameGespeichert"/> wird serverseitig vergeben
-/// und ist nie vom Nutzer beeinflussbar (Schutz vor Path-Traversal). Genau eines der Fotos einer
-/// Fraktion kann als <see cref="IstTitelbild"/> markiert sein (im Dienst transaktional erzwungen).
-/// </summary>
+/// <summary>Metadata for a faction gallery photo; the file lives outside wwwroot. FileNameSaved is server-assigned to prevent path traversal. At most one photo per faction is the title image (enforced transactionally).</summary>
 [Table("FraktionFotos")]
 public class FactionPhoto
 {
@@ -21,7 +16,7 @@ public class FactionPhoto
     [Column("GroesseBytes")]
     public long SizeBytes { get; set; }
 
-    /// <summary>Als Titelbild der Fraktion markiert (ersetzt den Farb-Banner der Steckkarte; höchstens eines je Fraktion).</summary>
+    /// <summary>Marked as the faction title image (at most one per faction).</summary>
     [Column("IstTitelbild")]
     public bool IsTitleImage { get; set; }
 

@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>Ein Alias/Spitzname einer Person (Steckbrief-Kind, hart gelöscht beim Entfernen).</summary>
+/// <summary>A person's alias/nickname; hard-deleted on removal.</summary>
 [Table("PersonAliase")]
 public class PersonAlias
 {

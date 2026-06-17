@@ -2,7 +2,7 @@ using MudBlazor;
 
 namespace NOOSE_Website.Components.Common.Shared;
 
-/// <summary>Gemeinsame Farbpalette für Tags (zuvor doppelt in TagDialog und TagPickerDialog definiert).</summary>
+/// <summary>Shared colour palette for tags.</summary>
 public static class TagColours
 {
     public static readonly Color[] All =

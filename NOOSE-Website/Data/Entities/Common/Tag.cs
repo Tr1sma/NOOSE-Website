@@ -3,12 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Ein global verwaltetes Tag/Label (Stammdaten), das beliebigen Akten über eine
-/// <see cref="TagZuordnung"/> zugeordnet werden kann. Bewusst <b>ohne</b> Soft-Delete: ein Tag ist
-/// keine Akte, sondern ein Lookup-Wert – beim Löschen wird es hart entfernt (FK-Cascade räumt die
-/// Zuordnungen ab), wodurch der eindeutige Index auf <see cref="Name"/> sauber bleibt.
-/// </summary>
+/// <summary>A global tag/label assignable to any case. No soft-delete: it's a lookup value, hard-deleted (FK cascade clears assignments) so the unique index on Name stays clean.</summary>
 [Table("Tags")]
 public class Tag : IAuditable
 {
@@ -16,11 +11,10 @@ public class Tag : IAuditable
 
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Optionale Farbe (MudBlazor-Color-Name wie „Primary"/„Info") für die Chip-Darstellung.</summary>
+    /// <summary>Optional MudBlazor colour name (e.g. "Primary"/"Info") for the chip.</summary>
     [Column("Farbe")]
     public string? Colour { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

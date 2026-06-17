@@ -1,4 +1,4 @@
-@* Dialog zum Anlegen/Bearbeiten eines Ausbildungsmoduls (Schulung). Liefert eine ModuleInput zurück. *@
+@* Dialog to create/edit a training module; returns a ModuleInput. *@
 
 <MudDialog>
     <DialogContent>
@@ -61,7 +61,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Werten). Liefert null bei Abbruch.</summary>
+    /// <summary>Shows the create/edit dialog; returns null if cancelled.</summary>
     public static async Task<ModuleInput?> ShowAsync(IDialogService dialog, string title, ModuleInput? value = null)
     {
         var parameters = new DialogParameters<ModuleDialog> { { x => x.Value, value } };

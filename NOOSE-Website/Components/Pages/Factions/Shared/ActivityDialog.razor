@@ -1,5 +1,3 @@
-@* Dialog zum Anlegen/Bearbeiten einer Fraktions-Aktivität: Titel, Art (Freitext+Vorschläge), Datum+Uhrzeit, Ort, Beschreibung. *@
-
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width:380px;">
@@ -39,10 +37,9 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Bereits genutzte Arten als Vorschläge für die Autocomplete (Freitext bleibt möglich).</summary>
     [Parameter] public IReadOnlyList<string> KindsSuggestions { get; set; } = Array.Empty<string>();
 
-    /// <summary>Vorhandene Werte beim Bearbeiten (mit lokalem Zeitpunkt); null = Neuanlage.</summary>
+    /// <summary>Existing values when editing (local time); null = create.</summary>
     [Parameter] public ActivityInput? Exists { get; set; }
 
     private bool IsEdit => Exists is not null;
@@ -54,7 +51,6 @@
     private string? _location;
     private string? _description;
 
-    // Speichern erst möglich, wenn Titel und Datum gesetzt sind.
     private bool CanSave => !string.IsNullOrWhiteSpace(_title) && _date is not null;
 
     protected override void OnInitialized()
@@ -70,7 +66,7 @@
         }
         else
         {
-            // Neuanlage: auf „jetzt" vorbelegen (lokal).
+            // prefill with now (local)
             var now = DateTime.Now;
             _date = now.Date;
             _time = now.TimeOfDay;
@@ -92,7 +88,7 @@
         {
             return;
         }
-        // Datum + Uhrzeit zu einem lokalen Zeitpunkt zusammenführen (Kind=Unspecified → der Dienst speichert als UTC).
+        // combine date+time as local (Unspecified); service stores as UTC
         var timestamp = _date.Value.Date + (_time ?? TimeSpan.Zero);
         MudDialog.Close(DialogResult.Ok(new ActivityInput
         {
@@ -106,7 +102,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog (Anlegen oder Bearbeiten); liefert die Eingabe oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
     public static async Task<ActivityInput?> ShowAsync(IDialogService dialog,
         IReadOnlyList<string> kindsSuggestions, ActivityInput? exists = null)
     {

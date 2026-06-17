@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace NOOSE_Website.Infrastructure.Storage;
 
-/// <inheritdoc cref="IQuellenStorageService" />
+/// <inheritdoc />
 public class SourcesStorageService : ISourcesStorageService
 {
     private readonly FileUploadOptions _options;
@@ -44,10 +44,9 @@ public class SourcesStorageService : ISourcesStorageService
         }
     }
 
-    /// <summary>Lässt nur blanke Dateinamen zu und kombiniert sie sicher mit dem Basispfad.</summary>
     private string SafePath(string fileName) => FilePathHelper.SafePath(_basePath, fileName);
 
-    /// <summary>Übernimmt nur eine einfache, gefahrlose Endung aus dem Originalnamen (sonst „.bin").</summary>
+    /// <summary>Takes only a simple, harmless extension from the original name (else ".bin").</summary>
     private static string SafeExtension(string originalName)
     {
         var extension = Path.GetExtension(originalName);

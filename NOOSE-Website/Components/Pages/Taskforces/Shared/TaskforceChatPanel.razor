@@ -1,5 +1,3 @@
-@* Team-Chat einer Taskforce: chronologische Nachrichten (neueste unten), @-Verlinkung von Akten/Quellen/Agenten,
-   Live-Aktualisierung über den Broadcaster. Sichtbarkeit/Schreibrecht erben von der Taskforce (Service-Guard). *@
 @implements IAsyncDisposable
 @inject ITaskforceChatService ChatService
 @inject IMentionService MentionService
@@ -8,7 +6,7 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="2" Style="height:60vh;">
-    @* Spaltenumkehr → neueste Nachricht klebt unten (CSS-Autoscroll, kein JS nötig). *@
+    @* Column-reverse keeps newest pinned to bottom, no JS *@
     <div style="flex:1 1 auto; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
         @if (_load)
         {
@@ -138,7 +136,7 @@
         try
         {
             await ChatService.SendAsync(TaskforceId, _text, User);
-            _text = string.Empty; // Die Liste aktualisiert der Broadcaster (auch für andere Nutzer).
+            _text = string.Empty; // broadcaster refreshes the list
         }
         catch (Exception ex)
         {
@@ -157,7 +155,7 @@
         }
         try
         {
-            await ChatService.DeleteAsync(m.Id, User); // Broadcaster lädt neu.
+            await ChatService.DeleteAsync(m.Id, User); // broadcaster reloads
         }
         catch (Exception ex)
         {
@@ -165,7 +163,7 @@
         }
     }
 
-    // Live-Signal (auch von anderen Circuits) → in den eigenen Circuit marshallen und neu laden.
+    // Marshal cross-circuit signal into own circuit, reload
     private void OnModified(string taskforceId)
     {
         if (taskforceId != TaskforceId)

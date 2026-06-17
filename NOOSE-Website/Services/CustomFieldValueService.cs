@@ -6,7 +6,6 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="ICustomFeldWertService" />
 public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) : ICustomFieldValueService
 {
     public async Task<List<CustomFieldValueDisplay>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default, ViewerScope? scope = null)
@@ -55,7 +54,6 @@ public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) 
             .Where(d => d.EntityType == entityType && d.IsActive)
             .ToListAsync(cancellationToken);
 
-        // Pflichtfeld-Validierung
         foreach (var def in definitions.Where(d => d.Mandatory))
         {
             var value = valuesPerDefinition.GetValueOrDefault(def.Id);

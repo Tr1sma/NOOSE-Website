@@ -1,4 +1,4 @@
-@* Zeigt einen benannten Steckbrief-Abschnitt als Label + Chips. Ist die Liste leer, wird nichts gerendert. *@
+@* Renders a named profile section as label + chips; nothing when the list is empty. *@
 @{
     var list = Values.Where(w => !string.IsNullOrWhiteSpace(w)).ToList();
 }

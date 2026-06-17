@@ -1,4 +1,3 @@
-@* Dialog zum Zuteilen eines NOOSE-Agents zu einer Personengruppe. *@
 @inject IAgentManagementService AgentService
 
 <MudDialog>
@@ -41,15 +40,13 @@
 
     [Parameter] public IReadOnlyList<string> ExclusionAgentIds { get; set; } = Array.Empty<string>();
 
-    /// <summary>Wer den Klarnamen sehen darf (Führungsebene/Admin), darf auch danach suchen und sieht ihn in der Liste –
-    /// sonst wäre die Suche ein Orakel auf das Geheimfeld. Vom Aufrufer über <c>User.DarfKlarnameSehen()</c> setzen.</summary>
+    /// <summary>Only real-name viewers may search/see it, else search would leak the secret field.</summary>
     [Parameter] public bool MayRealName { get; set; }
 
-    /// <summary>Nur die Führung darf das Ermittlungsleiter-Flag vergeben; steuert die Sichtbarkeit der Checkbox.
-    /// Vom Aufrufer über <c>User.IstFuehrung()</c> setzen.</summary>
+    /// <summary>Only leadership may set the investigation-lead flag; gates the checkbox.</summary>
     [Parameter] public bool MayInvestigationLeadSet { get; set; }
 
-    /// <summary>Beschriftung der Leitungs-Checkbox (modulabhängig, z. B. „Als Fallführer zuteilen").</summary>
+    /// <summary>Label for the lead checkbox, module-dependent.</summary>
     [Parameter] public string LeadLabel { get; set; } = "Als Ermittlungsleiter zuteilen";
 
     private Agent? _agent;
@@ -58,8 +55,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // GetAuswaehlbareAsync liefert nur aktive Agenten ohne TeamLeitung-Marker; hier zusätzlich bereits
-        // zugeteilte Agenten ausschließen.
+        // Also exclude already-allocated agents
         var selectable = await AgentService.GetSelectableAsync();
         _all = selectable.Where(a => !ExclusionAgentIds.Contains(a.Id)).ToList();
     }
@@ -85,10 +81,9 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Auswahl des Dialogs: zuzuteilender Agent + ob er gleich als Ermittlungsleiter markiert werden soll.</summary>
     public record Choice(string AgentId, bool AsInvestigationLead);
 
-    /// <summary>Zeigt den Dialog; liefert die Auswahl oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the choice or null on cancel.</summary>
     public static async Task<Choice?> ShowAsync(IDialogService dialog, IReadOnlyList<string> exclusionAgentIds,
         bool mayRealName, bool mayInvestigationLeadSet, string? leadLabel = null)
     {

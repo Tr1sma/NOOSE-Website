@@ -1,5 +1,3 @@
-@* Bestätigungs-Dialog mit Begründungs-Eingabe (z. B. Sperren, Ablehnen). Liefert den eingegebenen
-   Grund zurück (oder null bei Abbruch). Mit AutoFocus auf dem Begründungsfeld. *@
 <MudDialog>
     <DialogContent>
         @if (!string.IsNullOrWhiteSpace(Text))
@@ -45,7 +43,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog; liefert den eingegebenen Grund oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the reason or null on cancel.</summary>
     public static async Task<string?> ShowAsync(IDialogService dialog, string title, string? text,
         string confirmText = "Bestätigen", string label = "Begründung", bool mandatoryReason = false, Color colour = Color.Primary)
     {

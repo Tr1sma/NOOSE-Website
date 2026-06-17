@@ -13,7 +13,6 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // resolve targets
         var resolved = await RecordsReference.ResolveAsync(db, records, cancellationToken);
 
         foreach (var (type, id) in records.Distinct())
@@ -35,7 +34,6 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 continue;
             }
 
-            // active followers only
             var follower = await db.Users
                 .Where(u => followerIds.Contains(u.Id) && u.Status == AgentStatus.Active)
                 .Select(u => new { u.Id, u.IsAdmin, u.Rank })
@@ -45,7 +43,6 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 continue;
             }
 
-            // coalesce unread
             var alreadyOpen = new HashSet<string>();
             if (!string.IsNullOrWhiteSpace(aufl.Href))
             {
@@ -63,7 +60,6 @@ public sealed class WatchlistFanout(IDbContextFactory<AppDbContext> dbFactory, I
                 {
                     continue;
                 }
-                // recipient check
                 var isLeadership = f.IsAdmin || f.Rank is >= Rank.SupervisorySpecialAgent;
                 if (!await Visibility.IsRecordVisibleAsync(db, type, id, isLeadership, cancellationToken, f.Id))
                 {

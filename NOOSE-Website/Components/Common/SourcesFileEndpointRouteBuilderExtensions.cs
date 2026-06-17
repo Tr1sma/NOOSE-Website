@@ -6,11 +6,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Common;
 
-/// <summary>
-/// Geschützter Download-Endpoint für Quellen-Anhänge. Dateien liegen außerhalb von wwwroot und werden
-/// nur an eingeloggte Agenten ausgeliefert; Anhänge an Verschlusssachen nur an die Führung. Auslieferung
-/// erfolgt ausschließlich über den in der DB gespeicherten Dateinamen (kein User-Pfad).
-/// </summary>
+/// <summary>Protected download endpoint for source attachments; classified ones for leadership only, served by stored filename.</summary>
 public static class SourcesFileEndpointRouteBuilderExtensions
 {
     public static IEndpointConventionBuilder MapNooseSourcesFileEndpoints(this IEndpointRouteBuilder endpoints)
@@ -25,15 +21,14 @@ public static class SourcesFileEndpointRouteBuilderExtensions
             HttpContext http,
             CancellationToken cancellationToken) =>
         {
-            // Der Dienst prüft Typ=Upload, Soft-Delete und die Sichtbarkeit der Eltern-Akte
-            // (Verschlusssache/Papierkorb) – liefert sonst null („nicht vorhanden", kein Existenz-Leak).
+            // null on no visibility, avoids existence leak
             var source = await sourceService.GetForDownloadAsync(sourceId, ViewerScope.From(http.User), cancellationToken);
             if (source?.FileNameSaved is null)
             {
                 return Results.NotFound();
             }
 
-            // Datei öffnen, bevor protokolliert wird; fehlt sie physisch, sauber 404 statt 500.
+            // open before logging
             Stream stream;
             try
             {
@@ -46,7 +41,7 @@ public static class SourcesFileEndpointRouteBuilderExtensions
 
             await access.LogViewAsync(nameof(Source), sourceId, cancellationToken);
 
-            // Results.File übernimmt und entsorgt den Stream nach dem Senden (kein using!).
+            // Results.File disposes the stream, no using
             return Results.File(stream, source.ContentType ?? "application/octet-stream",
                 source.OriginalName, enableRangeProcessing: true);
         })

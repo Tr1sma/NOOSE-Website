@@ -1,4 +1,3 @@
-@* Dialog zum Hinzufügen/Bearbeiten einer Partei-Mitgliedschaft: Person + Rolle + Leitungs-Flag. *@
 @inject IPersonService PersonService
 @inject IProfileSuggestionService SuggestionService
 
@@ -40,8 +39,7 @@
                 }
             }
 
-            @* Wie das Waffen-/Art-Feld: Autocomplete mit Vorschlägen aus dem gemeinsamen Katalog; freie Eingabe erlaubt.
-               Ein neu eingetippter Wert (z. B. „Vorsitz") wird beim Speichern gemerkt und steht künftig zur Auswahl. *@
+            @* free-text allowed; new values are remembered for future suggestions *@
             <MudAutocomplete T="string" @bind-Value="_role" Label="Rolle (optional)"
                              SearchFunc="@RoleSearch" Variant="Variant.Outlined"
                              CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
@@ -64,7 +62,7 @@
     [Parameter] public bool IsLeadership { get; set; }
     [Parameter] public IReadOnlyList<string> ExclusionPersonIds { get; set; } = Array.Empty<string>();
 
-    // Bearbeiten-Modus (Person fix): wird durch einen gesetzten Namen signalisiert.
+    // edit mode (person fixed): signalled by a set name
     [Parameter] public string? PersonNameExists { get; set; }
     [Parameter] public string? RoleExists { get; set; }
     [Parameter] public bool IsLeadExists { get; set; }
@@ -78,7 +76,6 @@
     private bool _isLead;
     private IReadOnlyList<string> _rolesSuggestions = Array.Empty<string>();
 
-    // Speichern erst möglich, wenn eine Person gewählt (oder ein neuer Name eingegeben) ist – Button sonst deaktiviert.
     private bool CanSave => IsEdit || (_modeNew ? !string.IsNullOrWhiteSpace(_newName) : _person is not null);
 
     protected override async Task OnInitializedAsync()

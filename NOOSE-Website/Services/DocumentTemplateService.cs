@@ -6,7 +6,6 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IDokumentVorlageService" />
 public class DocumentTemplateService(IDbContextFactory<AppDbContext> dbFactory) : IDocumentTemplateService
 {
     public async Task<List<DocumentTemplate>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -86,12 +85,12 @@ public class DocumentTemplateService(IDbContextFactory<AppDbContext> dbFactory) 
         {
             return;
         }
-        // Remove wird vom AuditSaveChangesInterceptor in einen Soft-Delete (Papierkorb) umgewandelt.
+        // Interceptor rewrites Remove to soft-delete.
         db.DocumentTemplates.Remove(template);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Überträgt die editierbaren Felder (ohne Name – vorab validiert); bereinigt den HTML-Body.</summary>
+    /// <summary>Copies the editable fields and sanitizes the HTML body; name is validated beforehand.</summary>
     private static void Apply(DocumentTemplate template, DocumentTemplateInput input)
     {
         template.Description = input.Description.TrimToNull();

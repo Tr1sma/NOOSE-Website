@@ -10,7 +10,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IQuelleService" />
+/// <inheritdoc cref="ISourceService" />
 public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesStorageService storage) : ISourceService
 {
     public async Task<List<Source>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -24,7 +24,6 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
 
         var sources = await db.Sources
             .Where(q => q.EntityType == entityType && q.EntityId == entityId)
-            // Angepinnte zuerst, danach die zuletzt erstellten.
             .OrderByDescending(q => q.Pinned)
             .ThenByDescending(q => q.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -68,7 +67,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
                     throw new InvalidOperationException("Bei einer Link-Quelle ist eine URL erforderlich.");
                 }
                 var url = input.Url.Trim();
-                // Nur http(s) zulassen – verhindert z. B. javascript:-Links (stored-XSS-Vektor in der Anzeige).
+                // http(s) only, blocks stored-XSS via javascript: links
                 if (!IsSafeUrl(url))
                 {
                     throw new InvalidOperationException("Bitte eine gültige http(s)-URL angeben.");
@@ -90,7 +89,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
                 {
                     throw new InvalidOperationException("Es wurde keine Datei ausgewählt.");
                 }
-                // Größenlimit serverseitig erzwingen (nicht nur in der UI).
+                // enforce size limit server-side
                 if (input.FileContent.Length > storage.MaxBytes)
                 {
                     throw new InvalidOperationException($"Datei zu groß (max. {storage.MaxBytes / (1024 * 1024)} MB).");
@@ -109,7 +108,6 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
                 break;
 
             case SourceType.FreeText:
-                // Inhalt steckt in der Beschreibung – nichts weiter nötig.
                 break;
 
             case SourceType.Document:
@@ -117,8 +115,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
                 {
                     throw new InvalidOperationException("Bei einer Dokument-Quelle ist ein Ziel-Dokument erforderlich.");
                 }
-                // Existenz + Sichtbarkeit des referenzierten Dokuments prüfen (kein Verweis auf VS-Dokumente
-                // für Nicht-Führung; kein Existenz-Leak).
+                // verify referenced document is visible; no existence leak of classified docs
                 await using (var checkDb = await dbFactory.CreateDbContextAsync(cancellationToken))
                 {
                     var classifiedFlag = await checkDb.Documents
@@ -143,7 +140,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         }
         catch when (source.Type == SourceType.Upload && source.FileNameSaved is not null)
         {
-            // DB-Insert fehlgeschlagen → bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
+            // insert failed, remove the already-written file
             storage.Delete(source.FileNameSaved);
             throw;
         }
@@ -162,29 +159,24 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
-        // Soft-Delete via Interceptor. Die physische Datei bleibt erhalten (Wiederherstellung möglich);
-        // endgültiges Entfernen erst beim Hard-Delete (späterer Cleanup, siehe Plan).
+        // soft delete keeps the file for restore; removed on hard delete
         db.Sources.Remove(source);
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task PinSetAsync(string sourceId, bool pinned, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // ExecuteUpdate umgeht den Audit-/Nur-Lese-Interceptor → Schreibrecht hier explizit durchsetzen
-        // (ein hochrangiger Nur-Leser bestünde sonst keine Mutations-Sperre). Anpinnen ist an das
-        // Schreibrecht der Akte gekoppelt – wer Quellen hinzufügen/löschen darf, darf auch anpinnen.
+        // ExecuteUpdate bypasses the interceptors, so enforce write access here
         Permission.RequireWriteAccess(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Source laden, um EntityType/EntityId für den VS-Check zu kennen.
         var source = await db.Sources.FirstOrDefaultAsync(q => q.Id == sourceId, cancellationToken)
             ?? throw new InvalidOperationException("Quelle nicht gefunden.");
         if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
-        // Bewusst per ExecuteUpdate statt SaveChanges: setzt nur das Flag ohne Audit-Interceptor
-        // (Anpinnen ist keine inhaltliche Bearbeitung → kein GeaendertAm/Von-Stempel).
+        // ExecuteUpdate on purpose: pinning is not a content edit, skip the audit stamp
         await db.Sources
             .Where(q => q.Id == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(q => q.Pinned, pinned), cancellationToken);
@@ -210,7 +202,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             : null;
     }
 
-    /// <summary>Lässt nur absolute http(s)-URLs zu (Schutz vor javascript:/data:-Links in der Anzeige).</summary>
+    /// <summary>Allows only absolute http(s) URLs (blocks javascript:/data: links).</summary>
     private static bool IsSafeUrl(string url)
         => Uri.TryCreate(url, UriKind.Absolute, out var uri)
            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);

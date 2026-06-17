@@ -4,7 +4,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Gespeicherte Suchen/Smart-Listen je Agent (anlegen, eigene laden, eigene löschen).</summary>
+/// <summary>Saved searches/smart lists per agent (create, load own, delete own).</summary>
 public interface ISavedSearchService
 {
     Task<List<SavedSearch>> GetForAgentAsync(string agentId, CancellationToken cancellationToken = default);

@@ -201,10 +201,7 @@ else
     private string? _myId;
     private bool _amAdmin;
 
-    // Aktiver Tab: 0 = Aktive (intern, ohne Teamleitungen/Partner), 1 = Gesperrte, 2 = Teamleitung, 3 = Partner.
-    // Partner werden bewusst NUR im Partner-Tab gezeigt, nicht zusätzlich unter "Aktiv".
-    // Ausstehende Registrierungen werden hier bewusst nicht gezeigt – die laufen über die Freigaben-Seite.
-    // Das Sperren/Entsperren verschiebt einen Agenten zwischen den Tabs.
+    // Tabs: 0 active internal, 1 blocked, 2 team-lead, 3 partner. Partners show only in the partner tab.
     private int _tab;
 
     // partner-tab filters
@@ -411,7 +408,7 @@ else
 
     private async Task Block(Agent agent)
     {
-        // Destruktive Aktion (beendet alle Sitzungen sofort) → Bestätigung + optionale Begründung einholen.
+        // Destructive: confirm and capture an optional reason.
         var reason = await ReasonDialog.ShowAsync(DialogService,
             $"{DisplayName(agent)} sperren?",
             "Die Sperre beendet alle laufenden Sitzungen des Agents sofort (Kill-Switch).",
@@ -448,7 +445,6 @@ else
         await LoadAsync();
     }
 
-    // Erklärt, warum der Admin-Schalter gesperrt ist. Bei freigeschaltetem Schalter ist der Tooltip ausgeblendet.
     private string AdminToggleHint(Agent agent)
     {
         if (!_amAdmin)

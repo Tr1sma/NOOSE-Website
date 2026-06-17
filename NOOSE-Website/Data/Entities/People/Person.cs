@@ -10,13 +10,11 @@ public class Person : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Unique case number.</summary>
     [Column("Aktenzeichen")]
     public string CaseNumber { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Free-text notes.</summary>
     [Column("Beschreibung")]
     public string? Description { get; set; }
 
@@ -42,7 +40,6 @@ public class Person : IAuditable, ISoftDelete
     [Column("BedrohungsKonfidenz")]
     public int? ThreatConfidence { get; set; }
 
-    /// <summary>Score breakdown (JSON).</summary>
     [Column("BedrohungsDetailJson")]
     public string? ThreatDetailJson { get; set; }
 
@@ -50,7 +47,6 @@ public class Person : IAuditable, ISoftDelete
     [Column("ScoreBerechnetAm")]
     public DateTime? ScoreCalculatedAt { get; set; }
 
-    // ---- profile & child tables ----
     public List<PersonAlias> Aliases { get; set; } = new();
     public List<PersonPhone> PhoneNumbers { get; set; } = new();
     public List<PersonVehicle> Vehicles { get; set; } = new();
@@ -59,9 +55,7 @@ public class Person : IAuditable, ISoftDelete
     public List<PersonPhoto> Photos { get; set; } = new();
     public List<PersonDoc> Docs { get; set; } = new();
     public List<Observation> Observations { get; set; } = new();
-    // loaded via service
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -71,7 +65,6 @@ public class Person : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]
@@ -79,7 +72,6 @@ public class Person : IAuditable, ISoftDelete
     [Column("GeloeschtVonId")]
     public string? DeletedById { get; set; }
 
-    /// <summary>Effective life status (not mapped).</summary>
     [NotMapped]
     public LifeStatus EffectiveLifeStatus
         => LifeStatusLogic.Effective(LifeStatus, DeadUntil, DateTime.UtcNow);

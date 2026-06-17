@@ -2,7 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Schlanke Zeile für die Dokumenten-Bibliothek/Auswahl (ohne den großen HTML-Body).</summary>
+/// <summary>Lightweight document-library row without the HTML body.</summary>
 public record DocumentListItem(
     string Id,
     string Title,
@@ -11,9 +11,8 @@ public record DocumentListItem(
     DateTime Refreshed,
     bool Pinned)
 {
-    /// <summary>True, wenn das Dokument irgendeiner Verschluss-Stufe unterliegt (für die Schloss-Anzeige).</summary>
     public bool IsRestricted => Classification != DocumentClassification.None;
 }
 
-/// <summary>Eine Akte, an die ein Dokument angehängt ist (für die „Angehängt an"-Liste im Viewer).</summary>
+/// <summary>A record a document is attached to.</summary>
 public record DocumentAttachment(string EntityType, string EntityId, string Display, string? Href);

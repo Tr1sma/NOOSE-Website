@@ -8,7 +8,6 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IKommentarService" />
 public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : ICommentService
 {
     public Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default)

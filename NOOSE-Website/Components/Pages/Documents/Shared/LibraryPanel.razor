@@ -1,5 +1,4 @@
-@* Datei-Bibliothek (Phase 7): durchsuchbare Ablage hochgeladener Dateien (Formulare, SOPs,
-   Vorlagen). Eingebettet als Reiter in der Dokumenten-Bibliothek (/dokumente). *@
+@* File library: searchable store of uploaded files, embedded as a tab in the document library. *@
 @inject ILibraryService LibraryService
 @inject ILibraryStorageService Storage
 @inject IDialogService DialogService
@@ -119,7 +118,7 @@ else
         }
         try
         {
-            // Datei vollständig puffern (Browser-Stream unterstützt kein Seek) und dann speichern.
+            // Buffer fully; browser stream has no seek.
             await using var buffer = new MemoryStream();
             await result.File.OpenReadStream(Storage.MaxBytes).CopyToAsync(buffer);
             buffer.Position = 0;

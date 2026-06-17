@@ -2,7 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Jobs;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen und Bearbeiten einer Aufgabe/To-Do.</summary>
+/// <summary>Create/edit job/to-do input.</summary>
 public class JobInput
 {
     public string Title { get; set; } = string.Empty;
@@ -11,6 +11,6 @@ public class JobInput
     public JobPriority Priority { get; set; } = JobPriority.Normal;
     public DateTime? DueDate { get; set; }
 
-    /// <summary>Eingeschränkt: nur zugeteilte Agenten, der Ersteller und die Aufsicht (Führung/Admin/Teamleitung) sehen die Aufgabe.</summary>
+    /// <summary>Restricted: only assignees, creator and supervision see the job.</summary>
     public bool IsRestricted { get; set; }
 }

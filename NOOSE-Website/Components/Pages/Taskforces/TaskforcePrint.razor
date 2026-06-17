@@ -1,4 +1,3 @@
-@* Druckansicht der Taskforce-Akte (Phase 7): komplette Akte als strukturiertes Dokument. *@
 @page "/taskforces/{Id}/druck"
 @layout PrintLayout
 @inject ITaskforceService TaskforceService
@@ -80,7 +79,7 @@ else
         var user = (await AuthStateTask).User;
         _printBy = user.GetCodename();
 
-        // Sichtbarkeit wie auf der Detailseite: Führung/Aufsicht sehen alles, sonst nur als Mitglied.
+        // Same visibility as detail page: members only unless leadership
         _taskforce = await TaskforceService.GetDetailAsync(Id, user.MayAllTaskforcesSee(), user.GetAgentId());
         if (_taskforce is not null)
         {

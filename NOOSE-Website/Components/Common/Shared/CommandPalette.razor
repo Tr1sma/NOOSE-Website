@@ -1,5 +1,4 @@
-@* Command-Palette (Strg+K / Cmd+K): Schnellzugriff auf Akten und Funktionen.
-   Als Singleton im MainLayout platziert; der Hotkey wird per JS-Interop registriert. *@
+@* Command palette (Ctrl+K); hotkey registered via JS interop. *@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject ISearchService SearchService
@@ -99,7 +98,7 @@
             new("Gesetzbuch", "Rechtsgrundlagen", Icons.Material.Filled.Gavel, "/gesetze"),
             new("Globale Suche", null, Icons.Material.Filled.Search, "/suche"),
         };
-        // Papierkörbe und Verwaltung sind Führungs-gated → für Nicht-Führung nicht anbieten (sonst ACCESS DENIED).
+        // trash and admin are leadership-gated
         if (_isLeadership)
         {
             _commands.Add(new PaletteItem("Freigaben", "Posteingang", Icons.Material.Filled.HowToReg, "/admin/freigaben"));
@@ -118,7 +117,6 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // JS-Interop erst nach dem ersten Render verfügbar (Interactive Server).
         if (firstRender)
         {
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=2");
@@ -185,7 +183,7 @@
             }
             catch (Exception ex)
             {
-                // Schnellsuche-Fehler nicht eskalieren (dann nur die statischen Befehle anzeigen), aber loggen.
+                // fall back to static commands on search failure
                 Logger.LogDebug(ex, "Schnellsuche in der Command-Palette fehlgeschlagen.");
             }
         }
@@ -215,7 +213,7 @@
         }
         catch (JSDisconnectedException)
         {
-            // Circuit bereits getrennt – nichts zu tun.
+            /* ignore */
         }
         _ref?.Dispose();
     }

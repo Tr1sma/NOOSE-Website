@@ -7,10 +7,9 @@ using NOOSE_Website.Models.Statistics;
 
 namespace NOOSE_Website.Services.Statistics;
 
-/// <inheritdoc cref="IStatistikService" />
+/// <inheritdoc cref="IStatisticsService" />
 public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashboardService dashboard) : IStatisticsService
 {
-    /// <summary>Time series month count.</summary>
     private const int TimeSeriesMonths = 12;
 
     public async Task<StatisticsReport> GetReportAsync(bool isLeadership, string? meId, int topN = 10,
@@ -130,7 +129,6 @@ public class StatisticsService(IDbContextFactory<AppDbContext> dbFactory, IDashb
             factionsByHazard, measureOutcomes, casesByStatus, topPeople, topFactions, timeSeries);
     }
 
-    // in-memory bucket
     private static async Task<List<DistributionSegment>> HazardDistributionAsync(IQueryable<int?> scores,
         CancellationToken cancellationToken)
     {

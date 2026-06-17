@@ -7,12 +7,7 @@ using NOOSE_Website.Models.Cases;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Geschäftslogik der Vorgangs-/Fallakten: Liste/Detail (inkl. Verschlusssachen-Filter), Anlegen/Bearbeiten,
-/// Papierkorb, Einstufung mit Rang-Gate, beteiligte Agents (mit Fallführer) und Historie. Die gebündelten
-/// Mitglieder (Personen/Operationen/Observationen/Doks/Organisationen) laufen über die generische
-/// Verknüpfungs-Engine. Alle verändernden Aktionen werden auditiert.
-/// </summary>
+/// <summary>Case records: list/detail (classified-filtered), CRUD, trash, rank-gated classification, involved agents (with case lead), and history.</summary>
 public interface ICaseService
 {
     Task<List<Case>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
@@ -25,25 +20,25 @@ public interface ICaseService
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
+    /// <summary>Set the classification; "secured state-threatening" requires Senior Special Agent+ or Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Dem Vorgang zugeteilte (beteiligte) NOOSE-Agents (inkl. Agent-Daten; Fallführer zuerst).</summary>
+    /// <summary>Agents assigned to the case (with agent data; case lead first).</summary>
     Task<List<CaseAgent>> GetAgentsAsync(string caseId, CancellationToken cancellationToken = default);
 
-    /// <summary>Die als Fallführer markierten Zuteilungen des Vorgangs (inkl. Agent-Daten).</summary>
+    /// <summary>Assignments marked as case lead (with agent data).</summary>
     Task<List<CaseAgent>> GetCaseLeadAsync(string caseId, CancellationToken cancellationToken = default);
 
-    /// <summary>Agent zuteilen. Erlaubt für Führung oder Fallführer der Akte; <paramref name="alsFallfuehrer"/> nur durch die Führung.</summary>
+    /// <summary>Assign an agent; allowed for leadership or a case lead; marking as case lead is leadership-only.</summary>
     Task AgentAllocateAsync(string caseId, string agentId, bool asCaseLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Zuteilung aufheben. Erlaubt für Führung oder Fallführer der Akte.</summary>
+    /// <summary>Remove an assignment; allowed for leadership or a case lead.</summary>
     Task AgentRemoveAsync(string allocationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Fallführer-Markierung einer Zuteilung setzen/entfernen – nur Führung.</summary>
+    /// <summary>Set/clear the case-lead mark on an assignment; leadership only.</summary>
     Task CaseLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge des Vorgangs und seiner Zuteilungen/Verknüpfungen (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
+    /// <summary>Audit entries for the case and its assignments/links (classified-filtered).</summary>
     Task<List<AuditLog>> GetHistoryAsync(string caseId, bool isLeadership, CancellationToken cancellationToken = default);
 }

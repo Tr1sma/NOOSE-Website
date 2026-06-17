@@ -1,4 +1,3 @@
-@* Druckansicht der Fraktionsakte (Phase 7): komplette Akte als strukturiertes Dokument. *@
 @page "/fraktionen/{Id}/druck"
 @layout PrintLayout
 @inject IFactionService FactionService
@@ -245,7 +244,7 @@ else
         _load = false;
     }
 
-    /// <summary>Gefährdungsstufe inkl. Score-Zahl und Konfidenz (sofern berechnet) für die Druckansicht.</summary>
+    /// <summary>Hazard level with score and confidence for the print view.</summary>
     private string HazardDisplayText()
     {
         if (_faction is null)

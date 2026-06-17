@@ -1,5 +1,4 @@
-@* Duplikat-Zusammenführen (Phase 7): überführt eine doppelt angelegte Personenakte vollständig in
-   eine andere. Nur Führung; die Quell-Akte landet anschließend im Papierkorb. *@
+@* Merge a duplicate person record fully into another (leadership only); source goes to trash. *@
 @inject IPersonService PersonService
 @inject IPersonMergeService MergeService
 @inject ISnackbar Snackbar
@@ -81,7 +80,7 @@
         }
     }
 
-    /// <summary>Öffnet den Zusammenführen-Dialog; liefert die Id der Ziel-Akte oder <c>null</c>.</summary>
+    /// <summary>Opens the merge dialog; returns the target record id or <c>null</c>.</summary>
     public static async Task<string?> ShowAsync(IDialogService dialog)
     {
         var reference = await dialog.ShowAsync<PersonMergeDialog>("Akten zusammenführen",

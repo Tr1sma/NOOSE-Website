@@ -17,7 +17,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IVerknuepfungService" />
+/// <inheritdoc cref="ILinkService" />
 public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : ILinkService
 {
     public Task<List<LinkDisplay>> GetForRecordAsync(string entityType, string entityId, bool isLeadership, string? meId, LinkKind? kind = null, CancellationToken cancellationToken = default)
@@ -44,7 +44,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             .OrderByDescending(v => v.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        // Je Verknüpfung die „andere Seite" relativ zur betrachteten Akte bestimmen.
+        // determine the "other side" relative to the viewed record
         var pairs = raw.Select(v =>
         {
             var isBy = v.SourceType == entityType && v.SourceId == entityId;
@@ -53,8 +53,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
                     OtherId: isBy ? v.TargetId : v.SourceId);
         }).ToList();
 
-        // Ziele für Anzeige + Sichtbarkeit + Navigations-Href auflösen – je Typ eine Sammelabfrage, dann
-        // in EINE Lookup-Map (Typ, Id) → (Bezeichnung, Verschlusssache, Href) zusammenführen.
+        // resolve targets per type, merged into one lookup map
         var targets = new Dictionary<(string Type, string Id), (string Designation, bool Classified, string? Href)>();
 
         var personIds = pairs.Where(p => p.OtherType == nameof(Person)).Select(p => p.OtherId).Distinct().ToList();
@@ -85,7 +84,6 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Party), x.Id)] = ($"{x.Name} ({x.CaseNumber})", x.IsClassified, $"/parteien/{x.Id}");
         }
 
-        // Operation (Phase 5b): aufgelöst mit Navigation auf die eigene Detailseite.
         var operationIds = pairs.Where(p => p.OtherType == nameof(Operation)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Operations.Where(o => operationIds.Contains(o.Id))
                      .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified }).ToListAsync(cancellationToken))
@@ -93,8 +91,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Operation), x.Id)] = ($"{x.Title} ({x.CaseNumber})", x.IsClassified, $"/operationen/{x.Id}");
         }
 
-        // Taskforce (Phase 5c): nur die für den Betrachter sichtbaren (zugeteilt oder darf alle) auflösen –
-        // fremde Taskforces bleiben unaufgelöst und werden so aus der Beziehungs-Anzeige ausgeblendet.
+        // resolve only taskforces visible to the viewer; others stay hidden
         var taskforceIds = pairs.Where(p => p.OtherType == nameof(Taskforce)).Select(p => p.OtherId).Distinct().ToList();
         var visibleTf = await TaskforceVisibility.VisibleIdsAsync(db, taskforceIds, isLeadership, meId, cancellationToken);
         foreach (var x in await db.Taskforces.Where(t => visibleTf.Contains(t.Id))
@@ -103,7 +100,6 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Taskforce), x.Id)] = ($"{x.Name} ({x.CaseNumber})", x.IsClassified, $"/taskforces/{x.Id}");
         }
 
-        // Vorgang (Phase 5): aufgelöst mit Navigation auf die eigene Detailseite.
         var caseIds = pairs.Where(p => p.OtherType == nameof(Case)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
                      .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified }).ToListAsync(cancellationToken))
@@ -111,7 +107,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Case), x.Id)] = ($"{x.Title} ({x.CaseNumber})", x.IsClassified, $"/vorgaenge/{x.Id}");
         }
 
-        // Aufgabe (Phase 6): kein Verschlusssache-Konzept (Team-Board); Navigation auf die eigene Detailseite.
+        // jobs have no classification concept (team board)
         var jobIds = pairs.Where(p => p.OtherType == nameof(Job)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Jobs.Where(a => jobIds.Contains(a.Id))
                      .Select(a => new { a.Id, a.Title, a.CaseNumber }).ToListAsync(cancellationToken))
@@ -119,7 +115,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Job), x.Id)] = ($"{x.Title} ({x.CaseNumber})", false, $"/aufgaben/{x.Id}");
         }
 
-        // Agent: kein Verschlusssache-Konzept und keine eigene Detailseite (Href null) – nur Codename.
+        // agent: no classification, no detail page (href null), codename only
         var agentIds = pairs.Where(p => p.OtherType == nameof(Agent)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Users.Where(u => agentIds.Contains(u.Id))
                      .Select(u => new { u.Id, u.Codename }).ToListAsync(cancellationToken))
@@ -127,8 +123,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Agent), x.Id)] = (string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannter Agent)" : x.Codename, false, null);
         }
 
-        // Personen-Dok: erbt Sichtbarkeit von seiner Person (Join auf Personen → Soft-Delete/Verschlusssache
-        // greifen automatisch); Navigation auf die Personen-Akte, Doks-Tab.
+        // person doc inherits visibility from its person via the join
         var docIds = pairs.Where(p => p.OtherType == nameof(PersonDoc)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.PersonDocs.Where(d => docIds.Contains(d.Id))
                      .Join(db.People, d => d.PersonId, p => p.Id,
@@ -138,8 +133,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(PersonDoc), x.Id)] = ($"Dok – {x.PersonName} ({x.Timestamp.ToLocalTime():dd.MM.yyyy})", x.IsClassified, $"/personen/{x.PersonId}?tab=doks");
         }
 
-        // Observation (Phase 5): erbt Sichtbarkeit von seiner Person (Join auf Personen → Soft-Delete/
-        // Verschlusssache greifen automatisch); Navigation auf die Personen-Akte, Observationen-Tab.
+        // observation inherits visibility from its person via the join
         var observationIds = pairs.Where(p => p.OtherType == nameof(Observation)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Observations.Where(o => observationIds.Contains(o.Id))
                      .Join(db.People, o => o.PersonId, p => p.Id,
@@ -149,7 +143,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Observation), x.Id)] = ($"Observation – {x.PersonName} ({x.Start.ToLocalTime():dd.MM.yyyy})", x.IsClassified, $"/personen/{x.PersonId}?tab=ueberwachung");
         }
 
-        // Gesetz (Phase 7): kein Verschlusssache-Konzept (Wissensbasis); Navigation auf die Detailseite.
+        // laws have no classification concept (knowledge base)
         var lawIds = pairs.Where(p => p.OtherType == nameof(Law)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Laws.Where(g => lawIds.Contains(g.Id))
                      .Select(g => new { g.Id, g.Paragraph, g.Title, g.LawBook }).ToListAsync(cancellationToken))
@@ -187,7 +181,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             }
             if (targets.TryGetValue((p.OtherType, p.OtherId), out var info))
             {
-                // Verschlusssache nur für die Führung sichtbar.
+                // classified visible to leadership only
                 if (info.Classified && !isLeadership)
                 {
                     continue;
@@ -196,11 +190,11 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             }
             else if (knownTypes.Contains(p.OtherType))
             {
-                // Bekannter Aktentyp, aber nicht aufgelöst → Ziel im Papierkorb/unbekannt → ausblenden.
+                // known type but unresolved (trashed/unknown) -> hide
             }
             else
             {
-                // Unbekannter Aktentyp → vorerst Rohbezeichnung ohne Navigationsziel.
+                // unknown type -> raw label, no nav target
                 result.Add(new LinkDisplay(p.V.Id, p.OtherType, p.OtherId, p.V.Label, p.OtherId, p.V.Automatic));
             }
         }
@@ -216,10 +210,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Härtung: nicht manuell auf ein Ziel verlinken, das der Handelnde nicht sehen darf (Verschlusssache).
-        // Die Picker (VerknuepfungDialog) zeigen ohnehin nur sichtbare Ziele – das hier schließt geschmiedete
-        // Direktaufrufe. Nur die VS-fähigen Aktentypen prüfen; Agent/PersonDok/Observation/Aufgabe bleiben
-        // unverändert verlinkbar (deren Sichtbarkeit regelt der jeweilige Anzeige-/Lesepfad).
+        // don't let forged calls link to a classified target the actor can't see
         if (targetType is nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
                 or nameof(Operation) or nameof(Taskforce) or nameof(Case)
             && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, actor.IsLeadership(), cancellationToken))
@@ -227,8 +218,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");
         }
 
-        // Doppelte (aktive) Verknüpfung derselben Art verhindern – in beiden Richtungen. Soft-gelöschte
-        // (Papierkorb) sind durch den globalen Filter ausgenommen und blockieren das Neuanlegen nicht.
+        // prevent a duplicate active link of the same kind in either direction
         var exists = await db.Links.AnyAsync(v => v.Kind == kind
             && ((v.SourceType == sourceType && v.SourceId == sourceId && v.TargetType == targetType && v.TargetId == targetId)
              || (v.SourceType == targetType && v.SourceId == targetId && v.TargetType == sourceType && v.TargetId == sourceId)),
@@ -249,12 +239,11 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         });
         await db.SaveChangesAsync(cancellationToken);
 
-        // Jede manuelle Verknüpfung mit Fraktionsbeteiligung wirkt auf deren Score: Konflikt/Bündnis auf S3,
-        // Standard auf S4 (Netzwerk-Zentralität) → neu berechnen (no-op, falls keine Seite eine Fraktion ist).
+        // links touching a faction affect its threat score -> recompute
         await ThreatNewCalculateAsync(sourceType, sourceId, targetType, targetId, cancellationToken);
     }
 
-    /// <summary>Berechnet den Bedrohungs-Score jeder an der Verknüpfung beteiligten Fraktion neu (no-op für Nicht-Fraktionen).</summary>
+    /// <summary>Recomputes the threat score of each faction involved in the link (no-op for non-factions).</summary>
     private async Task ThreatNewCalculateAsync(string sourceType, string sourceId, string targetType, string targetId, CancellationToken cancellationToken)
     {
         if (sourceType == nameof(Faction))
@@ -265,7 +254,6 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         {
             await threat.NewCalculateAsync(targetId, cancellationToken);
         }
-        // Person-inzidente Standard-Verknüpfungen fließen in den Person-Score (P5).
         if (sourceType == nameof(Person))
         {
             await threat.NewCalculatePersonScoreAsync(sourceId, cancellationToken);
@@ -284,10 +272,9 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         {
             return;
         }
-        db.Links.Remove(v); // Soft-Delete via Interceptor
+        db.Links.Remove(v); // soft-delete via interceptor
         await db.SaveChangesAsync(cancellationToken);
 
-        // Entfernte manuelle Verknüpfung wirkt auf S3 (Konflikt/Bündnis) oder S4 (Standard) der beteiligten Fraktionen.
         await ThreatNewCalculateAsync(v.SourceType, v.SourceId, v.TargetType, v.TargetId, cancellationToken);
     }
 }

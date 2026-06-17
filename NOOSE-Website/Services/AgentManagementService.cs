@@ -11,15 +11,13 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IAgentVerwaltungService" />
-// shared context for UserManager
+// Scoped AppDbContext injected directly to share UserManager's context (writes only).
 public class AgentManagementService(
     UserManager<Agent> userManager,
     AppDbContext db,
     IDbContextFactory<AppDbContext> dbFactory,
     INotificationService notifications) : IAgentManagementService
 {
-    // read-only queries
     public async Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default)
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -81,7 +79,7 @@ public class AgentManagementService(
         agent.Status = AgentStatus.Active;
         agent.PartnerAgency = agency;
         agent.PartnerRank = partnerRank;
-        // no internal rank/flags
+        // partners hold no internal rank/flags
         agent.Rank = null;
         agent.IsTRU = false;
         agent.IsHRB = false;
@@ -121,12 +119,10 @@ public class AgentManagementService(
         agent.RealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
         agent.Codename = codename;
         agent.BadgeNumber = string.IsNullOrWhiteSpace(badgeNumber) ? null : badgeNumber.Trim();
-        // clear pending request
         PendingNameChangeEmpty(agent);
 
         Audit(agent, AuditAction.Modified, actor, $"Stammdaten geändert (Codename: {agent.Codename})");
-        // refresh claims
-        await Save(agent, newStamp: true);
+        await Save(agent, newStamp: true); // refresh claims
     }
 
     public async Task NameChangeRequestAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor)
@@ -139,14 +135,12 @@ public class AgentManagementService(
         }
 
         var agent = await GetOrThrow(agentId);
-        // pending snapshot
         agent.PendingCodename = codename;
         agent.PendingRealName = string.IsNullOrWhiteSpace(realName) ? null : realName.Trim();
         agent.PendingBadgeNumber = string.IsNullOrWhiteSpace(badgeNumber) ? null : badgeNumber.Trim();
         agent.NameChangeRequestedAt = DateTime.UtcNow;
 
         Audit(agent, AuditAction.Modified, actor, $"Namensänderung beantragt (Codename: {codename})");
-        // no stamp change
         await Save(agent, newStamp: false);
     }
 
@@ -166,14 +160,12 @@ public class AgentManagementService(
             throw new InvalidOperationException("Für diesen Agent liegt kein Namensänderungs-Antrag vor.");
         }
 
-        // apply snapshot
         agent.Codename = agent.PendingCodename ?? string.Empty;
         agent.RealName = agent.PendingRealName;
         agent.BadgeNumber = agent.PendingBadgeNumber;
         PendingNameChangeEmpty(agent);
 
         Audit(agent, AuditAction.Modified, actor, $"Namensänderung genehmigt (Codename: {agent.Codename})");
-        // refresh claims
         await Save(agent, newStamp: true);
 
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Namensänderung wurde genehmigt.", "/profil"); }
@@ -194,7 +186,6 @@ public class AgentManagementService(
         var hint = string.IsNullOrWhiteSpace(reason) ? "ohne Angabe" : reason.Trim();
         Audit(agent, AuditAction.Modified, actor,
             $"Namensänderung abgelehnt (beantragter Codename: {requestedCodename}): {hint}");
-        // no stamp change
         await Save(agent, newStamp: false);
 
         try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Deine Namensänderung wurde abgelehnt.", "/profil"); }
@@ -242,7 +233,7 @@ public class AgentManagementService(
             throw new InvalidOperationException("Die Zugehörigkeit kann nur für aktive Konten geändert werden.");
         }
 
-        // admin-strip guards
+        // guard admin strip
         if (agent.IsAdmin)
         {
             if (actor.GetAgentId() == agentId)
@@ -257,7 +248,6 @@ public class AgentManagementService(
 
         agent.PartnerAgency = agency;
         agent.PartnerRank = partnerRank;
-        // partners hold no internal rank/flags
         agent.Rank = null;
         agent.IsTRU = false;
         agent.IsHRB = false;
@@ -324,14 +314,13 @@ public class AgentManagementService(
             }
             Audit(agent, AuditAction.Modified, actor,
                 $"Beförderung genehmigt: {alt?.ToString() ?? "—"} → {request.TargetRank}");
-            // save all
             await Save(agent, newStamp: true);
         }
         else
         {
             Audit(agent, AuditAction.Modified, actor,
                 $"Beförderungsantrag abgelehnt (Ziel: {request.TargetRank})");
-            // save request only
+            // request only, no claims refresh
             await db.SaveChangesAsync();
         }
     }
@@ -368,18 +357,16 @@ public class AgentManagementService(
 
         Audit(agent, AuditAction.Modified, actor,
             isTeamLead ? "Als Teamleitung markiert" : "Teamleitung-Markierung entfernt");
-        // refresh claims
-        await Save(agent, newStamp: true);
+        await Save(agent, newStamp: true); // refresh claims
     }
 
     public async Task AdminSetAsync(string agentId, bool isAdmin, ClaimsPrincipal actor)
     {
-        // admin only
         Permission.RequireAdmin(actor);
 
         var agent = await GetOrThrow(agentId);
 
-        // self-lockout guard
+        // guard self-lockout and last admin
         if (!isAdmin && agent.IsAdmin)
         {
             if (actor.GetAgentId() == agentId)
@@ -402,7 +389,6 @@ public class AgentManagementService(
     {
         Permission.RequireLeadership(actor);
 
-        // no self-block
         if (actor.GetAgentId() == agentId)
         {
             throw new InvalidOperationException("Du kannst dich nicht selbst sperren.");
@@ -428,7 +414,6 @@ public class AgentManagementService(
         await Save(agent, newStamp: true);
     }
 
-    // fresh reload
     private async Task<Agent> GetOrThrow(string agentId)
     {
         var agent = await db.Users.FirstOrDefaultAsync(a => a.Id == agentId)
@@ -445,7 +430,6 @@ public class AgentManagementService(
         agent.NameChangeRequestedAt = null;
     }
 
-    // rank history
     private void HistoryEntryAdd(string agentId, Rank? alt, Rank @new, ClaimsPrincipal actor, string reason)
         => db.AgentRankHistories.Add(new AgentRankHistory
         {
@@ -469,10 +453,9 @@ public class AgentManagementService(
             ChangesJson = JsonSerializer.Serialize(new { target = target.Codename, hint }),
         });
 
-    /// <summary>Persist agent; rotate stamp if needed.</summary>
+    /// <summary>Persist agent; rotate the security stamp to force re-login when claims change.</summary>
     private async Task Save(Agent agent, bool newStamp)
     {
-        // check result
         var result = await userManager.UpdateAsync(agent);
         if (!result.Succeeded)
         {

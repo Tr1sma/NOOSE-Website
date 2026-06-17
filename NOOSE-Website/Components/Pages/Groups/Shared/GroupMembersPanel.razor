@@ -1,4 +1,3 @@
-@* Mitglieder einer Personengruppe: Liste (Leitung zuerst), Hinzufügen/Bearbeiten/Entfernen mit Rolle + Leitung. *@
 @inject IPersonGroupService GroupService
 @inject IPersonService PersonService
 @inject IDialogService DialogService
@@ -60,7 +59,7 @@
 @code {
     [Parameter, EditorRequired] public string GroupId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
-    /// <summary>Wird nach Änderungen ausgelöst (damit die Steckkarte den Fortschritt aktualisiert).</summary>
+    /// <summary>Raised after changes so the card refreshes progress.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -88,7 +87,7 @@
         {
             return;
         }
-        // Beim Anlegen einer neuen Person vor gleichnamigen Dubletten warnen.
+        // Warn on same-name duplicates when creating a new person
         if (!await DuplicateCheck.MayNewRecordCreateAsync(DialogService, PersonService, input.NewPersonName, User.IsLeadership()))
         {
             return;

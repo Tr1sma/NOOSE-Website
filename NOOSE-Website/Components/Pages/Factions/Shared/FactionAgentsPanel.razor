@@ -1,6 +1,4 @@
-@* Der Fraktion zugeteilte NOOSE-Agents: Liste + Zuteilen/Entfernen + Ermittlungsleiter-Markierung.
-   Hinweis: Komponentenname bewusst „FraktionAgentePanel" (nicht „AgentePanel"), um eine Tag-Auflösungs-
-   Kollision mit der gleichnamigen Gruppen-Komponente zu vermeiden (beide Shared-Ordner sind global @using). *@
+@* Name deliberately prefixed to avoid a tag-resolution collision with the groups component (both Shared folders are global @using). *@
 @inject IFactionService FactionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -64,7 +62,6 @@
     [Parameter, EditorRequired] public string FactionId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Wird nach jeder Änderung der Zuteilungen/Ermittlungsleiter ausgelöst (Steckkarte aktualisieren).</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -84,10 +81,10 @@
     {
         _load = true;
         _agents = await FactionService.GetAgentsAsync(FactionId);
-        // Verwalten (zuteilen/entfernen) darf die Führung oder ein Ermittlungsleiter dieser Akte.
+        // leadership or this record's investigation lead may manage
         var myId = User.GetAgentId();
         _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && a.IsInvestigationLead);
-        // Schreibgeschuetzte Aufsichtsrolle: keine Mutations-Steuerelemente anzeigen.
+        // read-only supervisors get no mutation controls
         _canManage = _canManage && _mayWrite;
         _load = false;
     }

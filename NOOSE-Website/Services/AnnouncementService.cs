@@ -9,7 +9,6 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IAnkuendigungService" />
 public class AnnouncementService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumber,
@@ -26,13 +25,11 @@ public class AnnouncementService(
         var isHRB = actor.IsHRB();
         var myRank = actor.GetRank();
 
-        // Taskforces des Betrachters – für die Sichtbarkeit der Taskforce-Zielgruppe (flaches WHERE FK IN).
         var myTaskforces = string.IsNullOrEmpty(meId)
             ? new List<string>()
             : await db.TaskforceAgents.Where(ta => ta.AgentId == meId)
                 .Select(ta => ta.TaskforceId).Distinct().ToListAsync(cancellationToken);
 
-        // Sichtbarkeit = Empfängerkreis ODER Führung (Aufsicht) ODER Verfasser.
         var rows = await db.Announcements
             .Where(a => isLeadership
                 || a.CreatedById == meId
@@ -57,21 +54,19 @@ public class AnnouncementService(
 
         var ids = rows.Select(r => r.Id).ToList();
 
-        // Quittierungs-Zeilen (flach) für Betrachter-Status + Zähler – in-memory aggregiert.
         var ack = await db.AnnouncementAcknowledgments
             .Where(q => ids.Contains(q.AnnouncementId))
             .Select(q => new { q.AnnouncementId, q.AgentId, q.AcknowledgedAt })
             .ToListAsync(cancellationToken);
         var ackPerId = ack.GroupBy(q => q.AnnouncementId).ToDictionary(g => g.Key, g => g.ToList());
 
-        // Ersteller-Codenamen (öffentlich, nie Klarname).
+        // Never the real name.
         var creatorIds = rows.Select(r => r.CreatedById).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
         var creatorNames = creatorIds.Count == 0
             ? new Dictionary<string, string>()
             : await db.Users.Where(u => creatorIds.Contains(u.Id))
                 .Select(u => new { u.Id, u.Codename }).ToDictionaryAsync(u => u.Id, u => u.Codename, cancellationToken);
 
-        // Taskforce-Namen für die Zielgruppen-Anzeige.
         var tfIds = rows.Where(r => r.Audience == AnnouncementAudience.Taskforce && r.TargetId != null)
             .Select(r => r.TargetId!).Distinct().ToList();
         var tfNames = tfIds.Count == 0
@@ -118,14 +113,12 @@ public class AnnouncementService(
         var isLeadership = actor.IsLeadership();
         var mayManage = isLeadership || a.CreatedById == meId;
 
-        // Sichtbarkeit: Verwalter (Führung/Verfasser) ODER Empfänger der Zielgruppe.
         if (!mayManage
             && !await IsRecipientAsync(db, a, meId, actor.IsTRU(), actor.IsHRB(), actor.GetRank(), cancellationToken))
         {
             return null;
         }
 
-        // Quittierungen (nur wenn verlangt) – Codename für die Verwalter-Liste, Status für den Aufrufer.
         var allAck = a.AcknowledgmentRequired
             ? await db.AnnouncementAcknowledgments.Where(q => q.AnnouncementId == a.Id)
                 .Select(q => new { q.AgentId, q.AcknowledgedAt, Codename = q.Agent!.Codename })
@@ -175,7 +168,6 @@ public class AnnouncementService(
         return new AnnouncementView
         {
             Row = row,
-            // Quittierungsliste nur für Verwalter (offene zuerst, dann nach Codename).
             Acknowledgments = mayManage
                 ? allAck
                     .OrderBy(x => x.AcknowledgedAt == null ? 0 : 1)
@@ -197,7 +189,7 @@ public class AnnouncementService(
 
     public async Task<Announcement> CreateAsync(AnnouncementInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Broadcast-Features (gezielte Zielgruppe, Push, Quittierung) sind der Führung vorbehalten.
+        // Broadcast features are leadership-only.
         var isBroadcastFeature = input.AsBroadcast
             || input.Audience != AnnouncementAudience.AllActive
             || input.AcknowledgmentRequired;
@@ -206,7 +198,6 @@ public class AnnouncementService(
             Permission.RequireLeadership(actor);
         }
 
-        // Zielgruppen-Parameter validieren.
         if (input.Audience == AnnouncementAudience.Taskforce && string.IsNullOrWhiteSpace(input.TargetId))
         {
             throw new InvalidOperationException("Bitte eine Taskforce als Zielgruppe wählen.");
@@ -234,7 +225,7 @@ public class AnnouncementService(
         db.Announcements.Add(announcement);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Empfängerkreis nur ermitteln, wenn er gebraucht wird (Quittierung-Snapshot und/oder Push).
+        // Resolve recipients only when needed.
         var creatorId = actor.GetAgentId();
         var recipient = announcement.AcknowledgmentRequired || announcement.AsBroadcast
             ? await RecipientIdsAsync(db, announcement, cancellationToken)
@@ -242,7 +233,7 @@ public class AnnouncementService(
 
         if (announcement.AcknowledgmentRequired)
         {
-            // Snapshot der quittierungspflichtigen Empfänger (ohne den Verfasser selbst).
+            // Snapshot recipients, excluding the author.
             foreach (var eid in recipient.Distinct().Where(x => x != creatorId))
             {
                 db.AnnouncementAcknowledgments.Add(new AnnouncementAcknowledgment
@@ -256,7 +247,7 @@ public class AnnouncementService(
 
         await tx.CommitAsync(cancellationToken);
 
-        // Glocken-Broadcast nach dem Commit (Verfasser ausgeschlossen, best-effort).
+        // Notify after commit, author excluded.
         if (announcement.AsBroadcast)
         {
             await notifications.NotifyManyAsync(recipient, NotificationType.Announcement,
@@ -273,8 +264,7 @@ public class AnnouncementService(
             ?? throw new InvalidOperationException($"Ankündigung '{id}' nicht gefunden.");
         RequireCreatorOrLeadership(a, actor);
 
-        // Bewusst nur Inhaltliches editierbar – Zielgruppe/Push/Quittierung sind nach dem Anlegen fix
-        // (kein Re-Snapshot/Re-Push beim Bearbeiten).
+        // Only content is editable; audience/push/acknowledgment are fixed after creation.
         a.Title = input.Title.Trim();
         a.Content = input.Content?.Trim() ?? string.Empty;
         a.Important = input.Important;
@@ -287,7 +277,7 @@ public class AnnouncementService(
         var a = await db.Announcements.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Ankündigung '{id}' nicht gefunden.");
         RequireCreatorOrLeadership(a, actor);
-        db.Announcements.Remove(a); // Interceptor wandelt das in Soft-Delete.
+        db.Announcements.Remove(a); // interceptor rewrites to soft-delete
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -321,13 +311,12 @@ public class AnnouncementService(
 
         if (row.AcknowledgedAt is not null)
         {
-            return; // bereits quittiert – idempotent
+            return; // idempotent
         }
         row.AcknowledgedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
-        // Den eigenen NavMenu-Badge des Quittierenden live neu zählen lassen (sonst bliebe er bis zum
-        // nächsten kompletten Seiten-Reload eingefroren).
+        // Live-refresh the acknowledger's own NavMenu badge.
         acknowledgmentBroadcaster.Report(meId);
     }
 
@@ -339,15 +328,12 @@ public class AnnouncementService(
             return 0;
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Referenz-Navigation erzwingt den Join auf die Ankündigung → deren Soft-Delete-Filter blendet
-        // Papierkorb-Ankündigungen automatisch aus (keine „Geister"-Quittierungen).
+        // Reference nav forces the join, so the announcement's soft-delete filter hides trashed ones.
         return await db.AnnouncementAcknowledgments
             .CountAsync(q => q.AgentId == meId && q.AcknowledgedAt == null && q.Announcement!.AcknowledgmentRequired, cancellationToken);
     }
 
-    // ---- Helfer ----
-
-    /// <summary>Aktive Agent-Ids des Empfängerkreises einer Ankündigung (für Snapshot/Push).</summary>
+    /// <summary>Active agent ids in an announcement's audience.</summary>
     private static async Task<List<string>> RecipientIdsAsync(AppDbContext db, Announcement a, CancellationToken cancellationToken)
     {
         var query = db.Users.Where(u => u.Status == AgentStatus.Active);
@@ -357,12 +343,12 @@ public class AnnouncementService(
             AnnouncementAudience.HrbUnit => query.Where(u => u.IsHRB),
             AnnouncementAudience.FromRank => query.Where(u => u.Rank != null && u.Rank >= a.MinRank),
             AnnouncementAudience.Taskforce => query.Where(u => db.TaskforceAgents.Any(ta => ta.TaskforceId == a.TargetId && ta.AgentId == u.Id)),
-            _ => query, // AlleAktiven
+            _ => query,
         };
         return await query.Select(u => u.Id).ToListAsync(cancellationToken);
     }
 
-    /// <summary>Prüft, ob der Aufrufer zum Empfängerkreis einer Ankündigung gehört (Brett-/Detail-Sichtbarkeit).</summary>
+    /// <summary>Whether the caller is in an announcement's audience.</summary>
     private static async Task<bool> IsRecipientAsync(AppDbContext db, Announcement a, string? meId, bool isTRU,
         bool isHRB, Rank? myRank, CancellationToken cancellationToken)
     {

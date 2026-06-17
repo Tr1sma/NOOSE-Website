@@ -11,7 +11,6 @@ using NOOSE_Website.Models.Cases;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IVorgangService" />
 public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion) : ICaseService
 {
     public async Task<List<Case>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
@@ -91,7 +90,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         db.Cases.Add(@case);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Ersteller automatisch zuteilen und als Fallführer markieren (so existiert stets mindestens ein FF).
+        // Auto-assign the creator as case lead so at least one always exists.
         var creatorId = actor.GetAgentId();
         if (creatorId is not null)
         {
@@ -119,8 +118,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        // Abschluss-Zeitpunkt mit dem Statuswechsel pflegen: setzen beim Wechsel in einen Abschluss-Status,
-        // wieder leeren, sobald der Vorgang erneut „offen" ist.
+        // Track the completion timestamp with the status: set on close, clear when reopened.
         var wasCompleted = CaseStatusDisplay.IsCompleted(@case.Status);
         var isCompleted = CaseStatusDisplay.IsCompleted(input.Status);
 
@@ -202,7 +200,6 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             .ToListAsync(cancellationToken);
     }
 
-    // scope-filtered case query
     private static IQueryable<Case> VisibleCases(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Cases.OnlyPartnerVisible(db, agency, scope.MeId)
@@ -239,7 +236,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         await RequireLeadershipOrFFAsync(db, caseId, actor, cancellationToken);
-        // Das Fallführer-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        // Only leadership may grant the case-lead flag.
         if (asCaseLead)
         {
             Permission.RequireLeadership(actor);
@@ -281,7 +278,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
 
     public async Task CaseLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Fallführer vergeben/entziehen ist der Führung vorbehalten.
+        // Granting/revoking the case lead is leadership-only.
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -291,7 +288,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Wirft, wenn der Handelnde weder Führung noch Fallführer dieses Vorgangs ist.</summary>
+    /// <summary>Throws unless the actor is leadership or a case lead of this case.</summary>
     private static async Task RequireLeadershipOrFFAsync(AppDbContext db, string caseId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (actor.IsLeadership())
@@ -320,8 +317,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Verknüpfungen (gebündelte Akten), die diesen Vorgang als Quelle oder Ziel berühren –
-        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        // Manual links touching this case, including removed ones so their "removed" entry still shows.
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic
@@ -341,11 +337,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Merkt den eingegebenen Vorgangs-Typ im gemeinsamen Vorschlagskatalog vor (Autocomplete beim nächsten
-    /// Mal), analog zum Operations-Typ. Verschlusssachen bleiben außen vor, damit keine sensiblen Werte in die
-    /// geteilte Liste gelangen. Nur vormerken – der Aufrufer speichert im selben SaveChanges (atomar).
-    /// </summary>
+    /// <summary>Stages the case type into the shared suggestion catalog; classified values are excluded, staged within the caller's SaveChanges.</summary>
     private async Task SuggestionsStageAsync(AppDbContext db, bool isClassified, string? type, CancellationToken cancellationToken)
     {
         if (isClassified || string.IsNullOrWhiteSpace(type))

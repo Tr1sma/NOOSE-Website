@@ -1,7 +1,4 @@
-@* Gemeinsamer Rahmen aller Druckansichten (Phase 7): Aktionsleiste (nur Bildschirm), Dokumentkopf
-   mit Behörde/Titel/Druckvermerk/VS-Stempel, Inhalt und Fußzeile. Öffnet den Browser-Druckdialog
-   automatisch nach dem ersten Render (die Eltern-Seite rendert den Rahmen erst, wenn alle Daten
-   geladen sind); Abbruch lässt die Vorschau mit dem Drucken-Knopf stehen. *@
+@* Shared frame for all print views; opens the browser print dialog on first render. *@
 @inject IJSRuntime JS
 
 <div class="no-print druck-aktionen">
@@ -37,13 +34,11 @@
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string BackHref { get; set; } = string.Empty;
-    /// <summary>Beschriftung des Zurück-Knopfes (Standard: „Zurück zur Akte"; z. B. Übersichten setzen ein eigenes Ziel).</summary>
     [Parameter] public string BackText { get; set; } = "Zurück zur Akte";
     [Parameter] public string? PrintedBy { get; set; }
     [Parameter] public bool IsClassified { get; set; }
     [Parameter] public string Footer { get; set; } = "NOOSE-interne Akte · Weitergabe nur nach Freigabe durch die Führung.";
-    /// <summary>Beim ersten Render automatisch den Druckdialog öffnen (Standard: an – „Druckansicht"). Für reine
-    /// Lese-/Dokumentansichten (z. B. Lagebericht-Archiv) auf <c>false</c> setzen; der Drucken-Knopf bleibt.</summary>
+    /// <summary>Open the print dialog automatically on first render.</summary>
     [Parameter] public bool AutomaticPrint { get; set; } = true;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
@@ -60,7 +55,7 @@
             }
             catch (JSException)
             {
-                // Manche Browser blockieren programmatisches Drucken – der Knopf bleibt als Fallback.
+                /* best effort */
             }
         }
     }

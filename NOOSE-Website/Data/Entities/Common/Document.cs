@@ -4,13 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Ein eigenständiges Dokument der zentralen Dokumenten-Bibliothek: ein im WYSIWYG-Editor erstellter,
-/// formatierter Text, der serverseitig bereinigt als HTML (<see cref="InhaltHtml"/>) abgelegt wird.
-/// Dokumente sind wiederverwendbar und werden über generische Quellen (<see cref="Quelle"/> mit
-/// <c>Typ = QuelleTyp.Dokument</c>, <c>ZielTyp = nameof(Dokument)</c>, <c>ZielId = Id</c>) an eine oder
-/// mehrere Akten angehängt. Voll auditiert und papierkorbfähig.
-/// </summary>
+/// <summary>Reusable document in the central library; content stored as sanitized HTML, attached to records via generic sources.</summary>
 [Table("Dokumente")]
 public class Document : IAuditable, ISoftDelete
 {
@@ -19,30 +13,26 @@ public class Document : IAuditable, ISoftDelete
     [Column("Titel")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>Optionale Kategorie zur Gruppierung/Filterung in der Bibliothek (z. B. „SOP", „Formular").</summary>
     [Column("Kategorie")]
     public string? Category { get; set; }
 
-    /// <summary>Bereinigter HTML-Inhalt (serverseitig durch <c>HtmlBereinigung</c> gefiltert).</summary>
+    /// <summary>Server-side sanitized HTML content.</summary>
     [Column("InhaltHtml")]
     public string ContentHtml { get; set; } = string.Empty;
 
-    /// <summary>Verschlusssache: nur für die Führung sichtbar (Bibliothek/Viewer/Auswahl filtern entsprechend).</summary>
+    /// <summary>Classified: leadership-only visibility.</summary>
     [Column("IstVerschlusssache")]
     public bool IsClassified { get; set; }
 
-    /// <summary>Verschlusssache nur für die TRU (Tactical Response Unit). Schließt sich mit den übrigen
-    /// Verschluss-Stufen gegenseitig aus (gesetzt über <see cref="Classification"/>).</summary>
+    /// <summary>Classified for TRU only; mutually exclusive with the other classification levels.</summary>
     [Column("IstVerschlusssacheTRU")]
     public bool IsTRUClassified { get; set; }
 
-    /// <summary>Verschlusssache nur für den HRB (Human Resources Branch). Schließt sich mit den übrigen
-    /// Verschluss-Stufen gegenseitig aus (gesetzt über <see cref="Classification"/>).</summary>
+    /// <summary>Classified for HRB only; mutually exclusive with the other classification levels.</summary>
     [Column("IstVerschlusssacheHRB")]
     public bool IsHRBClassified { get; set; }
 
-    /// <summary>Einheitliche Verschluss-Stufe (Mapping auf genau eine der Bool-Spalten bzw. keine).
-    /// Führung hat beim Lesen Vorrang, falls je mehrere Flags gesetzt wären.</summary>
+    /// <summary>Unified classification level mapping onto exactly one of the bool columns (or none).</summary>
     [NotMapped]
     public DocumentClassification Classification
     {
@@ -58,16 +48,14 @@ public class Document : IAuditable, ISoftDelete
         }
     }
 
-    /// <summary>True, wenn überhaupt eine Verschluss-Stufe gesetzt ist (für die Schloss-Anzeige).</summary>
+    /// <summary>True when any classification level is set (drives the lock icon).</summary>
     [NotMapped]
     public bool IsRestricted => IsClassified || IsTRUClassified || IsHRBClassified;
 
-    /// <summary>Angepinnt: erscheint in der Bibliothek in einem abgesetzten Block ganz oben. Globale, von der
-    /// Führung kuratierte Markierung (kein „zuletzt bearbeitet"-Bezug). Steuert nur die Anzeige-Reihenfolge.</summary>
+    /// <summary>Pinned to the top of the library; affects display order only.</summary>
     [Column("Angepinnt")]
     public bool Pinned { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -77,7 +65,6 @@ public class Document : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

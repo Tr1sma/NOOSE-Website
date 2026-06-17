@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Factions;
 
-/// <summary>Ein Waffen-Bestandseintrag einer Fraktion (Bezeichnung + optionale Menge) – Steckbrief-Kind.</summary>
+/// <summary>A faction weapon-stock entry (designation + optional quantity).</summary>
 [Table("FraktionWaffenbestaende")]
 public class FactionWeaponStock
 {
@@ -12,7 +12,6 @@ public class FactionWeaponStock
     [Column("Bezeichnung")]
     public string Designation { get; set; } = string.Empty;
 
-    /// <summary>Menge als Freitext (z. B. „ca. 20", „mehrere").</summary>
     [Column("Menge")]
     public string? Quantity { get; set; }
 }

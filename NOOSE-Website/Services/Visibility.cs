@@ -38,7 +38,6 @@ public static class Visibility
             return isLeadership;
         }
 
-        // taskforce check
         if (entityType == nameof(Taskforce))
         {
             return await TaskforceVisibility.IsVisibleAsync(db, entityId, isLeadership, meId, cancellationToken);
@@ -65,7 +64,6 @@ public static class Visibility
             nameof(Operation) => await db.Operations
                 .Where(o => o.Id == entityId).Select(o => (bool?)o.IsClassified)
                 .FirstOrDefaultAsync(cancellationToken),
-            // handled above
             nameof(Case) => await db.Cases
                 .Where(v => v.Id == entityId).Select(v => (bool?)v.IsClassified)
                 .FirstOrDefaultAsync(cancellationToken),
@@ -89,7 +87,7 @@ public static class Visibility
             _ => false,
         };
 
-        // unknown type
+        // unknown type = visible
         if (entityType is not (nameof(Person) or nameof(Faction) or nameof(FactionActivity) or nameof(PersonGroup) or nameof(Party) or nameof(Operation) or nameof(Case) or nameof(Job) or nameof(Appointment) or nameof(Document) or nameof(Law)))
         {
             return true;

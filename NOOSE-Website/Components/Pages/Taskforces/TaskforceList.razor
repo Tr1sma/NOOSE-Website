@@ -45,7 +45,7 @@ else
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
             <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
-                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    @* Real link so middle/ctrl-click opens in new tab and stays keyboard-reachable *@
                     <MudLink Href="@($"/taskforces/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                 </CellTemplate>
             </TemplateColumn>
@@ -96,7 +96,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        // Nur zugeteilte Taskforces; Führung/Admin sehen alle.
+        // Only assigned taskforces; leadership sees all
         var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId());
         var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Taskforce));
         var now = DateTime.UtcNow;

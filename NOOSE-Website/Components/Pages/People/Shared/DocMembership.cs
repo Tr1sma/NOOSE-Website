@@ -23,7 +23,6 @@ public static class DocMembership
         ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        // checkbox + record
         if (!input.AsMember || string.IsNullOrWhiteSpace(input.OrgId) || string.IsNullOrWhiteSpace(input.OrgType))
         {
             return;
@@ -51,7 +50,7 @@ public static class DocMembership
         }
         catch (Exception ex)
         {
-            // best effort
+            /* best effort */
             snackbar.Add($"Mitgliedschaft nicht eingetragen: {ex.Message}", Severity.Warning);
         }
     }

@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Factions;
 
-/// <summary>Eine Drogenroute einer Fraktion (Bezeichnung + optionale Notiz) – Steckbrief-Kind, analog zum Waffenbestand.</summary>
+/// <summary>A faction drug route (designation + optional note).</summary>
 [Table("FraktionDrogenrouten")]
 public class FactionDrugRoute
 {
@@ -12,7 +12,6 @@ public class FactionDrugRoute
     [Column("Bezeichnung")]
     public string Designation { get; set; } = string.Empty;
 
-    /// <summary>Notiz als Freitext (z. B. Droge, Übergabeort, Details zur Route).</summary>
     [Column("Notiz")]
     public string? Note { get; set; }
 }

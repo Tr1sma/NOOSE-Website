@@ -58,7 +58,7 @@ else
     {
         _load = true;
         var rows = await BoardService.GetBoardAsync(_user);
-        // Mentions aller Inhalte in einer Sammelabfrage auflösen (Verschlusssachen für Nicht-Führung verborgen).
+        // resolve all mentions in one batch
         var segments = await MentionService.ResolveManyAsync(rows.Select(z => (string?)z.Content).ToList(), _user.MayClassifiedRead(), _user.GetAgentId());
         _entries = rows.Select((z, i) => new Entry(z, segments[i])).ToList();
         _load = false;

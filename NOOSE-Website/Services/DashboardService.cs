@@ -13,7 +13,6 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IDashboardService" />
 public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IRequestService requestService,
     IRecencyService recency) : IDashboardService
 {
@@ -21,29 +20,25 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Der globale Soft-Delete-Filter blendet Papierkorb-Akten automatisch aus. Die VS-Bedingung
-        // spiegelt die jeweilige Listenansicht, damit die Kachel exakt deren Trefferzahl zeigt.
+        // Classification filter mirrors each list view so the tile matches its hit count.
         var people = await db.People.CountAsync(p => isLeadership || !p.IsClassified, cancellationToken);
         var factions = await db.Factions.CountAsync(f => isLeadership || !f.IsClassified, cancellationToken);
         var groups = await db.PersonGroups.CountAsync(g => isLeadership || !g.IsClassified, cancellationToken);
         var parties = await db.Parties.CountAsync(p => isLeadership || !p.IsClassified, cancellationToken);
         var operations = await db.Operations.CountAsync(o => isLeadership || !o.IsClassified, cancellationToken);
 
-        // Offene Vorgänge = noch nicht abgeschlossene/archivierte Fälle (Offen/In Bearbeitung/Ruht), VS-gefiltert.
+        // Open cases = not yet completed/archived.
         var openCases = await db.Cases.CountAsync(v => (isLeadership || !v.IsClassified)
             && v.Status != CaseStatus.Completed && v.Status != CaseStatus.Archived, cancellationToken);
 
-        // Offene Anträge = Hochstufungs-Anträge + ausstehende Registrierungen + offene Namensänderungen
-        // + beantragte Taskforces + Beförderungsanträge (alle im Freigabe-Posteingang). Die Hochstufungs-
-        // Anträge laufen über den VS-gefilterten Dienst (wie NavMenu-Badge + Posteingang), beantragte
-        // Verschlusssache-Taskforces zählen nur für die Führung.
+        // Open requests = upgrades + pending registrations + name changes + requested taskforces + promotions.
         var openRequests = await requestService.GetOpenCountAsync(isLeadership, cancellationToken)
             + await db.Users.CountAsync(a => a.Status == AgentStatus.Pending, cancellationToken)
             + await db.Users.CountAsync(a => a.NameChangeRequestedAt != null, cancellationToken)
             + await db.Taskforces.OnlyVisible(db, isLeadership, meId).CountAsync(t => t.Status == TaskforceStatus.Requested, cancellationToken)
             + await db.AgentPromotionRequests.CountAsync(a => a.Status == PromotionStatus.Requested, cancellationToken);
 
-        // Anzahl klassifizierter Akten ist selbst eine Verschlusssache → nur für die Führung.
+        // The classified count is itself classified, so leadership-only.
         var classified = 0;
         if (isLeadership)
         {
@@ -57,8 +52,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
                 + await db.Cases.CountAsync(v => v.IsClassified, cancellationToken);
         }
 
-        // Veraltete Akten: je Aktentyp ab dem konfigurierten „rot"-Schwellwert ohne Änderung. Referenzdatum ist
-        // GeaendertAm ?? ErstelltAm (COALESCE in SQL). VS-gefiltert wie die übrigen Kennzahlen.
+        // Stale records: per type past the configured red threshold, referenced by ModifiedAt ?? CreatedAt.
         var thresholds = await recency.GetThresholdsAsync(cancellationToken);
         var now = DateTime.UtcNow;
         DateTime CutoffDate(string type) => now.AddDays(-thresholds[type].StaleDays);
@@ -78,7 +72,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             + await db.Taskforces.OnlyVisible(db, isLeadership, meId).CountAsync(t => (t.ModifiedAt ?? t.CreatedAt) < sT, cancellationToken)
             + await db.Cases.CountAsync(v => (isLeadership || !v.IsClassified) && (v.ModifiedAt ?? v.CreatedAt) < sV, cancellationToken);
 
-        // Die Org-Kachel bündelt Fraktionen, Personengruppen und Parteien; Operationen sind eine eigene Kachel.
+        // The org tile bundles factions, groups and parties; operations are their own tile.
         return new DashboardMetrics(people, factions + groups + parties, operations, openCases, openRequests, classified, staleRecords);
     }
 
@@ -90,9 +84,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         var now = DateTime.UtcNow;
         var result = new List<DashboardStaleRecord>();
 
-        // Aktualisierungsbedarf beginnt ab dem „gelb"-Schwellwert (Warnung); die genaue Stufe (gelb/rot) berechnet
-        // AktualitaetsBewertung. Referenzdatum = GeaendertAm ?? ErstelltAm. Je Typ die ältesten N laden (VS-gefiltert),
-        // am Ende global nach Alter sortiert und auf max gekappt.
+        // Update need starts at the yellow threshold; load the oldest N per type, then globally sort and cap.
         var (wP, vP) = thresholds[nameof(Person)];
         var cutP = now.AddDays(-wP);
         foreach (var x in await db.People
@@ -177,7 +169,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
                 RecencyAssessment.Level(wV, vV, x.Reference, now), x.Reference));
         }
 
-        // Älteste zuerst (höchster Aktualisierungsbedarf oben), dann global kappen.
+        // Oldest first, then globally cap.
         return result.OrderBy(e => e.ReferenceUtc).Take(max).ToList();
     }
 
@@ -186,8 +178,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Echte Fraktionsliste (nicht aggregiert), gefährlichste zuerst. Gefährdungsstufe on-read aus dem
-        // (Phase-8-)Bedrohungs-Score abgeleitet; ohne Score → „Keine" (sortiert ans Ende). VS-gefiltert.
+        // Most dangerous first; hazard level derived on-read from the threat score, no score sorts last.
         var rows = await db.Factions
             .Where(f => isLeadership || !f.IsClassified)
             .OrderByDescending(f => f.ThreatScore ?? 0)
@@ -204,9 +195,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Echte Personenliste (nicht aggregiert), gefährlichste zuerst – Pendant zur Fraktions-Kachel. Nur
-        // bewertete Personen (Score > 0), damit die Kachel nicht von „Keine"-Akten geflutet wird. Gefährdungsstufe
-        // on-read aus dem (Phase-8-)Bedrohungs-Score abgeleitet. VS-gefiltert; auf die obersten 15 begrenzt.
+        // Counterpart to the faction tile, most dangerous first; only scored people (> 0), top 15.
         var rows = await db.People
             .Where(p => (isLeadership || !p.IsClassified) && p.ThreatScore != null && p.ThreatScore > 0)
             .OrderByDescending(p => p.ThreatScore)
@@ -223,10 +212,9 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Alle vier Verteilungen sind – wie die Kennzahl-Kacheln – VS-gefiltert: Nicht-Führung zählt nur
-        // nicht-klassifizierte Akten, damit aus den Diagrammen kein Verschlusssachen-Bestand ablesbar ist.
+        // All four distributions are classification-filtered like the metric tiles.
 
-        // 1) Fälle (Vorgänge) nach Einstufung. Alle Enum-Werte werden gefüllt (fehlende = 0 → stabile Legende).
+        // Cases by classification; all enum values filled so the legend stays stable.
         var classificationCount = (await db.Cases
                 .Where(v => isLeadership || !v.IsClassified)
                 .GroupBy(v => v.Classification)
@@ -237,8 +225,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             .Select(e => new DistributionSegment(ClassificationDisplay.Name(e), classificationCount.GetValueOrDefault(e)))
             .ToList();
 
-        // 2) Maßnahme-Ausgänge der Personen-Doks. VS-Filter über die Eltern-Person (Referenz-Navigation →
-        //    INNER JOIN, dessen Soft-Delete-Filter zugleich Doks gelöschter Personen ausblendet).
+        // Person-doc outcomes; classification filtered via the parent person (INNER JOIN also hides deleted ones).
         var outcomeCount = (await db.PersonDocs
                 .Where(d => isLeadership || !d.Person!.IsClassified)
                 .GroupBy(d => d.Outcome)
@@ -249,9 +236,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             .Select(a => new DistributionSegment(MeasureOutcomeDisplay.Name(a), outcomeCount.GetValueOrDefault(a)))
             .ToList();
 
-        // 3) Fraktionen nach Gefährdung – on-read aus dem (Phase-8-)Bedrohungs-Score abgeleitet. Da der Score
-        //    aktuell für alle Fraktionen null ist, landen vorerst alle in „Keine". Bucketing in-memory (kleine
-        //    Menge, vermeidet eine CASE-Übersetzung).
+        // Factions by hazard, derived on-read from the threat score; bucketed in-memory to avoid a CASE translation.
         var scores = await db.Factions
             .Where(f => isLeadership || !f.IsClassified)
             .Select(f => f.ThreatScore)
@@ -263,8 +248,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             .Select(s => new DistributionSegment(HazardLevelLogic.Name(s), hazardCount.GetValueOrDefault(s)))
             .ToList();
 
-        // 4) Offene Anträge nach Art – exakt dieselben fünf Teilzähler wie die KPI-Kachel „Offene Anträge"
-        //    (GetKennzahlenAsync), nur einzeln ausgewiesen; die Summe entspricht damit der Kachel.
+        // Open requests by kind; same five sub-counts as the metric tile, broken out individually.
         var openRequestsByKind = new List<DistributionSegment>
         {
             new("Hochstufung", await requestService.GetOpenCountAsync(isLeadership, cancellationToken)),
@@ -281,8 +265,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Großzügig laden: VS-Filter und nicht auflösbare Einträge (z. B. hart entfernte Mitglieder)
-        // dünnen die Liste noch aus, bevor wir auf `max` kürzen.
+        // Over-fetch: classification filter and unresolvable entries thin the list before we cap to max.
         var raw = await db.AuditLogs
             .OrderByDescending(a => a.Timestamp)
             .ThenByDescending(a => a.Id)
@@ -294,14 +277,13 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             return new List<DashboardChange>();
         }
 
-        // Kind-Entitäten auf ihre Eltern-Akte hochrollen (je ein server-seitig gefilterter Batch-Lookup).
+        // Roll child entities up to their parent record via batch lookups.
         var docIds = Ids(raw, nameof(PersonDoc));
         var docToPerson = docIds.Count == 0 ? new Dictionary<string, string>()
             : await db.PersonDocs.IgnoreQueryFilters().Where(d => docIds.Contains(d.Id))
                 .Select(d => new { d.Id, d.PersonId }).ToDictionaryAsync(x => x.Id, x => x.PersonId, cancellationToken);
 
-        // IgnoreQueryFilters: ein Austritt ist ein Soft-Delete der Mitgliedschaft – ohne dies fiele die Zeile
-        // aus dem Lookup und das „Mitglied entfernt"-Ereignis ließe sich nie auf eine Akte abbilden.
+        // IgnoreQueryFilters: a departure soft-deletes the membership, so the "member removed" event would otherwise be unmappable.
         var fmIds = Ids(raw, nameof(FactionMember));
         var memberToFaction = fmIds.Count == 0 ? new Dictionary<string, string>()
             : await db.FactionMembers.IgnoreQueryFilters().Where(m => fmIds.Contains(m.Id))
@@ -342,7 +324,7 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             : await db.CaseAgents.Where(a => vaIds.Contains(a.Id))
                 .Select(a => new { a.Id, a.CaseId }).ToDictionaryAsync(x => x.Id, x => x.CaseId, cancellationToken);
 
-        // Jeden Audit-Eintrag (in Reihenfolge) auf eine Ziel-Akte abbilden – oder verwerfen.
+        // Map each audit entry to a target record, or drop it.
         var targets = new List<(AuditLog Log, DashboardRecordType Type, string RecordId, string? Detail)>();
         foreach (var log in raw)
         {
@@ -382,14 +364,14 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
             }
         }
 
-        // Anzeigedaten der Akten in einem Rutsch laden (inkl. Papierkorb → „gelöscht" bleibt benennbar).
+        // Load display data in one batch, including trash so deleted records stay nameable.
         var personMap = await PersonInfos(db, TargetIds(targets, DashboardRecordType.Person), cancellationToken);
         var factionMap = await FactionInfos(db, TargetIds(targets, DashboardRecordType.Faction), cancellationToken);
         var groupMap = await GroupInfos(db, TargetIds(targets, DashboardRecordType.PersonGroup), cancellationToken);
         var partyMap = await PartyInfos(db, TargetIds(targets, DashboardRecordType.Party), cancellationToken);
         var operationMap = await OperationInfos(db, TargetIds(targets, DashboardRecordType.Operation), cancellationToken);
         var taskforceMap = await TaskforceInfos(db, TargetIds(targets, DashboardRecordType.Taskforce), cancellationToken);
-        // Für Taskforces entscheidet die Mitgliedschaft (nicht Verschlusssache), welche im Feed auftauchen.
+        // For taskforces, membership (not classification) decides feed visibility.
         var visibleTf = await TaskforceVisibility.VisibleIdsAsync(db, TargetIds(targets, DashboardRecordType.Taskforce), isLeadership, meId, cancellationToken);
         var caseMap = await CaseInfos(db, TargetIds(targets, DashboardRecordType.Case), cancellationToken);
 
@@ -407,12 +389,12 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
                 _ => groupMap.GetValueOrDefault(recordId),
             };
 
-            // Akte nicht mehr auffindbar (z. B. hart entfernt).
+            // Record no longer resolvable.
             if (info is null)
             {
                 continue;
             }
-            // Taskforce: Mitgliedschaft entscheidet (zugeteilt oder darf alle). Übrige Typen: Verschlusssache.
+            // Taskforce gated by membership; other types by classification.
             if (type == DashboardRecordType.Taskforce)
             {
                 if (!visibleTf.Contains(recordId))
@@ -437,8 +419,6 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
 
         return result;
     }
-
-    // ---- Helfer ----
 
     private sealed record RecordInfo(string Name, string CaseNumber, bool IsClassified, bool IsDeleted);
 

@@ -21,13 +21,12 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Nur folgen, was der Aufrufer auch sehen darf (Verschlusssache/Papierkorb/Personalakte-Gate serverseitig).
+        // only follow what the caller may see
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.IsLeadership(), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
 
-        // Bereits aktiv gefolgt → nichts zu tun.
         var active = await db.Watchlists
             .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntityType == entityType && w.EntityId == entityId,
                 cancellationToken);
@@ -36,7 +35,7 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
             return;
         }
 
-        // Eine früher entfolgte (soft-gelöschte) Zeile reaktivieren statt eine zweite anzulegen.
+        // reactivate a previously unfollowed (soft-deleted) row instead of adding a second
         var alt = await db.Watchlists.IgnoreQueryFilters()
             .FirstOrDefaultAsync(w => w.AgentId == agentId && w.EntityType == entityType && w.EntityId == entityId
                                       && w.IsDeleted, cancellationToken);
@@ -75,7 +74,6 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
         {
             return;
         }
-        // Hard-Delete → der Audit-Interceptor wandelt es in einen Soft-Delete um.
         db.Watchlists.Remove(entry);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -117,7 +115,7 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
         {
             return new();
         }
-        // Lese-Gate: die Nur-Lese-Aufsicht darf gefolgte VS-Akten einsehen (DarfVerschlusssacheLesen).
+        // only-reader supervision may view followed classified records
         var isLeadership = actor.MayClassifiedRead();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -132,16 +130,13 @@ public class WatchlistService(IDbContextFactory<AppDbContext> dbFactory) : IWatc
         }
 
         var refs = entries.Select(e => (e.EntityType, e.EntityId)).Distinct().ToList();
-        // Gefolgte Taskforces nur auflösen, wenn der Aufrufer zugeteilt ist (oder alle sehen darf).
         var resolved = await RecordsReference.ResolveAsync(db, refs, cancellationToken,
             mayAllTaskforces: actor.MayAllTaskforcesSee(), meId: agentId);
 
         var result = new List<FollowedRecord>(entries.Count);
         foreach (var e in entries)
         {
-            // Sichtbarkeit ohne zusätzliche DB-Abfrage je Eintrag: AktenReferenz hat das Verschlusssache-Flag bereits
-            // mitgeladen (nicht auflösbar = Papierkorb/unbekannt → nicht zugänglich). Personalakten (Agent) gelten als
-            // Führungs-Inhalt (entspricht Sichtbarkeit.IstAkteSichtbarAsync). Spiegelt die Logik dort 1:1, nur in-memory.
+            // in-memory visibility from the already-loaded classified flag; unresolved = trashed/unknown; agent files are leadership-only
             bool accessible;
             if (resolved.TryGetValue((e.EntityType, e.EntityId), out var a))
             {

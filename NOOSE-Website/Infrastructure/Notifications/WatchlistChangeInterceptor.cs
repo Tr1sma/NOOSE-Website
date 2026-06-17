@@ -50,7 +50,6 @@ public sealed class WatchlistChangeInterceptor(
 
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
-        // failed save
         if (eventData.Context is not null)
         {
             _pending.Remove(eventData.Context);
@@ -70,7 +69,6 @@ public sealed class WatchlistChangeInterceptor(
     private void Remember(DbContext context, string? actorId)
     {
         var records = Collect(context);
-        // keep existing
         if (records.Count == 0)
         {
             return;
@@ -90,7 +88,6 @@ public sealed class WatchlistChangeInterceptor(
 
     private HashSet<(string, string)> Collect(DbContext context)
     {
-        // read only
         context.ChangeTracker.DetectChanges();
         var records = new HashSet<(string, string)>();
         foreach (var entry in context.ChangeTracker.Entries())

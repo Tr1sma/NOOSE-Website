@@ -1,4 +1,3 @@
-@* Identitäts-/Steckkarte des Vorgangs: Titel, Status, Typ, Einstufung, Fallführer, Abschluss-Zeitpunkt. *@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
         <MudStack AlignItems="AlignItems.Center" Class="py-2">
@@ -74,6 +73,6 @@
 @code {
     [Parameter, EditorRequired] public Case Case { get; set; } = default!;
 
-    /// <summary>Codenames der Fallführer (für die prominente Anzeige links in der Steckkarte).</summary>
+    /// <summary>Case-lead codenames.</summary>
     [Parameter] public IReadOnlyList<string> CaseLead { get; set; } = Array.Empty<string>();
 }

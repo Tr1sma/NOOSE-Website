@@ -41,8 +41,7 @@ public partial class PlaceholderService(IDbContextFactory<AppDbContext> dbFactor
         if (!string.IsNullOrWhiteSpace(entityType) && !string.IsNullOrWhiteSpace(entityId))
         {
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-            // Nur sichtbare Akten auflösen (keine Verschlusssachen-Namen für Nicht-Führung). Die Nur-Lese-
-            // Aufsicht darf VS-Akten einsehen → DarfVerschlusssacheLesen.
+            // resolve visible records only (no classified names for non-leadership)
             if (await Visibility.IsRecordVisibleAsync(db, entityType!, entityId!, actor.MayClassifiedRead(), cancellationToken))
             {
                 var record = await RecordNameAsync(db, entityType!, entityId!, cancellationToken);
@@ -62,7 +61,7 @@ public partial class PlaceholderService(IDbContextFactory<AppDbContext> dbFactor
             ["Dienstgrad"] = actor.GetRank() is { } dg ? RankDisplay.Name(dg) : string.Empty,
         };
 
-        // Werte HTML-kodieren (gehen in den HTML-Body) – unbekannte Tokens unverändert lassen.
+        // HTML-encode values; leave unknown tokens untouched
         return TokenRegex().Replace(html, m =>
         {
             var key = m.Groups[1].Value;

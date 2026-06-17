@@ -13,7 +13,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IAntragService" />
+/// <inheritdoc cref="IRequestService" />
 public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : IRequestService
 {
     public async Task<bool> HasOpenRequestAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
@@ -26,7 +26,7 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
     public async Task UpgradeRequestAsync(string targetType, string targetId, string targetDesignation, Classification target,
         string justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // top level only
+        // top classification needs a request
         if (target != Classification.SecuredStateThreatening)
         {
             throw new InvalidOperationException("Ein Antrag ist nur für die Einstufung „Gesichert staatsgefährdend“ erforderlich.");
@@ -38,13 +38,11 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, targetType, targetId, actor.IsLeadership(), cancellationToken))
         {
             throw new InvalidOperationException("Die Ziel-Akte wurde nicht gefunden.");
         }
 
-        // dedup
         if (await db.Requests.AnyAsync(a => a.TargetType == targetType && a.TargetId == targetId && a.Status == RequestStatus.Requested, cancellationToken))
         {
             throw new InvalidOperationException("Für diese Akte läuft bereits ein Hochstufungs-Antrag.");
@@ -72,7 +70,6 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             .OrderBy(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        // visibility filter
         var visible = new List<Request>();
         foreach (var a in open)
         {
@@ -111,7 +108,6 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             throw new InvalidOperationException("Dieser Antrag wurde bereits entschieden.");
         }
 
-        // visibility check
         if (!await Visibility.IsRecordVisibleAsync(db, request.TargetType, request.TargetId, actor.IsLeadership(), cancellationToken))
         {
             throw new InvalidOperationException("Die Ziel-Akte ist nicht (mehr) für dich sichtbar.");
@@ -119,7 +115,6 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
 
         if (approved)
         {
-            // set classification
             if (!await ClassificationOnTargetSetAsync(db, request, cancellationToken))
             {
                 throw new InvalidOperationException("Die Ziel-Akte ist nicht mehr vorhanden.");
@@ -137,7 +132,6 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
 
-        // notify requester
         try
         {
             await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,

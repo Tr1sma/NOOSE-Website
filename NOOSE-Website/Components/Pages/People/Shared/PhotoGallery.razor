@@ -1,4 +1,4 @@
-@* Foto-Galerie einer Person: Mehrfach-Upload, geschützte Anzeige, Löschen. *@
+@* Person photo gallery: multi-upload, protected display, delete. *@
 @inject IPersonService PersonService
 @inject IFileStorageService FileStorage
 @inject IDialogService DialogService
@@ -102,7 +102,6 @@
                 uploaded++;
             }
 
-            // Nur melden/neu laden, wenn tatsächlich mindestens ein Foto gespeichert wurde.
             if (uploaded > 0)
             {
                 Snackbar.Add(uploaded == 1 ? "Foto hochgeladen." : $"{uploaded} Fotos hochgeladen.", Severity.Success);

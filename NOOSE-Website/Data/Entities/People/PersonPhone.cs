@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>Eine Telefonnummer einer Person – Steckbrief-Feld und Basis der Dublettensuche.</summary>
+/// <summary>A person's phone number; basis of duplicate detection.</summary>
 [Table("PersonTelefone")]
 public class PersonPhone
 {

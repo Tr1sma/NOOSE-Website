@@ -60,7 +60,7 @@ else
                 <MudText Typo="Typo.body2">@MeasureOutcomeDisplay.Name(context.Doc.Outcome)</MudText>
             </MudTd>
             <MudTd DataLabel="Fraktion">
-                @* Verknüpfte Fraktion/Gruppe als Link (Klick öffnet nicht den Dialog); sonst Freitext. *@
+                @* link stops row click from opening the dialog *@
                 @if (context.OrgRoute is not null)
                 {
                     <MudLink Href="@context.OrgRoute" Typo="Typo.body2" @onclick:stopPropagation="true">@context.OrgName</MudLink>
@@ -124,7 +124,6 @@ else
             || (doc.Faction?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    // Klick auf eine Zeile öffnet das Dok als Detail-Dialog (lesen + bearbeiten, mit „Zur Akte"-Sprung).
     private async Task Open(PersonDocDisplay? display)
     {
         if (display is null)
@@ -146,7 +145,7 @@ else
             return;
         }
 
-        // Beim Anlegen einer neuen Akte vor gleichnamigen Dubletten warnen (wie im regulären „Neue Person"-Formular).
+        // warn on same-name duplicates when creating a new record
         if (result.PersonId is null
             && !await DuplicateCheck.MayNewRecordCreateAsync(DialogService, PersonService, result.NewName, _isLeadership))
         {
@@ -155,7 +154,6 @@ else
 
         try
         {
-            // Die Person, auf die sich eine optionale Mitgliedschaft bezieht (bestehend oder neu angelegt).
             string personId;
             if (result.PersonId is not null)
             {
@@ -169,7 +167,7 @@ else
                 personId = doc.PersonId;
                 Snackbar.Add($"Neue Akte „{result.NewName}“ samt Dok angelegt.", Severity.Success);
             }
-            // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
+            // optionally enroll person in the linked record
             await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, personId, result.Input, _user);
             await LoadAsync();
         }

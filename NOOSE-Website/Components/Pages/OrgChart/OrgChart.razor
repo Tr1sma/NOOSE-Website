@@ -4,7 +4,6 @@
 <PageTitle>Organigramm · NOOSE</PageTitle>
 
 <MudStack Spacing="4">
-    @* ---- Kopfzeile ---- *@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
         <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Size="Size.Large" />
         <div>
@@ -19,7 +18,6 @@
     }
     else if (_data is not null)
     {
-        @* ---- Dienstgrad-Hierarchie als Org-Chart (Director oben → Junior unten) ---- *@
         @if (_data.Ranks.Count == 0)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine aktiven Agenten erfasst.</MudText>
@@ -65,7 +63,6 @@
             </div>
         }
 
-        @* ---- TRU ---- *@
         @if (_data.Tru.Count > 0)
         {
             <MudDivider />
@@ -86,7 +83,6 @@
             </MudStack>
         }
 
-        @* ---- HRB ---- *@
         @if (_data.Hrb.Count > 0)
         {
             <MudDivider />
@@ -107,7 +103,6 @@
             </MudStack>
         }
 
-        @* ---- Taskforce-Besetzung ---- *@
         <MudDivider />
         <MudStack Spacing="2">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -173,7 +168,6 @@
         _load = false;
     }
 
-    // Initialen aus dem Codename (1–2 Buchstaben) für den Avatar.
     private static string Initials(string? codename)
     {
         if (string.IsNullOrWhiteSpace(codename))

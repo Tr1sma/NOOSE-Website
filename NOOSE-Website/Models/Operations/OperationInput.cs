@@ -2,7 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Operations;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen und Bearbeiten einer Operation/eines Einsatzberichts.</summary>
+/// <summary>Create/edit operation input.</summary>
 public class OperationInput
 {
     public string Title { get; set; } = string.Empty;

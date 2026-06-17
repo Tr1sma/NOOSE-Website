@@ -13,14 +13,12 @@ using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IFraktionService" />
 public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion, IPersonService personService, IFactionPhotoStorageService photoStorage, IThreatScoreService threat) : IFactionService
 {
     public async Task<List<Faction>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht
-        // (gelöschte/Verschlusssache-Personen werden dort wie hier ausgeblendet).
+        // Include members+person so the list member count matches the detail view.
         return await VisibleFactions(db, scope)
             .Include(f => f.Members).ThenInclude(m => m.Person)
             .Include(f => f.Photos)
@@ -108,8 +106,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         db.Factions.Add(faction);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Im Anlege-Formular erfasste Mitglieder übernehmen (bestehende Personen + automatisch angelegte neue
-        // Akten, dedupliziert) und anschließend die Fraktionskollegen-Verknüpfungen aufbauen – analog zur Gruppe.
+        // Take over the members from the create form (existing + auto-created, deduplicated), then build colleague links.
         if (input.Members.Count > 0)
         {
             var existingIds = input.Members
@@ -164,7 +161,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             }
         }
 
-        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        // Auto-assign the creator as investigation lead so at least one always exists.
         var creatorId = actor.GetAgentId();
         if (creatorId is not null)
         {
@@ -178,7 +175,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         }
 
         await tx.CommitAsync(cancellationToken);
-        // Bedrohungs-Score initial berechnen (Einstufung/Mitglieder/Bestände liegen jetzt vor).
+        // Initial threat score now that classification/members/stocks exist.
         await threat.NewCalculateAsync(faction.Id, cancellationToken);
         return faction;
     }
@@ -213,11 +210,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         faction.IsStateFaction = input.IsStateFaction;
         faction.EstimatedMemberCount = input.EstimatedMemberCount;
 
-        // Umbenennungen erkennen, BEVOR die alten Ränge ersetzt werden: je bestehender Rang-Id die alte Bezeichnung,
-        // damit der denormalisierte Rang-Name in der Mitgliederliste nachgezogen werden kann (siehe unten).
+        // Detect renames before replacing the old ranks, so the denormalized rank name on members can follow.
         var renames = RankRenamesDetect(faction.Ranks, input.Ranks);
 
-        // Strukturierte Listen vollständig ersetzen (Mitglieder bleiben unangetastet – eigene Endpunkte).
+        // Replace the structured lists wholesale; members are untouched (own endpoints).
         db.FactionRanks.RemoveRange(faction.Ranks);
         db.FactionWeaponStocks.RemoveRange(faction.WeaponStock);
         db.FactionInventories.RemoveRange(faction.Inventory);
@@ -225,7 +221,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         ChildrenMap(faction, input);
         await SuggestionsStageAsync(db, faction, cancellationToken);
 
-        // Umbenannte Ränge in der Mitgliederliste mitziehen (Rang ist dort eine denormalisierte Kopie der Bezeichnung).
+        // Carry renamed ranks over to the member list (rank is a denormalized copy there).
         if (renames.Count > 0)
         {
             var members = await db.FactionMembers
@@ -241,7 +237,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        // Stammdaten (Mitgliederzahl/Anwesen/Staatsfraktion/Bestände) wirken auf den Score.
+        // Master data affects the score.
         await threat.NewCalculateAsync(id, cancellationToken);
     }
 
@@ -252,7 +248,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
-        // Hard-Delete → Interceptor wandelt in Soft-Delete um (+ Audit „Geloescht").
+        // Interceptor rewrites Remove to soft-delete.
         db.Factions.Remove(faction);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -288,7 +284,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         faction.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Faction), id, @new, justification, actor));
         await db.SaveChangesAsync(cancellationToken);
-        // Einstufung bestimmt das Mindest-Band des Scores → neu berechnen.
+        // Classification sets the score's minimum band.
         await threat.NewCalculateAsync(id, cancellationToken);
     }
 
@@ -305,7 +301,6 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToListAsync(cancellationToken);
     }
 
-    // scope-filtered faction query
     private static IQueryable<Faction> VisibleFactions(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
@@ -319,8 +314,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .Include(m => m.Person)
             .ToListAsync(cancellationToken);
 
-        // Person == null → Akte im Papierkorb (Soft-Delete-Filter greift auf die Navigation); ausblenden.
-        // Verschlusssachen-Personen nur für Führung sichtbar.
+        // Person == null means the record is trashed; classified people are leadership-only.
         var visible = members
             .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
             .ToList();
@@ -353,8 +347,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Fraktion.");
         }
 
-        // Mitgliedschaft + automatische Fraktionskollegen-Verknüpfungen in EINER Transaktion,
-        // damit nach außen kein Zwischenzustand (Mitglied ohne Kollegen-Links) sichtbar wird.
+        // Membership and colleague links in one transaction, so no intermediate state leaks.
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.FactionMembers.Add(new FactionMember
         {
@@ -366,16 +359,13 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await db.SaveChangesAsync(cancellationToken);
         await FactionColleaguesSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
-        // Mitgliederzahl/Leitung wirken auf den Score (S2) und das neue Mitglied bringt seinen Maßnahmen-Heat ein.
+        // Member count/lead affect the faction score; the new member brings its measure heat.
         await threat.NewCalculateAsync(factionId, cancellationToken);
-        // Mitgliedschaft/Leitungsrolle wirkt auf den Person-Score (P4).
+        // Membership/lead role affect the person score.
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
-    /// <summary>
-    /// Liefert die Personen-Id: entweder die übergebene bestehende (mit Existenzprüfung) oder – wenn nur ein
-    /// neuer Name angegeben ist – eine frisch angelegte Personen-Akte (committet, eigenes Aktenzeichen).
-    /// </summary>
+    /// <summary>Returns the person id: the existing one (checked) or a freshly created person record.</summary>
     private Task<string> PersonIdDetermineAsync(AppDbContext db, string? personId, string? newName, ClaimsPrincipal actor, CancellationToken cancellationToken)
         => MemberHelper.PersonIdDetermineAsync(db, personService, personId, newName, actor, cancellationToken);
 
@@ -391,7 +381,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         member.Rank = rank.TrimToNull();
         member.IsLead = isLead;
         await db.SaveChangesAsync(cancellationToken);
-        // Leitungs-Flag fließt in S2 (Struktur) der Fraktion und in P4 (Leitungsrolle) der Person → beide neu berechnen.
+        // Lead flag affects both the faction and the person score.
         await threat.NewCalculateAsync(member.FactionId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(member.PersonId, cancellationToken);
     }
@@ -410,18 +400,16 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         }
         var personId = member.PersonId;
         var factionId = member.FactionId;
-        // Austritt + Kollegen-Verknüpfungen nachführen in EINER Transaktion (kein Zwischenzustand).
+        // Departure and colleague-link update in one transaction.
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
-        // Soft-Delete (Join-Entity ist ISoftDelete): der Interceptor setzt GeloeschtAm (= Austrittsdatum) statt
-        // hart zu löschen → die Mitgliedschaft bleibt als Verlaufseintrag erhalten. KollegenSync sieht danach
-        // nur noch aktive Mitglieder (globaler Filter) und entfernt die Fraktionskollegen-Links korrekt.
+        // Soft-delete keeps the membership as a history entry; colleague sync then sees only active members.
         db.FactionMembers.Remove(member);
         await db.SaveChangesAsync(cancellationToken);
         await FactionColleaguesSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
-        // Austritt wirkt auf S2 (Größe/Leitung); der Heat des Mitglieds bleibt austritts-stabil erhalten.
+        // Departure affects faction size/lead; the member's heat stays stable.
         await threat.NewCalculateAsync(factionId, cancellationToken);
-        // Austritt ändert Mitgliedschaften/Leitungsrollen der Person → Person-Score (P4) neu berechnen.
+        // Departure changes the person's memberships/lead roles.
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
@@ -456,7 +444,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         await RequireLeadershipOrELAsync(db, factionId, actor, cancellationToken);
-        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        // Only leadership may grant the investigation-lead flag.
         if (asInvestigationLead)
         {
             Permission.RequireLeadership(actor);
@@ -498,7 +486,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
 
     public async Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        // Granting/revoking the investigation lead is leadership-only.
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -508,7 +496,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Fraktion ist.</summary>
+    /// <summary>Throws unless the actor is leadership or an investigation lead of this faction.</summary>
     private static async Task RequireLeadershipOrELAsync(AppDbContext db, string factionId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (actor.IsLeadership())
@@ -541,8 +529,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Beziehungen (Konflikte/Bündnisse), die diese Fraktion als Quelle oder Ziel berühren –
-        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        // Manual relations touching this faction, including removed ones so their "removed" entry still shows.
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic
@@ -562,12 +549,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToListAsync(cancellationToken);
     }
 
-    // ---- Aktivitäten (Zeitstrahl) ----
-
     public async Task<List<FactionActivity>> GetActivitiesAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Defense in depth: an Aktivitäten einer Verschlusssache-Fraktion kommt nur die Führung.
+        // Defense in depth: classified-faction activities are leadership-only.
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Faction), factionId, scope, cancellationToken))
         {
             return new();
@@ -604,13 +589,13 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             FactionId = factionId,
             Title = title,
             Kind = input.Kind.TrimToNull(),
-            // Vom Nutzer gewählter Zeitpunkt (lokal erfasst) → als UTC speichern (App-Konvention, vgl. Wiedervorlagen).
+            // Store the user-picked local time as UTC (app convention).
             Timestamp = input.Timestamp.ToUniversalTime(),
             Description = input.Description.TrimToNull(),
             Location = input.Location.TrimToNull(),
         });
         await db.SaveChangesAsync(cancellationToken);
-        // Aktivität = datierter Vorfall → Kern des S1-Heat → neu berechnen.
+        // An activity is a dated incident, core of the S1 heat.
         await threat.NewCalculateAsync(factionId, cancellationToken);
     }
 
@@ -636,7 +621,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         activity.Description = input.Description.TrimToNull();
         activity.Location = input.Location.TrimToNull();
         await db.SaveChangesAsync(cancellationToken);
-        // Art/Zeitpunkt einer Aktivität wirken auf S1 → neu berechnen.
+        // Kind/time of an activity affect S1.
         await threat.NewCalculateAsync(activity.FactionId, cancellationToken);
     }
 
@@ -653,17 +638,16 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         var factionId = activity.FactionId;
-        // Soft-Delete via Interceptor (bleibt als Verlaufseintrag im Papierkorb).
         db.FactionActivities.Remove(activity);
         await db.SaveChangesAsync(cancellationToken);
-        // Entfernter Vorfall fällt aus S1 → neu berechnen.
+        // Removed incident drops out of S1.
         await threat.NewCalculateAsync(factionId, cancellationToken);
     }
 
     public async Task<List<string>> GetActivityKindsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Distinct über alle (nicht gelöschten – globaler Filter) Aktivitäten, damit gängige Arten überall als Vorschlag auftauchen.
+        // Distinct over all activities so common kinds appear as suggestions everywhere.
         return await db.FactionActivities
             .Where(a => a.Kind != null && a.Kind != "")
             .Select(a => a.Kind!)
@@ -672,12 +656,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .ToListAsync(cancellationToken);
     }
 
-    // ---- Fotos (Galerie + Titelbild) ----
-
     public async Task<List<FactionPhoto>> GetPhotosAsync(string factionId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Titelbild zuerst, danach nach Aufnahmezeitpunkt.
+        // Title image first, then by capture time.
         return await db.FactionPhotos
             .Where(f => f.FactionId == factionId)
             .OrderByDescending(f => f.IsTitleImage)
@@ -709,14 +691,14 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             throw new InvalidOperationException($"Dateityp '{contentType}' ist nicht erlaubt.");
         }
-        // Größenlimit serverseitig erzwingen (nicht nur in der UI) – verhindert Disk-Filling über andere Pfade.
+        // Enforce the size limit server-side, not just in the UI.
         if (size > photoStorage.MaxBytes)
         {
             throw new InvalidOperationException($"Datei zu groß (max. {photoStorage.MaxBytes / (1024 * 1024)} MB).");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Existenz + Verschlusssache-Sichtbarkeit der Akte prüfen, BEVOR eine Datei geschrieben wird.
+        // Check existence and visibility before writing a file.
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
         if (faction.IsClassified && !actor.IsLeadership())
@@ -724,7 +706,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        // Das erste Foto der Fraktion wird automatisch Titelbild (Steckkarte zeigt sofort ein Bild).
+        // The first photo becomes the title image automatically.
         var isFirst = !await db.FactionPhotos.AnyAsync(f => f.FactionId == factionId, cancellationToken);
 
         var fileName = await photoStorage.SaveAsync(content, contentType, cancellationToken);
@@ -746,7 +728,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         }
         catch
         {
-            // Schlägt der DB-Insert fehl, die bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
+            // Remove the written file if the DB insert fails, to avoid an orphaned attachment.
             photoStorage.Delete(fileName);
             throw;
         }
@@ -765,8 +747,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        // Erst den DB-Datensatz entfernen (Quelle der Wahrheit), dann die Datei löschen. So bleibt
-        // bei einem Speicherfehler kein verwaister Datensatz zurück, der auf eine fehlende Datei zeigt.
+        // Remove the DB record first, then the file, so a storage error leaves no record pointing at a missing file.
         db.FactionPhotos.Remove(photo);
         await db.SaveChangesAsync(cancellationToken);
         photoStorage.Delete(photo.FileNameSaved);
@@ -782,7 +763,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        // Genau ein Titelbild je Fraktion: alle Geschwister-Fotos zurücksetzen, dieses markieren (eine SaveChanges = atomar).
+        // Exactly one title image per faction: clear all siblings, mark this one.
         var siblings = await db.FactionPhotos.Where(f => f.FactionId == photo.FactionId).ToListAsync(cancellationToken);
         foreach (var g in siblings)
         {
@@ -791,13 +772,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    // ---- Helfer ----
-
-    /// <summary>
-    /// Ermittelt Rang-Umbenennungen (alte Bezeichnung → neue Bezeichnung) anhand der stabilen Rang-Id.
-    /// Nur Einträge, deren Id einem bestehenden Rang entspricht und deren getrimmte Bezeichnung sich tatsächlich
-    /// geändert hat, werden berücksichtigt – neu hinzugefügte oder gelöschte Ränge erzeugen keine Umbenennung.
-    /// </summary>
+    /// <summary>Detects rank renames (old to new designation) by stable rank id; only actual changes count.</summary>
     private static Dictionary<string, string> RankRenamesDetect(IEnumerable<FactionRank> existing, IEnumerable<RankInput> input)
     {
         var oldById = existing.ToDictionary(r => r.Id, r => r.Designation);
@@ -831,17 +806,14 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .Where(l => !string.IsNullOrWhiteSpace(l.Designation))
             .Select(l => new FactionInventory { FactionId = faction.Id, Designation = l.Designation.Trim(), Quantity = l.Quantity.TrimToNull() })
             .ToList();
-        // Drogenrouten teilen das generische BestandEingabe; dessen Menge-/Zusatzfeld trägt hier die Notiz.
+        // Drug routes share the generic stock input; its quantity field carries the note here.
         faction.DrugRoutes = input.DrugRoutes
             .Where(d => !string.IsNullOrWhiteSpace(d.Designation))
             .Select(d => new FactionDrugRoute { FactionId = faction.Id, Designation = d.Designation.Trim(), Note = d.Quantity.TrimToNull() })
             .ToList();
     }
 
-    /// <summary>
-    /// Speist Bestands-Bezeichnungen in den gemeinsamen Vorschlagskatalog ein (Waffen → Waffe, Lager → Lagerbestand).
-    /// Verschlusssachen bleiben außen vor. Merkt nur im übergebenen Context vor – persistiert wird mit SaveChanges.
-    /// </summary>
+    /// <summary>Stages stock designations into the shared suggestion catalog; classified factions are excluded, staged within the caller's SaveChanges.</summary>
     private async Task SuggestionsStageAsync(AppDbContext db, Faction faction, CancellationToken cancellationToken)
     {
         if (faction.IsClassified)
@@ -857,20 +829,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await suggestion.StageAsync(db, SuggestionType.DrugRoute, faction.DrugRoutes.Select(d => d.Designation), cancellationToken);
     }
 
-    /// <summary>
-    /// Synchronisiert die automatischen „Fraktionskollege"-Verknüpfungen der Person: Zwischen P und Q soll
-    /// genau dann eine automatische Verknüpfung bestehen, wenn beide mindestens eine Fraktion teilen. Wird
-    /// nach jeder Mitglieder-Änderung für die betroffene Person aufgerufen (greift auch von der Fraktionsseite).
-    /// </summary>
-    /// <remarks>
-    /// Invariante: pro Personen-Paar genau EINE automatische Verknüpfung (eine Richtung). Es genügt, nur die
-    /// betroffene Person P abzugleichen, weil eine Verknüpfung nur eine Zeile ist und hier beide Richtungen
-    /// (<c>VonId == P || NachId == P</c>) berücksichtigt werden – ein späterer Abgleich von Q findet die
-    /// Zeile von P aus wieder und legt keine Gegen-Richtung an. Etwaige Alt-Duplikate werden hier mit
-    /// abgeräumt. Bewusst KEIN Unique-Index auf (Von/Nach), da der für manuelle, soft-gelöschte
-    /// Verknüpfungen kollidieren würde. Automatische Verknüpfungen werden hart gelöscht (maschinell gepflegt,
-    /// kein Papierkorb, keine Soft-Delete-Reste).
-    /// </remarks>
+    /// <summary>Syncs the person's automatic faction-colleague links: a link exists iff two people share at least one faction. Called after every membership change.</summary>
     private static async Task FactionColleaguesSyncAsync(AppDbContext db, string personId, CancellationToken cancellationToken)
     {
         var myFactions = await db.FactionMembers

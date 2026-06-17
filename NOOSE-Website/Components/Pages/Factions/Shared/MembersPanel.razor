@@ -1,4 +1,3 @@
-@* Mitglieder einer Fraktion: Liste (Leitung zuerst), Hinzufügen/Bearbeiten/Entfernen mit Rang + Leitung. *@
 @inject IFactionService FactionService
 @inject IPersonService PersonService
 @inject IDialogService DialogService
@@ -60,9 +59,7 @@
 @code {
     [Parameter, EditorRequired] public string FactionId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
-    /// <summary>Ränge der Fraktion (für den Rang-Auswahl-Dialog).</summary>
     [Parameter] public IReadOnlyList<string> Ranks { get; set; } = Array.Empty<string>();
-    /// <summary>Wird nach Änderungen ausgelöst (damit die Steckkarte die Mitgliederzahl aktualisiert).</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -90,7 +87,6 @@
         {
             return;
         }
-        // Beim Anlegen einer neuen Person vor gleichnamigen Dubletten warnen.
         if (!await DuplicateCheck.MayNewRecordCreateAsync(DialogService, PersonService, input.NewPersonName, User.IsLeadership()))
         {
             return;

@@ -1,6 +1,4 @@
-@* Vereinheitlichter Akten-Zeitstrahl: Audit-Ereignisse + semantische Domänen-Ereignisse einer beliebigen Akte
-   (polymorph über EntitaetTyp/EntitaetId), chronologisch absteigend, mit Kategorie-Filter. Rein lesend –
-   ersetzt den bisherigen je-Akte „Historie"-Reiter. *@
+@* Unified record timeline: audit plus domain events, newest first, with category filter. Read-only. *@
 @using NOOSE_Website.Models.Timeline
 @inject ITimelineService TimelineService
 
@@ -15,7 +13,6 @@ else if (_all.Count == 0)
 else
 {
     <MudStack Spacing="3">
-        @* Kategorie-Filter: Chips schalten die jeweilige Ereignisart ein/aus (Standard: alle an). *@
         <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
             @foreach (var k in _exists)
             {

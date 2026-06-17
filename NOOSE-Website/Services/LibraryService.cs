@@ -8,7 +8,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IBibliothekService" />
+/// <inheritdoc cref="ILibraryService" />
 public class LibraryService(
     IDbContextFactory<AppDbContext> dbFactory,
     ILibraryStorageService storage) : ILibraryService
@@ -16,7 +16,7 @@ public class LibraryService(
     public async Task<List<LibraryFile>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // In lokale Variablen ziehen, damit EF die Verschluss-Filter als SQL-Parameter übersetzt.
+        // local vars so EF parameterizes the classification filters
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
         return await db.LibraryFiles
             .Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
@@ -32,7 +32,6 @@ public class LibraryService(
         ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireWriteAccess(actor);
-        // Nur Stufen vergeben, für die der Handelnde berechtigt ist (Führung: alle; TRU/HRB: nur die eigene).
         Permission.RequireMayAssignClassification(actor, classification);
 
         title = title.Trim();
@@ -82,7 +81,7 @@ public class LibraryService(
         var file = await db.LibraryFiles.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Datei nicht gefunden.");
 
-        // Bearbeiten nur, wer die aktuelle Stufe sehen darf; eine geänderte Stufe muss zuweisbar sein.
+        // may edit only if allowed to see the current level
         if (!DocumentViewerScope.From(actor).CanSee(file.Classification))
         {
             throw new UnauthorizedAccessException("Diese Datei ist eine Verschlusssache und dir nicht zugänglich.");
@@ -106,8 +105,7 @@ public class LibraryService(
         var file = await db.LibraryFiles.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Datei nicht gefunden.");
 
-        // Soft-Delete (Interceptor wandelt Remove um); die physische Datei bleibt erhalten,
-        // damit eine Wiederherstellung über die DB möglich bleibt.
+        // soft-delete; physical file kept so DB restore stays possible
         db.LibraryFiles.Remove(file);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -118,7 +116,7 @@ public class LibraryService(
         var file = await db.LibraryFiles.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
         if (file is null || !scope.CanSee(file.Classification))
         {
-            // Kein Existenz-Leak: nicht vorhanden oder nicht sichtbar → null.
+            // no existence leak: missing or not visible -> null
             return null;
         }
         return file;

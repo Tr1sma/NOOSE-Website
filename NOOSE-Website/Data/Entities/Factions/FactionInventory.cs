@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Factions;
 
-/// <summary>Ein Lager-Bestandseintrag einer Fraktion (Bezeichnung + optionale Menge) – Steckbrief-Kind.</summary>
+/// <summary>A faction inventory-stock entry (designation + optional quantity).</summary>
 [Table("FraktionLagerbestaende")]
 public class FactionInventory
 {
@@ -12,7 +12,6 @@ public class FactionInventory
     [Column("Bezeichnung")]
     public string Designation { get; set; } = string.Empty;
 
-    /// <summary>Menge als Freitext (z. B. „50 kg", „voll").</summary>
     [Column("Menge")]
     public string? Quantity { get; set; }
 }

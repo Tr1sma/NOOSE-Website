@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace NOOSE_Website.Infrastructure.Storage;
 
-/// <inheritdoc cref="IBibliothekStorageService" />
+/// <inheritdoc />
 public class LibraryStorageService : ILibraryStorageService
 {
     private readonly FileUploadOptions _options;
@@ -44,7 +44,7 @@ public class LibraryStorageService : ILibraryStorageService
         }
     }
 
-    /// <summary>Übernimmt nur eine einfache, gefahrlose Endung aus dem Originalnamen (sonst „.bin").</summary>
+    /// <summary>Takes only a simple, harmless extension from the original name (else ".bin").</summary>
     private static string SafeExtension(string originalName)
     {
         var extension = Path.GetExtension(originalName);

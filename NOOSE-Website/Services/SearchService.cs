@@ -19,7 +19,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 {
     private const int MaxPerCategory = 50;
 
-    /// <summary>Obergrenze der in-memory geprüften Fuzzy-Kandidaten je Kategorie (Schutz vor Last bei großen Datenmengen).</summary>
+    /// <summary>Cap on in-memory fuzzy candidates per category, to bound load.</summary>
     private const int FuzzyCandidatesMax = 2000;
 
     public async Task<List<SearchResultGroup>> SearchAsync(SearchCriteria criteria, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -39,18 +39,13 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         var hasTags = tagIds.Count > 0;
         var max = criteria.MaxMode;
 
-        // Bewusst KEIN Früh-Ausstieg bei leerem Text/leeren Tags: ohne Filter sollen alle (sichtbaren)
-        // Personen erscheinen (Durchblättern). Die Personen-Query unten lässt dann einfach das Text-Where
-        // weg; die reinen Text-Kategorien (Doks/Quellen/Kommentare) bleiben mangels Suchtext leer.
-
+        // no early exit on empty text/tags: unfiltered should list all visible persons for browsing
         var categories = criteria.Categories is { Count: > 0 } ? criteria.Categories.ToHashSet() : null;
         bool Active(string kat) => categories is null || categories.Contains(kat);
 
-        // Im Max-Modus werden die Inhalts-Kategorien (Doks/Quellen/Kommentare) immer mitdurchsucht,
-        // unabhängig davon, ob ihr Häkchen gesetzt ist – eine einzige Wahrheitsquelle für die Erzwingung.
+        // max mode always searches content categories regardless of their checkbox
         bool ContentActive(string kat) => max || Active(kat);
 
-        // Suchwörter nur einmal zerlegen (für den in-memory Fuzzy-Pass).
         var searchWords = criteria.Fuzzy && hasText
             ? TextSimilarity.Tokens(s)
             : (IReadOnlyList<string>)Array.Empty<string>();
@@ -58,7 +53,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         var groups = new List<SearchResultGroup>();
 
-        // ---- Personen (Name/Aktenzeichen/Beschreibung/Aliase; Max zusätzlich Steckbrief-Unterdaten) ----
+        // ---- people ----
         if (Active(nameof(Person)))
         {
             var q = db.People.Where(p => isLeadership || !p.IsClassified);
@@ -92,9 +87,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 var raw = await @base.OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt).Take(FuzzyCandidatesMax)
                     .Select(p => new { p.Id, p.Name, p.CaseNumber, p.Description })
                     .ToListAsync(cancellationToken);
-                // Aliase separat als flache Abfrage über die Kind-Tabelle laden (WHERE PersonId IN …).
-                // Bewusst KEIN SelectMany über die Navigation und KEINE Collection-Projektion mit .ToList():
-                // beides erzeugt auf MySQL/MariaDB ein nicht übersetzbares CROSS APPLY bzw. LATERAL.
+                // load aliases via flat WHERE PersonId IN; SelectMany/collection projection becomes untranslatable CROSS APPLY on MySQL
                 var ids = raw.Select(x => x.Id).ToList();
                 var aliasByPerson = (await db.PersonAliases
                         .Where(a => ids.Contains(a.PersonId))
@@ -119,7 +112,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Fraktionen (Name/Aktenzeichen/Art/Beschreibung/Ziele; Max zusätzlich Anwesen/Funk/Darkchat/Ausstellungszeiten) ----
+        // ---- factions ----
         if (Active(nameof(Faction)))
         {
             var q = db.Factions.Where(f => isLeadership || !f.IsClassified);
@@ -166,13 +159,13 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Personengruppen (Name/Aktenzeichen/Beschreibung/Ziele/Art; Ziele jetzt analog Fraktion/Partei) ----
+        // ---- person groups ----
         if (Active(nameof(PersonGroup)))
         {
             var q = db.PersonGroups.Where(g => isLeadership || !g.IsClassified);
             if (hasText)
             {
-                // Auch nach Kategorie-Namen (z. B. „Persönlichkeit", „Person of Interest") suchbar.
+                // also searchable by category display name
                 var matchingKinds = GroupsKindDisplay.All
                     .Where(a => GroupsKindDisplay.Name(a).Contains(s!, StringComparison.OrdinalIgnoreCase))
                     .ToList();
@@ -212,7 +205,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Parteien (Name/Aktenzeichen/Beschreibung/Ziele/Bemerkungen) ----
+        // ---- parties ----
         if (Active(nameof(Party)))
         {
             var q = db.Parties.Where(p => isLeadership || !p.IsClassified);
@@ -254,7 +247,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Operationen (Titel/Aktenzeichen/Ablauf/Ergebnis/Ort/Typ/Bemerkungen) ----
+        // ---- operations ----
         if (Active(nameof(Operation)))
         {
             var q = db.Operations.Where(o => isLeadership || !o.IsClassified);
@@ -298,7 +291,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Taskforces (Name/Aktenzeichen/Zweck/Bemerkungen) ----
+        // ---- taskforces ----
         if (Active(nameof(Taskforce)))
         {
             var q = db.Taskforces.OnlyVisible(db, isLeadership, meId);
@@ -339,7 +332,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Vorgänge/Fälle (Titel/Aktenzeichen/Typ/Beschreibung/Zusammenfassung/Abschlussvermerk) ----
+        // ---- cases ----
         if (Active(nameof(Case)))
         {
             var q = db.Cases.Where(v => isLeadership || !v.IsClassified);
@@ -382,7 +375,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Gesetze (Phase 7: Gesetzbuch/Paragraf/Titel/Text; ohne VS-Konzept und ohne Tag-Filter) ----
+        // ---- laws (no classification, no tag filter) ----
         if (Active(nameof(Law)) && !hasTags)
         {
             var q = db.Laws.AsQueryable();
@@ -404,7 +397,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- Aufgaben (Titel/Aktenzeichen/Beschreibung; eingeschränkte nur für Beteiligte/Aufsicht) ----
+        // ---- jobs ----
         if (Active(nameof(Job)))
         {
             var q = db.Jobs.OnlyVisible(db, isLeadership, meId);
@@ -444,9 +437,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // Die folgenden Kategorien sind Text-Inhalte → nur bei vorhandenem Suchtext. Im Max-Modus immer aktiv.
-        // Wichtig: expliziter Join auf db.Personen (NICHT Include über die soft-delete-gefilterte
-        // Pflichtnavigation), sonst greift das fragile Query-Filter-/Pflichtnavigations-Zusammenspiel.
+        // content categories: text only. Explicit join on People, not Include over the soft-delete-filtered required navigation
         if (hasText && ContentActive(nameof(PersonDoc)))
         {
             var hit = await (
@@ -469,8 +460,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
 
         if (hasText && ContentActive(nameof(Source)))
         {
-            // Quellen aller Akten-Eltern (Person/Fraktion/Gruppe) durchsuchen; Eltern + Sichtbarkeit/Tags
-            // anschließend zentral auflösen, damit der Treffer auf die richtige Akte verlinkt.
+            // resolve parents + visibility/tags centrally so the hit links to the right record
             var raw = await db.Sources
                 .Where(source => source.Title.Contains(s!) || (source.Description != null && source.Description.Contains(s!)))
                 .OrderByDescending(source => source.CreatedAt)
@@ -559,8 +549,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .Select(a => new QuickHit(nameof(Job), a.Id, a.Title, a.CaseNumber))
             .ToListAsync(cancellationToken);
 
-        // Immer leicht aktive Tippfehler-Toleranz auf Identifikatoren (Name/Titel/Aktenzeichen). Pro
-        // Kategorie nur, wenn der Begriff lang genug ist UND noch Platz frei ist (sonst lohnt der Scan nicht).
+        // light fuzzy on identifiers, only per category when the term is long enough and space remains
         var searchWords = TextSimilarity.Tokens(s);
         if (searchWords.Any(w => w.Length >= TextSimilarity.MinWordLength))
         {
@@ -622,7 +611,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // Rundlauf-Mischung, damit Personen die Trefferliste nicht verdrängen und alle Kategorien erscheinen.
+        // round-robin so people do not crowd out other categories
         return Shuffle(people, factions, groups, parties, operations, taskforces, cases, jobs).Take(max).ToList();
     }
 
@@ -820,7 +809,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         return groups;
     }
 
-    /// <summary>Mischt mehrere Trefferlisten im Rundlauf (P, F, G, …) für eine faire Verteilung.</summary>
+    /// <summary>Round-robin merge of several hit lists for a fair distribution.</summary>
     private static IEnumerable<QuickHit> Shuffle(params List<QuickHit>[] lists)
     {
         for (var index = 0; ; index++)
@@ -841,14 +830,10 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         }
     }
 
-    /// <summary>Kandidat für den in-memory Fuzzy-Pass: Anzeige-Daten + die zu vergleichenden Wörter.</summary>
+    /// <summary>Candidate for the in-memory fuzzy pass: display data plus the words to compare.</summary>
     private sealed record FuzzyCandidate(string Id, string Display, string CaseNumber, string Snippet, IReadOnlyList<string> Tokens);
 
-    /// <summary>
-    /// Hängt an eine bereits ermittelte Substring-Trefferliste die per Levenshtein ähnlichen Kandidaten
-    /// an (dedupliziert gegen die vorhandenen Ziel-Ids, sortiert nach aufsteigender Editierdistanz).
-    /// Substring-Treffer bleiben vorne (höhere Relevanz); Gesamtzahl auf <see cref="MaxProKategorie"/> gekappt.
-    /// </summary>
+    /// <summary>Appends Levenshtein-similar candidates to the substring hits, deduped and sorted by distance; substring hits stay first.</summary>
     private static List<SearchHit> FuzzySupplement(
         string category, List<SearchHit> substring, IReadOnlyList<string> searchWords, IEnumerable<FuzzyCandidate> candidates)
     {
@@ -878,7 +863,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         return result.Count > MaxPerCategory ? result.Take(MaxPerCategory).ToList() : result;
     }
 
-    /// <summary>Leichtgewichtige Fuzzy-Ergänzung für die Schnellsuche: Identifikatoren (Name/Titel + Aktenzeichen).</summary>
+    /// <summary>Lightweight fuzzy supplement for quick search: identifiers (name/title + case number).</summary>
     private static List<QuickHit> QuickFuzzy(
         string category, List<QuickHit> already, IReadOnlyList<string> searchWords,
         IEnumerable<(string Id, string Name, string CaseNumber)> candidates, int max)
@@ -905,14 +890,10 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         return result;
     }
 
-    /// <summary>Roh-Treffer eines polymorphen Inhalts (Quelle/Kommentar): Eltern-Typ/-Id + Anzeige-Schnipsel.</summary>
+    /// <summary>Raw hit of polymorphic content (source/comment): parent type/id plus a display snippet.</summary>
     private sealed record RawHit(string EntityType, string EntityId, string Snippet);
 
-    /// <summary>
-    /// Löst Roh-Treffer (Quellen/Kommentare) auf ihre Eltern-Akte auf: Name/Aktenzeichen je Typ
-    /// (Person/Fraktion/Personengruppe), filtert Verschlusssachen (außer Führung) und – falls gefordert –
-    /// nach Tags der Eltern-Akte. Reihenfolge der Roh-Treffer bleibt erhalten; auf <see cref="MaxProKategorie"/> gekürzt.
-    /// </summary>
+    /// <summary>Resolves raw content hits to their parent record, filters classified (unless leadership) and by tag; keeps order.</summary>
     private static async Task<List<SearchHit>> RecordParentsHitAsync(
         AppDbContext db, string category, List<RawHit> raw, bool isLeadership, string? meId, bool hasTags, List<string> tagIds, CancellationToken cancellationToken)
     {
@@ -930,7 +911,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         var caseIds = raw.Where(r => r.EntityType == nameof(Case)).Select(r => r.EntityId).Distinct().ToList();
         var jobIds = raw.Where(r => r.EntityType == nameof(Job)).Select(r => r.EntityId).Distinct().ToList();
 
-        // (Typ, Id) → (Name, Aktenzeichen, Verschlusssache). Gelöschte Akten fehlen (globaler Filter).
+        // (type, id) -> (name, case number, classified); deleted records absent via global filter
         var map = new Dictionary<(string, string), (string Name, string CaseNumber, bool Classified)>();
         foreach (var x in await db.People.Where(p => personIds.Contains(p.Id))
                      .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(cancellationToken))
@@ -967,15 +948,14 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Case), x.Id)] = (x.Title, x.CaseNumber, x.IsClassified);
         }
-        // Eingeschränkte Aufgaben nur für Beteiligte/Aufsicht in die Map aufnehmen – sonst werden Treffer auf
-        // Kommentaren/Quellen einer eingeschränkten Aufgabe unten (fehlt in der Map → continue) ausgeblendet.
+        // restricted jobs only for participants/supervision; otherwise their content hits are dropped below
         foreach (var x in await db.Jobs.OnlyVisible(db, isLeadership, meId).Where(a => jobIds.Contains(a.Id))
                      .Select(a => new { a.Id, a.Title, a.CaseNumber }).ToListAsync(cancellationToken))
         {
             map[(nameof(Job), x.Id)] = (x.Title, x.CaseNumber, false);
         }
 
-        // Tag-Filter: welche Eltern-Akten tragen mindestens einen der gewählten Tags?
+        // which parent records carry at least one of the selected tags
         HashSet<(string, string)>? withTag = null;
         if (hasTags)
         {
@@ -998,7 +978,7 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             if (!map.TryGetValue((r.EntityType, r.EntityId), out var info))
             {
-                continue; // Eltern-Akte gelöscht/unbekannt → ausblenden.
+                continue; // parent deleted/unknown
             }
             if (info.Classified && !isLeadership)
             {

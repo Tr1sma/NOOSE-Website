@@ -3,10 +3,7 @@ using NOOSE_Website.Data.Entities.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Generische Kommentare/Vermerke an beliebigen Akten (polymorph über EntitaetTyp + EntitaetId).
-/// Sichtbarkeit richtet sich nach der Eltern-Akte; Löschen ist Soft-Delete und wird auditiert.
-/// </summary>
+/// <summary>Polymorphic comments on any record (via EntityType + EntityId); visibility follows the parent record, delete is soft-delete.</summary>
 public interface ICommentService
 {
     Task<List<Comment>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default);

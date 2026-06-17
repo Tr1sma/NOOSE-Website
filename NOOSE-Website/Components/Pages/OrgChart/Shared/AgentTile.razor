@@ -1,6 +1,3 @@
-@* Wiederverwendbare Agenten-Karte für das Organigramm: Initialen-Avatar, Codename (Link zur Personalakte),
-   Klarname nur für Führung, optional Dienstgrad-/Rollen-Chip + TRU-/HRB-Badge. *@
-
 <MudPaper Class="pa-3" Elevation="1" Style="height:100%;">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
         <MudAvatar Color="@(IsLead ? Color.Warning : Color.Primary)" Rounded="true">@Initials(Agent.Codename)</MudAvatar>
@@ -44,7 +41,6 @@
     [Parameter] public string? RoleText { get; set; }
     [Parameter] public bool IsLead { get; set; }
 
-    // Initialen aus dem Codename (1–2 Buchstaben) – ohne externe Avatar-Bilder.
     private static string Initials(string? codename)
     {
         if (string.IsNullOrWhiteSpace(codename))

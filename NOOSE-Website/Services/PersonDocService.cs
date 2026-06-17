@@ -16,7 +16,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
     public async Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Eigenständige Sichtbarkeitsprüfung der Eltern-Person (nicht nur auf den Aufrufer verlassen).
+        // independently re-check parent visibility
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
@@ -61,19 +61,14 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var docs = await db.PersonDocs
             .Include(d => d.Person)
-            // Der Soft-Delete-Filter setzt Person bei gelöschten Akten auf null → solche Doks ausblenden.
+            // soft-deleted parent surfaces as null → hide those
             .Where(d => d.Person != null && (isLeadership || !d.Person.IsClassified))
             .OrderByDescending(d => d.Timestamp)
             .ToListAsync(cancellationToken);
         return await ToDisplayAsync(db, docs, isLeadership, cancellationToken);
     }
 
-    /// <summary>
-    /// Reichert geladene Doks mit den Anzeigedaten ihrer verknüpften Organisation an. Namen werden in je
-    /// einer Sammelabfrage je Org-Typ aufgelöst und dabei Verschlusssache-gefiltert (<paramref name="istFuehrung"/>);
-    /// der globale Soft-Delete-Filter blendet gelöschte Orgs automatisch aus. Nicht (mehr) sichtbare oder
-    /// nicht verknüpfte Doks erhalten leere Org-Felder → die Anzeige fällt auf den Freitext zurück.
-    /// </summary>
+    /// <summary>Enrich docs with their linked org's name/case number/route (classification-filtered); unresolved links get empty fields.</summary>
     private static async Task<List<PersonDocDisplay>> ToDisplayAsync(AppDbContext db, List<PersonDoc> docs, bool isLeadership, CancellationToken cancellationToken)
     {
         var factionIds = docs.Where(d => d.OrgType == nameof(Faction) && d.OrgId is not null).Select(d => d.OrgId!).Distinct().ToList();
@@ -122,7 +117,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         }
 
         var doc = await CreateDocAsync(db, personId, input, cancellationToken);
-        // Maßnahmen fließen in den Heat der Fraktionen der Person (S1) UND in den Person-Score selbst (P1).
+        // measures feed both faction heat and the person score
         await threat.NewCalculateForPersonAsync(personId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
         return doc;
@@ -135,9 +130,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             throw new InvalidOperationException("Für eine neue Akte ist ein Name erforderlich.");
         }
 
-        // Neue Akte (nur Name) über den Personen-Dienst anlegen – inkl. Aktenzeichen-Vergabe und Audit –
-        // und das Dok daran hängen. Jeder Dienst nutzt seinen eigenen Context aus der Factory; die Person
-        // ist nach ErstellenAsync committet und wird unten in unserem Context frisch geladen.
+        // create the record via the person service (own context, already committed), then attach the doc
         var person = await personService.CreateAsync(new PersonInput { Name = name.Trim() }, actor, cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var doc = await CreateDocAsync(db, person.Id, input, cancellationToken);
@@ -159,7 +152,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        // Alten Zustand merken, bevor wir überschreiben – die Status-Neuauswertung braucht beides.
+        // capture old state before overwriting; status re-evaluation needs both
         var altOutcome = doc.Outcome;
         var altTimestamp = doc.Timestamp;
 
@@ -168,33 +161,27 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         doc.Faction = input.Faction.TrimToNull();
         var aktOrgId = input.OrgId.TrimToNull();
         doc.OrgId = aktOrgId;
-        // Kein verwaister Typ ohne Id (Freitext-Fallback).
+        // no orphan type without id
         doc.OrgType = aktOrgId is null ? null : input.OrgType.TrimToNull();
         doc.ReceivedInformation = input.ReceivedInformation.TrimToNull();
         doc.TruthSerum = input.TruthSerum;
         doc.Outcome = input.Outcome;
-        // Gedächtnisverlust folgt dem Ausgang (Amnestie-Spritze).
+        // memory loss follows the amnesty-injection outcome
         doc.MemoryDeleted = input.Outcome == MeasureOutcome.Injection;
 
-        // Person ist null, wenn ihre Akte (soft-)gelöscht ist – dann ist der Lebensstatus ohnehin belanglos.
         if (doc.Person is not null)
         {
             StatusNewEvaluate(doc.Person, altOutcome, altTimestamp, input);
         }
 
-        // Dok + ggf. Person in einem SaveChanges → Audit setzt GeaendertAm/Von automatisch.
         await db.SaveChangesAsync(cancellationToken);
-        // Geänderter Ausgang/Zeitpunkt wirkt auf den Heat (S1) der Fraktionen der Person UND den Person-Score (P1).
+        // changed outcome/timestamp affects faction heat and the person score
         await threat.NewCalculateForPersonAsync(doc.PersonId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(doc.PersonId, cancellationToken);
         return doc;
     }
 
-    /// <summary>
-    /// Wertet den Status-Effekt eines bearbeiteten Doks neu aus („Status neu anwenden"). Ein Dok „besitzt"
-    /// das aktuelle Tot-Fenster nur, wenn dieses aus seinem (alten) Zeitpunkt stammt – so wird ein manuell
-    /// oder von einem anderen Dok gesetzter Lebensstatus nicht überschrieben.
-    /// </summary>
+    /// <summary>Re-evaluates a doc's life-status effect; only owns the death window if it stems from the doc's own old timestamp.</summary>
     private static void StatusNewEvaluate(Person person, MeasureOutcome altOutcome, DateTime altTimestamp, PersonDocInput @new)
     {
         var altWasShot = altOutcome == MeasureOutcome.Shot;
@@ -206,19 +193,19 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         {
             if (!altWasShot)
             {
-                // Neu „Erschossen": Tod zum Maßnahme-Zeitpunkt setzen (wie beim Anlegen).
+                // newly shot: set death at measure time
                 person.LifeStatus = LifeStatus.Dead;
                 person.DeadUntil = LifeStatusLogic.DeadUntilFrom(@new.Timestamp);
             }
             else if (ownsWindow)
             {
-                // Bleibt „Erschossen", Zeitpunkt evtl. verschoben → eigenes Tot-Fenster nachführen.
+                // still shot, time shifted → move own death window
                 person.DeadUntil = LifeStatusLogic.DeadUntilFrom(@new.Timestamp);
             }
         }
         else if (altWasShot && ownsWindow)
         {
-            // Weg von „Erschossen": das von diesem Dok gesetzte Tot-Fenster zurücknehmen.
+            // no longer shot → undo the death window this doc set
             person.LifeStatus = LifeStatus.Alive;
             person.DeadUntil = null;
         }
@@ -234,25 +221,23 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             Reason = input.Reason.TrimToNull(),
             Faction = input.Faction.TrimToNull(),
             OrgId = orgId,
-            // Kein verwaister Typ ohne Id (Freitext-Fallback).
+            // no orphan type without id
             OrgType = orgId is null ? null : input.OrgType.TrimToNull(),
             ReceivedInformation = input.ReceivedInformation.TrimToNull(),
             TruthSerum = input.TruthSerum,
             Outcome = input.Outcome,
         };
 
-        // Automatik: Maßnahme-Ausgang wirkt auf den Lebensstatus der Person.
+        // measure outcome drives the person's life status
         switch (input.Outcome)
         {
             case MeasureOutcome.Shot:
-                // Tod tritt zum Maßnahme-Zeitpunkt ein; 20-Minuten-Fenster bis zum Respawn. Die Person im
-                // selben Context laden, damit die Statusänderung mit dem Dok gespeichert wird.
+                // load person in the same context so the status change saves with the doc
                 var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken);
                 if (person is not null)
                 {
                     var newDeadUntil = LifeStatusLogic.DeadUntilFrom(input.Timestamp);
-                    // Ein bereits laufendes, späteres Tot-Fenster nicht verkürzen (z. B. wenn nachträglich ein
-                    // älteres Dok erfasst wird) – nur setzen/verlängern.
+                    // never shorten a later, already-running death window
                     if (person.DeadUntil is null || newDeadUntil > person.DeadUntil)
                     {
                         person.LifeStatus = LifeStatus.Dead;
@@ -261,13 +246,12 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
                 }
                 break;
             case MeasureOutcome.Injection:
-                // Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.
+                // amnesty injection: person survives but loses memory
                 doc.MemoryDeleted = true;
                 break;
         }
 
         db.PersonDocs.Add(doc);
-        // Person + Dok in einem SaveChanges → je ein Audit-Eintrag (Dok „Erstellt", Person „Geaendert").
         await db.SaveChangesAsync(cancellationToken);
         return doc;
     }
@@ -285,8 +269,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
-        // Hat dieses „Erschossen"-Dok das aktuelle Tot-Fenster gesetzt, beim Löschen den Status zurücknehmen
-        // (sonst bliebe die versehentlich getötete Person für den Rest des Fensters „Tot").
+        // if this shot-doc set the current death window, undo the status on delete
         if (doc.Person is not null && doc.Outcome == MeasureOutcome.Shot
             && doc.Person.LifeStatus == LifeStatus.Dead
             && doc.Person.DeadUntil == LifeStatusLogic.DeadUntilFrom(doc.Timestamp))
@@ -296,10 +279,9 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         }
 
         var personId = doc.PersonId;
-        // Soft-Delete via Interceptor.
         db.PersonDocs.Remove(doc);
         await db.SaveChangesAsync(cancellationToken);
-        // Entfernte Maßnahme fällt aus dem Heat (S1) der Fraktionen der Person UND dem Person-Score (P1).
+        // removed measure drops out of faction heat and the person score
         await threat.NewCalculateForPersonAsync(personId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }

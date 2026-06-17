@@ -1,10 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Verknüpft ein <see cref="Tag"/> mit einer beliebigen Akte (polymorph über Typ + Id).
-/// Einfache Zuordnungs-Zeile ohne Audit/Soft-Delete – wird beim Ent-Taggen hart entfernt.
-/// </summary>
+/// <summary>Links a tag to any record (polymorphic by type + id); hard-deleted on untag.</summary>
 [Table("TagZuordnungen")]
 public class TagMapping
 {

@@ -17,19 +17,15 @@ public class DocTemplate : IAuditable, ISoftDelete
     [Column("Beschreibung")]
     public string? Description { get; set; }
 
-    /// <summary>Active templates only.</summary>
     [Column("IstAktiv")]
     public bool IsActive { get; set; } = true;
 
-    /// <summary>Sort order; ascending.</summary>
     [Column("Sortierung")]
     public int Sorting { get; set; }
 
-    // ---- default field values ----
     [Column("StandardGrund")]
     public string? DefaultReason { get; set; }
 
-    /// <summary>Default faction name.</summary>
     [Column("StandardFraktion")]
     public string? DefaultFaction { get; set; }
 
@@ -42,7 +38,6 @@ public class DocTemplate : IAuditable, ISoftDelete
     [Column("StandardAusgang")]
     public MeasureOutcome DefaultOutcome { get; set; } = MeasureOutcome.RunningStill;
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -52,7 +47,6 @@ public class DocTemplate : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

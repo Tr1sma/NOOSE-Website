@@ -4,22 +4,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Appointments;
 
-/// <summary>
-/// Ein Termin (Gerichtstermin, Besprechung, Frist …) als vollwertige, verknüpfbare Akte – Phase 8 (Block C).
-/// Frei anlegbarer Kalendereintrag mit Zeitraum (<see cref="Beginn"/>/<see cref="Ende"/>) und Teilnehmern
-/// (<see cref="TerminZuweisung"/>). Sichtbarkeit über drei Stufen (<see cref="Sichtbarkeit"/>): Öffentlich
-/// (alle aktiven Agenten, Behörden-Kalender), Eingeschränkt (Ersteller + zugeteilte Teilnehmer + Aufsicht) und
-/// Privat (nur der Ersteller + Aufsicht). Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>) sieht alle
-/// Stufen. KEIN Verschlusssache-/Einstufungs-Konzept (anders als <see cref="Operationen.Operation"/>). Voll
-/// auditiert und papierkorbfähig (<see cref="IAuditable"/> + <see cref="ISoftDelete"/>). <c>ErstelltVonId</c>
-/// ist der Ersteller.
-/// </summary>
+/// <summary>Calendar appointment as a linkable record with three visibility levels (public/restricted/private); no classification concept.</summary>
 [Table("Termine")]
 public class Appointment : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Menschenlesbares, eindeutiges Aktenzeichen (z. B. NOOSE-TM-2026-0001).</summary>
+    /// <summary>Human-readable unique case number (e.g. NOOSE-TM-2026-0001).</summary>
     [Column("Aktenzeichen")]
     public string CaseNumber { get; set; } = string.Empty;
 
@@ -31,38 +22,30 @@ public class Appointment : IAuditable, ISoftDelete
 
     public AppointmentStatus Status { get; set; } = AppointmentStatus.Planned;
 
-    /// <summary>Ort des Termins (Freitext).</summary>
     [Column("Ort")]
     public string? Location { get; set; }
 
-    /// <summary>Beginn des Termins (RP-Zeit, UTC gespeichert). Pflichtfeld.</summary>
+    /// <summary>Start time (stored UTC). Required.</summary>
     [Column("Beginn")]
     public DateTime Start { get; set; }
 
-    /// <summary>Ende des Termins (optional, RP-Zeit, UTC gespeichert).</summary>
+    /// <summary>End time (optional, stored UTC).</summary>
     [Column("Ende")]
     public DateTime? End { get; set; }
 
-    /// <summary>Ganztägiger Termin – Uhrzeiten werden dann ausgeblendet/ignoriert.</summary>
+    /// <summary>All-day appointment; times are then hidden/ignored.</summary>
     [Column("Ganztaegig")]
     public bool AllDay { get; set; }
 
-    /// <summary>Beschreibung/Worum geht es (Freitext).</summary>
     [Column("Beschreibung")]
     public string? Description { get; set; }
 
-    /// <summary>
-    /// Sichtbarkeitsstufe: Öffentlich (alle, Behörden-Kalender), Eingeschränkt (Ersteller + Teilnehmer +
-    /// Aufsicht) oder Privat (nur Ersteller + Aufsicht). Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>)
-    /// sieht alle Stufen.
-    /// </summary>
+    /// <summary>Visibility level: public, restricted (creator + participants + supervision) or private; supervision sees all.</summary>
     [Column("Sichtbarkeit")]
     public AppointmentVisibilityLevel Visibility { get; set; } = AppointmentVisibilityLevel.Public;
 
-    // ---- Kind-Tabellen ----
     public List<AppointmentAssignment> Participant { get; set; } = new();
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -72,7 +55,6 @@ public class Appointment : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

@@ -17,7 +17,7 @@
     <JobForm Input="_input" ShowAssignment="true" @bind-AgentIds="_agentIds" />
 </MudForm>
 
-@* Bezug / Verknüpfungen: hier schon beim Anlegen Akten verknüpfen, auf die sich die Aufgabe bezieht. *@
+@* Link related files already at creation time. *@
 <MudPaper Class="pa-4 mt-4" Elevation="1">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
         <MudText Typo="Typo.subtitle1">Bezug / Verknüpfte Akten (optional)</MudText>
@@ -67,7 +67,7 @@
     {
         _user = (await AuthStateTask).User;
 
-        // Vom „Aufgabe erstellen"-Button einer Akte vorausgefüllt: als Bezug vormerken (nur wenn zugänglich).
+        // Prefilled reference from a file's "create job" button.
         if (!string.IsNullOrWhiteSpace(ReferenceType) && !string.IsNullOrWhiteSpace(ReferenceId))
         {
             var name = await JobService.ReferenceDisplayAsync(ReferenceType, ReferenceId, _user);
@@ -85,7 +85,7 @@
         {
             return;
         }
-        // Dubletten vermeiden (gleiches Ziel nicht doppelt verknüpfen).
+        // Avoid duplicate targets.
         if (_references.Any(b => b.TargetType == choice.TargetType && b.TargetId == choice.TargetId))
         {
             return;
@@ -112,8 +112,7 @@
         {
             var job = await JobService.CreateAsync(_input, _agentIds.ToList(), _user);
 
-            // Gewählte Bezüge verknüpfen – ein Fehler einzelner Verknüpfungen bricht das Anlegen nicht ab;
-            // die konkreten Fehlertexte werden gesammelt und angezeigt.
+            // A failed individual link does not abort creation; errors are collected.
             var error = new List<string>();
             foreach (var b in _references)
             {
