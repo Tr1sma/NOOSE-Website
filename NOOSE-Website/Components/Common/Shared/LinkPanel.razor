@@ -103,6 +103,8 @@
                         </MudStack>
                         @if (_mayWrite)
                         {
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Color="Color.Default" Size="Size.Small"
+                                           OnClick="@(() => EditRelationAsync(b))" aria-label="Beziehung bearbeiten" />
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                            OnClick="@(() => RelationRemoveAsync(b))" aria-label="Beziehung löschen" />
                         }
@@ -226,6 +228,13 @@
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    private async Task EditRelationAsync(RelationDisplay b)
+    {
+        var saved = await RelationEditDialog.ShowAsync(DialogService, b.RelationId, b.OtherPersonName, b.Type, b.Note);
+        if (saved)
+            await LoadAsync();
     }
 
     private async Task NewLinkAsync()

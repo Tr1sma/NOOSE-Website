@@ -38,7 +38,8 @@
             {
                 <MudPaper Class="pa-1" Elevation="2" Style="width:160px;">
                     <MudImage Src="@($"/dateien/personen/foto/{photo.Id}")" Alt="@photo.OriginalName"
-                              Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                              Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded"
+                              Style="@($"object-position:{photo.FocalPointX}% {photo.FocalPointY}%")" />
                     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="px-1">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                             @photo.OriginalName
@@ -47,6 +48,8 @@
                             <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(PersonPhoto)" ChildId="@photo.Id" />
                             @if (_mayWrite)
                             {
+                                <MudIconButton Icon="@Icons.Material.Outlined.CropFree" Color="Color.Default" Size="Size.Small"
+                                               OnClick="@(() => EditFocalPointAsync(photo))" aria-label="Bildausschnitt festlegen" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                                OnClick="@(() => RemoveAsync(photo))" aria-label="Foto löschen" />
                             }
@@ -116,6 +119,16 @@
         finally
         {
             _load = false;
+        }
+    }
+
+    private async Task EditFocalPointAsync(PersonPhoto photo)
+    {
+        var saved = await FocalPointDialog.ShowAsync(DialogService,
+            $"/dateien/personen/foto/{photo.Id}", photo.Id, photo.FocalPointX, photo.FocalPointY);
+        if (saved)
+        {
+            await Changed.InvokeAsync();
         }
     }
 

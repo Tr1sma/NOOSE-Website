@@ -9,7 +9,8 @@
         @if (photo is not null)
         {
             <MudImage Src="@($"/dateien/personen/foto/{photo.Id}")" Alt="@Person.Name"
-                      Height="220" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+                      Height="220" ObjectFit="ObjectFit.Cover" Class="rounded"
+                      Style="@($"width:100%; object-position:{photo.FocalPointX}% {photo.FocalPointY}%")" />
         }
         else
         {

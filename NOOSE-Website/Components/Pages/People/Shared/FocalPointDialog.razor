@@ -1,0 +1,78 @@
+@* Dialog to set the crop focal point for a person photo. *@
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Verschieben Sie die Regler, um festzulegen, welcher Bildbereich als Mugshot angezeigt wird.
+        </MudText>
+        <div style="width:100%; height:220px; overflow:hidden; border-radius:8px; margin-bottom:16px;">
+            <img src="@PhotoUrl" alt="Vorschau"
+                 style="@($"width:100%; height:100%; object-fit:cover; object-position:{_x}% {_y}%")" />
+        </div>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Vertikal – von oben (@(_y) %)</MudText>
+        <MudSlider T="int" @bind-Value="_y" Min="0" Max="100" Color="Color.Primary" Class="mb-2" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Horizontal – von links (@(_x) %)</MudText>
+        <MudSlider T="int" @bind-Value="_x" Min="0" Max="100" Color="Color.Primary" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string PhotoUrl { get; set; } = default!;
+    [Parameter, EditorRequired] public string PhotoId { get; set; } = default!;
+    [Parameter] public int InitialX { get; set; } = 50;
+    [Parameter] public int InitialY { get; set; } = 25;
+
+    private int _x;
+    private int _y;
+    private bool _saving;
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _x = InitialX;
+        _y = InitialY;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await PersonService.PhotoSetFocalPointAsync(PhotoId, _x, _y, _user);
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public static async Task<bool> ShowAsync(IDialogService dialog, string photoUrl, string photoId, int initialX, int initialY)
+    {
+        var parameters = new DialogParameters<FocalPointDialog>
+        {
+            { x => x.PhotoUrl, photoUrl },
+            { x => x.PhotoId, photoId },
+            { x => x.InitialX, initialX },
+            { x => x.InitialY, initialY },
+        };
+        var reference = await dialog.ShowAsync<FocalPointDialog>("Bildausschnitt festlegen", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await reference.Result;
+        return result is { Canceled: false };
+    }
+}

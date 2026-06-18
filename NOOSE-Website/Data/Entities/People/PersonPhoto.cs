@@ -22,4 +22,8 @@ public class PersonPhoto
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
     public string? CreatedById { get; set; }
+    [Column("FokuspunktX")]
+    public int FocalPointX { get; set; } = 50;
+    [Column("FokuspunktY")]
+    public int FocalPointY { get; set; } = 25;
 }

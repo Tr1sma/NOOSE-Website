@@ -546,6 +546,19 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         fileStorage.Delete(photo.FileNameSaved);
     }
 
+    public async Task PhotoSetFocalPointAsync(string photoId, int x, int y, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        x = Math.Clamp(x, 0, 100);
+        y = Math.Clamp(y, 0, 100);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await db.PersonPhotos
+            .Where(p => p.Id == photoId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.FocalPointX, x)
+                .SetProperty(p => p.FocalPointY, y), cancellationToken);
+    }
+
     public async Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

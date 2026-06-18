@@ -45,6 +45,7 @@ public interface IPersonService
 
     Task<PersonPhoto> PhotoAddAsync(string personId, Stream content, string originalName, string contentType, long size, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task PhotoRemoveAsync(string photoId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    Task PhotoSetFocalPointAsync(string photoId, int x, int y, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Loads a photo with its person for delivery, gated to the viewer (partner: child-release gated); null if not visible.</summary>
     Task<PersonPhoto?> GetPhotoWithPersonAsync(string photoId, ViewerScope scope, CancellationToken cancellationToken = default);

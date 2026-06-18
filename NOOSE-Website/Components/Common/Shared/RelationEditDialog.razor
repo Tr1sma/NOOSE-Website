@@ -1,0 +1,78 @@
+@* Dialog for editing the type and note of an existing person relation. *@
+@inject IRelationService RelationService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">@OtherPersonName</MudText>
+            <MudSelect T="RelationType" @bind-Value="_type" Label="Typ" Variant="Variant.Outlined" Dense="true">
+                @foreach (var t in RelationTypeDisplay.All)
+                {
+                    <MudSelectItem T="RelationType" Value="@t">@RelationTypeDisplay.Name(t)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_note" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" MaxLength="500" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string RelationId { get; set; } = default!;
+    [Parameter, EditorRequired] public string OtherPersonName { get; set; } = default!;
+    [Parameter] public RelationType InitialType { get; set; } = RelationType.Known;
+    [Parameter] public string? InitialNote { get; set; }
+
+    private RelationType _type;
+    private string? _note;
+    private bool _saving;
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _type = InitialType;
+        _note = InitialNote;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await RelationService.UpdateAsync(RelationId, _type, _note, _user);
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public static async Task<bool> ShowAsync(IDialogService dialog, string relationId, string otherPersonName,
+        RelationType initialType, string? initialNote)
+    {
+        var parameters = new DialogParameters<RelationEditDialog>
+        {
+            { x => x.RelationId, relationId },
+            { x => x.OtherPersonName, otherPersonName },
+            { x => x.InitialType, initialType },
+            { x => x.InitialNote, initialNote },
+        };
+        var reference = await dialog.ShowAsync<RelationEditDialog>("Beziehung bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await reference.Result;
+        return result is { Canceled: false };
+    }
+}

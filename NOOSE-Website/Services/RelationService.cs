@@ -88,6 +88,36 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
         await threat.NewCalculatePersonScoreAsync(personBId, cancellationToken);
     }
 
+    public async Task UpdateAsync(string relationId, RelationType type, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var relation = await db.PersonRelations.FindAsync([relationId], cancellationToken)
+            ?? throw new InvalidOperationException("Beziehung nicht gefunden.");
+        if (relation.Type != type)
+        {
+            var duplicate = await db.PersonRelations.AnyAsync(r =>
+                r.Id != relationId &&
+                r.Type == type &&
+                ((r.PersonAId == relation.PersonAId && r.PersonBId == relation.PersonBId) ||
+                 (r.PersonAId == relation.PersonBId && r.PersonBId == relation.PersonAId)),
+                cancellationToken);
+            if (duplicate)
+                throw new InvalidOperationException(
+                    "Eine Beziehung dieses Typs besteht bereits zwischen den beiden Personen.");
+        }
+        bool typeChanged = relation.Type != type;
+        relation.Type = type;
+        relation.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        // type change affects P4 score of both persons
+        if (typeChanged)
+        {
+            await threat.NewCalculatePersonScoreAsync(relation.PersonAId, cancellationToken);
+            await threat.NewCalculatePersonScoreAsync(relation.PersonBId, cancellationToken);
+        }
+    }
+
     public async Task RemoveAsync(string relationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

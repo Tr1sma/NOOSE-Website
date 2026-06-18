@@ -16,5 +16,8 @@ public interface IRelationService
 
     Task CreateAsync(string personAId, string personBId, RelationType type, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Update type and note of an existing relation.</summary>
+    Task UpdateAsync(string relationId, RelationType type, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     Task RemoveAsync(string relationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
