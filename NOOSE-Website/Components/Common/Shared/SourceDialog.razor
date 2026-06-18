@@ -1,5 +1,6 @@
 @inject ISourcesStorageService Storage
 @inject IPersonService PersonService
+@inject ICaseService CaseService
 @inject IDocumentService DocumentService
 @inject ISnackbar Snackbar
 
@@ -16,6 +17,12 @@
 
                 <MudTextField @bind-Value="_input.Title" Label="Titel" Variant="Variant.Outlined"
                               Required="true" RequiredError="Titel ist erforderlich" AutoFocus="true" />
+
+                @if (ShowInternalToggle)
+                {
+                    <MudSwitch @bind-Value="_input.IsInternalOnly" Label="Nur Taskforce-intern (nicht für Partner sichtbar)"
+                               Color="Color.Warning" />
+                }
 
                 @switch (_input.Type)
                 {
@@ -58,20 +65,44 @@
                         break;
 
                     case SourceType.Internal:
-                        <MudAutocomplete T="Person" Label="Ziel-Akte (Person)" @bind-Value="_targetPerson"
-                                         SearchFunc="@SearchPeople" ToStringFunc="@(p => p?.Name ?? string.Empty)"
-                                         Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
-                                         ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
-                                         Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch"
-                                         HelperText="Verknüpfte Person auswählen.">
-                            <ItemTemplate Context="p">
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                    <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Primary" />
-                                    <MudText Typo="Typo.body2">@p.Name</MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
-                                </MudStack>
-                            </ItemTemplate>
-                        </MudAutocomplete>
+                        <MudRadioGroup T="string" @bind-Value="_internalTargetMode">
+                            <MudRadio Value="@("Person")" Color="Color.Primary">Person</MudRadio>
+                            <MudRadio Value="@("Case")" Color="Color.Primary">Vorgang</MudRadio>
+                        </MudRadioGroup>
+                        @if (_internalTargetMode == "Case")
+                        {
+                            <MudAutocomplete T="Case" Label="Ziel-Vorgang" @bind-Value="_targetCase"
+                                             SearchFunc="@SearchCases" ToStringFunc="@(c => c is null ? string.Empty : $"{c.CaseNumber} – {c.Title}")"
+                                             Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                                             HelperText="Verknüpften Vorgang auswählen.">
+                                <ItemTemplate Context="c">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small" Color="Color.Primary" />
+                                        <MudText Typo="Typo.body2">@c.Title</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.CaseNumber</MudText>
+                                    </MudStack>
+                                </ItemTemplate>
+                            </MudAutocomplete>
+                        }
+                        else
+                        {
+                            <MudAutocomplete T="Person" Label="Ziel-Akte (Person)" @bind-Value="_targetPerson"
+                                             SearchFunc="@SearchPeople" ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                             Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                             ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonSearch"
+                                             HelperText="Verknüpfte Person auswählen.">
+                                <ItemTemplate Context="p">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                        <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" Color="Color.Primary" />
+                                        <MudText Typo="Typo.body2">@p.Name</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
+                                    </MudStack>
+                                </ItemTemplate>
+                            </MudAutocomplete>
+                        }
                         <MudTextField @bind-Value="_input.Description" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
                         break;
 
@@ -113,14 +144,22 @@
     /// <summary>Viewer's classification scope for the document picker.</summary>
     [Parameter] public DocumentViewerScope DocumentScope { get; set; }
 
+    /// <summary>Show the intern toggle; set only when the parent entity is a Taskforce.</summary>
+    [Parameter] public bool ShowInternalToggle { get; set; }
+
     private MudForm _form = default!;
     private readonly SourceInput _input = new();
     private Person? _targetPerson;
+    private Case? _targetCase;
+    private string _internalTargetMode = "Person";
     private DocumentListItem? _selectedDocument;
     private string? _fileName;
 
     private async Task<IEnumerable<Person>> SearchPeople(string value, CancellationToken token)
         => await PersonService.SearchAsync(value, IsLeadership, 20, token);
+
+    private async Task<IEnumerable<Case>> SearchCases(string value, CancellationToken token)
+        => await CaseService.SearchAsync(value, IsLeadership, 20, token);
 
     private async Task<IEnumerable<DocumentListItem>> SearchDocuments(string value, CancellationToken token)
         => await DocumentService.SearchAsync(value, DocumentScope, 20, token);
@@ -184,6 +223,19 @@
             case SourceType.Link when string.IsNullOrWhiteSpace(_input.Url):
                 Snackbar.Add("Bitte eine URL angeben.", Severity.Warning);
                 return;
+            case SourceType.Internal when _internalTargetMode == "Case":
+                if (_targetCase is null)
+                {
+                    Snackbar.Add("Bitte einen Vorgang auswählen.", Severity.Warning);
+                    return;
+                }
+                _input.TargetType = nameof(Case);
+                _input.TargetId = _targetCase.Id;
+                if (string.IsNullOrWhiteSpace(_input.Title))
+                {
+                    _input.Title = _targetCase.Title;
+                }
+                break;
             case SourceType.Internal:
                 if (_targetPerson is null)
                 {
@@ -221,12 +273,13 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
-    public static async Task<SourceInput?> ShowAsync(IDialogService dialog, ClaimsPrincipal user)
+    public static async Task<SourceInput?> ShowAsync(IDialogService dialog, ClaimsPrincipal user, bool showInternalToggle = false)
     {
         var parameters = new DialogParameters<SourceDialog>
         {
             { x => x.IsLeadership, user.IsLeadership() },
             { x => x.DocumentScope, DocumentViewerScope.From(user) },
+            { x => x.ShowInternalToggle, showInternalToggle },
         };
         var reference = await dialog.ShowAsync<SourceDialog>("Quelle hinzufügen", parameters);
         var result = await reference.Result;

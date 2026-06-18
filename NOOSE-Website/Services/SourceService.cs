@@ -4,6 +4,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
@@ -33,6 +34,17 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             sources = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
             sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency, scope.MeId, cancellationToken);
         }
+
+        // taskforce-internal sources: only taskforce members may see them, never partners
+        if (entityType == nameof(Taskforce))
+        {
+            bool isMember = scope.MeId is not null && !scope.IsPartner &&
+                await db.TaskforceAgents.AnyAsync(
+                    ta => ta.TaskforceId == entityId && ta.AgentId == scope.MeId, cancellationToken);
+            if (!isMember)
+                sources = sources.Where(s => !s.IsInternalOnly).ToList();
+        }
+
         return sources;
     }
 
@@ -57,6 +69,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             Type = input.Type,
             Title = title,
             Description = input.Description.TrimToNull(),
+            IsInternalOnly = input.IsInternalOnly,
         };
 
         switch (input.Type)

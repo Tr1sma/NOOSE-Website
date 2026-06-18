@@ -29,18 +29,23 @@
         {
             <MudPaper Class="pa-3" Elevation="1">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-wrap:wrap;">
                         <MudIcon Icon="@TypeIcon(q.Type)" Color="Color.Primary" Size="Size.Small" />
                         <MudText Typo="Typo.body2"><b>@q.Title</b></MudText>
                         @if (q.Pinned)
                         {
                             <MudIcon Icon="@Icons.Material.Filled.PushPin" Color="Color.Primary" Size="Size.Small" Title="Angepinnt" />
                         }
+                        @if (q.IsInternalOnly)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.Lock">Nur intern</MudChip>
+                        }
                     </MudStack>
                     @if (_mayWrite)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
-                            <PartnerChildShareButton Show="_canShareChildren" ChildType="@nameof(Source)" ChildId="@q.Id" />
+                            <PartnerChildShareButton Show="@(_canShareChildren && !q.IsInternalOnly)" ChildType="@nameof(Source)" ChildId="@q.Id" />
                             <MudIconButton Size="Size.Small"
                                            Icon="@(q.Pinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
                                            Color="@(q.Pinned ? Color.Primary : Color.Default)"
@@ -65,6 +70,11 @@
                     case SourceType.Internal when q.TargetType == nameof(Person) && q.TargetId is not null:
                         <MudLink Href="@($"/personen/{q.TargetId}")" Typo="Typo.body2" Class="d-block mt-1">
                             <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />Verknüpfte Akte öffnen
+                        </MudLink>
+                        break;
+                    case SourceType.Internal when q.TargetType == nameof(Case) && q.TargetId is not null:
+                        <MudLink Href="@($"/vorgaenge/{q.TargetId}")" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />Verknüpften Vorgang öffnen
                         </MudLink>
                         break;
                     case SourceType.FreeText:
@@ -121,7 +131,7 @@
 
     private async Task NewAsync()
     {
-        var input = await SourceDialog.ShowAsync(DialogService, User);
+        var input = await SourceDialog.ShowAsync(DialogService, User, showInternalToggle: EntityType == nameof(Taskforce));
         if (input is null)
         {
             return;

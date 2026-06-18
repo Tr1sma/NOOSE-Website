@@ -19,6 +19,9 @@ public class SourceInput
     /// <summary>Dialog-only: create a new document in the editor instead of referencing an existing one.</summary>
     public bool NewDocumentCreate { get; set; }
 
+    /// <summary>Taskforce-internal: hide from non-members.</summary>
+    public bool IsInternalOnly { get; set; }
+
     public byte[]? FileContent { get; set; }
     public string? OriginalName { get; set; }
     public string? ContentType { get; set; }

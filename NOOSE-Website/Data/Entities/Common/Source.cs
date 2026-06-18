@@ -53,6 +53,10 @@ public class Source : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
+    /// <summary>Taskforce-internal: visible only to members of the parent taskforce.</summary>
+    [Column("IstNurIntern")]
+    public bool IsInternalOnly { get; set; }
+
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]
