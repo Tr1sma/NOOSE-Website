@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Taskforces;
 
 namespace NOOSE_Website.Services;
 
@@ -61,6 +62,12 @@ public static class PartnerTabCatalog
             new("stammdaten", "Stammdaten"), new("inhalt", "Inhalt"), new("einstufung", "Einstufung"),
             new("quellen", "Quellen"), new("wiedervorlagen", "Wiedervorlagen"), new("kommentare", "Kommentare"),
             new("zusatzfelder", "Zusatzfelder"), new("historie", "Zeitstrahl"),
+        }),
+        new PartnerRecordType(nameof(Taskforce), "taskforces", "Taskforces", new PartnerTab[]
+        {
+            new("stammdaten", "Stammdaten"), new("quellen", "Quellen"),
+            new("wiedervorlagen", "Wiedervorlagen"), new("kommentare", "Kommentare"), new("zusatzfelder", "Zusatzfelder"),
+            new("historie", "Zeitstrahl"),
         }),
         new PartnerRecordType(nameof(Document), "dokumente", "Dokumente", Array.Empty<PartnerTab>()),
         new PartnerRecordType(nameof(Law), "gesetze", "Gesetzbuch", Array.Empty<PartnerTab>()),

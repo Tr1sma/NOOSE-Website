@@ -177,12 +177,15 @@ else
         try
         {
             var html = await _editor.GetHtmlAsync();
+            // documents created from a taskforce's sources are taskforce-internal
+            var isTaskforceDoc = !_edit && HasRecordsContext() && _entityType == nameof(Taskforce);
             var input = new DocumentInput
             {
                 Title = title,
                 Category = _category,
                 ContentHtml = html,
                 Classification = _classification,
+                OwnerTaskforceId = isTaskforceDoc ? _entityId : null,
             };
 
             string id;
@@ -196,7 +199,7 @@ else
                 var document = await DocumentService.CreateAsync(input, _user);
                 id = document.Id;
 
-                // Attach as a source when created from a record.
+                // Attach as a source when created from a record; keep taskforce docs internal.
                 if (HasRecordsContext())
                 {
                     await SourceService.CreateAsync(_entityType!, _entityId!, new SourceInput
@@ -205,6 +208,7 @@ else
                         Title = title,
                         TargetType = nameof(Document),
                         TargetId = id,
+                        IsInternalOnly = isTaskforceDoc,
                     }, _user);
                 }
             }

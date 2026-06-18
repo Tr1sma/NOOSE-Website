@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IPartnerVisibilityPolicyService PartnerPolicy
 
 <PageTitle>@(_taskforce?.Name ?? "Taskforce") · NOOSE</PageTitle>
 
@@ -28,8 +29,14 @@ else
                            Href="@($"/taskforces/{Id}/druck")" Target="_blank"
                            aria-label="Druckansicht öffnen" />
         </MudTooltip>
-        <FollowButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
-        <JobCreateButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" />
+        @if (!_isPartner)
+        {
+            <FollowButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
+            <JobCreateButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" />
+        }
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="freigabe">
+            <PartnerShareButton EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" />
+        </AuthorizeView>
         <AuthorizeView Policy="@Policies.Leadership">
             <MudMenu Label="Genehmigung" StartIcon="@Icons.Material.Filled.Gavel" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                      Variant="Variant.Outlined" Color="Color.Secondary">
@@ -46,9 +53,12 @@ else
         </AuthorizeView>
     </MudStack>
 
-    <MudPaper Class="pa-2 mb-4" Elevation="1">
-        <TagChips EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
-    </MudPaper>
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-2 mb-4" Elevation="1">
+            <TagChips EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
+        </MudPaper>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
@@ -58,9 +68,19 @@ else
         </MudItem>
 
         <MudItem xs="12" md="8" lg="9">
+            @if (_renderTabs.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Für Ihren Zugang sind in dieser Akte keine Bereiche freigegeben.
+                </MudAlert>
+            }
+            else
+            {
             <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
                      @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _tabs, _activeTab))">
+                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
+                @if (TabOn("stammdaten"))
+                {
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_taskforce.Purpose))
@@ -83,31 +103,59 @@ else
                         }
                     </MudStack>
                 </MudTabPanel>
+                }
+                @* assigned NOOSE agents: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <TaskforceAgentsPanel TaskforceId="@_taskforce.Id" User="_user" Changed="LeadRefreshAsync" />
                 </MudTabPanel>
+                }
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Chat" Icon="@Icons.Material.Filled.Forum">
                     <TaskforceChatPanel TaskforceId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @* relations panel is write-enabled and not partner-scoped: internal only *@
+                @if (!_isPartner)
+                {
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <TaskforceRelationsPanel TaskforceId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("quellen"))
+                {
                 <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("wiedervorlagen"))
+                {
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("kommentare"))
+                {
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("zusatzfelder"))
+                {
                 <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
+                }
+                @if (TabOn("historie"))
+                {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Taskforce)" EntityId="@_taskforce.Id" User="_user" @key="_historyKey" />
                 </MudTabPanel>
+                }
             </MudTabs>
+            }
         </MudItem>
     </MudGrid>
 }
@@ -117,6 +165,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
+    private bool _isPartner;
     private Taskforce? _taskforce;
     private List<(string Codename, TaskforceRole Role)> _lead = new();
     private ClaimsPrincipal _user = default!;
@@ -130,9 +179,19 @@ else
         "stammdaten", "agents", "chat", "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 
+    // tabs that are write-enabled or not partner-scoped, hidden from partners regardless of tab config
+    private static readonly HashSet<string> _internalOnlyTabs = new() { "agents", "chat", "beziehungen" };
+
+    // partner tab gating: null = no restriction (internal/unconfigured/individually released)
+    private IReadOnlySet<string>? _visibleTabs;
+    private List<string> _renderTabs = new();
+    private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
+    private void RebuildRenderTabs() => _renderTabs = _tabs.Where(s => (!_internalOnlyTabs.Contains(s) || !_isPartner) && TabOn(s)).ToList();
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _isPartner = _user.IsPartner();
     }
 
     // Component is reused across ids; react to id changes here since OnInitialized won't rerun
@@ -145,8 +204,8 @@ else
         _loadedId = Id;
         _load = true;
         _taskforce = null;
-        _activeTab = TabUrlState.Read(Nav, _tabs);
         await LoadAsync();
+        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_taskforce is not null)
         {
             await AccessLog.LogViewAsync(nameof(Taskforce), _taskforce.Id);
@@ -156,11 +215,17 @@ else
     private async Task LoadAsync()
     {
         // Don't set _load on reload: it would remount MudTabs and jump to the first tab
-        _taskforce = await TaskforceService.GetDetailAsync(Id, _user.MayAllTaskforcesSee(), _user.GetAgentId());
-        if (_taskforce is not null)
+        _taskforce = await TaskforceService.GetDetailAsync(Id, _user.MayAllTaskforcesSee(), _user.GetAgentId(),
+            partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
+        if (_taskforce is not null && !_isPartner)
         {
+            // partners: skip lead fan-out (internal codenames)
             await LeadLoadAsync();
         }
+        _visibleTabs = _isPartner && _taskforce is not null
+            ? await PartnerPolicy.GetVisibleTabsAsync(_user, nameof(Taskforce), _taskforce.Id)
+            : null;
+        RebuildRenderTabs();
         _load = false;
     }
 

@@ -640,14 +640,18 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .Where(o => o.Title.Contains(s) || o.CaseNumber.Contains(s))
             .OrderBy(o => o.Title).Take(max)
             .Select(o => new QuickHit(nameof(Operation), o.Id, o.Title, o.CaseNumber)).ToListAsync(cancellationToken);
+        var taskforces = await db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId)
+            .Where(t => t.Name.Contains(s) || t.CaseNumber.Contains(s))
+            .OrderBy(t => t.Name).Take(max)
+            .Select(t => new QuickHit(nameof(Taskforce), t.Id, t.Name, t.CaseNumber)).ToListAsync(cancellationToken);
         var cases = await db.Cases.OnlyPartnerVisible(db, agency, partnerAgentId)
             .Where(v => v.Title.Contains(s) || v.CaseNumber.Contains(s))
             .OrderBy(v => v.Title).Take(max)
             .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber)).ToListAsync(cancellationToken);
-        return Shuffle(people, factions, groups, parties, operations, cases).Take(max).ToList();
+        return Shuffle(people, factions, groups, parties, operations, taskforces, cases).Take(max).ToList();
     }
 
-    /// <summary>Global search for partners: released, non-classified releasable records; no content/taskforce/job categories.</summary>
+    /// <summary>Global search for partners: released, non-classified releasable records; no content/job categories.</summary>
     private async Task<List<SearchResultGroup>> SearchPartnerAsync(AppDbContext db, SearchCriteria criteria, PartnerAgency agency, string? partnerAgentId, CancellationToken cancellationToken)
     {
         var s = criteria.Text?.Trim();
@@ -763,6 +767,26 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
+            }
+        }
+
+        if (Active(nameof(Taskforce)))
+        {
+            var q = db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId);
+            if (hasText)
+            {
+                q = q.Where(t => t.Name.Contains(s!) || t.CaseNumber.Contains(s!)
+                    || (t.Purpose != null && t.Purpose.Contains(s!)));
+            }
+            if (hasTags)
+            {
+                q = q.Where(t => db.TagMappings.Any(z => z.EntityType == nameof(Taskforce) && z.EntityId == t.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderBy(t => t.Name).Take(MaxPerCategory)
+                .Select(t => new SearchHit(nameof(Taskforce), t.Id, t.Name, t.Purpose ?? string.Empty, t.CaseNumber)).ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(Taskforce), "Taskforces", hit));
             }
         }
 

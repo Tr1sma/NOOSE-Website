@@ -11,6 +11,7 @@ public static class PartnerRoutes
         "parteien",
         "operationen",
         "vorgaenge",
+        "taskforces",
         "dokumente",
         "gesetze",
         "suche",

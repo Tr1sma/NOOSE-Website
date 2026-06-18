@@ -79,8 +79,9 @@ else
         var user = (await AuthStateTask).User;
         _printBy = user.GetCodename();
 
-        // Same visibility as detail page: members only unless leadership
-        _taskforce = await TaskforceService.GetDetailAsync(Id, user.MayAllTaskforcesSee(), user.GetAgentId());
+        // Same visibility as detail page: members/leadership, or partners with a release
+        _taskforce = await TaskforceService.GetDetailAsync(Id, user.MayAllTaskforcesSee(), user.GetAgentId(),
+            partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         if (_taskforce is not null)
         {
             _links = await LinkService.GetForRecordAsync(nameof(Taskforce), Id, user.MayAllTaskforcesSee(), user.GetAgentId());

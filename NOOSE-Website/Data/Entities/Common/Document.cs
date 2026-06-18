@@ -56,6 +56,10 @@ public class Document : IAuditable, ISoftDelete
     [Column("Angepinnt")]
     public bool Pinned { get; set; }
 
+    /// <summary>When set, the document is taskforce-internal: visible only to that taskforce's members and leadership/admin, never to partners.</summary>
+    [Column("BesitzerTaskforceId")]
+    public string? OwnerTaskforceId { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

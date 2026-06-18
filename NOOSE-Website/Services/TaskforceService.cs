@@ -13,18 +13,27 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="ITaskforceService" />
 public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber) : ITaskforceService
 {
-    public async Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Taskforces
-            .OnlyVisible(db, mayAll, meId)
+        var query = partnerAgency is { } agency
+            ? db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId)
+            : db.Taskforces.OnlyVisible(db, mayAll, meId);
+        return await query
             .OrderByDescending(t => t.ModifiedAt ?? t.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<Taskforce?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default)
+    public async Task<Taskforce?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (partnerAgency is { } agency)
+        {
+            // partners: only released, non-classified taskforces
+            return await PartnerVisibility.IsRecordVisibleToPartnerAsync(db, nameof(Taskforce), id, agency, partnerAgentId, cancellationToken)
+                ? await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
+                : null;
+        }
         var taskforce = await db.Taskforces.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
         if (taskforce is null)
         {
@@ -48,10 +57,12 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Taskforce>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<Taskforce>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var query = db.Taskforces.OnlyVisible(db, mayAll, meId);
+        var query = partnerAgency is { } agency
+            ? db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId)
+            : db.Taskforces.OnlyVisible(db, mayAll, meId);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

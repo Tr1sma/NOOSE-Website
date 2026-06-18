@@ -14,12 +14,18 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
+        bool isLeadership = scope.IsLeadership;
+        string? meId = scope.MeId;
         var baseQuery = partnerAgency is { } agency
             ? db.Documents.OnlyPartnerVisible(db, agency, partnerAgentId)
             : db.Documents.Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
-                || mayClassified
-                || (d.IsTRUClassified && isTru)
-                || (d.IsHRBClassified && isHrb));
+                    || mayClassified
+                    || (d.IsTRUClassified && isTru)
+                    || (d.IsHRBClassified && isHrb))
+                // taskforce-internal: members and leadership/admin only
+                .Where(d => d.OwnerTaskforceId == null
+                    || isLeadership
+                    || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)));
         var rows = await baseQuery
             .OrderByDescending(d => d.Pinned)
             .ThenByDescending(d => d.ModifiedAt ?? d.CreatedAt)
@@ -33,10 +39,16 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
+        bool isLeadership = scope.IsLeadership;
+        string? meId = scope.MeId;
         var query = db.Documents.Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
-            || mayClassified
-            || (d.IsTRUClassified && isTru)
-            || (d.IsHRBClassified && isHrb));
+                || mayClassified
+                || (d.IsTRUClassified && isTru)
+                || (d.IsHRBClassified && isHrb))
+            // taskforce-internal: members and leadership/admin only
+            .Where(d => d.OwnerTaskforceId == null
+                || isLeadership
+                || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)));
 
         var s = searchText?.Trim();
         if (!string.IsNullOrWhiteSpace(s))
@@ -79,6 +91,12 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         {
             return null; // hide existence
         }
+        // taskforce-internal: members and leadership/admin only
+        if (document.OwnerTaskforceId is not null && !scope.IsLeadership
+            && !(scope.MeId is not null && await db.TaskforceAgents.AnyAsync(ta => ta.TaskforceId == document.OwnerTaskforceId && ta.AgentId == scope.MeId, cancellationToken)))
+        {
+            return null; // hide existence
+        }
         return document;
     }
 
@@ -98,6 +116,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
             Category = input.Category.TrimToNull(),
             ContentHtml = HtmlCleanup.Clean(input.ContentHtml),
             Classification = input.Classification,
+            OwnerTaskforceId = input.OwnerTaskforceId.TrimToNull(),
         };
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

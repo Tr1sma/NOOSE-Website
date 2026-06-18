@@ -97,7 +97,8 @@ else
     {
         var user = (await AuthStateTask).User;
         // Only assigned taskforces; leadership sees all
-        var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId());
+        var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId(),
+            partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Taskforce));
         var now = DateTime.UtcNow;
         _rows = taskforces.Select(t =>

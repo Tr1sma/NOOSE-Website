@@ -7,6 +7,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -17,7 +18,8 @@ public static class PartnerVisibility
     /// <summary>Record types that can be released to partners; everything else is never partner-visible.</summary>
     public static bool IsReleasableType(string entityType) => entityType is
         nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
-        or nameof(Operation) or nameof(Case) or nameof(Document) or nameof(Law);
+        or nameof(Operation) or nameof(Case) or nameof(Document) or nameof(Law)
+        or nameof(Taskforce);
 
     /// <summary>True if an active share row grants this record to the agency or the viewer's account (whole or shell).</summary>
     public static Task<bool> HasShareAsync(AppDbContext db, string entityType, string entityId, PartnerAgency agency, string? partnerAgentId, CancellationToken cancellationToken = default)
@@ -50,10 +52,12 @@ public static class PartnerVisibility
                 .Where(p => p.Id == entityId).Select(p => (bool?)p.IsClassified).FirstOrDefaultAsync(cancellationToken),
             nameof(Operation) => await db.Operations
                 .Where(o => o.Id == entityId).Select(o => (bool?)o.IsClassified).FirstOrDefaultAsync(cancellationToken),
+            nameof(Taskforce) => await db.Taskforces
+                .Where(t => t.Id == entityId).Select(t => (bool?)t.IsClassified).FirstOrDefaultAsync(cancellationToken),
             nameof(Case) => await db.Cases
                 .Where(v => v.Id == entityId).Select(v => (bool?)v.IsClassified).FirstOrDefaultAsync(cancellationToken),
             nameof(Document) => await db.Documents
-                .Where(d => d.Id == entityId).Select(d => (bool?)(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified)).FirstOrDefaultAsync(cancellationToken),
+                .Where(d => d.Id == entityId).Select(d => (bool?)(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified || d.OwnerTaskforceId != null)).FirstOrDefaultAsync(cancellationToken),
             nameof(Law) => await db.Laws
                 .Where(g => g.Id == entityId).Select(g => (bool?)false).FirstOrDefaultAsync(cancellationToken),
             _ => null,
@@ -159,11 +163,16 @@ public static class PartnerVisibility
                 && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
 
     public static IQueryable<Document> OnlyPartnerVisible(this IQueryable<Document> query, AppDbContext db, PartnerAgency agency, string? partnerAgentId)
-        => query.Where(d => !(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified)
+        => query.Where(d => !(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified) && d.OwnerTaskforceId == null
             && db.PartnerShares.Any(s => s.EntityType == nameof(Document) && s.EntityId == d.Id && s.Agency == agency
                 && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
 
     public static IQueryable<Law> OnlyPartnerVisible(this IQueryable<Law> query, AppDbContext db, PartnerAgency agency, string? partnerAgentId)
         => query.Where(l => db.PartnerShares.Any(s => s.EntityType == nameof(Law) && s.EntityId == l.Id && s.Agency == agency
             && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
+
+    public static IQueryable<Taskforce> OnlyPartnerVisible(this IQueryable<Taskforce> query, AppDbContext db, PartnerAgency agency, string? partnerAgentId)
+        => query.Where(t => !t.IsClassified
+            && db.PartnerShares.Any(s => s.EntityType == nameof(Taskforce) && s.EntityId == t.Id && s.Agency == agency
+                && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
 }

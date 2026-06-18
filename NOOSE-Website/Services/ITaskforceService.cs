@@ -9,10 +9,10 @@ namespace NOOSE_Website.Services;
 /// <summary>Taskforce business logic: list, detail, CRUD, approval, agents, history.</summary>
 public interface ITaskforceService
 {
-    Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default);
-    Task<Taskforce?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default);
+    Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
+    Task<Taskforce?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
     Task<List<Taskforce>> GetTrashAsync(CancellationToken cancellationToken = default);
-    Task<List<Taskforce>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default);
+    Task<List<Taskforce>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
 
     /// <summary>Requested taskforces, oldest first.</summary>
     Task<List<Taskforce>> GetRequestedAsync(CancellationToken cancellationToken = default);

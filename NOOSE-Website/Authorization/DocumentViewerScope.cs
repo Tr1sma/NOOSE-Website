@@ -4,11 +4,11 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Authorization;
 
 /// <summary>Document-library classification visibility for a viewer, so services can filter levels server-side without per-request claim eval.</summary>
-public readonly record struct DocumentViewerScope(bool MayClassified, bool IsTru, bool IsHrb)
+public readonly record struct DocumentViewerScope(bool MayClassified, bool IsTru, bool IsHrb, bool IsLeadership, string? MeId)
 {
     /// <summary>Derives the visibility scope from the signed-in agent's claims.</summary>
     public static DocumentViewerScope From(ClaimsPrincipal user)
-        => new(user.MayClassifiedRead(), user.IsTRU(), user.IsHRB());
+        => new(user.MayClassifiedRead(), user.IsTRU(), user.IsHRB(), user.IsLeadership(), user.GetAgentId());
 
     public bool CanSee(DocumentClassification classification) => classification switch
     {

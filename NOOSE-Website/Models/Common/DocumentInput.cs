@@ -13,4 +13,7 @@ public class DocumentInput
 
     /// <summary>Classification level; the service checks the actor may set it.</summary>
     public DocumentClassification Classification { get; set; }
+
+    /// <summary>When set, the document is taskforce-internal (created from a taskforce's sources).</summary>
+    public string? OwnerTaskforceId { get; set; }
 }

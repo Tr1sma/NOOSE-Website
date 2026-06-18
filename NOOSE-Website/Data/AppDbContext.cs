@@ -349,9 +349,11 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(d => d.Title).HasMaxLength(300).IsRequired();
             b.Property(d => d.Category).HasMaxLength(120);
             b.Property(d => d.ContentHtml).HasColumnType("longtext");
+            b.Property(d => d.OwnerTaskforceId).HasMaxLength(40);
             b.HasIndex(d => d.Title);
             b.HasIndex(d => d.Category);
             b.HasIndex(d => d.IsClassified);
+            b.HasIndex(d => d.OwnerTaskforceId);
         });
 
         modelBuilder.Entity<DocumentTemplate>(b =>

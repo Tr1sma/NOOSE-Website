@@ -7,6 +7,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Navigation;
@@ -118,6 +119,7 @@ public static class NavCatalog
         nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
         nameof(Party) => Icons.Material.Filled.AccountBalance,
         nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
         nameof(Case) => Icons.Material.Filled.FolderSpecial,
         nameof(Document) => Icons.Material.Filled.MenuBook,
         nameof(Law) => Icons.Material.Filled.Gavel,
