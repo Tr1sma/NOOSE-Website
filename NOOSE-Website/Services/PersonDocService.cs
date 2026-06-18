@@ -92,17 +92,27 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
                 .ToDictionaryAsync(g => g.Id, g => (g.Name, g.CaseNumber), cancellationToken);
         }
 
+        var creatorIds = docs.Where(d => d.CreatedById is not null).Select(d => d.CreatedById!).Distinct().ToList();
+        var creators = new Dictionary<string, string>();
+        if (creatorIds.Count > 0)
+        {
+            creators = await db.Users
+                .Where(a => creatorIds.Contains(a.Id))
+                .ToDictionaryAsync(a => a.Id, a => a.Codename, cancellationToken);
+        }
+
         return docs.Select(d =>
         {
+            var codename = d.CreatedById is not null && creators.TryGetValue(d.CreatedById, out var cn) ? cn : null;
             if (d.OrgId is not null && d.OrgType == nameof(Faction) && factions.TryGetValue(d.OrgId, out var f))
             {
-                return new PersonDocDisplay(d, f.Name, f.CaseNumber, $"/fraktionen/{d.OrgId}");
+                return new PersonDocDisplay(d, f.Name, f.CaseNumber, $"/fraktionen/{d.OrgId}", codename);
             }
             if (d.OrgId is not null && d.OrgType == nameof(PersonGroup) && groups.TryGetValue(d.OrgId, out var g))
             {
-                return new PersonDocDisplay(d, g.Name, g.CaseNumber, $"/personengruppen/{d.OrgId}");
+                return new PersonDocDisplay(d, g.Name, g.CaseNumber, $"/personengruppen/{d.OrgId}", codename);
             }
-            return new PersonDocDisplay(d, null, null, null);
+            return new PersonDocDisplay(d, null, null, null, codename);
         }).ToList();
     }
 

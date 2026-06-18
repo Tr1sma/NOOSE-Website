@@ -36,6 +36,7 @@ else
             <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Person?.Name)">Person</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Person?.CaseNumber)">Aktenzeichen</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Timestamp)" InitialDirection="SortDirection.Descending">Zeitpunkt</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.CreatedByCodename)">Agent</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => MeasureOutcomeDisplay.Name(x.Doc.Outcome))">Ausgang</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.OrgName ?? x.Doc.Faction)">Fraktion</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel T="PersonDocDisplay" SortBy="@(x => x.Doc.Reason)">Grund</MudTableSortLabel></MudTh>
@@ -55,6 +56,9 @@ else
             </MudTd>
             <MudTd DataLabel="Zeitpunkt">
                 <MudText Typo="Typo.body2">@context.Doc.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Agent">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.CreatedByCodename ?? "—")</MudText>
             </MudTd>
             <MudTd DataLabel="Ausgang">
                 <MudText Typo="Typo.body2">@MeasureOutcomeDisplay.Name(context.Doc.Outcome)</MudText>
@@ -121,7 +125,8 @@ else
         return (doc.Person?.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
             || (doc.Person?.CaseNumber?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
             || (display.OrgName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (doc.Faction?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+            || (doc.Faction?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (display.CreatedByCodename?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
     private async Task Open(PersonDocDisplay? display)
