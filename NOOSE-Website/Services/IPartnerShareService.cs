@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -44,4 +45,22 @@ public interface IPartnerShareService
 
     /// <summary>Release or withdraw a whole record type for one agency at once; returns how many records were newly released (or withdrawn).</summary>
     Task<int> SetTypeAsync(string entityType, PartnerAgency agency, bool released, bool includesChildren, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    // ---- Request workflow (agents below leadership submit; leadership decides) ----
+
+    /// <summary>Submit a release request for a record to an agency; any non-partner write-access agent may call this.</summary>
+    Task RequestPartnerShareAsync(ClaimsPrincipal actor, string entityType, string entityId,
+        PartnerAgency agency, string? partnerAgentId, bool includesChildren, string justification,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Pending partner-release requests (leadership inbox).</summary>
+    Task<List<Request>> GetPendingPartnerShareRequestsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Approve a pending partner-release request; creates the PartnerShare and marks the request Approved.</summary>
+    Task ApprovePartnerShareRequestAsync(ClaimsPrincipal actor, string requestId, string? note,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reject a pending partner-release request.</summary>
+    Task RejectPartnerShareRequestAsync(ClaimsPrincipal actor, string requestId, string? note,
+        CancellationToken cancellationToken = default);
 }

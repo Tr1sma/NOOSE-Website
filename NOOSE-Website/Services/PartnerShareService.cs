@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Cases;
@@ -9,6 +10,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -227,4 +229,128 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
                 return new PartnerShareState(agency, row is not null, row?.IncludesChildren ?? false);
             })
             .ToList();
+
+    public async Task RequestPartnerShareAsync(ClaimsPrincipal actor, string entityType, string entityId,
+        PartnerAgency agency, string? partnerAgentId, bool includesChildren, string justification,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        if (string.IsNullOrWhiteSpace(justification))
+            throw new InvalidOperationException("Bitte eine Begründung für den Freigabe-Antrag angeben.");
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // block if already released agency-wide
+        if (await db.PartnerShares.AnyAsync(s =>
+            s.EntityType == entityType && s.EntityId == entityId &&
+            s.Agency == agency && s.PartnerAgentId == null, cancellationToken))
+        {
+            throw new InvalidOperationException("Diese Akte ist für diese Behörde bereits freigegeben.");
+        }
+
+        // dedup: no other pending request for the same target + agency
+        if (await db.Requests.AnyAsync(r =>
+            r.Type == RequestType.PartnerFreigabe &&
+            r.TargetType == entityType && r.TargetId == entityId &&
+            r.FreigabeAgency == agency &&
+            r.Status == RequestStatus.Requested, cancellationToken))
+        {
+            throw new InvalidOperationException("Für diese Akte läuft bereits ein Freigabe-Antrag für diese Behörde.");
+        }
+
+        var designation = await GetDesignationAsync(db, entityType, entityId, cancellationToken);
+        db.Requests.Add(new Request
+        {
+            Type = RequestType.PartnerFreigabe,
+            TargetType = entityType,
+            TargetId = entityId,
+            TargetDesignation = designation,
+            FreigabeAgency = agency,
+            FreigabePartnerAgentId = partnerAgentId,
+            FreigabeIncludesChildren = includesChildren,
+            Justification = justification.Trim(),
+            Status = RequestStatus.Requested,
+            RequesterName = actor.GetCodename(),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<Request>> GetPendingPartnerShareRequestsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Requests
+            .Where(r => r.Type == RequestType.PartnerFreigabe && r.Status == RequestStatus.Requested)
+            .OrderBy(r => r.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task ApprovePartnerShareRequestAsync(ClaimsPrincipal actor, string requestId, string? note,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        var request = await db.Requests.FirstOrDefaultAsync(r => r.Id == requestId, cancellationToken)
+            ?? throw new InvalidOperationException("Antrag nicht gefunden.");
+        if (request.Type != RequestType.PartnerFreigabe)
+            throw new InvalidOperationException("Ungültiger Antragstyp.");
+        if (request.Status != RequestStatus.Requested)
+            throw new InvalidOperationException("Dieser Antrag wurde bereits entschieden.");
+
+        await UpsertAsync(db, request.TargetType, request.TargetId,
+            request.FreigabeAgency!.Value, request.FreigabePartnerAgentId,
+            released: true, request.FreigabeIncludesChildren, cancellationToken);
+
+        request.Status = RequestStatus.Approved;
+        request.DeciderName = actor.GetCodename();
+        request.DecidedAt = DateTime.UtcNow;
+        request.DecisionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+
+        await db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+    }
+
+    public async Task RejectPartnerShareRequestAsync(ClaimsPrincipal actor, string requestId, string? note,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var request = await db.Requests.FirstOrDefaultAsync(r => r.Id == requestId, cancellationToken)
+            ?? throw new InvalidOperationException("Antrag nicht gefunden.");
+        if (request.Type != RequestType.PartnerFreigabe)
+            throw new InvalidOperationException("Ungültiger Antragstyp.");
+        if (request.Status != RequestStatus.Requested)
+            throw new InvalidOperationException("Dieser Antrag wurde bereits entschieden.");
+
+        request.Status = RequestStatus.Rejected;
+        request.DeciderName = actor.GetCodename();
+        request.DecidedAt = DateTime.UtcNow;
+        request.DecisionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task<string> GetDesignationAsync(AppDbContext db, string entityType, string entityId, CancellationToken ct)
+        => entityType switch
+        {
+            nameof(Person) => await db.People.Where(p => p.Id == entityId)
+                .Select(p => p.Name + " (" + p.CaseNumber + ")").FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(Faction) => await db.Factions.Where(f => f.Id == entityId)
+                .Select(f => f.Name + " (" + f.CaseNumber + ")").FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(PersonGroup) => await db.PersonGroups.Where(g => g.Id == entityId)
+                .Select(g => g.Name + " (" + g.CaseNumber + ")").FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(Party) => await db.Parties.Where(p => p.Id == entityId)
+                .Select(p => p.Name + " (" + p.CaseNumber + ")").FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(Operation) => await db.Operations.Where(o => o.Id == entityId)
+                .Select(o => o.Title + " (" + o.CaseNumber + ")").FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(Case) => await db.Cases.Where(c => c.Id == entityId)
+                .Select(c => c.Title + " (" + c.CaseNumber + ")").FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(Document) => await db.Documents.Where(d => d.Id == entityId)
+                .Select(d => d.Title).FirstOrDefaultAsync(ct) ?? entityId,
+            nameof(Law) => await db.Laws.Where(l => l.Id == entityId)
+                .Select(l => l.Title).FirstOrDefaultAsync(ct) ?? entityId,
+            _ => entityId,
+        };
 }

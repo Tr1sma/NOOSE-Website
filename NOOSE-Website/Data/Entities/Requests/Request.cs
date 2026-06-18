@@ -57,6 +57,16 @@ public class Request : IAuditable, ISoftDelete
     [Column("Entscheidungsnotiz")]
     public string? DecisionNote { get; set; }
 
+    // ---- Partner-Freigabe fields (only set when Type == PartnerFreigabe) ----
+    [Column("FreigabeBehoerde")]
+    public PartnerAgency? FreigabeAgency { get; set; }
+
+    [Column("FreigabePartnerAgentId")]
+    public string? FreigabePartnerAgentId { get; set; }
+
+    [Column("FreigabeInklusiveKinder")]
+    public bool FreigabeIncludesChildren { get; set; }
+
     // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

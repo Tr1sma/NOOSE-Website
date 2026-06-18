@@ -68,7 +68,7 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var open = await db.Requests
-            .Where(a => a.Status == RequestStatus.Requested)
+            .Where(a => a.Status == RequestStatus.Requested && a.Type == RequestType.Upgrade)
             .OrderBy(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -85,7 +85,14 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
     }
 
     public async Task<int> GetOpenCountAsync(bool isLeadership, CancellationToken cancellationToken = default)
-        => (await GetOpenAsync(isLeadership, cancellationToken)).Count;
+    {
+        var upgradeCount = (await GetOpenAsync(isLeadership, cancellationToken)).Count;
+        if (!isLeadership) return upgradeCount;
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var partnerCount = await db.Requests
+            .CountAsync(r => r.Type == RequestType.PartnerFreigabe && r.Status == RequestStatus.Requested, cancellationToken);
+        return upgradeCount + partnerCount;
+    }
 
     public async Task<List<Request>> GetMyAsync(string agentId, CancellationToken cancellationToken = default)
     {

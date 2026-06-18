@@ -5,6 +5,8 @@ public enum RequestType
 {
     /// <summary>Classification upgrade request.</summary>
     Upgrade = 0,
+    /// <summary>Partner-agency record release request.</summary>
+    PartnerFreigabe = 1,
 }
 
 /// <summary>Display labels.</summary>
@@ -13,6 +15,7 @@ public static class RequestTypeDisplay
     public static string Name(RequestType type) => type switch
     {
         RequestType.Upgrade => "Hochstufung",
+        RequestType.PartnerFreigabe => "Partner-Freigabe",
         _ => "—",
     };
 }

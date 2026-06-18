@@ -6,6 +6,7 @@
 @inject ITaskforceService TaskforceService
 @inject IPersonnelFileService PersonnelFileService
 @inject IRequestService RequestService
+@inject IPartnerShareService PartnerShareService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject SharesBroadcaster SharesBroadcaster
@@ -17,8 +18,8 @@
     <MudText Typo="Typo.h4">Freigabe-Posteingang</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Hochstufungs-Anträge sowie – für die Führung – neu registrierte Discord-Konten, beantragte
-    Stammdatenänderungen, Taskforce- und Beförderungsanträge warten hier auf Entscheidung.
+    Hochstufungs-Anträge sowie – für die Führung – Partner-Freigabe-Anträge, neu registrierte Discord-Konten,
+    beantragte Stammdatenänderungen, Taskforce- und Beförderungsanträge warten hier auf Entscheidung.
 </MudText>
 
 @if (_load)
@@ -296,6 +297,56 @@ else
             </RowTemplate>
         </MudTable>
     }
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h6" Class="mb-2">Partner-Freigabe-Anträge</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Agenten unterhalb Supervisory können beantragen, dass eine Akte für eine Partnerbehörde freigegeben wird.
+        Bei Genehmigung wird die Freigabe automatisch gesetzt.
+    </MudText>
+    @if (_openPartnerRequests.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Partner-Freigabe-Anträge.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_openPartnerRequests" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.TargetDesignation)">Akte</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.FreigabeAgency)">Behörde</MudTableSortLabel></MudTh>
+                <MudTh>Ganze Akte</MudTh>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.Justification)">Begründung</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Request" SortBy="@(x => x.CreatedAt)">Beantragt</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Akte">
+                    <MudLink Href="@SearchNavigation.Route(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Behörde">
+                    <MudText Typo="Typo.body2">@(context.FreigabeAgency.HasValue ? PartnerAgencyDisplay.Name(context.FreigabeAgency.Value) : "—")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Ganze Akte">
+                    <MudIcon Icon="@(context.FreigabeIncludesChildren ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+                             Color="@(context.FreigabeIncludesChildren ? Color.Success : Color.Default)" Size="Size.Small" />
+                </MudTd>
+                <MudTd DataLabel="Begründung">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Justification) ? "—" : context.Justification)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => PartnerRequestDecide(context, true)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => PartnerRequestDecide(context, false)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
     </AuthorizeView>
 }
 
@@ -306,6 +357,7 @@ else
     private bool _load = true;
     private bool _isLeadership;
     private List<Request> _openUpgrades = new();
+    private List<Request> _openPartnerRequests = new();
     private List<Agent> _pending = new();
     private List<Agent> _nameChanges = new();
     private List<Taskforce> _requestedTaskforces = new();
@@ -351,6 +403,7 @@ else
         // Die übrigen vier Posteingangs-Bereiche sind der Führung vorbehalten.
         if (_isLeadership)
         {
+            _openPartnerRequests = await PartnerShareService.GetPendingPartnerShareRequestsAsync();
             _pending = await AgentService.GetPendingAsync();
             _nameChanges = await AgentService.GetPendingNameChangesAsync();
             _requestedTaskforces = await TaskforceService.GetRequestedAsync();
@@ -523,6 +576,43 @@ else
             Snackbar.Add(approved
                 ? $"Beförderung von {AgentName(request.AgentId)} genehmigt."
                 : $"Beförderungsantrag von {AgentName(request.AgentId)} abgelehnt.", approved ? Severity.Success : Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task PartnerRequestDecide(Request request, bool approved)
+    {
+        var agencyName = request.FreigabeAgency.HasValue ? PartnerAgencyDisplay.Name(request.FreigabeAgency.Value) : "Behörde";
+        var note = await ReasonDialog.ShowAsync(DialogService,
+            approved
+                ? $"Freigabe von {request.TargetDesignation} fuer {agencyName} genehmigen?"
+                : $"Freigabe-Antrag fuer {request.TargetDesignation} ablehnen?",
+            approved
+                ? "Die Akte wird fuer die Behoerde freigegeben. Eine Notiz ist optional."
+                : "Der Antrag wird abgelehnt. Eine Notiz ist optional.",
+            confirmText: approved ? "Genehmigen" : "Ablehnen",
+            label: "Notiz (optional)",
+            colour: approved ? Color.Success : Color.Error);
+        if (note is null)
+        {
+            return; // abgebrochen
+        }
+        try
+        {
+            if (approved)
+            {
+                await PartnerShareService.ApprovePartnerShareRequestAsync(_user, request.Id, string.IsNullOrWhiteSpace(note) ? null : note);
+                Snackbar.Add($"Freigabe von {request.TargetDesignation} genehmigt.", Severity.Success);
+            }
+            else
+            {
+                await PartnerShareService.RejectPartnerShareRequestAsync(_user, request.Id, string.IsNullOrWhiteSpace(note) ? null : note);
+                Snackbar.Add($"Freigabe-Antrag von {request.TargetDesignation} abgelehnt.", Severity.Info);
+            }
         }
         catch (Exception ex)
         {

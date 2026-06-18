@@ -46,7 +46,7 @@ else
         {
             <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
         }
-        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="freigabe">
             <PartnerShareButton EntityType="@nameof(Document)" EntityId="@_document.Id" />
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">

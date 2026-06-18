@@ -34,7 +34,7 @@ else
             <FollowButton EntityType="@nameof(Operation)" EntityId="@_operation.Id" User="_user" />
             <JobCreateButton EntityType="@nameof(Operation)" EntityId="@_operation.Id" />
         }
-        <AuthorizeView Policy="@Policies.Leadership" Context="freigabe">
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="freigabe">
             <PartnerShareButton EntityType="@nameof(Operation)" EntityId="@_operation.Id" />
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
