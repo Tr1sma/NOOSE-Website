@@ -1,4 +1,3 @@
-@* Aktivitäten-Zeitstrahl einer Fraktion: Aktionen (z. B. Raub/Geiselnahme) chronologisch, mit Dokument-/Quellen-Verknüpfung je Eintrag. *@
 @inject IFactionService FactionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -71,7 +70,7 @@
                             <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@a.Description</MudText>
                         }
 
-                        @* Dokumente/Anhänge je Aktivität – generische Quellen-Engine; nur laden, wenn aufgeklappt. *@
+                        @* lazy-load sources only when expanded *@
                         <MudExpansionPanels Elevation="0" Dense="true" Class="mt-1">
                             <MudExpansionPanel Text="Quellen &amp; Anhänge" Icon="@Icons.Material.Filled.AttachFile"
                                                Expanded="@_open.Contains(a.Id)" ExpandedChanged="@(v => Toggle(a.Id, v))">
@@ -140,7 +139,7 @@
 
     private async Task EditAsync(FactionActivity a)
     {
-        // Vorhandene Werte mit lokalem Zeitpunkt in den Dialog geben (der Dienst speichert wieder als UTC).
+        // pass local time to dialog; service stores back as UTC
         var exists = new ActivityInput
         {
             Title = a.Title,
@@ -199,7 +198,7 @@
         }
     }
 
-    // Deterministische Farbe je Art (gleiche Art → gleiche Farbe im Zeitstrahl); ohne Art neutral.
+    // deterministic colour per kind
     private static readonly Color[] _palette =
     {
         Color.Primary, Color.Secondary, Color.Info, Color.Success, Color.Warning, Color.Error, Color.Tertiary,

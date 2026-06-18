@@ -1,6 +1,6 @@
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Eingabemodell für Anlegen/Bearbeiten eines Paragrafen im Gesetzbuch-Modul (Phase 7).</summary>
+/// <summary>Input model for a law-book paragraph.</summary>
 public class LawInput
 {
     public string LawBook { get; set; } = string.Empty;

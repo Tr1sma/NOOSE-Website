@@ -1,6 +1,4 @@
-@* Volltext-WYSIWYG-Editor zum Erstellen/Bearbeiten eines Bibliotheks-Dokuments. Optional: aus einer
-   Akte heraus gestartet (?entitaetTyp=…&entitaetId=…&attach=1) → das Dokument wird beim Speichern als
-   Quelle an die Akte gehängt. Optional: Vorlage vorausgewählt (?vorlageId=…). *@
+@* WYSIWYG editor to create/edit a library document; may attach to a record or preselect a template via query. *@
 @page "/dokumente/neu"
 @page "/dokumente/{Id}/bearbeiten"
 @inject IDocumentService DocumentService
@@ -95,7 +93,7 @@ else
     private List<DocumentTemplate> _templates = new();
     private string? _selectedTemplateId;
 
-    // Akten-Kontext (aus der Quellen-Ansicht heraus gestartet).
+    // Record context when launched from a source view.
     private string? _entityType;
     private string? _entityId;
     private bool _attach;
@@ -127,8 +125,7 @@ else
         else
         {
             _templates = await TemplateService.GetActiveAsync();
-            // Vorab gewählte Vorlage (Platzhalter direkt in den Initial-Inhalt einsetzen, da der Editor
-            // den Wert nur beim Initialisieren liest).
+            // Editor reads the value only on init, so inject the template into the initial content.
             if (!string.IsNullOrEmpty(templateId))
             {
                 var template = _templates.FirstOrDefault(v => v.Id == templateId);
@@ -199,7 +196,7 @@ else
                 var document = await DocumentService.CreateAsync(input, _user);
                 id = document.Id;
 
-                // Beim Anlegen aus einer Akte heraus: direkt als Dokument-Quelle anhängen.
+                // Attach as a source when created from a record.
                 if (HasRecordsContext())
                 {
                     await SourceService.CreateAsync(_entityType!, _entityId!, new SourceInput

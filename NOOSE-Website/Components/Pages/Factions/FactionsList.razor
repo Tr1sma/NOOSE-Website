@@ -37,7 +37,6 @@ else
             <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        @* Titelbild als kleines Vorschaubild (falls markiert), sonst neutraler Platzhalter. *@
                         @if (!string.IsNullOrEmpty(context.Item.TitleImagePhotoId))
                         {
                             <MudImage Src="@($"/dateien/fraktionen/foto/{context.Item.TitleImagePhotoId}")" Alt="Titelbild"
@@ -47,7 +46,7 @@ else
                         {
                             <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Default" Size="Size.Small" />
                         }
-                        @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                        @* real link: middle/ctrl-click and keyboard/screen-reader access *@
                         <MudLink Href="@($"/fraktionen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                     </MudStack>
                 </CellTemplate>
@@ -136,7 +135,7 @@ else
                 CaseNumber = f.CaseNumber,
                 Name = f.Name,
                 Kind = f.Kind ?? "—",
-                // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
+                // count only members with a visible record
                 // partners: hide member count
                 MemberCount = isPartner ? 0 : f.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 TitleImagePhotoId = f.Photos.FirstOrDefault(x => x.IsTitleImage)?.Id,
@@ -147,7 +146,7 @@ else
                 IsClassified = f.IsClassified,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                // Staatsfraktionen können nicht veralten – Ampel bleibt dauerhaft „Aktuell".
+                // state factions never go stale
                 Level = f.IsStateFaction ? RecencyLevel.Fresh : RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
             };
         }).ToList();

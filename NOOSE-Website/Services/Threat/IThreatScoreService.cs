@@ -1,29 +1,20 @@
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Berechnet &amp; persistiert den automatischen Bedrohungs-Score einer Fraktion (Algorithmus „EHK-Score",
-/// siehe AlgoPlan.md). Schreibt <c>BedrohungsScore</c>/<c>BedrohungsKonfidenz</c>/<c>BedrohungsDetailJson</c>/
-/// <c>ScoreBerechnetAm</c> via <c>ExecuteUpdateAsync</c> am Audit-Interceptor vorbei (kein <c>GeaendertAm</c>-Stempel,
-/// keine AuditLog-Flut). Wird ereignisgetrieben aus den schreibenden Diensten und zeitgetrieben aus dem
-/// nächtlichen Sweep-Dienst aufgerufen.
-/// </summary>
+/// <summary>Computes and persists the automatic threat score (EHK-Score, see AlgoPlan.md) via ExecuteUpdateAsync past the audit interceptor (no modified stamp, no audit-log flood). Called event-driven and from the nightly sweep.</summary>
 public interface IThreatScoreService
 {
-    /// <summary>Berechnet den Score einer Fraktion neu und persistiert ihn. Idempotent; eigener DbContext.
-    /// Gelöschte Fraktionen werden übersprungen, Staatsfraktionen auf <c>null</c> gesetzt.</summary>
+    /// <summary>Recomputes and persists a faction's score. Idempotent; own DbContext. Deleted factions skipped, state factions set to null.</summary>
     Task NewCalculateAsync(string factionId, CancellationToken cancellationToken = default);
 
-    /// <summary>Rechnet alle Fraktionen neu, in denen die Person je Mitglied war (austritts-stabil), neu –
-    /// nach einer Änderung an deren Maßnahmen-Doks aufzurufen.</summary>
+    /// <summary>Recomputes every faction the person was ever a member of; call after a change to their measure docs.</summary>
     Task NewCalculateForPersonAsync(string personId, CancellationToken cancellationToken = default);
 
-    /// <summary>Rechnet alle nicht gelöschten Fraktionen neu (nächtlicher Sweep gegen Decay-Drift).
-    /// Liefert die Anzahl tatsächlich berechneter Fraktionen.</summary>
+    /// <summary>Recomputes all non-deleted factions (nightly sweep against decay drift). Returns the count actually computed.</summary>
     Task<int> NewCalculateAllAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Berechnet den Score einer Person neu und persistiert ihn. Idempotent; eigener DbContext.</summary>
+    /// <summary>Recomputes and persists a person's score. Idempotent; own DbContext.</summary>
     Task NewCalculatePersonScoreAsync(string personId, CancellationToken cancellationToken = default);
 
-    /// <summary>Rechnet alle nicht gelöschten Personen neu (Sweep gegen Decay-Drift). Liefert die Anzahl.</summary>
+    /// <summary>Recomputes all non-deleted persons (sweep against decay drift). Returns the count.</summary>
     Task<int> NewCalculateAllPeopleScoresAsync(CancellationToken cancellationToken = default);
 }

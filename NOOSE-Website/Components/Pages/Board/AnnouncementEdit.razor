@@ -74,8 +74,7 @@ else
         var detail = await BoardService.GetDetailAsync(Id, _user);
         if (detail is not null)
         {
-            // Bearbeiten ist Verfasser/Führung vorbehalten (serverseitig in AktualisierenAsync erzwungen) – hier
-            // proaktiv gespiegelt, damit kein nicht-berechtigtes Formular erscheint.
+            // mirror server-side edit gate so no unauthorized form appears
             if (!detail.Row.MayManage)
             {
                 _noAccess = true;

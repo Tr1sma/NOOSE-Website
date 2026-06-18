@@ -15,7 +15,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
     public async Task<List<ObservationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Eigenständige Sichtbarkeitsprüfung der Eltern-Person (nicht nur auf den Aufrufer verlassen).
+        // independently re-check parent visibility
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, scope, cancellationToken))
         {
             return new();
@@ -36,7 +36,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var entries = await db.Observations
             .Include(o => o.Person)
-            // Der Soft-Delete-Filter setzt Person bei gelöschten Akten auf null → solche Einträge ausblenden.
+            // soft-deleted parent surfaces as null → hide those
             .Where(o => o.Person != null && (isLeadership || !o.Person.IsClassified))
             .OrderByDescending(o => o.Start)
             .ToListAsync(cancellationToken);
@@ -46,14 +46,14 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
     public async Task<List<ObservationDisplay>> GetForOrgAsync(string orgType, string orgId, bool isLeadership, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Sichtbarkeit der Organisations-Akte selbst prüfen.
+        // check the org record's own visibility
         if (!await Visibility.IsRecordVisibleAsync(db, orgType, orgId, isLeadership, cancellationToken))
         {
             return new();
         }
         var entries = await db.Observations
             .Include(o => o.Person)
-            // Person == null → Akte im Papierkorb; Verschlusssache-Personen nur für Führung.
+            // null person = trashed; classified persons leadership-only
             .Where(o => o.OrgType == orgType && o.OrgId == orgId
                 && o.Person != null && (isLeadership || !o.Person.IsClassified))
             .OrderByDescending(o => o.Start)
@@ -61,15 +61,9 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         return await ToDisplayAsync(db, entries, isLeadership, cancellationToken);
     }
 
-    /// <summary>
-    /// Reichert geladene Observationen mit Anzeigedaten an: den Deckname des beobachtenden Agents sowie
-    /// Name/Aktenzeichen/Route der verknüpften Organisation. Beides wird je in einer Sammelabfrage aufgelöst;
-    /// Organisationen sind Verschlusssache-gefiltert (<paramref name="istFuehrung"/>), gelöschte werden vom
-    /// globalen Soft-Delete-Filter ausgeblendet. Nicht (mehr) auflösbare Verknüpfungen erhalten leere Felder.
-    /// </summary>
+    /// <summary>Enrich observations with observer codename and linked org name/case number/route (classification-filtered).</summary>
     private static async Task<List<ObservationDisplay>> ToDisplayAsync(AppDbContext db, List<Observation> entries, bool isLeadership, CancellationToken cancellationToken)
     {
-        // Beobachtende Agents (Deckname) auflösen.
         var agentIds = entries.Where(o => o.ObservingAgentId is not null).Select(o => o.ObservingAgentId!).Distinct().ToList();
         var agents = new Dictionary<string, string>();
         if (agentIds.Count > 0)
@@ -139,14 +133,13 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
             Result = input.Result.TrimToNull(),
             ObservingAgentId = input.ObservingAgentId.TrimToNull(),
             OrgId = orgId,
-            // Kein verwaister Typ ohne Id.
+            // no orphan type without id
             OrgType = orgId is null ? null : input.OrgType.TrimToNull(),
         };
 
         db.Observations.Add(obs);
-        // Audit setzt ErstelltAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
-        // Observationen fließen in den Person-Score (P3) → neu berechnen.
+        // feeds person score
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
         return obs;
     }
@@ -174,7 +167,6 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         obs.OrgId = orgId;
         obs.OrgType = orgId is null ? null : input.OrgType.TrimToNull();
 
-        // Audit setzt GeaendertAm/Von automatisch über den Interceptor.
         await db.SaveChangesAsync(cancellationToken);
         await threat.NewCalculatePersonScoreAsync(obs.PersonId, cancellationToken);
         return obs;
@@ -194,7 +186,6 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         }
 
         var personId = obs.PersonId;
-        // Soft-Delete via Interceptor.
         db.Observations.Remove(obs);
         await db.SaveChangesAsync(cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);

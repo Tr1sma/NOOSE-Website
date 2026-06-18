@@ -1,12 +1,9 @@
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Gemeinsame String-Helfer der Service-Schicht. Zentralisiert die Eingabe-Normalisierung, die zuvor
-/// als privates <c>Leer(...)</c> in mehreren Diensten kopiert war (eine Quelle der Wahrheit).
-/// </summary>
+/// <summary>Shared string helpers for the service layer.</summary>
 public static class StringExtensions
 {
-    /// <summary>Trimmt den Wert; gibt <c>null</c> zurück, wenn er leer oder nur Whitespace ist.</summary>
+    /// <summary>Trims the value; returns null if empty or whitespace.</summary>
     public static string? TrimToNull(this string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

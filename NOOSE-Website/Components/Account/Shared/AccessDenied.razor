@@ -1,6 +1,4 @@
-@* Wird von <AuthorizeRouteView> angezeigt, wenn ein eingeloggter Agent eine Seite ohne
-   ausreichende Rechte aufruft. Vollflächige Sperranzeige: großes rotes "ACCESS DENIED"
-   mittig auf schwarzem Hintergrund. *@
+@* Shown by AuthorizeRouteView when a signed-in agent lacks rights for a page; full-screen block notice. *@
 <PageTitle>ACCESS DENIED · NOOSE</PageTitle>
 
 <div class="noose-access-denied">
@@ -18,7 +16,7 @@
 </div>
 
 <style>
-    /* Überdeckt das gesamte Fenster – inkl. AppBar/Navigation – für eine kompromisslose Sperranzeige. */
+    /* Covers the whole window including AppBar/nav. */
     .noose-access-denied {
         position: fixed;
         inset: 0;

@@ -1,9 +1,6 @@
 namespace NOOSE_Website.Models.Abstractions;
 
-/// <summary>
-/// Markiert eine Entität, deren Erstellungs-/Änderungs-Metadaten automatisch vom
-/// <c>AuditSaveChangesInterceptor</c> gestempelt werden ("zuletzt aktualisiert von/am").
-/// </summary>
+/// <summary>Audit metadata stamped automatically by the audit interceptor.</summary>
 public interface IAuditable
 {
     DateTime CreatedAt { get; set; }

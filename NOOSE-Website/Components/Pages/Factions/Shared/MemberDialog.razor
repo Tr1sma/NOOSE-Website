@@ -1,4 +1,3 @@
-@* Dialog zum Hinzufügen/Bearbeiten einer Fraktions-Mitgliedschaft: Person + Rang + Leitungs-Flag. *@
 @inject IPersonService PersonService
 
 <MudDialog>
@@ -72,7 +71,7 @@
     [Parameter] public IReadOnlyList<string> Ranks { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> ExclusionPersonIds { get; set; } = Array.Empty<string>();
 
-    // Bearbeiten-Modus (Person fix): wird durch einen gesetzten Namen signalisiert.
+    // edit mode (person fixed): signalled by a set name
     [Parameter] public string? PersonNameExists { get; set; }
     [Parameter] public string? RankExists { get; set; }
     [Parameter] public bool IsLeadExists { get; set; }
@@ -85,7 +84,6 @@
     private string? _rank;
     private bool _isLead;
 
-    // Speichern erst möglich, wenn eine Person gewählt (oder ein neuer Name eingegeben) ist – Button sonst deaktiviert.
     private bool CanSave => IsEdit || (_modeNew ? !string.IsNullOrWhiteSpace(_newName) : _person is not null);
 
     protected override void OnInitialized()
@@ -141,7 +139,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Dialog zum Hinzufügen eines Mitglieds; liefert die Eingabe oder null bei Abbruch.</summary>
+    /// <summary>Shows the add-member dialog; returns the input or null if cancelled.</summary>
     public static async Task<MemberInput?> ShowAsync(IDialogService dialog, bool isLeadership,
         IReadOnlyList<string> ranks, IReadOnlyList<string> exclusionPersonIds)
     {
@@ -156,7 +154,7 @@
         return result is { Canceled: false, Data: MemberInput e } ? e : null;
     }
 
-    /// <summary>Dialog zum Ändern von Rang/Leitung eines bestehenden Mitglieds (Person fix).</summary>
+    /// <summary>Shows the dialog to change an existing member's rank/lead (person fixed).</summary>
     public static async Task<MemberInput?> ShowToEditAsync(IDialogService dialog,
         IReadOnlyList<string> ranks, string personName, string? rank, bool isLead)
     {

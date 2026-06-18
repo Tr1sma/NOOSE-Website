@@ -1,4 +1,4 @@
-@* Wiederverwendbarer Bestätigungs-Dialog (z. B. für Löschvorgänge). *@
+@* Reusable confirmation dialog. *@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body1">@Text</MudText>
@@ -19,7 +19,7 @@
     private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert true, wenn bestätigt wurde.</summary>
+    /// <summary>Shows the dialog; returns true when confirmed.</summary>
     public static async Task<bool> ShowAsync(IDialogService dialog, string title, string text, string confirmText = "Löschen")
     {
         var parameters = new DialogParameters<ConfirmDialog>

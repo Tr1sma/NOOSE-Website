@@ -1,6 +1,4 @@
-@* Gemeinsames Formular für Anlegen/Bearbeiten einer Aufgabe. Beim Anlegen kann zusätzlich eine
-   Mehrfach-Zuweisung an aktive Agenten erfolgen (nur Codename – kein Klarname-Leck). Beim Bearbeiten
-   werden Zuweisungen über das Beteiligte-Panel der Detailseite verwaltet. *@
+@* Shared create/edit form for a job. *@
 @inject IAgentManagementService AgentService
 
 <MudGrid>
@@ -60,10 +58,10 @@
 @code {
     [Parameter, EditorRequired] public JobInput Input { get; set; } = default!;
 
-    /// <summary>Mehrfach-Zuweisung anzeigen (nur beim Anlegen).</summary>
+    /// <summary>Show multi-assignment (create only).</summary>
     [Parameter] public bool ShowAssignment { get; set; }
 
-    /// <summary>Gewählte Agent-Ids (zweiweg-gebunden über <c>@bind-AgentIds</c>).</summary>
+    /// <summary>Selected agent ids (two-way bound).</summary>
     [Parameter] public IReadOnlyCollection<string> AgentIds { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<IReadOnlyCollection<string>> AgentIdsChanged { get; set; }
 
@@ -73,7 +71,7 @@
     {
         if (ShowAssignment)
         {
-            // GetAuswaehlbareAsync: nur aktive Agenten ohne TeamLeitung-Marker, bereits nach Codename sortiert.
+            // Active agents without the TeamLead marker, sorted by codename.
             _agents = await AgentService.GetSelectableAsync();
         }
     }

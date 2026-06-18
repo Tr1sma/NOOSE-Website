@@ -1,6 +1,4 @@
-@* Beteiligte einer Operation (Personen & Organisationen) über die generische Verknüpfungs-Engine
-   (VerknuepfungArt.Standard). Beidseitig klickbar; die Notiz dient als Rolle/Funktion des Beteiligten.
-   Beteiligte Agents laufen separat über das Agent-Panel. *@
+@* People and organisations involved in an operation; agents are handled separately. *@
 @inject ILinkService LinkService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -76,7 +74,7 @@
 
     private async Task AddAsync()
     {
-        // Bereits beteiligte Ziele je Typ ausschließen. Die Operation selbst ist kein Person/Org-Ziel → keine Selbstverknüpfung möglich.
+        // Exclude already-involved targets per type.
         var factionFrom = _list.Where(v => v.OtherType == nameof(Faction)).Select(v => v.OtherId).ToList();
         var groupsFrom = _list.Where(v => v.OtherType == nameof(PersonGroup)).Select(v => v.OtherId).ToList();
         var partyFrom = _list.Where(v => v.OtherType == nameof(Party)).Select(v => v.OtherId).ToList();

@@ -1,5 +1,3 @@
-@* Dialog zum Anlegen einer Quelle/eines Anhangs. Je nach Typ erscheinen passende Felder.
-   Bei Upload wird die Datei sofort in den Speicher gepuffert (kein Browser-Stream über die Dialog-Dauer). *@
 @inject ISourcesStorageService Storage
 @inject IPersonService PersonService
 @inject IDocumentService DocumentService
@@ -110,10 +108,9 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Steuert, ob auch Verschlusssachen in der Personensuche erscheinen.</summary>
     [Parameter] public bool IsLeadership { get; set; }
 
-    /// <summary>Verschluss-Sichtbarkeit des Betrachters für die Dokumenten-Auswahl (Führung/TRU/HRB).</summary>
+    /// <summary>Viewer's classification scope for the document picker.</summary>
     [Parameter] public DocumentViewerScope DocumentScope { get; set; }
 
     private MudForm _form = default!;
@@ -131,14 +128,12 @@
     private void DocumentSelected(DocumentListItem? document)
     {
         _selectedDocument = document;
-        // Titel der Quelle mit dem Dokumenttitel vorbelegen (erfüllt zugleich die Titel-Pflicht).
         if (document is not null && string.IsNullOrWhiteSpace(_input.Title))
         {
             _input.Title = document.Title;
         }
     }
 
-    // Schließt den Dialog mit dem Signal „neues Dokument erstellen"; das Quellen-Panel navigiert zum Editor.
     private void NewDocument()
     {
         _input.NewDocumentCreate = true;
@@ -170,7 +165,6 @@
         _input.SizeBytes = file.Size;
         _fileName = file.Name;
 
-        // Titel vorbelegen, falls noch leer.
         if (string.IsNullOrWhiteSpace(_input.Title))
         {
             _input.Title = file.Name;
@@ -226,7 +220,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert die Eingabe oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
     public static async Task<SourceInput?> ShowAsync(IDialogService dialog, ClaimsPrincipal user)
     {
         var parameters = new DialogParameters<SourceDialog>

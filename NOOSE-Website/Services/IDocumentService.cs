@@ -6,17 +6,13 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Verwaltung der zentralen Dokumenten-Bibliothek (im WYSIWYG-Editor erstellte HTML-Dokumente).
-/// Sichtbarkeit nach Verschluss-Stufe: „nur Führung" sieht die Führung, „nur TRU"/„nur HRB" zusätzlich
-/// die jeweilige Einheit (die Führung sieht stets alle Stufen).
-/// </summary>
+/// <summary>Central document library (WYSIWYG HTML documents); visibility by classification level, leadership always sees all levels.</summary>
 public interface IDocumentService
 {
     /// <summary>Visible documents, newest first; classified-filtered, or released-only when partnerAgency is set.</summary>
     Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null);
 
-    /// <summary>Typeahead-Suche über Titel/Kategorie für die Auswahl beim Anhängen.</summary>
+    /// <summary>Typeahead search over title/category for the attach picker.</summary>
     Task<List<DocumentListItem>> SearchAsync(string? searchText, DocumentViewerScope scope, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Single document with HTML body, or null if missing/not visible; released-only when partnerAgency is set.</summary>
@@ -26,13 +22,12 @@ public interface IDocumentService
 
     Task RefreshAsync(string id, DocumentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Setzt/entfernt die „Angepinnt"-Markierung (erscheint oben in der Bibliothek). Nur Führung.</summary>
+    /// <summary>Set/clear the pinned mark; leadership only.</summary>
     Task PinSetAsync(string id, bool pinned, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Soft-Delete (Papierkorb). Nur Ersteller oder Führung.</summary>
+    /// <summary>Soft-delete (trash); creator or leadership only.</summary>
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Akten, an die dieses Dokument als Quelle angehängt ist (für die „Angehängt an"-Anzeige).
-    /// <paramref name="meId"/> = Agent-Id des Betrachters (fremde Taskforces werden ausgeblendet).</summary>
+    /// <summary>Records this document is attached to as a source; foreign taskforces are hidden by meId.</summary>
     Task<List<DocumentAttachment>> GetAttachmentsAsync(string documentId, bool isLeadership, string? meId, CancellationToken cancellationToken = default);
 }

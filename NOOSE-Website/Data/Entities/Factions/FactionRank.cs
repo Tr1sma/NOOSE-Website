@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.Factions;
 
-/// <summary>Ein Rang innerhalb einer Fraktion (z. B. „Boss", „Soldat") – Steckbrief-Kind, hart gelöscht beim Entfernen.</summary>
+/// <summary>A rank within a faction; hard-deleted when removed.</summary>
 [Table("FraktionRaenge")]
 public class FactionRank
 {
@@ -12,7 +12,7 @@ public class FactionRank
     [Column("Bezeichnung")]
     public string Designation { get; set; } = string.Empty;
 
-    /// <summary>Sortierung (höhere Ränge zuerst); rein anzeigeseitig.</summary>
+    /// <summary>Display order (higher ranks first).</summary>
     [Column("Reihenfolge")]
     public int Order { get; set; }
 }

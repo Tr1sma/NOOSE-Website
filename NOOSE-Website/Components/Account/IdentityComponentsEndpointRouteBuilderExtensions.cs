@@ -9,26 +9,23 @@ using NOOSE_Website.Models.Navigation;
 
 namespace NOOSE_Website.Components.Account;
 
-/// <summary>
-/// Statische HTTP-Endpoints für den Login-/Logout-Fluss. Diese können NICHT in interaktiven
-/// Komponenten leben, weil der OAuth-Ablauf echte HTTP-Redirects (zu Discord und zurück) braucht.
-/// </summary>
+/// <summary>Static HTTP endpoints for the login/logout flow; can't live in interactive components because OAuth needs real HTTP redirects.</summary>
 public static class IdentityComponentsEndpointRouteBuilderExtensions
 {
-    /// <summary>Name der Rate-Limiting-Policy für den Login-Start (in Program.cs konfiguriert).</summary>
+    /// <summary>Rate-limiting policy name for login start (configured in Program.cs).</summary>
     public const string LoginRateLimitPolicy = "noose-login";
 
     public static IEndpointConventionBuilder MapNooseAccountEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/Account");
 
-        // 1) Login-Start: fordert den Discord-OAuth-Flow an.
+        // login start: triggers the Discord OAuth flow
         group.MapPost("/PerformExternalLogin", async (
             [FromServices] SignInManager<Agent> signInManager,
             [FromServices] IAuthenticationSchemeProvider schemeProvider,
             [FromForm] string? returnUrl) =>
         {
-            // Falls Discord (noch) nicht konfiguriert ist, existiert das Schema nicht.
+            // scheme is absent when Discord isn't configured yet
             var schema = await schemeProvider.GetSchemeAsync(DiscordAuthenticationDefaults.AuthenticationScheme);
             if (schema is null)
             {
@@ -42,7 +39,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             return Results.Challenge(properties, [DiscordAuthenticationDefaults.AuthenticationScheme]);
         }).RequireRateLimiting(LoginRateLimitPolicy);
 
-        // 2) Rückkanal nach erfolgreicher Discord-Authentifizierung.
+        // callback after successful Discord authentication
         group.MapGet("/ExternalLogin", async (
             [FromServices] SignInManager<Agent> signInManager,
             [FromServices] UserManager<Agent> userManager,
@@ -81,7 +78,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 await EnsureBootstrapAdminSafeAsync(userManager, agent, configuration, logger);
             }
 
-            // Status-Gate: ausschließlich aktive Agenten erhalten eine Sitzung.
+            // only active agents get a session
             switch (agent.Status)
             {
                 case AgentStatus.Active:
@@ -99,7 +96,6 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             }
         }).RequireRateLimiting(LoginRateLimitPolicy);
 
-        // 3) Abmelden.
         group.MapPost("/Logout", async (
             [FromServices] SignInManager<Agent> signInManager,
             [FromForm] string? returnUrl) =>
@@ -140,12 +136,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         return false;
     }
 
-    /// <summary>
-    /// Liest alle Bootstrap-Admin-Discord-IDs aus der Konfiguration. Berücksichtigt sowohl den
-    /// Einzelwert <c>Bootstrap:AdminDiscordId</c> (z. B. aus User Secrets) als auch die Liste
-    /// <c>Bootstrap:AdminDiscordIds</c>. Diese Agenten werden beim ersten Login direkt als
-    /// aktiver Admin angelegt.
-    /// </summary>
+    /// <summary>Reads all bootstrap-admin Discord IDs from config (single <c>Bootstrap:AdminDiscordId</c> and list <c>Bootstrap:AdminDiscordIds</c>).</summary>
     private static HashSet<string> ReadBootstrapAdminIds(IConfiguration configuration)
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -174,11 +165,10 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
 
         var agent = new Agent
         {
-            UserName = discordId, // Discord-Snowflake (nur Ziffern) – erfüllt die Identity-Namensregeln.
+            UserName = discordId, // Discord snowflake (digits only) satisfies identity name rules
             Email = email,
             EmailConfirmed = email is not null,
-            // Codename/Klarname/Dienstnummer bleiben leer – die Stammdaten vergibt ein Admin
-            // auf der Agenten-Verwaltung. Der Discord-Name wird NIE als Codename übernommen.
+            // codename/real name/badge stay empty; an admin assigns master data, Discord name is never used as codename
             DiscordId = discordId,
             DiscordUsername = username,
             AvatarUrl = ExtractAvatarUrl(info.Principal),
@@ -206,16 +196,12 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             return null;
         }
 
-        // Hinweis: Admin-Rechte laufen über das IstAdmin-Flag/Claim, nicht über Identity-Rollen.
         logger.LogInformation("Neuer Agent registriert: {DiscordUsername} ({DiscordId}), Status {Status}.",
             agent.DiscordUsername ?? discordId, discordId, agent.Status);
         return agent;
     }
 
-    /// <summary>
-    /// Hält die internen Discord-Stammdaten (Username, Avatar) bei jedem Login aktuell.
-    /// Der nutzersichtbare Codename wird NIE aus Discord befüllt – er wird ausschließlich vom Admin vergeben.
-    /// </summary>
+    /// <summary>Keeps internal Discord master data (username, avatar) fresh on each login; the codename is never filled from Discord.</summary>
     private static async Task RefreshMasterDataAsync(UserManager<Agent> userManager, Agent agent, ExternalLoginInfo info)
     {
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
@@ -231,12 +217,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         }
     }
 
-    /// <summary>
-    /// Befördert einen bereits registrierten Agenten zum aktiven Admin, falls seine Discord-ID
-    /// als Bootstrap-Admin hinterlegt ist. So greift die Standard-Admin-Liste auch dann, wenn
-    /// der Agent sich schon vor dem Eintrag registriert hatte (sonst bliebe er „Ausstehend").
-    /// Ein bereits vergebener Dienstgrad bleibt erhalten.
-    /// </summary>
+    /// <summary>Promotes an already-registered agent to active admin if their Discord ID is a bootstrap admin; keeps an existing rank.</summary>
     private static async Task EnsureBootstrapAdminSafeAsync(
         UserManager<Agent> userManager, Agent agent, IConfiguration configuration, ILogger logger)
     {

@@ -2,7 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Eingabe zum Anlegen einer Person-zu-Person-Beziehung.</summary>
+/// <summary>Input for a person-to-person relation.</summary>
 public class RelationInput
 {
     public string TargetPersonId { get; set; } = string.Empty;
@@ -10,7 +10,7 @@ public class RelationInput
     public string? Note { get; set; }
 }
 
-/// <summary>Aufbereitete Beziehung aus Sicht einer Person: die jeweils andere Person + Typ.</summary>
+/// <summary>A relation from one person's perspective: the other person plus type.</summary>
 public record RelationDisplay(
     string RelationId,
     RelationType Type,

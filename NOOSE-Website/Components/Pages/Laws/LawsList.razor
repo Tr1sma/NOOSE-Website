@@ -1,5 +1,4 @@
-@* Gesetzbuch/Rechtsgrundlagen (Phase 7): durchsuchbare Wissensbasis aller Paragrafen.
-   Lesbar für alle aktiven Agenten; kuratiert (anlegen/bearbeiten/löschen) von der Führung. *@
+@* Searchable law knowledge base; readable by all, curated by leadership. *@
 @page "/gesetze"
 @inject ILawService LawService
 @inject IDialogService DialogService
@@ -54,7 +53,7 @@ else
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 @if (_isLeadership)
                 {
-                    @* span stoppt die Klick-Propagation, damit der Button-Klick nicht zusätzlich die Zeile öffnet. *@
+                    @* Stop click propagation so the button doesn't open the row. *@
                     <span @onclick:stopPropagation="true">
                         <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"

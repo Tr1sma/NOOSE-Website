@@ -2,15 +2,9 @@ using NOOSE_Website.Data;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Vergibt fortlaufende, menschenlesbare Aktenzeichen (NOOSE-{Praefix}-{Jahr}-{Nummer}) je Aktentyp.
-/// Gemeinsam genutzt von Person (P), Fraktion (F) und Personengruppe (G).
-/// </summary>
+/// <summary>Issues sequential, human-readable case numbers (NOOSE-{Prefix}-{Year}-{Number}) per record type.</summary>
 public interface ICaseNumberService
 {
-    /// <summary>
-    /// Erhöht den Jahres-Zähler des Präfixes race-sicher (auf dem <b>übergebenen</b> Kontext, damit der
-    /// Inkrement in der Transaktion des Aufrufers bleibt) und liefert das formatierte Aktenzeichen.
-    /// </summary>
+    /// <summary>Race-safely increments the prefix's yearly counter on the passed context (so it stays in the caller's transaction) and returns the formatted case number.</summary>
     Task<string> NextAsync(AppDbContext db, string prefix, CancellationToken cancellationToken = default);
 }

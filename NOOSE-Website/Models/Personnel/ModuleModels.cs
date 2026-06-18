@@ -2,7 +2,7 @@ using NOOSE_Website.Data.Entities.Personnel;
 
 namespace NOOSE_Website.Models.Personnel;
 
-/// <summary>Eingabemodell zum Anlegen/Bearbeiten eines Ausbildungsmoduls.</summary>
+/// <summary>Create/edit training module input.</summary>
 public class ModuleInput
 {
     public string Name { get; set; } = string.Empty;
@@ -14,10 +14,7 @@ public class ModuleInput
     public int Sorting { get; set; }
 }
 
-/// <summary>
-/// Anzeigemodell für die Personalakte: ein Modul samt Abschluss-Status des betrachteten Agenten.
-/// Ist <see cref="CompletionId"/> gesetzt, gilt das Modul als abgeschlossen.
-/// </summary>
+/// <summary>A training module plus the viewed agent's completion status.</summary>
 public record AgentModuleStatus(
     TrainingModule Module,
     string? CompletionId,

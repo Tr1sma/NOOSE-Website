@@ -1,5 +1,4 @@
-@* Übergreifender Dialog zum Anlegen eines Personen-Doks: Person wird über ein suchbares Dropdown
-   ausgewählt; existiert sie noch nicht, wird beim Speichern automatisch eine Akte angelegt. *@
+@* Person picked via search; if none exists, a record is created on save. *@
 @inject IPersonService PersonService
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
@@ -82,7 +81,7 @@
                 }
                 <MudTextField @bind-Value="_input.Reason" Label="Grund" Lines="2" Variant="Variant.Outlined" />
 
-                @* Fraktionszugehörigkeit: bevorzugt eine bestehende Akte verknüpfen, sonst Freitext. *@
+                @* Prefer linking an existing record; otherwise free text. *@
                 <MudRadioGroup T="string" @bind-Value="Type">
                     <MudRadio T="string" Value="@nameof(Faction)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
                     <MudRadio T="string" Value="@nameof(PersonGroup)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
@@ -122,7 +121,6 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Steuert, ob auch Verschlusssachen in der Personensuche erscheinen.</summary>
     [Parameter] public bool IsLeadership { get; set; }
 
     private MudForm _form = default!;
@@ -134,14 +132,13 @@
     private string Type
     {
         get => _orgType;
-        // Typwechsel verwirft die bisherige Auswahl (Fraktion- und Gruppen-Treffer sind nicht austauschbar).
+        // Type change discards prior selection.
         set { if (_orgType != value) { _orgType = value; _target = null; } }
     }
     private bool IsFaction => _orgType == nameof(Faction);
     private AffiliationDialog.RecordHit? _target;
     private bool _asMember;
 
-    // Vorlagen-Picker: aktive Vorlagen + aktuell gewählte.
     private List<DocTemplate> _templates = new();
     private DocTemplate? _selectedTemplate;
 
@@ -150,7 +147,6 @@
         _templates = await TemplateService.GetActiveAsync();
     }
 
-    /// <summary>Übernimmt die Vorgaben der gewählten Vorlage in das Formular (frei editierbar).</summary>
     private void TemplateApply(DocTemplate? template)
     {
         _selectedTemplate = template;
@@ -180,10 +176,10 @@
     private string? _personText;
     private bool _personError;
 
-    // Neue Akte: kein bestehender Treffer gewählt, aber ein Name eingegeben.
+    // No existing hit selected but a name was typed.
     private bool IsNewRecord => SelectedPersonId is null && !string.IsNullOrWhiteSpace(_personText);
 
-    // Die gewählte Person zählt nur, solange ihr Name auch im Eingabefeld steht (sonst Freitext → neue Akte).
+    // Selected person counts only while its name still matches the input (else free text → new record).
     private string? SelectedPersonId
         => _person is not null && string.Equals(_person.Name, _personText?.Trim(), StringComparison.Ordinal)
             ? _person.Id
@@ -206,9 +202,8 @@
 
         var date = (_date ?? DateTime.Now).Date;
         var time = _time ?? TimeSpan.Zero;
-        // Eingabe ist Ortszeit → für die Speicherung nach UTC umrechnen.
+        // Input is local time → store as UTC (VPS must run TZ=Europe/Berlin).
         _input.Timestamp = DateTime.SpecifyKind(date + time, DateTimeKind.Local).ToUniversalTime();
-        // Verknüpfung übernehmen; ohne Auswahl bleibt nur der Freitext.
         _input.OrgId = _target?.Id;
         _input.OrgType = _target is null ? null : _orgType;
         _input.AsMember = _target is not null && _asMember;
@@ -223,7 +218,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert die Eingabe (inkl. Personenzuordnung) oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog and returns the input (incl. person assignment), or null on cancel.</summary>
     public static async Task<DocCreateResult?> ShowAsync(IDialogService dialog, bool isLeadership)
     {
         var parameters = new DialogParameters<DocCreateDialog> { { x => x.IsLeadership, isLeadership } };

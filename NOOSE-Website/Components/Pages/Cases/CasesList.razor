@@ -45,7 +45,7 @@ else
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
             <TemplateColumn Sortable="true" Title="Titel" SortBy="x => x.Title">
                 <CellTemplate>
-                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    @* real link: middle-click/ctrl-click opens in new tab; keyboard/screenreader reachable *@
                     <MudLink Href="@($"/vorgaenge/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Title</MudLink>
                 </CellTemplate>
             </TemplateColumn>

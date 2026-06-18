@@ -4,19 +4,16 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Verwaltung der Dokument-Vorlagen (HTML-Body mit Platzhaltern). Schreibende Aktionen sind der Führung
-/// vorbehalten (analog zu <see cref="IDokVorlageService"/>).
-/// </summary>
+/// <summary>Management of document templates (HTML body with placeholders); writes are leadership-only.</summary>
 public interface IDocumentTemplateService
 {
-    /// <summary>Alle Vorlagen (für die Verwaltung), sortiert.</summary>
+    /// <summary>All templates for management, sorted.</summary>
     Task<List<DocumentTemplate>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Nur aktive Vorlagen (für den Picker beim Dokument-Anlegen).</summary>
+    /// <summary>Active templates only for the create-document picker.</summary>
     Task<List<DocumentTemplate>> GetActiveAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Eine einzelne Vorlage inkl. HTML-Body, oder null wenn nicht vorhanden.</summary>
+    /// <summary>A single template with HTML body, or null if missing.</summary>
     Task<DocumentTemplate?> GetAsync(string id, CancellationToken cancellationToken = default);
 
     Task<DocumentTemplate> CreateAsync(DocumentTemplateInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

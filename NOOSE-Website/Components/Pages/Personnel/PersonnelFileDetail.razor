@@ -18,7 +18,7 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personal" aria-label="Zurück" />
         <MudText Typo="Typo.h5">Personalakte</MudText>
-        @* Folgen nur für die Führung: Personalakten gelten in der Sichtbarkeit als Führungs-Inhalt (Sichtbarkeit(Agent)=istFuehrung). *@
+        @* Personnel files count as leadership-only content. *@
         @if (_isLeadership)
         {
             <MudSpacer />
@@ -82,12 +82,11 @@ else
     private string? _loadedId;
 
     private int _activeTab;
-    // Reihenfolge muss den MudTabPanels entsprechen; der Kommentare-Tab existiert nur für die Führung.
+    // Order must match the MudTabPanels; comments tab is leadership-only
     private string[] _tabs = Array.Empty<string>();
 
     protected override async Task OnInitializedAsync()
     {
-        // Betrachter-abhängige (für alle Personalakten gleiche) Werte einmalig setzen.
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
         _mayRealName = _user.MayRealNameSee();
@@ -96,9 +95,7 @@ else
             : new[] { "verlauf", "belobigungen", "disziplinarisch", "befoerderungen", "module" };
     }
 
-    // Diese Seite wird bei Navigation /personal/{A} → /personal/{B} WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den AgentId-Wechsel reagieren – sonst bliebe die alte
-    // Personalakte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch.
+    // Component is reused across /personal/{A}→{B}; react to AgentId change since OnInitialized won't rerun
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == AgentId)
@@ -115,7 +112,7 @@ else
 
     private async Task TargetDecisionAsync()
     {
-        // Eine genehmigte Beförderung ändert den Rang → Agent + Verlauf neu laden.
+        // Approved promotion changes rank; reload agent + history
         _agent = await AgentService.FindAsync(AgentId);
         _reloadKey = Guid.NewGuid();
         StateHasChanged();

@@ -1,6 +1,4 @@
-@* Archiv der automatischen Monats-Lageberichte (Phase 8 / Block D, Schritt 2). Nur für die Führung
-   (FuehrungSeite öffnet auch der Nur-Lese-Aufsicht das Lesen; das manuelle Erzeugen bleibt an Fuehrung
-   gebunden). Jeder Bericht ist ein eingefrorener Schnappschuss der vollständigen Lage. *@
+@* Archive of monthly situation reports; leadership-only, manual generation gated to Leadership. *@
 @page "/lageberichte"
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject ISituationReportService SituationReportService
@@ -53,7 +51,7 @@ else
                             </MudText>
                         </div>
                         <AuthorizeView Policy="@Policies.Leadership">
-                            @* Klick auf den Löschen-Knopf nicht zur Zeile durchreichen (sonst öffnet sich der Bericht). *@
+                            @* Don't let the delete click bubble to the row. *@
                             <span @onclick:stopPropagation="true">
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                                OnClick="@(() => Delete(b))" />
@@ -95,7 +93,7 @@ else
         try
         {
             var now = DateTime.UtcNow;
-            // Aktuellen Monat (Stand jetzt) erzeugen bzw. auffrischen – ermöglicht einen sofort sichtbaren Bericht.
+            // Generate/refresh the current month for an immediately visible report
             var bulletin = await SituationReportService.GenerateMonthAsync(now.Year, now.Month, replaceExisting: true, _user.GetAgentId());
             await Load();
             Snackbar.Add(bulletin is null ? "Es wurde kein Bericht erzeugt." : $"{bulletin.Title} erzeugt.", Severity.Success);

@@ -1,4 +1,4 @@
-@* Zentrale Dokumenten-Bibliothek: durchsuchbare Liste aller (für den Aufrufer sichtbaren) Dokumente. *@
+@* Central document library: searchable list of all documents visible to the caller. *@
 @page "/dokumente"
 @inject IDocumentService DocumentService
 @inject NavigationManager Nav
@@ -76,7 +76,7 @@ else
             {
                 <TemplateColumn Title="" Sortable="false">
                     <CellTemplate>
-                        @* span stoppt die Klick-Propagation, damit der Pin-Klick nicht zusätzlich die Zeile öffnet. *@
+                        @* Stop propagation so the pin click doesn't also open the row. *@
                         <span @onclick:stopPropagation="true">
                             <MudTooltip Text="Anpinnen">
                                 <MudIconButton Icon="@Icons.Material.Outlined.PushPin" Color="Color.Default" Size="Size.Small"
@@ -89,7 +89,7 @@ else
             }
             <TemplateColumn Sortable="true" Title="Titel" SortBy="x => x.Title">
                 <CellTemplate>
-                    @* Echter Link: Mittelklick/Strg+Klick öffnet im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    @* Real link: middle/Ctrl-click opens a new tab; keyboard/screen-reader reachable. *@
                     <MudLink Href="@($"/dokumente/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Title</MudLink>
                 </CellTemplate>
             </TemplateColumn>

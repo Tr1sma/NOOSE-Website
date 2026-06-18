@@ -1,4 +1,3 @@
-@* Dialog zum Anlegen einer Verknüpfung auf eine beliebige Akte: Aktentyp wählen, Ziel suchen, optionaler Label. *@
 @inject IPersonService PersonService
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
@@ -246,10 +245,10 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     [Parameter] public bool IsLeadership { get; set; }
-    /// <summary>Diese Person (die aktuelle Akte) wird aus der Personen-Auswahl ausgeschlossen.</summary>
+    /// <summary>Person excluded from the person picker.</summary>
     [Parameter] public string? ExclusionPersonId { get; set; }
 
-    // Betrachter-Kontext für die Sichtbarkeit in den Suchen (Taskforce-Mitgliedschaft, eingeschränkte Aufgaben).
+    // viewer context for search visibility
     private string? _meId;
     private bool _mayAllTf;
     private bool _mayClassified;
@@ -298,7 +297,7 @@
     private ObservationDisplay? _observation;
     private Law? _law;
 
-    // Agent-/Dok-/Observations-Listen werden bei Bedarf einmalig geladen (clientseitige Suche).
+    // loaded on demand for client-side search
     private List<Agent>? _allAgents;
     private List<PersonDocDisplay>? _allDocs;
     private List<ObservationDisplay>? _allObservations;
@@ -322,7 +321,6 @@
 
     private async Task TypeSwitchedAsync()
     {
-        // Auswahl der vorherigen Art verwerfen, Listen für client-seitige Suche bei Bedarf laden.
         _person = null; _faction = null; _group = null; _party = null; _operation = null; _taskforce = null;
         _case = null; _job = null; _agent = null; _doc = null; _observation = null; _law = null;
         if (_targetType == nameof(Agent) && _allAgents is null)
@@ -441,7 +439,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert die Eingabe (inkl. Zieltyp) oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
     public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership, string exclusionPersonId)
     {
         var parameters = new DialogParameters<LinkDialog>
@@ -454,9 +452,7 @@
         return result is { Canceled: false, Data: LinkInput e } ? e : null;
     }
 
-    /// <summary>
-    /// Überladung ohne Personen-Ausschluss – für Akten, die selbst keine Person sind (z. B. Vorgangsakte).
-    /// </summary>
+    /// <summary>Overload without person exclusion, for non-person records.</summary>
     public static async Task<LinkInput?> ShowAsync(IDialogService dialog, bool isLeadership)
     {
         var parameters = new DialogParameters<LinkDialog>

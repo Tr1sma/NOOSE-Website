@@ -1,6 +1,5 @@
 @page "/admin/freigaben"
-@* Posteingang: Hochstufungs-Anträge entscheidet bereits Senior Special Agent+ (Policy HoechsteEinstufung);
-   die vier übrigen Bereiche bleiben der Führung vorbehalten und sind unten gekapselt. *@
+@* Inbox: upgrade requests are decided by Senior Special Agent+; the other four sections are leadership-only. *@
 @attribute [Authorize(Policy = Policies.HighestClassificationPage)]
 @inject IAgentManagementService AgentService
 @inject ITaskforceService TaskforceService
@@ -397,10 +396,10 @@ else
         _load = true;
         _isLeadership = _user.IsLeadership();
 
-        // Hochstufungs-Anträge sieht/entscheidet bereits Senior Special Agent+ (breiter als die Führung).
+        // Senior Special Agent+ sees upgrade requests (broader than leadership).
         _openUpgrades = await RequestService.GetOpenAsync(_isLeadership);
 
-        // Die übrigen vier Posteingangs-Bereiche sind der Führung vorbehalten.
+        // Remaining four sections are leadership-only.
         if (_isLeadership)
         {
             _openPartnerRequests = await PartnerShareService.GetPendingPartnerShareRequestsAsync();
@@ -417,7 +416,7 @@ else
         }
         _load = false;
 
-        // Nach jeder Entscheidung (alle Aktionen rufen LadenAsync auf) den NavMenu-Badge live neu zählen lassen.
+        // Refresh the NavMenu badge count after every decision.
         SharesBroadcaster.Report();
     }
 
@@ -643,7 +642,6 @@ else
 
     private sealed record FieldChange(string Label, string Alt, string New);
 
-    // Neu registrierte Konten haben noch keinen Codenamen – zur Identifikation dient die Discord-Spalte.
     private static string DisplayName(Agent agent)
         => string.IsNullOrWhiteSpace(agent.Codename) ? "Neuer Agent" : agent.Codename;
 }

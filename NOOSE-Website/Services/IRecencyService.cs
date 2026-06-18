@@ -3,31 +3,24 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Liefert und verwaltet die Schwellwerte der Aktualitäts-Ampel je Aktentyp und bewertet Akten anhand ihres
-/// letzten Änderungsdatums. Im Code stehen Standardwerte je Typ; die Führung kann sie im Admin überschreiben
-/// (in der DB). Die Schwellen werden gecacht, damit Listen die Ampel ohne DB-Treffer je Zeile berechnen können.
-/// </summary>
+/// <summary>Manages recency-light thresholds per record type and assesses records by last-modified date. Thresholds are cached so lists compute the light without a DB hit per row.</summary>
 public interface IRecencyService
 {
-    /// <summary>Die unterstützten Aktentypen (mit Anzeigename und Standardwerten) – für den Admin-Bereich.</summary>
+    /// <summary>Supported record types (display name + defaults) for the admin area.</summary>
     IReadOnlyList<RecencyTypeInfo> SupportedTypes { get; }
 
-    /// <summary>
-    /// Aktuelle Schwellwerte je Aktentyp (Standard aus dem Code, überschrieben durch gespeicherte Werte). Gecacht;
-    /// enthält stets einen Eintrag für jeden unterstützten Typ.
-    /// </summary>
+    /// <summary>Current thresholds per record type (code defaults overridden by stored values). Cached; one entry per supported type.</summary>
     Task<IReadOnlyDictionary<string, (int WarningDays, int StaleDays)>> GetThresholdsAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Die Schwellwerte eines einzelnen Aktentyps (Standard, falls nicht überschrieben).</summary>
+    /// <summary>Thresholds for a single record type (default if not overridden).</summary>
     Task<(int WarningDays, int StaleDays)> GetThresholdAsync(string recordsType, CancellationToken cancellationToken = default);
 
-    /// <summary>Bewertet eine Akte anhand ihres Referenzdatums (<c>GeaendertAm ?? ErstelltAm</c>, UTC).</summary>
+    /// <summary>Assesses a record by its reference date (modified-at ?? created-at, UTC).</summary>
     Task<RecencyLevel> AssessAsync(string recordsType, DateTime referenceDate, CancellationToken cancellationToken = default);
 
-    /// <summary>Speichert die Schwellwerte eines Aktentyps (nur Führung) und leert den Cache.</summary>
+    /// <summary>Saves a record type's thresholds (leadership only) and clears the cache.</summary>
     Task SaveAsync(string recordsType, int warningDays, int staleDays, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Ein unterstützter Aktentyp der Aktualitäts-Ampel inkl. Anzeigename und Standard-Schwellwerten.</summary>
+/// <summary>A supported recency-light record type incl. display name and default thresholds.</summary>
 public sealed record RecencyTypeInfo(string Type, string Display, int DefaultWarningDays, int DefaultStaleDays);

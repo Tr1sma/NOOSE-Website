@@ -1,4 +1,3 @@
-@* Dialog zum Anlegen/Bearbeiten einer Wiedervorlage: Termin, Notiz und optional ein zuständiger Agent. *@
 @inject IAgentManagementService AgentService
 
 <MudDialog>
@@ -44,7 +43,7 @@
     [Parameter] public string? Note { get; set; }
     [Parameter] public string? ResponsibleAgentId { get; set; }
 
-    /// <summary>Wer den Klarnamen sehen darf (Führung/Admin) – sieht ihn auch hier in der Liste. Über <c>User.DarfKlarnameSehen()</c>.</summary>
+    /// <summary>Whether the viewer may see real names.</summary>
     [Parameter] public bool MayRealName { get; set; }
 
     private DateTime? _due;
@@ -54,7 +53,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Vorbelegung (Neu: morgen; Bearbeiten: vorhandener Termin lokal).
         _due = (DueAt ?? DateTime.UtcNow.AddDays(1)).ToLocalTime().Date;
         _note = Note;
 
@@ -87,7 +85,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog (Anlegen oder Bearbeiten); liefert die Eingabe oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
     public static async Task<FollowupInput?> ShowAsync(IDialogService dialog, bool mayRealName,
         string title = "Wiedervorlage planen", DateTime? dueAt = null, string? note = null, string? responsibleAgentId = null)
     {

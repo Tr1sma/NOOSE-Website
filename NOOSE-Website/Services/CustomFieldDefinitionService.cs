@@ -7,7 +7,6 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="ICustomFeldDefinitionService" />
 public class CustomFieldDefinitionService(IDbContextFactory<AppDbContext> dbFactory) : ICustomFieldDefinitionService
 {
     public async Task<List<CustomFieldDefinition>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -78,8 +77,7 @@ public class CustomFieldDefinitionService(IDbContextFactory<AppDbContext> dbFact
         {
             return;
         }
-        // Remove wird vom AuditSaveChangesInterceptor in einen Soft-Delete (Papierkorb) umgewandelt.
-        // Bereits erfasste Werte bleiben bestehen, werden aber nicht mehr angezeigt (Filter auf aktive Felder).
+        // Interceptor rewrites Remove to soft-delete; existing values stay but are filtered out as inactive.
         db.CustomFieldDefinitions.Remove(definition);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -103,7 +101,7 @@ public class CustomFieldDefinitionService(IDbContextFactory<AppDbContext> dbFact
         return (name, entityType);
     }
 
-    /// <summary>Überträgt die editierbaren Felder (ohne Name/EntitaetTyp – die werden vorab validiert/gesetzt).</summary>
+    /// <summary>Copies the editable fields; name and entity type are validated/set beforehand.</summary>
     private static void Apply(CustomFieldDefinition definition, CustomFieldDefinitionInput input)
     {
         definition.FieldType = input.FieldType;

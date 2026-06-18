@@ -1,11 +1,11 @@
-@* Warnt beim Anlegen vor möglichen Dubletten (gleicher Name / gleiche Telefonnummer). *@
+@* Warns about possible duplicates on create (same name / phone number). *@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mb-3">
             Es gibt bereits Akten mit gleichem Namen oder gleicher Telefonnummer. Bitte prüfe, ob es
             sich um dieselbe Person handelt:
         </MudText>
-        @* Im neuen Tab öffnen, damit das bereits ausgefüllte Anlege-Formular nicht verloren geht. *@
+        @* Open in a new tab so the half-filled create form isn't lost. *@
         <MudList T="string" Dense="true">
             @foreach (var p in Hit)
             {
@@ -29,7 +29,7 @@
     private void Anyway() => MudDialog.Close(DialogResult.Ok(true));
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert true, wenn „Trotzdem anlegen" gewählt wurde.</summary>
+    /// <summary>Shows the dialog; returns true when "create anyway" was chosen.</summary>
     public static async Task<bool> ShowAsync(IDialogService dialog, List<Person> hit)
     {
         var parameters = new DialogParameters<DuplicateDialog> { { x => x.Hit, hit } };

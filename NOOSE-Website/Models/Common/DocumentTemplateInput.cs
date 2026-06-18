@@ -1,13 +1,13 @@
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen/Bearbeiten einer Dokument-Vorlage.</summary>
+/// <summary>Input model for a document template.</summary>
 public class DocumentTemplateInput
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Category { get; set; }
 
-    /// <summary>HTML-Body der Vorlage (darf Platzhalter wie {{Name}} enthalten) – im Dienst bereinigt.</summary>
+    /// <summary>Template HTML body (may contain placeholders like {{Name}}); sanitized in the service.</summary>
     public string ContentHtml { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;

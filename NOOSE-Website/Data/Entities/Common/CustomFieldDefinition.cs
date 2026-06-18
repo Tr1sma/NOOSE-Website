@@ -4,44 +4,37 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Admin-definiertes Zusatzfeld („Custom-Feld") für einen Aktentyp – konfigurierbar ohne Code
-/// (Plan.md Phase 7). Legt Name, Typ und Optionen fest; die konkreten Werte je Akte liegen in
-/// <see cref="CustomFeldWert"/> (polymorph über <see cref="CustomFeldWert.EntitaetTyp"/> +
-/// <see cref="CustomFeldWert.EntitaetId"/>). Voll auditiert und papierkorbfähig.
-/// </summary>
+/// <summary>Admin-defined custom field for a record type; per-record values live in CustomFieldValue.</summary>
 [Table("CustomFeldDefinitionen")]
 public class CustomFieldDefinition : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Aktentyp, für den das Feld gilt, z. B. <c>nameof(Person)</c> (CLR-Typname).</summary>
+    /// <summary>Record type the field applies to, e.g. nameof(Person) (CLR type name).</summary>
     [Column("EntitaetTyp")]
     public string EntityType { get; set; } = string.Empty;
 
-    /// <summary>Feld-Bezeichnung (Label), z. B. „Decknamen-Quelle".</summary>
     public string Name { get; set; } = string.Empty;
 
     [Column("FeldTyp")]
     public CustomFieldType FieldType { get; set; }
 
-    /// <summary>Auswahl-Optionen bei <see cref="CustomFeldTyp.Auswahl"/> – eine Option pro Zeile.</summary>
+    /// <summary>Select options (one per line) for dropdown field types.</summary>
     [Column("Optionen")]
     public string? Options { get; set; }
 
-    /// <summary>Pflichtfeld: beim Speichern der Werte muss ein Wert gesetzt sein.</summary>
+    /// <summary>Required: a value must be set when saving.</summary>
     [Column("Pflicht")]
     public bool Mandatory { get; set; }
 
-    /// <summary>Sortierreihenfolge im Panel (kleiner zuerst).</summary>
+    /// <summary>Display order in the panel (smaller first).</summary>
     [Column("Reihenfolge")]
     public int Order { get; set; }
 
-    /// <summary>Nur aktive Felder erscheinen im Zusatzfelder-Panel der Akten.</summary>
+    /// <summary>Only active fields appear in the record's custom-fields panel.</summary>
     [Column("IstAktiv")]
     public bool IsActive { get; set; } = true;
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -51,7 +44,6 @@ public class CustomFieldDefinition : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

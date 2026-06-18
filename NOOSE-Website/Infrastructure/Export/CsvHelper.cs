@@ -17,7 +17,6 @@ public static class CsvHelper
             WriteRow(sb, row);
         }
 
-        // explicit BOM
         var bom = new UTF8Encoding(true).GetPreamble();
         var content = Encoding.UTF8.GetBytes(sb.ToString());
         var result = new byte[bom.Length + content.Length];
@@ -38,11 +37,9 @@ public static class CsvHelper
             first = false;
             sb.Append(Mask(field));
         }
-        // CRLF line ending
         sb.Append("\r\n");
     }
 
-    // RFC 4180
     private static string Mask(string? field)
     {
         var s = field ?? string.Empty;

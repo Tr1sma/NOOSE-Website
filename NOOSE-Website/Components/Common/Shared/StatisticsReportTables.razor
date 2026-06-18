@@ -1,6 +1,4 @@
-@* Rendert einen StatistikReport als druckfreundliche Tabellen (Kennzahlen, Verteilungen, 12-Monats-Verlauf,
-   Top-Listen). Geteilt von der Statistik-Druckansicht und der Lagebericht-Detailansicht – beide betten die
-   Tabellen in einen DruckRahmen ein. Nutzt die globalen .druck-*-Klassen (s. wwwroot/app.css). *@
+@* Renders a statistics report as print-friendly tables. *@
 @using NOOSE_Website.Models.Dashboard
 @using NOOSE_Website.Models.Statistics
 
@@ -47,7 +45,6 @@
 }
 
 @code {
-    /// <summary>Der zu rendernde Auswertungs-Schnappschuss.</summary>
     [Parameter, EditorRequired] public StatisticsReport? Report { get; set; }
 
     private RenderFragment DistributionTable(string title, IReadOnlyList<DistributionSegment> segments) =>@<section>

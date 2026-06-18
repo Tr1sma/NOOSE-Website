@@ -3,14 +3,12 @@ using NOOSE_Website.Data;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IAktenzeichenService" />
 public class CaseNumberService : ICaseNumberService
 {
     public async Task<string> NextAsync(AppDbContext db, string prefix, CancellationToken cancellationToken = default)
     {
-        // Race-Sicherheit setzt eine umschließende Transaktion des Aufrufers voraus: Erst der Commit gibt den
-        // Row-Lock auf dem Zähler frei. Ohne Transaktion (Autocommit) könnten zwei parallele Anlagen dieselbe
-        // Nummer lesen → Unique-Index-Crash. Daher Fail-fast, statt die Race unbemerkt wieder zu öffnen.
+        // Race-safety needs the caller's enclosing transaction: commit releases the counter row-lock.
+        // Without it, parallel inserts read the same number and crash the unique index, so fail fast.
         if (db.Database.CurrentTransaction is null)
         {
             throw new InvalidOperationException(
@@ -18,8 +16,7 @@ public class CaseNumberService : ICaseNumberService
         }
 
         var year = DateTime.UtcNow.Year;
-        // Atomarer, race-sicherer Zähler-Inkrement (MariaDB/MySQL-nativ) auf dem Kontext des Aufrufers,
-        // damit Zähler und Akte in einer Transaktion gemeinsam committen.
+        // Atomic counter increment on the caller's context so counter and record commit together.
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO AktenzeichenZaehler (Praefix, Jahr, LetzteNummer) VALUES ({prefix}, {year}, 1) ON DUPLICATE KEY UPDATE LetzteNummer = LetzteNummer + 1;",
             cancellationToken);

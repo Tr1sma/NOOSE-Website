@@ -7,7 +7,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IBeziehungService" />
+/// <inheritdoc cref="IRelationService" />
 public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IRelationService
 {
     public async Task<List<RelationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -32,11 +32,10 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
         var result = new List<RelationDisplay>();
         foreach (var b in raw)
         {
-            // Die jeweils andere Person bestimmen.
             var other = b.PersonAId == personId ? b.PersonB : b.PersonA;
             if (other is null)
             {
-                continue; // Gegenseite im Papierkorb (Query-Filter) → ausblenden.
+                continue; // other side trashed
             }
             if (other.IsClassified && !isLeadership)
             {
@@ -64,8 +63,7 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
             throw new InvalidOperationException("Die gewählte Person wurde nicht gefunden.");
         }
 
-        // Dieselbe Beziehung (gleicher Typ) zwischen beiden Personen nicht doppelt anlegen – in beiden
-        // Richtungen geprüft. Andere Beziehungstypen zwischen denselben Personen bleiben erlaubt.
+        // no duplicate relation of same type, checked both directions
         var exists = await db.PersonRelations.AnyAsync(b => b.Type == type
             && ((b.PersonAId == personAId && b.PersonBId == personBId)
              || (b.PersonAId == personBId && b.PersonBId == personAId)),
@@ -83,7 +81,7 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
         });
         await db.SaveChangesAsync(cancellationToken);
-        // Feind/Verbündeter/Geschäftspartner wirken auf P4 BEIDER Personen → beide neu berechnen.
+        // relation affects the score of both persons
         await threat.NewCalculatePersonScoreAsync(personAId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personBId, cancellationToken);
     }
@@ -128,9 +126,9 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
         }
         var personAId = b.PersonAId;
         var personBId = b.PersonBId;
-        db.PersonRelations.Remove(b); // Soft-Delete via Interceptor
+        db.PersonRelations.Remove(b);
         await db.SaveChangesAsync(cancellationToken);
-        // Entfernte Beziehung wirkt auf P4 beider Personen → beide neu berechnen.
+        // relation affects the score of both persons
         await threat.NewCalculatePersonScoreAsync(personAId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personBId, cancellationToken);
     }

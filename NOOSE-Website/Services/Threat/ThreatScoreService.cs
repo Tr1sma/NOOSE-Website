@@ -10,11 +10,10 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IBedrohungsScoreService" />
+/// <inheritdoc cref="IThreatScoreService" />
 public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreConfigService configService)
     : IThreatScoreService
 {
-    /// <summary>JSON serializer options.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -22,8 +21,6 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         // Readable encoding.
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
-
-    // faction score
 
     /// <summary>Calculate faction score.</summary>
     public static ThreatScoreResult Calculate(ThreatScoreInput e, DateTime nowUtc, ThreatScoreConfiguration k)
@@ -109,8 +106,6 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             BuildDetail(partialScores, content, e.Classification, @base, score, confidence, triage, triageHint, nowUtc));
     }
 
-    // person score
-
     /// <summary>Calculate person score.</summary>
     public static ThreatScoreResult CalculatePerson(PersonThreatScoreInput e, DateTime nowUtc, ThreatScoreConfiguration k)
     {
@@ -171,7 +166,6 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             new("Netzwerk-Zentralität", R1(e.DefaultEdgesDegree), R1(p5), k.CapP5, P5DriverPerson(e)),
         };
 
-        // UI renders live.
         return new ThreatScoreResult(score, confidence,
             BuildDetail(partialScores, content, e.Classification, @base, score, confidence, triage, triageHint, nowUtc));
     }
@@ -325,8 +319,6 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         => e.DefaultEdgesDegree > 0
             ? new[] { $"{e.DefaultEdgesDegree} sonstige Verknüpfung(en) im Netzwerk" }
             : new[] { "nicht vernetzt (keine sonstigen Verknüpfungen)" };
-
-    // db layer
 
     public async Task NewCalculateAsync(string factionId, CancellationToken cancellationToken = default)
     {

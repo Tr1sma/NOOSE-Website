@@ -18,7 +18,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
     public async Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Mitglieder inkl. Person laden, damit die Listen-Mitgliederzahl exakt der Detailansicht entspricht.
+        // include members so the list count matches the detail view
         return await VisibleParties(db, scope)
             .Include(p => p.Members).ThenInclude(m => m.Person)
             .OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt)
@@ -88,8 +88,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         db.Parties.Add(party);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Im Anlege-Formular erfasste Mitglieder übernehmen (bestehende Personen + automatisch angelegte
-        // neue Akten, dedupliziert) und anschließend die Parteikollegen-Verknüpfungen aufbauen.
+        // import members from the create form, then build colleague links
         if (input.Members.Count > 0)
         {
             var existingIds = input.Members
@@ -114,7 +113,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
                 }
                 else if (string.IsNullOrWhiteSpace(m.PersonId) && !string.IsNullOrWhiteSpace(m.NewPersonName))
                 {
-                    // Derselbe neue Name im selben Formular → nur EINE Akte anlegen (keine Dubletten).
+                    // same new name within one form creates only one record
                     if (!seenNewNames.Add(m.NewPersonName.Trim()))
                     {
                         continue;
@@ -146,7 +145,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             }
         }
 
-        // Ersteller automatisch zuteilen und als Ermittlungsleiter markieren (so existiert stets mindestens ein EL).
+        // creator auto-assigned as investigation lead (ensures at least one)
         var creatorId = actor.GetAgentId();
         if (creatorId is not null)
         {
@@ -287,7 +286,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             throw new InvalidOperationException("Diese Person ist bereits Mitglied der Partei.");
         }
 
-        // Mitgliedschaft + automatische Parteikollegen-Verknüpfungen in EINER Transaktion.
+        // membership + colleague links in one transaction
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PartyMembers.Add(new PartyMember
         {
@@ -303,10 +302,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
     }
 
-    /// <summary>
-    /// Liefert die Personen-Id: bestehende (mit Existenzprüfung) oder – bei nur neuem Namen – eine frisch
-    /// angelegte Personen-Akte (committet, eigenes Aktenzeichen).
-    /// </summary>
+    /// <summary>Resolves an existing person id, or creates a fresh record when only a new name is given.</summary>
     private Task<string> PersonIdDetermineAsync(AppDbContext db, string? personId, string? newName, ClaimsPrincipal actor, CancellationToken cancellationToken)
         => MemberHelper.PersonIdDetermineAsync(db, personService, personId, newName, actor, cancellationToken);
 
@@ -339,8 +335,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         var personId = member.PersonId;
-        // Austritt + Kollegen-Verknüpfungen in EINER Transaktion. Soft-Delete (ISoftDelete): der Interceptor setzt
-        // GeloeschtAm (= Austrittsdatum) statt hart zu löschen → Mitgliedschaft bleibt als Verlaufseintrag erhalten.
+        // soft-delete keeps the membership as a history entry (exit date)
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         db.PartyMembers.Remove(member);
         await db.SaveChangesAsync(cancellationToken);
@@ -380,7 +375,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         await RequireLeadershipOrELAsync(db, partyId, actor, cancellationToken);
-        // Das Ermittlungsleiter-Flag darf nur die Führung vergeben (auch beim Zuteilen).
+        // only leadership may grant the lead flag
         if (asInvestigationLead)
         {
             Permission.RequireLeadership(actor);
@@ -422,7 +417,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
 
     public async Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Ermittlungsleiter vergeben/entziehen ist der Führung vorbehalten.
+        // leadership-only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -432,7 +427,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Wirft, wenn der Handelnde weder Führung noch Ermittlungsleiter dieser Partei ist.</summary>
+    /// <summary>Throws unless the actor is leadership or an investigation lead of this party.</summary>
     private static async Task RequireLeadershipOrELAsync(AppDbContext db, string partyId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (actor.IsLeadership())
@@ -465,8 +460,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Beziehungen (Konflikte/Bündnisse), die diese Partei als Quelle oder Ziel berühren –
-        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        // manual links touching this party, including removed ones so their delete entry shows
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic
@@ -486,11 +480,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             .ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Synchronisiert die automatischen „Parteikollege"-Verknüpfungen der Person (analog zu den
-    /// Fraktions-/Gruppenkollegen): zwischen P und Q soll genau dann eine bestehen, wenn beide mindestens
-    /// eine Partei teilen. Wird nach jeder Mitglieder-Änderung für die betroffene Person aufgerufen.
-    /// </summary>
+    /// <summary>Syncs the person's automatic party-colleague links: one exists iff two people share a party.</summary>
     private static async Task PartyColleaguesSyncAsync(AppDbContext db, string personId, CancellationToken cancellationToken)
     {
         var myParties = await db.PartyMembers
@@ -510,12 +500,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await ColleaguesSync.SyncAsync(db, personId, ColleaguesSync.PartyColleague, should, cancellationToken);
     }
 
-    /// <summary>
-    /// Merkt eingegebene Mitglieds-Rollen im gemeinsamen Vorschlagskatalog vor (Autocomplete beim nächsten
-    /// Mal), analog zu den Steckbrief-Feldern und der Fraktions-Art. Verschlusssachen bleiben außen vor,
-    /// damit keine sensiblen Werte in die geteilte Liste gelangen. Nur vormerken – der Aufrufer speichert
-    /// im selben SaveChanges (atomar mit der Mitgliedschaft).
-    /// </summary>
+    /// <summary>Stage member roles for the shared suggestion catalog; classified records excluded. Caller persists it.</summary>
     private async Task SuggestionsStageAsync(AppDbContext db, bool isClassified, IEnumerable<string?> roles, CancellationToken cancellationToken)
     {
         if (isClassified)

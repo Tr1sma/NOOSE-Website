@@ -3,20 +3,15 @@ using NOOSE_Website.Data.Entities.Taskforces;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Team-Chat einer Taskforce (Phase 5d). Sichtbarkeit/Schreibrecht erben von der Eltern-Taskforce: wer die
-/// Taskforce sehen darf (Verschlusssache → nur Führung), darf mitlesen und schreiben. Löschen nur durch den Autor
-/// oder die Führung. Nach Senden/Löschen wird ein Live-Signal über den Broadcaster ausgelöst.
-/// </summary>
+/// <summary>Taskforce team chat; visibility and write rights inherit from the parent taskforce.</summary>
 public interface ITaskforceChatService
 {
-    /// <summary>Lädt die jüngsten Nachrichten (chronologisch aufsteigend für die Anzeige). <paramref name="aelterAls"/>
-    /// blättert ältere nach. Leere Liste, wenn die Taskforce für den Aufrufer nicht sichtbar ist.</summary>
+    /// <summary>Loads recent messages, oldest first for display; olderAs pages further back.</summary>
     Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, bool isLeadership, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Sendet eine Nachricht (Autor = Handelnder). Wirft, wenn die Taskforce nicht sichtbar oder der Text leer ist.</summary>
+    /// <summary>Sends a message; throws if the taskforce is not visible or the text is empty.</summary>
     Task<TaskforceMessage> SendAsync(string taskforceId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Zieht eine Nachricht zurück (Soft-Delete). Erlaubt für den Autor oder die Führung.</summary>
+    /// <summary>Soft-deletes a message; allowed for the author or leadership.</summary>
     Task DeleteAsync(string messageId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

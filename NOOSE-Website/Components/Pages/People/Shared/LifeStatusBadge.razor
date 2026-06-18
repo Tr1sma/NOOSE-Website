@@ -1,4 +1,4 @@
-@* Zeigt den effektiven Lebensstatus farbig an. Bei laufendem Tot-Fenster mit Respawn-Countdown. *@
+@* Coloured life-status indicator, with respawn countdown during the dead window. *@
 @{
     var now = DateTime.UtcNow;
     var effective = LifeStatusLogic.Effective(Status, DeadUntil, now);

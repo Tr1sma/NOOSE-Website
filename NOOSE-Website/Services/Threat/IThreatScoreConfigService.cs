@@ -2,19 +2,15 @@ using System.Security.Claims;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Lädt &amp; speichert die admin-einstellbare <see cref="BedrohungsScoreKonfiguration"/> (Phase 8/Block D).
-/// Muster wie <c>AktualitaetService</c>: Code-Default als Fallback, DB-Overlay, 10-Minuten-Cache,
-/// <c>Berechtigung.VerlangeFuehrung</c> + volle Validierung beim Speichern.
-/// </summary>
+/// <summary>Loads and saves the admin-configurable threat score configuration: code default fallback, DB overlay, 10-minute cache, leadership-gated save.</summary>
 public interface IThreatScoreConfigService
 {
-    /// <summary>Aktuelle Konfiguration für die Berechnung (gecacht). Aufrufer dürfen die Instanz NICHT mutieren.</summary>
+    /// <summary>Current configuration for the calculation (cached); callers must NOT mutate the instance.</summary>
     Task<ThreatScoreConfiguration> GetAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Frische, mutierbare Kopie für die Admin-Bearbeitung (nicht gecacht).</summary>
+    /// <summary>Fresh mutable copy for admin editing (not cached).</summary>
     Task<ThreatScoreConfiguration> GetEditableAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Validiert und speichert die Konfiguration (Führung erforderlich) und invalidiert den Cache.</summary>
+    /// <summary>Validates and saves the configuration (leadership required) and invalidates the cache.</summary>
     Task SaveAsync(ThreatScoreConfiguration config, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

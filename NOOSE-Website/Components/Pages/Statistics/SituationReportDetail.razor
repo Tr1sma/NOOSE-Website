@@ -1,6 +1,4 @@
-@* Detailansicht eines archivierten Lageberichts (Phase 8 / Block D, Schritt 2): rendert den eingefrorenen
-   Schnappschuss als Dokument im DruckRahmen (ohne automatischen Druckdialog – der Drucken-/PDF-Knopf bleibt).
-   Nur für die Führung; der Bericht enthält die vollständige Lage inkl. Verschlusssachen-Aggregate. *@
+@* Frozen situation-report snapshot rendered as a document; leadership-only (contains classified aggregates). *@
 @page "/lageberichte/{Id}"
 @layout PrintLayout
 @attribute [Authorize(Policy = Policies.LeadershipPage)]

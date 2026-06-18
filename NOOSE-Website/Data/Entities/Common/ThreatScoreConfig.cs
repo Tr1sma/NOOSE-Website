@@ -3,13 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Persistierte, admin-einstellbare Konfiguration des Bedrohungs-Score-Algorithmus (Phase 8/Block D). Bewusst
-/// EINE Singleton-Zeile (<see cref="Id"/> = „global") mit einem JSON-Feld, das eine
-/// <c>BedrohungsScoreKonfiguration</c> trägt – so kommen neue Tuning-Parameter ohne Migration aus (fehlende
-/// Felder fallen beim Deserialisieren auf den Code-Default zurück). Fehlt die Zeile, gilt komplett der Default.
-/// <see cref="IAuditable"/> (kein Soft-Delete – die Konfiguration wird nie gelöscht, nur überschrieben).
-/// </summary>
+/// <summary>Admin-tunable threat-score config as a single "global" row holding JSON, so new params need no migration (missing fields fall back to code defaults). No row = full default.</summary>
 [Table("BedrohungsScoreKonfigs")]
 public class ThreatScoreConfig : IAuditable
 {
@@ -17,10 +11,9 @@ public class ThreatScoreConfig : IAuditable
 
     public string Id { get; set; } = GlobalId;
 
-    /// <summary>Serialisierte <c>BedrohungsScoreKonfiguration</c> (JSON, longtext).</summary>
+    /// <summary>Serialized threat-score configuration (JSON, longtext).</summary>
     public string? Json { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

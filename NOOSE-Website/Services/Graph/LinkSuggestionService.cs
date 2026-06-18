@@ -7,14 +7,14 @@ using NOOSE_Website.Models.Graph;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IVerknuepfungVorschlagService" />
+/// <inheritdoc cref="ILinkSuggestionService" />
 public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : ILinkSuggestionService
 {
     private const int MaxSuggestions = 12;
 
     public async Task<List<LinkSuggestion>> GetSuggestionsAsync(string entityType, string entityId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
-        // Block A: nur Personen-Akten liefern Vorschläge (die Signale sind personenzentriert).
+        // only person records yield suggestions; the signals are person-centric
         if (entityType != nameof(Person))
         {
             return new();
@@ -23,7 +23,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var isLeadership = viewer.IsLeadership();
 
-        // Kandidaten-Personen → Menge der zutreffenden Begründungen.
+        // candidate person -> set of matching reasons
         var candidates = new Dictionary<string, HashSet<string>>();
         void Add(string personId, string reason)
         {
@@ -39,7 +39,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             reasons.Add(reason);
         }
 
-        // ---- Signal 1: gleiche Telefonnummer (normalisiert auf Ziffern) ----
+        // ---- signal 1: same phone number (digits only) ----
         var ownNumbers = await db.PersonPhones.Where(t => t.PersonId == entityId)
             .Select(t => t.Number).ToListAsync(cancellationToken);
         var ownNumbersNorm = ownNumbers.Select(Normalize).Where(n => n.Length > 0).ToHashSet();
@@ -56,7 +56,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             }
         }
 
-        // ---- Signal 2: gleiche Fraktion ----
+        // ---- signal 2: same faction ----
         var factionIds = await db.FactionMembers.Where(m => m.PersonId == entityId)
             .Select(m => m.FactionId).Distinct().ToListAsync(cancellationToken);
         if (factionIds.Count > 0)
@@ -72,7 +72,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             }
         }
 
-        // ---- Signal 3: gleiche Personengruppe ----
+        // ---- signal 3: same person group ----
         var groupsIds = await db.PersonGroupMembers.Where(m => m.PersonId == entityId)
             .Select(m => m.PersonGroupId).Distinct().ToListAsync(cancellationToken);
         if (groupsIds.Count > 0)
@@ -88,7 +88,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             }
         }
 
-        // ---- Signal 4: gemeinsamer Tag ----
+        // ---- signal 4: shared tag ----
         var tagIds = await db.TagMappings
             .Where(z => z.EntityType == nameof(Person) && z.EntityId == entityId)
             .Select(z => z.TagId).Distinct().ToListAsync(cancellationToken);
@@ -105,8 +105,8 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             }
         }
 
-        // ---- Signal 5: gemeinsame Verknüpfung (gleicher Nachbar im Verknüpfungs-Graph) ----
-        // Bereits (manuell) verknüpfte/bezogene Personen werden zugleich für den Ausschluss gesammelt.
+        // ---- signal 5: shared link (same neighbour in the link graph) ----
+        // also collects already-linked persons for exclusion
         var meKey = $"{nameof(Person)}:{entityId}";
         var alreadyLinked = new HashSet<string>();
         var allVk = await db.Links
@@ -148,10 +148,8 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             }
         }
 
-        // ---- Signal 6: gleicher Nachname / Zweitname / Alias ----
-        // Namen sind ein einzelnes Freitext-Feld → in Wörter zerlegt. Der Vorname (erstes Wort) wird
-        // ignoriert (zu unspezifisch); verglichen werden Nachname + weitere Namensteile sowie Aliase.
-        // Aus Sicht DIESER Akte je Token die treffendste Begründung (Priorität Nachname > Namensteil > Alias).
+        // ---- signal 6: same surname / middle name / alias ----
+        // first name (first word) ignored as too unspecific; compare surname, other name parts and aliases
         var ownName = await db.People.Where(p => p.Id == entityId)
             .Select(p => p.Name).FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
         var ownAliases = await db.PersonAliases.Where(a => a.PersonId == entityId)
@@ -163,11 +161,11 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             var key = NormToken(display);
             if (key.Length >= 2 && !StopWords.Contains(key))
             {
-                tokenReason.TryAdd(key, reason); // erste Eintragung gewinnt → Reihenfolge unten = Priorität
+                tokenReason.TryAdd(key, reason); // first entry wins, so order below = priority
             }
         }
 
-        var ownNameParts = Words(ownName).Skip(1).ToList(); // Vorname raus
+        var ownNameParts = Words(ownName).Skip(1).ToList(); // drop first name
         var ownLastName = ownNameParts.LastOrDefault();
         if (ownLastName is not null)
         {
@@ -187,7 +185,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
 
         if (tokenReason.Count > 0)
         {
-            // Kandidaten-Namen (Vorname auch hier ignorieren, symmetrisch zum eigenen).
+            // candidate names, also dropping the first name symmetrically
             var otherNames = await db.People.Where(p => p.Id != entityId)
                 .Select(p => new { p.Id, p.Name }).ToListAsync(cancellationToken);
             foreach (var p in otherNames)
@@ -200,7 +198,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
                     }
                 }
             }
-            // Kandidaten-Aliase (alle Wörter – ein Alias kennt keinen „Vornamen").
+            // candidate aliases (all words; an alias has no first name)
             var otherAliases = await db.PersonAliases.Where(a => a.PersonId != entityId)
                 .Select(a => new { a.PersonId, a.AliasName }).ToListAsync(cancellationToken);
             foreach (var a in otherAliases)
@@ -215,7 +213,7 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             }
         }
 
-        // Bereits typisierte Person-Beziehungen ebenfalls vom Vorschlag ausschließen.
+        // also exclude existing typed person relations
         var related = await db.PersonRelations
             .Where(b => b.PersonAId == entityId || b.PersonBId == entityId)
             .Select(b => new { b.PersonAId, b.PersonBId }).ToListAsync(cancellationToken);
@@ -224,14 +222,14 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             alreadyLinked.Add(b.PersonAId == entityId ? b.PersonBId : b.PersonAId);
         }
 
-        // Kandidaten ohne bereits bestehende Verknüpfung/Beziehung.
+        // candidates without an existing link/relation
         var ids = candidates.Keys.Where(p => !alreadyLinked.Contains(p)).ToList();
         if (ids.Count == 0)
         {
             return new();
         }
 
-        // Auflösen + Sichtbarkeit (Verschlusssache nur für Führung; Papierkorb via globalem Filter).
+        // resolve + visibility (classified for leadership only)
         var people = await db.People.Where(p => ids.Contains(p.Id))
             .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified })
             .ToListAsync(cancellationToken);
@@ -256,21 +254,21 @@ public class LinkSuggestionService(IDbContextFactory<AppDbContext> dbFactory) : 
             .ToList();
     }
 
-    /// <summary>Reduziert eine Telefonnummer auf ihre Ziffern (toleriert Formatierungen/Leerzeichen).</summary>
+    /// <summary>Reduces a phone number to its digits.</summary>
     private static string Normalize(string? number)
         => string.IsNullOrEmpty(number) ? string.Empty : new string(number.Where(char.IsDigit).ToArray());
 
-    /// <summary>Zerlegt einen Namen/Alias in Wörter (Trennung an Leerzeichen, Bindestrich, Schrägstrich, Komma, Punkt …).</summary>
+    /// <summary>Splits a name/alias into words at whitespace and common punctuation.</summary>
     private static List<string> Words(string? text)
         => string.IsNullOrWhiteSpace(text)
             ? new()
             : text.Split(new[] { ' ', '\t', '\n', '\r', '-', '/', ',', '.', ';' }, StringSplitOptions.RemoveEmptyEntries).ToList();
 
-    /// <summary>Normalisiert ein Namens-Wort für den Abgleich (nur Buchstaben/Ziffern, klein – toleriert Umlaute).</summary>
+    /// <summary>Normalises a name word for matching (lowercase letters/digits only).</summary>
     private static string NormToken(string word)
         => new string(word.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
 
-    /// <summary>Häufige Artikel/Partikel, die als alleiniger Namens-/Alias-Treffer nur Rauschen erzeugen würden.</summary>
+    /// <summary>Common articles/particles that would only produce noise as a sole name/alias match.</summary>
     private static readonly HashSet<string> StopWords = new()
     {
         "der", "die", "das", "den", "dem", "von", "van", "de", "el", "la", "le", "the", "of", "und", "and",

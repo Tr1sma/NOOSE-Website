@@ -44,7 +44,7 @@ else
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
             <TemplateColumn Sortable="true" Title="Name" SortBy="x => x.Name">
                 <CellTemplate>
-                    @* Echter Link: Mittelklick/Strg+Klick öffnet die Akte im neuen Tab; tastatur-/screenreader-erreichbar. *@
+                    @* Real link so middle/ctrl-click opens in new tab and stays keyboard-reachable *@
                     <MudLink Href="@($"/personengruppen/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Name</MudLink>
                 </CellTemplate>
             </TemplateColumn>
@@ -120,8 +120,7 @@ else
                 Id = g.Id,
                 CaseNumber = g.CaseNumber,
                 Name = g.Name,
-                // Wie in der Detailansicht zählen: nur Mitglieder mit sichtbarer (nicht gelöschter, ggf. nicht-VS) Akte.
-                // partners: hide count
+                // Count only members with a visible (non-deleted, classification-permitted) file; partners hidden
                 MemberCount = isPartner ? 0 : g.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 Kind = g.Kind,
                 Classification = g.Classification,

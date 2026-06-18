@@ -17,7 +17,6 @@ public static class SystemEndpointRouteBuilderExtensions
             {
                 return Results.NotFound();
             }
-            // no caching
             return Results.File(logo.Value.Content, logo.Value.ContentType);
         })
         .AllowAnonymous();

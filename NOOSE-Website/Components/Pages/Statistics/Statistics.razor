@@ -1,6 +1,4 @@
-@* Statistik & Auswertungen (Phase 8 / Block D): aggregierte Verteilungen, 12-Monats-Verlauf und die
-   Top-Listen der gefährlichsten Akten – mit CSV- und Druck-Export. Für alle aktiven Agenten sichtbar
-   (App-Default-Policy AktiverAgent); alle Zahlen sind aus Sicht des Aufrufers VS-gefiltert. *@
+@* Aggregated statistics with CSV/print export; all numbers are classification-filtered per caller. *@
 @page "/statistik"
 @inject IStatisticsService StatisticsService
 @inject NavigationManager Nav
@@ -14,8 +12,6 @@
         <MudText Typo="Typo.h4">Statistik &amp; Auswertungen</MudText>
     </MudStack>
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-        @* Browser-Navigation (Target="_blank") liefert die CSV über den Minimal-API-Endpunkt aus –
-           Content-Disposition=attachment startet den Download, ohne die Seite zu verlassen. *@
         <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
                    Href="/statistik/export/verteilungen.csv" Target="_blank">Verteilungen (CSV)</MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
@@ -36,7 +32,6 @@
 }
 else if (_report is { } r)
 {
-    @* ---- Kennzahl-Streifen (identisch zum Lagezentrum) ---- *@
     <MudGrid>
         <MudItem xs="6" sm="4" md="3">
             <MudPaper Class="pa-4" Elevation="2">
@@ -76,7 +71,6 @@ else if (_report is { } r)
         </MudItem>
     </MudGrid>
 
-    @* ---- Verteilungs-Diagramme (Donuts) ---- *@
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Verteilungen</MudText>
     <MudGrid>
         <MudItem xs="12" sm="6" md="4" Class="d-flex">
@@ -99,14 +93,12 @@ else if (_report is { } r)
         </MudItem>
     </MudGrid>
 
-    @* ---- 12-Monats-Verlauf ---- *@
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Verlauf der letzten 12 Monate</MudText>
     <MudPaper Class="pa-4" Elevation="2">
         <TimeSeriesChart Title="Erfasste Maßnahmen &amp; neue Personenakten" Points="@r.TimeSeries"
                           Rows="@_timeSeries" Colours="_coloursTimeSeries" Height="320px" />
     </MudPaper>
 
-    @* ---- Top-Listen der gefährlichsten Akten ---- *@
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Gefährlichste Akten</MudText>
     <MudGrid>
         <MudItem xs="12" md="6">@TopList("Gefährlichste Personen", r.TopPeople)</MudItem>
@@ -122,13 +114,13 @@ else if (_report is { } r)
     private StatisticsReport? _report;
     private (string Name, IReadOnlyList<int> Values)[] _timeSeries = Array.Empty<(string, IReadOnlyList<int>)>();
 
-    // NOOSE-Farben je Diagramm – Reihenfolge identisch zur jeweiligen *Anzeige.Alle-Reihenfolge (stabile Legende).
-    private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };          // Unbekannt · Prüffall · Verdachtsfall · Gesichert staatsgefährdend
-    private static readonly string[] _coloursHazard = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" }; // Keine · Niedrig · Mittel · Hoch · Kritisch
-    private static readonly string[] _coloursLifeStatus = { "#3FB950", "#F85149", "#D29922" };                    // Lebend · Tot · Flüchtig
-    private static readonly string[] _coloursOutcome = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };              // Läuft noch · Offiziell entlassen · Amnestie-Spritze · Erschossen
-    private static readonly string[] _coloursStatus = { "#22D3EE", "#7C8CF8", "#D29922", "#3FB950", "#9BA8B8" };    // Offen · In Bearbeitung · Ruht · Abgeschlossen · Archiviert
-    private static readonly string[] _coloursTimeSeries = { "#F85149", "#22D3EE" };                                // Maßnahmen · Neuzugänge
+    // Colour order must match each *Display.All order for a stable legend
+    private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };
+    private static readonly string[] _coloursHazard = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" };
+    private static readonly string[] _coloursLifeStatus = { "#3FB950", "#F85149", "#D29922" };
+    private static readonly string[] _coloursOutcome = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };
+    private static readonly string[] _coloursStatus = { "#22D3EE", "#7C8CF8", "#D29922", "#3FB950", "#9BA8B8" };
+    private static readonly string[] _coloursTimeSeries = { "#F85149", "#22D3EE" };
 
     protected override async Task OnInitializedAsync()
     {

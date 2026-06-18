@@ -123,7 +123,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    // Active tab persisted in URL; order must match the MudTabPanels
     private int _activeTab;
     private static readonly string[] _tabs =
     {
@@ -135,10 +135,7 @@ else
         _user = (await AuthStateTask).User;
     }
 
-    // Diese Seite wird bei Navigation /taskforces/{A} → /taskforces/{B} WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
-    // Akte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch. Tab-/Query-Wechsel: Id
-    // bleibt gleich → kein Neuladen.
+    // Component is reused across ids; react to id changes here since OnInitialized won't rerun
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -158,8 +155,7 @@ else
 
     private async Task LoadAsync()
     {
-        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
-        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab.
+        // Don't set _load on reload: it would remount MudTabs and jump to the first tab
         _taskforce = await TaskforceService.GetDetailAsync(Id, _user.MayAllTaskforcesSee(), _user.GetAgentId());
         if (_taskforce is not null)
         {

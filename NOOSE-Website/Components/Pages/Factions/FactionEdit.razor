@@ -54,9 +54,7 @@ else
         _isLeadership = _user.IsLeadership();
     }
 
-    // Diese Seite wird bei /fraktionen/{A}/bearbeiten → /fraktionen/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
-    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    // Page is reused across edit routes, so OnInitializedAsync won't re-run; reload on Id change here.
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -87,7 +85,7 @@ else
                 Ranks = f.Ranks.OrderBy(r => r.Order).Select(r => new RankInput { Id = r.Id, Designation = r.Designation }).ToList(),
                 WeaponStock = f.WeaponStock.Select(w => new StockInput { Designation = w.Designation, Quantity = w.Quantity }).ToList(),
                 Inventory = f.Inventory.Select(l => new StockInput { Designation = l.Designation, Quantity = l.Quantity }).ToList(),
-                // Drogenrouten teilen BestandEingabe; das Menge-Feld trägt hier die Notiz.
+                // Quantity field carries the note for drug routes
                 DrugRoutes = f.DrugRoutes.Select(d => new StockInput { Designation = d.Designation, Quantity = d.Note }).ToList(),
             };
         }

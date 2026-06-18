@@ -11,7 +11,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IAufgabeService" />
+/// <inheritdoc cref="IJobService" />
 public class JobService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumber,
@@ -24,16 +24,14 @@ public class JobService(
 
         var meId = actor.GetAgentId();
         var isLeadership = actor.IsLeadership();
-        // Eingeschränkte Aufgaben nur für Beteiligte (Ersteller/Zugeteilte) bzw. die Aufsicht.
         var query = db.Jobs.OnlyVisible(db, actor.MayClassifiedRead(), meId);
         if (onlyMy && !string.IsNullOrEmpty(meId))
         {
-            // „Meine" = selbst angelegt ODER zugewiesen (korreliertes EXISTS – auf MySQL/MariaDB zulässig).
             query = query.Where(a => a.CreatedById == meId
                 || db.JobAssignments.Any(z => z.JobId == a.Id && z.AgentId == meId));
         }
 
-        // Aufgaben flach laden (kein Collection-Projektions-Subselect – Pomelo-Regel).
+        // flat load, no collection-projection subselect (Pomelo)
         var rows = await query
             .OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt)
             .Select(a => new
@@ -47,7 +45,7 @@ public class JobService(
         }
 
         var ids = rows.Select(r => r.Id).ToList();
-        // Zuweisungen flach über WHERE FK IN; Codename per Referenz-Join (kein LATERAL).
+        // flat WHERE FK IN, no LATERAL
         var assignments = await db.JobAssignments
             .Where(z => ids.Contains(z.JobId))
             .Select(z => new { z.JobId, z.AgentId, Codename = z.Agent!.Codename })
@@ -55,12 +53,11 @@ public class JobService(
         var assignedPerJob = assignments
             .GroupBy(z => z.JobId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Codename).OrderBy(c => c).ToList());
-        // Wer ist mir zugewiesen? (für die Status-Ändern-Berechtigung des Kanban-Boards)
         var myAssignments = string.IsNullOrEmpty(meId)
             ? new HashSet<string>()
             : assignments.Where(z => z.AgentId == meId).Select(z => z.JobId).ToHashSet();
 
-        // Ersteller-Codenamen einsammeln (Codename ist öffentlich, nie Klarname).
+        // codename is public, never real name
         var creatorIds = rows.Select(r => r.CreatedById).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
         var creatorNames = await db.Users
             .Where(u => creatorIds.Contains(u.Id))
@@ -78,8 +75,7 @@ public class JobService(
             DoneAt = r.DoneAt,
             CreatorCodename = r.CreatedById is not null && creatorNames.TryGetValue(r.CreatedById, out var name) ? name : null,
             AssignedCodenames = assignedPerJob.TryGetValue(r.Id, out var list) ? list : new List<string>(),
-            // Status ändern dürfen Führung, Ersteller oder zugewiesene Agenten (spiegelt StatusSetzenAsync).
-            // Die Nur-Lese-Aufsicht darf nichts ändern – auch keine eigenen/zugewiesenen Aufgaben.
+            // read-only supervision may change nothing
             MayStatusChange = actor.MayWrite() && (isLeadership || r.CreatedById == meId || myAssignments.Contains(r.Id)),
         }).ToList();
     }
@@ -87,7 +83,6 @@ public class JobService(
     public async Task<Job?> GetDetailAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Eingeschränkte Aufgaben sind nur für Beteiligte/Aufsicht zugänglich (null = „nicht gefunden/zugänglich").
         return await db.Jobs
             .OnlyVisible(db, actor.MayClassifiedRead(), actor.GetAgentId())
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
@@ -105,7 +100,6 @@ public class JobService(
     public async Task<List<Job>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Eingeschränkte Aufgaben tauchen im Picker nur für Beteiligte/Aufsicht auf.
         var query = db.Jobs.OnlyVisible(db, mayAll, meId);
 
         var s = searchText?.Trim();
@@ -140,7 +134,7 @@ public class JobService(
         db.Jobs.Add(job);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Nur tatsächlich existierende, aktive Agenten zuweisen (dedupliziert).
+        // assign only existing, active agents
         var valid = agentIds.Count == 0
             ? new List<string>()
             : await db.Users
@@ -158,7 +152,7 @@ public class JobService(
 
         await tx.CommitAsync(cancellationToken);
 
-        // Nach dem Commit benachrichtigen (der Ersteller selbst bekommt keine Meldung).
+        // notify after commit; creator gets none
         var creatorId = actor.GetAgentId();
         foreach (var agentId in valid.Distinct().Where(x => x != creatorId))
         {
@@ -293,7 +287,7 @@ public class JobService(
             .Select(z => z.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Verknüpfungen, die diese Aufgabe als Quelle oder Ziel berühren (inkl. entfernter, für „entfernt"-Einträge).
+        // manual links touching this job as source or target, incl. removed
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic
@@ -321,8 +315,7 @@ public class JobService(
             return null;
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Nur anzeigen, was der Aufrufer sehen darf (Verschlusssache/Papierkorb/Personalakte/Taskforce-Gate).
-        // VS: die Nur-Lese-Aufsicht darf einsehen (DarfVerschlusssacheLesen); Taskforces: nur wenn zugeteilt (meId).
+        // only resolve what the caller may see
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.MayClassifiedRead(), cancellationToken, actor.GetAgentId()))
         {
             return null;
@@ -332,9 +325,7 @@ public class JobService(
         return map.TryGetValue((entityType, entityId), out var a) ? a.Display : null;
     }
 
-    // ---- Helfer ----
-
-    /// <summary>Setzt den Status und pflegt den Erledigt-Zeitpunkt (setzen bei Abschluss, leeren bei erneut offen).</summary>
+    /// <summary>Sets status and maintains the done timestamp (set on completion, cleared when reopened).</summary>
     private static void SetStatus(Job job, JobStatus @new)
     {
         var wasCompleted = JobStatusDisplay.IsCompleted(job.Status);
@@ -350,7 +341,7 @@ public class JobService(
         }
     }
 
-    /// <summary>Benachrichtigt den Ersteller, wenn die Aufgabe gerade erst auf „Erledigt" gesetzt wurde (und er nicht selbst handelt).</summary>
+    /// <summary>Notifies the creator when the job was just set to done (and they did not do it themselves).</summary>
     private async Task NotifyCreatorOnDoneAsync(Job job, JobStatus alterStatus,
         ClaimsPrincipal actor, CancellationToken cancellationToken)
     {

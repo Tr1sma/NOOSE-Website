@@ -1,14 +1,9 @@
 namespace NOOSE_Website.Infrastructure.Chat;
 
-/// <summary>
-/// Prozessweiter (Singleton) In-Memory-Broadcaster für die Live-Aktualisierung der Taskforce-Chats. Der
-/// Chat-Service meldet nach Senden/Löschen die betroffene <c>TaskforceId</c>; offene Chat-Panels (je Blazor-Server-
-/// Circuit) abonnieren das Ereignis und laden ihren Verlauf neu. Single-VPS-Betrieb (siehe Plan.md Phase 10) →
-/// ein In-Memory-Broadcaster genügt, kein SignalR-Hub nötig.
-/// </summary>
+/// <summary>Process-wide in-memory broadcaster for live taskforce-chat updates.</summary>
 public sealed class TaskforceChatBroadcaster
 {
-    /// <summary>Wird mit der betroffenen TaskforceId ausgelöst, sobald sich deren Chat ändert.</summary>
+    /// <summary>Fired with the affected taskforce id when its chat changes.</summary>
     public event Action<string>? Modified;
 
     public void Report(string taskforceId) => Modified?.Invoke(taskforceId);

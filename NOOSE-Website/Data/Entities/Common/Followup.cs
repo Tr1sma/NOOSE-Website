@@ -3,38 +3,29 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Eine terminierte Wiedervorlage/Erinnerung an einer beliebigen Akte (Person/Fraktion/…). Die Zuordnung erfolgt
-/// polymorph über <see cref="EntitaetTyp"/> + <see cref="EntitaetId"/> – analog zu <see cref="Quelle"/>, daher ohne
-/// FK-Navigation. Wird der Termin (<see cref="FaelligAm"/>) erreicht, erzeugt der Hintergrund-Dienst eine
-/// Benachrichtigung an den Zuständigen und die Follower der Akte. Voll auditiert und papierkorbfähig.
-/// </summary>
+/// <summary>A scheduled follow-up/reminder on any record (polymorphic by entity type + id); the background worker notifies on due date.</summary>
 [Table("Wiedervorlagen")]
 public class Followup : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Typ der Eltern-Akte, z. B. <c>nameof(Person)</c>.</summary>
     [Column("EntitaetTyp")]
     public string EntityType { get; set; } = string.Empty;
 
-    /// <summary>Schlüssel der Eltern-Akte.</summary>
     [Column("EntitaetId")]
     public string EntityId { get; set; } = string.Empty;
 
-    /// <summary>Fälligkeitstermin (UTC). Überfällig = in der Vergangenheit bei noch offener Wiedervorlage.</summary>
+    /// <summary>Due date (UTC); overdue = in the past while still open.</summary>
     [Column("FaelligAm")]
     public DateTime DueAt { get; set; }
 
-    /// <summary>Worum geht es / Grund der Wiedervorlage (Freitext, optional).</summary>
     [Column("Notiz")]
     public string? Note { get; set; }
 
-    /// <summary>Zuständiger Agent (Identity-Id). Default = Ersteller; per <c>OnDelete SetNull</c> entkoppelt.</summary>
+    /// <summary>Responsible agent; defaults to creator, decoupled via OnDelete SetNull.</summary>
     [Column("ZustaendigerAgentId")]
     public string? ResponsibleAgentId { get; set; }
 
-    /// <summary>True, sobald die Wiedervorlage abgehakt wurde.</summary>
     [Column("Erledigt")]
     public bool Done { get; set; }
     [Column("ErledigtAm")]
@@ -42,14 +33,10 @@ public class Followup : IAuditable, ISoftDelete
     [Column("ErledigtVonId")]
     public string? DoneById { get; set; }
 
-    /// <summary>
-    /// Gesetzt, sobald die Fälligkeits-Benachrichtigung verschickt wurde – verhindert, dass der wiederkehrende
-    /// Hintergrund-Check dieselbe Wiedervorlage mehrfach meldet (Dedupe).
-    /// </summary>
+    /// <summary>Set once the due notification was sent; dedupes the recurring background check.</summary>
     [Column("BenachrichtigtAm")]
     public DateTime? NotifiedAt { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -59,7 +46,6 @@ public class Followup : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

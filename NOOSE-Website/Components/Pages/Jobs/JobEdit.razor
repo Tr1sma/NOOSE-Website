@@ -73,8 +73,7 @@ else
         var a = await JobService.GetDetailAsync(Id, _user);
         if (a is not null)
         {
-            // Bearbeiten ist Ersteller/Führung vorbehalten – serverseitig in AktualisierenAsync erzwungen, hier
-            // proaktiv in der UI gespiegelt, damit kein nicht-berechtigtes Formular angezeigt wird.
+            // UI mirror of the server-enforced creator/leadership gate.
             if (!_user.IsLeadership() && a.CreatedById != _user.GetAgentId())
             {
                 _noAccess = true;

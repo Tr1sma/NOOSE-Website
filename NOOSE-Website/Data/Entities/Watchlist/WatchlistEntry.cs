@@ -3,20 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Watchlist;
 
-/// <summary>
-/// Ein „Folgen"-Eintrag: ein Agent (<see cref="AgentId"/>) beobachtet eine Akte (polymorph über
-/// <see cref="EntitaetTyp"/> + <see cref="EntitaetId"/>, wie Kommentar/Quelle/Tag). Ändert sich die
-/// gefolgte Akte, erhält der Agent eine „Beobachtete Akte geändert"-Benachrichtigung (Glocke).
-/// Voll auditiert und papierkorbfähig. Bewusst KEIN Unique-Index (Projekt-Konvention „soft-deletebar →
-/// kein Unique-Index"); Entfolgen ist ein Soft-Delete, erneutes Folgen reaktiviert die alte Zeile –
-/// die Aktiv-Eindeutigkeit prüft der <c>WatchlistService</c> per Aktiv-Abfrage (analog FraktionMitglied).
-/// </summary>
+/// <summary>A follow entry: an agent watches a polymorphic record. No unique index by convention (soft-deletable); active-uniqueness is enforced in the service.</summary>
 [Table("Watchlisten")]
 public class WatchlistEntry : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Agent-Id des Folgers (Identity-User-Id).</summary>
     public string AgentId { get; set; } = string.Empty;
 
     [Column("EntitaetTyp")]
@@ -24,7 +16,6 @@ public class WatchlistEntry : IAuditable, ISoftDelete
     [Column("EntitaetId")]
     public string EntityId { get; set; } = string.Empty;
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -34,7 +25,6 @@ public class WatchlistEntry : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

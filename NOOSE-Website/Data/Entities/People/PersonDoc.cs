@@ -4,10 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>
-/// Ein Personen-Dok: Protokoll eines Verhörs / einer Maßnahme. Voll auditiert und papierkorbfähig.
-/// Der <see cref="Ausgang"/> kann den Lebensstatus der Person beeinflussen (siehe <c>PersonDokService</c>).
-/// </summary>
+/// <summary>An interrogation/measure protocol on a person. The outcome can affect the person's life status.</summary>
 [Table("PersonDoks")]
 public class PersonDoc : IAuditable, ISoftDelete
 {
@@ -15,25 +12,22 @@ public class PersonDoc : IAuditable, ISoftDelete
     public string PersonId { get; set; } = string.Empty;
     public Person? Person { get; set; }
 
-    /// <summary>Zeitpunkt der Maßnahme (RP-Zeit, UTC gespeichert).</summary>
+    /// <summary>Measure time (RP time, stored UTC).</summary>
     [Column("Zeitpunkt")]
     public DateTime Timestamp { get; set; }
 
     [Column("Grund")]
     public string? Reason { get; set; }
 
-    /// <summary>Fraktionszugehörigkeit als Freitext – Rückfallebene, falls die Organisation (noch)
-    /// nicht als Akte existiert. Existiert sie, wird stattdessen über <see cref="OrgTyp"/>/<see cref="OrgId"/> verknüpft.</summary>
+    /// <summary>Free-text faction fallback when the organization has no record yet; otherwise linked via OrgType/OrgId.</summary>
     [Column("Fraktion")]
     public string? Faction { get; set; }
 
-    /// <summary>Typ der verknüpften Organisation: <c>nameof(Fraktion)</c> oder <c>nameof(Personengruppe)</c>;
-    /// null, wenn keine Akte verknüpft ist (dann zählt der Freitext <see cref="Fraktion"/>).</summary>
+    /// <summary>Linked organization type; null when no record is linked (then the free-text faction applies).</summary>
     [Column("OrgTyp")]
     public string? OrgType { get; set; }
 
-    /// <summary>Id der verknüpften Fraktion bzw. Personengruppe (lose Verknüpfung ohne FK, analog der
-    /// generischen Entitaet-Assoziationen). Der Name wird erst bei der Anzeige aufgelöst.</summary>
+    /// <summary>Linked organization id (loose link, no FK).</summary>
     public string? OrgId { get; set; }
 
     [Column("ErhalteneInformationen")]
@@ -45,11 +39,10 @@ public class PersonDoc : IAuditable, ISoftDelete
     [Column("Ausgang")]
     public MeasureOutcome Outcome { get; set; }
 
-    /// <summary>Bei Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.</summary>
+    /// <summary>Amnesty injection: person survives but loses their memory.</summary>
     [Column("GedaechtnisGeloescht")]
     public bool MemoryDeleted { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -59,7 +52,6 @@ public class PersonDoc : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

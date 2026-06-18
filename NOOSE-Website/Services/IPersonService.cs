@@ -6,11 +6,7 @@ using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Geschäftslogik der Personen-Akten: Liste/Detail (inkl. Verschlusssachen-Filter), Anlegen/
-/// Bearbeiten mit Steckbrief-Kindern, Papierkorb (Soft-Delete/Wiederherstellen), Einstufung mit
-/// Rang-Gate, Foto-Galerie und Akten-Historie. Alle verändernden Aktionen werden auditiert.
-/// </summary>
+/// <summary>Business logic for person records: list/detail, CRUD with profile children, classification, photos, history.</summary>
 public interface IPersonService
 {
     Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
@@ -20,7 +16,7 @@ public interface IPersonService
     /// <summary>Search people by name or case number for internal pickers (write path); classified-filtered.</summary>
     Task<List<Person>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
-    /// <summary>Mögliche Dubletten anhand identischem Namen oder gemeinsamer Telefonnummer (Verschlusssache-gefiltert).</summary>
+    /// <summary>Possible duplicates by identical name or shared phone number (classified-filtered).</summary>
     Task<List<Person>> FindDuplicatesAsync(string name, IEnumerable<string> phoneNumbers, bool isLeadership, CancellationToken cancellationToken = default);
 
     Task<Person> CreateAsync(PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
@@ -28,7 +24,7 @@ public interface IPersonService
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
+    /// <summary>Set classification. "Secured state-threatening" requires Senior Special Agent+ or Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Append-only classification history of the person, newest first; visibility-filtered.</summary>

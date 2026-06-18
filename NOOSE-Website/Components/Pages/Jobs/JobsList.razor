@@ -26,7 +26,6 @@
 }
 else
 {
-    @* Filterzeile *@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4 flex-wrap">
         <MudTextField T="string" Value="_search" ValueChanged="SearchModified" Placeholder="Suchen (Titel, Aktenzeichen, Agent)…"
                       Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
@@ -43,7 +42,6 @@ else
         </MudSelect>
     </MudStack>
 
-    @* Kennzahl-Kacheln *@
     <MudGrid Class="mb-4">
         @foreach (var s in JobStatusDisplay.All)
         {
@@ -85,9 +83,7 @@ else
             </div>
         </ChildContent>
         <ItemRenderer>
-            @* Karte ist gleichzeitig ziehbar (Drag&Drop) UND klickbar. Navigation MUSS per @onclick (programmatisch)
-               erfolgen – ein <a href> (MudLink) würde vom Drag-Container per preventDefault geschluckt; ein
-               Blazor-@onclick-Handler feuert hingegen weiterhin. *@
+            @* Navigate via @onclick: a real link would be swallowed by the drag container's preventDefault. *@
             <MudPaper Class="aufgaben-karte pa-3" Elevation="2" @onclick="@(() => Open(context))">
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1">
@@ -162,7 +158,7 @@ else
         _container?.Refresh();
     }
 
-    /// <summary>Client-Filter (Suchtext + Priorität); der „nur meine"-Filter läuft serverseitig.</summary>
+    /// <summary>Client-side filter; the "only mine" filter runs server-side.</summary>
     private bool Matches(JobRow z)
     {
         if (_priorityFilter is not null && z.Priority != _priorityFilter)
@@ -193,7 +189,7 @@ else
             return;
         }
         var alt = item.Status;
-        item.Status = target; // optimistisch: Karte sofort in der Zielspalte
+        item.Status = target; // optimistic
         _container?.Refresh();
         try
         {
@@ -201,7 +197,7 @@ else
         }
         catch (Exception ex)
         {
-            item.Status = alt; // zurückrollen
+            item.Status = alt; // roll back
             _container?.Refresh();
             Snackbar.Add(ex.Message, Severity.Error);
         }

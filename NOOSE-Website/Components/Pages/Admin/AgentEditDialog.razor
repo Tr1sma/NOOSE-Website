@@ -1,5 +1,4 @@
-@* Dialog zum Bearbeiten der Agent-Stammdaten: Klarname (intern), Codename (öffentlich) und
-   Dienstnummer (öffentlich). Der Discord-Name dient nur der internen Identifikation. *@
+@* Edits agent master data: real name (internal), codename and badge number (public). *@
 
 <MudDialog>
     <DialogContent>
@@ -63,7 +62,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog und liefert die geänderten Stammdaten oder null bei Abbruch.</summary>
+    /// <summary>Shows the dialog and returns the edited master data, or null if cancelled.</summary>
     public static async Task<AgentMasterData?> ShowAsync(IDialogService dialog, Agent agent)
     {
         var parameters = new DialogParameters<AgentEditDialog>
@@ -78,6 +77,6 @@
         return result is { Canceled: false, Data: AgentMasterData e } ? e : null;
     }
 
-    /// <summary>Ergebnis des Bearbeiten-Dialogs.</summary>
+    /// <summary>Result of the edit dialog.</summary>
     public record AgentMasterData(string? RealName, string Codename, string? BadgeNumber);
 }

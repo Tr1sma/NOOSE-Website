@@ -20,7 +20,6 @@ namespace NOOSE_Website.Services;
 /// <summary>Builds unified timeline from audit and semantic sources.</summary>
 public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimelineService
 {
-    // internal DTO
     private sealed record Raw(
         DateTime Timestamp, TimelineCategory Category, string Title, string? Detail,
         string? ActorName, string? ActorId, string? Href,
@@ -39,12 +38,10 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         var mayAllTf = viewer.MayAllTaskforcesSee();
         var meId = viewer.GetAgentId();
 
-        // visibility gate
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, scope, cancellationToken))
         {
             return Array.Empty<TimelineEntry>();
         }
-        // check job restriction
         if (entityType == nameof(Job))
         {
             var visible = await JobVisibility.VisibleIdsAsync(db, new[] { entityId }, mayAllTf, meId, cancellationToken);
@@ -53,7 +50,6 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 return Array.Empty<TimelineEntry>();
             }
         }
-        // check appointment restriction
         if (entityType == nameof(Appointment))
         {
             var visible = await AppointmentVisibility.VisibleIdsAsync(db, new[] { entityId }, mayAllTf, meId, cancellationToken);
@@ -281,7 +277,6 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .ToList();
     }
 
-    // audit sources
     private static async Task<(string[] Types, HashSet<string> Ids)> AuditSourceAsync(
         AppDbContext db, string type, string id, CancellationToken ct)
     {
@@ -323,7 +318,6 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         }
     }
 
-    // map audit entry
     private static (TimelineCategory Kat, string Title) MapAudit(string entityType, AuditAction action)
     {
         string Verb(string created, string deleted) => action switch
@@ -360,7 +354,6 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         return (kat, $"Akte {Verb("angelegt", "gelöscht")}");
     }
 
-    // resolve target
     private static (string Name, string? Href) CounterpartDisplay(
         Dictionary<(string, string), RecordsReference.Resolution> map, (string, string) target, string covertNoun)
     {

@@ -3,10 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Common;
 
-/// <summary>
-/// Ein generischer Kommentar/Vermerk an einer beliebigen Akte (polymorph über <see cref="EntitaetTyp"/>
-/// + <see cref="EntitaetId"/>). Voll auditiert und papierkorbfähig. @-Erwähnungen folgen erst in Phase 6.
-/// </summary>
+/// <summary>Generic comment on any record, polymorphic over EntityType + EntityId.</summary>
 [Table("Kommentare")]
 public class Comment : IAuditable, ISoftDelete
 {
@@ -19,11 +16,10 @@ public class Comment : IAuditable, ISoftDelete
 
     public string Text { get; set; } = string.Empty;
 
-    /// <summary>Codename des Autors zum Zeitpunkt der Erstellung (denormalisiert, wie EinstufungVerlauf.AgentName).</summary>
+    /// <summary>Author codename at creation time (denormalized).</summary>
     [Column("AutorName")]
     public string? AuthorName { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -33,7 +29,6 @@ public class Comment : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

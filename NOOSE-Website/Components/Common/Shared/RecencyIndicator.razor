@@ -1,7 +1,4 @@
-@* Aktualitäts-Ampel einer Akte: farbiger Punkt (grün/gelb/rot) je nach Alter der letzten Änderung.
-   Zwei Nutzungsarten:
-   • Listen geben die bereits berechnete Stufe direkt (kein DB-Treffer je Zeile).
-   • Detailkarten geben Aktentyp + UTC-Referenzdatum; die Stufe wird über den (gecachten) Dienst ermittelt. *@
+@* Recency indicator dot; lists pass a precomputed level, detail cards self-compute via the service. *@
 @inject IRecencyService Recency
 
 <MudTooltip Text="@TooltipText">
@@ -9,13 +6,13 @@
 </MudTooltip>
 
 @code {
-    /// <summary>Modus A: bereits berechnete Stufe (Listen berechnen sie einmalig je Laden).</summary>
+    /// <summary>Precomputed level; lists supply this.</summary>
     [Parameter] public RecencyLevel? Level { get; set; }
 
-    /// <summary>Modus B: Aktentyp (z. B. <c>nameof(Person)</c>) zur Selbstberechnung der Stufe.</summary>
+    /// <summary>Record type, for self-computing the level.</summary>
     [Parameter] public string? RecordsType { get; set; }
 
-    /// <summary>Referenzdatum in UTC (<c>GeaendertAm ?? ErstelltAm</c>) – für Selbstberechnung und Tooltip.</summary>
+    /// <summary>UTC reference date, for self-computation and tooltip.</summary>
     [Parameter] public DateTime? ReferenceDateUtc { get; set; }
 
     [Parameter] public Size Size { get; set; } = Size.Small;

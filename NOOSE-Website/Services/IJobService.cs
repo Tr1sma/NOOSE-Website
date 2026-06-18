@@ -6,51 +6,41 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Geschäftslogik der Aufgaben/To-Dos – Phase 6. Team-Board: alle aktiven Agenten sehen alle Aufgaben (kein
-/// Verschlusssache-/Einstufungs-Konzept). Anlegen mit Mehrfach-Zuweisung, Status/Bearbeiten/Papierkorb,
-/// Zuweisen/Entfernen und Historie. Zuweisung und Erledigung erzeugen eine In-App-Benachrichtigung (Glocke).
-/// </summary>
+/// <summary>Tasks/to-dos team board: all active agents see all jobs (no classification concept).</summary>
 public interface IJobService
 {
-    /// <summary>Team-Board: alle Aufgaben, optional nur eigene (Ersteller ODER zugewiesen). Neueste zuerst.</summary>
+    /// <summary>Team board: all jobs, optionally only own (creator or assigned). Newest first.</summary>
     Task<List<JobRow>> GetTeamBoardAsync(bool onlyMy, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    /// <summary>Lädt eine Aufgabe – liefert null, wenn sie eingeschränkt und für den Aufrufer nicht sichtbar ist.</summary>
+    /// <summary>Loads a job; null when restricted and not visible to the caller.</summary>
     Task<Job?> GetDetailAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<Job>> GetTrashAsync(CancellationToken cancellationToken = default);
-    /// <summary>Aufgaben-Suche für Picker; eingeschränkte Aufgaben nur für Beteiligte/Aufsicht (<paramref name="darfAlles"/> = DarfVerschlusssacheLesen).</summary>
+    /// <summary>Job search for pickers; restricted jobs only for participants/supervision (mayAll = may read classified).</summary>
     Task<List<Job>> SearchAsync(string? searchText, bool mayAll, string? meId, int max = 20, CancellationToken cancellationToken = default);
 
-    /// <summary>Legt eine Aufgabe an, weist sie den angegebenen aktiven Agenten zu und benachrichtigt diese (außer den Ersteller).</summary>
+    /// <summary>Create a job, assign it to the given active agents and notify them (except the creator).</summary>
     Task<Job> CreateAsync(JobInput input, IReadOnlyList<string> agentIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    /// <summary>Stammdaten/Status bearbeiten – nur Ersteller oder Führung.</summary>
     Task RefreshAsync(string id, JobInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-    /// <summary>Status setzen – Ersteller, Zugewiesener oder Führung. Bei „Erledigt" wird der Ersteller benachrichtigt.</summary>
+    /// <summary>Set status (creator, assignee or leadership); "Done" notifies the creator.</summary>
     Task StatusSetAsync(string id, JobStatus status, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Der Aufgabe zugewiesene Agenten (inkl. Agent-Daten; nach Codename).</summary>
+    /// <summary>Agents assigned to the job (by codename).</summary>
     Task<List<JobAssignment>> GetAssignmentsAsync(string jobId, CancellationToken cancellationToken = default);
 
-    /// <summary>Agent zuweisen – nur Ersteller oder Führung; benachrichtigt den Agenten (außer er ist der Handelnde).</summary>
+    /// <summary>Assign an agent (creator or leadership); notifies the agent unless they are the actor.</summary>
     Task AgentAssignAsync(string jobId, string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Zuweisung aufheben – nur Ersteller oder Führung.</summary>
     Task AgentRemoveAsync(string assignmentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Aufgabe inkl. Zuweisungen/Verknüpfungen (für die Akten-Historie).</summary>
+    /// <summary>Audit entries for the job incl. assignments/links.</summary>
     Task<List<AuditLog>> GetHistoryAsync(string jobId, CancellationToken cancellationToken = default);
 
-    /// <summary>Öffentlicher Anzeigename einer Bezugs-Akte (für den vorausgefüllten Bezug beim Anlegen), sofern für den Aufrufer sichtbar; sonst null. Nie Klarname.</summary>
+    /// <summary>Public display name of a referenced record if visible to the caller; else null. Never a real name.</summary>
     Task<string?> ReferenceDisplayAsync(string entityType, string entityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Listenzeile/Karte für das Aufgaben-Team-Board (öffentliche Codenamen, nie Klarname).
-/// Klasse (nicht Record), damit das Kanban-Board den <see cref="Status"/> beim Drag&amp;Drop optimistisch
-/// umsetzen kann. <see cref="DarfStatusAendern"/> spiegelt das Server-Gate (Ersteller/Zugewiesener/Führung).
-/// </summary>
+/// <summary>Row/card for the jobs team board (public codenames only). Class so the kanban board can update Status optimistically on drag.</summary>
 public sealed class JobRow
 {
     public string Id { get; set; } = string.Empty;

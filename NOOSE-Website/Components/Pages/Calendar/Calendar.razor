@@ -9,7 +9,6 @@
 <PageTitle>Kalender · NOOSE</PageTitle>
 
 <MudStack Spacing="3">
-    @* ---- Kopfzeile ---- *@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
         <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Primary" Size="Size.Large" />
         <div>
@@ -17,7 +16,6 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@SubtitleText</MudText>
         </div>
 
-        @* ---- Umschalter: Mein Kalender ⇄ Behörden-Kalender ---- *@
         <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" OverrideStyles="false" Class="ml-2">
             <MudButton Variant="@(_mode == CalendarMode.My ? Variant.Filled : Variant.Outlined)"
                        Color="@(_mode == CalendarMode.My ? Color.Primary : Color.Default)"
@@ -45,7 +43,6 @@
         </MudAlert>
     }
 
-    @* ---- Kalenderfläche ---- *@
     <MudPaper Elevation="2" Class="pa-3" Style="position:relative;">
         <div id="@ContainerId" style="width:100%;"></div>
         @if (_load)
@@ -56,7 +53,6 @@
         }
     </MudPaper>
 
-    @* ---- Arten-Filter (modus-abhängig) – Klick blendet eine Art aus/ein ---- *@
     <MudPaper Class="pa-3" Elevation="1">
         <MudStack Row="true" Spacing="2" Class="flex-wrap" AlignItems="AlignItems.Center">
             <MudText Typo="Typo.caption" Class="mud-text-secondary">ARTEN</MudText>
@@ -122,16 +118,16 @@
         }
         try
         {
-            // JS-Interop erst nach dem ersten Render. ?v= hochzählen, wenn kalender.js geändert wird.
+            // Bump ?v= when kalender.js changes
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=6");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
-            // Leer rendern – FullCalendar meldet sofort seinen Sichtbereich (datesSet) → Daten werden nachgeladen.
+            // Render empty; FullCalendar reports its range (datesSet) and data loads then
             await _module.InvokeVoidAsync("render", ContainerId, Array.Empty<CalendarEntry>(), _ref, "de");
         }
         catch (JSDisconnectedException)
         {
-            // Circuit getrennt – nichts zu tun.
+            /* ignore */
         }
         catch (Exception ex)
         {
@@ -149,13 +145,12 @@
             return;
         }
         _mode = mode;
-        // Beim Sichtwechsel alle Arten der neuen Sicht wieder einblenden.
+        // Re-enable all sources of the new view
         _activeSources = new HashSet<CalendarSource>(LegendSources);
-        // Sicht ohne Datumssprung neu laden (das FC-Fenster bleibt gleich).
         await NewLoadAsync();
     }
 
-    /// <summary>FullCalendar meldet den sichtbaren Zeitraum (Initial-Render + Monats-/Wochenwechsel) → Fenster nachladen.</summary>
+    /// <summary>FullCalendar reports its visible range; load that window.</summary>
     [JSInvokable]
     public async Task OnDateRange(string sourceIso, string untilIso)
     {
@@ -164,14 +159,13 @@
         await NewLoadAsync();
     }
 
-    // Lädt das aktuell gemerkte Fenster im aktuellen Modus und schiebt die Einträge an FullCalendar.
     private async Task NewLoadAsync()
     {
         if (_module is null || !_ready || _sourceUtc is null || _untilUtc is null)
         {
             return;
         }
-        // Schnelles Blättern/Umschalten kann Ladevorgänge überlappen → nur das zuletzt angeforderte Ergebnis anwenden.
+        // Fast paging can overlap loads; apply only the latest request
         var token = ++_loadToken;
         _load = true;
         StateHasChanged();
@@ -180,14 +174,14 @@
             var entries = await CalendarService.GetEntriesAsync(_sourceUtc.Value, _untilUtc.Value, _user, _mode);
             if (token != _loadToken)
             {
-                return; // veraltetes Fenster/Modus – verwerfen
+                return; // stale window/mode
             }
             _allEntries = entries;
             _load = false;
             StateHasChanged();
             await PushFilteredAsync();
         }
-        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (JSDisconnectedException) { /* ignore */ }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Kalender: Einträge konnten nicht geladen werden.");
@@ -199,7 +193,6 @@
         }
     }
 
-    // Eine Art (Quelle) aus-/einblenden – rein clientseitig (kein DB-Reload).
     private async Task SourceToggleAsync(CalendarSource source)
     {
         if (!_activeSources.Remove(source))
@@ -215,7 +208,6 @@
         await PushFilteredAsync();
     }
 
-    // Schiebt die nach aktiven Arten gefilterten Einträge an FullCalendar.
     private async Task PushFilteredAsync()
     {
         if (_module is null || !_ready)
@@ -228,14 +220,13 @@
         {
             await _module.InvokeVoidAsync("setzeEreignisse", ContainerId, filtered);
         }
-        catch (JSDisconnectedException) { /* Circuit weg */ }
+        catch (JSDisconnectedException) { /* ignore */ }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Kalender: Filter-Anzeige fehlgeschlagen.");
         }
     }
 
-    // Stil der Arten-Chips: aktiv = gefüllt in Quellenfarbe; inaktiv = ausgegraut/umrandet.
     private static string LegendStyle(CalendarSource source, bool active)
     {
         var colour = CalendarDisplay.Colour(source);
@@ -244,7 +235,6 @@
             : $"background:transparent;border-color:{colour};color:var(--mud-palette-text-secondary);opacity:.6;cursor:pointer;";
     }
 
-    /// <summary>Klick auf einen Eintrag → zur zugehörigen Akte navigieren.</summary>
     [JSInvokable]
     public async Task OnEventClick(string href)
     {
@@ -254,7 +244,7 @@
         }
     }
 
-    // FullCalendar liefert den Bereich als ISO (mit oder ohne Offset). Ohne Offset = lokale Wandzeit → in UTC umrechnen.
+    // ISO without offset = local wall time; convert to UTC
     private static DateTime ParseWindowUtc(string iso, DateTime fallback)
     {
         if (DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var dto))
@@ -274,8 +264,8 @@
                 await _module.DisposeAsync();
             }
         }
-        catch (JSDisconnectedException) { /* Circuit weg */ }
-        catch (Exception) { /* Aufräum-Fehler folgenlos */ }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception) { /* best effort */ }
         _ref?.Dispose();
     }
 }

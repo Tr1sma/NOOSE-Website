@@ -10,27 +10,24 @@ public class PartnerShare : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Released entity CLR type name (nameof), polymorphic.</summary>
+    /// <summary>Polymorphic CLR type name (nameof).</summary>
     [Column("EntitaetTyp")]
     public string EntityType { get; set; } = string.Empty;
 
-    /// <summary>Released entity id.</summary>
     [Column("EntitaetId")]
     public string EntityId { get; set; } = string.Empty;
 
-    /// <summary>Target partner agency.</summary>
     [Column("Behoerde")]
     public PartnerAgency Agency { get; set; }
 
-    /// <summary>Target partner account; null = whole agency, set = single partner only.</summary>
+    /// <summary>Null = whole agency, set = single partner only.</summary>
     [Column("PartnerAgentId")]
     public string? PartnerAgentId { get; set; }
 
-    /// <summary>Whole record incl. all current and future children; false = shell only, children released individually.</summary>
+    /// <summary>True = incl. all current and future children; false = shell only.</summary>
     [Column("InklusiveKinder")]
     public bool IncludesChildren { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -40,7 +37,6 @@ public class PartnerShare : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

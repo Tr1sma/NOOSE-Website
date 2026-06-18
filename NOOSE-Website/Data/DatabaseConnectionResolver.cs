@@ -6,7 +6,6 @@ namespace NOOSE_Website.Data;
 /// <summary>Selects DB at startup; falls back to local if production unreachable.</summary>
 public static class DatabaseConnectionResolver
 {
-    // short timeout
     private const uint ProbeTimeoutSeconds = 5;
 
     /// <summary>Resolves connection string and server version.</summary>
@@ -16,14 +15,12 @@ public static class DatabaseConnectionResolver
         var production = configuration.GetConnectionString("ProductionConnection");
         var local = configuration.GetConnectionString("DefaultConnection");
 
-        // 1) prefer production
         if (!string.IsNullOrWhiteSpace(production) && TryReach(production, logger, out var prodVersion))
         {
             logger.LogInformation("DB: using production.");
             return (production, prodVersion);
         }
 
-        // 2) local fallback
         if (!string.IsNullOrWhiteSpace(local))
         {
             if (!string.IsNullOrWhiteSpace(production))
@@ -49,7 +46,6 @@ public static class DatabaseConnectionResolver
         version = default!;
         try
         {
-            // probe timeout
             var probe = new MySqlConnectionStringBuilder(connectionString)
             {
                 ConnectionTimeout = ProbeTimeoutSeconds,

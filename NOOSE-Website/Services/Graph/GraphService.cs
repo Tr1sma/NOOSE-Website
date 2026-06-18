@@ -20,14 +20,11 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IGraphService" />
 public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphService
 {
-    /// <summary>Max node limit.</summary>
     private const int MaxNode = 250;
 
-    /// <summary>Path search limits.</summary>
     private const int MaxPathDepth = 12;
     private const int MaxVisited = 8000;
 
-    /// <summary>Raw edge.</summary>
     private readonly record struct RawEdge(string Source, string Target, string? Label, LinkKind Kind, bool Automatic);
 
     public async Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
@@ -43,7 +40,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
         var rawEdges = await LoadRawEdgesAsync(db, query.KindFilter, cancellationToken);
 
-        // Collect all nodes.
         var keys = new HashSet<string>();
         foreach (var k in rawEdges)
         {
@@ -55,10 +51,8 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             keys.Add($"{query.FocusType}:{query.FocusId}");
         }
 
-        // Resolve visible nodes.
         var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
-        // Apply type filter.
         if (query.TypeFilter is { Count: > 0 })
         {
             var allowed = query.TypeFilter.ToHashSet();
@@ -71,7 +65,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             }
         }
 
-        // Filter edges to visible nodes.
         var edges = rawEdges
             .Where(k => k.Source != k.Target && node.ContainsKey(k.Source) && node.ContainsKey(k.Target))
             .ToList();
@@ -84,7 +77,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             var focusKey = $"{query.FocusType}:{query.FocusId}";
             if (!node.ContainsKey(focusKey))
             {
-                // Focus not visible.
                 return new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
             }
             keep = Radius(focusKey, edges, Math.Clamp(query.Depth, 1, 3));
@@ -142,7 +134,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         }
         var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
-        // Source/target not visible.
         if (!node.ContainsKey(sourceKey) || !node.ContainsKey(targetKey))
         {
             return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
@@ -152,7 +143,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             return new PathResult(true, new[] { node[sourceKey] }, Array.Empty<GraphEdge>());
         }
 
-        // Build adjacency.
         var adj = new Dictionary<string, List<RawEdge>>();
         void Connect(string a, RawEdge k)
         {
@@ -211,7 +201,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             return new PathResult(false, Array.Empty<GraphNode>(), Array.Empty<GraphEdge>());
         }
 
-        // Reconstruct path.
         var nodePath = new List<string> { targetKey };
         var edgesPath = new List<RawEdge>();
         var cursor = targetKey;
@@ -251,7 +240,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             edges.Add(new RawEdge($"{v.SourceType}:{v.SourceId}", $"{v.TargetType}:{v.TargetId}", v.Label, v.Kind, v.Automatic));
         }
 
-        // Map person relations.
         var bez = await db.PersonRelations
             .Select(b => new { b.PersonAId, b.PersonBId, b.Type })
             .ToListAsync(cancellationToken);
@@ -306,7 +294,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
     private static async Task<Dictionary<string, GraphNode>> ResolveNodeAsync(
         AppDbContext db, IEnumerable<string> keys, bool isLeadership, string? meId, CancellationToken cancellationToken)
     {
-        // Group keys by type.
         var targetType = new Dictionary<string, HashSet<string>>();
         foreach (var key in keys)
         {
@@ -529,7 +516,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
     // ---- Graph helpers ----
 
-    /// <summary>Node degree count.</summary>
     private static Dictionary<string, int> DegreeCount(IEnumerable<RawEdge> edges)
     {
         var degree = new Dictionary<string, int>();
@@ -541,7 +527,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         return degree;
     }
 
-    /// <summary>BFS radius set.</summary>
     private static HashSet<string> Radius(string start, IEnumerable<RawEdge> edges, int depth)
     {
         var adj = new Dictionary<string, List<string>>();

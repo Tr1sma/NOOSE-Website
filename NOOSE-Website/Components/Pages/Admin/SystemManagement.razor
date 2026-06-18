@@ -1,6 +1,4 @@
-@* System & Erscheinungsbild (Phase 7): Wartungsmodus, Ankündigungsbanner, Theme-Farben und
-   Logo-Upload. Seite öffnet sich für Admin + Nur-Lese-Aufsicht; Speichern ist Admins vorbehalten
-   (Service-Guard VerlangeAdmin). Änderungen greifen beim nächsten Seitenwechsel/Neuladen. *@
+@* System and appearance settings: maintenance mode, banner, theme colours, logo upload. Saving is admin-only. *@
 @page "/admin/system"
 @attribute [Authorize(Policy = Policies.AdminPage)]
 @using MudBlazor.Utilities
@@ -159,7 +157,7 @@ else
         _load = false;
     }
 
-    /// <summary>Hex-Wert (oder Standardfarbe bei leer) als MudColor für den Color-Picker.</summary>
+    /// <summary>Hex value (or default when empty) as a MudColor for the picker.</summary>
     private static MudColor AsColour(string? value, string @default)
     {
         try
@@ -168,7 +166,7 @@ else
         }
         catch (Exception)
         {
-            // Unparsbarer Alt-Wert in der DB → Standardfarbe zeigen statt die Seite zu reißen.
+            // Unparsable stored value: fall back to default.
             return new MudColor(@default);
         }
     }
@@ -200,7 +198,7 @@ else
         }
         try
         {
-            // 10-MB-Obergrenze entspricht FileUploadOptions.MaxBytes (der Dienst validiert erneut).
+            // 10 MB cap mirrors FileUploadOptions.MaxBytes; service revalidates.
             await using var buffer = new MemoryStream();
             await file.OpenReadStream(10 * 1024 * 1024).CopyToAsync(buffer);
             buffer.Position = 0;

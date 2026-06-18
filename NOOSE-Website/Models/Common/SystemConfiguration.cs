@@ -1,6 +1,6 @@
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Schlüssel-Konstanten der <c>SystemEinstellungen</c>-Tabelle (Phase 7).</summary>
+/// <summary>Key constants for the system-settings table.</summary>
 public static class SystemSettingKeys
 {
     public const string MaintenanceModeActive = "WartungsmodusAktiv";
@@ -14,7 +14,7 @@ public static class SystemSettingKeys
     public const string LogoContentType = "LogoContentType";
 }
 
-/// <summary>Banner-Dringlichkeit (als Text gespeichert; UI mappt auf MudBlazor-Severity).</summary>
+/// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>
 public static class BannerLevels
 {
     public const string Info = "Info";
@@ -24,10 +24,7 @@ public static class BannerLevels
     public static readonly IReadOnlyList<string> All = new[] { Info, Warning, Error };
 }
 
-/// <summary>
-/// Gecachter Lese-Schnappschuss aller Systemeinstellungen (Wartungsmodus, Banner, Theme, Logo).
-/// Nicht gesetzte Werte sind <c>null</c> → der Code-Standard gilt (Standard-Theme, kein Banner …).
-/// </summary>
+/// <summary>Cached read snapshot of all system settings; null values fall back to code defaults.</summary>
 public sealed record SystemConfiguration(
     bool MaintenanceModeActive,
     string? MaintenanceModeText,
@@ -42,7 +39,7 @@ public sealed record SystemConfiguration(
     public bool HasLogo => !string.IsNullOrWhiteSpace(LogoFileName);
 }
 
-/// <summary>Eingabemodell der Admin-Seite „System" (Logo läuft separat über den Upload-Pfad).</summary>
+/// <summary>Input model for the admin System page; logo goes through the separate upload path.</summary>
 public class SystemConfigurationInput
 {
     public bool MaintenanceModeActive { get; set; }

@@ -3,7 +3,6 @@ namespace NOOSE_Website.Authorization;
 /// <summary>Relative routes a partner may open; everything else is blocked centrally (MainLayout/PrintLayout).</summary>
 public static class PartnerRoutes
 {
-    // wired record-type prefixes
     private static readonly string[] AllowedPrefixes =
     {
         "personen",

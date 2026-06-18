@@ -1,5 +1,3 @@
-@* Dialog zum Anlegen einer Beziehung zu einer anderen Akte: Ziel (Fraktion, Personengruppe, Partei und –
-   bei PersonenErlauben, z. B. für Operationen – auch Person) + Notiz. *@
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
 @inject IPartyService PartyService
@@ -47,14 +45,14 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     [Parameter] public bool IsLeadership { get; set; }
-    /// <summary>„Konflikt" oder „Bündnis" – nur für Texte/Platzhalter.</summary>
+    /// <summary>Relation label, drives only texts and placeholders.</summary>
     [Parameter] public string Designation { get; set; } = "Konflikt";
     [Parameter] public IReadOnlyList<string> ExclusionFactionIds { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> ExclusionGroupsIds { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> ExclusionPartyIds { get; set; } = Array.Empty<string>();
     [Parameter] public IReadOnlyList<string> ExclusionPersonIds { get; set; } = Array.Empty<string>();
 
-    /// <summary>Erlaubt zusätzlich Personen als Ziel (z. B. Beteiligte einer Operation). Standard: nur Organisationen.</summary>
+    /// <summary>Also allow persons as target, not just organisations.</summary>
     [Parameter] public bool PeopleAllow { get; set; }
 
     private string _type = nameof(Faction);
@@ -68,7 +66,7 @@
 
     protected override void OnInitialized()
     {
-        // Bei erlaubten Personen ist „Person" die häufigste Wahl (z. B. Operations-Beteiligte) → vorbelegen.
+        // person is the common choice when allowed
         if (PeopleAllow)
         {
             _type = nameof(Person);

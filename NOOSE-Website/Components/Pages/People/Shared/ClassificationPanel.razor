@@ -1,7 +1,4 @@
-@* Einstufung anzeigen/ändern (mit Rang-Gate) und Verlauf als Zeitleiste. Akten-agnostisch:
-   der Aufrufer reicht aktuelle Einstufung + Verlauf herein und behandelt das Setzen via OnSetzen.
-   Reicht der Aufrufer EntitaetTyp/EntitaetId mit, kann ein Agent unterhalb Senior Special Agent die
-   höchste Einstufung „Gesichert staatsgefährdend" per Hochstufungs-Antrag beantragen (Phase 5). *@
+@* Record-agnostic classification view/edit (rank-gated) with history timeline. *@
 @inject ISnackbar Snackbar
 @inject IRequestService RequestService
 
@@ -113,13 +110,13 @@
     [Parameter, EditorRequired] public Classification Current { get; set; }
     [Parameter, EditorRequired] public IReadOnlyList<ClassificationHistory> History { get; set; } = Array.Empty<ClassificationHistory>();
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
-    /// <summary>Wird mit (neue Einstufung, Begründung) aufgerufen; der Aufrufer persistiert und lädt neu.</summary>
+    /// <summary>Called with (new classification, justification); caller persists and reloads.</summary>
     [Parameter, EditorRequired] public EventCallback<(Classification New, string? Justification)> OnSet { get; set; }
 
-    // Optionaler Akten-Bezug: ermöglicht den Hochstufungs-Antrag für Agenten unterhalb Senior Special Agent.
+    // Optional record context: enables the upgrade request below Senior Special Agent.
     [Parameter] public string? EntityType { get; set; }
     [Parameter] public string? EntityId { get; set; }
-    /// <summary>Denormalisierte Bezeichnung der Akte (Name + Aktenzeichen) für den Antrag/Posteingang.</summary>
+    /// <summary>Denormalized record designation (name + case number) for the request.</summary>
     [Parameter] public string? TargetDesignation { get; set; }
 
     private Classification _new;
@@ -131,7 +128,7 @@
     private bool _requestRunning;
     private bool _mayWrite;
 
-    // Beantragen statt direkt setzen: höchste Stufe gewählt, kein Senior-Recht, aber Akten-Bezug vorhanden.
+    // Request instead of set directly: highest tier chosen, no Senior right, but record context exists.
     private bool _isRequest => _new == Classification.SecuredStateThreatening && !_mayHighest && _canRequest;
 
     protected override async Task OnInitializedAsync()
@@ -167,8 +164,7 @@
     protected override void OnParametersSet()
     {
         _mayHighest = User.MayHighestClassification();
-        // Auswahl an die aktuelle Einstufung angleichen – aber nur bei echter Änderung, damit
-        // eine laufende Auswahl des Nutzers nicht durch Re-Renders des Elternteils zurückgesetzt wird.
+        // Only on real change, so parent re-renders don't reset the user's selection.
         if (!_initialized || _lastCurrent != Current)
         {
             _new = Current;

@@ -1,4 +1,4 @@
-@* Dialog zum Anlegen/Bearbeiten einer Dok-Vorlage (Erfassungsmaske). Liefert eine DokVorlageEingabe zurück. *@
+@* Dialog to create/edit a doc template (capture mask); returns the input record. *@
 
 <MudDialog>
     <DialogContent>
@@ -46,7 +46,7 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Beim Bearbeiten gesetzt: vorhandene Vorlage zum Vorbefüllen. Null = Anlegen.</summary>
+    /// <summary>Existing template to prefill when editing; null when creating.</summary>
     [Parameter] public DocTemplate? Exists { get; set; }
 
     private MudForm _form = default!;
@@ -82,7 +82,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Vorlage). Liefert null bei Abbruch.</summary>
+    /// <summary>Shows the create/edit dialog; returns null if cancelled.</summary>
     public static async Task<DocTemplateInput?> ShowAsync(IDialogService dialog, string title, DocTemplate? exists = null)
     {
         var parameters = new DialogParameters<DocTemplateDialog> { { x => x.Exists, exists } };

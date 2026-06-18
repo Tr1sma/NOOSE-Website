@@ -5,7 +5,6 @@ namespace NOOSE_Website.Services;
 /// <summary>Resolves and searches @-mention tokens in stored text.</summary>
 public interface IMentionService
 {
-    // taskforce filter
     /// <summary>Resolves mention tokens in text.</summary>
     Task<IReadOnlyList<MentionSegment>> ResolveAsync(string? text, bool isLeadership, string? meId, CancellationToken cancellationToken = default);
 

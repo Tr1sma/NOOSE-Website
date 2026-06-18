@@ -5,27 +5,22 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Zentrale Datei-Bibliothek (Phase 7): durchsuchbare Ablage hochgeladener Dateien (Formulare,
-/// SOPs, Vorlagen). Hochladen dürfen alle schreibberechtigten Agenten. Die Verschluss-Stufe (Führung/
-/// TRU/HRB) darf nur vergeben, wer der jeweiligen Einheit angehört (die Führung jede Stufe); sichtbar
-/// ist eine Verschlusssache entsprechend nur dem berechtigten Personenkreis.
-/// </summary>
+/// <summary>Central file library; classification level (Leadership/TRU/HRB) only settable by, and visible to, the matching unit.</summary>
 public interface ILibraryService
 {
     Task<List<LibraryFile>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Lädt eine Datei in die Bibliothek hoch (Typ-/Größen-Validierung im Storage-Dienst).</summary>
+    /// <summary>Upload a file (type/size validated in the storage service).</summary>
     Task<LibraryFile> UploadAsync(string title, string? category, DocumentClassification classification,
         Stream content, string originalName, string contentType, long sizeBytes,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Titel/Kategorie/Verschluss-Stufe nachträglich ändern (Stufe nur durch dafür Berechtigte).</summary>
+    /// <summary>Change title/category/classification (level only by those entitled).</summary>
     Task RefreshAsync(string id, string title, string? category, DocumentClassification classification,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Für den Download-Endpoint: liefert die Datei nur, wenn sie für den Aufrufer sichtbar ist.</summary>
+    /// <summary>Download endpoint: returns the file only when visible to the caller.</summary>
     Task<LibraryFile?> GetForDownloadAsync(string id, DocumentViewerScope scope, CancellationToken cancellationToken = default);
 }

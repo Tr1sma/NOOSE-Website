@@ -4,17 +4,10 @@ using NOOSE_Website.Data.Entities.Taskforces;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Zentrale Sichtbarkeitsregel für Taskforces: Ein Agent sieht nur Taskforces, denen er ZUGETEILT ist
-/// (es existiert eine Zeile in <c>TaskforceAgenten</c>). Die Führung (<c>ClaimsPrincipal.IstFuehrung()</c>,
-/// d. h. Supervisory Special Agent+ oder Admin) sieht ALLE. Drei Formen derselben Regel:
-/// Query-Prädikat für Listen/Suchen/Dashboard, Punkt-Check für die Detailseite, Batch-Check für die
-/// Referenz-/Verknüpfungsauflösung. Mitgliedschaftsmuster analog <see cref="AnkuendigungService"/> (Zielgruppe
-/// Taskforce). Der Soft-Delete-/Papierkorb-Filter greift weiterhin über die globalen Query-Filter.
-/// </summary>
+/// <summary>Central taskforce visibility rule: an agent sees only assigned taskforces; leadership/admin sees all.</summary>
 public static class TaskforceVisibility
 {
-    /// <summary>Filtert eine Taskforce-Query auf die für den Aufrufer sichtbaren Einträge.</summary>
+    /// <summary>Filters a taskforce query to the entries visible to the caller.</summary>
     public static IQueryable<Taskforce> OnlyVisible(this IQueryable<Taskforce> query, AppDbContext db, bool mayAll, string? meId)
     {
         if (mayAll)
@@ -28,7 +21,7 @@ public static class TaskforceVisibility
         return query.Where(t => db.TaskforceAgents.Any(ta => ta.TaskforceId == t.Id && ta.AgentId == meId));
     }
 
-    /// <summary>True, wenn die Taskforce existiert und für den Aufrufer sichtbar ist (Führung/Admin oder Mitglied).</summary>
+    /// <summary>True if the taskforce exists and is visible to the caller (leadership/admin or member).</summary>
     public static async Task<bool> IsVisibleAsync(AppDbContext db, string taskforceId, bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {
         if (!await db.Taskforces.AnyAsync(t => t.Id == taskforceId, cancellationToken))
@@ -43,7 +36,7 @@ public static class TaskforceVisibility
             && await db.TaskforceAgents.AnyAsync(ta => ta.TaskforceId == taskforceId && ta.AgentId == meId, cancellationToken);
     }
 
-    /// <summary>Aus einer Kandidatenmenge die für den Aufrufer sichtbaren Taskforce-Ids (für Batch-Referenzauflösung).</summary>
+    /// <summary>Visible taskforce ids from a candidate set (for batch reference resolution).</summary>
     public static async Task<HashSet<string>> VisibleIdsAsync(AppDbContext db, IReadOnlyCollection<string> taskforceIds, bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {
         if (taskforceIds.Count == 0)

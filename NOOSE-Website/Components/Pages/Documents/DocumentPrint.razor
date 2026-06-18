@@ -38,7 +38,7 @@ else
 
         <section>
             <h2>Inhalt</h2>
-            @* Serverseitig bereinigtes HTML (HtmlBereinigung) – sicher als MarkupString renderbar. *@
+            @* Sanitized server-side, so safe as MarkupString. *@
             <div class="dokument-html">@((MarkupString)_document.ContentHtml)</div>
         </section>
 

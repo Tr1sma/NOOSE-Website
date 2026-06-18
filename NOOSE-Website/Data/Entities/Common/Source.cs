@@ -10,11 +10,9 @@ public class Source : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
-    /// <summary>Parent entity type.</summary>
     [Column("EntitaetTyp")]
     public string EntityType { get; set; } = string.Empty;
 
-    /// <summary>Parent entity key.</summary>
     [Column("EntitaetId")]
     public string EntityId { get; set; } = string.Empty;
 
@@ -28,22 +26,17 @@ public class Source : IAuditable, ISoftDelete
     [Column("Angepinnt")]
     public bool Pinned { get; set; }
 
-    /// <summary>Free-text notes.</summary>
     [Column("Beschreibung")]
     public string? Description { get; set; }
 
-    /// <summary>Link URL.</summary>
     public string? Url { get; set; }
 
-    /// <summary>Internal link target type.</summary>
     [Column("ZielTyp")]
     public string? TargetType { get; set; }
 
-    /// <summary>Internal link target key.</summary>
     [Column("ZielId")]
     public string? TargetId { get; set; }
 
-    // ---- file metadata ----
     [Column("DateinameGespeichert")]
     public string? FileNameSaved { get; set; }
     public string? OriginalName { get; set; }
@@ -51,7 +44,6 @@ public class Source : IAuditable, ISoftDelete
     [Column("GroesseBytes")]
     public long? SizeBytes { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -61,7 +53,6 @@ public class Source : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

@@ -1,4 +1,4 @@
-@* Dialog zum Anlegen/Bearbeiten einer Custom-Feld-Definition (Zusatzfeld). Liefert eine CustomFeldDefinitionEingabe zurück. *@
+@* Dialog to create/edit a custom field definition; returns the input record. *@
 
 <MudDialog>
     <DialogContent>
@@ -54,10 +54,10 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Beim Bearbeiten gesetzt: vorhandene Definition zum Vorbefüllen. Null = Anlegen.</summary>
+    /// <summary>Existing definition to prefill when editing; null when creating.</summary>
     [Parameter] public CustomFieldDefinition? Exists { get; set; }
 
-    /// <summary>Beim Anlegen optional vorausgewählter Aktentyp.</summary>
+    /// <summary>Optional preselected record type when creating.</summary>
     [Parameter] public string? DefaultType { get; set; }
 
     private MudForm _form = default!;
@@ -95,7 +95,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    /// <summary>Zeigt den Dialog zum Anlegen (ohne Werte) oder Bearbeiten (mit Definition). Liefert null bei Abbruch.</summary>
+    /// <summary>Shows the create/edit dialog; returns null if cancelled.</summary>
     public static async Task<CustomFieldDefinitionInput?> ShowAsync(IDialogService dialog, string title,
         CustomFieldDefinition? exists = null, string? defaultType = null)
     {

@@ -9,7 +9,6 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IWiedervorlageService" />
 public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollowupService
 {
     public async Task<List<FollowupItem>> GetForRecordAsync(string entityType, string entityId,
@@ -17,8 +16,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Wiedervorlagen einer Akte nur zeigen, wenn der Aufrufer die Akte sehen darf (VS/Papierkorb-Gate).
-        // Lese-Gate: die Nur-Lese-Aufsicht darf VS-Akten einsehen (DarfVerschlusssacheLesen).
+        // Only show followups if the caller may see the parent record.
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, ViewerScope.From(actor), cancellationToken))
         {
             return new();
@@ -37,7 +35,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
             return new();
         }
 
-        // Zuständigen-Codenamen einsammeln (Codename ist öffentlich, nie Klarname).
+        // Codenames only, never real names.
         var agentIds = rows.Select(r => r.ResponsibleAgentId).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList()!;
         var codenames = agentIds.Count == 0
             ? new Dictionary<string, string?>()
@@ -59,7 +57,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
             Done: r.Done,
             DoneAt: r.DoneAt,
             Overdue: !r.Done && r.DueAt <= now,
-            // Nur-Leser (Aufsicht) dürfen nichts bearbeiten – auch nicht eigene/zugewiesene Wiedervorlagen.
+            // Read-only supervision may not edit anything, even its own.
             MayEdit: actor.MayWrite() && (isLeadership || r.CreatedById == meId || r.ResponsibleAgentId == meId))).ToList();
         if (actor.GetPartnerAgency() is { } agency)
         {
@@ -100,7 +98,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
         RequireEdit(w, actor);
 
         var newDue = input.DueAt.ToUniversalTime();
-        // Bei verschobenem Termin erneut benachrichtigen lassen (Dedupe-Stempel zurücksetzen).
+        // Re-notify on a moved due date by clearing the dedupe stamp.
         if (w.DueAt != newDue)
         {
             w.NotifiedAt = null;
@@ -139,7 +137,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
             w.Done = false;
             w.DoneAt = null;
             w.DoneById = null;
-            // Erneut fällig → darf wieder gemeldet werden.
+            // Due again, so allow re-notification.
             w.NotifiedAt = null;
             await db.SaveChangesAsync(cancellationToken);
         }
@@ -167,7 +165,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
 
-        // Offen + fällig, und ich bin zuständig ODER folge der Akte (korreliertes EXISTS – auf MySQL/MariaDB zulässig).
+        // Open and due, where I am responsible or watch the record.
         var rows = await db.Followups
             .Where(w => !w.Done && w.DueAt <= now
                 && (w.ResponsibleAgentId == meId
@@ -180,11 +178,8 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
             return new();
         }
 
-        // Akten-Namen + Href in einer Sammelabfrage; aus Sicht des Aufrufers VS-/Papierkorb-gefiltert.
-        // Lese-Gate: die Nur-Lese-Aufsicht darf VS-Akten einsehen.
         var isLeadership = actor.MayClassifiedRead();
         var refs = rows.Select(r => (r.EntityType, r.EntityId)).Distinct().ToList();
-        // Taskforces nur auflösen, wenn der Aufrufer zugeteilt ist (oder alle sehen darf) – meId mitgeben.
         var resolved = await RecordsReference.ResolveAsync(db, refs, cancellationToken,
             mayAllTaskforces: actor.MayAllTaskforcesSee(), meId: meId);
 
@@ -193,28 +188,25 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
         {
             if (!resolved.TryGetValue((r.EntityType, r.EntityId), out var a))
             {
-                continue; // Akte im Papierkorb/unbekannt → überspringen.
+                continue; // record trashed or unknown
             }
             if (a.Classified && !isLeadership)
             {
-                continue; // Verschlusssache für Nicht-Führung verbergen.
+                continue; // hide classified from non-leadership
             }
             result.Add(new FollowupDashboardItem(r.Id, a.Display, a.Href, r.DueAt, r.Note));
         }
         return result;
     }
 
-    // ---- Helfer ----
-
     private static async Task<string?> DetermineResponsibleAsync(AppDbContext db, string? desired,
         ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
-        // Ohne Auswahl: der Ersteller wird zuständig.
+        // No selection defaults to the creator.
         if (string.IsNullOrWhiteSpace(desired))
         {
             return actor.GetAgentId();
         }
-        // Mit Auswahl: muss ein existierender, aktiver Agent sein.
         var valid = await db.Users.AnyAsync(u => u.Id == desired && u.Status == AgentStatus.Active, cancellationToken);
         if (!valid)
         {

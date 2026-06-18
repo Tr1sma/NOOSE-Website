@@ -87,7 +87,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
         {
             return;
         }
-        // Abschlüsse zu diesem Modul mit-entfernen (Soft-Delete via Interceptor), damit keine Waisen bleiben.
+        // remove completions too, avoid orphans
         var completions = await db.AgentModuleCompletions
             .Where(c => c.ModuleId == moduleId)
             .ToListAsync(cancellationToken);
@@ -121,7 +121,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
             completionByModule.TryGetValue(module.Id, out var done);
             result.Add(new AgentModuleStatus(module, done?.Id, done?.CompletedAt, done?.CompleterName, done?.Note));
         }
-        // Bereits abgeschlossene, inzwischen inaktive Module bleiben in der Akte sichtbar (Verlauf).
+        // keep already-completed but now-inactive modules visible as history
         foreach (var done in completions.Where(c => c.Module is not null && !seen.Contains(c.ModuleId)))
         {
             result.Add(new AgentModuleStatus(done.Module!, done.Id, done.CompletedAt, done.CompleterName, done.Note));
@@ -172,7 +172,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
         {
             return;
         }
-        db.AgentModuleCompletions.Remove(completion); // Soft-Delete via Interceptor
+        db.AgentModuleCompletions.Remove(completion); // soft delete via interceptor
         await db.SaveChangesAsync(cancellationToken);
     }
 

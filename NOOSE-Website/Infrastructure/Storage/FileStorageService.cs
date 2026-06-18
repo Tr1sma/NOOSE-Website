@@ -44,7 +44,6 @@ public class FileStorageService : IFileStorageService
         }
     }
 
-    /// <summary>Lässt nur blanke Dateinamen zu und kombiniert sie sicher mit dem Basispfad.</summary>
     private string SafePath(string fileName) => FilePathHelper.SafePath(_basePath, fileName);
 
     private static string ExtensionFor(string contentType) => contentType.ToLowerInvariant() switch

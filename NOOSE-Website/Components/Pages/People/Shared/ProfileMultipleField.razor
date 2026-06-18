@@ -1,6 +1,4 @@
-@* Generische Chip-Eingabe für ein Steckbrief-Mehrfachfeld (Waffe/Fahrzeug/Ort):
-   vorhandene Werte als umbrechende Chips, Hinzufügen per Autocomplete mit Katalog-Vorschlägen
-   (freie Eingabe neuer Werte möglich) plus optionalem Zusatzfeld (Kennzeichen/Notiz). *@
+@* Generic chip input for a profile multi-value field with catalog suggestions and an optional extra field. *@
 @typeparam TItem where TItem : IProfileMultiple, new()
 @inject IProfileSuggestionService SuggestionService
 
@@ -58,7 +56,7 @@
         IEnumerable<string> hit = string.IsNullOrWhiteSpace(value)
             ? _suggestions
             : _suggestions.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
-        // Bereits erfasste Werte nicht erneut vorschlagen.
+        // Skip already-entered values.
         return Task.FromResult(hit.Where(v =>
             !Items.Any(i => string.Equals(i.MainValue, v, StringComparison.OrdinalIgnoreCase))));
     }
@@ -68,13 +66,13 @@
 
     private void Add()
     {
-        // Maßgeblich ist der sichtbare Text (deckt Vorschlag-Auswahl und freie Eingabe gleichermaßen ab).
+        // Visible text covers both suggestion pick and free entry.
         var main = _newMainText?.Trim();
         if (string.IsNullOrWhiteSpace(main))
         {
             return;
         }
-        // Duplikate (case-insensitiv) innerhalb derselben Person vermeiden.
+        // Case-insensitive dedup.
         if (!Items.Any(i => string.Equals(i.MainValue, main, StringComparison.OrdinalIgnoreCase)))
         {
             var item = new TItem();

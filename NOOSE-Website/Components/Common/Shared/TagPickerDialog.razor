@@ -1,5 +1,3 @@
-@* Dialog zur Mehrfachauswahl von Tags für eine Akte – inkl. Inline-Anlegen neuer Tags.
-   Liefert die gewählten Tag-IDs zurück. *@
 @inject ITagService TagService
 @inject ISnackbar Snackbar
 
@@ -58,10 +56,9 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
-    /// <summary>Aktuell der Akte zugeordnete Tag-IDs (Vorauswahl).</summary>
+    /// <summary>Pre-selected tag IDs.</summary>
     [Parameter] public List<string> AlreadySet { get; set; } = new();
 
-    /// <summary>Handelnder Agent (für das Anlegen neuer Tags / Audit-Kontext).</summary>
     [Parameter, EditorRequired] public System.Security.Claims.ClaimsPrincipal User { get; set; } = default!;
 
     private bool _load = true;
@@ -117,7 +114,7 @@
 
     private static Color ColourBy(string? colour) => Enum.TryParse<Color>(colour, out var c) ? c : Color.Default;
 
-    /// <summary>Zeigt den Picker und liefert die gewählten Tag-IDs oder null bei Abbruch.</summary>
+    /// <summary>Shows the picker; returns selected tag IDs or null on cancel.</summary>
     public static async Task<List<string>?> ShowAsync(IDialogService dialog, List<string> alreadySet, System.Security.Claims.ClaimsPrincipal user)
     {
         var parameters = new DialogParameters<TagPickerDialog>

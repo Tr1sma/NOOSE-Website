@@ -1,6 +1,4 @@
-@* Gemeinsames Formular für Anlegen/Bearbeiten eines Termins. Datum + Uhrzeit werden getrennt erfasst und in
-   Eingabe.Beginn/Ende (lokale RP-Zeit) zusammengeführt; der Dienst rechnet beim Speichern in UTC um. Beim
-   Anlegen kann zusätzlich eine Mehrfach-Zuteilung an aktive Agenten erfolgen (nur Codename – kein Klarname-Leck). *@
+@* Shared create/edit appointment form; date+time merge into local RP time, service stores UTC. *@
 @inject IAgentManagementService AgentService
 
 <MudGrid>
@@ -91,10 +89,10 @@
 @code {
     [Parameter, EditorRequired] public AppointmentInput Input { get; set; } = default!;
 
-    /// <summary>Mehrfach-Zuteilung anzeigen (nur beim Anlegen).</summary>
+    /// <summary>Show multi-assignment (create only).</summary>
     [Parameter] public bool ShowAssignment { get; set; }
 
-    /// <summary>Gewählte Agent-Ids (zweiweg-gebunden über <c>@bind-AgentIds</c>).</summary>
+    /// <summary>Selected agent ids, two-way bound.</summary>
     [Parameter] public IReadOnlyCollection<string> AgentIds { get; set; } = Array.Empty<string>();
     [Parameter] public EventCallback<IReadOnlyCollection<string>> AgentIdsChanged { get; set; }
 
@@ -108,10 +106,8 @@
     {
         if (ShowAssignment)
         {
-            // GetAuswaehlbareAsync: nur aktive Agenten ohne TeamLeitung-Marker, bereits nach Codename sortiert.
             _agents = await AgentService.GetSelectableAsync();
         }
-        // Datum/Uhrzeit aus der (ggf. vorbelegten) Eingabe übernehmen.
         if (Input.Start is { } b)
         {
             _startDate = b.Date;
@@ -135,7 +131,7 @@
         Sync();
     }
 
-    // Datum + Uhrzeit in die Eingabe zusammenführen (Uhrzeit fehlt → 00:00).
+    // Merge date + time; missing time defaults to 00:00
     private void Sync()
     {
         Input.Start = Combo(_startDate, _startTime);

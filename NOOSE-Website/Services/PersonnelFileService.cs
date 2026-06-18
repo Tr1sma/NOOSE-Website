@@ -62,12 +62,12 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory) : I
         {
             return;
         }
-        // Löschen darf der Verfasser selbst oder die Führung – serverseitig erzwingen.
+        // only author or leadership may delete
         if (!actor.IsLeadership() && note.CreatedById != actor.GetAgentId())
         {
             throw new UnauthorizedAccessException("Diesen Vermerk darf nur der Verfasser oder die Führung löschen.");
         }
-        db.AgentNotes.Remove(note); // Soft-Delete via Interceptor
+        db.AgentNotes.Remove(note);
         await db.SaveChangesAsync(cancellationToken);
     }
 

@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>Ein bekannter Ort/Aufenthaltsort einer Person (Steckbrief-Kind).</summary>
+/// <summary>A known location/whereabouts of a person.</summary>
 [Table("PersonOrte")]
 public class PersonLocation
 {

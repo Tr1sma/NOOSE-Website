@@ -123,7 +123,6 @@ else
     {
         get
         {
-            // tab 0 = internal NOOSE, tab 1 = partner
             var query = _agents.Where(a => _tab == 1 ? a.PartnerAgency != null : a.PartnerAgency == null);
             if (_tab == 1)
             {
@@ -153,8 +152,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _mayRealName = (await AuthStateTask).User.MayRealNameSee();
-        // TeamLeitungen (FiveM-Aufsicht) sind im RP-Betrieb unsichtbar – aus dem Personalroster ausblenden.
-        // Gesperrte Accounts (Notfall-Sperre) ebenfalls nicht im Roster zeigen.
+        // TeamLeads invisible in RP; blocked accounts hidden too
         _agents = (await AgentService.GetAllAsync())
             .Where(a => !a.IsTeamLead && a.Status != AgentStatus.Blocked)
             .ToList();

@@ -16,8 +16,6 @@ public class FileUploadOptions
     public string[] AllowedContentTypes { get; set; } =
         ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-    // ---- Attachments ----
-
     /// <summary>Sources upload path.</summary>
     public string SourcesPath { get; set; } = "App_Data/uploads/quellen";
 

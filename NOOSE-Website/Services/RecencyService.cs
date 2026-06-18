@@ -15,15 +15,11 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IAktualitaetService" />
 public class RecencyService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache cache) : IRecencyService
 {
     private const string CacheKey = "aktualitaet:schwellen";
 
-    /// <summary>
-    /// Unterstützte Akten + Standard-Schwellwerte. Personen/Operationen/Taskforces/Vorgänge ändern sich häufiger
-    /// (30/90 Tage); Organisationen (Fraktion/Gruppe/Partei) leben länger ohne Update (60/180 Tage).
-    /// </summary>
+    /// <summary>Supported record types with default thresholds (warning/stale days).</summary>
     private static readonly RecencyTypeInfo[] Types =
     {
         new(nameof(Person), "Person", 30, 90),
@@ -49,7 +45,6 @@ public class RecencyService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCa
         var overrides = await db.RecencyThresholds
             .ToDictionaryAsync(s => s.RecordsType, s => (s.WarningDays, s.StaleDays), cancellationToken);
 
-        // Standard je Typ, überschrieben durch gespeicherte Werte. Stets ein Eintrag je unterstütztem Typ.
         var result = Types.ToDictionary(
             t => t.Type,
             t => overrides.TryGetValue(t.Type, out var o) ? o : (t.DefaultWarningDays, t.DefaultStaleDays));
@@ -84,7 +79,7 @@ public class RecencyService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCa
         {
             throw new InvalidOperationException($"Unbekannter Aktentyp '{recordsType}'.");
         }
-        // Plausibilität: nicht-negativ, und „rot" frühestens ab „gelb".
+        // clamp: stale never before warning
         warningDays = Math.Max(0, warningDays);
         staleDays = Math.Max(warningDays, staleDays);
 

@@ -85,9 +85,7 @@ else
         _isLeadership = _user.IsLeadership();
     }
 
-    // Diese Seite wird bei /personen/{A}/bearbeiten → /personen/{B}/bearbeiten WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher das id-abhängige Laden hier mit Guard – sonst bliebe das alte
-    // Formular stehen. Das kurze _laden=true mountet das Formular frisch.
+    // Component is reused across edit routes, so OnInitializedAsync does not re-run; guard the Id-dependent load here or the old form stays.
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -104,8 +102,7 @@ else
             {
                 Name = p.Name,
                 Description = p.Description,
-                // Effektiven Status vorbefüllen: eine Person, deren 20-Min-Tot-Fenster abgelaufen ist, gilt
-                // als „Lebend" – so startet eine harmlose Bearbeitung kein neues Tot-Fenster.
+                // Prefill effective status so a harmless edit doesn't start a new death window.
                 LifeStatus = LifeStatusLogic.Effective(p.LifeStatus, p.DeadUntil, DateTime.UtcNow),
                 Classification = p.Classification,
                 IsClassified = p.IsClassified,

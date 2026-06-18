@@ -81,8 +81,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToList();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Verschlusssachen nur für die Führung als mögliche Dublette anzeigen – sonst leakt der Warn-Dialog
-        // Name + Aktenzeichen klassifizierter Akten an jeden Agenten (Namens-/Nummern-Raten genügt).
+        // classified records only as duplicates for leadership (else the warning dialog leaks name + case number)
         return await db.People
             .Where(p => isLeadership || !p.IsClassified)
             .Include(p => p.PhoneNumbers)
@@ -119,7 +118,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         db.People.Add(person);
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
-        // Initialen Person-Score berechnen (Einstufung/Waffen/Lebensstatus liegen jetzt committet vor).
+        // compute the initial person score (inputs now committed)
         await threat.NewCalculatePersonScoreAsync(person.Id, cancellationToken);
         return person;
     }
@@ -137,7 +136,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
-        // Verschlusssache nur für die Führung bearbeitbar (serverseitig erzwungen, nicht nur via UI).
+        // classified records editable by leadership only
         if (person.IsClassified && !actor.IsLeadership())
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
@@ -152,9 +151,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         person.LifeStatus = input.LifeStatus;
         if (input.LifeStatus == LifeStatus.Dead)
         {
-            // Ein frisches 20-Minuten-Fenster startet NUR beim echten Übergang nach „Tot" (vorher kein Tot).
-            // War die Person bereits „Tot", bleibt das bestehende Fenster erhalten – auch ein abgelaufenes wird
-            // nicht neu gestartet (sonst „tötet" eine harmlose Bearbeitung die Person erneut).
+            // start a fresh death window only on a real transition into dead; never restart an existing one
             person.DeadUntil = altStatus != LifeStatus.Dead
                 ? LifeStatusLogic.DeadUntilFrom(DateTime.UtcNow)
                 : altDeadUntil;
@@ -164,7 +161,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             person.DeadUntil = null;
         }
 
-        // Steckbrief-Kinder vollständig ersetzen (alte hart löschen, neue anlegen).
+        // fully replace profile children
         db.PersonAliases.RemoveRange(person.Aliases);
         db.PersonPhones.RemoveRange(person.PhoneNumbers);
         db.PersonVehicles.RemoveRange(person.Vehicles);
@@ -174,26 +171,25 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await SuggestionsStageAsync(db, person, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
-        // Waffen (P2) und Lebensstatus „Flüchtig" (P2) wirken auf den Person-Score → neu berechnen.
+        // weapons and fugitive status affect the person score
         await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Löschen/Archivieren ist laut Rechte-Matrix Führung/Admin vorbehalten – serverseitig erzwingen.
+        // delete/archive is leadership/admin only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
-        // Hard-Delete wird vom Interceptor in Soft-Delete umgewandelt (+ Audit „Geloescht").
         db.People.Remove(person);
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Wiederherstellen aus dem Papierkorb ist Führung/Admin vorbehalten.
+        // restore from trash is leadership/admin only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -204,7 +200,6 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         person.IsDeleted = false;
         person.DeletedAt = null;
         person.DeletedById = null;
-        // Interceptor erkennt den Übergang true → false und schreibt „Wiederhergestellt".
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -224,7 +219,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         person.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Person), id, @new, justification, actor));
         await db.SaveChangesAsync(cancellationToken);
-        // Einstufung bestimmt das Mindest-Band des Person-Scores → neu berechnen.
+        // classification sets the minimum score band
         await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
     }
 
@@ -250,8 +245,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return new();
         }
         var isLeadership = scope.MayClassifiedRead;
-        // Join auf die (soft-delete-gefilterten) Eltern-Akten → gelöschte Fraktionen/Gruppen fallen weg.
-        // Der globale Soft-Delete-Filter blendet beendete Mitgliedschaften aus → nur aktive (BeendetAm = null).
+        // soft-delete filter keeps only live parent records and active memberships
         var factions = await (
             from m in db.FactionMembers
             where m.PersonId == personId
@@ -281,8 +275,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return new();
         }
         var isLeadership = scope.MayClassifiedRead;
-        // IgnoreQueryFilters: beendete (soft-gelöschte) Mitgliedschaften gezielt holen. Achtung – das schaltet
-        // ALLE Filter der Query ab, auch die der Eltern-Akte → Papierkorb/Verschlusssache hier manuell nachsetzen.
+        // IgnoreQueryFilters fetches ended memberships but disables ALL filters → re-apply trash/classified manually
         var factions = await (
             from m in db.FactionMembers.IgnoreQueryFilters()
             where m.PersonId == personId && m.IsDeleted
@@ -299,7 +292,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             select new PersonAffiliation(nameof(PersonGroup), m.Id, g.Id, g.Name, g.CaseNumber, m.Role, m.IsLead, m.CreatedAt, m.DeletedAt))
             .ToListAsync(cancellationToken);
 
-        // Neueste Beendigung zuerst (typübergreifend).
+        // most recent exit first
         return await OnlyReleasedOrgsAsync(db, factions.Concat(groups).OrderByDescending(z => z.EndedAt).ToList(), scope, cancellationToken);
     }
 
@@ -332,7 +325,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         }
         var isLeadership = scope.MayClassifiedRead;
 
-        // 1. Eigene, für den Betrachter sichtbare Organisationen (Fraktionen + Gruppen + Parteien).
+        // 1. viewer-visible orgs the person belongs to (factions + groups + parties)
         var myFactions = await db.FactionMembers
             .Where(m => m.PersonId == personId)
             .Join(db.Factions, m => m.FactionId, f => f.Id, (m, f) => f)
@@ -361,7 +354,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return new();
         }
 
-        // 2. Bündnis-/Konflikt-Verknüpfungen, an denen eine meiner Organisationen beteiligt ist.
+        // 2. alliance/conflict links involving one of those orgs
         var myOrgIds = myFactions.Select(f => f.Id)
             .Concat(myGroups.Select(g => g.Id))
             .Concat(myParties.Select(p => p.Id))
@@ -372,7 +365,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .Select(v => new { v.SourceType, v.SourceId, v.TargetType, v.TargetId, v.Kind })
             .ToListAsync(cancellationToken);
 
-        // Je Verknüpfung die eigene Seite (Quelle) und die Partner-Organisation bestimmen.
+        // per link, pick own side and the partner org
         var partner = new List<(string SourceKey, string PartnerType, string PartnerId, LinkKind Kind)>();
         foreach (var v in raw)
         {
@@ -392,7 +385,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return new();
         }
 
-        // 3. Sichtbare Partner-Organisationen auflösen (Name; Verschlusssache nur für Führung).
+        // 3. resolve visible partner orgs (classified leadership-only)
         var partnerFactionIds = partner.Where(p => p.PartnerType == nameof(Faction)).Select(p => p.PartnerId).Distinct().ToList();
         var partnerGroupsIds = partner.Where(p => p.PartnerType == nameof(PersonGroup)).Select(p => p.PartnerId).Distinct().ToList();
         var partnerPartyIds = partner.Where(p => p.PartnerType == nameof(Party)).Select(p => p.PartnerId).Distinct().ToList();
@@ -406,7 +399,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .Where(p => partnerPartyIds.Contains(p.Id) && (isLeadership || !p.IsClassified))
             .Select(p => new { p.Id, p.Name }).ToListAsync(cancellationToken)).ToDictionary(p => p.Id, p => p.Name);
 
-        // 4. Mitglieder der Partner-Organisationen (Person-Ids je Partner).
+        // 4. members of the partner orgs (person ids per partner)
         var visibleFactionIds = partnerFactions.Keys.ToList();
         var visibleGroupsIds = partnerGroups.Keys.ToList();
         var visiblePartyIds = partnerParties.Keys.ToList();
@@ -429,7 +422,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             membersPerPartner[grp.Key] = grp.Select(x => x.PersonId).ToList();
         }
 
-        // 5. Kandidaten bilden (dedupliziert je (Person, Art); sich selbst ausschließen).
+        // 5. build candidates (deduped per (person, kind); exclude self)
         var candidates = new Dictionary<(string PersonId, LinkKind Kind), (string SourceName, string PartnerName)>();
         foreach (var p in partner)
         {
@@ -459,7 +452,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             return new();
         }
 
-        // 6. Personen auflösen (Name/Aktenzeichen; Verschlusssache nur für Führung).
+        // 6. resolve persons (classified leadership-only)
         var personIds = candidates.Keys.Select(k => k.PersonId).Distinct().ToList();
         var people = (await db.People
             .Where(p => personIds.Contains(p.Id) && (isLeadership || !p.IsClassified))
@@ -487,14 +480,14 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             throw new InvalidOperationException($"Dateityp '{contentType}' ist nicht erlaubt.");
         }
-        // Größenlimit serverseitig erzwingen (nicht nur in der UI) – verhindert Disk-Filling über andere Pfade.
+        // enforce size limit server-side against disk-filling
         if (size > fileStorage.MaxBytes)
         {
             throw new InvalidOperationException($"Datei zu groß (max. {fileStorage.MaxBytes / (1024 * 1024)} MB).");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Existenz + Verschlusssache-Sichtbarkeit der Akte prüfen, BEVOR eine Datei geschrieben wird.
+        // check existence and visibility before writing any file
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
         if (person.IsClassified && !actor.IsLeadership())
@@ -520,7 +513,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         }
         catch
         {
-            // Schlägt der DB-Insert fehl, die bereits geschriebene Datei wieder entfernen (kein verwaister Anhang).
+            // roll back the written file if the insert fails
             fileStorage.Delete(fileName);
             throw;
         }
@@ -539,8 +532,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
-        // Erst den DB-Datensatz entfernen (Quelle der Wahrheit), dann die Datei löschen. So bleibt
-        // bei einem Speicherfehler kein verwaister Datensatz zurück, der auf eine fehlende Datei zeigt.
+        // remove the DB row (source of truth) before the file
         db.PersonPhotos.Remove(photo);
         await db.SaveChangesAsync(cancellationToken);
         fileStorage.Delete(photo.FileNameSaved);
@@ -589,7 +581,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             return new();
         }
-        // Kind-IDs (Doks) einsammeln, damit deren Audit-Einträge in der Akten-Historie erscheinen.
+        // collect doc ids so their audit entries appear in the record history
         var docIds = await db.PersonDocs.IgnoreQueryFilters()
             .Where(d => d.PersonId == personId)
             .Select(d => d.Id)
@@ -603,8 +595,6 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .OrderByDescending(a => a.Timestamp)
             .ToListAsync(cancellationToken);
     }
-
-    // ---- Helfer ----
 
     private static void ChildrenMap(Person person, PersonInput input)
     {
@@ -630,11 +620,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToList();
     }
 
-    /// <summary>
-    /// Speist die erfassten Steckbrief-Werte in den gemeinsamen Vorschlagskatalog ein (Waffen/Fahrzeuge/Orte).
-    /// Verschlusssachen bleiben außen vor, damit klassifizierte Werte nicht in die geteilte Liste gelangen.
-    /// Merkt nur im übergebenen Context vor – persistiert wird mit dem nachfolgenden SaveChanges der Person (atomar).
-    /// </summary>
+    /// <summary>Stage profile values (weapons/vehicles/locations) for the shared suggestion catalog; classified records excluded. Caller persists it.</summary>
     private async Task SuggestionsStageAsync(AppDbContext db, Person person, CancellationToken cancellationToken)
     {
         if (person.IsClassified)

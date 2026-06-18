@@ -1,10 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Infrastructure.Audit;
 
-/// <summary>
-/// Lese-/Zugriffsprotokoll: hält fest, wer wann eine (sensible) Akte angesehen hat.
-/// Wird über den <c>IZugriffsLogService</c> explizit aus den Detailansichten geschrieben.
-/// </summary>
+/// <summary>Read/access log: who viewed which record and when.</summary>
 [Table("ZugriffsLogs")]
 public class AccessLog
 {

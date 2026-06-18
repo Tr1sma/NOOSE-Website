@@ -1,5 +1,4 @@
-@* Auswahl einer Akte (Aktentyp + Autocomplete) für den Beziehungsgraph – Fokusknoten bzw. Pfad-Endpunkt.
-   Nutzt die vorhandenen, sichtbarkeitsgefilterten SucheAsync-Dienste (wie VerknuepfungDialog). *@
+@* Record picker (type + autocomplete) for the relation graph, using visibility-filtered search. *@
 @inject IPersonService PersonService
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
@@ -76,7 +75,7 @@
     [Parameter] public bool IsLeadership { get; set; }
     [Parameter] public string? MeId { get; set; }
     [Parameter] public bool MayAllTf { get; set; }
-    /// <summary>Wird bei jeder Auswahländerung gefeuert (null = Auswahl geleert).</summary>
+    /// <summary>Raised on every selection change; null means cleared.</summary>
     [Parameter] public EventCallback<GraphRecordChoice?> Selected { get; set; }
 
     private record TypeOption(string Value, string Display);

@@ -8,7 +8,7 @@ using NOOSE_Website.Data.Entities.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IBedrohungsScoreKonfigService" />
+/// <inheritdoc cref="IThreatScoreConfigService" />
 public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache cache) : IThreatScoreConfigService
 {
     private const string CacheKey = "bedrohung:konfig";

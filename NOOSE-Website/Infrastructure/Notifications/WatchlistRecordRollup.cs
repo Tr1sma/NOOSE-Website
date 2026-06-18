@@ -49,7 +49,6 @@ public static class WatchlistRecordRollup
             case TaskforceMessage tn: return One(nameof(Taskforce), tn.TaskforceId);
             case AgentNote av: return One(nameof(Agent), av.AgentId);
             case AgentPromotionRequest from: return One(nameof(Agent), from.AgentId);
-            // agent IS the record
             case Agent ag: return One(nameof(Agent), ag.Id);
             case AgentRankHistory adv: return One(nameof(Agent), adv.AgentId);
 
@@ -62,11 +61,9 @@ public static class WatchlistRecordRollup
             case Link vk: return Two((vk.SourceType, vk.SourceId), (vk.TargetType, vk.TargetId));
             case PersonRelation pb: return Two((nameof(Person), pb.PersonAId), (nameof(Person), pb.PersonBId));
 
-            // ---- ignored: not watchable ----
-            // jobs excluded
+            // not watchable
             case Job:
             case JobAssignment:
-            // announcements excluded
             case Announcement:
             case AnnouncementAcknowledgment:
             case Request:
@@ -77,7 +74,6 @@ public static class WatchlistRecordRollup
                 return Array.Empty<(string, string)>();
 
             default:
-                // warn if missing
                 if (entity is IAuditable)
                 {
                     logger.LogWarning(

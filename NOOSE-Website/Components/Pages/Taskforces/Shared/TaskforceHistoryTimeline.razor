@@ -1,4 +1,3 @@
-@* Akten-Historie der Taskforce: Audit-Einträge der Taskforce, Agent-Zuteilungen und Beziehungen. *@
 @inject ITaskforceService TaskforceService
 
 @if (_load)
@@ -40,9 +39,9 @@ else
 
 @code {
     [Parameter, EditorRequired] public string TaskforceId { get; set; } = default!;
-    /// <summary>Der Betrachter darf ALLE Taskforces sehen (Führung/Admin/Aufsicht) – sonst nur zugeteilte.</summary>
+    /// <summary>Viewer may see all taskforces, not just assigned ones.</summary>
     [Parameter] public bool MayAll { get; set; }
-    /// <summary>Agent-Id des Betrachters – für die Mitgliedschafts-Sichtbarkeit (Historie nur für Zugeteilte/Führung).</summary>
+    /// <summary>Viewer agent id, for membership visibility.</summary>
     [Parameter] public string? MeId { get; set; }
 
     private bool _load = true;

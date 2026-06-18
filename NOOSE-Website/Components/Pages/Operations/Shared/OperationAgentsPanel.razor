@@ -1,6 +1,4 @@
-@* Der Operation zugeteilte (beteiligte) NOOSE-Agents: Liste + Zuteilen/Entfernen + Ermittlungsleiter-Markierung.
-   Hinweis: Komponentenname bewusst „OperationAgentePanel" (nicht „AgentePanel"), um eine Tag-Auflösungs-
-   Kollision mit den gleichnamigen Komponenten anderer Module zu vermeiden (alle Shared-Ordner sind global @using). *@
+@* Agents assigned to the operation. Name is module-prefixed to avoid tag-resolution collisions across globally-imported Shared folders. *@
 @inject IOperationService OperationService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -64,7 +62,7 @@
     [Parameter, EditorRequired] public string OperationId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Wird nach jeder Änderung der Zuteilungen/Ermittlungsleiter ausgelöst (Steckkarte aktualisieren).</summary>
+    /// <summary>Raised after any assignment change.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -82,7 +80,7 @@
     {
         _load = true;
         _agents = await OperationService.GetAgentsAsync(OperationId);
-        // Verwalten (zuteilen/entfernen) darf die Führung oder ein Ermittlungsleiter dieser Akte.
+        // Leadership or an investigation lead may manage.
         var myId = User.GetAgentId();
         _canManage = _isLeadership || _agents.Any(a => a.AgentId == myId && a.IsInvestigationLead);
         _load = false;

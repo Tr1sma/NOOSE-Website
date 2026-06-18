@@ -1,5 +1,3 @@
-@* Zeigt die Ermittlungsleiter einer Akte (Codenames) prominent in der linken Steckkarte.
-   Generisch über eine Namensliste – entkoppelt von den konkreten Join-Entitäten (Gruppe/Fraktion/Partei). *@
 <div>
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
         <MudIcon Icon="@Icons.Material.Filled.LocalPolice" Color="Color.Warning" Size="Size.Small" />
@@ -22,6 +20,5 @@
 </div>
 
 @code {
-    /// <summary>Codenames der als Ermittlungsleiter markierten Agents (leer = niemand zugewiesen).</summary>
     [Parameter] public IReadOnlyList<string> Names { get; set; } = Array.Empty<string>();
 }

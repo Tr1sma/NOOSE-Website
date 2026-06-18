@@ -2,7 +2,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Cases;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen und Bearbeiten einer Vorgangs-/Fallakte.</summary>
+/// <summary>Form model for creating/editing a case record.</summary>
 public class CaseInput
 {
     public string Title { get; set; } = string.Empty;

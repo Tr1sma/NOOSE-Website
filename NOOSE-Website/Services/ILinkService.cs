@@ -4,12 +4,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Generische Verknüpfungs-Engine: legt gerichtete Verknüpfungen zwischen beliebigen Akten an und liefert
-/// sie aus Sicht einer Akte <b>bidirektional</b> normalisiert („andere Seite"). Ziele sind Personen,
-/// Fraktionen oder Personengruppen; Verschlusssache-/Papierkorb-Sichtbarkeit wird über die jeweilige Akte
-/// geprüft. Über <see cref="VerknuepfungArt"/> getrennt: allgemeine Verknüpfungen vs. Konflikte/Bündnisse.
-/// </summary>
+/// <summary>Generic link engine: directed links between records, returned bidirectionally normalized from one record's view; visibility-checked per record.</summary>
 public interface ILinkService
 {
     /// <summary>Links of a record, bidirectionally normalized; optionally restricted to one kind. Partners see only links to released records.</summary>

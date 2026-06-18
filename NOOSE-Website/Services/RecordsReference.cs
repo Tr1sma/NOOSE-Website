@@ -22,7 +22,6 @@ public static class RecordsReference
     public readonly record struct Resolution(string Display, bool Classified, string? Href);
 
     /// <summary>Batch-resolves all (type, id) refs; respects taskforce visibility.</summary>
-    // resolve all or own
     public static async Task<Dictionary<(string Type, string Id), Resolution>> ResolveAsync(
         AppDbContext db, IReadOnlyCollection<(string Type, string Id)> refs, CancellationToken ct = default,
         bool mayAllTaskforces = true, string? meId = null)
@@ -35,14 +34,12 @@ public static class RecordsReference
 
         await ResolveRecordsAsync(db, refs, map, mayAllTaskforces, meId, ct);
 
-        // resolve sources
         var sourceIds = refs.Where(r => r.Type == nameof(Source)).Select(r => r.Id).Distinct().ToList();
         if (sourceIds.Count > 0)
         {
             var sources = await db.Sources.Where(q => sourceIds.Contains(q.Id))
                 .Select(q => new { q.Id, q.Title, q.Type, q.Url, q.EntityType, q.EntityId })
                 .ToListAsync(ct);
-            // resolve parents
             var parentsRefs = sources.Select(q => (q.EntityType, q.EntityId)).Distinct().ToList();
             await ResolveRecordsAsync(db, parentsRefs, map, mayAllTaskforces, meId, ct);
             foreach (var q in sources)
@@ -124,14 +121,12 @@ public static class RecordsReference
         var taskforceIds = OpenIds(nameof(Taskforce));
         if (taskforceIds.Count > 0)
         {
-            // visible only
             var visible = await TaskforceVisibility.VisibleIdsAsync(db, taskforceIds, mayAllTaskforces, meId, ct);
             if (visible.Count > 0)
             {
                 foreach (var x in await db.Taskforces.Where(t => visible.Contains(t.Id))
                     .Select(t => new { t.Id, t.Name, t.CaseNumber }).ToListAsync(ct))
                 {
-                    // classified=false intentional
                     map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Taskforce), x.Id));
                 }
             }
@@ -147,7 +142,6 @@ public static class RecordsReference
             }
         }
 
-        // jobs visibility
         var jobIds = OpenIds(nameof(Job));
         if (jobIds.Count > 0)
         {
@@ -162,7 +156,6 @@ public static class RecordsReference
             }
         }
 
-        // appointments visibility
         var appointmentIds = OpenIds(nameof(Appointment));
         if (appointmentIds.Count > 0)
         {
@@ -177,7 +170,6 @@ public static class RecordsReference
             }
         }
 
-        // documents classified
         var documentIds = OpenIds(nameof(Document));
         if (documentIds.Count > 0)
         {
@@ -190,7 +182,7 @@ public static class RecordsReference
             }
         }
 
-        // codename only
+        // codename, never real name
         var agentIds = OpenIds(nameof(Agent));
         if (agentIds.Count > 0)
         {

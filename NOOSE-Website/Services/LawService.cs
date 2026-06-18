@@ -7,7 +7,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IGesetzService" />
+/// <inheritdoc cref="ILawService" />
 public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
 {
     public async Task<List<Law>> GetListAsync(CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
@@ -92,8 +92,7 @@ public class LawService(IDbContextFactory<AppDbContext> dbFactory) : ILawService
         var law = await db.Laws.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Paragraf nicht gefunden.");
 
-        // Soft-Delete (Interceptor wandelt Remove um); bestehende Verknüpfungen zeigen den Eintrag
-        // danach nicht mehr an (Soft-Delete-Filter der Verknüpfungs-Auflösung).
+        // soft-delete (interceptor rewrites Remove)
         db.Laws.Remove(law);
         await db.SaveChangesAsync(cancellationToken);
     }

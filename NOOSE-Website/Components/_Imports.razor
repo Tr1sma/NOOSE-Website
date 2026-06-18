@@ -79,6 +79,5 @@
 @using NOOSE_Website.Services.Statistics
 @using NOOSE_Website.Theme
 
-@* App-weiter Standard: jede Seite verlangt einen aktiven (eingeloggten) Agent.
-   Anonyme Seiten (Login/Ausstehend/Gesperrt/Error/NotFound) heben das mit [AllowAnonymous] auf. *@
+@* App-wide default: every page requires an active agent; anonymous pages opt out with [AllowAnonymous]. *@
 @attribute [Authorize(Policy = Policies.ActiveAgent)]

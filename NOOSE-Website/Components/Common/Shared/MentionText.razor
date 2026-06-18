@@ -1,6 +1,4 @@
-@* Rendert einen bereits aufgelösten Mention-Text (Segmente) inline: Klartext + klickbare Verweise/Chips.
-   Verschlusssachen ohne Berechtigung erscheinen als neutraler Schloss-Chip ohne Name/Link. Reiner Renderer –
-   die Auflösung (DB) macht der Aufrufer (bei Listen gebündelt via IMentionService.AufloesenVieleAsync). *@
+@* Renders pre-resolved mention segments inline; the caller does the DB resolution. *@
 <span style="white-space:pre-wrap;word-break:break-word;">
 @foreach (var seg in Segments)
 {

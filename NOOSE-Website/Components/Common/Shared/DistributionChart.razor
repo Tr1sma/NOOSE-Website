@@ -1,8 +1,4 @@
-@* Wiederverwendbares Verteilungs-Diagramm fürs Lagezentrum (§248): rendert eine (Bezeichnung, Anzahl)-Liste
-   als Donut in NOOSE-Farben. Sind alle Werte 0 (oder keine Segmente vorhanden), erscheint ein dezenter Hinweis
-   statt eines leeren Rings (MudChart würde sonst eine NaN-Geometrie zeichnen). MudBlazor 9.5: Pie/Donut nehmen
-   die Daten als ChartSeries (über die AsChartDataSet()-Erweiterung) plus ChartLabels.
-   Bare = ohne eigene Kachel (für mehrere Diagramme in einer gemeinsamen Kachel); Height steuert die Donut-Größe. *@
+@* Reusable distribution donut; shows a hint instead of an empty ring when all values are 0 (MudChart would draw NaN geometry). *@
 @using NOOSE_Website.Models.Dashboard
 
 @if (Bare)
@@ -21,19 +17,16 @@ else
 }
 
 @code {
-    /// <summary>Überschrift der Karte (z. B. „Fälle nach Einstufung").</summary>
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
 
-    /// <summary>Die Segmente (Kategorie + Anzahl) in fester Reihenfolge.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<DistributionSegment> Segments { get; set; } = Array.Empty<DistributionSegment>();
 
-    /// <summary>Hex-Farben je Segment, in derselben Reihenfolge wie <see cref="Segmente"/>.</summary>
+    /// <summary>Hex colours per segment, same order as Segments.</summary>
     [Parameter, EditorRequired] public string[] Colours { get; set; } = Array.Empty<string>();
 
-    /// <summary>Höhe des Donuts (CSS-Wert). Standard 300px; für kompakte Darstellung kleiner setzen.</summary>
     [Parameter] public string Height { get; set; } = "300px";
 
-    /// <summary>Ohne eigene MudPaper-Kachel rendern (z. B. zwei Diagramme in einer gemeinsamen Kachel).</summary>
+    /// <summary>Render without an own MudPaper tile.</summary>
     [Parameter] public bool Bare { get; set; }
 
     private bool _empty = true;
@@ -45,7 +38,6 @@ else
     {
         _empty = Segments.Count == 0 || Segments.All(s => s.Count == 0);
         _data = Segments.Select(s => (double)s.Count).ToArray();
-        // Anzahl direkt ins Etikett → die Legende ist auch ohne Tooltip selbsterklärend.
         _labels = Segments.Select(s => $"{s.Designation} ({s.Count})").ToArray();
         _options = new ChartOptions { ChartPalette = Colours, ShowLegend = true };
     }

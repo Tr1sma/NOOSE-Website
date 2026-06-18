@@ -5,7 +5,6 @@ using NOOSE_Website.Infrastructure.CurrentUser;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="IZugriffsLogService" />
 public class AccessLogService(IDbContextFactory<AppDbContext> dbFactory, ICurrentUserService currentUserService) : IAccessLogService
 {
     public async Task LogViewAsync(string entityType, string entityId, CancellationToken cancellationToken = default)

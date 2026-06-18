@@ -20,7 +20,7 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
 
     public async Task StageAsync(AppDbContext db, SuggestionType type, IEnumerable<string> values, CancellationToken cancellationToken = default)
     {
-        // Eingaben normalisieren: trimmen, Leere verwerfen, case-insensitiv deduplizieren.
+        // trim, drop empties, dedupe case-insensitively
         var candidates = values
             .Select(w => w?.Trim() ?? string.Empty)
             .Where(w => w.Length > 0)
@@ -33,7 +33,7 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
             return;
         }
 
-        // Bereits vorhandene Werte (case-insensitiv) ermitteln, damit nur wirklich Neues angelegt wird.
+        // find already-present values so only genuinely new ones are added
         var candidatesLower = candidates.Select(w => w.ToLowerInvariant()).ToList();
         var exists = await db.ProfileSuggestions
             .Where(v => v.Type == type && candidatesLower.Contains(v.Value.ToLower()))
@@ -43,10 +43,10 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
 
         foreach (var value in candidates)
         {
-            // vorhandenSet wächst mit → fängt auch identische Werte innerhalb desselben Aufrufs ab.
+            // set grows as we go, catching duplicates within one call
             if (existsSet.Add(value.ToLowerInvariant()))
             {
-                // Nur vormerken – der Aufrufer (PersonService) speichert im selben SaveChanges.
+                // stage only; caller persists in the same SaveChanges
                 db.ProfileSuggestions.Add(new ProfileSuggestion { Type = type, Value = value });
             }
         }

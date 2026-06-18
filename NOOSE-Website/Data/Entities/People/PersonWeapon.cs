@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 namespace NOOSE_Website.Data.Entities.People;
 
-/// <summary>Eine der Person zugeordnete Waffe (Steckbrief-Kind).</summary>
+/// <summary>A weapon associated with a person.</summary>
 [Table("PersonWaffen")]
 public class PersonWeapon
 {

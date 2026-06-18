@@ -30,7 +30,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             return null;
         }
-        // Sichtbar nur für Führung/Admin oder zugeteilte Agenten (Verschlusssache ist damit subsumiert).
+        // visible only to leadership/admin or assigned agents
         if (!mayAll
             && !(meId is not null && await db.TaskforceAgents.AnyAsync(a => a.TaskforceId == id && a.AgentId == meId, cancellationToken)))
         {
@@ -67,7 +67,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task<List<Taskforce>> GetRequestedAsync(CancellationToken cancellationToken = default)
     {
-        // Nur für den Führungs-Freigabe-Posteingang (Seite ist Policies.Fuehrung-gated) → kein VS-Filter nötig.
+        // leadership-gated approval inbox, no classification filter needed
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Taskforces
             .Where(t => t.Status == TaskforceStatus.Requested)
@@ -94,7 +94,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         db.Taskforces.Add(taskforce);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Ersteller automatisch als Chefermittler (Leitung) zuteilen (so existiert stets mindestens eine Leitung).
+        // auto-assign creator as lead, so a lead always exists
         var creatorId = actor.GetAgentId();
         if (creatorId is not null)
         {
@@ -159,7 +159,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task ApprovalSetAsync(string id, TaskforceStatus @new, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Genehmigen/Ablehnen/Auflösen ist der Führung vorbehalten (Plan §6 „Taskforce genehmigen").
+        // approve/reject/dissolve is leadership-only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -176,7 +176,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         return await db.TaskforceAgents
             .Where(a => a.TaskforceId == taskforceId)
             .Include(a => a.Agent)
-            // Leitung (Rolle != Mitglied) zuerst, dann nach Rolle (Chefermittler < CID-Lead < TRU-Lead), dann Codename.
+            // leads first, then by role, then codename
             .OrderBy(a => a.Role == TaskforceRole.Member)
             .ThenBy(a => a.Role)
             .ThenBy(a => a.Agent!.Codename)
@@ -241,7 +241,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task RoleSetAsync(string allocationId, TaskforceRole role, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Rollen/Leitung vergeben/entziehen ist der Führung vorbehalten.
+        // assigning roles/leads is leadership-only
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -251,7 +251,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Wirft, wenn der Handelnde weder Führung noch Leitung (Rolle != Mitglied) dieser Taskforce ist.</summary>
+    /// <summary>Throws unless the actor is leadership or a lead of this taskforce.</summary>
     private static async Task RequireLeadershipOrLeadAsync(AppDbContext db, string taskforceId, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (actor.IsLeadership())
@@ -280,8 +280,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .Select(a => a.Id)
             .ToListAsync(cancellationToken);
 
-        // Manuelle Beziehungen (Verknüpfungen), die diese Taskforce als Quelle oder Ziel berühren –
-        // inkl. bereits entfernter (IgnoreQueryFilters), damit auch deren „entfernt"-Eintrag erscheint.
+        // manual links touching this taskforce, including removed ones so their "removed" entry shows
         var relationIds = await db.Links
             .IgnoreQueryFilters()
             .Where(v => !v.Automatic

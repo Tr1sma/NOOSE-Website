@@ -1,5 +1,3 @@
-@* Anlegen/Bearbeiten eines Paragrafen (Gesetzbuch-Modul, Phase 7). Nur Führung. *@
-
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
@@ -56,7 +54,7 @@
 
     private void Save() => MudDialog.Close(DialogResult.Ok(_input));
 
-    /// <summary>Zeigt den Dialog; liefert die Eingabe oder <c>null</c> bei Abbruch.</summary>
+    /// <summary>Shows the dialog; returns the input or null if cancelled.</summary>
     public static async Task<LawInput?> ShowAsync(IDialogService dialog, string title, LawInput? preset = null)
     {
         var parameters = new DialogParameters<LawDialog>

@@ -7,12 +7,7 @@ using NOOSE_Website.Models.Operations;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Geschäftslogik der Operationen/Einsatzberichte: Liste/Detail (inkl. Verschlusssachen-Filter),
-/// Anlegen/Bearbeiten, Papierkorb, Einstufung mit Rang-Gate, beteiligte Agents (mit Ermittlungsleiter)
-/// und Historie. Beteiligte Personen/Organisationen laufen über die generische Verknüpfungs-Engine.
-/// Alle verändernden Aktionen werden auditiert.
-/// </summary>
+/// <summary>Operations/mission reports: list/detail, CRUD, classification, involved agents and history.</summary>
 public interface IOperationService
 {
     Task<List<Operation>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
@@ -25,25 +20,24 @@ public interface IOperationService
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
+    /// <summary>Set classification; "Gesichert staatsgefährdend" requires Senior Special Agent+ or Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Der Operation zugeteilte (beteiligte) NOOSE-Agents (inkl. Agent-Daten; Ermittlungsleiter zuerst).</summary>
+    /// <summary>NOOSE agents involved in the operation (investigation leads first).</summary>
     Task<List<OperationAgent>> GetAgentsAsync(string operationId, CancellationToken cancellationToken = default);
 
-    /// <summary>Die als Ermittlungsleiter markierten Zuteilungen der Operation (inkl. Agent-Daten).</summary>
+    /// <summary>Allocations marked as investigation lead.</summary>
     Task<List<OperationAgent>> GetInvestigationLeadAsync(string operationId, CancellationToken cancellationToken = default);
 
-    /// <summary>Agent zuteilen. Erlaubt für Führung oder Ermittlungsleiter der Akte; <paramref name="alsErmittlungsleiter"/> nur durch die Führung.</summary>
+    /// <summary>Allocate an agent; lead flag is leadership-only.</summary>
     Task AgentAllocateAsync(string operationId, string agentId, bool asInvestigationLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Zuteilung aufheben. Erlaubt für Führung oder Ermittlungsleiter der Akte.</summary>
     Task AgentRemoveAsync(string allocationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Ermittlungsleiter-Markierung einer Zuteilung setzen/entfernen – nur Führung.</summary>
+    /// <summary>Set/clear the investigation-lead flag; leadership only.</summary>
     Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Operation und ihrer Zuteilungen/Beziehungen (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
+    /// <summary>Audit entries for the operation and its allocations/relations; visibility-filtered.</summary>
     Task<List<AuditLog>> GetHistoryAsync(string operationId, bool isLeadership, CancellationToken cancellationToken = default);
 }

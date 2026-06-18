@@ -22,11 +22,9 @@ else if (_person is null)
 }
 else
 {
-    @* Schlanke Aktionsleiste: Zurück links, Aktionen rechts. Name/Status leben in der Steckkarte. *@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
         <MudSpacer />
-        @* Strukturierte Druckansicht der ganzen Akte (eigene Seite, öffnet im neuen Tab). *@
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
                            Href="@($"/personen/{_person.Id}/druck")" Target="_blank"
@@ -48,7 +46,6 @@ else
         </AuthorizeView>
     </MudStack>
 
-    @* record tags (internal) *@
     @if (!_isPartner)
     {
         <MudPaper Class="pa-2 mb-4" Elevation="1">
@@ -57,14 +54,12 @@ else
     }
 
     <MudGrid>
-        @* Links: feste Identitäts-/Steckkarte (auf Desktop klebend). *@
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
                 <IdentityCard Person="_person" Affiliations="_affiliations" />
             </div>
         </MudItem>
 
-        @* Rechts: die bestehenden Inhalte als Tabs. *@
         <MudItem xs="12" md="8" lg="9">
             @if (_renderTabs.Count == 0)
             {
@@ -143,7 +138,6 @@ else
                                       DetailJson="@_person.ThreatDetailJson" />
                 </MudTabPanel>
                 }
-                @* partner-safe child services *@
                 @if (TabOn("fotos"))
                 {
                 <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
@@ -156,7 +150,6 @@ else
                     <SourcesPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
                 }
-                @* partner-safe child service *@
                 @if (TabOn("wiedervorlagen"))
                 {
                 <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
@@ -167,7 +160,7 @@ else
                 {
                 <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <LinkPanel PersonId="@_person.Id" User="_user" />
-                    @* link suggestions reveal other records: internal only *@
+                    @* Link suggestions reveal other records: internal only. *@
                     @if (!_isPartner)
                     {
                         <MudDivider Class="my-4" />
@@ -181,7 +174,6 @@ else
                     <AffiliationsPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" @key="_historyKey" />
                 </MudTabPanel>
                 }
-                @* partner-safe child services *@
                 @if (TabOn("kommentare"))
                 {
                 <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
@@ -194,7 +186,7 @@ else
                     <CustomFieldsPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </MudTabPanel>
                 }
-                @* partner-safe: timeline filters cross-refs for partners *@
+                @* Timeline filters cross-refs for partners. *@
                 @if (TabOn("historie"))
                 {
                 <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
@@ -221,7 +213,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    // Order must match the MudTabPanels.
     private int _activeTab;
     private static readonly string[] _tabs =
     {
@@ -239,14 +231,11 @@ else
     {
         _user = (await AuthStateTask).User;
         _isPartner = _user.IsPartner();
-        // Hält den Tot-Countdown aktuell (rein anzeigeseitig, kein Hintergrund-Job).
+        // Keeps the death countdown ticking.
         _timer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
 
-    // Diese Seite wird bei Navigation /personen/{A} → /personen/{B} WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
-    // Akte stehen. Das kurze _laden=true entfernt den Tab-Baum und mountet ihn frisch (auch die Kind-Panels, die
-    // ihrerseits in OnInitialized laden). Bei reinem Tab-/Query-Wechsel bleibt Id gleich → kein Neuladen.
+    // Component is reused across /personen/{A} → /personen/{B}, so OnInitializedAsync does not re-run; react to the Id change here or the old record stays.
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -266,15 +255,12 @@ else
 
     private async Task LoadAsync()
     {
-        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
-        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
-        // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
+        // Don't set _load=true on reload: it would unmount MudTabs and reset to the first tab.
         var scope = ViewerScope.From(_user);
         _person = await PersonService.GetDetailAsync(Id, scope);
         _classificationHistory = _person is null
             ? new()
             : await PersonService.GetClassificationHistoryAsync(_person.Id, scope);
-        // Aktive Zugehörigkeiten für die Übersichtskarte (sichtbarkeits-gefiltert; für Partner leer).
         _affiliations = _person is null
             ? new()
             : await PersonService.GetAffiliationsAsync(_person.Id, scope);

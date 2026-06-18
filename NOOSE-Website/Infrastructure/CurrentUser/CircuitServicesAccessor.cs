@@ -2,15 +2,7 @@ using Microsoft.AspNetCore.Components.Server.Circuits;
 
 namespace NOOSE_Website.Infrastructure.CurrentUser;
 
-/// <summary>
-/// Macht den scoped <see cref="IServiceProvider"/> des aktuellen Blazor-Circuits über einen
-/// <see cref="AsyncLocal{T}"/> zugänglich, damit app-weite (Singleton-)Dienste den circuit-gebundenen
-/// <c>AuthenticationStateProvider</c> auflösen können. Notwendig, weil die DbContext-Factory jetzt
-/// Singleton ist (Contexts nicht mehr circuit-gebunden, sonst „ObjectDisposedException: IServiceProvider").
-/// Der eingeloggte Nutzer (für Audit/Read-Only-Sperre in den SaveChanges-Interceptors) wird im Circuit
-/// aber nur über den per-Circuit scoped <c>AuthenticationStateProvider</c> aufgelöst — diesen liefert
-/// der Accessor. Offizielles Muster: „Access server-side Blazor services from a different DI scope".
-/// </summary>
+/// <summary>Exposes the current circuit's scoped <see cref="IServiceProvider"/> via <see cref="AsyncLocal{T}"/> so singleton services can resolve the circuit-scoped AuthenticationStateProvider.</summary>
 public sealed class CircuitServicesAccessor
 {
     private static readonly AsyncLocal<IServiceProvider?> Current = new();
@@ -22,11 +14,7 @@ public sealed class CircuitServicesAccessor
     }
 }
 
-/// <summary>
-/// Setzt für die Dauer jeder eingehenden Circuit-Aktivität (UI-Event, JS-Interop) den scoped
-/// IServiceProvider des Circuits in den <see cref="CircuitServicesAccessor"/> — der AsyncLocal-Wert
-/// fließt von dort in die awaiteten Service-/SaveChanges-Aufrufe.
-/// </summary>
+/// <summary>Sets the circuit's scoped service provider into <see cref="CircuitServicesAccessor"/> for the duration of each inbound circuit activity.</summary>
 internal sealed class CircuitServicesAccessorHandler(IServiceProvider services, CircuitServicesAccessor accessor)
     : CircuitHandler
 {
@@ -50,7 +38,6 @@ public static class CircuitServicesAccessorExtensions
 {
     public static IServiceCollection AddCircuitServicesAccessor(this IServiceCollection services)
     {
-        // Singleton (AsyncLocal-gestützt) — darf so in den Singleton-CurrentUserService injiziert werden.
         services.AddSingleton<CircuitServicesAccessor>();
         services.AddScoped<CircuitHandler, CircuitServicesAccessorHandler>();
         return services;

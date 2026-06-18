@@ -1,5 +1,4 @@
-@* Beförderungsanträge eines Agents: Liste (für alle sichtbar), Beantragen (Führung) und Entscheiden
-   (Deputy Director+/Admin). Die Entscheidung setzt den Rang (im AgentVerwaltungService) → Changed-Callback. *@
+@* Promotion requests; requesting is leadership, deciding is Deputy Director+/Admin. *@
 @inject IPersonnelFileService PersonnelFileService
 @inject IAgentManagementService AgentService
 @inject IDialogService DialogService
@@ -66,7 +65,7 @@
     [Parameter, EditorRequired] public Agent Agent { get; set; } = default!;
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
-    /// <summary>Wird nach einer Entscheidung ausgelöst (Rang kann sich geändert haben → Steckkarte/Verlauf neu laden).</summary>
+    /// <summary>Raised after a decision so the rank can be reloaded.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;

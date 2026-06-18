@@ -28,7 +28,6 @@ public static class PeopleFileEndpointRouteBuilderExtensions
                 return Results.NotFound();
             }
 
-            // open before logging
             Stream stream;
             try
             {
@@ -41,7 +40,6 @@ public static class PeopleFileEndpointRouteBuilderExtensions
 
             await access.LogViewAsync(nameof(PersonPhoto), photoId, cancellationToken);
 
-            // auto-disposed
             return Results.File(stream, photo.ContentType, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.ActiveAgent);

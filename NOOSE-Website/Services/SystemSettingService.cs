@@ -10,7 +10,7 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <inheritdoc cref="ISystemEinstellungService" />
+/// <inheritdoc cref="ISystemSettingService" />
 public partial class SystemSettingService(
     IDbContextFactory<AppDbContext> dbFactory,
     IMemoryCache cache,
@@ -52,7 +52,6 @@ public partial class SystemSettingService(
         }
         catch (Exception)
         {
-            // return defaults
             return Default();
         }
 
@@ -103,7 +102,6 @@ public partial class SystemSettingService(
             throw new InvalidOperationException($"Das Logo ist zu groß (max. {options.MaxBytes / (1024 * 1024)} MB).");
         }
 
-        // randomize filename
         var extension = Path.GetExtension(originalName);
         if (string.IsNullOrEmpty(extension) || extension.Length > 12 || extension.Skip(1).Any(c => !char.IsLetterOrDigit(c)))
         {
@@ -194,7 +192,7 @@ public partial class SystemSettingService(
         }
         catch (IOException)
         {
-            // ignore cleanup errors
+            /* ignore */
         }
     }
 }

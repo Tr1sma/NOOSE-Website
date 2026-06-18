@@ -169,7 +169,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        // Aufruf über die Topbar/Command-Palette: ?q=… übernehmen und sofort suchen.
+        // Adopt ?q= and search immediately
         if (Q != _appliedQ)
         {
             _appliedQ = Q;
@@ -215,7 +215,7 @@ else
         return new SearchCriteria
         {
             Text = _text,
-            // Alle zehn aktiv → leere Liste (= alle), sonst die gewählte Teilmenge.
+            // All active means empty list (= all), else the chosen subset
             Categories = categories.Count == 11 ? new() : categories,
             TagIds = _tagSelection.ToList(),
             Fuzzy = _fuzzy,
@@ -223,9 +223,7 @@ else
         };
     }
 
-    // Max-Modus zieht Doks/Quellen/Kommentare immer mit (Service erzwingt es ohnehin); zur Klarheit
-    // hier die Häkchen setzen, damit der angezeigte Zustand der tatsächlichen Suche entspricht.
-    // Läuft als @bind-Value:after, also nach dem Setzen von _maxModus; Blazor rendert danach automatisch neu.
+    // Keep the checkboxes in sync with what deep-scan actually searches
     private void MaxAddendum()
     {
         if (_maxMode)
@@ -243,9 +241,7 @@ else
             Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
             return;
         }
-        // Läuft schon eine Suche (z. B. schnelle ?q-Navigation), nur vormerken statt überlappen zu lassen.
-        // Nach Abschluss wird mit den dann aktuellen Kriterien wiederholt – verhindert den inkonsistenten
-        // Zustand „Feld zeigt X, Treffer zeigen Y" und unnötige Parallel-Abfragen.
+        // A search is already running; queue a rerun instead of overlapping
         if (_searchingNow)
         {
             _againSearch = true;
@@ -267,7 +263,7 @@ else
         }
         catch (Exception ex)
         {
-            // Fehler sichtbar machen statt den Ladeindikator hängen zu lassen.
+            // Surface the error instead of hanging the spinner
             _groups = new();
             _searched = true;
             Snackbar.Add($"Suche fehlgeschlagen: {ex.Message}", Severity.Error);
@@ -302,7 +298,7 @@ else
     {
         SearchCriteria? k = null;
         try { k = JsonSerializer.Deserialize<SearchCriteria>(g.SearchParameterJson); }
-        catch { /* defekte gespeicherte Suche ignorieren */ }
+        catch { /* ignore */ }
         if (k is null)
         {
             return;
@@ -334,7 +330,7 @@ else
         {
             return;
         }
-        // Das X liegt direkt neben „Suche anwenden" → vor dem Löschen kurz bestätigen (kein versehentlicher Verlust).
+        // Confirm before delete; the X sits next to "apply"
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Gespeicherte Suche löschen?",
             $"„{g.Name}“ wird dauerhaft entfernt.");
         if (!ok)

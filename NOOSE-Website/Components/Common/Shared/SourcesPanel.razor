@@ -1,4 +1,3 @@
-@* Quellen-/Anhang-Liste einer Akte: Upload/Link/interne Verknüpfung/Freitext anhängen und entfernen. *@
 @inject ISourceService SourceService
 @inject IDialogService DialogService
 @inject NavigationManager Nav
@@ -128,8 +127,7 @@
             return;
         }
 
-        // Sonderfall „Neues Dokument erstellen": zum Volltext-Editor wechseln; das Dokument wird beim
-        // Speichern automatisch als Quelle an diese Akte gehängt (attach=1).
+        // new document: go to the editor, attach=1 links it back on save
         if (input.NewDocumentCreate)
         {
             Nav.NavigateTo($"/dokumente/neu?entitaetTyp={Uri.EscapeDataString(EntityType)}&entitaetId={Uri.EscapeDataString(EntityId)}&attach=1");
@@ -168,7 +166,7 @@
             var @new = !source.Pinned;
             await SourceService.PinSetAsync(source.Id, @new, User);
             Snackbar.Add(@new ? "Quelle angepinnt." : "Anpinnen gelöst.", Severity.Success);
-            await LoadAsync(); // neu laden → Server-Sortierung bringt sie nach oben/zurück
+            await LoadAsync();
         }
         catch (Exception ex)
         {

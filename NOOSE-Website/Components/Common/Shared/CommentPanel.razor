@@ -1,5 +1,3 @@
-@* Kommentare/Vermerke einer Akte: neueste zuerst, Inline-Verfassen mit @-Verlinkung (Akten/Quellen/Agenten),
-   aufgelöste Verweise in der Anzeige, Löschen (eigene oder Führung). *@
 @inject ICommentService CommentService
 @inject IMentionService MentionService
 @inject IDialogService DialogService
@@ -99,7 +97,7 @@
     {
         _load = true;
         var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User));
-        // Alle Kommentar-Texte in EINER Sammelabfrage auflösen (@-Tokens → anzeigefertige Segmente, VS-/Klarname-gefiltert).
+        // resolve all comment mentions in one batch
         var segments = await MentionService.ResolveManyAsync(
             comments.Select(k => (string?)k.Text).ToList(), _mayClassifiedRead, User.GetAgentId());
         _entries = comments.Select((k, i) => new Entry(k, segments[i])).ToList();
@@ -143,7 +141,6 @@
         await LoadAsync();
     }
 
-    // Löschen darf der Verfasser selbst oder die Führung.
     private bool MayDelete(Comment k)
         => _isLeadership || (k.CreatedById is not null && k.CreatedById == User.GetAgentId());
 }

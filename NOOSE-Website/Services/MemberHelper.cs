@@ -5,15 +5,10 @@ using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Gemeinsame Helfer für die Mitglieder-Pflege von Fraktionen und Personengruppen (zuvor je Dienst dupliziert).
-/// </summary>
+/// <summary>Shared helpers for faction and person-group member maintenance.</summary>
 internal static class MemberHelper
 {
-    /// <summary>
-    /// Liefert die Personen-Id: entweder die übergebene bestehende (mit Existenzprüfung) oder – wenn nur ein
-    /// neuer Name angegeben ist – eine frisch angelegte Personen-Akte (committet, eigenes Aktenzeichen).
-    /// </summary>
+    /// <summary>Returns the existing person id (checked) or creates a fresh person record from a new name.</summary>
     public static async Task<string> PersonIdDetermineAsync(AppDbContext db, IPersonService personService,
         string? personId, string? newName, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {

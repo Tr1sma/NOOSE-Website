@@ -10,7 +10,6 @@ public sealed class ThreatScoreSweepWorker(IServiceScopeFactory scopeFactory, IL
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // startup delay
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);

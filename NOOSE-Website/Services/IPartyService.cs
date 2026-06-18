@@ -7,11 +7,7 @@ using NOOSE_Website.Models.Parties;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Geschäftslogik der Partei-Akten: Liste/Detail (inkl. Verschlusssachen-Filter), Anlegen/Bearbeiten,
-/// Papierkorb, Einstufung mit Rang-Gate, Mitglieder (mit Rolle/Leitung), zugeteilte Agents und Historie.
-/// Alle verändernden Aktionen werden auditiert.
-/// </summary>
+/// <summary>Business logic for party records: list/detail, CRUD, classification, members, assigned agents, history.</summary>
 public interface IPartyService
 {
     Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default);
@@ -24,31 +20,31 @@ public interface IPartyService
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Einstufung setzen. „Gesichert staatsgefährdend" erfordert Senior Special Agent+ oder Admin.</summary>
+    /// <summary>Set classification. "Secured state-threatening" requires Senior Special Agent+ or Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Mitglieder der Partei inkl. Person; Verschlusssachen-Personen nur für Führung.</summary>
+    /// <summary>Party members incl. person; classified persons only for leadership.</summary>
     Task<List<PartyMember>> GetMembersAsync(string partyId, ViewerScope scope, CancellationToken cancellationToken = default);
     Task MemberAddAsync(string partyId, PartyMemberInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task MemberChangeAsync(string memberId, string? role, bool isLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task MemberRemoveAsync(string memberId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Der Partei zugeteilte NOOSE-Agents (inkl. Agent-Daten; Ermittlungsleiter zuerst).</summary>
+    /// <summary>Agents assigned to the party (incl. agent data; investigation leads first).</summary>
     Task<List<PartyAgent>> GetAgentsAsync(string partyId, CancellationToken cancellationToken = default);
 
-    /// <summary>Die als Ermittlungsleiter markierten Zuteilungen der Partei (inkl. Agent-Daten).</summary>
+    /// <summary>Assignments marked as investigation lead (incl. agent data).</summary>
     Task<List<PartyAgent>> GetInvestigationLeadAsync(string partyId, CancellationToken cancellationToken = default);
 
-    /// <summary>Agent zuteilen. Erlaubt für Führung oder Ermittlungsleiter der Akte; <paramref name="alsErmittlungsleiter"/> nur durch die Führung.</summary>
+    /// <summary>Assign agent. Leadership or record investigation lead; as-lead flag only by leadership.</summary>
     Task AgentAllocateAsync(string partyId, string agentId, bool asInvestigationLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Zuteilung aufheben. Erlaubt für Führung oder Ermittlungsleiter der Akte.</summary>
+    /// <summary>Remove assignment. Leadership or record investigation lead.</summary>
     Task AgentRemoveAsync(string allocationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Ermittlungsleiter-Markierung einer Zuteilung setzen/entfernen – nur Führung.</summary>
+    /// <summary>Set/clear the investigation-lead mark on an assignment - leadership only.</summary>
     Task InvestigationLeadSetAsync(string allocationId, bool @is, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Audit-Einträge der Partei und ihrer Mitgliedschaften (für die Akten-Historie; Verschlusssache-gefiltert).</summary>
+    /// <summary>Audit entries of the party and its memberships (record history; classified-filtered).</summary>
     Task<List<AuditLog>> GetHistoryAsync(string partyId, bool isLeadership, CancellationToken cancellationToken = default);
 }

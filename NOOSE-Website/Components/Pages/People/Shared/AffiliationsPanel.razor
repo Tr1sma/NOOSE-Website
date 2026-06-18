@@ -1,6 +1,4 @@
-@* Rück-Verknüpfungen einer Person: Fraktionen und Personengruppen, denen sie angehört.
-   Hinzufügen/Entfernen direkt hier; eine Fraktions-Mitgliedschaft erzeugt automatisch
-   „Fraktionskollege"-Verknüpfungen zu den übrigen Mitgliedern (siehe Tab „Verknüpfungen"). *@
+@* A person's faction and person-group memberships, with add/remove. *@
 @inject IPersonService PersonService
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
@@ -51,7 +49,7 @@
         }
     }
 
-    @* Mitgliedschafts-Verlauf: beendete Zugehörigkeiten mit Beitritts-/Austrittsdatum (nur lesbar). *@
+    @* Read-only history of ended memberships. *@
     @if (!_load && _former.Count > 0)
     {
         <MudDivider Class="my-2" />
@@ -87,7 +85,7 @@
     [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    @* Wird nach Hinzufügen/Entfernen ausgelöst, damit die Eltern-Akte (Übersichtskarte + Historie) aktualisiert. *@
+    @* Notifies the parent record to refresh after add/remove. *@
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;
@@ -105,9 +103,7 @@
         _load = false;
     }
 
-    @* Nach einer Änderung: ist die Komponente in eine Akte eingebunden, benachrichtigt sie die Eltern – die
-       re-keyen dieses Panel (frisches Neuladen) und aktualisieren die Übersichtskarte. Sonst lädt sie sich
-       selbst neu (Standalone-Betrieb). Vermeidet Doppel-Laden über das Re-Key. *@
+    @* Let the parent re-key (avoids double load); else reload standalone. *@
     private async Task RefreshAsync()
     {
         if (Changed.HasDelegate)

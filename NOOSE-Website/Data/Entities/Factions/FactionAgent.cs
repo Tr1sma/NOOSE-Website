@@ -3,12 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Factions;
 
-/// <summary>
-/// Zuteilung eines NOOSE-Agents zu einer Fraktion (wer bearbeitet die Fraktion). Join-Entity mit
-/// <see cref="IAuditable"/>. FK auf den <see cref="Agent"/> (Identity-Tabelle) ist <c>Restrict</c>; FK auf
-/// die Fraktion ist Cascade. Das Flag <see cref="IstErmittlungsleiter"/> markiert leitende Agents –
-/// mehrere gleichzeitig möglich; gesetzt/entfernt nur durch die Führung.
-/// </summary>
+/// <summary>Assignment of a NOOSE agent to a faction; Restrict FK on the Identity Agent table, Cascade on the faction.</summary>
 [Table("FraktionAgenten")]
 public class FactionAgent : IAuditable
 {
@@ -21,11 +16,10 @@ public class FactionAgent : IAuditable
     public string AgentId { get; set; } = string.Empty;
     public Agent? Agent { get; set; }
 
-    /// <summary>Markiert diesen zugeteilten Agent als Ermittlungsleiter der Akte (mehrere je Akte möglich).</summary>
+    /// <summary>Marks this agent as investigation lead of the case (several allowed).</summary>
     [Column("IstErmittlungsleiter")]
     public bool IsInvestigationLead { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

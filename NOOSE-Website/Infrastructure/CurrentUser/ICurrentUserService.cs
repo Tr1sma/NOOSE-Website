@@ -6,19 +6,11 @@ public readonly record struct CurrentUserInfo(string? Id, string? Name, bool IsO
     public static readonly CurrentUserInfo System = new(null, "System", false, false);
 }
 
-/// <summary>
-/// Ermittelt den aktuell handelnden Agent – funktioniert sowohl in HTTP-Anfragen (z. B. den
-/// OAuth-Endpoints) als auch in interaktiven Blazor-Circuits. Wird vom Audit-Interceptor und von
-/// Protokoll-Diensten genutzt.
-/// </summary>
+/// <summary>Resolves the current acting agent in both HTTP requests and interactive Blazor circuits.</summary>
 public interface ICurrentUserService
 {
     Task<CurrentUserInfo> GetAsync();
 
-    /// <summary>
-    /// Synchrone Variante: ermittelt den Agent ausschließlich aus dem <see cref="HttpContext"/> (ohne den
-    /// async AuthenticationStateProvider). Für synchrone Aufrufpfade (z. B. sync SaveChanges im Interceptor),
-    /// damit dort nicht blockierend auf async gewartet wird. Liefert System, wenn kein HttpContext-Nutzer existiert.
-    /// </summary>
+    /// <summary>Sync variant resolving the agent from <see cref="HttpContext"/> only (no async provider); for sync save paths. Returns System if no HTTP user.</summary>
     CurrentUserInfo Get();
 }

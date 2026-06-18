@@ -17,14 +17,12 @@ public static class NavCatalog
     /// <summary>All internal-agent entries in default order. Keys are stable; favorites/hidden/order reference them.</summary>
     public static readonly IReadOnlyList<NavEntry> Internal = new[]
     {
-        // primary
         new NavEntry("dashboard", "/", Icons.Material.Filled.SpaceDashboard, "Dashboard", NavSection.Primary, NavLinkMatch.All),
         new NavEntry("profil", "/profil", Icons.Material.Filled.AccountCircle, "Mein Profil", NavSection.Primary),
         new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.Primary),
         new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Primary),
         new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Primary, BadgeKey: "acknowledgments"),
 
-        // akten
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten),
         new NavEntry("doks", "/doks", Icons.Material.Filled.Description, "Personen-Doks", NavSection.Akten),
         new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumente", NavSection.Akten),
@@ -43,10 +41,8 @@ public static class NavCatalog
         new NavEntry("kalender", "/kalender", Icons.Material.Filled.CalendarMonth, "Kalender", NavSection.Akten),
         new NavEntry("statistik", "/statistik", Icons.Material.Filled.QueryStats, "Statistik", NavSection.Akten),
 
-        // verwaltung: senior special agent+ (decides promotions) reaches the release inbox
         new NavEntry("admin.freigaben", "/admin/freigaben", Icons.Material.Filled.HowToReg, "Freigaben", NavSection.VerwaltungFreigaben, BadgeKey: "shares"),
 
-        // verwaltung: leadership
         new NavEntry("admin.tags", "/admin/tags", Icons.Material.Filled.Label, "Tags", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.vorlagen", "/admin/vorlagen", Icons.Material.Filled.Dvr, "Vorlagen", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.custom-felder", "/admin/custom-felder", Icons.Material.Filled.Tune, "Custom-Felder", NavSection.VerwaltungFuehrung),
@@ -56,7 +52,6 @@ public static class NavCatalog
         new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.basisdaten", "/admin/basisdaten", Icons.Material.Filled.Storage, "Basisdaten", NavSection.VerwaltungFuehrung),
 
-        // verwaltung: admin
         new NavEntry("admin.module", "/admin/module", Icons.Material.Filled.School, "Ausbildungsmodule", NavSection.VerwaltungAdmin),
         new NavEntry("admin.partner-sichtbarkeit", "/admin/partner-sichtbarkeit", Icons.Material.Filled.Handshake, "Partner-Sichtbarkeit", NavSection.VerwaltungAdmin),
         new NavEntry("admin.partner-freigabe", "/admin/partner-freigabe", Icons.Material.Filled.FolderShared, "Partner-Freigabe", NavSection.VerwaltungAdmin),

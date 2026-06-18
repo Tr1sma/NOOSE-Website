@@ -48,7 +48,7 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 
     public async Task RefreshAsync(string tagId, string name, string? colour, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Tags anlegen darf jeder aktive Agent; Umbenennen/Einfärben ist Verwaltung → Führung/Admin.
+        // any agent may create; renaming/recolouring is leadership/admin
         Permission.RequireLeadership(actor);
 
         name = (name ?? string.Empty).Trim();
@@ -71,7 +71,7 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 
     public async Task DeleteAsync(string tagId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // Hart-Löschen entfernt das Tag von ALLEN Akten (destruktiv) → Führung/Admin.
+        // hard delete removes the tag from all records; leadership/admin
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -80,7 +80,7 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
         {
             return;
         }
-        // Hart löschen; die Zuordnungen werden per FK-Cascade (OnDelete) mitentfernt.
+        // mappings removed via FK cascade
         db.Tags.Remove(tag);
         await db.SaveChangesAsync(cancellationToken);
     }

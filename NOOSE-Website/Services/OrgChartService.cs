@@ -8,26 +8,19 @@ using NOOSE_Website.Models.OrgChart;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Liest die Organigramm-Daten in drei flachen Abfragen zusammen (kein N+1, kein SelectMany/CROSS APPLY).
-/// Roster = aktive Agenten ohne RP-unsichtbare Teamleitung und mit gesetztem Dienstgrad; gruppiert nach
-/// Dienstgrad (Director→Junior). TRU/HRB = Querschnitt des Rosters. Taskforces = nur sichtbare (Taskforce-
-/// Sichtbarkeit) und genehmigte, Mitglieder über eine einzige flache <c>WHERE TaskforceId IN (…)</c>-Abfrage.
-/// </summary>
+/// <summary>Assembles org-chart data in flat queries (no N+1, no CROSS APPLY on MySQL).</summary>
 public class OrgChartService(IDbContextFactory<AppDbContext> dbFactory) : IOrgChartService
 {
     public async Task<OrgChartData> GetAsync(ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // Roster: aktives NOOSE-Personal. Teamleitung (FiveM-Aufsicht) ist RP-unsichtbar → überall ausblenden.
-        // Agenten ohne Dienstgrad (noch nicht freigegeben/halb-migriert) gehören in keine Rang-Ebene.
+        // active staff only; team leads are RP-invisible and rankless agents have no level
         var roster = await db.Users.AsNoTracking()
             .Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.Rank != null)
             .OrderBy(a => a.Codename)
             .ToListAsync(cancellationToken);
 
-        // Nach Dienstgrad gruppieren, höchster Rang zuerst (Director oben → Junior unten).
         var ranks = roster
             .GroupBy(a => a.Rank!.Value)
             .OrderByDescending(g => g.Key)
@@ -37,7 +30,7 @@ public class OrgChartService(IDbContextFactory<AppDbContext> dbFactory) : IOrgCh
         var tru = roster.Where(a => a.IsTRU).ToList();
         var hrb = roster.Where(a => a.IsHRB).ToList();
 
-        // Nur sichtbare (zugeteilte bzw. Führung sieht alle) UND genehmigte Taskforces.
+        // visible and approved taskforces only
         var mayAllTf = viewer.MayAllTaskforcesSee();
         var meId = viewer.GetAgentId();
         var taskforces = await db.Taskforces.AsNoTracking()
@@ -46,7 +39,7 @@ public class OrgChartService(IDbContextFactory<AppDbContext> dbFactory) : IOrgCh
             .OrderBy(t => t.Name)
             .ToListAsync(cancellationToken);
 
-        // Besetzung in EINER flachen Abfrage laden (kein N+1), dann in-memory je Taskforce gruppieren.
+        // load all members in one flat query, then group in memory
         var tfIds = taskforces.Select(t => t.Id).ToList();
         var members = tfIds.Count == 0
             ? new List<TaskforceAgent>()
@@ -59,7 +52,7 @@ public class OrgChartService(IDbContextFactory<AppDbContext> dbFactory) : IOrgCh
             .Select(t => new TaskforceStaffing(t,
                 members
                     .Where(m => m.TaskforceId == t.Id && m.Agent != null && !m.Agent.IsTeamLead)
-                    .OrderBy(m => m.Role == TaskforceRole.Member) // Leitung zuerst
+                    .OrderBy(m => m.Role == TaskforceRole.Member) // leads first
                     .ThenBy(m => m.Role)
                     .ThenBy(m => m.Agent!.Codename)
                     .ToList()))

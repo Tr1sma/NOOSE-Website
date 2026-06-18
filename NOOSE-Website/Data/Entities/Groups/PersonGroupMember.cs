@@ -4,14 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Groups;
 
-/// <summary>
-/// Mitgliedschaft einer Person in einer Personengruppe – dediziertes Join-Entity. <see cref="IAuditable"/>
-/// hält den Beitritts-/Änderungszeitpunkt fest. FK auf <see cref="Person"/> ist <c>Restrict</c> (sonst
-/// kollidierende Cascade-Pfade, da auch die Gruppe auf diese Tabelle cascadet); FK auf Gruppe ist Cascade.
-/// <para><see cref="ISoftDelete"/>: ein Austritt löscht die Zeile nicht hart, sondern markiert sie als beendet
-/// (<c>GeloeschtAm</c> = Enddatum, <c>ErstelltAm</c> = Beitrittsdatum) – so bleibt der Mitgliedschafts-Verlauf
-/// erhalten. Aktive Mitglieder = nicht gelöscht (greift automatisch über den globalen Soft-Delete-Filter).</para>
-/// </summary>
+/// <summary>Join entity for a person's group membership; Restrict FK on Person avoids colliding cascade paths. Soft-delete preserves membership history (DeletedAt = leave date, CreatedAt = join date).</summary>
 [Table("PersonengruppeMitglieder")]
 public class PersonGroupMember : IAuditable, ISoftDelete
 {
@@ -24,15 +17,12 @@ public class PersonGroupMember : IAuditable, ISoftDelete
     public string PersonId { get; set; } = string.Empty;
     public Person? Person { get; set; }
 
-    /// <summary>Rolle innerhalb der Gruppe (Freitext, optional).</summary>
     [Column("Rolle")]
     public string? Role { get; set; }
 
-    /// <summary>Gehört zur Führung/Leitung der Gruppe.</summary>
     [Column("IstLeitung")]
     public bool IsLead { get; set; }
 
-    // ---- IAuditable (ErstelltAm = Beitrittsdatum) ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
@@ -42,7 +32,6 @@ public class PersonGroupMember : IAuditable, ISoftDelete
     [Column("GeaendertVonId")]
     public string? ModifiedById { get; set; }
 
-    // ---- ISoftDelete (GeloeschtAm = Austritts-/Enddatum) ----
     [Column("IstGeloescht")]
     public bool IsDeleted { get; set; }
     [Column("GeloeschtAm")]

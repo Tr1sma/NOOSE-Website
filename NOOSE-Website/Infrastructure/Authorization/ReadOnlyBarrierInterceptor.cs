@@ -9,7 +9,6 @@ namespace NOOSE_Website.Infrastructure.Authorization;
 /// <summary>Blocks all writes for read-only supervisors and partners; registered first in the interceptor chain.</summary>
 public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
-    // read-side entities
     private static readonly HashSet<Type> Whitelist =
     [
         typeof(AuditLog),
@@ -27,7 +26,6 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
-        // avoid deadlock
         var user = currentUserService.Get();
         Require(eventData.Context, user);
         return base.SavingChanges(eventData, result);

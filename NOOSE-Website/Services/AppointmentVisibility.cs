@@ -5,26 +5,19 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Zentrale Sichtbarkeitsregeln für Termine – Phase 8 (Block C). Drei Stufen
-/// (<see cref="TerminSichtbarkeitsStufe"/>): Öffentlich (alle), Eingeschränkt (Ersteller + Teilnehmer +
-/// Aufsicht), Privat (nur Ersteller + Aufsicht). Die Aufsicht/Führung (<c>DarfVerschlusssacheLesen()</c>)
-/// sieht alle Stufen. <see cref="NurSichtbare"/>/<see cref="SichtbareIdsAsync"/> = allgemeine „darf
-/// zugreifen"-Regel (Detail/Referenzen/Zeitstrahl). <see cref="NurEigene"/> und <see cref="FuerBehoerde"/>
-/// sind die beiden Kalender-Sichten. Immer hierüber filtern, nie das Prädikat kopieren.
-/// </summary>
+/// <summary>Central appointment visibility rules; always filter through here, never copy the predicate.</summary>
 public static class AppointmentVisibility
 {
-    /// <summary>Allgemeine Zugriffsregel: darf der Aufrufer den Termin überhaupt sehen?</summary>
+    /// <summary>General access rule: may the caller see the appointment at all?</summary>
     public static IQueryable<Appointment> OnlyVisible(this IQueryable<Appointment> query, AppDbContext db, bool mayAll, string? meId)
     {
         if (mayAll)
         {
-            return query; // Aufsicht/Führung sieht alle Stufen (auch Privat).
+            return query; // supervision sees all levels
         }
         if (string.IsNullOrEmpty(meId))
         {
-            // Ohne Agent-Kontext (fail-closed): nur öffentliche Termine.
+            // Fail-closed without agent context.
             return query.Where(t => t.Visibility == AppointmentVisibilityLevel.Public);
         }
         return query.Where(t => t.Visibility == AppointmentVisibilityLevel.Public
@@ -33,7 +26,7 @@ public static class AppointmentVisibility
                 && db.AppointmentAssignments.Any(z => z.AppointmentId == t.Id && z.AgentId == meId)));
     }
 
-    /// <summary>Aus einer Kandidatenmenge die für den Aufrufer zugänglichen Termin-Ids (Batch-Referenzauflösung).</summary>
+    /// <summary>From a candidate set, the appointment ids accessible to the caller.</summary>
     public static async Task<HashSet<string>> VisibleIdsAsync(AppDbContext db, IReadOnlyCollection<string> appointmentIds,
         bool mayAll, string? meId, CancellationToken cancellationToken = default)
     {
@@ -57,7 +50,7 @@ public static class AppointmentVisibility
         return visible.ToHashSet();
     }
 
-    /// <summary>Mein-Kalender-Filter: Termine, an denen ich beteiligt bin (Ersteller ODER Teilnehmer) – jede Stufe.</summary>
+    /// <summary>My-calendar filter: appointments I am involved in, any level.</summary>
     public static IQueryable<Appointment> OnlyOwn(this IQueryable<Appointment> query, AppDbContext db, string? meId)
     {
         if (string.IsNullOrEmpty(meId))
@@ -68,7 +61,7 @@ public static class AppointmentVisibility
             || db.AppointmentAssignments.Any(z => z.AppointmentId == t.Id && z.AgentId == meId));
     }
 
-    /// <summary>Behörden-Kalender-Filter: öffentliche Termine; die Aufsicht/Führung sieht zusätzlich alle Stufen.</summary>
+    /// <summary>Authority-calendar filter: public appointments; supervision additionally sees all levels.</summary>
     public static IQueryable<Appointment> ForAuthority(this IQueryable<Appointment> query, bool mayAll)
     {
         return mayAll ? query : query.Where(t => t.Visibility == AppointmentVisibilityLevel.Public);

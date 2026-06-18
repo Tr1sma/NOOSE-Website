@@ -225,7 +225,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // Aktiver Tab wird in der URL (?tab=…) gehalten – Reihenfolge muss den MudTabPanels entsprechen.
+    // order must match MudTabPanels
     private int _activeTab;
     private static readonly string[] _tabs =
     {
@@ -245,10 +245,7 @@ else
         _isPartner = _user.IsPartner();
     }
 
-    // Diese Seite wird bei Navigation /fraktionen/{A} → /fraktionen/{B} WIEDERVERWENDET (gleiche Komponente);
-    // OnInitializedAsync läuft dann NICHT erneut. Daher hier auf den Id-Wechsel reagieren – sonst bliebe die alte
-    // Akte stehen. Das kurze _laden=true mountet den Tab-Baum (samt Kind-Panels) frisch. Tab-/Query-Wechsel: Id
-    // bleibt gleich → kein Neuladen.
+    // Page is reused across /fraktionen/{A}→{B}, so OnInitializedAsync won't re-run; react to Id change here.
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -268,9 +265,7 @@ else
 
     private async Task LoadAsync()
     {
-        // Kein _laden = true beim Neuladen: sonst entfernt das @if (_laden) die MudTabs aus dem
-        // Render-Baum, ein frisch gemountetes MudTabs springt auf den ersten Tab. Der erste Aufruf
-        // zeigt den Ladebalken weiterhin über den Feld-Initialwert (_laden = true).
+        // Don't set _load=true on reload: remounting MudTabs would jump to the first tab.
         var scope = ViewerScope.From(_user);
         _faction = await FactionService.GetDetailAsync(Id, scope);
         if (_faction is not null)
@@ -327,7 +322,7 @@ else
     {
         if (_faction is not null)
         {
-            // Fotos der Akte neu laden, damit der Steckkarten-Banner das (ggf. neue) Titelbild zeigt.
+            // refresh title image banner
             _faction.Photos = await FactionService.GetPhotosAsync(_faction.Id);
             StateHasChanged();
         }

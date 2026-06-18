@@ -73,8 +73,7 @@ else
         var t = await AppointmentService.GetDetailAsync(Id, _user);
         if (t is not null)
         {
-            // Bearbeiten ist Ersteller/Führung vorbehalten – serverseitig in AktualisierenAsync erzwungen, hier
-            // proaktiv in der UI gespiegelt, damit kein nicht-berechtigtes Formular angezeigt wird.
+            // Mirror the server-side creator/leadership write gate in the UI
             if (!_user.IsLeadership() && t.CreatedById != _user.GetAgentId())
             {
                 _noAccess = true;

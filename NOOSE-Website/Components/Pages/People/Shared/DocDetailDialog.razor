@@ -1,4 +1,3 @@
-@* Detailansicht eines Personen-Doks (lesen + bearbeiten). Öffnet sich per Klick aus der Übersicht und der Akte. *@
 @inject NavigationManager Nav
 @inject IDialogService DialogService
 @inject IPersonDocService DocService
@@ -23,7 +22,7 @@
             {
                 <MudText Typo="Typo.body2"><b>Grund:</b> @Doc.Reason</MudText>
             }
-            @* Verknüpfte Fraktion/Gruppe als Link; sonst Freitext-Fallback. *@
+            @* Linked record as link; otherwise free-text fallback. *@
             @if (OrgRoute is not null)
             {
                 <MudText Typo="Typo.body2"><b>Fraktion:</b> <MudLink Href="@OrgRoute">@OrgName</MudLink></MudText>
@@ -71,7 +70,7 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
     [Parameter] public bool ShowToRecord { get; set; } = true;
 
-    @* Aufgelöste Anzeigedaten der verknüpften Org (Verschlusssache-gefiltert); null → Freitext-Fallback. *@
+    @* Resolved display data of the linked record (classification-filtered); null → free-text fallback. *@
     [Parameter] public string? OrgName { get; set; }
     [Parameter] public string? OrgCaseNumber { get; set; }
     [Parameter] public string? OrgRoute { get; set; }
@@ -95,9 +94,7 @@
         {
             await DocService.RefreshAsync(Doc.Id, input, User);
             Snackbar.Add("Dok aktualisiert.", Severity.Success);
-            // Optional: Person zugleich als Mitglied der verknüpften Akte eintragen.
             await DocMembership.EnterAsync(FactionService, GroupService, PersonService, Snackbar, Doc.PersonId, input, User);
-            // Detail schließen und dem Aufrufer „geändert" melden → Liste neu laden.
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (Exception ex)
@@ -106,10 +103,7 @@
         }
     }
 
-    /// <summary>
-    /// Zeigt die Dok-Detailansicht an und liefert true, wenn das Dok darin bearbeitet wurde
-    /// (damit der Aufrufer seine Liste neu laden kann).
-    /// </summary>
+    /// <summary>Shows the doc detail view; returns true if the doc was edited (so the caller can reload).</summary>
     public static async Task<bool> ShowAsync(IDialogService dialog, PersonDocDisplay display, ClaimsPrincipal user, bool showToRecord = true)
     {
         var doc = display.Doc;

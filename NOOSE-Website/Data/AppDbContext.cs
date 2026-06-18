@@ -33,7 +33,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AccessLog> AccessLogs => Set<AccessLog>();
 
-    // ---- Phase 2: Personen-Akten ----
+    // person records
     public DbSet<Person> People => Set<Person>();
     public DbSet<PersonDoc> PersonDocs => Set<PersonDoc>();
     public DbSet<PersonPhoto> PersonPhotos => Set<PersonPhoto>();
@@ -56,10 +56,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Link> Links => Set<Link>();
     public DbSet<PersonRelation> PersonRelations => Set<PersonRelation>();
 
-    // ---- Phase 3c: gespeicherte Suchen ----
     public DbSet<SavedSearch> SavedSearch => Set<SavedSearch>();
 
-    // ---- Phase 4a: Fraktionen ----
+    // factions
     public DbSet<Faction> Factions => Set<Faction>();
     public DbSet<FactionRank> FactionRanks => Set<FactionRank>();
     public DbSet<FactionWeaponStock> FactionWeaponStocks => Set<FactionWeaponStock>();
@@ -70,57 +69,55 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FactionPhoto> FactionPhotos => Set<FactionPhoto>();
     public DbSet<FactionActivity> FactionActivities => Set<FactionActivity>();
 
-    // ---- Phase 4b: Personengruppen ----
+    // person groups
     public DbSet<PersonGroup> PersonGroups => Set<PersonGroup>();
     public DbSet<PersonGroupMember> PersonGroupMembers => Set<PersonGroupMember>();
     public DbSet<PersonGroupAgent> PersonGroupAgents => Set<PersonGroupAgent>();
 
-    // ---- Phase 5a: Parteien ----
+    // parties
     public DbSet<Party> Parties => Set<Party>();
     public DbSet<PartyMember> PartyMembers => Set<PartyMember>();
     public DbSet<PartyAgent> PartyAgents => Set<PartyAgent>();
 
-    // ---- Phase 5b: Operationen ----
+    // operations
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<OperationAgent> OperationAgents => Set<OperationAgent>();
 
-    // ---- Phase 5: Vorgangs-/Fallakten ----
+    // cases
     public DbSet<Case> Cases => Set<Case>();
     public DbSet<CaseAgent> CaseAgents => Set<CaseAgent>();
 
-    // ---- Phase 5c: Taskforces ----
+    // taskforces
     public DbSet<Taskforce> Taskforces => Set<Taskforce>();
     public DbSet<TaskforceAgent> TaskforceAgents => Set<TaskforceAgent>();
-
-    // ---- Phase 5d: Taskforce-Chat ----
     public DbSet<TaskforceMessage> TaskforceMessages => Set<TaskforceMessage>();
 
     // ---- observations ----
     public DbSet<Observation> Observations => Set<Observation>();
 
-    // ---- Phase 5e: Personalakte je Agent ----
+    // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
     public DbSet<AgentNote> AgentNotes => Set<AgentNote>();
     public DbSet<AgentPromotionRequest> AgentPromotionRequests => Set<AgentPromotionRequest>();
 
-    // ---- Phase 22: Ausbildungsmodule + Abschluss je Agent ----
+    // training modules + per-agent completion
     public DbSet<TrainingModule> TrainingModules => Set<TrainingModule>();
     public DbSet<AgentModuleCompletion> AgentModuleCompletions => Set<AgentModuleCompletion>();
 
-    // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----
+    // request/inbox workflow
     public DbSet<Request> Requests => Set<Request>();
 
-    // ---- Phase 6: In-App-Benachrichtigungen (Glocke) ----
+    // in-app notifications
     public DbSet<Notification> Notifications => Set<Notification>();
 
-    // ---- Phase 6: Watchlist (gefolgte Akten) ----
+    // watchlist (followed records)
     public DbSet<WatchlistEntry> Watchlists => Set<WatchlistEntry>();
 
-    // ---- Phase 6: Aufgaben/To-Dos & Zuweisungen ----
+    // jobs/to-dos & assignments
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobAssignment> JobAssignments => Set<JobAssignment>();
 
-    // ---- Phase 8 (Block C): Termine/Kalender & Teilnehmer ----
+    // calendar appointments & participants
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentAssignment> AppointmentAssignments => Set<AppointmentAssignment>();
 
@@ -128,14 +125,14 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Announcement> Announcements => Set<Announcement>();
     public DbSet<AnnouncementAcknowledgment> AnnouncementAcknowledgments => Set<AnnouncementAcknowledgment>();
 
-    // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
+    // doc templates (admin-defined entry masks)
     public DbSet<DocTemplate> DocTemplates => Set<DocTemplate>();
 
-    // ---- Phase 7: konfigurierbare Custom-Felder je Aktentyp ----
+    // configurable custom fields per record type
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
 
-    // ---- Phase 7: Dokumenten-Bibliothek (WYSIWYG-Dokumente) + Dokument-Vorlagen ----
+    // document library + document templates
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentTemplate> DocumentTemplates => Set<DocumentTemplate>();
 
@@ -144,10 +141,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<ThreatScoreConfig> ThreatScoreConfigs => Set<ThreatScoreConfig>();
     public DbSet<Followup> Followups => Set<Followup>();
 
-    // ---- Phase 8 (Block D, Schritt 2): archivierte Monats-Lageberichte ----
+    // archived monthly situation reports
     public DbSet<SituationReport> SituationReports => Set<SituationReport>();
 
-    // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----
+    // system settings, law book, file library
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<Law> Laws => Set<Law>();
     public DbSet<LibraryFile> LibraryFiles => Set<LibraryFile>();
@@ -192,12 +189,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => new { a.EntityType, a.EntityId });
         });
 
-        // ---- Phase 2: Personen-Akten ----
         modelBuilder.Entity<Person>(b =>
         {
             b.Property(p => p.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(p => p.Name).HasMaxLength(200).IsRequired();
-            // longtext for JSON
             b.Property(p => p.ThreatDetailJson).HasColumnType("longtext");
             b.HasIndex(p => p.CaseNumber).IsUnique();
             b.HasIndex(p => p.Name);
@@ -243,7 +238,6 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<ProfileSuggestion>(b =>
         {
             b.Property(v => v.Value).HasMaxLength(300).IsRequired();
-            // unique per type+value
             b.HasIndex(v => new { v.Type, v.Value }).IsUnique();
         });
 
@@ -269,26 +263,22 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<PersonDoc>(b =>
         {
             b.Property(d => d.Faction).HasMaxLength(200);
-            // soft FK
             b.Property(d => d.OrgType).HasMaxLength(128);
             b.Property(d => d.OrgId).HasMaxLength(64);
             b.HasIndex(d => d.PersonId);
             b.HasIndex(d => new { d.OrgType, d.OrgId });
         });
 
-        // observation entity
         modelBuilder.Entity<Observation>(b =>
         {
             b.Property(o => o.Location).HasMaxLength(300);
             b.Property(o => o.Sighting).HasMaxLength(4000);
             b.Property(o => o.Result).HasMaxLength(4000);
-            // soft FK
             b.Property(o => o.OrgType).HasMaxLength(128);
             b.Property(o => o.OrgId).HasMaxLength(64);
             b.HasIndex(o => o.PersonId);
             b.HasIndex(o => o.Start);
             b.HasIndex(o => new { o.OrgType, o.OrgId });
-            // SetNull on delete
             b.HasOne(o => o.ObservingAgent).WithMany()
                 .HasForeignKey(o => o.ObservingAgentId).OnDelete(DeleteBehavior.SetNull);
             b.HasIndex(o => o.ObservingAgentId);
@@ -296,15 +286,11 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<CaseNumberCounter>(b =>
         {
-            // composite key
             b.HasKey(z => new { z.Prefix, z.Year });
             b.Property(z => z.Prefix).HasMaxLength(8);
-            // explicit year
             b.Property(z => z.Year).ValueGeneratedNever();
         });
 
-        // ---- Phase 3a: Querschnitt ----
-        // soft FK
         modelBuilder.Entity<Source>(b =>
         {
             b.Property(q => q.EntityType).HasMaxLength(128);
@@ -326,7 +312,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(t => t.Name).IsUnique();
         });
 
-        // ---- Phase 7: Dok-Vorlagen (admin-definierte Erfassungsmasken) ----
         modelBuilder.Entity<DocTemplate>(b =>
         {
             b.Property(v => v.Name).HasMaxLength(120).IsRequired();
@@ -339,7 +324,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(v => v.IsActive);
         });
 
-        // ---- Phase 7: konfigurierbare Custom-Felder je Aktentyp ----
         modelBuilder.Entity<CustomFieldDefinition>(b =>
         {
             b.Property(d => d.EntityType).HasMaxLength(128).IsRequired();
@@ -356,16 +340,14 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(w => w.EntityId).HasMaxLength(64).IsRequired();
             b.Property(w => w.Value).HasColumnType("longtext");
             b.HasIndex(w => new { w.EntityType, w.EntityId });
-            // Ein Wert je Feld je Akte.
+            // one value per field per record
             b.HasIndex(w => new { w.CustomFieldDefinitionId, w.EntityType, w.EntityId }).IsUnique();
         });
 
-        // ---- Phase 7: Dokumenten-Bibliothek + Dokument-Vorlagen ----
         modelBuilder.Entity<Document>(b =>
         {
             b.Property(d => d.Title).HasMaxLength(300).IsRequired();
             b.Property(d => d.Category).HasMaxLength(120);
-            // longtext for HTML
             b.Property(d => d.ContentHtml).HasColumnType("longtext");
             b.HasIndex(d => d.Title);
             b.HasIndex(d => d.Category);
@@ -383,7 +365,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(v => v.IsActive);
         });
 
-        // ---- recency + followups ----
         modelBuilder.Entity<RecencyThreshold>(b =>
         {
             // one row per type
@@ -391,7 +372,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(s => s.RecordsType).HasMaxLength(64);
         });
 
-        // ---- Phase 8/Block D: admin-einstellbare Bedrohungs-Score-Konfiguration (eine Singleton-Zeile, JSON) ----
+        // admin-tunable threat-score config (single JSON row)
         modelBuilder.Entity<ThreatScoreConfig>(b =>
         {
             b.HasKey(k => k.Id);
@@ -399,12 +380,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(k => k.Json).HasColumnType("longtext");
         });
 
-        // ---- Phase 8/Block D, Schritt 2: archivierte Monats-Lageberichte (Snapshot als JSON) ----
         modelBuilder.Entity<SituationReport>(b =>
         {
             b.Property(l => l.Title).HasMaxLength(200).IsRequired();
             b.Property(l => l.SnapshotJson).HasColumnType("longtext");
-            // sorted archive index
             b.HasIndex(l => new { l.Year, l.Month });
         });
 
@@ -415,11 +394,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(w => w.Note).HasMaxLength(500);
             b.Property(w => w.ResponsibleAgentId).HasMaxLength(64);
             b.Property(w => w.DoneById).HasMaxLength(64);
-            // entity index
             b.HasIndex(w => new { w.EntityType, w.EntityId });
-            // due followup query
             b.HasIndex(w => new { w.DueAt, w.Done, w.NotifiedAt });
-            // SetNull on delete
             b.HasOne<Agent>().WithMany()
                 .HasForeignKey(w => w.ResponsibleAgentId).OnDelete(DeleteBehavior.SetNull);
         });
@@ -442,7 +418,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(k => new { k.EntityType, k.EntityId });
         });
 
-        // ---- links and relations ----
         modelBuilder.Entity<Link>(b =>
         {
             b.Property(v => v.SourceType).HasMaxLength(128);
@@ -450,7 +425,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.TargetType).HasMaxLength(128);
             b.Property(v => v.TargetId).HasMaxLength(64);
             b.Property(v => v.Label).HasMaxLength(200);
-            // Beide Richtungen schnell auffindbar.
+            // both directions quickly findable
             b.HasIndex(v => new { v.SourceType, v.SourceId });
             b.HasIndex(v => new { v.TargetType, v.TargetId });
         });
@@ -475,7 +450,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(g => g.AgentId);
         });
 
-        // ---- Phase 4a: Fraktionen ----
         modelBuilder.Entity<Faction>(b =>
         {
             b.Property(f => f.CaseNumber).HasMaxLength(32).IsRequired();
@@ -488,7 +462,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.RecognitionColor).HasMaxLength(32);
             b.Property(f => f.Targets).HasMaxLength(2000);
             b.Property(f => f.Description).HasMaxLength(2000);
-            // longtext for JSON
             b.Property(f => f.ThreatDetailJson).HasColumnType("longtext");
             b.HasIndex(f => f.CaseNumber).IsUnique();
             b.HasIndex(f => f.Name);
@@ -519,13 +492,11 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.Location).HasMaxLength(200);
             b.Property(a => a.Description).HasMaxLength(4000);
             b.HasIndex(a => a.FactionId);
-            // index for suggestions
             b.HasIndex(a => a.Kind);
         });
 
         modelBuilder.Entity<FactionPhoto>(b =>
         {
-            // file metadata
             b.Property(f => f.FileNameSaved).HasMaxLength(128);
             b.Property(f => f.OriginalName).HasMaxLength(260);
             b.Property(f => f.ContentType).HasMaxLength(100);
@@ -535,7 +506,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<FactionAgent>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.FactionId, a.AgentId }).IsUnique();
@@ -573,7 +544,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(m => m.PersonId);
         });
 
-        // ---- Phase 4b: Personengruppen ----
         modelBuilder.Entity<PersonGroup>(b =>
         {
             b.Property(g => g.CaseNumber).HasMaxLength(32).IsRequired();
@@ -603,14 +573,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<PersonGroupAgent>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.PersonGroupId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 
-        // ---- Phase 5a: Parteien ----
         modelBuilder.Entity<Party>(b =>
         {
             b.Property(p => p.CaseNumber).HasMaxLength(32).IsRequired();
@@ -641,14 +610,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<PartyAgent>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.PartyId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 
-        // ---- Phase 5b: Operationen ----
         modelBuilder.Entity<Operation>(b =>
         {
             b.Property(o => o.CaseNumber).HasMaxLength(32).IsRequired();
@@ -669,14 +637,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<OperationAgent>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.OperationId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 
-        // ---- Phase 5: Vorgangs-/Fallakten ----
         modelBuilder.Entity<Case>(b =>
         {
             b.Property(v => v.CaseNumber).HasMaxLength(32).IsRequired();
@@ -696,14 +663,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<CaseAgent>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.CaseId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 
-        // ---- Phase 6: Aufgaben/To-Dos & Zuweisungen ----
         modelBuilder.Entity<Job>(b =>
         {
             b.Property(a => a.CaseNumber).HasMaxLength(32).IsRequired();
@@ -721,14 +687,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<JobAssignment>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(z => z.Agent).WithMany()
                 .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(z => new { z.JobId, z.AgentId }).IsUnique();
             b.HasIndex(z => z.AgentId);
         });
 
-        // ---- Phase 8 (Block C): Termine/Kalender & Teilnehmer (Vorlage: Aufgabe) ----
         modelBuilder.Entity<Appointment>(b =>
         {
             b.Property(t => t.CaseNumber).HasMaxLength(32).IsRequired();
@@ -739,7 +704,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(t => t.Title);
             b.HasIndex(t => t.Category);
             b.HasIndex(t => t.Status);
-            // index by start
             b.HasIndex(t => t.Start);
             b.HasIndex(t => t.Visibility);
 
@@ -749,7 +713,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<AppointmentAssignment>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(z => z.Agent).WithMany()
                 .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(z => new { z.AppointmentId, z.AgentId }).IsUnique();
@@ -762,9 +726,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.CaseNumber).HasMaxLength(32).IsRequired();
             b.Property(a => a.Title).HasMaxLength(200).IsRequired();
             b.Property(a => a.TargetId).HasMaxLength(64);
-            // longtext body
             b.HasIndex(a => a.CaseNumber).IsUnique();
-            // sort index
             b.HasIndex(a => new { a.Important, a.CreatedAt });
             b.HasIndex(a => a.Audience);
 
@@ -774,14 +736,13 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<AnnouncementAcknowledgment>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(q => q.Agent).WithMany()
                 .HasForeignKey(q => q.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(q => new { q.AnnouncementId, q.AgentId }).IsUnique();
             b.HasIndex(q => new { q.AgentId, q.AcknowledgedAt });
         });
 
-        // ---- Phase 5: Antrags-/Posteingang-Workflow (Hochstufung) ----
         modelBuilder.Entity<Request>(b =>
         {
             b.Property(a => a.TargetType).HasMaxLength(128);
@@ -797,33 +758,27 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => a.CreatedById);
         });
 
-        // ---- Phase 6: In-App-Benachrichtigungen (Glocke) ----
         modelBuilder.Entity<Notification>(b =>
         {
             b.Property(n => n.RecipientId).HasMaxLength(64);
             b.Property(n => n.Title).HasMaxLength(300);
             b.Property(n => n.Href).HasMaxLength(512);
             b.Property(n => n.CreatedById).HasMaxLength(64);
-            // recipient index
             b.HasIndex(n => new { n.RecipientId, n.ReadAt });
         });
 
-        // ---- Phase 6: Watchlist (gefolgte Akten) ----
         modelBuilder.Entity<WatchlistEntry>(b =>
         {
             b.Property(w => w.AgentId).HasMaxLength(64);
             b.Property(w => w.EntityType).HasMaxLength(128);
             b.Property(w => w.EntityId).HasMaxLength(64);
             b.Property(w => w.CreatedById).HasMaxLength(64);
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne<Agent>().WithMany().HasForeignKey(w => w.AgentId).OnDelete(DeleteBehavior.Restrict);
-            // entity + agent indexes
             b.HasIndex(w => new { w.EntityType, w.EntityId });
             b.HasIndex(w => new { w.AgentId, w.IsDeleted });
-            // no unique: soft-delete safe
         });
 
-        // ---- Phase 5c: Taskforces ----
         modelBuilder.Entity<Taskforce>(b =>
         {
             b.Property(t => t.CaseNumber).HasMaxLength(32).IsRequired();
@@ -841,25 +796,22 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<TaskforceAgent>(b =>
         {
-            // FK auf den Identity-Agent mit Restrict (keine Cascade von der Nutzer-Tabelle).
+            // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(a => a.Agent).WithMany()
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.TaskforceId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
         });
 
-        // ---- Phase 5d: Taskforce-Chat ----
         modelBuilder.Entity<TaskforceMessage>(b =>
         {
             b.Property(n => n.Text).HasMaxLength(4000).IsRequired();
             b.Property(n => n.AuthorName).HasMaxLength(128);
-            // chronological index
             b.HasIndex(n => new { n.TaskforceId, n.CreatedAt });
             b.HasOne(n => n.Taskforce).WithMany()
                 .HasForeignKey(n => n.TaskforceId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ---- Phase 5e: Personalakte je Agent (Kind-Daten an AgentId; FK auf Identity-Agent = Restrict) ----
         modelBuilder.Entity<AgentRankHistory>(b =>
         {
             b.Property(v => v.ActorName).HasMaxLength(128);
@@ -890,7 +842,6 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ---- Phase 22: Ausbildungsmodule (Katalog) + Abschluss je Agent ----
         modelBuilder.Entity<TrainingModule>(b =>
         {
             b.Property(m => m.Name).HasMaxLength(160).IsRequired();
@@ -909,12 +860,10 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(c => c.ModuleId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ---- Phase 7 (Abschluss): Systemeinstellungen, Gesetzbuch, Datei-Bibliothek ----
         modelBuilder.Entity<SystemSetting>(b =>
         {
             b.HasKey(e => e.Key);
             b.Property(e => e.Key).HasMaxLength(128);
-            // longtext value
         });
 
         modelBuilder.Entity<Law>(b =>
@@ -923,7 +872,6 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(g => g.Paragraph).HasMaxLength(32).IsRequired();
             b.Property(g => g.Title).HasMaxLength(256).IsRequired();
             b.Property(g => g.Sentence).HasMaxLength(512);
-            // longtext body
             b.HasIndex(g => g.LawBook);
             b.HasIndex(g => g.Title);
         });

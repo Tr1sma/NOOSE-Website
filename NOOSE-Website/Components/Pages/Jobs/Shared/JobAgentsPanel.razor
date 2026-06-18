@@ -1,6 +1,4 @@
-@* Der Aufgabe zugewiesene NOOSE-Agents: Liste + Zuweisen/Entfernen. Verwalten darf der Ersteller oder die
-   Führung (über das Flag <see cref="KannVerwalten"/>). Komponentenname bewusst „AufgabeAgentePanel" wegen der
-   global per @using sichtbaren Shared-Ordner. *@
+@* Agents assigned to the job. Name is module-prefixed to avoid tag-resolution collisions across globally-imported Shared folders. *@
 @inject IJobService JobService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -50,10 +48,10 @@
     [Parameter, EditorRequired] public string JobId { get; set; } = default!;
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Darf der Aufrufer zuweisen/entfernen (Ersteller oder Führung)? Vom Detail berechnet.</summary>
+    /// <summary>May the caller assign/remove (creator or leadership)?</summary>
     [Parameter] public bool CanManage { get; set; }
 
-    /// <summary>Wird nach jeder Änderung der Zuweisungen ausgelöst (Karte aktualisieren).</summary>
+    /// <summary>Raised after any assignment change.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
     private bool _load = true;

@@ -5,37 +5,21 @@ using NOOSE_Website.Data.Entities.Common;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>
-/// Gemeinsame Pflege der automatischen „Kollegen"-Verknüpfungen zwischen Personen (Fraktion → „Fraktionskollege",
-/// Personengruppe → „Gruppenkollege", Partei → „Parteikollege"). Jede Variante wird über ihr eigenes <c>Label</c>
-/// getrennt verwaltet, damit sich die Links der verschiedenen Organisationsarten nicht gegenseitig löschen.
-/// </summary>
+/// <summary>Maintains automatic colleague links between people; each org kind keyed by its own label so they don't clobber each other.</summary>
 public static class ColleaguesSync
 {
     public const string FactionColleague = "Fraktionskollege";
     public const string GroupColleague = "Gruppenkollege";
     public const string PartyColleague = "Parteikollege";
 
-    /// <summary>
-    /// Gleicht die automatischen Verknüpfungen mit dem Label <paramref name="label"/> für die Person
-    /// <paramref name="personId"/> ab: Zwischen P und Q soll genau dann eine solche (automatische)
-    /// Verknüpfung bestehen, wenn Q in <paramref name="sollKollegen"/> steht. Läuft auf dem übergebenen
-    /// Kontext (Transaktion des Aufrufers).
-    /// </summary>
-    /// <remarks>
-    /// Es genügt, nur P abzugleichen: eine Verknüpfung ist nur eine Zeile, und hier werden beide Richtungen
-    /// (<c>VonId == P || NachId == P</c>) berücksichtigt – ein späterer Abgleich von Q findet die Zeile von P
-    /// wieder und legt keine Gegen-Richtung an. Etwaige Alt-Duplikate werden mit abgeräumt. Bewusst KEIN
-    /// Unique-Index (würde mit soft-gelöschten manuellen Verknüpfungen kollidieren). Automatische
-    /// Verknüpfungen werden hart gelöscht (maschinell gepflegt, kein Papierkorb).
-    /// </remarks>
+    /// <summary>Reconciles the automatic links with the given label for one person; runs on the caller's context/transaction.</summary>
+    /// <remarks>Both directions are considered, so syncing only P suffices. No unique index (would clash with soft-deleted manual links); automatic links are hard-deleted.</remarks>
     public static async Task SyncAsync(AppDbContext db, string personId, string label,
         IReadOnlyCollection<string> shouldColleagues, CancellationToken cancellationToken)
     {
         var shouldSet = shouldColleagues as HashSet<string> ?? shouldColleagues.ToHashSet();
 
-        // AsNoTracking: nur lesen + per Id hart löschen; keine getrackten Entitäten, die das spätere
-        // SaveChanges (für die neuen Links) stören könnten.
+        // AsNoTracking so the later SaveChanges for new links isn't disturbed by tracked entities.
         var existing = await db.Links.AsNoTracking()
             .Where(v => v.Automatic && v.Label == label && v.SourceType == nameof(Person) && v.TargetType == nameof(Person)
                      && (v.SourceId == personId || v.TargetId == personId))
@@ -47,7 +31,7 @@ public static class ColleaguesSync
         foreach (var v in existing)
         {
             var other = v.SourceId == personId ? v.TargetId : v.SourceId;
-            // Behalten, wenn weiterhin gewünscht und noch nicht vorhanden – sonst (auch Duplikate) entfernen.
+            // Keep if still wanted and not yet seen; otherwise drop (including duplicates).
             if (shouldSet.Contains(other) && have.Add(other))
             {
                 continue;

@@ -12,7 +12,6 @@ namespace NOOSE_Website.Infrastructure.Audit;
 /// <summary>Stamps auditable entities, converts hard-deletes to soft-deletes, and writes audit logs (two-phase).</summary>
 public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService) : SaveChangesInterceptor
 {
-    // per-context entries
     private readonly ConditionalWeakTable<DbContext, List<PendingAudit>> _pending = new();
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -32,7 +31,6 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
     {
         if (eventData.Context is not null)
         {
-            // sync path
             var user = currentUserService.Get();
             _pending.AddOrUpdate(eventData.Context, StampAndCollect(eventData.Context, user));
         }
@@ -49,7 +47,6 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
     public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
     {
-        // sync path
         WritePending(eventData.Context);
         return base.SavedChanges(eventData, result);
     }
@@ -61,7 +58,6 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
             return;
         }
         ctx.Set<AuditLog>().AddRange(logs);
-        // no recursion
         await ctx.SaveChangesAsync(cancellationToken);
     }
 
@@ -101,7 +97,6 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
 
         foreach (var entry in context.ChangeTracker.Entries())
         {
-            // skip log tables
             if (entry.Entity is AuditLog or AccessLog)
             {
                 continue;
@@ -126,7 +121,6 @@ public class AuditSaveChangesInterceptor(ICurrentUserService currentUserService)
             var isRestoration = false;
             if (originalState == EntityState.Deleted && entry.Entity is ISoftDelete soft)
             {
-                // soft delete
                 entry.State = EntityState.Modified;
                 soft.IsDeleted = true;
                 soft.DeletedAt = now;

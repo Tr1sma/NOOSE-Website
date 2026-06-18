@@ -3,11 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NOOSE_Website.Data.Entities.Cases;
 
-/// <summary>
-/// Zuteilung eines NOOSE-Agents zu einem Vorgang (beteiligte Ermittlungskraft). Join-Entity mit
-/// <see cref="IAuditable"/>. FK auf den <see cref="Agent"/> (Identity-Tabelle) ist <c>Restrict</c>; FK auf
-/// den Vorgang ist Cascade. Vorlage: <see cref="Operationen.OperationAgent"/>.
-/// </summary>
+/// <summary>Assignment of an agent to a case. FK to Agent is Restrict; FK to Case is Cascade.</summary>
 [Table("VorgangAgenten")]
 public class CaseAgent : IAuditable
 {
@@ -20,11 +16,10 @@ public class CaseAgent : IAuditable
     public string AgentId { get; set; } = string.Empty;
     public Agent? Agent { get; set; }
 
-    /// <summary>Markiert diesen zugeteilten Agent als Fallführer des Vorgangs (mehrere je Akte möglich).</summary>
+    /// <summary>Marks this agent as a case lead (multiple allowed per case).</summary>
     [Column("IstFallfuehrer")]
     public bool IsCaseLead { get; set; }
 
-    // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

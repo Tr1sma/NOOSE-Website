@@ -3,14 +3,14 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Models.Common;
 
-/// <summary>Formular-/Eingabemodell zum Anlegen/Bearbeiten einer Custom-Feld-Definition (Admin).</summary>
+/// <summary>Input model for a custom field definition.</summary>
 public class CustomFieldDefinitionInput
 {
     public string Name { get; set; } = string.Empty;
     public string EntityType { get; set; } = string.Empty;
     public CustomFieldType FieldType { get; set; } = CustomFieldType.Text;
 
-    /// <summary>Auswahl-Optionen (eine pro Zeile), nur bei <see cref="CustomFeldTyp.Auswahl"/> relevant.</summary>
+    /// <summary>Select options (one per line); only relevant for select fields.</summary>
     public string? Options { get; set; }
 
     public bool Mandatory { get; set; }
@@ -18,11 +18,10 @@ public class CustomFieldDefinitionInput
     public bool IsActive { get; set; } = true;
 }
 
-/// <summary>Eine Definition samt aktuellem Wert einer Akte – Grundlage für das Zusatzfelder-Panel.</summary>
+/// <summary>A definition paired with its current value for a record.</summary>
 public class CustomFieldValueDisplay
 {
     public required CustomFieldDefinition Definition { get; init; }
 
-    /// <summary>Aktueller gespeicherter Wert (String) bzw. null, wenn noch nicht erfasst.</summary>
     public string? Value { get; set; }
 }
