@@ -57,7 +57,7 @@ public static class PartnerVisibility
             nameof(Case) => await db.Cases
                 .Where(v => v.Id == entityId).Select(v => (bool?)v.IsClassified).FirstOrDefaultAsync(cancellationToken),
             nameof(Document) => await db.Documents
-                .Where(d => d.Id == entityId).Select(d => (bool?)(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified || d.OwnerTaskforceId != null)).FirstOrDefaultAsync(cancellationToken),
+                .Where(d => d.Id == entityId).Select(d => (bool?)(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified)).FirstOrDefaultAsync(cancellationToken),
             nameof(Law) => await db.Laws
                 .Where(g => g.Id == entityId).Select(g => (bool?)false).FirstOrDefaultAsync(cancellationToken),
             _ => null,
@@ -163,7 +163,7 @@ public static class PartnerVisibility
                 && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
 
     public static IQueryable<Document> OnlyPartnerVisible(this IQueryable<Document> query, AppDbContext db, PartnerAgency agency, string? partnerAgentId)
-        => query.Where(d => !(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified) && d.OwnerTaskforceId == null
+        => query.Where(d => !(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified)
             && db.PartnerShares.Any(s => s.EntityType == nameof(Document) && s.EntityId == d.Id && s.Agency == agency
                 && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
 

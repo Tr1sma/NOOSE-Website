@@ -199,7 +199,9 @@ else
                 var document = await DocumentService.CreateAsync(input, _user);
                 id = document.Id;
 
-                // Attach as a source when created from a record; keep taskforce docs internal.
+                // Attach as a source when created from a record. Taskforce docs stay internal via
+                // Document.OwnerTaskforceId, so the source row itself need not be marked internal-only
+                // (that would hide it from leadership/admin who aren't assigned members).
                 if (HasRecordsContext())
                 {
                     await SourceService.CreateAsync(_entityType!, _entityId!, new SourceInput
@@ -208,7 +210,6 @@ else
                         Title = title,
                         TargetType = nameof(Document),
                         TargetId = id,
-                        IsInternalOnly = isTaskforceDoc,
                     }, _user);
                 }
             }

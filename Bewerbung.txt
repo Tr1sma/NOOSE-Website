@@ -1,0 +1,153 @@
+Noose Website TODO
+
+Bewerbungen:
+Es soll eine Öffentliche Version der Website geben. Auf dieser öffentlichen Version wird content drauf kommen der für alle Zugänglich sein soll. Fürs erste sind das Bewerbungen. Aktuell laufen bewerbungen wie folgt ab: 
+1. Jemand eröffnet ein Bewerbungs Ticket und schreibt / Schickt dort seine bewerbung hinein
+
+2. Es wird ein Thread erstellt der HRB Intern ist (Nur von HRB und Führung sichtbar). In diesem Thread weist sich dann ein Agent zu der die Bewerbung bearbeitet. in dem Theread wird auserdem über die bewerbung geschrieben und ausgetauscht. Von diesem Thread kann man die Bewerbung auch Direkt schliesen.
+
+3. Sicherheits pprüfung: Akten warden gerppüft es wird mit ehmelaigen Arbeitgebern gesprochen etc pp. Auserdem soll man in dem Thread den Risiko Score der Person sehen können falls wir eine akte über die person haben.
+
+4. Die prüfung ist bestanden oder nicht. Wenn nicht wird die Bewerbung direct geschlossen und abgelehnt.
+
+5. (OPTIONAL) Es wird ein test (aktuell Google Forms) mit der Person gemacht. Diesen test soll man über die website als HRB Mitglied und Fürhung anlegen und bearbeiten können. Möglichst viel in dem test ist mutliple choice oder ja nein fragen, allerdings gibt es auch Freitext. Die ganze auswertung des testes ist auch in dem Thread der Bewerbung einsehbar
+
+6. Die Person wird zu einem Vorstellungs gespräch eingeladen und dann dem entsprechen angenommen oder abgelehnt.
+
+Es gibt aktuell ein Paar nachrichten vorlagen die wir immer nutzen. Wichtig ist das der Name IMMER geschwärtzt ist in den nachrichten und das soll bitte auch so auf der Website sein
+
+Vorlage | Anhörung zwecks Sicherheitsüberprüfung
+:NOOSE: | Auswahlverfahren
+National Office of Security Enforcement
+Abteilung: Criminal Investigation Division
+Sicherheitsfreigabe: 6
+
+
+Anordnung zur persönlichen Anhörung im Rahmen der Sicherheitsüberprüfung
+
+Sehr geehrter NAME,
+
+im Rahmen der gegen Sie eingeleiteten  Sicherheitsüberprüfung wurden Sachverhalte festgestellt, die einer persönlichen Erörterung bedürfen.
+
+Die Anhörung wird am DATUM um UHRZEIT Uhr in der Government Facility des National Office of Security Enforcement 5020, Los  Santos, San Andreas stattfinden.
+
+Mit diesem Schreiben sind Sie temporär autorisiert, das ausgewiesene militärische Sperrgebiet zum Zweck der Terminwahrnehmung zu betreten. Bei Ansprache durch Special Agents ist unverzüglich auf den Unterzeichner zu verweisen. Das Betreten des militärischen Sperrgebiets hat zwingend unbewaffnet zu erfolgen. Bei Erreichen der Sperrgebietsgrenze ist eine vollständige Maskierung anzulegen. Stellen Sie sicher, dass Sie vor der Anreise kein Smartphone oder Funkgerät mit sich führen.
+
+Eine Missachtung der Sicherheitsauflagen führt zum sofortigen Entzug der Zutrittsberechtigung und zum Ausschluss aus dem Auswahlverfahren.
+
+
+Mit freundlichen Grüßen
+NAME
+DIENSTGRAD
+
+Das National Office of Security Enforcement entspricht hohen Standard und der höchsten Stufe der Geheimhaltung. Sprechen Sie mit niemandem über Ihr Interesse oder den Stand des Auswahlverfahrens.
+
+
+
+Vorlage | Einladung zum Auswahlverfahren
+# <:NOOSE:1497241179862073354> | Auswahlverfahren
+National Office of Security Enforcement
+Abteilung: Criminal Investigation Division
+Sicherheitsfreigabe: 6
+
+
+**Einladung zum mündlichen Auswahlverfahren**
+
+Sehr geehrter NAME,
+
+im Rahmen des laufenden Auswahlverfahrens ergeht hiermit die Einladung zu einem persönlichen Vorstellungsgespräch.
+
+Das Auswahlverfahren wird am DATUM um UHRZEIT Uhr in der Government Facility des National Office of Security Enforcement 5020, Los  Santos, San Andreas stattfinden.
+Bitte planen Sie sich viel Zeit ein.
+
+Diese Einladung erfolgt ausdrücklich unter dem Vorbehalt der noch ausstehenden Ergebnisse der Sicherheitsüberprüfung. Sollten im Rahmen dieser Überprüfung sicherheitsrelevante Erkenntnisse  zutage treten, verliert diese Einladung mit sofortiger Wirkung ihre Gültigkeit.
+
+Mit diesem Schreiben sind Sie temporär autorisiert, das ausgewiesene militärische Sperrgebiet zum Zweck der Terminwahrnehmung zu betreten. Bei Ansprache durch Special Agents ist unverzüglich auf den Unterzeichner zu verweisen. Das Betreten des militärischen Sperrgebiets hat zwingend unbewaffnet zu erfolgen. Bei Erreichen der Sperrgebietsgrenze ist eine vollständige Maskierung anzulegen. Stellen Sie sicher, dass Sie vor der Anreise kein Smartphone oder Funkgerät mit sich führen.
+
+Eine Missachtung der Sicherheitsauflagen führt zum sofortigen Entzug der Zutrittsberechtigung und zum Ausschluss aus dem Auswahlverfahren.
+
+
+Mit freundlichen Grüßen
+NAME
+*DIENSTGRAD*
+
+-# Das National Office of Security Enforcement entspricht hohen Standard und der höchsten Stufe der Geheimhaltung. Sprechen Sie mit niemandem über Ihr Interesse oder den Stand des Auswahlverfahrens.
+
+
+
+
+
+
+Vorlage | Anfrage von Personalakten
+# <:NOOSE:1497241179862073354> | Behördenanfrage
+National Office of Security Enforcement
+Sicherheitsfreigabe: 6
+
+
+**Anforderung von Personalunterlagen**
+hier; VORNAME NACHNAME
+
+Sehr geehrte Damen und Herren,
+
+das National Office of Security Enforcement fordert Sie hiermit im Wege der Amtshilfe dazu auf, die vollständige und ungeschwärzte Personalakte(einschließlich Disziplinarverfahren, internen Ermittlungen und Aktennotizen) von Herrn NAME an uns zu übermitteln.
+
+Wir verweisen in diesem Zusammenhang auf die Verfassung des Staates San Andreas sowie die gesetzliche Pflicht zur Amtshilfe und interbehördlichen Zusammenarbeit hin. Demnach sind alle Behörden des öffentlichen Dienstes dazu verpflichtet, dem National Office of Security Enforcement zur Erfüllung seiner gesetzlichen Aufgaben uneingeschränkte Unterstützung zu leisten.
+
+Aufgrund der zeitkritischen Einstufung des Verfahrens wird eine Übermittlung der Dokumente auf sicherem, digitalem oder physischem Dienstweg bis zum DATUM erwartet.
+
+Sollten der Übermittlung wider Erwarten Hinderungsgründe entgegenstehen, ist dies unverzüglich unter Angabe der genauen Rechtsnorm schriftlich zu begründen.
+
+Mit freundlichen Grüßen
+NAME
+*DIENSTGRAD*
+
+
+
+
+
+Vorlage | Verweigerung zu Ablehnungsgründen
+# <:NOOSE:1497241179862073354> | Auswahlverfahren
+National Office of Security Enforcement
+Abteilung: Criminal Investigation Division
+Sicherheitsfreigabe: 6
+
+
+**Mitteilung über die Verweigerung von Auskünften**
+
+Sehr geehrter NAME,
+
+das National Office of Security Enforcement erteilt grundsätzlich keinerlei Auskünfte über den Verlauf, Fortführung, Beendigung oder die konkreten Gründe für eine Ablehnung innerhalb des behördlichen Auswahlverfahrens.
+
+Sämtliche im Rahmen der Personalgewinnung erhobenen Daten, Ergebnisse, Profile sowie die Erkenntnisse aus der Sicherheitsüberprüfung sind als Verschlusssache eingestuft. Die Offenlegung dieser Informationen ist zum Schutz von Auswahlkriterien sowie aus Gründen der geheimdienstlichen Sicherheit absolut ausgeschlossen.
+
+Das Ausscheiden aus dem Auswahlverfahren ist eine endgültige behördliche Entscheidung. Wir bitten Sie von weiteren Sachstandsanfragen abzusehen und werden keine weiteren Auskünfte zu diesem Vorgang erteilen.
+
+
+Mit freundlichen Grüßen
+NAME
+*DIENSTGRAD*
+
+-# Das National Office of Security Enforcement entspricht hohen Standard und der höchsten Stufe der Geheimhaltung. Sprechen Sie mit niemandem über Ihr Interesse oder den Stand des Auswahlverfahrens.
+
+
+
+Vorlage | Eingangsbestätigung
+# <:NOOSE:1497241179862073354>  | Auswahlverfahren 
+
+National Office of Security Enforcement
+Abteilung: Criminal Investigation Division
+Sicherheitsfreigabe: 6
+
+
+**Eingangsbestätigung**
+
+Sehr geehrte NAME,
+
+hiermit bestätigen wir Ihnen den Eingang Ihrer Bewerbung. Die Sicherheitsüberprüfung und das anschließende Auswahlverfahren werden einige Zeit in Anspruch nehmen. Wir bitten Sie daher von weiteren Statusanfragen abzusehen.
+
+
+Mit freundlichen Grüßen
+NAME
+*DIENSTGRAD*
+
+-# Das National Office of Security Enforcement entspricht hohen Standard und der höchsten Stufe der Geheimhaltung. Sprechen Sie mit niemandem über Ihr Interesse oder den Stand des Auswahlverfahrens.

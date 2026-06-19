@@ -172,7 +172,8 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
             nameof(Party) => await db.Parties.Select(p => p.Id).ToListAsync(cancellationToken),
             nameof(Operation) => await db.Operations.Select(o => o.Id).ToListAsync(cancellationToken),
             nameof(Case) => await db.Cases.Select(c => c.Id).ToListAsync(cancellationToken),
-            nameof(Document) => await db.Documents.Select(d => d.Id).ToListAsync(cancellationToken),
+            // taskforce-internal docs are shared per-document only, never via bulk type-release
+            nameof(Document) => await db.Documents.Where(d => d.OwnerTaskforceId == null).Select(d => d.Id).ToListAsync(cancellationToken),
             nameof(Law) => await db.Laws.Select(l => l.Id).ToListAsync(cancellationToken),
             _ => new List<string>(),
         };
@@ -186,7 +187,7 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
             nameof(Party) => await db.Parties.CountAsync(cancellationToken),
             nameof(Operation) => await db.Operations.CountAsync(cancellationToken),
             nameof(Case) => await db.Cases.CountAsync(cancellationToken),
-            nameof(Document) => await db.Documents.CountAsync(cancellationToken),
+            nameof(Document) => await db.Documents.CountAsync(d => d.OwnerTaskforceId == null, cancellationToken),
             nameof(Law) => await db.Laws.CountAsync(cancellationToken),
             _ => 0,
         };
