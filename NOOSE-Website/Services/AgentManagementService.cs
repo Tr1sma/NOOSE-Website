@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
@@ -16,7 +17,8 @@ public class AgentManagementService(
     UserManager<Agent> userManager,
     AppDbContext db,
     IDbContextFactory<AppDbContext> dbFactory,
-    INotificationService notifications) : IAgentManagementService
+    INotificationService notifications,
+    IConfiguration configuration) : IAgentManagementService
 {
     public async Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default)
     {
@@ -441,6 +443,98 @@ public class AgentManagementService(
 
         Audit(agent, AuditAction.Modified, actor, "Entsperrt");
         await Save(agent, newStamp: true);
+    }
+
+    public async Task DeleteAccountAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        // Bulk SQL bypasses the interceptors, so guard explicitly and first.
+        Permission.RequireLeadership(actor);
+
+        if (actor.GetAgentId() == agentId)
+        {
+            throw new InvalidOperationException("Du kannst deinen eigenen Account nicht löschen.");
+        }
+
+        var agent = await GetOrThrow(agentId);
+
+        // bootstrap admins would just re-create themselves on the next login
+        if (IsBootstrapAdmin(agent.DiscordId))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap-Admins können nicht gelöscht werden (sie würden sich beim nächsten Login neu anlegen).");
+        }
+
+        if (agent.IsAdmin && await db.Users.CountAsync(u => u.IsAdmin, cancellationToken) <= 1)
+        {
+            throw new InvalidOperationException("Der letzte verbliebene Admin kann nicht gelöscht werden.");
+        }
+
+        var codename = agent.Codename;
+        var discordId = agent.DiscordId;
+
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Purge the Restrict-FK rows that block the user delete. IgnoreQueryFilters so soft-deleted rows
+        // (still physically present, FK still live) are removed too. SetNull/Cascade FKs
+        // (Observation, Followup, SavedSearch) are handled by MySQL when the user row drops.
+        await db.Watchlists.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.FactionAgents.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.PersonGroupAgents.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.PartyAgents.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.OperationAgents.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.CaseAgents.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.TaskforceAgents.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.JobAssignments.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AppointmentAssignments.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AnnouncementAcknowledgments.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AgentRankHistories.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AgentNotes.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AgentPromotionRequests.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.AgentModuleCompletions.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
+
+        // recruiting: this person's own invites/applications go; applications they merely processed are detached
+        await db.AgentInvites.IgnoreQueryFilters().Where(x => x.UsedByUserId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.Bewerbungen.IgnoreQueryFilters().Where(x => x.ApplicantUserId == agentId).ExecuteDeleteAsync(cancellationToken);
+        await db.Bewerbungen.IgnoreQueryFilters().Where(x => x.AssignedAgentId == agentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.AssignedAgentId, (string?)null), cancellationToken);
+
+        // drop the user; Identity cascades AspNetUserLogins/Claims/Tokens/Roles -> Discord link severed
+        var result = await userManager.DeleteAsync(agent);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Löschen fehlgeschlagen: " + string.Join("; ", result.Errors.Select(e => e.Description)));
+        }
+
+        // forensic trail (AuditLog has no FK to Agent, so it survives the delete)
+        db.AuditLogs.Add(new AuditLog
+        {
+            Timestamp = DateTime.UtcNow,
+            AgentId = actor.GetAgentId(),
+            AgentName = actor.GetCodename(),
+            EntityType = nameof(Agent),
+            EntityId = agentId,
+            Action = AuditAction.Deleted,
+            ChangesJson = JsonSerializer.Serialize(new { deletedCodename = codename, discordId }),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>True if the Discord ID is a configured bootstrap admin (single or list key).</summary>
+    private bool IsBootstrapAdmin(string? discordId)
+    {
+        if (string.IsNullOrWhiteSpace(discordId))
+        {
+            return false;
+        }
+        if (string.Equals(configuration["Bootstrap:AdminDiscordId"]?.Trim(), discordId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+        return (configuration.GetSection("Bootstrap:AdminDiscordIds").Get<string[]>() ?? [])
+            .Any(id => string.Equals(id?.Trim(), discordId, StringComparison.Ordinal));
     }
 
     private async Task<Agent> GetOrThrow(string agentId)

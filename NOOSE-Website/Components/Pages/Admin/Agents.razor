@@ -175,6 +175,13 @@ else
                                    Disabled="@(context.Id == _myId)"
                                    OnClick="() => Block(context)">Sperren</MudButton>
                     }
+                    @if (context.Id != _myId)
+                    {
+                        <MudTooltip Text="Account vollständig löschen (unwiderruflich)">
+                            <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" Color="Color.Error"
+                                           OnClick="() => DeleteAccount(context)" aria-label="Account vollständig löschen" />
+                        </MudTooltip>
+                    }
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -437,6 +444,33 @@ else
         {
             await AgentService.UnblockAsync(agent.Id, user);
             Snackbar.Add($"{DisplayName(agent)} entsperrt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task DeleteAccount(Agent agent)
+    {
+        // Irreversible: require the operator to type the codename to confirm.
+        var name = DisplayName(agent);
+        var ok = await ConfirmTypedDialog.ShowAsync(DialogService,
+            $"{name} löschen?",
+            "Der Account wird unwiderruflich gelöscht. Die Discord-Verknüpfung wird getrennt; bei einem "
+            + "erneuten Login entsteht ein frischer, ausstehender Account. Erstellte Inhalte (Personen, "
+            + "Dokumente, Kommentare) bleiben erhalten.",
+            confirmPhrase: name);
+        if (!ok)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await AgentService.DeleteAccountAsync(agent.Id, user);
+            Snackbar.Add($"{name} wurde vollständig gelöscht.", Severity.Success);
         }
         catch (Exception ex)
         {

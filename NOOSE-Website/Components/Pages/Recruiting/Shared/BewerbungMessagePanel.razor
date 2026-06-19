@@ -22,7 +22,14 @@
                             <MudText Typo="Typo.caption"><b>@AuthorLabel(m)</b></MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">· @m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
                         </MudStack>
-                        <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                        @if (_richMode)
+                        {
+                            <div class="dokument-html bewerbung-chat-html mud-typography-body2">@((MarkupString)m.Text)</div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                        }
                     </MudPaper>
                 </div>
             }
@@ -50,11 +57,18 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Name wird automatisch geschwärzt.</MudText>
                 </MudStack>
             }
-            <MudTextField @bind-Value="_text" Variant="Variant.Outlined" Lines="3"
-                          Placeholder="@Placeholder" Immediate="true" />
+            @if (_richMode)
+            {
+                <RichTextEditor @ref="_editor" ValueChanged="@(v => _html = v)" />
+            }
+            else
+            {
+                <MudTextField @bind-Value="_text" Variant="Variant.Outlined" Lines="3"
+                              Placeholder="@Placeholder" Immediate="true" />
+            }
             <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
-                           OnClick="SendAsync" Disabled="@(_sends || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
+                           OnClick="SendAsync" Disabled="@(_sends || ComposeEmpty)">Senden</MudButton>
             </MudStack>
         </div>
     }
@@ -72,9 +86,15 @@
     private bool _load = true;
     private bool _sends;
     private string _text = string.Empty;
+    private string _html = string.Empty;
+    private RichTextEditor? _editor;
     private string? _myId;
     private List<BewerbungMessage> _messages = new();
     private List<DocumentTemplate> _templates = new();
+
+    // applicant-facing thread is rich text (formatting preserved); internal thread stays plain text + mentions
+    private bool _richMode => Audience == BewerbungMessageAudience.Bewerber;
+    private bool ComposeEmpty => _richMode ? string.IsNullOrWhiteSpace(_html) : string.IsNullOrWhiteSpace(_text);
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,16 +140,31 @@
         return string.IsNullOrWhiteSpace(m.AuthorName) ? "NOOSE" : m.AuthorName!;
     }
 
-    private void InsertTemplate(DocumentTemplate t)
+    private async Task InsertTemplate(DocumentTemplate t)
     {
         var dienstgrad = User.GetRank() is { } rank ? RankDisplay.Name(rank) : null;
         var rendered = BewerbungTemplateRenderer.RenderForApplicant(t.ContentHtml, dienstgrad);
-        _text = BewerbungTemplateRenderer.HtmlToText(rendered);
+        if (_editor is not null)
+        {
+            await _editor.SetHtmlAsync(rendered);
+            _html = rendered;
+        }
+        else
+        {
+            _text = BewerbungTemplateRenderer.HtmlToText(rendered);
+        }
     }
 
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(_text) || _sends)
+        if (_sends)
+        {
+            return;
+        }
+        var content = _richMode
+            ? (_editor is not null ? await _editor.GetHtmlAsync() : _html)
+            : _text;
+        if (string.IsNullOrWhiteSpace(content))
         {
             return;
         }
@@ -138,17 +173,22 @@
         {
             if (Audience == BewerbungMessageAudience.Intern)
             {
-                await BewerbungService.PostInternalAsync(BewerbungId, _text, User);
+                await BewerbungService.PostInternalAsync(BewerbungId, content, User);
             }
             else if (IsApplicantView)
             {
-                await BewerbungService.PostAsApplicantAsync(BewerbungId, _text, User);
+                await BewerbungService.PostAsApplicantAsync(BewerbungId, content, User);
             }
             else
             {
-                await BewerbungService.PostToApplicantAsync(BewerbungId, _text, User);
+                await BewerbungService.PostToApplicantAsync(BewerbungId, content, User);
             }
-            _text = string.Empty; // broadcaster refreshes
+            _text = string.Empty;
+            _html = string.Empty;
+            if (_editor is not null)
+            {
+                await _editor.SetHtmlAsync(string.Empty); // broadcaster refreshes the thread
+            }
         }
         catch (Exception ex)
         {

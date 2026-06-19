@@ -55,7 +55,7 @@
         var path = Nav.ToBaseRelativePath(Nav.Uri);
         _location = await LabelService.ResolveAsync(path, _scope);
 
-        var items = new List<BreadcrumbItem> { new("Lagezentrum", "/") };
+        var items = new List<BreadcrumbItem> { new("Lagezentrum", "/dashboard") };
         if (_location.Section is { } sec && sec.Key != "dashboard")
         {
             if (_location.IsRecord)

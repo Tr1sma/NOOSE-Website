@@ -37,7 +37,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             }
 
             // carry the entry context (public application vs invite) into the callback
-            var redirectUrl = $"/Account/ExternalLogin?returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}";
+            var redirectUrl = $"/Account/ExternalLogin?returnUrl={Uri.EscapeDataString(returnUrl ?? "/dashboard")}";
             if (!string.IsNullOrWhiteSpace(source))
                 redirectUrl += $"&source={Uri.EscapeDataString(source)}";
             if (!string.IsNullOrWhiteSpace(inviteToken))
@@ -62,7 +62,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         {
             var logger = loggerFactory.CreateLogger("NOOSE.ExternalLogin");
             // empty (not just null) would make LocalRedirect throw
-            returnUrl = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
+            returnUrl = string.IsNullOrWhiteSpace(returnUrl) ? "/dashboard" : returnUrl;
 
             if (remoteError is not null)
             {
@@ -132,7 +132,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 case AgentStatus.Active:
                     await signInManager.SignInAsync(agent, isPersistent: true);
                     // honor an explicit deep link; otherwise use the user's custom start page
-                    if (returnUrl == "/" && TryGetStartRoute(agent, out var startRoute))
+                    if (returnUrl == "/dashboard" && TryGetStartRoute(agent, out var startRoute))
                     {
                         return Results.LocalRedirect(startRoute);
                     }
@@ -164,7 +164,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     /// <summary>Reads the user's custom start route from saved nav preferences; guards against open redirects.</summary>
     private static bool TryGetStartRoute(Agent agent, out string route)
     {
-        route = "/";
+        route = "/dashboard";
         if (string.IsNullOrWhiteSpace(agent.NavPreferencesJson))
         {
             return false;

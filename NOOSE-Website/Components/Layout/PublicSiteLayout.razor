@@ -1,0 +1,55 @@
+@inherits LayoutComponentBase
+
+@* Public site shell (landing, career) with top tab nav; no maintenance wall, no auth chrome. *@
+<MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div style="min-height:100vh;background:#0E1116;padding:24px 16px;">
+    <div style="max-width:960px;margin:0 auto;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">National Office of Security Enforcement</MudText>
+                </MudStack>
+            </MudStack>
+            <AuthorizeView>
+                <Authorized Context="authCtx">
+                    @if (authCtx.User.IsApplicant())
+                    {
+                        <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Badge">Zum Bewerber-Portal</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Shield">Zum Agent-Portal</MudButton>
+                    }
+                </Authorized>
+                <NotAuthorized>
+                    <MudButton Href="/Account/Login" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Login">Agent-Login</MudButton>
+                </NotAuthorized>
+            </AuthorizeView>
+        </MudStack>
+
+        <MudDivider Class="mb-2" />
+        <PublicNav />
+
+        <div class="mt-4">
+            @Body
+        </div>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="mt-6">
+            <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
+                     Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+            <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+            <MudLink Href="/nutzungsbedingungen" Typo="Typo.caption" Color="Color.Default">Nutzungsbedingungen</MudLink>
+        </MudStack>
+    </div>
+</div>

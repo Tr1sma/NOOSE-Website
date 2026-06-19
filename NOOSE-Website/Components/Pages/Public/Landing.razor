@@ -1,0 +1,49 @@
+@page "/"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>NOOSE · National Office of Security Enforcement</PageTitle>
+
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="5">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.overline" Color="Color.Primary">National Office of Security Enforcement</MudText>
+            <MudText Typo="Typo.h3" Style="font-weight:700;line-height:1.15;">Defending Our Nation. Securing the Future.</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:640px;">
+                Das NOOSE bündelt die staatliche Gefahrenabwehr und Aufklärung an einer Stelle. Diese Seite ist der
+                öffentliche Zugang zur Behörde – mit Informationen für Interessierte und Bewerber. Der interne
+                Aktenbestand bleibt den Agenten vorbehalten.
+            </MudText>
+        </MudStack>
+
+        <MudDivider />
+
+        <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
+            <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
+                <MudStack Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">Karriere beim NOOSE</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Du möchtest Teil der Behörde werden? Informiere dich über das Auswahlverfahren und reiche deine
+                        Bewerbung vertraulich über das Portal ein.
+                    </MudText>
+                    <MudButton Href="/karriere" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.ArrowForward" Class="mt-2">Zur Karriere-Seite</MudButton>
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
+                <MudStack Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">Agent-Zugang</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        NOOSE-Agenten gelangen über den internen Login zum Lagezentrum und zur Akten-Datenbank.
+                    </MudText>
+                    <MudButton Href="/Account/Login" Variant="Variant.Outlined" Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.Login" Class="mt-2">Agent-Login</MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    </MudStack>
+</MudPaper>

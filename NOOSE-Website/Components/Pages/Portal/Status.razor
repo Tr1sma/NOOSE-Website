@@ -14,7 +14,7 @@
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.h5">Status deiner Bewerbung</MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Aktenzeichen @_bewerbung.CaseNumber</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@_bewerbung.Name · Aktenzeichen @_bewerbung.CaseNumber</MudText>
                 </MudStack>
                 <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(_bewerbung.Status)" Variant="Variant.Filled">
                     @BewerbungStatusDisplay.Name(_bewerbung.Status)

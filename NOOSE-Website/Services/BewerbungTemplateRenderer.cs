@@ -23,15 +23,28 @@ public static partial class BewerbungTemplateRenderer
     }
 
     /// <summary>Defense in depth before persisting an applicant-facing message: redact the NAME token and any
-    /// literal occurrence of the applicant's real name, so a hand-typed name can never leak.</summary>
-    public static string Redact(string text, string? applicantName)
+    /// literal occurrence of the applicant's real name. HTML-safe — only visible text is rewritten, never tags.</summary>
+    public static string Redact(string html, string? applicantName)
     {
-        text = NameToken().Replace(text, Redaction);
-        if (!string.IsNullOrWhiteSpace(applicantName))
+        if (string.IsNullOrEmpty(html))
         {
-            text = Regex.Replace(text, Regex.Escape(applicantName.Trim()), Redaction, RegexOptions.IgnoreCase);
+            return html ?? string.Empty;
         }
-        return text;
+        var name = applicantName?.Trim();
+        // rewrite only the text segments, never the inside of < ... > tags, so markup/attributes stay intact
+        return TagOrText().Replace(html, m =>
+        {
+            if (m.Value.StartsWith('<'))
+            {
+                return m.Value;
+            }
+            var text = NameToken().Replace(m.Value, Redaction);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                text = Regex.Replace(text, Regex.Escape(name), Redaction, RegexOptions.IgnoreCase);
+            }
+            return text;
+        });
     }
 
     /// <summary>Flatten template HTML to plain text (paragraph/break aware) for the plain-text conversation.</summary>
@@ -62,4 +75,7 @@ public static partial class BewerbungTemplateRenderer
 
     [GeneratedRegex(@"\bDIENSTGRAD\b")]
     private static partial Regex RankToken();
+
+    [GeneratedRegex(@"<[^>]+>|[^<]+")]
+    private static partial Regex TagOrText();
 }

@@ -253,6 +253,20 @@ html, body {
         margin: 0;
     }
 
+/* Bewerber-Chat: kompakte Absätze für Rich-Text-Nachrichten in der Sprechblase. */
+.bewerbung-chat-html p {
+    margin: 0 0 .25rem 0;
+}
+
+    .bewerbung-chat-html p:last-child {
+        margin-bottom: 0;
+    }
+
+.bewerbung-chat-html ul,
+.bewerbung-chat-html ol {
+    margin: .25rem 0;
+}
+
 /* ---- Druck-/PDF-Export (Phase 7) ----
    window.print() (DruckButton) druckt nur den Akteninhalt: Navigation, Topbar, Buttons und
    andere Bedienelemente werden ausgeblendet, dunkles Theme wird auf Schwarz-auf-Weiß gedreht.

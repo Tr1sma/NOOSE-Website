@@ -69,4 +69,9 @@ public interface IAgentManagementService
 
     /// <summary>Lift a block; status becomes Active.</summary>
     Task UnblockAsync(string agentId, ClaimsPrincipal actor);
+
+    /// <summary>Hard-delete an agent: purge personnel/junction rows and drop the user (severs the Discord
+    /// login, so a re-login creates a fresh Pending account). Keeps authored content and audit logs.
+    /// Leadership only; blocked for self, the last admin, and bootstrap admins.</summary>
+    Task DeleteAccountAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

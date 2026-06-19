@@ -1,5 +1,5 @@
 @page "/karriere"
-@layout PublicLayout
+@layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
 
@@ -14,21 +14,50 @@
             persönliches Vorstellungsgespräch. Der gesamte Ablauf wird vertraulich über dieses Portal abgewickelt.
         </MudText>
 
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-            Melde dich mit Discord an, um eine Bewerbung einzureichen und ihren Status zu verfolgen.
-        </MudAlert>
-
-        <div>
-            <form method="post" action="/Account/PerformExternalLogin">
-                <AntiforgeryToken />
-                <input type="hidden" name="returnUrl" value="/portal" />
-                <input type="hidden" name="source" value="bewerbung" />
-                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
-                           Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
-                    Mit Discord bewerben
-                </MudButton>
-            </form>
-        </div>
+        <AuthorizeView>
+            <NotAuthorized>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Melde dich mit Discord an, um eine Bewerbung einzureichen und ihren Status zu verfolgen.
+                </MudAlert>
+                <div>
+                    <form method="post" action="/Account/PerformExternalLogin">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="/portal" />
+                        <input type="hidden" name="source" value="bewerbung" />
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                                   Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
+                            Mit Discord bewerben
+                        </MudButton>
+                    </form>
+                </div>
+            </NotAuthorized>
+            <Authorized Context="authCtx">
+                @if (authCtx.User.IsApplicant())
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Du bist angemeldet. Verwalte deine Bewerbung und die Kommunikation mit dem HRB im Bewerber-Portal.
+                    </MudAlert>
+                    <div>
+                        <MudButton Href="/portal" Variant="Variant.Filled" Color="Color.Primary"
+                                   Size="Size.Large" StartIcon="@Icons.Material.Filled.Badge">
+                            Zum Bewerber-Portal
+                        </MudButton>
+                    </div>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Du bist als NOOSE-Agent angemeldet.
+                    </MudAlert>
+                    <div>
+                        <MudButton Href="/dashboard" Variant="Variant.Filled" Color="Color.Primary"
+                                   Size="Size.Large" StartIcon="@Icons.Material.Filled.Shield">
+                            Zum Agent-Portal
+                        </MudButton>
+                    </div>
+                }
+            </Authorized>
+        </AuthorizeView>
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
             Das National Office of Security Enforcement entspricht hohen Standards und der höchsten Stufe der

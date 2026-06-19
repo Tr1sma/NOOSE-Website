@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IBewerbungService BewerbungService
 
 @* Shell for the authenticated applicant portal; no internal nav, no maintenance wall. *@
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
@@ -16,12 +17,18 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Bewerber-Portal</MudText>
                 </MudStack>
             </MudStack>
-            <form method="post" action="/Account/Logout">
-                <AntiforgeryToken />
-                <input type="hidden" name="returnUrl" value="/karriere" />
-                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
-            </form>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                @if (!string.IsNullOrWhiteSpace(_displayName))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Angemeldet als <b>@_displayName</b></MudText>
+                }
+                <form method="post" action="/Account/Logout">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="/karriere" />
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
+                </form>
+            </MudStack>
         </MudStack>
 
         @Body
@@ -36,3 +43,24 @@
         </MudStack>
     </div>
 </div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string? _displayName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // prefer the name the applicant entered over the Discord username
+        try
+        {
+            if (AuthState is not null)
+            {
+                var user = (await AuthState).User;
+                _displayName = (await BewerbungService.GetOwnAsync(user))?.Name;
+            }
+        }
+        catch { /* best effort */ }
+    }
+}

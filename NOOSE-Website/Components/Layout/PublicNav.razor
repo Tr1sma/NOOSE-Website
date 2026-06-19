@@ -1,0 +1,32 @@
+@inject NavigationManager Nav
+
+@* Tab bar for the public site; add a tuple to extend with more public pages. *@
+<MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+    @foreach (var tab in Tabs)
+    {
+        var active = IsActive(tab.Href);
+        <MudButton Href="@tab.Href"
+                   Variant="@(active ? Variant.Filled : Variant.Text)"
+                   Color="@(active ? Color.Primary : Color.Default)"
+                   StartIcon="@tab.Icon"
+                   Size="Size.Small">
+            @tab.Label
+        </MudButton>
+    }
+</MudStack>
+
+@code {
+    private static readonly (string Label, string Href, string Icon)[] Tabs =
+    [
+        ("Start", "/", Icons.Material.Filled.Home),
+        ("Karriere", "/karriere", Icons.Material.Filled.WorkOutline),
+        // weitere öffentliche Tabs hier ergänzen
+    ];
+
+    private bool IsActive(string href)
+    {
+        var rel = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Split('#')[0].Trim('/');
+        var path = rel.Length == 0 ? "/" : "/" + rel;
+        return href == "/" ? path == "/" : path == href || path.StartsWith(href + "/");
+    }
+}

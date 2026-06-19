@@ -303,8 +303,13 @@ public class BewerbungService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var bewerbung = await GetOrThrow(db, id, cancellationToken);
 
-        // defense in depth: the applicant name must never reach the applicant-facing conversation
+        // sanitize the rich-text HTML, then redact so the applicant name never reaches the applicant-facing conversation
+        content = HtmlCleanup.Clean(content);
         content = BewerbungTemplateRenderer.Redact(content, bewerbung.Name);
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            throw new InvalidOperationException("Die Nachricht darf nicht leer sein.");
+        }
 
         var message = new BewerbungMessage
         {
@@ -342,6 +347,13 @@ public class BewerbungService(
         if (bewerbung.ApplicantUserId != applicant.GetAgentId())
         {
             throw new UnauthorizedAccessException("Das ist nicht deine Bewerbung.");
+        }
+
+        // sanitize the applicant's rich-text HTML before it is rendered to HRB
+        content = HtmlCleanup.Clean(content);
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            throw new InvalidOperationException("Die Nachricht darf nicht leer sein.");
         }
 
         var message = new BewerbungMessage

@@ -1,0 +1,46 @@
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrWhiteSpace(Text))
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">@Text</MudText>
+        }
+        <MudText Typo="Typo.body2" Class="mb-2">Tippe zur Bestätigung <b>@ConfirmPhrase</b> ein:</MudText>
+        <MudTextField @bind-Value="_typed" Variant="Variant.Outlined" AutoFocus="true" Immediate="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   Disabled="@(_typed.Trim() != ConfirmPhrase)"
+                   OnClick="Confirm">@ConfirmText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Bestätigen";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string ConfirmPhrase { get; set; } = string.Empty;
+    [Parameter] public string ConfirmText { get; set; } = "Löschen";
+
+    private string _typed = string.Empty;
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the dialog; returns true only if the operator typed the exact confirm phrase.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialog, string title, string? text,
+        string confirmPhrase, string confirmText = "Löschen")
+    {
+        var parameters = new DialogParameters<ConfirmTypedDialog>
+        {
+            { x => x.Title, title },
+            { x => x.Text, text },
+            { x => x.ConfirmPhrase, confirmPhrase },
+            { x => x.ConfirmText, confirmText },
+        };
+        var reference = await dialog.ShowAsync<ConfirmTypedDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

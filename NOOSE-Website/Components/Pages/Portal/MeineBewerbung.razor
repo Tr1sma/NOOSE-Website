@@ -96,11 +96,15 @@
                 await BewerbungService.SubmitAsync(_model, null, null, null, _user);
             }
             Snackbar.Add("Deine Bewerbung wurde eingereicht.", Severity.Success);
-            Nav.NavigateTo("/portal/status");
+            // full reload guarantees the status page re-evaluates the freshly created application
+            Nav.NavigateTo("/portal/status", forceLoad: true);
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
             _busy = false;
         }
     }

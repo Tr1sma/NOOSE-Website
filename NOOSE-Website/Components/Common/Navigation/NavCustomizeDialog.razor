@@ -92,9 +92,9 @@
 
                 <MudTabPanel Text="Startseite" Icon="@Icons.Material.Filled.Home">
                     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">Welche Seite soll nach dem Login zuerst geöffnet werden?</MudText>
-                    <MudSelect T="string" Value="@(_prefs.StartRoute ?? "/")" ValueChanged="OnStartRouteChangedAsync"
+                    <MudSelect T="string" Value="@(_prefs.StartRoute ?? "/dashboard")" ValueChanged="OnStartRouteChangedAsync"
                                Label="Startseite" Dense="true" Variant="Variant.Outlined" Style="max-width:360px;">
-                        <MudSelectItem T="string" Value="@("/")">Dashboard (Standard)</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("/dashboard")">Dashboard (Standard)</MudSelectItem>
                         @foreach (var e in _startOptions)
                         {
                             <MudSelectItem T="string" Value="@e.Route">@e.Label</MudSelectItem>
@@ -182,7 +182,7 @@
         => RunAsync(() => NavPrefs.ToggleFavoriteAsync(_agentId, f));
 
     private Task OnStartRouteChangedAsync(string route)
-        => RunAsync(() => NavPrefs.SetStartRouteAsync(_agentId, route == "/" ? null : route));
+        => RunAsync(() => NavPrefs.SetStartRouteAsync(_agentId, route == "/dashboard" ? null : route));
 
     private async Task OnMenuDropAsync(MudItemDropInfo<NavEntry> info)
     {

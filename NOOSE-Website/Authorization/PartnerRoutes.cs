@@ -23,7 +23,7 @@ public static class PartnerRoutes
     public static bool IsAllowed(string? relativePath)
     {
         var path = (relativePath ?? string.Empty).Split('?')[0].Split('#')[0].Trim('/').ToLowerInvariant();
-        if (path.Length == 0 || path == "profil" || path.StartsWith("profil/"))
+        if (path.Length == 0 || path == "dashboard" || path == "profil" || path.StartsWith("profil/"))
         {
             return true;
         }
