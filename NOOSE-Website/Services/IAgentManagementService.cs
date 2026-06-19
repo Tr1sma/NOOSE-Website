@@ -24,6 +24,9 @@ public interface IAgentManagementService
     /// <summary>Reject a registration; status becomes Blocked with a reason.</summary>
     Task RejectAsync(string agentId, string reason, ClaimsPrincipal actor);
 
+    /// <summary>Promote an applicant (status Applicant) directly to an active agent with rank/flags; leadership only. Rotates the SecurityStamp.</summary>
+    Task PromoteApplicantToAgentAsync(string applicantUserId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor);
+
     /// <summary>Set an agent's master data; codename is required.</summary>
     Task MasterDataChangeAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor);
 

@@ -1,0 +1,149 @@
+@inject IBewerbungService BewerbungService
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudText Typo="Typo.h6" Class="mb-2">Verknüpfte Person / Risiko</MudText>
+
+    @if (_linked is not null)
+    {
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudLink Href="@($"/personen/{_linked.PersonId}")">@_linked.Name</MudLink>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@_linked.CaseNumber</MudText>
+                @if (_linked.IsClassified)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">VS</MudChip>
+                }
+            </MudStack>
+            @if (_linked.ThreatScore is { } score)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudChip T="string" Color="ScoreColor(score)" Variant="Variant.Filled">EHK-Score: @score</MudChip>
+                    @if (_linked.ThreatConfidence is { } conf)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Konfidenz @conf %</MudText>
+                    }
+                    @if (_linked.ScoreCalculatedAt is { } at)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">· Stand @at.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Für diese Person liegt kein Risiko-Score vor.</MudText>
+            }
+            @if (_canWrite)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.LinkOff" OnClick="Unlink">Verknüpfung entfernen</MudButton>
+            }
+        </MudStack>
+    }
+    else
+    {
+        @if (_linkedId is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Eine verknüpfte Person ist für dich nicht sichtbar.</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Keine Person-Akte verknüpft.</MudText>
+        }
+        @if (_canWrite)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudTextField @bind-Value="_search" Label="Person suchen" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Immediate="true" OnKeyUp="OnKey" Style="min-width:240px;" />
+                <MudButton Variant="Variant.Outlined" OnClick="SearchAsync" StartIcon="@Icons.Material.Filled.Search">Suchen</MudButton>
+            </MudStack>
+            @if (_results.Count > 0)
+            {
+                <MudList T="Person" Dense="true">
+                    @foreach (var p in _results)
+                    {
+                        <MudListItem T="Person" OnClick="@(() => LinkAsync(p.Id))">
+                            @p.Name <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string BewerbungId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public string? LinkedPersonId { get; set; }
+
+    private LinkedPersonInfo? _linked;
+    private string? _linkedId;
+    private bool _canWrite;
+    private string _search = string.Empty;
+    private List<Person> _results = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canWrite = User.MayWrite();
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _linkedId = LinkedPersonId;
+        _linked = await BewerbungService.GetLinkedPersonAsync(BewerbungId, User);
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _results = new();
+            return;
+        }
+        _results = await PersonService.SearchAsync(_search, User.IsLeadership());
+    }
+
+    private async Task LinkAsync(string personId)
+    {
+        try
+        {
+            await BewerbungService.LinkPersonAsync(BewerbungId, personId, User);
+            LinkedPersonId = personId;
+            _results = new();
+            _search = string.Empty;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task Unlink()
+    {
+        try
+        {
+            await BewerbungService.LinkPersonAsync(BewerbungId, null, User);
+            LinkedPersonId = null;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static Color ScoreColor(int score)
+        => score >= 70 ? Color.Error : score >= 40 ? Color.Warning : Color.Success;
+}

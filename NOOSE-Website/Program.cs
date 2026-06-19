@@ -14,6 +14,7 @@ using NOOSE_Website.Components.Account;
 using NOOSE_Website.Components.Factions;
 using NOOSE_Website.Components.People;
 using NOOSE_Website.Components.Common;
+using NOOSE_Website.Components.Recruiting;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Announcements;
@@ -203,6 +204,13 @@ builder.Services.AddScoped<ILibraryService, LibraryService>();
 builder.Services.AddScoped<IPersonMergeService, PersonMergeService>();
 builder.Services.AddScoped<IPartnerShareService, PartnerShareService>();
 
+// ---- recruiting (applications, invites, tests) ----
+builder.Services.AddScoped<IAgentInviteService, AgentInviteService>();
+builder.Services.AddScoped<IBewerbungService, BewerbungService>();
+builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
+builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
+builder.Services.AddSingleton<BewerbungBroadcaster>();
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -256,6 +264,7 @@ app.MapNooseFactionsFileEndpoints();
 app.MapNooseLibraryFileEndpoints();
 app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
+app.MapNooseRecruitingFileEndpoints();
 
 // apply pending migrations on startup
 using (var scope = app.Services.CreateScope())
@@ -268,6 +277,9 @@ using (var scope = app.Services.CreateScope())
     {
         await roleManager.CreateAsync(new IdentityRole("Admin"));
     }
+
+    // seed the default recruiting message templates (idempotent)
+    await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
 }
 
 app.Run();

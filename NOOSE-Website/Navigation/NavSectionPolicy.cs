@@ -9,6 +9,7 @@ public static class NavSectionPolicy
     public static string For(NavSection section) => section switch
     {
         NavSection.VerwaltungFreigaben => Policies.HighestClassificationPage,
+        NavSection.VerwaltungBewerbungen => Policies.HrbOrLeadership,
         NavSection.VerwaltungFuehrung => Policies.LeadershipPage,
         NavSection.VerwaltungAdmin => Policies.AdminPage,
         NavSection.Partner => Policies.PartnerView,
@@ -21,6 +22,7 @@ public static class NavSectionPolicy
         NavSection.Primary => "Allgemein",
         NavSection.Akten => "Akten",
         NavSection.VerwaltungFreigaben => "Verwaltung",
+        NavSection.VerwaltungBewerbungen => "Verwaltung · Bewerbungen",
         NavSection.VerwaltungFuehrung => "Verwaltung · Führung",
         NavSection.VerwaltungAdmin => "Verwaltung · Admin",
         NavSection.Partner => "Freigegebene Akten",
@@ -31,6 +33,7 @@ public static class NavSectionPolicy
     public static readonly NavSection[] InternalSections =
     [
         NavSection.Primary, NavSection.Akten,
-        NavSection.VerwaltungFreigaben, NavSection.VerwaltungFuehrung, NavSection.VerwaltungAdmin,
+        NavSection.VerwaltungFreigaben, NavSection.VerwaltungBewerbungen,
+        NavSection.VerwaltungFuehrung, NavSection.VerwaltungAdmin,
     ];
 }

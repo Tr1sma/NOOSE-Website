@@ -70,4 +70,24 @@ public static class Permission
                 "Über Hochstufungen auf „Gesichert staatsgefährdend“ entscheidet nur Senior Special Agent aufwärts oder ein Admin.");
         }
     }
+
+    /// <summary>Require recruiting management access (HRB or leadership).</summary>
+    public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
+    {
+        if (!actor.IsHrbOrLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist dem HRB und der Führung vorbehalten.");
+        }
+    }
+
+    /// <summary>Require applicant status (portal owner actions).</summary>
+    public static void RequireApplicant(ClaimsPrincipal actor)
+    {
+        if (!actor.IsApplicant())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist nur für Bewerber verfügbar.");
+        }
+    }
 }

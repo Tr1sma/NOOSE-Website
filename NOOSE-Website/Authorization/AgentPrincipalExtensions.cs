@@ -102,4 +102,10 @@ public static class AgentPrincipalExtensions
     /// <summary>May decide promotions = rank ≥ Deputy Director or admin.</summary>
     public static bool MayPromotionDecide(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.DeputyDirector;
+
+    /// <summary>Public applicant (status Applicant): portal-only access, never an internal agent.</summary>
+    public static bool IsApplicant(this ClaimsPrincipal user) => user.GetStatus() == AgentStatus.Applicant;
+
+    /// <summary>May access recruiting management = HRB member or leadership.</summary>
+    public static bool IsHrbOrLeadership(this ClaimsPrincipal user) => user.IsHRB() || user.IsLeadership();
 }

@@ -29,7 +29,9 @@ public class AgentManagementService(
     public async Task<List<Agent>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await readDb.Users.AsNoTracking().OrderByDescending(a => a.Status == AgentStatus.Pending)
+        // applicants are not agents; they are managed in the recruiting area, never in agent rosters
+        return await readDb.Users.AsNoTracking().Where(a => a.Status != AgentStatus.Applicant)
+            .OrderByDescending(a => a.Status == AgentStatus.Pending)
             .ThenBy(a => a.Codename)
             .ToListAsync(cancellationToken);
     }
@@ -104,6 +106,33 @@ public class AgentManagementService(
 
         Audit(agent, AuditAction.Modified, actor, $"Registrierung abgelehnt: {agent.BlockedReason}");
         await Save(agent, newStamp: true);
+    }
+
+    public async Task PromoteApplicantToAgentAsync(string applicantUserId, Rank rank, bool isTRU, bool isHRB, ClaimsPrincipal actor)
+    {
+        Permission.RequireLeadership(actor);
+
+        var agent = await GetOrThrow(applicantUserId);
+        if (agent.Status != AgentStatus.Applicant)
+        {
+            throw new InvalidOperationException("Nur Bewerber können hochgestuft werden.");
+        }
+        var altRank = agent.Rank;
+        agent.Status = AgentStatus.Active;
+        agent.Rank = rank;
+        agent.IsTRU = isTRU;
+        agent.IsHRB = isHRB;
+        agent.ReleasedAt = DateTime.UtcNow;
+        agent.ReleasedById = actor.GetAgentId();
+        agent.BlockedReason = null;
+
+        HistoryEntryAdd(agent.Id, altRank, rank, actor, "Aus Bewerbung hochgestuft");
+        Audit(agent, AuditAction.Modified, actor,
+            $"Bewerber hochgestuft als {rank}{(isTRU ? " (TRU)" : "")}{(isHRB ? " (HRB)" : "")}");
+        await Save(agent, newStamp: true);
+
+        try { await notifications.NotifyAsync(agent.Id, NotificationType.Account, "Dein NOOSE-Zugang wurde freigeschaltet.", "/"); }
+        catch { /* best effort */ }
     }
 
     public async Task MasterDataChangeAsync(string agentId, string? realName, string codename, string? badgeNumber, ClaimsPrincipal actor)

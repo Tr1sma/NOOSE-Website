@@ -1,0 +1,99 @@
+@page "/bewerbungen"
+@attribute [Authorize(Policy = Policies.HrbOrLeadership)]
+@inject IBewerbungService BewerbungService
+@inject BewerbungBroadcaster Broadcaster
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Bewerbungen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.HowToReg" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Bewerbungen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Übersicht über alle Bewerber. Offene und abgeschlossene Verfahren – inklusive Tests, interner Threads und
+    der Kommunikation mit dem Bewerber – bleiben hier einsehbar.
+</MudText>
+
+<MudTabs Elevation="0" Rounded="true" Class="mb-2" @bind-ActivePanelIndex="_tab">
+    <MudTabPanel Text="@($"Offen ({_open.Count})")" />
+    <MudTabPanel Text="@($"Archiv ({_archived.Count})")" />
+    <MudTabPanel Text="@($"Alle ({_all.Count})")" />
+</MudTabs>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (Current.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine Bewerbungen in dieser Ansicht.</MudAlert>
+}
+else
+{
+    <MudTable Items="Current" Hover="true" Dense="true" OnRowClick="@((TableRowClickEventArgs<Bewerbung> e) => Open(e.Item))"
+              Style="cursor:pointer;">
+        <HeaderContent>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Bearbeiter</MudTh>
+            <MudTh>Eingereicht</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen">@context.CaseNumber</MudTd>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="BewerbungStatusDisplay.ChipColor(context.Status)">
+                    @BewerbungStatusDisplay.Name(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Bearbeiter">@(string.IsNullOrWhiteSpace(context.AssignedAgentName) ? "—" : context.AssignedAgentName)</MudTd>
+            <MudTd DataLabel="Eingereicht">@context.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private int _tab;
+    private List<Bewerbung> _all = new();
+    private List<Bewerbung> _open = new();
+    private List<Bewerbung> _archived = new();
+
+    private List<Bewerbung> Current => _tab switch { 1 => _archived, 2 => _all, _ => _open };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        Broadcaster.Modified += OnModified;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _all = await BewerbungService.ListAsync(_user);
+        _open = _all.Where(b => !BewerbungStatusDisplay.IsTerminal(b.Status)).ToList();
+        _archived = _all.Where(b => BewerbungStatusDisplay.IsTerminal(b.Status)).ToList();
+        _load = false;
+    }
+
+    private void Open(Bewerbung? b)
+    {
+        if (b is not null)
+        {
+            Nav.NavigateTo($"/bewerbungen/{b.Id}");
+        }
+    }
+
+    private void OnModified(string bewerbungId)
+        => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+}

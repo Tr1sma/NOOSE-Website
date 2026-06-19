@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Navigation;
+using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Account;
 
@@ -23,7 +24,9 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
         group.MapPost("/PerformExternalLogin", async (
             [FromServices] SignInManager<Agent> signInManager,
             [FromServices] IAuthenticationSchemeProvider schemeProvider,
-            [FromForm] string? returnUrl) =>
+            [FromForm] string? returnUrl,
+            [FromForm] string? source,
+            [FromForm] string? inviteToken) =>
         {
             // scheme is absent when Discord isn't configured yet
             var schema = await schemeProvider.GetSchemeAsync(DiscordAuthenticationDefaults.AuthenticationScheme);
@@ -33,7 +36,13 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                     "Discord-Login ist noch nicht konfiguriert. Bitte Client-ID und Secret in den User Secrets hinterlegen.");
             }
 
+            // carry the entry context (public application vs invite) into the callback
             var redirectUrl = $"/Account/ExternalLogin?returnUrl={Uri.EscapeDataString(returnUrl ?? "/")}";
+            if (!string.IsNullOrWhiteSpace(source))
+                redirectUrl += $"&source={Uri.EscapeDataString(source)}";
+            if (!string.IsNullOrWhiteSpace(inviteToken))
+                redirectUrl += $"&inviteToken={Uri.EscapeDataString(inviteToken)}";
+
             var properties = signInManager.ConfigureExternalAuthenticationProperties(
                 DiscordAuthenticationDefaults.AuthenticationScheme, redirectUrl);
             return Results.Challenge(properties, [DiscordAuthenticationDefaults.AuthenticationScheme]);
@@ -45,8 +54,11 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromServices] UserManager<Agent> userManager,
             [FromServices] IConfiguration configuration,
             [FromServices] ILoggerFactory loggerFactory,
+            [FromServices] IAgentInviteService inviteService,
             [FromQuery] string? returnUrl,
-            [FromQuery] string? remoteError) =>
+            [FromQuery] string? remoteError,
+            [FromQuery] string? source,
+            [FromQuery] string? inviteToken) =>
         {
             var logger = loggerFactory.CreateLogger("NOOSE.ExternalLogin");
             // empty (not just null) would make LocalRedirect throw
@@ -66,7 +78,35 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             var agent = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
             if (agent is null)
             {
-                agent = await CreateAgentAsync(userManager, info, configuration, logger);
+                var isBootstrap = ReadBootstrapAdminIds(configuration).Contains(info.ProviderKey);
+                if (isBootstrap)
+                {
+                    agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Pending);
+                }
+                else if (string.Equals(source, "invite", StringComparison.OrdinalIgnoreCase))
+                {
+                    // agent onboarding via secret invite link only
+                    if (await inviteService.ValidateAsync(inviteToken) is null)
+                    {
+                        return RedirectToLoginPage("Einladungslink ungültig oder bereits verwendet.");
+                    }
+                    agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Pending);
+                    if (agent is not null)
+                    {
+                        try { await inviteService.ConsumeAsync(inviteToken!, agent.Id); }
+                        catch { /* best effort: account exists, invite race lost */ }
+                    }
+                }
+                else if (string.Equals(source, "bewerbung", StringComparison.OrdinalIgnoreCase))
+                {
+                    agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Applicant);
+                }
+                else
+                {
+                    // invite-only: a plain login can no longer self-register as an agent
+                    return Results.LocalRedirect("/karriere");
+                }
+
                 if (agent is null)
                 {
                     return RedirectToLoginPage("Das NOOSE-Konto konnte nicht angelegt werden.");
@@ -76,9 +116,17 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             {
                 await RefreshMasterDataAsync(userManager, agent, info);
                 await EnsureBootstrapAdminSafeAsync(userManager, agent, configuration, logger);
+
+                // a returning applicant who follows an invite link becomes a pending agent
+                if (agent.Status == AgentStatus.Applicant
+                    && string.Equals(source, "invite", StringComparison.OrdinalIgnoreCase)
+                    && await inviteService.RedeemForExistingAsync(inviteToken, agent.Id))
+                {
+                    return Results.Redirect("/Account/Ausstehend");
+                }
             }
 
-            // only active agents get a session
+            // only active agents get a session into the internal app
             switch (agent.Status)
             {
                 case AgentStatus.Active:
@@ -89,6 +137,9 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                         return Results.LocalRedirect(startRoute);
                     }
                     return Results.LocalRedirect(returnUrl);
+                case AgentStatus.Applicant:
+                    await signInManager.SignInAsync(agent, isPersistent: true);
+                    return Results.LocalRedirect("/portal");
                 case AgentStatus.Pending:
                     return Results.Redirect("/Account/Ausstehend");
                 default:
@@ -155,7 +206,8 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
     }
 
     private static async Task<Agent?> CreateAgentAsync(
-        UserManager<Agent> userManager, ExternalLoginInfo info, IConfiguration configuration, ILogger logger)
+        UserManager<Agent> userManager, ExternalLoginInfo info, IConfiguration configuration, ILogger logger,
+        AgentStatus intendedStatus)
     {
         var discordId = info.ProviderKey;
         var username = info.Principal.FindFirstValue(ClaimTypes.Name);
@@ -173,7 +225,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
             DiscordUsername = username,
             AvatarUrl = ExtractAvatarUrl(info.Principal),
             RegisteredAt = DateTime.UtcNow,
-            Status = isBootstrapAdmin ? AgentStatus.Active : AgentStatus.Pending,
+            Status = isBootstrapAdmin ? AgentStatus.Active : intendedStatus,
             Rank = isBootstrapAdmin ? Rank.Director : null,
             IsAdmin = isBootstrapAdmin,
             ReleasedAt = isBootstrapAdmin ? DateTime.UtcNow : null,

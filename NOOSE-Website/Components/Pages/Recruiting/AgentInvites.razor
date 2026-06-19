@@ -1,0 +1,176 @@
+@page "/admin/einladungen"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject IAgentInviteService InviteService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Einladungen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.PersonAddAlt" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Agent-Einladungen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Geheime, einmalig nutzbare Links, über die sich neue Agents mit Discord registrieren können.
+    Eine Anmeldung über einen Einladungslink landet wie gewohnt im Freigabe-Posteingang und muss
+    angenommen oder abgelehnt werden. Ohne Einladung kann sich niemand mehr als Agent registrieren.
+</MudText>
+
+@if (_user.IsLeadership())
+{
+    <MudPaper Elevation="2" Class="pa-4 mb-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="min-width:240px;" />
+            <MudNumericField @bind-Value="_expiryDays" Label="Gültig (Tage, 0 = unbegrenzt)" Variant="Variant.Outlined"
+                             Margin="Margin.Dense" Min="0" Max="365" Style="max-width:200px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="CreateAsync">Einladungslink erzeugen</MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrEmpty(_lastLink))
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mt-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.body2" Style="word-break:break-all;">@_lastLink</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                   OnClick="() => CopyAsync(_lastLink)" />
+                </MudStack>
+            </MudAlert>
+        }
+    </MudPaper>
+}
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_invites.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Einladungen erstellt.</MudAlert>
+}
+else
+{
+    <MudTable Items="_invites" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Bezeichnung</MudTh>
+            <MudTh>Erstellt</MudTh>
+            <MudTh>Läuft ab</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Link</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Bezeichnung">@(string.IsNullOrWhiteSpace(context.Label) ? "—" : context.Label)</MudTd>
+            <MudTd DataLabel="Erstellt">@context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Läuft ab">@(context.ExpiresAt is { } e ? e.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "—")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="StatusColor(context)">@StatusText(context)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Link">
+                @if (IsOpen(context))
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                   OnClick="() => CopyAsync(LinkFor(context))" />
+                }
+            </MudTd>
+            <MudTd>
+                @if (IsOpen(context) && _user.IsLeadership())
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="() => RevokeAsync(context)" />
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private List<AgentInvite> _invites = new();
+    private string? _label;
+    private int _expiryDays;
+    private string? _lastLink;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _invites = await InviteService.ListAsync(_user);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        try
+        {
+            DateTime? expires = _expiryDays > 0 ? DateTime.UtcNow.AddDays(_expiryDays) : null;
+            var invite = await InviteService.CreateAsync(_label, expires, _user);
+            _lastLink = LinkFor(invite);
+            _label = null;
+            _expiryDays = 0;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RevokeAsync(AgentInvite invite)
+    {
+        try
+        {
+            await InviteService.RevokeAsync(invite.Id, _user);
+            if (_lastLink == LinkFor(invite)) _lastLink = null;
+            await LoadAsync();
+            Snackbar.Add("Einladung widerrufen.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task CopyAsync(string? link)
+    {
+        if (string.IsNullOrEmpty(link)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", link);
+            Snackbar.Add("Link kopiert.", Severity.Success);
+        }
+        catch { /* clipboard unavailable */ }
+    }
+
+    private string LinkFor(AgentInvite invite) => $"{Nav.BaseUri}invite/{invite.Token}";
+
+    private static bool IsOpen(AgentInvite invite)
+        => invite.UsedAt is null && (invite.ExpiresAt is null || invite.ExpiresAt > DateTime.UtcNow);
+
+    private static string StatusText(AgentInvite invite)
+        => invite.UsedAt is not null ? "Eingelöst"
+            : invite.ExpiresAt is { } e && e <= DateTime.UtcNow ? "Abgelaufen"
+            : "Offen";
+
+    private static Color StatusColor(AgentInvite invite)
+        => invite.UsedAt is not null ? Color.Default
+            : invite.ExpiresAt is { } e && e <= DateTime.UtcNow ? Color.Warning
+            : Color.Success;
+}

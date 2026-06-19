@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NOOSE_Website.Data;
 
@@ -11,9 +12,11 @@ using NOOSE_Website.Data;
 namespace NOOSE_Website.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260619114522_Phase30_Bewerbungen")]
+    partial class Phase30_Bewerbungen
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4281,10 +4284,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("GeaendertVonId");
 
-                    b.Property<int?>("PassPercent")
-                        .HasColumnType("int")
-                        .HasColumnName("Bestehensgrenze");
-
                     b.Property<int>("Sorting")
                         .HasColumnType("int")
                         .HasColumnName("Sortierung");
@@ -4334,10 +4333,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstGeloescht");
-
-                    b.Property<bool?>("ManualCorrect")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("ManuellRichtig");
 
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("datetime(6)")
@@ -4488,10 +4483,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("varchar(255)");
 
-                    b.Property<bool?>("CorrectYesNo")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("RichtigJaNein");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("ErstelltAm");
@@ -4512,14 +4503,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstGeloescht");
 
-                    b.Property<string>("Keywords")
-                        .HasColumnType("longtext")
-                        .HasColumnName("Schlagwoerter");
-
-                    b.Property<int?>("MinKeywordHits")
-                        .HasColumnType("int")
-                        .HasColumnName("MindestTreffer");
-
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("GeaendertAm");
@@ -4527,12 +4510,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("ModifiedById")
                         .HasColumnType("longtext")
                         .HasColumnName("GeaendertVonId");
-
-                    b.Property<int>("Points")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1)
-                        .HasColumnName("Punkte");
 
                     b.Property<string>("Prompt")
                         .IsRequired()

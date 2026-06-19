@@ -1,0 +1,272 @@
+@page "/bewerbungs-tests"
+@page "/bewerbungs-tests/{Id}"
+@attribute [Authorize(Policy = Policies.HrbOrLeadership)]
+@inject IBewerbungTestService TestService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Bewerbungs-Tests · NOOSE</PageTitle>
+
+@if (Id is null)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Bewerbungs-Tests</MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+        Wiederverwendbare Eignungstests. Lege Fragen (Multiple Choice, Ja/Nein, Freitext) an und weise einen Test
+        in einer Bewerbung dem Bewerber zu.
+    </MudText>
+
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudTextField @bind-Value="_newTitle" Label="Neuer Test" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:260px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateAsync">Test anlegen</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_tests.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Tests angelegt.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_tests" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Titel</MudTh><MudTh>Status</MudTh><MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Titel">@context.Title</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Aktiv" : "Inaktiv")
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Href="@($"/bewerbungs-tests/{context.Id}")" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteTestAsync(context.Id))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+else if (_model is not null)
+{
+    <MudButton Href="/bewerbungs-tests" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Alle Tests</MudButton>
+
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" Class="mb-2">Test bearbeiten</MudText>
+        <MudTextField @bind-Value="_model.Test.Title" Label="Titel" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+        <MudTextField @bind-Value="_model.Test.Description" Label="Beschreibung" Variant="Variant.Outlined" Lines="2" Class="mb-2" />
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudCheckBox T="bool" @bind-Value="_model.Test.IsActive" Label="Aktiv" />
+            <MudNumericField T="int?" @bind-Value="_model.Test.PassPercent" Label="Bestehensgrenze % (leer = keine)" Min="0" Max="100"
+                             Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:240px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveTestAsync">Speichern</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @foreach (var (qe, qi) in _model.Questions.Select((q, i) => (q, i + 1)))
+    {
+        <MudPaper Elevation="1" Outlined="true" Class="pa-4 mb-3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText Typo="Typo.subtitle2">Frage @qi · @TestQuestionTypeDisplay.Name(qe.Question.Type)</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteQuestionAsync(qe.Question.Id))" />
+            </MudStack>
+            <MudTextField @bind-Value="qe.Question.Prompt" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Fragetext" Variant="Variant.Outlined" Lines="2" Class="mb-2" />
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                <MudCheckBox T="bool" @bind-Value="qe.Question.Required" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Pflichtfrage" />
+                <MudNumericField T="int" @bind-Value="qe.Question.Points" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Punkte" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:110px;" />
+                @if (qe.Question.Type == TestQuestionType.YesNo)
+                {
+                    <MudSelect T="bool?" @bind-Value="qe.Question.CorrectYesNo" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Richtige Antwort" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;">
+                        <MudSelectItem T="bool?" Value="@((bool?)null)">— keine —</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="@((bool?)true)">Ja</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="@((bool?)false)">Nein</MudSelectItem>
+                    </MudSelect>
+                }
+            </MudStack>
+
+            @if (qe.Question.Type == TestQuestionType.FreeText)
+            {
+                <MudTextField @bind-Value="qe.Question.Keywords" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Schlagwörter (eine pro Zeile oder mit Komma)"
+                              Variant="Variant.Outlined" Lines="2" Class="mt-2"
+                              HelperText="Treffer mit Tippfehler-Toleranz wie in der Suche." HelperTextOnFocus="true" />
+                <MudNumericField T="int?" @bind-Value="qe.Question.MinKeywordHits" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Mindesttreffer (leer = alle)"
+                                 Min="1" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" Style="max-width:200px;" />
+            }
+
+            @if (qe.Question.Type == TestQuestionType.MultipleChoice)
+            {
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Antwortoptionen (richtige markieren)</MudText>
+                @foreach (var o in qe.Options)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1">
+                        <MudTextField @bind-Value="o.Label" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:240px;" />
+                        <MudCheckBox T="bool" @bind-Value="o.IsCorrect" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Richtig" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteOptionAsync(qe.Question.Id, o.Id))" />
+                    </MudStack>
+                }
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-2">
+                    <MudTextField Value="@_newOption.GetValueOrDefault(qe.Question.Id, string.Empty)" ValueChanged="@(v => _newOption[qe.Question.Id] = v)"
+                                  T="string" Placeholder="Neue Option" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:240px;" />
+                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddOptionAsync(qe.Question.Id))">Option</MudButton>
+                </MudStack>
+            }
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="@(() => SaveQuestionAsync(qe))">Frage speichern</MudButton>
+                @if (_dirty.Contains(qe.Question.Id))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Edit">Nicht gespeichert</MudChip>
+                }
+                else if (_saved.Contains(qe.Question.Id))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CheckCircle">Gespeichert</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudSelect T="TestQuestionType" @bind-Value="_newType" Label="Fragetyp" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px;">
+                @foreach (var t in Enum.GetValues<TestQuestionType>())
+                {
+                    <MudSelectItem T="TestQuestionType" Value="@t">@TestQuestionTypeDisplay.Name(t)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddQuestionAsync">Frage hinzufügen</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private List<BewerbungTest> _tests = new();
+    private string? _newTitle;
+    private TestEditModel? _model;
+    private TestQuestionType _newType = TestQuestionType.MultipleChoice;
+    private readonly Dictionary<string, string> _newOption = new();
+    private readonly HashSet<string> _dirty = new();
+    private readonly HashSet<string> _saved = new();
+
+    private void MarkDirty(string questionId)
+    {
+        _dirty.Add(questionId);
+        _saved.Remove(questionId);
+    }
+
+    protected override async Task OnInitializedAsync() => _user = (await AuthStateTask).User;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id is null)
+        {
+            _load = true;
+            _tests = await TestService.GetTestsAsync(_user);
+            _load = false;
+        }
+        else
+        {
+            await LoadModelAsync();
+        }
+    }
+
+    private async Task LoadModelAsync() => _model = await TestService.GetEditModelAsync(Id!, _user);
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle))
+        {
+            return;
+        }
+        try
+        {
+            var t = await TestService.CreateTestAsync(_newTitle, null, _user);
+            Nav.NavigateTo($"/bewerbungs-tests/{t.Id}");
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task DeleteTestAsync(string id)
+    {
+        try { await TestService.DeleteTestAsync(id, _user); _tests = await TestService.GetTestsAsync(_user); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task SaveTestAsync()
+    {
+        try
+        {
+            await TestService.UpdateTestAsync(_model!.Test.Id, _model.Test.Title, _model.Test.Description, _model.Test.IsActive, _model.Test.PassPercent, _user);
+            Snackbar.Add("Gespeichert.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task AddQuestionAsync()
+    {
+        try { await TestService.AddQuestionAsync(Id!, _newType, "", true, _user); await LoadModelAsync(); Snackbar.Add("Frage hinzugefügt.", Severity.Success); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task SaveQuestionAsync(TestQuestionEdit qe)
+    {
+        try
+        {
+            var q = qe.Question;
+            await TestService.UpdateQuestionAsync(q.Id, q.Prompt, q.Required, q.Points, q.CorrectYesNo, q.Keywords, q.MinKeywordHits, _user);
+            foreach (var o in qe.Options)
+            {
+                await TestService.UpdateOptionAsync(o.Id, o.Label, o.IsCorrect, _user);
+            }
+            _dirty.Remove(q.Id);
+            _saved.Add(q.Id);
+            Snackbar.Add("Frage gespeichert.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task DeleteQuestionAsync(string questionId)
+    {
+        try
+        {
+            await TestService.DeleteQuestionAsync(questionId, _user);
+            _dirty.Remove(questionId);
+            _saved.Remove(questionId);
+            await LoadModelAsync();
+            Snackbar.Add("Frage gelöscht.", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task AddOptionAsync(string questionId)
+    {
+        var label = _newOption.GetValueOrDefault(questionId);
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return;
+        }
+        try { await TestService.AddOptionAsync(questionId, label, false, _user); _newOption[questionId] = ""; await LoadModelAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task DeleteOptionAsync(string questionId, string optionId)
+    {
+        try { await TestService.DeleteOptionAsync(optionId, _user); await LoadModelAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

@@ -17,6 +17,7 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -151,6 +152,16 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- partner record releases ----
     public DbSet<PartnerShare> PartnerShares => Set<PartnerShare>();
+
+    // ---- recruiting (applications, invites, tests) ----
+    public DbSet<AgentInvite> AgentInvites => Set<AgentInvite>();
+    public DbSet<Bewerbung> Bewerbungen => Set<Bewerbung>();
+    public DbSet<BewerbungMessage> BewerbungMessages => Set<BewerbungMessage>();
+    public DbSet<BewerbungTest> BewerbungTests => Set<BewerbungTest>();
+    public DbSet<BewerbungTestQuestion> BewerbungTestQuestions => Set<BewerbungTestQuestion>();
+    public DbSet<BewerbungTestOption> BewerbungTestOptions => Set<BewerbungTestOption>();
+    public DbSet<BewerbungTestAssignment> BewerbungTestAssignments => Set<BewerbungTestAssignment>();
+    public DbSet<BewerbungTestAnswer> BewerbungTestAnswers => Set<BewerbungTestAnswer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -897,6 +908,99 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(s => s.PartnerAgentId).HasMaxLength(64);
             b.HasIndex(s => new { s.EntityType, s.EntityId });
             b.HasIndex(s => new { s.Agency, s.EntityType, s.EntityId });
+        });
+
+        modelBuilder.Entity<AgentInvite>(b =>
+        {
+            b.Property(i => i.Token).HasMaxLength(64).IsRequired();
+            b.Property(i => i.Label).HasMaxLength(200);
+            b.Property(i => i.CreatedByName).HasMaxLength(128);
+            b.Property(i => i.UsedByUserId).HasMaxLength(64);
+            b.HasIndex(i => i.Token).IsUnique();
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(i => i.UsedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Bewerbung>(b =>
+        {
+            b.Property(v => v.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(v => v.AcademicDegree).HasMaxLength(64);
+            b.Property(v => v.Name).HasMaxLength(200).IsRequired();
+            b.Property(v => v.Employer).HasMaxLength(200);
+            b.Property(v => v.PriorExperience).HasColumnType("longtext");
+            b.Property(v => v.CoverLetter).HasColumnType("longtext");
+            b.Property(v => v.AttachmentFileNameSaved).HasMaxLength(128);
+            b.Property(v => v.AttachmentOriginalName).HasMaxLength(260);
+            b.Property(v => v.AttachmentContentType).HasMaxLength(100);
+            b.Property(v => v.AssignedAgentName).HasMaxLength(128);
+            b.Property(v => v.LinkedPersonId).HasMaxLength(64);
+            b.Property(v => v.DecisionNote).HasColumnType("longtext");
+            b.Property(v => v.DecidedByName).HasMaxLength(128);
+            b.HasIndex(v => v.CaseNumber).IsUnique();
+            b.HasIndex(v => v.Status);
+            b.HasIndex(v => new { v.ApplicantUserId, v.Status });
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(v => v.ApplicantUserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(v => v.AssignedAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Person>().WithMany()
+                .HasForeignKey(v => v.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BewerbungMessage>(b =>
+        {
+            b.Property(m => m.Text).HasColumnType("longtext");
+            b.Property(m => m.AuthorName).HasMaxLength(128);
+            b.HasIndex(m => new { m.BewerbungId, m.Audience });
+            b.HasIndex(m => new { m.BewerbungId, m.CreatedAt });
+            b.HasOne(m => m.Bewerbung).WithMany()
+                .HasForeignKey(m => m.BewerbungId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BewerbungTest>(b =>
+        {
+            b.Property(t => t.Title).HasMaxLength(200).IsRequired();
+            b.Property(t => t.Description).HasColumnType("longtext");
+            b.HasIndex(t => t.IsActive);
+        });
+
+        modelBuilder.Entity<BewerbungTestQuestion>(b =>
+        {
+            b.Property(q => q.Prompt).HasColumnType("longtext");
+            b.Property(q => q.Points).HasDefaultValue(1);
+            b.Property(q => q.Keywords).HasColumnType("longtext");
+            b.HasIndex(q => new { q.TestId, q.Sorting });
+            b.HasOne(q => q.Test).WithMany()
+                .HasForeignKey(q => q.TestId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BewerbungTestOption>(b =>
+        {
+            b.Property(o => o.Label).HasMaxLength(500).IsRequired();
+            b.HasIndex(o => new { o.QuestionId, o.Sorting });
+            b.HasOne(o => o.Question).WithMany()
+                .HasForeignKey(o => o.QuestionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BewerbungTestAssignment>(b =>
+        {
+            b.Property(a => a.AssignedByName).HasMaxLength(128);
+            b.HasIndex(a => a.BewerbungId).IsUnique();
+            b.HasOne(a => a.Bewerbung).WithMany()
+                .HasForeignKey(a => a.BewerbungId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(a => a.Test).WithMany()
+                .HasForeignKey(a => a.TestId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BewerbungTestAnswer>(b =>
+        {
+            b.Property(a => a.SelectedOptionId).HasMaxLength(64);
+            b.Property(a => a.FreeTextAnswer).HasColumnType("longtext");
+            b.HasIndex(a => new { a.AssignmentId, a.QuestionId });
+            b.HasOne(a => a.Assignment).WithMany()
+                .HasForeignKey(a => a.AssignmentId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(a => a.Question).WithMany()
+                .HasForeignKey(a => a.QuestionId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // global soft-delete filter

@@ -38,4 +38,10 @@ public static class Policies
 
     /// <summary>Decide promotions: rank ≥ Deputy Director or admin.</summary>
     public const string PromotionDecide = "BefoerderungEntscheiden";
+
+    /// <summary>Applicant portal access: signed in with status Applicant.</summary>
+    public const string ApplicantPortal = "BewerberPortal";
+
+    /// <summary>Recruiting management access: HRB member or leadership.</summary>
+    public const string HrbOrLeadership = "HrbOderFuehrung";
 }

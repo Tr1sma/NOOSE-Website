@@ -1,0 +1,178 @@
+@implements IAsyncDisposable
+@inject IBewerbungService BewerbungService
+@inject IDocumentTemplateService TemplateService
+@inject BewerbungBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="2" Style="height:52vh;">
+    <div style="flex:1 1 auto; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            @foreach (var m in _messages.AsEnumerable().Reverse())
+            {
+                var own = IsOwn(m);
+                <div style="@(own ? "align-self:flex-end;" : "align-self:flex-start;")max-width:85%;">
+                    <MudPaper Class="pa-2" Elevation="@(own ? 0 : 1)" Outlined="@(!own)"
+                              Style="@(own ? "background-color:var(--mud-palette-primary-hover);" : "")">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.caption"><b>@AuthorLabel(m)</b></MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">· @m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                    </MudPaper>
+                </div>
+            }
+            @if (_messages.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="align-self:center;">Noch keine Nachrichten.</MudText>
+            }
+        }
+    </div>
+
+    @if (CanWrite)
+    {
+        <div>
+            @if (ShowTemplates && _templates.Count > 0)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Default" />
+                    <MudMenu Label="Vorlage einfügen" Variant="Variant.Outlined" Size="Size.Small"
+                             EndIcon="@Icons.Material.Filled.ArrowDropDown">
+                        @foreach (var t in _templates)
+                        {
+                            <MudMenuItem OnClick="@(() => InsertTemplate(t))">@t.Name</MudMenuItem>
+                        }
+                    </MudMenu>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Name wird automatisch geschwärzt.</MudText>
+                </MudStack>
+            }
+            <MudTextField @bind-Value="_text" Variant="Variant.Outlined" Lines="3"
+                          Placeholder="@Placeholder" Immediate="true" />
+            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="SendAsync" Disabled="@(_sends || string.IsNullOrWhiteSpace(_text))">Senden</MudButton>
+            </MudStack>
+        </div>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string BewerbungId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public BewerbungMessageAudience Audience { get; set; } = BewerbungMessageAudience.Intern;
+    [Parameter] public bool IsApplicantView { get; set; }
+    [Parameter] public bool CanWrite { get; set; } = true;
+    [Parameter] public bool ShowTemplates { get; set; }
+
+    private const string Placeholder = "Nachricht verfassen …";
+    private bool _load = true;
+    private bool _sends;
+    private string _text = string.Empty;
+    private string? _myId;
+    private List<BewerbungMessage> _messages = new();
+    private List<DocumentTemplate> _templates = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _myId = User.GetAgentId();
+        Broadcaster.Modified += OnModified;
+        await LoadAsync();
+        if (ShowTemplates)
+        {
+            try
+            {
+                var all = await TemplateService.GetActiveAsync();
+                _templates = all.Where(t => string.Equals(t.Category, "Bewerbung", StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+            catch { /* best effort */ }
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _messages = await BewerbungService.GetMessagesAsync(BewerbungId, Audience, User);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _load = false;
+    }
+
+    private bool IsOwn(BewerbungMessage m)
+        => Audience == BewerbungMessageAudience.Intern
+            ? m.CreatedById == _myId
+            : (IsApplicantView ? m.AuthorIsApplicant : !m.AuthorIsApplicant);
+
+    private string AuthorLabel(BewerbungMessage m)
+    {
+        if (m.AuthorIsApplicant)
+        {
+            return IsApplicantView ? "Du" : "Bewerber";
+        }
+        return string.IsNullOrWhiteSpace(m.AuthorName) ? "NOOSE" : m.AuthorName!;
+    }
+
+    private void InsertTemplate(DocumentTemplate t)
+    {
+        var dienstgrad = User.GetRank() is { } rank ? RankDisplay.Name(rank) : null;
+        var rendered = BewerbungTemplateRenderer.RenderForApplicant(t.ContentHtml, dienstgrad);
+        _text = BewerbungTemplateRenderer.HtmlToText(rendered);
+    }
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_text) || _sends)
+        {
+            return;
+        }
+        _sends = true;
+        try
+        {
+            if (Audience == BewerbungMessageAudience.Intern)
+            {
+                await BewerbungService.PostInternalAsync(BewerbungId, _text, User);
+            }
+            else if (IsApplicantView)
+            {
+                await BewerbungService.PostAsApplicantAsync(BewerbungId, _text, User);
+            }
+            else
+            {
+                await BewerbungService.PostToApplicantAsync(BewerbungId, _text, User);
+            }
+            _text = string.Empty; // broadcaster refreshes
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _sends = false;
+    }
+
+    private void OnModified(string bewerbungId)
+    {
+        if (bewerbungId != BewerbungId)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Broadcaster.Modified -= OnModified;
+        return ValueTask.CompletedTask;
+    }
+}

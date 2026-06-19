@@ -1,0 +1,203 @@
+@implements IDisposable
+@inject IBewerbungTestService TestService
+@inject BewerbungBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudText Typo="Typo.h6" Class="mb-2">Eignungstest</MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_assignment is null)
+    {
+        @if (_canWrite)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudSelect T="string" @bind-Value="_selectedTestId" Label="Test auswählen" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Style="min-width:240px;">
+                    @foreach (var t in _tests)
+                    {
+                        <MudSelectItem T="string" Value="@t.Id">@t.Title</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AssignmentInd"
+                           OnClick="AssignAsync" Disabled="@string.IsNullOrEmpty(_selectedTestId)">Zuweisen</MudButton>
+            </MudStack>
+            @if (_tests.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                    Noch keine aktiven Tests vorhanden. Lege unter „Bewerbungs-Tests“ einen Test an.
+                </MudText>
+            }
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein Test zugewiesen.</MudText>
+        }
+    }
+    else if (_assignment.CompletedAt is null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Test wurde zugewiesen und wartet auf die Beantwortung durch den Bewerber.
+        </MudAlert>
+    }
+    else if (_eval is not null)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-2">
+            <MudText Typo="Typo.subtitle2">
+                @_eval.Title · abgeschlossen am @_assignment.CompletedAt!.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+            </MudText>
+            <MudSpacer />
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                @_eval.TotalPoints / @_eval.MaxPoints Punkte (@_eval.Percent %)
+            </MudChip>
+            @if (_eval.Passed is true)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Bestanden (≥@_eval.PassPercent %)</MudChip>
+            }
+            else if (_eval.Passed is false)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Cancel">Nicht bestanden (≥@_eval.PassPercent %)</MudChip>
+            }
+        </MudStack>
+        <MudStack Spacing="2">
+            @foreach (var (item, i) in _eval.Items.Select((x, i) => (x, i + 1)))
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body2"><b>@i. @item.Prompt</b></MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@item.AwardedPoints / @item.Points P.</MudText>
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1">
+                        @if (item.EffectiveCorrect is true)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                        }
+                        else if (item.EffectiveCorrect is false)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Color="Color.Default" Size="Size.Small" />
+                        }
+                        <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(item.AnswerText) ? "— keine Antwort —" : item.AnswerText)</MudText>
+                        @if (item.ManualCorrect is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">manuell</MudChip>
+                        }
+                    </MudStack>
+
+                    @if (item.EffectiveCorrect is not true && !string.IsNullOrWhiteSpace(item.CorrectAnswer))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Richtig: @item.CorrectAnswer</MudText>
+                    }
+
+                    @if (item.Type == TestQuestionType.FreeText && (item.MatchedKeywords.Count > 0 || item.MissedKeywords.Count > 0))
+                    {
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                            @foreach (var k in item.MatchedKeywords)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Check">@k</MudChip>
+                            }
+                            @foreach (var k in item.MissedKeywords)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Close">@k</MudChip>
+                            }
+                        </MudStack>
+                    }
+
+                    @if (_canWrite && item.AnswerId is not null)
+                    {
+                        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="mt-2">
+                            <MudButton Color="Color.Success" Variant="@(item.ManualCorrect is true ? Variant.Filled : Variant.Outlined)"
+                                       OnClick="@(() => SetGradeAsync(item.AnswerId!, true))">Richtig</MudButton>
+                            <MudButton Color="Color.Error" Variant="@(item.ManualCorrect is false ? Variant.Filled : Variant.Outlined)"
+                                       OnClick="@(() => SetGradeAsync(item.AnswerId!, false))">Falsch</MudButton>
+                            <MudButton Color="Color.Default" Variant="@(item.ManualCorrect is null ? Variant.Filled : Variant.Outlined)"
+                                       OnClick="@(() => SetGradeAsync(item.AnswerId!, null))">Auto</MudButton>
+                        </MudButtonGroup>
+                    }
+                </MudPaper>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string BewerbungId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _canWrite;
+    private string? _selectedTestId;
+    private List<BewerbungTest> _tests = new();
+    private BewerbungTestAssignment? _assignment;
+    private TestEvaluation? _eval;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canWrite = User.MayWrite();
+        Broadcaster.Modified += OnModified;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _assignment = await TestService.GetAssignmentAsync(BewerbungId, User);
+        if (_assignment is null)
+        {
+            _tests = (await TestService.GetTestsAsync(User)).Where(t => t.IsActive).ToList();
+        }
+        else if (_assignment.CompletedAt is not null)
+        {
+            _eval = await TestService.GetEvaluationAsync(BewerbungId, User);
+        }
+        _load = false;
+    }
+
+    private async Task AssignAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedTestId))
+        {
+            return;
+        }
+        try
+        {
+            await TestService.AssignAsync(BewerbungId, _selectedTestId, User);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SetGradeAsync(string answerId, bool? value)
+    {
+        try
+        {
+            await TestService.SetManualGradeAsync(answerId, value, User);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void OnModified(string id)
+    {
+        if (id != BewerbungId)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+}

@@ -1,0 +1,52 @@
+@page "/invite/{Token}"
+@layout PublicLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@inject IAgentInviteService InviteService
+
+<PageTitle>Einladung · NOOSE</PageTitle>
+
+<MudPaper Elevation="4" Class="pa-8" Style="max-width:480px;margin:0 auto;">
+    <MudStack AlignItems="AlignItems.Center" Spacing="4">
+        @if (_valid)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.MarkEmailRead" Color="Color.Success" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Align="Align.Center">Einladung zum NOOSE-Zugang</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="mud-text-secondary">
+                Melde dich mit Discord an, um deinen Zugang anzufordern. Anschließend muss dein
+                Konto von der Führung freigegeben werden.
+            </MudText>
+
+            <form method="post" action="/Account/PerformExternalLogin" style="width:100%;">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="/Account/Ausstehend" />
+                <input type="hidden" name="source" value="invite" />
+                <input type="hidden" name="inviteToken" value="@Token" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           Size="Size.Large" FullWidth="true" StartIcon="@Icons.Material.Filled.Login">
+                    Mit Discord beitreten
+                </MudButton>
+            </form>
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Error" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Align="Align.Center">Einladung ungültig</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="mud-text-secondary">
+                Dieser Einladungslink ist ungültig, abgelaufen oder wurde bereits verwendet.
+                Bitte wende dich an deine Kontaktperson bei NOOSE.
+            </MudText>
+            <MudButton Href="/karriere" Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Work">Zur Karriereseite</MudButton>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public string Token { get; set; } = string.Empty;
+
+    private bool _valid;
+
+    protected override async Task OnInitializedAsync()
+        => _valid = await InviteService.ValidateAsync(Token) is not null;
+}

@@ -1,0 +1,222 @@
+@page "/bewerbungen/{Id}"
+@attribute [Authorize(Policy = Policies.HrbOrLeadership)]
+@inject IBewerbungService BewerbungService
+@inject BewerbungBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Bewerbung · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_b is null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">Bewerbung nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudButton Href="/bewerbungen" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Übersicht</MudButton>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h4">@_b.Name</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Aktenzeichen @_b.CaseNumber · eingereicht @_b.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+        </MudStack>
+        <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(_b.Status)" Variant="Variant.Filled">@BewerbungStatusDisplay.Name(_b.Status)</MudChip>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Stammdaten</MudText>
+                <MudSimpleTable Dense="true" Bordered="false" Striped="false" Style="background:transparent;">
+                    <tbody>
+                        <tr><td class="mud-text-secondary">Akademischer Grad</td><td>@Or(_b.AcademicDegree)</td></tr>
+                        <tr><td class="mud-text-secondary">Name</td><td>@_b.Name</td></tr>
+                        <tr><td class="mud-text-secondary">Geburtsdatum</td><td>@(_b.BirthDate?.ToString("dd.MM.yyyy") ?? "—")</td></tr>
+                        <tr><td class="mud-text-secondary">Arbeitgeber</td><td>@Or(_b.Employer)</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+                @if (!string.IsNullOrWhiteSpace(_b.PriorExperience))
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-3">Vorerfahrung</MudText>
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@_b.PriorExperience</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(_b.CoverLetter))
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-3">Anschreiben</MudText>
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@_b.CoverLetter</MudText>
+                }
+                @if (_b.AttachmentFileNameSaved is not null)
+                {
+                    <MudButton Href="@($"/dateien/bewerbungen/anhang/{_b.Id}")" Target="_blank" Variant="Variant.Outlined"
+                               Size="Size.Small" StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-3">
+                        Anhang: @(_b.AttachmentOriginalName ?? "Datei")
+                    </MudButton>
+                }
+            </MudPaper>
+
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Bearbeitung</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.body2">Bearbeiter: <b>@Or(_b.AssignedAgentName)</b></MudText>
+                    @if (_canWrite)
+                    {
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.PersonPin"
+                                   OnClick="AssignSelf">Mir zuweisen</MudButton>
+                    }
+                </MudStack>
+
+                @if (!BewerbungStatusDisplay.IsTerminal(_b.Status))
+                {
+                    @if (_canWrite)
+                    {
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                @if (_b.Status == BewerbungStatus.Eingereicht)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                               OnClick="@(() => SetStatus(BewerbungStatus.InSicherheitspruefung))">Sicherheitsüberprüfung starten</MudButton>
+                                }
+                                @if (_b.Status == BewerbungStatus.InSicherheitspruefung)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                               OnClick="@(() => SetSecurity(true))">Sicherheit bestanden</MudButton>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => SetSecurity(false))">Sicherheit nicht bestanden</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                               OnClick="@(() => SetStatus(BewerbungStatus.ImTest))">Zum Test</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                               OnClick="@(() => SetStatus(BewerbungStatus.ImVorstellungsgespraech))">Zum Gespräch</MudButton>
+                                }
+                                @if (_b.Status == BewerbungStatus.ImTest)
+                                {
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                               OnClick="@(() => SetStatus(BewerbungStatus.ImVorstellungsgespraech))">Zum Gespräch</MudButton>
+                                }
+                                @if (_b.Status == BewerbungStatus.ImVorstellungsgespraech)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                               OnClick="@(() => SetStatus(BewerbungStatus.Angenommen))">Annehmen</MudButton>
+                                }
+                            </MudStack>
+                            <MudTextField @bind-Value="_note" Label="Notiz (für Annahme/Ablehnung/Schließen)" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Lines="2" />
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => SetStatus(BewerbungStatus.Abgelehnt))">Ablehnen</MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                                           OnClick="@(() => SetStatus(BewerbungStatus.Geschlossen))">Schließen</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    }
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Abgeschlossen@(string.IsNullOrWhiteSpace(_b.DecidedByName) ? "" : $" von {_b.DecidedByName}")@(_b.DecidedAt is { } d ? $" am {d.ToLocalTime():dd.MM.yyyy HH:mm}" : "").
+                        @if (!string.IsNullOrWhiteSpace(_b.DecisionNote)) { <text> Notiz: @_b.DecisionNote</text> }
+                    </MudAlert>
+                }
+            </MudPaper>
+
+            <div class="mb-4">
+                <BewerbungPersonPanel BewerbungId="@_b.Id" User="_user" LinkedPersonId="@_b.LinkedPersonId" />
+            </div>
+
+            <div class="mb-4">
+                <BewerbungTestPanel BewerbungId="@_b.Id" User="_user" />
+            </div>
+
+            <BewerbungPromotePanel ApplicantUserId="@_b.ApplicantUserId" User="_user" ApplicantName="@_b.Name"
+                                   OnPromoted="OnPromoted" />
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Interner Thread (HRB/Führung)</MudText>
+                <BewerbungMessagePanel BewerbungId="@_b.Id" User="_user" Audience="BewerbungMessageAudience.Intern"
+                                       IsApplicantView="false" CanWrite="_canWrite" />
+            </MudPaper>
+
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Kommunikation mit dem Bewerber</MudText>
+                <BewerbungMessagePanel BewerbungId="@_b.Id" User="_user" Audience="BewerbungMessageAudience.Bewerber"
+                                       IsApplicantView="false" CanWrite="_canWrite" ShowTemplates="true" />
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _canWrite;
+    private Bewerbung? _b;
+    private string? _note;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _canWrite = _user.MayWrite();
+        Broadcaster.Modified += OnModified;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _b = await BewerbungService.GetForHrbAsync(Id, _user);
+        _load = false;
+    }
+
+    private async Task AssignSelf()
+    {
+        try { await BewerbungService.AssignSelfAsync(Id, _user); await LoadAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task SetStatus(BewerbungStatus target)
+    {
+        try
+        {
+            await BewerbungService.SetStatusAsync(Id, target, _note, _user);
+            _note = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task SetSecurity(bool passed)
+    {
+        try { await BewerbungService.SetSecurityResultAsync(Id, passed, _user); await LoadAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task OnPromoted()
+    {
+        Snackbar.Add("Bewerber wurde hochgestuft.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private static string Or(string? v) => string.IsNullOrWhiteSpace(v) ? "—" : v!;
+
+    private void OnModified(string id)
+    {
+        if (id != Id)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+}

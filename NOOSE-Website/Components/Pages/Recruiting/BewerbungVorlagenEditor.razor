@@ -1,0 +1,120 @@
+@page "/bewerbungs-vorlagen/neu"
+@page "/bewerbungs-vorlagen/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.HrbOrLeadership)]
+@inject IBewerbungTemplateService TemplateService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_edit ? "Vorlage bearbeiten" : "Neue Vorlage") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit && !_found)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Vorlage nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="Cancel" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.MarkEmailRead" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(_edit ? "Vorlage bearbeiten" : "Neue Vorlage")</MudText>
+        <MudSpacer />
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
+        <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_name" Label="Name der Vorlage" Variant="Variant.Outlined" Required="true" AutoFocus="true" />
+            <MudTextField @bind-Value="_description" Label="Beschreibung (optional)" Lines="2" Variant="Variant.Outlined" />
+            <MudSwitch @bind-Value="_isActive" Color="Color.Primary" Label="Aktiv (einfügbar)" />
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                <MudText Typo="Typo.body2" Class="mb-1">Platzhalter im Text:</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">NAME (wird geschwärzt)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">DATUM</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">UHRZEIT</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">DIENSTGRAD</MudChip>
+                </MudStack>
+            </MudAlert>
+
+            <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" />
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private RichTextEditor _editor = default!;
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _edit;
+    private bool _found;
+    private bool _saves;
+    private string _name = string.Empty;
+    private string? _description;
+    private bool _isActive = true;
+    private string? _contentHtml;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _edit = !string.IsNullOrEmpty(Id);
+        if (_edit)
+        {
+            var template = await TemplateService.GetAsync(Id!, _user);
+            if (template is not null)
+            {
+                _found = true;
+                _name = template.Name;
+                _description = template.Description;
+                _isActive = template.IsActive;
+                _contentHtml = template.ContentHtml;
+            }
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Bitte einen Namen angeben.", Severity.Warning);
+            return;
+        }
+        _saves = true;
+        try
+        {
+            var html = await _editor.GetHtmlAsync();
+            if (_edit)
+            {
+                await TemplateService.UpdateAsync(Id!, _name, _description, html, _isActive, _user);
+            }
+            else
+            {
+                await TemplateService.CreateAsync(_name, _description, html, _isActive, _user);
+            }
+            Snackbar.Add("Vorlage gespeichert.", Severity.Success);
+            Nav.NavigateTo("/bewerbungs-vorlagen");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private void Cancel() => Nav.NavigateTo("/bewerbungs-vorlagen");
+}

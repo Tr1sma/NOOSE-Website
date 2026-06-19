@@ -31,6 +31,9 @@ public enum NotificationType
 
     /// <summary>New situation report.</summary>
     SituationReport = 8,
+
+    /// <summary>Recruiting/application event.</summary>
+    Recruiting = 9,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -47,6 +50,7 @@ public static class NotificationTypeDisplay
         NotificationType.Followup => "Wiedervorlage fällig",
         NotificationType.AppointmentAssigned => "Termin",
         NotificationType.SituationReport => "Lagebericht",
+        NotificationType.Recruiting => "Bewerbung",
         _ => "Benachrichtigung",
     };
 
@@ -62,6 +66,7 @@ public static class NotificationTypeDisplay
         NotificationType.Followup => Icons.Material.Filled.EventRepeat,
         NotificationType.AppointmentAssigned => Icons.Material.Filled.Event,
         NotificationType.SituationReport => Icons.Material.Filled.Assessment,
+        NotificationType.Recruiting => Icons.Material.Filled.HowToReg,
         _ => Icons.Material.Filled.Notifications,
     };
 }

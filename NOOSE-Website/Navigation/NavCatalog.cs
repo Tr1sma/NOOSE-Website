@@ -44,6 +44,11 @@ public static class NavCatalog
 
         new NavEntry("admin.freigaben", "/admin/freigaben", Icons.Material.Filled.HowToReg, "Freigaben", NavSection.VerwaltungFreigaben, BadgeKey: "shares"),
 
+        new NavEntry("bewerbungen", "/bewerbungen", Icons.Material.Filled.HowToReg, "Bewerbungen", NavSection.VerwaltungBewerbungen),
+        new NavEntry("bewerbungen.tests", "/bewerbungs-tests", Icons.Material.Filled.Quiz, "Bewerbungs-Tests", NavSection.VerwaltungBewerbungen),
+        new NavEntry("bewerbungen.vorlagen", "/bewerbungs-vorlagen", Icons.Material.Filled.MarkEmailRead, "Bewerbungs-Vorlagen", NavSection.VerwaltungBewerbungen),
+
+        new NavEntry("admin.einladungen", "/admin/einladungen", Icons.Material.Filled.PersonAddAlt, "Einladungen", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.tags", "/admin/tags", Icons.Material.Filled.Label, "Tags", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.vorlagen", "/admin/vorlagen", Icons.Material.Filled.Dvr, "Vorlagen", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.custom-felder", "/admin/custom-felder", Icons.Material.Filled.Tune, "Custom-Felder", NavSection.VerwaltungFuehrung),

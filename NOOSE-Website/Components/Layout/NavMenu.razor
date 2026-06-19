@@ -38,6 +38,17 @@
         }
     </MudNavGroup>
 
+    @* Recruiting management: HRB members and leadership (HRB is rank-independent, so this sits outside the leadership nesting). *@
+    <AuthorizeView Policy="@Policies.HrbOrLeadership" Context="bewerbungenNav">
+        <MudNavGroup Title="Bewerbungen" Icon="@Icons.Material.Filled.HowToReg"
+                     Expanded="@(!IsCollapsed("Bewerbungen"))" ExpandedChanged="@(v => GroupToggledAsync("Bewerbungen", v))">
+            @foreach (var entry in SectionEntries(NavSection.VerwaltungBewerbungen))
+            {
+                @NavLink(entry)
+            }
+        </MudNavGroup>
+    </AuthorizeView>
+
     @* Senior Special Agent+ reaches the release inbox; the rest stays leadership/admin (Page-policies also let read-only oversight in). *@
     <AuthorizeView Policy="@Policies.HighestClassificationPage" Context="posteingang">
         <MudNavGroup Title="Verwaltung" Icon="@Icons.Material.Filled.AdminPanelSettings"

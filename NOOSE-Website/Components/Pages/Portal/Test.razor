@@ -1,0 +1,142 @@
+@page "/portal/test"
+@layout ApplicantPortalLayout
+@attribute [AllowAnonymous]
+@inject IBewerbungTestService TestService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Eignungstest · NOOSE</PageTitle>
+
+@if (_ready && _test is not null)
+{
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="4">
+            <MudText Typo="Typo.h4">@_test.Title</MudText>
+            @if (!string.IsNullOrWhiteSpace(_test.Description))
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_test.Description</MudText>
+            }
+
+            @if (_test.Completed)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
+                    Du hast diesen Test bereits abgeschlossen.
+                </MudAlert>
+                <MudButton Variant="Variant.Outlined" Href="/portal/status" StartIcon="@Icons.Material.Filled.ArrowBack">Zurück</MudButton>
+            }
+            else
+            {
+                @foreach (var (q, index) in _test.Questions.Select((q, i) => (q, i + 1)))
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            @index. @q.Prompt @(q.Required ? "*" : "")
+                        </MudText>
+
+                        @switch (q.Type)
+                        {
+                            case TestQuestionType.MultipleChoice:
+                                <MudRadioGroup T="string" Value="@_choice.GetValueOrDefault(q.QuestionId)"
+                                               ValueChanged="@(v => _choice[q.QuestionId] = v)">
+                                    @foreach (var o in q.Options)
+                                    {
+                                        <MudRadio T="string" Value="@o.OptionId">@o.Label</MudRadio>
+                                    }
+                                </MudRadioGroup>
+                                break;
+
+                            case TestQuestionType.YesNo:
+                                <MudRadioGroup T="string" Value="@_text.GetValueOrDefault(q.QuestionId)"
+                                               ValueChanged="@(v => _text[q.QuestionId] = v)">
+                                    <MudRadio T="string" Value="@("Ja")">Ja</MudRadio>
+                                    <MudRadio T="string" Value="@("Nein")">Nein</MudRadio>
+                                </MudRadioGroup>
+                                break;
+
+                            default:
+                                <MudTextField T="string" Value="@_text.GetValueOrDefault(q.QuestionId)"
+                                              ValueChanged="@(v => _text[q.QuestionId] = v)"
+                                              Variant="Variant.Outlined" Lines="3" />
+                                break;
+                        }
+                    </MudPaper>
+                }
+
+                <MudStack Row="true" Justify="Justify.FlexEnd">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                               OnClick="SubmitAsync" Disabled="_busy">Test absenden</MudButton>
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _ready;
+    private bool _busy;
+    private TestView? _test;
+    private readonly Dictionary<string, string> _choice = new();
+    private readonly Dictionary<string, string> _text = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (!_user.IsApplicant())
+        {
+            Nav.NavigateTo("/karriere", forceLoad: true);
+            return;
+        }
+        _test = await TestService.GetAssignedForApplicantAsync(_user);
+        if (_test is null)
+        {
+            Nav.NavigateTo("/portal/status");
+            return;
+        }
+        _ready = true;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_test is null)
+        {
+            return;
+        }
+        var answers = new List<TestAnswerInput>();
+        foreach (var q in _test.Questions)
+        {
+            var input = new TestAnswerInput { QuestionId = q.QuestionId };
+            if (q.Type == TestQuestionType.MultipleChoice)
+            {
+                input.SelectedOptionId = _choice.GetValueOrDefault(q.QuestionId);
+            }
+            else
+            {
+                input.FreeText = _text.GetValueOrDefault(q.QuestionId);
+            }
+
+            if (q.Required && string.IsNullOrWhiteSpace(input.SelectedOptionId) && string.IsNullOrWhiteSpace(input.FreeText))
+            {
+                Snackbar.Add("Bitte beantworte alle Pflichtfragen.", Severity.Warning);
+                return;
+            }
+            answers.Add(input);
+        }
+
+        _busy = true;
+        try
+        {
+            await TestService.SubmitAnswersAsync(_test.AssignmentId, answers, _user);
+            Snackbar.Add("Test übermittelt.", Severity.Success);
+            Nav.NavigateTo("/portal/status");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _busy = false;
+        }
+    }
+}

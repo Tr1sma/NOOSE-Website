@@ -1,0 +1,63 @@
+@inject IAgentManagementService AgentService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@if (User.IsLeadership())
+{
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-2">Zum Agent hochstufen</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Stuft den Bewerber direkt zu einem aktiven NOOSE-Agent hoch. Der Bewerber-Zugang endet, der interne
+            Zugang beginnt. Nur die Führung kann diese Aktion ausführen.
+        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+            <MudSelect T="Rank" @bind-Value="_rank" Label="Dienstgrad" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       Style="min-width:220px;">
+                @foreach (var r in Ranks)
+                {
+                    <MudSelectItem T="Rank" Value="@r">@RankDisplay.Name(r)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudCheckBox T="bool" @bind-Value="_tru" Label="TRU" />
+            <MudCheckBox T="bool" @bind-Value="_hrb" Label="HRB" />
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.MilitaryTech"
+                       OnClick="PromoteAsync" Disabled="_busy">Hochstufen</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter, EditorRequired] public string ApplicantUserId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public string? ApplicantName { get; set; }
+    [Parameter] public EventCallback OnPromoted { get; set; }
+
+    private static readonly Rank[] Ranks = Enum.GetValues<Rank>();
+    private Rank _rank = Rank.JuniorAgent;
+    private bool _tru;
+    private bool _hrb;
+    private bool _busy;
+
+    private async Task PromoteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Bewerber hochstufen?",
+            $"{ApplicantName ?? "Der Bewerber"} wird als {RankDisplay.Name(_rank)} freigeschaltet und wird ein aktiver NOOSE-Agent.",
+            "Hochstufen");
+        if (!ok)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await AgentService.PromoteApplicantToAgentAsync(ApplicantUserId, _rank, _tru, _hrb, User);
+            Snackbar.Add("Bewerber wurde zum Agent hochgestuft.", Severity.Success);
+            await OnPromoted.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _busy = false;
+    }
+}

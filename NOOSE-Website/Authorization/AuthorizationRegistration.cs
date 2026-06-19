@@ -50,7 +50,14 @@ public static class AuthorizationRegistration
                 .AddRequirements(new RankRequirement(Rank.SeniorSpecialAgent)))
             .AddPolicy(Policies.PromotionDecide, p => p
                 .RequireAuthenticatedUser()
-                .AddRequirements(new RankRequirement(Rank.DeputyDirector)));
+                .AddRequirements(new RankRequirement(Rank.DeputyDirector)))
+            // recruiting
+            .AddPolicy(Policies.ApplicantPortal, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.GetStatus() == AgentStatus.Applicant))
+            .AddPolicy(Policies.HrbOrLeadership, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IsHrbOrLeadership()));
 
         return services;
     }

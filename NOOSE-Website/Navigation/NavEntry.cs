@@ -8,6 +8,7 @@ public enum NavSection
     Primary,
     Akten,
     VerwaltungFreigaben,
+    VerwaltungBewerbungen,
     VerwaltungFuehrung,
     VerwaltungAdmin,
     Partner,

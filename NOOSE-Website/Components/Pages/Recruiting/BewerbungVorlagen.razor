@@ -1,0 +1,75 @@
+@page "/bewerbungs-vorlagen"
+@attribute [Authorize(Policy = Policies.HrbOrLeadership)]
+@inject IBewerbungTemplateService TemplateService
+@inject ISnackbar Snackbar
+
+<PageTitle>Bewerbungs-Vorlagen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.MarkEmailRead" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Bewerbungs-Vorlagen</MudText>
+    </MudStack>
+    <MudButton Href="/bewerbungs-vorlagen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Vorlage</MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Wiederverwendbare Anschreiben an Bewerber. Beim Einfügen in die Bewerber-Kommunikation wird der Name automatisch
+    geschwärzt; DATUM, UHRZEIT und DIENSTGRAD werden ausgefüllt.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_templates.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Vorlagen vorhanden.</MudAlert>
+}
+else
+{
+    <MudTable Items="_templates" Dense="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh><MudTh>Status</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                    @(context.IsActive ? "Aktiv" : "Inaktiv")
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Href="@($"/bewerbungs-vorlagen/{context.Id}/bearbeiten")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteAsync(context.Id))" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private List<DocumentTemplate> _templates = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _templates = await TemplateService.ListAsync(_user);
+        _load = false;
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        try { await TemplateService.DeleteAsync(id, _user); await LoadAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

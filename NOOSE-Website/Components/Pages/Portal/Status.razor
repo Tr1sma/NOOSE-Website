@@ -1,0 +1,104 @@
+@page "/portal/status"
+@layout ApplicantPortalLayout
+@attribute [AllowAnonymous]
+@inject IBewerbungService BewerbungService
+@inject IBewerbungTestService TestService
+@inject NavigationManager Nav
+
+<PageTitle>Status · NOOSE</PageTitle>
+
+@if (_ready)
+{
+    <MudStack Spacing="4">
+        <MudPaper Elevation="4" Class="pa-6">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h5">Status deiner Bewerbung</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Aktenzeichen @_bewerbung.CaseNumber</MudText>
+                </MudStack>
+                <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(_bewerbung.Status)" Variant="Variant.Filled">
+                    @BewerbungStatusDisplay.Name(_bewerbung.Status)
+                </MudChip>
+            </MudStack>
+
+            <MudDivider Class="my-4" />
+
+            @if (_bewerbung.Status == BewerbungStatus.Abgelehnt || _bewerbung.Status == BewerbungStatus.Geschlossen)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Dein Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTimeline TimelinePosition="TimelinePosition.Start">
+                    @foreach (var step in Steps)
+                    {
+                        <MudTimelineItem Color="@(StepReached(step) ? Color.Primary : Color.Default)"
+                                         Variant="@(step == _bewerbung.Status ? Variant.Filled : Variant.Outlined)">
+                            <MudText Typo="Typo.body2">@BewerbungStatusDisplay.Name(step)</MudText>
+                        </MudTimelineItem>
+                    }
+                </MudTimeline>
+            }
+
+            @if (_test is { Completed: false } && _bewerbung.Status == BewerbungStatus.ImTest)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Quiz"
+                           Href="/portal/test" Class="mt-2">Eignungstest ausfüllen</MudButton>
+            }
+            else if (_test is { Completed: true })
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mt-2">
+                    Dein Eignungstest wurde übermittelt.
+                </MudAlert>
+            }
+        </MudPaper>
+
+        <MudPaper Elevation="4" Class="pa-6">
+            <MudText Typo="Typo.h6" Class="mb-2">Kommunikation mit dem NOOSE</MudText>
+            <BewerbungMessagePanel BewerbungId="@_bewerbung.Id" User="_user"
+                                   Audience="BewerbungMessageAudience.Bewerber" IsApplicantView="true" CanWrite="true" />
+        </MudPaper>
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private static readonly BewerbungStatus[] Steps =
+    [
+        BewerbungStatus.Eingereicht,
+        BewerbungStatus.InSicherheitspruefung,
+        BewerbungStatus.ImTest,
+        BewerbungStatus.ImVorstellungsgespraech,
+        BewerbungStatus.Angenommen,
+    ];
+
+    private ClaimsPrincipal _user = default!;
+    private bool _ready;
+    private Bewerbung _bewerbung = default!;
+    private TestView? _test;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (!_user.IsApplicant())
+        {
+            Nav.NavigateTo("/karriere", forceLoad: true);
+            return;
+        }
+        var own = await BewerbungService.GetOwnAsync(_user);
+        if (own is null)
+        {
+            Nav.NavigateTo("/portal");
+            return;
+        }
+        _bewerbung = own;
+        _test = await TestService.GetAssignedForApplicantAsync(_user);
+        _ready = true;
+    }
+
+    private bool StepReached(BewerbungStatus step) => (int)_bewerbung.Status >= (int)step;
+}

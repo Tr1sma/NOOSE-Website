@@ -1,0 +1,38 @@
+@inherits LayoutComponentBase
+
+@* Shell for the authenticated applicant portal; no internal nav, no maintenance wall. *@
+<MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div style="min-height:100vh;background:#0E1116;padding:24px 16px;">
+    <div style="max-width:860px;margin:0 auto;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudImage Src="NooseIcon.png" Alt="NOOSE Wappen" Height="40" />
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:.12em;line-height:1.1;">N.O.O.S.E.</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Bewerber-Portal</MudText>
+                </MudStack>
+            </MudStack>
+            <form method="post" action="/Account/Logout">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="/karriere" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Logout">Abmelden</MudButton>
+            </form>
+        </MudStack>
+
+        @Body
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="mt-6">
+            <MudLink Href="@LegalData.ImprintUrl" Target="_blank" rel="noopener noreferrer"
+                     Typo="Typo.caption" Color="Color.Default">Impressum</MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+            <MudLink Href="/datenschutz" Typo="Typo.caption" Color="Color.Default">Datenschutz</MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">·</MudText>
+            <MudLink Href="/nutzungsbedingungen" Typo="Typo.caption" Color="Color.Default">Nutzungsbedingungen</MudLink>
+        </MudStack>
+    </div>
+</div>

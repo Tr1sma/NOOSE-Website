@@ -1,0 +1,38 @@
+@page "/karriere"
+@layout PublicLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Karriere · NOOSE</PageTitle>
+
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Bewerbung beim National Office of Security Enforcement</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            Das NOOSE rekrutiert ausgewählte Bewerber für den Dienst in der Criminal Investigation Division.
+            Das Auswahlverfahren umfasst eine Sicherheitsüberprüfung, ggf. einen Eignungstest und ein
+            persönliches Vorstellungsgespräch. Der gesamte Ablauf wird vertraulich über dieses Portal abgewickelt.
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Melde dich mit Discord an, um eine Bewerbung einzureichen und ihren Status zu verfolgen.
+        </MudAlert>
+
+        <div>
+            <form method="post" action="/Account/PerformExternalLogin">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="/portal" />
+                <input type="hidden" name="source" value="bewerbung" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
+                    Mit Discord bewerben
+                </MudButton>
+            </form>
+        </div>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Das National Office of Security Enforcement entspricht hohen Standards und der höchsten Stufe der
+            Geheimhaltung. Sprich mit niemandem über dein Interesse oder den Stand des Auswahlverfahrens.
+        </MudText>
+    </MudStack>
+</MudPaper>
