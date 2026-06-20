@@ -42,7 +42,7 @@ public partial class PlaceholderService(IDbContextFactory<AppDbContext> dbFactor
         {
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
             // resolve visible records only (no classified names for non-leadership)
-            if (await Visibility.IsRecordVisibleAsync(db, entityType!, entityId!, actor.MayClassifiedRead(), cancellationToken))
+            if (await Visibility.IsRecordVisibleAsync(db, entityType!, entityId!, ViewerScope.From(actor), cancellationToken))
             {
                 var record = await RecordNameAsync(db, entityType!, entityId!, cancellationToken);
                 name = record.Name;

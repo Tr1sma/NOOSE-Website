@@ -42,7 +42,7 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // visibility check
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.IsLeadership(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }

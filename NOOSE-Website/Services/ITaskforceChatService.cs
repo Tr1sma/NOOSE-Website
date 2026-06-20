@@ -7,7 +7,7 @@ namespace NOOSE_Website.Services;
 public interface ITaskforceChatService
 {
     /// <summary>Loads recent messages, oldest first for display; olderAs pages further back.</summary>
-    Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, bool isLeadership, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default);
+    Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, ViewerScope scope, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default);
 
     /// <summary>Sends a message; throws if the taskforce is not visible or the text is empty.</summary>
     Task<TaskforceMessage> SendAsync(string taskforceId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

@@ -40,8 +40,24 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
                         NOOSE-Agenten gelangen über den internen Login zum Lagezentrum und zur Akten-Datenbank.
                     </MudText>
-                    <MudButton Href="/Account/Login" Variant="Variant.Outlined" Color="Color.Default"
-                               StartIcon="@Icons.Material.Filled.Login" Class="mt-2">Agent-Login</MudButton>
+                    <AuthorizeView>
+                        <Authorized Context="agentCtx">
+                            @if (agentCtx.User.IsApplicant())
+                            {
+                                <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Badge" Class="mt-2">Zum Bewerber-Portal</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Login" Class="mt-2">Zum Agent-Portal</MudButton>
+                            }
+                        </Authorized>
+                        <NotAuthorized>
+                            @* secret agency: no usable agent login on the public page *@
+                            <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true" Class="mt-2">Kein Zugriff</MudButton>
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </MudStack>
             </MudPaper>
         </MudStack>

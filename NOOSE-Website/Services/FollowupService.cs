@@ -71,7 +71,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, actor.IsLeadership(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Für diese Akte darf keine Wiedervorlage angelegt werden.");
         }

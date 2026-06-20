@@ -14,12 +14,11 @@ public static class RecruitingSeeder
     {
         var existing = await db.DocumentTemplates
             .Where(t => t.Category == TemplateCategory)
-            .Select(t => t.Name)
             .ToListAsync(cancellationToken);
-        var have = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+        var have = new HashSet<string>(existing.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
 
         var sorting = 0;
-        var added = false;
+        var changed = false;
         foreach (var (name, html) in Templates)
         {
             sorting++;
@@ -35,23 +34,49 @@ public static class RecruitingSeeder
                 IsActive = true,
                 Sorting = sorting,
             });
-            added = true;
+            changed = true;
         }
 
-        if (added)
+        // migrate already-seeded letters from the old single NAME token to the recipient BEWERBER token,
+        // leaving the sender's signature NAME (and any admin edits) untouched
+        foreach (var t in existing)
+        {
+            var upgraded = UpgradeSalutationTokens(t.ContentHtml);
+            if (!string.Equals(upgraded, t.ContentHtml, StringComparison.Ordinal))
+            {
+                t.ContentHtml = upgraded;
+                changed = true;
+            }
+        }
+
+        if (changed)
         {
             await db.SaveChangesAsync(cancellationToken);
         }
     }
 
-    // Placeholders NAME / DATUM / UHRZEIT / DIENSTGRAD are filled when an HRB member sends the letter;
-    // NAME is rendered as a redaction block for the applicant (see BewerbungTemplateRenderer).
+    /// <summary>Swap the recipient salutation/subject NAME token for BEWERBER; the signature NAME stays.</summary>
+    private static string UpgradeSalutationTokens(string html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return html;
+        }
+        return html
+            .Replace("Sehr geehrte NAME", "Sehr geehrte BEWERBER")
+            .Replace("Sehr geehrter NAME", "Sehr geehrter BEWERBER")
+            .Replace("von Herrn NAME", "von Herrn BEWERBER");
+    }
+
+    // BEWERBER (recipient) is filled with the applicant's name; NAME (sender) is rendered as a redaction
+    // block so the agent stays anonymous; DATUM / UHRZEIT / DIENSTGRAD are filled when the letter is sent
+    // (see BewerbungTemplateRenderer).
     private static readonly (string Name, string Html)[] Templates =
     [
         ("Eingangsbestätigung",
             Head("Auswahlverfahren") +
             "<p><strong>Eingangsbestätigung</strong></p>" +
-            "<p>Sehr geehrte NAME,</p>" +
+            "<p>Sehr geehrte BEWERBER,</p>" +
             "<p>hiermit bestätigen wir Ihnen den Eingang Ihrer Bewerbung. Die Sicherheitsüberprüfung und das " +
             "anschließende Auswahlverfahren werden einige Zeit in Anspruch nehmen. Wir bitten Sie daher von " +
             "weiteren Statusanfragen abzusehen.</p>" +
@@ -60,7 +85,7 @@ public static class RecruitingSeeder
         ("Anhörung zwecks Sicherheitsüberprüfung",
             Head("Auswahlverfahren") +
             "<p><strong>Anordnung zur persönlichen Anhörung im Rahmen der Sicherheitsüberprüfung</strong></p>" +
-            "<p>Sehr geehrter NAME,</p>" +
+            "<p>Sehr geehrter BEWERBER,</p>" +
             "<p>im Rahmen der gegen Sie eingeleiteten Sicherheitsüberprüfung wurden Sachverhalte festgestellt, " +
             "die einer persönlichen Erörterung bedürfen.</p>" +
             "<p>Die Anhörung wird am DATUM um UHRZEIT Uhr in der Government Facility des National Office of " +
@@ -73,7 +98,7 @@ public static class RecruitingSeeder
         ("Einladung zum Auswahlverfahren",
             Head("Auswahlverfahren") +
             "<p><strong>Einladung zum mündlichen Auswahlverfahren</strong></p>" +
-            "<p>Sehr geehrter NAME,</p>" +
+            "<p>Sehr geehrter BEWERBER,</p>" +
             "<p>im Rahmen des laufenden Auswahlverfahrens ergeht hiermit die Einladung zu einem persönlichen " +
             "Vorstellungsgespräch.</p>" +
             "<p>Das Auswahlverfahren wird am DATUM um UHRZEIT Uhr in der Government Facility des National Office " +
@@ -92,7 +117,7 @@ public static class RecruitingSeeder
             "<p>Sehr geehrte Damen und Herren,</p>" +
             "<p>das National Office of Security Enforcement fordert Sie hiermit im Wege der Amtshilfe dazu auf, die " +
             "vollständige und ungeschwärzte Personalakte (einschließlich Disziplinarverfahren, internen Ermittlungen " +
-            "und Aktennotizen) von Herrn NAME an uns zu übermitteln.</p>" +
+            "und Aktennotizen) von Herrn BEWERBER an uns zu übermitteln.</p>" +
             "<p>Wir verweisen in diesem Zusammenhang auf die Verfassung des Staates San Andreas sowie die gesetzliche " +
             "Pflicht zur Amtshilfe und interbehördlichen Zusammenarbeit. Demnach sind alle Behörden des öffentlichen " +
             "Dienstes dazu verpflichtet, dem National Office of Security Enforcement zur Erfüllung seiner gesetzlichen " +
@@ -106,7 +131,7 @@ public static class RecruitingSeeder
         ("Verweigerung zu Ablehnungsgründen",
             Head("Auswahlverfahren") +
             "<p><strong>Mitteilung über die Verweigerung von Auskünften</strong></p>" +
-            "<p>Sehr geehrter NAME,</p>" +
+            "<p>Sehr geehrter BEWERBER,</p>" +
             "<p>das National Office of Security Enforcement erteilt grundsätzlich keinerlei Auskünfte über den Verlauf, " +
             "Fortführung, Beendigung oder die konkreten Gründe für eine Ablehnung innerhalb des behördlichen " +
             "Auswahlverfahrens.</p>" +

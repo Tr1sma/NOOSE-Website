@@ -11,10 +11,10 @@ namespace NOOSE_Website.Services;
 public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, TaskforceChatBroadcaster broadcaster,
     INotificationService notifications) : ITaskforceChatService
 {
-    public async Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, bool isLeadership, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default)
+    public async Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, ViewerScope scope, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, isLeadership, cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, scope, cancellationToken))
         {
             return new();
         }
@@ -42,7 +42,7 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, actor.IsLeadership(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Taskforce ist für dich nicht zugänglich.");
         }

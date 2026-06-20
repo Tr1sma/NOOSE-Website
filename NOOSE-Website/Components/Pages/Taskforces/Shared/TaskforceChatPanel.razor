@@ -95,7 +95,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var messages = await ChatService.GetMessagesAsync(TaskforceId, _mayClassifiedRead, Page);
+        var messages = await ChatService.GetMessagesAsync(TaskforceId, ViewerScope.From(User), Page);
         _morePossible = messages.Count >= Page;
         _entries = await ToEntriesAsync(messages);
         _load = false;
@@ -116,7 +116,7 @@
         }
         _loadsMore = true;
         var oldest = _entries[0].Msg.CreatedAt;
-        var more = await ChatService.GetMessagesAsync(TaskforceId, _mayClassifiedRead, Page, oldest);
+        var more = await ChatService.GetMessagesAsync(TaskforceId, ViewerScope.From(User), Page, oldest);
         _morePossible = more.Count >= Page;
         if (more.Count > 0)
         {

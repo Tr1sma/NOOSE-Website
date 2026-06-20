@@ -303,7 +303,7 @@ public class BewerbungService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var bewerbung = await GetOrThrow(db, id, cancellationToken);
 
-        // sanitize the rich-text HTML, then redact so the applicant name never reaches the applicant-facing conversation
+        // sanitize the rich-text HTML, then redact the sender's name token (the applicant is addressed by name)
         content = HtmlCleanup.Clean(content);
         content = BewerbungTemplateRenderer.Redact(content, bewerbung.Name);
         if (string.IsNullOrWhiteSpace(content))

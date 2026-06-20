@@ -30,8 +30,8 @@
                     }
                 </Authorized>
                 <NotAuthorized>
-                    <MudButton Href="/Account/Login" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Login">Agent-Login</MudButton>
+                    @* secret agency: the public never gets a usable agent login, only a dead notice *@
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" Disabled="true">Kein Zugriff</MudButton>
                 </NotAuthorized>
             </AuthorizeView>
         </MudStack>

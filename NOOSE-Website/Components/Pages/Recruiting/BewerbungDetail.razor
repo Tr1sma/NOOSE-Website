@@ -145,7 +145,7 @@ else
             <MudPaper Elevation="2" Class="pa-4">
                 <MudText Typo="Typo.h6" Class="mb-2">Kommunikation mit dem Bewerber</MudText>
                 <BewerbungMessagePanel BewerbungId="@_b.Id" User="_user" Audience="BewerbungMessageAudience.Bewerber"
-                                       IsApplicantView="false" CanWrite="_canWrite" ShowTemplates="true" />
+                                       IsApplicantView="false" CanWrite="_canWrite" ShowTemplates="true" ApplicantName="@_b.Name" />
             </MudPaper>
         </MudItem>
     </MudGrid>

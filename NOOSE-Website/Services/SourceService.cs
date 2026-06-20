@@ -57,7 +57,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         }
 
         await using var visDb = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(visDb, entityType, entityId, actor.IsLeadership(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(visDb, entityType, entityId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
@@ -168,7 +168,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         {
             return;
         }
-        if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, actor.IsLeadership(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
@@ -185,7 +185,7 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var source = await db.Sources.FirstOrDefaultAsync(q => q.Id == sourceId, cancellationToken)
             ?? throw new InvalidOperationException("Quelle nicht gefunden.");
-        if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, actor.IsLeadership(), cancellationToken))
+        if (!await Visibility.IsRecordVisibleAsync(db, source.EntityType, source.EntityId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }

@@ -85,7 +85,7 @@ else
         if (_taskforce is not null)
         {
             _links = await LinkService.GetForRecordAsync(nameof(Taskforce), Id, user.MayAllTaskforcesSee(), user.GetAgentId());
-            _comments = await CommentService.GetForRecordAsync(nameof(Taskforce), Id, user.IsLeadership());
+            _comments = await CommentService.GetForRecordAsync(nameof(Taskforce), Id, ViewerScope.From(user));
             await AccessLog.LogViewAsync(nameof(Taskforce), Id);
         }
         _load = false;

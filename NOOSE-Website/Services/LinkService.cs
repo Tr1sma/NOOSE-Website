@@ -213,7 +213,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         // don't let forged calls link to a classified target the actor can't see
         if (targetType is nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
                 or nameof(Operation) or nameof(Taskforce) or nameof(Case)
-            && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, actor.IsLeadership(), cancellationToken))
+            && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");
         }

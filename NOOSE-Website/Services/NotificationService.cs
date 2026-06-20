@@ -62,7 +62,7 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         {
             // gate on recipient's own visibility, not the trigger's (no record/classification leak)
             var recipientIsLeadership = e.IsAdmin || e.Rank is >= Rank.SupervisorySpecialAgent;
-            if (!await Visibility.IsRecordVisibleAsync(db, targetType, targetId, recipientIsLeadership, cancellationToken))
+            if (!await Visibility.IsRecordVisibleAsync(db, targetType, targetId, recipientIsLeadership, cancellationToken, e.Id))
             {
                 continue;
             }

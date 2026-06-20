@@ -18,7 +18,7 @@ public static class NavCatalog
     /// <summary>All internal-agent entries in default order. Keys are stable; favorites/hidden/order reference them.</summary>
     public static readonly IReadOnlyList<NavEntry> Internal = new[]
     {
-        new NavEntry("dashboard", "/", Icons.Material.Filled.SpaceDashboard, "Dashboard", NavSection.Primary, NavLinkMatch.All),
+        new NavEntry("dashboard", "/dashboard", Icons.Material.Filled.SpaceDashboard, "Dashboard", NavSection.Primary, NavLinkMatch.All),
         new NavEntry("profil", "/profil", Icons.Material.Filled.AccountCircle, "Mein Profil", NavSection.Primary),
         new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.Primary),
         new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Primary),

@@ -5,7 +5,7 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="2" Style="height:52vh;">
-    <div style="flex:1 1 auto; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
+    <div style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
         @if (_load)
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -57,9 +57,33 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">Name wird automatisch geschwärzt.</MudText>
                 </MudStack>
             }
+            @if (_richMode && (_needsDate || _needsTime))
+            {
+                <MudPaper Outlined="true" Class="pa-2 mb-1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Color="Color.Default" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Termin der Vorlage:</MudText>
+                        @if (_needsDate)
+                        {
+                            <MudDatePicker @bind-Date="_pickDate" Label="Datum" DateFormat="dd.MM.yyyy"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:160px;" />
+                        }
+                        @if (_needsTime)
+                        {
+                            <MudTimePicker @bind-Time="_pickTime" Label="Uhrzeit" AmPm="false"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:140px;" />
+                        }
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Check" OnClick="ApplyDateTime"
+                                   Disabled="@(!CanApplyDateTime)">Einsetzen</MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
             @if (_richMode)
             {
-                <RichTextEditor @ref="_editor" ValueChanged="@(v => _html = v)" />
+                <div class="bewerbung-chat-editor">
+                    <RichTextEditor @ref="_editor" ValueChanged="@(v => _html = v)" />
+                </div>
             }
             else
             {
@@ -81,6 +105,7 @@
     [Parameter] public bool IsApplicantView { get; set; }
     [Parameter] public bool CanWrite { get; set; } = true;
     [Parameter] public bool ShowTemplates { get; set; }
+    [Parameter] public string? ApplicantName { get; set; }
 
     private const string Placeholder = "Nachricht verfassen …";
     private bool _load = true;
@@ -88,6 +113,10 @@
     private string _text = string.Empty;
     private string _html = string.Empty;
     private RichTextEditor? _editor;
+    private bool _needsDate;
+    private bool _needsTime;
+    private DateTime? _pickDate;
+    private TimeSpan? _pickTime;
     private string? _myId;
     private List<BewerbungMessage> _messages = new();
     private List<DocumentTemplate> _templates = new();
@@ -95,6 +124,10 @@
     // applicant-facing thread is rich text (formatting preserved); internal thread stays plain text + mentions
     private bool _richMode => Audience == BewerbungMessageAudience.Bewerber;
     private bool ComposeEmpty => _richMode ? string.IsNullOrWhiteSpace(_html) : string.IsNullOrWhiteSpace(_text);
+
+    // enable "Einsetzen" only once every token the template still carries has a picked value
+    private bool CanApplyDateTime
+        => (!_needsDate || _pickDate is not null) && (!_needsTime || _pickTime is not null);
 
     protected override async Task OnInitializedAsync()
     {
@@ -143,7 +176,7 @@
     private async Task InsertTemplate(DocumentTemplate t)
     {
         var dienstgrad = User.GetRank() is { } rank ? RankDisplay.Name(rank) : null;
-        var rendered = BewerbungTemplateRenderer.RenderForApplicant(t.ContentHtml, dienstgrad);
+        var rendered = BewerbungTemplateRenderer.RenderForApplicant(t.ContentHtml, ApplicantName, dienstgrad);
         if (_editor is not null)
         {
             await _editor.SetHtmlAsync(rendered);
@@ -153,6 +186,29 @@
         {
             _text = BewerbungTemplateRenderer.HtmlToText(rendered);
         }
+        // reveal date/time pickers only when the inserted letter still needs those tokens filled
+        _needsDate = BewerbungTemplateRenderer.HasDateToken(rendered);
+        _needsTime = BewerbungTemplateRenderer.HasTimeToken(rendered);
+        _pickDate = null;
+        _pickTime = null;
+    }
+
+    private async Task ApplyDateTime()
+    {
+        var date = _pickDate?.ToString("dd.MM.yyyy");
+        var time = _pickTime is { } t ? t.ToString(@"hh\:mm") : null;
+        if (_editor is not null)
+        {
+            var html = BewerbungTemplateRenderer.FillDateTime(await _editor.GetHtmlAsync(), date, time);
+            await _editor.SetHtmlAsync(html);
+            _html = html;
+        }
+        else
+        {
+            _text = BewerbungTemplateRenderer.FillDateTime(_text, date, time);
+        }
+        _needsDate = false;
+        _needsTime = false;
     }
 
     private async Task SendAsync()
@@ -185,6 +241,10 @@
             }
             _text = string.Empty;
             _html = string.Empty;
+            _needsDate = false;
+            _needsTime = false;
+            _pickDate = null;
+            _pickTime = null;
             if (_editor is not null)
             {
                 await _editor.SetHtmlAsync(string.Empty); // broadcaster refreshes the thread

@@ -267,6 +267,13 @@ html, body {
     margin: .25rem 0;
 }
 
+/* Bewerber-Chat: Editor kompakt halten (statt der globalen 340px-Mindesthöhe) und intern scrollen. */
+.bewerbung-chat-editor .ql-editor {
+    min-height: 96px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
 /* ---- Druck-/PDF-Export (Phase 7) ----
    window.print() (DruckButton) druckt nur den Akteninhalt: Navigation, Topbar, Buttons und
    andere Bedienelemente werden ausgeblendet, dunkles Theme wird auf Schwarz-auf-Weiß gedreht.
