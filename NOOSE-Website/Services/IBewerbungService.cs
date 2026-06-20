@@ -11,7 +11,7 @@ public interface IBewerbungService
     /// <summary>The signed-in applicant's own application (most recent, non-deleted), or null.</summary>
     Task<Bewerbung?> GetOwnAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
 
-    /// <summary>Submit a new application. Applicant only; one open application per applicant.</summary>
+    /// <summary>Submit a new application. Applicant only; one open application at a time, blocked while banned or blacklisted.</summary>
     Task<Bewerbung> SubmitAsync(BewerbungSubmitModel model, Stream? attachment, string? originalName, string? contentType,
         ClaimsPrincipal applicant, CancellationToken cancellationToken = default);
 

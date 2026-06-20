@@ -1,0 +1,151 @@
+@page "/bewerbungen/sperren"
+@attribute [Authorize(Policy = Policies.HrbOrLeadership)]
+@inject IBewerbungssperreService SperreService
+@inject ISnackbar Snackbar
+
+<PageTitle>Bewerbungssperren · NOOSE</PageTitle>
+
+<MudButton Href="/bewerbungen" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Bewerbungen</MudButton>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Bewerbungssperren</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Aktive Bewerbungssperren und Blacklist-Einträge. Sperren lassen sich hier verkürzen oder aufheben.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_entries.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine aktiven Sperren.</MudAlert>
+}
+else
+{
+    <MudTable Items="_entries" Hover="true" Dense="true">
+        <HeaderContent>
+            <MudTh>Bewerber</MudTh>
+            <MudTh>Art</MudTh>
+            <MudTh>Grund</MudTh>
+            <MudTh>Erstellt von</MudTh>
+            <MudTh>Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Bewerber">
+                @if (!string.IsNullOrWhiteSpace(context.BewerbungId))
+                {
+                    <MudLink Href="@($"/bewerbungen/{context.BewerbungId}")">@Or(context.ApplicantName)</MudLink>
+                }
+                else
+                {
+                    @Or(context.ApplicantName)
+                }
+            </MudTd>
+            <MudTd DataLabel="Art">
+                @if (context.IsBlacklist)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Blacklist</MudChip>
+                }
+                else
+                {
+                    <text>Befristet bis @(context.BannedUntil?.ToLocalTime().ToString("dd.MM.yyyy"))</text>
+                }
+            </MudTd>
+            <MudTd DataLabel="Grund">@Or(context.Reason)</MudTd>
+            <MudTd DataLabel="Erstellt von">@Or(context.CreatedByName)</MudTd>
+            <MudTd DataLabel="Aktion">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    @if (!context.IsBlacklist)
+                    {
+                        <MudDatePicker @bind-Date="_edits[context.Id]" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       Style="min-width:150px;" />
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.Update" OnClick="@(() => Shorten(context))">Anpassen</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.LockOpen" OnClick="@(() => Lift(context))">Aufheben</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small" Disabled="_busy"
+                                   StartIcon="@Icons.Material.Filled.Restore" OnClick="@(() => Lift(context))">Entfernen</MudButton>
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _busy;
+    private List<BewerbungssperreInfo> _entries = new();
+    private readonly Dictionary<string, DateTime?> _edits = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _entries = await SperreService.ListActiveAsync(_user);
+            _edits.Clear();
+            foreach (var e in _entries)
+            {
+                _edits[e.Id] = e.BannedUntil?.ToLocalTime();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task Shorten(BewerbungssperreInfo entry)
+    {
+        if (_edits.GetValueOrDefault(entry.Id) is not { } until)
+        {
+            Snackbar.Add("Bitte ein Datum wählen.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await SperreService.ShortenAsync(entry.Id, until, _user);
+            Snackbar.Add("Sperre angepasst.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Lift(BewerbungssperreInfo entry)
+    {
+        _busy = true;
+        try
+        {
+            await SperreService.LiftAsync(entry.Id, _user);
+            Snackbar.Add("Sperre aufgehoben.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private static string Or(string? v) => string.IsNullOrWhiteSpace(v) ? "—" : v!;
+}

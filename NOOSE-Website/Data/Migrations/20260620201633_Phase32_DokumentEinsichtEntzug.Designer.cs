@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NOOSE_Website.Data;
 
@@ -11,9 +12,11 @@ using NOOSE_Website.Data;
 namespace NOOSE_Website.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620201633_Phase32_DokumentEinsichtEntzug")]
+    partial class Phase32_DokumentEinsichtEntzug
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4616,86 +4619,6 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("BewerbungTestFragen");
                 });
 
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Recruiting.Bewerbungssperre", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("AgentId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)")
-                        .HasColumnName("BewerberId");
-
-                    b.Property<string>("ApplicantName")
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)")
-                        .HasColumnName("BewerberName");
-
-                    b.Property<DateTime?>("BannedUntil")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("GesperrtBis");
-
-                    b.Property<string>("BewerbungId")
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)")
-                        .HasColumnName("BewerbungId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("ErstelltAm");
-
-                    b.Property<string>("CreatedById")
-                        .HasColumnType("longtext")
-                        .HasColumnName("ErstelltVonId");
-
-                    b.Property<string>("CreatedByName")
-                        .HasMaxLength(128)
-                        .HasColumnType("varchar(128)")
-                        .HasColumnName("ErstelltVonName");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("GeloeschtAm");
-
-                    b.Property<string>("DeletedById")
-                        .HasColumnType("longtext")
-                        .HasColumnName("GeloeschtVonId");
-
-                    b.Property<string>("DiscordId")
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)")
-                        .HasColumnName("DiscordId");
-
-                    b.Property<bool>("IsBlacklist")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("IstBlacklist");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("IstGeloescht");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("GeaendertAm");
-
-                    b.Property<string>("ModifiedById")
-                        .HasColumnType("longtext")
-                        .HasColumnName("GeaendertVonId");
-
-                    b.Property<string>("Reason")
-                        .HasColumnType("longtext")
-                        .HasColumnName("Grund");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AgentId");
-
-                    b.HasIndex("BewerbungId");
-
-                    b.ToTable("Bewerbungssperren");
-                });
-
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Requests.Request", b =>
                 {
                     b.Property<string>("Id")
@@ -5753,20 +5676,6 @@ namespace NOOSE_Website.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Test");
-                });
-
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Recruiting.Bewerbungssperre", b =>
-                {
-                    b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
-                        .WithMany()
-                        .HasForeignKey("AgentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("NOOSE_Website.Data.Entities.Recruiting.Bewerbung", null)
-                        .WithMany()
-                        .HasForeignKey("BewerbungId")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Taskforces.TaskforceAgent", b =>

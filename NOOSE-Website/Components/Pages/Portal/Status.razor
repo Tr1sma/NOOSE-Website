@@ -3,6 +3,7 @@
 @attribute [AllowAnonymous]
 @inject IBewerbungService BewerbungService
 @inject IBewerbungTestService TestService
+@inject IBewerbungssperreService SperreService
 @inject NavigationManager Nav
 
 <PageTitle>Status · NOOSE</PageTitle>
@@ -28,6 +29,17 @@
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
                     Dein Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.
                 </MudAlert>
+                @if (_ban is { IsBlacklist: false, BannedUntil: { } until })
+                {
+                    <MudText Typo="Typo.body2" Class="mt-3">
+                        Du kannst dich ab dem <b>@until.ToLocalTime().ToString("dd.MM.yyyy")</b> erneut bewerben.
+                    </MudText>
+                }
+                else if (_ban is null)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                               Href="/portal" Class="mt-3">Neue Bewerbung</MudButton>
+                }
             }
             else
             {
@@ -80,6 +92,7 @@
     private bool _ready;
     private Bewerbung _bewerbung = default!;
     private TestView? _test;
+    private BewerbungssperreInfo? _ban;
 
     protected override async Task OnInitializedAsync()
     {
@@ -96,6 +109,10 @@
             return;
         }
         _bewerbung = own;
+        if (own.Status is BewerbungStatus.Abgelehnt or BewerbungStatus.Geschlossen)
+        {
+            _ban = await SperreService.GetActiveAsync(_user.GetAgentId() ?? string.Empty);
+        }
         _test = await TestService.GetAssignedForApplicantAsync(_user);
         _ready = true;
     }

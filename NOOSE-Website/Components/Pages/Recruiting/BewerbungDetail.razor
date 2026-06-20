@@ -124,6 +124,11 @@ else
             </MudPaper>
 
             <div class="mb-4">
+                <BewerbungssperrePanel ApplicantUserId="@_b.ApplicantUserId" BewerbungId="@_b.Id"
+                                       ApplicantName="@_b.Name" User="_user" />
+            </div>
+
+            <div class="mb-4">
                 <BewerbungPersonPanel BewerbungId="@_b.Id" User="_user" LinkedPersonId="@_b.LinkedPersonId" />
             </div>
 

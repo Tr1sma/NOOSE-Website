@@ -1,0 +1,163 @@
+@* Access list: who can see this document, with per-agent revoke/restore. *@
+@implements IAsyncDisposable
+@inject IDocumentAccessService AccessService
+@inject DocumentAccessBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" />
+        <MudText Typo="Typo.subtitle2">Einsichtsliste (@_entries.Count)</MudText>
+    </MudStack>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+        Agenten mit Zugriff auf dieses Dokument. Zugriff kann gezielt entzogen werden.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_entries.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein interner Agent hat Zugriff.</MudText>
+    }
+    else
+    {
+        @if (_revokedCount > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">@_revokedCount entzogen</MudText>
+        }
+        <div style="max-height:420px; overflow-y:auto;">
+            <MudStack Spacing="0">
+                @foreach (var e in _entries)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween"
+                              Class="@(e.Excluded ? "py-1 mud-text-disabled" : "py-1")">
+                        <div>
+                            <MudText Typo="Typo.body2" Style="@(e.Excluded ? "text-decoration:line-through;" : null)">
+                                @e.Codename
+                                @if (_mayRealName && !string.IsNullOrWhiteSpace(e.RealName))
+                                {
+                                    <span class="mud-text-secondary"> (@e.RealName)</span>
+                                }
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@RankDisplay.Name(e.Rank)</MudText>
+                        </div>
+                        @if (e.Excluded)
+                        {
+                            <MudTooltip Text="Zugriff wiederherstellen">
+                                <MudIconButton Icon="@Icons.Material.Filled.Restore" Color="Color.Success" Size="Size.Small"
+                                               Disabled="_busy" OnClick="@(() => RestoreAsync(e.AgentId))"
+                                               aria-label="Zugriff wiederherstellen" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Zugriff entziehen">
+                                <MudIconButton Icon="@Icons.Material.Filled.DoNotDisturbOn" Color="Color.Error" Size="Size.Small"
+                                               Disabled="_busy" OnClick="@(() => RevokeAsync(e.AgentId))"
+                                               aria-label="Zugriff entziehen" />
+                            </MudTooltip>
+                        }
+                    </MudStack>
+                }
+            </MudStack>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string DocumentId { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayRealName;
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<DocumentAccessEntry> _entries = new List<DocumentAccessEntry>();
+    private int _revokedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayRealName = _user.MayRealNameSee();
+        Broadcaster.Modified += OnModified;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _entries = await AccessService.GetAccessListAsync(DocumentId, _user);
+            _revokedCount = _entries.Count(e => e.Excluded);
+        }
+        catch (Exception ex)
+        {
+            // surface instead of killing the circuit
+            Snackbar.Add($"Einsichtsliste konnte nicht geladen werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void OnModified(string docId)
+    {
+        if (docId != DocumentId)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RevokeAsync(string agentId)
+    {
+        _busy = true;
+        try
+        {
+            await AccessService.RevokeAsync(DocumentId, agentId, _user);
+            Snackbar.Add("Zugriff entzogen.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RestoreAsync(string agentId)
+    {
+        _busy = true;
+        try
+        {
+            await AccessService.RestoreAsync(DocumentId, agentId, _user);
+            Snackbar.Add("Zugriff wiederhergestellt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Broadcaster.Modified -= OnModified;
+        return ValueTask.CompletedTask;
+    }
+}

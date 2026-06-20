@@ -1,0 +1,148 @@
+@* Recruitment ban / blacklist for one applicant, managed from the application detail. *@
+@inject IBewerbungssperreService SperreService
+@inject ISnackbar Snackbar
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Small" />
+        <MudText Typo="Typo.h6">Bewerbungssperre</MudText>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_info is null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Keine Sperre aktiv.</MudText>
+        @if (_canWrite)
+        {
+            <MudTextField @bind-Value="_reason" Label="Grund (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+            <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.PersonOff" OnClick="Blacklist">Auf Blacklist setzen</MudButton>
+        }
+    }
+    else if (_info.IsBlacklist)
+    {
+        <MudChip T="string" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.PersonOff" Class="mb-2">Auf der Blacklist</MudChip>
+        @if (!string.IsNullOrWhiteSpace(_info.Reason))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Grund: @_info.Reason</MudText>
+        }
+        @if (_canWrite)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.Restore" OnClick="Lift">Von Blacklist entfernen</MudButton>
+        }
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mb-1">
+            Befristet gesperrt bis <b>@(_info.BannedUntil?.ToLocalTime().ToString("dd.MM.yyyy"))</b>
+        </MudText>
+        @if (!string.IsNullOrWhiteSpace(_info.Reason))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Grund: @_info.Reason</MudText>
+        }
+        @if (_canWrite)
+        {
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudDatePicker @bind-Date="_newUntil" Label="Sperre bis" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Style="min-width:160px;" />
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.Update" OnClick="Shorten">Anpassen</MudButton>
+                </MudStack>
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.LockOpen" OnClick="Lift">Sperre aufheben</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.PersonOff" OnClick="Blacklist">Auf Blacklist setzen</MudButton>
+                </MudStack>
+            </MudStack>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string ApplicantUserId { get; set; } = default!;
+    [Parameter] public string? BewerbungId { get; set; }
+    [Parameter] public string? ApplicantName { get; set; }
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _busy;
+    private bool _canWrite;
+    private string? _reason;
+    private DateTime? _newUntil;
+    private BewerbungssperreInfo? _info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canWrite = User.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _info = await SperreService.GetActiveAsync(ApplicantUserId);
+            _newUntil = _info?.BannedUntil?.ToLocalTime();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task Blacklist()
+    {
+        _busy = true;
+        try
+        {
+            await SperreService.BlacklistAsync(ApplicantUserId, BewerbungId, ApplicantName, _reason, User);
+            _reason = null;
+            Snackbar.Add("Bewerber auf die Blacklist gesetzt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Shorten()
+    {
+        if (_newUntil is not { } until)
+        {
+            Snackbar.Add("Bitte ein Datum wählen.", Severity.Warning);
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await SperreService.ShortenAsync(_info!.Id, until, User);
+            Snackbar.Add("Sperre angepasst.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Lift()
+    {
+        _busy = true;
+        try
+        {
+            await SperreService.LiftAsync(_info!.Id, User);
+            Snackbar.Add("Sperre aufgehoben.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+}

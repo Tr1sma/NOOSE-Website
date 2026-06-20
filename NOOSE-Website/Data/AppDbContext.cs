@@ -152,6 +152,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- partner record releases ----
     public DbSet<PartnerShare> PartnerShares => Set<PartnerShare>();
+    public DbSet<DocumentAccessExclusion> DocumentAccessExclusions => Set<DocumentAccessExclusion>();
 
     // ---- recruiting (applications, invites, tests) ----
     public DbSet<AgentInvite> AgentInvites => Set<AgentInvite>();
@@ -162,6 +163,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<BewerbungTestOption> BewerbungTestOptions => Set<BewerbungTestOption>();
     public DbSet<BewerbungTestAssignment> BewerbungTestAssignments => Set<BewerbungTestAssignment>();
     public DbSet<BewerbungTestAnswer> BewerbungTestAnswers => Set<BewerbungTestAnswer>();
+    public DbSet<Bewerbungssperre> Bewerbungssperren => Set<Bewerbungssperre>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -910,6 +912,19 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(s => new { s.Agency, s.EntityType, s.EntityId });
         });
 
+        modelBuilder.Entity<DocumentAccessExclusion>(b =>
+        {
+            b.Property(x => x.DocumentId).HasMaxLength(64).IsRequired();
+            b.Property(x => x.AgentId).HasMaxLength(64).IsRequired();
+            // no unique: soft-delete safe; dedupe in service among active rows
+            b.HasIndex(x => new { x.DocumentId, x.AgentId });
+            b.HasIndex(x => x.AgentId);
+            b.HasOne<Document>().WithMany()
+                .HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<AgentInvite>(b =>
         {
             b.Property(i => i.Token).HasMaxLength(64).IsRequired();
@@ -945,6 +960,21 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(v => v.AssignedAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne<Person>().WithMany()
                 .HasForeignKey(v => v.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Bewerbungssperre>(b =>
+        {
+            b.Property(s => s.AgentId).HasMaxLength(64).IsRequired();
+            b.Property(s => s.DiscordId).HasMaxLength(64);
+            b.Property(s => s.ApplicantName).HasMaxLength(200);
+            b.Property(s => s.BewerbungId).HasMaxLength(64);
+            b.Property(s => s.Reason).HasColumnType("longtext");
+            b.Property(s => s.CreatedByName).HasMaxLength(128);
+            b.HasIndex(s => s.AgentId);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(s => s.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Bewerbung>().WithMany()
+                .HasForeignKey(s => s.BewerbungId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<BewerbungMessage>(b =>

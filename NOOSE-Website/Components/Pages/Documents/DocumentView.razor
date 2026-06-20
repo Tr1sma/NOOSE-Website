@@ -106,6 +106,14 @@ else
                 }
                 }
             </MudPaper>
+
+            @* access list: leadership manages who may see this document *@
+            @if (_isLeadership)
+            {
+                <div class="mt-4">
+                    <DocumentAccessList DocumentId="@_document.Id" />
+                </div>
+            }
         </MudItem>
     </MudGrid>
 }

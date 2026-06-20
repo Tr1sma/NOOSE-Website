@@ -14,7 +14,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
-        bool isLeadership = scope.IsLeadership;
+        bool isLeadership = scope.IsLeadership, isAdmin = scope.IsAdmin;
         string? meId = scope.MeId;
         var baseQuery = partnerAgency is { } agency
             ? db.Documents.OnlyPartnerVisible(db, agency, partnerAgentId)
@@ -25,7 +25,10 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
                 // taskforce-internal: members and leadership/admin only
                 .Where(d => d.OwnerTaskforceId == null
                     || isLeadership
-                    || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)));
+                    || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)))
+                // per-agent revocation (admins always retain access)
+                .Where(d => isAdmin || meId == null
+                    || !db.DocumentAccessExclusions.Any(x => x.DocumentId == d.Id && x.AgentId == meId));
         var rows = await baseQuery
             .OrderByDescending(d => d.Pinned)
             .ThenByDescending(d => d.ModifiedAt ?? d.CreatedAt)
@@ -39,7 +42,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
-        bool isLeadership = scope.IsLeadership;
+        bool isLeadership = scope.IsLeadership, isAdmin = scope.IsAdmin;
         string? meId = scope.MeId;
         var query = db.Documents.Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
                 || mayClassified
@@ -48,7 +51,10 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
             // taskforce-internal: members and leadership/admin only
             .Where(d => d.OwnerTaskforceId == null
                 || isLeadership
-                || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)));
+                || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)))
+            // per-agent revocation (admins always retain access)
+            .Where(d => isAdmin || meId == null
+                || !db.DocumentAccessExclusions.Any(x => x.DocumentId == d.Id && x.AgentId == meId));
 
         var s = searchText?.Trim();
         if (!string.IsNullOrWhiteSpace(s))
@@ -94,6 +100,12 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         // taskforce-internal: members and leadership/admin only
         if (document.OwnerTaskforceId is not null && !scope.IsLeadership
             && !(scope.MeId is not null && await db.TaskforceAgents.AnyAsync(ta => ta.TaskforceId == document.OwnerTaskforceId && ta.AgentId == scope.MeId, cancellationToken)))
+        {
+            return null; // hide existence
+        }
+        // per-agent revocation (admins always retain access)
+        if (!scope.IsAdmin && scope.MeId is not null
+            && await db.DocumentAccessExclusions.AnyAsync(x => x.DocumentId == document.Id && x.AgentId == scope.MeId, cancellationToken))
         {
             return null; // hide existence
         }

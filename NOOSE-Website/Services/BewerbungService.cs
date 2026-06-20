@@ -17,6 +17,7 @@ public class BewerbungService(
     ICaseNumberService caseNumbers,
     ISourcesStorageService storage,
     BewerbungBroadcaster broadcaster,
+    IBewerbungssperreService sperren,
     INotificationService notifications) : IBewerbungService
 {
     public async Task<Bewerbung?> GetOwnAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
@@ -47,9 +48,22 @@ public class BewerbungService(
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        if (await db.Bewerbungen.AnyAsync(b => b.ApplicantUserId == userId, cancellationToken))
+        // block only while an open or accepted application exists; rejected/closed may re-apply once unbanned
+        bool hasActive = await db.Bewerbungen.AnyAsync(b => b.ApplicantUserId == userId
+            && b.Status != BewerbungStatus.Abgelehnt && b.Status != BewerbungStatus.Geschlossen, cancellationToken);
+        if (hasActive)
         {
             throw new InvalidOperationException("Es liegt bereits eine Bewerbung für dieses Konto vor.");
+        }
+
+        var ban = await sperren.GetActiveAsync(userId, cancellationToken);
+        if (ban is { IsBlacklist: true })
+        {
+            throw new InvalidOperationException("Du kannst dich derzeit nicht bei der NOOSE bewerben.");
+        }
+        if (ban is { BannedUntil: { } until })
+        {
+            throw new InvalidOperationException($"Du bist noch bis zum {until.ToLocalTime():dd.MM.yyyy} für Bewerbungen gesperrt.");
         }
 
         string? fileNameSaved = null;
@@ -161,6 +175,12 @@ public class BewerbungService(
         await db.SaveChangesAsync(cancellationToken);
         broadcaster.Report(id);
 
+        if (target is BewerbungStatus.Abgelehnt or BewerbungStatus.Geschlossen)
+        {
+            try { await sperren.BanAsync(bewerbung.ApplicantUserId, bewerbung.Id, bewerbung.Name, Trim(note), actor, cancellationToken); }
+            catch { /* best effort: the rejection itself is already saved */ }
+        }
+
         try
         {
             await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
@@ -192,6 +212,9 @@ public class BewerbungService(
 
         if (!passed)
         {
+            try { await sperren.BanAsync(bewerbung.ApplicantUserId, bewerbung.Id, bewerbung.Name, bewerbung.DecisionNote, actor, cancellationToken); }
+            catch { /* best effort: the rejection itself is already saved */ }
+
             try
             {
                 await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,

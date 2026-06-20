@@ -24,6 +24,19 @@ public record LinkedPersonInfo(
     DateTime? ScoreCalculatedAt,
     bool IsClassified);
 
+/// <summary>An active recruitment ban or blacklist entry, for the HRB panel and the applicant gate.</summary>
+public record BewerbungssperreInfo(
+    string Id,
+    string AgentId,
+    string? DiscordId,
+    string? ApplicantName,
+    string? BewerbungId,
+    bool IsBlacklist,
+    DateTime? BannedUntil,
+    string? Reason,
+    DateTime CreatedAt,
+    string? CreatedByName);
+
 /// <summary>An applicant-facing view of an assigned test.</summary>
 public record TestView(
     string AssignmentId,

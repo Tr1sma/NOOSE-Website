@@ -145,6 +145,7 @@ builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>(
 builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IDocumentTemplateService, DocumentTemplateService>();
+builder.Services.AddScoped<IDocumentAccessService, DocumentAccessService>();
 builder.Services.AddScoped<IPlaceholderService, PlaceholderService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IRecencyService, RecencyService>();
@@ -188,6 +189,7 @@ builder.Services.AddHostedService<SituationReportWorker>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
 builder.Services.AddSingleton<SharesBroadcaster>();
+builder.Services.AddSingleton<DocumentAccessBroadcaster>();
 builder.Services.AddSingleton<AcknowledgmentBroadcaster>();
 builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<WatchlistFanout>();
@@ -207,6 +209,7 @@ builder.Services.AddScoped<IPartnerShareService, PartnerShareService>();
 // ---- recruiting (applications, invites, tests) ----
 builder.Services.AddScoped<IAgentInviteService, AgentInviteService>();
 builder.Services.AddScoped<IBewerbungService, BewerbungService>();
+builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
