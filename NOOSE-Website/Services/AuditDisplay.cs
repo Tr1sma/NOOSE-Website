@@ -28,7 +28,7 @@ public static class AuditDisplay
         ["Wahrheitsserum"] = "Wahrheitsserum", ["Ausgang"] = "Maßnahme-Ausgang",
         ["GedaechtnisGeloescht"] = "Gedächtnisverlust", ["Zeitpunkt"] = "Zeitpunkt",
         ["Art"] = "Art", ["Funk"] = "Funk", ["Darkchat"] = "Darkchat",
-        ["Ausstellungszeiten"] = "Ausstellungszeiten", ["Anwesen"] = "Anwesen",
+        ["Ausstellungszeiten"] = "Aufstellungszeiten", ["Anwesen"] = "Anwesen",
         ["Erkennungsfarbe"] = "Erkennungsfarbe", ["Ziele"] = "Ziele",
         ["Rang"] = "Rang", ["Rolle"] = "Rolle", ["IstLeitung"] = "Leitung",
         ["GeschaetzteMitgliederzahl"] = "Geschätzte Mitgliederzahl", ["Label"] = "Bezeichnung",

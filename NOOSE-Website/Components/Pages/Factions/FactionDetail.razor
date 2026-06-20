@@ -360,7 +360,7 @@ else
         yield return ("Art", _faction!.Kind ?? "—");
         yield return ("Funk", _faction.Radio ?? "—");
         yield return ("Darkchat", _faction.Darkchat ?? "—");
-        yield return ("Ausstellungszeiten", _faction.IssuingTimes ?? "—");
+        yield return ("Aufstellungszeiten", _faction.IssuingTimes ?? "—");
     }
 
     private static IEnumerable<string> StockTexts(IEnumerable<(string Designation, string? Quantity)> items)
