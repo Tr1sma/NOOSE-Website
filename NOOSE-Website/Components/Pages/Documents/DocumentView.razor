@@ -1,6 +1,7 @@
 @* Read-only viewer for a library document and the records it is attached to. *@
 @page "/dokumente/{Id}"
 @inject IDocumentService DocumentService
+@inject IDocumentAccessService AccessService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
@@ -107,8 +108,8 @@ else
                 }
             </MudPaper>
 
-            @* access list: leadership manages who may see this document *@
-            @if (_isLeadership)
+            @* access list: creator, taskforce lead, or leadership manages who may see this document *@
+            @if (_canManageAccess)
             {
                 <div class="mt-4">
                     <DocumentAccessList DocumentId="@_document.Id" />
@@ -128,6 +129,7 @@ else
     private List<DocumentAttachment> _attachments = new();
     private bool _mayDelete;
     private bool _isLeadership;
+    private bool _canManageAccess;
     private ClaimsPrincipal _user = default!;
     private string? _loadedId;
 
@@ -154,6 +156,7 @@ else
             _attachments = await DocumentService.GetAttachmentsAsync(Id, _isLeadership, _user.GetAgentId());
             _mayDelete = _isLeadership
                 || (_document.CreatedById is not null && _document.CreatedById == _user.GetAgentId());
+            _canManageAccess = await AccessService.CanManageAccessAsync(Id, _user);
         }
         _load = false;
     }

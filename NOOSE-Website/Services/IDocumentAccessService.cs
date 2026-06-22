@@ -9,6 +9,9 @@ public record DocumentAccessEntry(string AgentId, string Codename, string? RealN
 /// <summary>Materializes who has access to a document and manages per-agent revocations.</summary>
 public interface IDocumentAccessService
 {
+    /// <summary>True if the actor may view and manage this document's access list.</summary>
+    Task<bool> CanManageAccessAsync(string documentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     /// <summary>Internal active agents with role-based access, each flagged if currently revoked.</summary>
     Task<IReadOnlyList<DocumentAccessEntry>> GetAccessListAsync(string documentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

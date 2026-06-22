@@ -241,7 +241,7 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // block if already released agency-wide
+        // block if already released agency-wide (also covers an individual target)
         if (await db.PartnerShares.AnyAsync(s =>
             s.EntityType == entityType && s.EntityId == entityId &&
             s.Agency == agency && s.PartnerAgentId == null, cancellationToken))
@@ -249,14 +249,24 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
             throw new InvalidOperationException("Diese Akte ist für diese Behörde bereits freigegeben.");
         }
 
-        // dedup: no other pending request for the same target + agency
+        // block if this exact partner account already has it
+        if (partnerAgentId != null && await db.PartnerShares.AnyAsync(s =>
+            s.EntityType == entityType && s.EntityId == entityId &&
+            s.Agency == agency && s.PartnerAgentId == partnerAgentId, cancellationToken))
+        {
+            throw new InvalidOperationException("Diese Akte ist für diesen Partner bereits freigegeben.");
+        }
+
+        // dedup: no other pending request for the same target + agency + account
         if (await db.Requests.AnyAsync(r =>
             r.Type == RequestType.PartnerFreigabe &&
             r.TargetType == entityType && r.TargetId == entityId &&
-            r.FreigabeAgency == agency &&
+            r.FreigabeAgency == agency && r.FreigabePartnerAgentId == partnerAgentId &&
             r.Status == RequestStatus.Requested, cancellationToken))
         {
-            throw new InvalidOperationException("Für diese Akte läuft bereits ein Freigabe-Antrag für diese Behörde.");
+            throw new InvalidOperationException(partnerAgentId == null
+                ? "Für diese Akte läuft bereits ein Freigabe-Antrag für diese Behörde."
+                : "Für diese Akte läuft bereits ein Freigabe-Antrag für diesen Partner.");
         }
 
         var designation = await GetDesignationAsync(db, entityType, entityId, cancellationToken);

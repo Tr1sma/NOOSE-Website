@@ -300,8 +300,8 @@ else
 
     <MudText Typo="Typo.h6" Class="mb-2">Partner-Freigabe-Anträge</MudText>
     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
-        Agenten unterhalb Supervisory können beantragen, dass eine Akte für eine Partnerbehörde freigegeben wird.
-        Bei Genehmigung wird die Freigabe automatisch gesetzt.
+        Agenten unterhalb Supervisory können beantragen, dass eine Akte für eine Partnerbehörde oder einen einzelnen
+        Partner freigegeben wird. Bei Genehmigung wird die Freigabe automatisch gesetzt.
     </MudText>
     @if (_openPartnerRequests.Count == 0)
     {
@@ -323,7 +323,15 @@ else
                     <MudLink Href="@SearchNavigation.Route(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
                 </MudTd>
                 <MudTd DataLabel="Behörde">
-                    <MudText Typo="Typo.body2">@(context.FreigabeAgency.HasValue ? PartnerAgencyDisplay.Name(context.FreigabeAgency.Value) : "—")</MudText>
+                    @if (context.FreigabePartnerAgentId is not null)
+                    {
+                        <MudText Typo="Typo.body2">@(context.FreigabeAgency.HasValue ? PartnerAgencyDisplay.Name(context.FreigabeAgency.Value) : "—") · @(_agentNames.GetValueOrDefault(context.FreigabePartnerAgentId, "Einzel-Partner"))</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Einzelner Partner</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">@(context.FreigabeAgency.HasValue ? PartnerAgencyDisplay.Name(context.FreigabeAgency.Value) : "—")</MudText>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Ganze Akte">
                     <MudIcon Icon="@(context.FreigabeIncludesChildren ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"

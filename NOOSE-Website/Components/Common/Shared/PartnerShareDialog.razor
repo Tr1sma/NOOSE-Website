@@ -66,16 +66,31 @@
         else
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-                Beantragen Sie, dass diese Akte für eine Partnerbehörde freigegeben wird. Die Führung entscheidet
-                über den Antrag; bei Genehmigung wird die Freigabe automatisch gesetzt.
+                Beantragen Sie, dass diese Akte für eine Partnerbehörde oder einen einzelnen Partner freigegeben
+                wird. Die Führung entscheidet über den Antrag; bei Genehmigung wird die Freigabe automatisch gesetzt.
             </MudText>
-            <MudSelect T="PartnerAgency" @bind-Value="_reqAgency" Label="Behörde" Variant="Variant.Outlined"
-                       Required="true" Class="mb-3">
-                @foreach (var a in PartnerAgencyDisplay.All)
-                {
-                    <MudSelectItem Value="a">@PartnerAgencyDisplay.Name(a) · @PartnerAgencyDisplay.LongName(a)</MudSelectItem>
-                }
-            </MudSelect>
+            <MudRadioGroup T="bool" @bind-Value="_reqIndividual" Class="mb-3">
+                <MudRadio T="bool" Value="false" Color="Color.Primary">Behörde</MudRadio>
+                <MudRadio T="bool" Value="true" Color="Color.Primary">Einzelner Partner</MudRadio>
+            </MudRadioGroup>
+            @if (!_reqIndividual)
+            {
+                <MudSelect T="PartnerAgency" @bind-Value="_reqAgency" Label="Behörde" Variant="Variant.Outlined"
+                           Required="true" Class="mb-3">
+                    @foreach (var a in PartnerAgencyDisplay.All)
+                    {
+                        <MudSelectItem Value="a">@PartnerAgencyDisplay.Name(a) · @PartnerAgencyDisplay.LongName(a)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <MudAutocomplete T="PartnerAccountOption" Label="Partner-Konto" Variant="Variant.Outlined" Class="mb-3"
+                                 @bind-Value="_reqPartner" SearchFunc="SearchPartners" Dense="true" ResetValueOnEmptyText="true"
+                                 Required="true"
+                                 ToStringFunc="@(o => o is null ? string.Empty : $"{o.Codename} · {PartnerRankDisplay.Full(o.Agency, o.Rank)}")"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonAdd" />
+            }
             <MudCheckBox T="bool" @bind-Value="_reqIncludesChildren" Color="Color.Primary" Label="Ganze Akte (inklusive Unterpunkte)" Class="mb-3" />
             <MudTextField @bind-Value="_reqJustification" Label="Begründung" Variant="Variant.Outlined"
                           Lines="3" Required="true" Placeholder="Warum sollte diese Akte freigegeben werden?" />
@@ -106,7 +121,9 @@
     private PartnerAccountOption? _toAdd;
 
     // request-mode fields
+    private bool _reqIndividual;
     private PartnerAgency _reqAgency;
+    private PartnerAccountOption? _reqPartner;
     private bool _reqIncludesChildren;
     private string? _reqJustification;
     private bool _submitting;
@@ -116,9 +133,9 @@
         try
         {
             _user = (await AuthStateTask).User;
+            _partners = await ShareService.GetSelectablePartnersAsync();
             if (_user.IsLeadership())
             {
-                _partners = await ShareService.GetSelectablePartnersAsync();
                 await ReloadAsync();
             }
         }
@@ -206,11 +223,18 @@
             Snackbar.Add("Bitte eine Begründung angeben.", Severity.Warning);
             return;
         }
+        if (_reqIndividual && _reqPartner is null)
+        {
+            Snackbar.Add("Bitte ein Partner-Konto auswählen.", Severity.Warning);
+            return;
+        }
         _submitting = true;
         try
         {
+            var agency = _reqIndividual ? _reqPartner!.Agency : _reqAgency;
+            var partnerAgentId = _reqIndividual ? _reqPartner!.AgentId : null;
             await ShareService.RequestPartnerShareAsync(
-                _user, EntityType, EntityId, _reqAgency, null, _reqIncludesChildren, _reqJustification);
+                _user, EntityType, EntityId, agency, partnerAgentId, _reqIncludesChildren, _reqJustification);
             Snackbar.Add("Freigabe-Antrag gestellt. Die Führung entscheidet zeitnah.", Severity.Success);
             MudDialog.Close();
         }
