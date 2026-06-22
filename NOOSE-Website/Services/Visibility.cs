@@ -25,6 +25,11 @@ public static class Visibility
         {
             return PartnerVisibility.IsRecordVisibleToPartnerAsync(db, entityType, entityId, agency, scope.MeId, cancellationToken);
         }
+        // taskforces gate on membership (MayAllTaskforces), not the classified-read flag
+        if (entityType == nameof(Taskforce))
+        {
+            return TaskforceVisibility.IsVisibleAsync(db, entityId, scope.MayAllTaskforces, scope.MeId, cancellationToken);
+        }
         return IsRecordVisibleAsync(db, entityType, entityId, scope.MayClassifiedRead, cancellationToken, scope.MeId);
     }
 

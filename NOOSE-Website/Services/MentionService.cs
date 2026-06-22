@@ -126,7 +126,9 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         if (sourcesRaw.Count > 0)
         {
             var parentsRefs = sourcesRaw.Select(q => (q.EntityType, q.EntityId)).Distinct().ToList();
-            var parentsMap = await RecordsReference.ResolveAsync(db, parentsRefs, cancellationToken);
+            // taskforce parents must respect membership, not just classification
+            var parentsMap = await RecordsReference.ResolveAsync(db, parentsRefs, cancellationToken,
+                mayAllTaskforces: mayClassifiedRead, meId: meId);
             var count = 0;
             foreach (var q in sourcesRaw)
             {

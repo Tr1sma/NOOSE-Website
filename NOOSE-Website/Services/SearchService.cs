@@ -962,7 +962,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
         {
             map[(nameof(Operation), x.Id)] = (x.Title, x.CaseNumber, x.IsClassified);
         }
-        foreach (var x in await db.Taskforces.Where(t => taskforceIds.Contains(t.Id))
+        // taskforces are membership-gated, not classification-gated: resolve only visible ones
+        foreach (var x in await db.Taskforces.OnlyVisible(db, isLeadership, meId).Where(t => taskforceIds.Contains(t.Id))
                      .Select(t => new { t.Id, t.Name, t.CaseNumber, t.IsClassified }).ToListAsync(cancellationToken))
         {
             map[(nameof(Taskforce), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);

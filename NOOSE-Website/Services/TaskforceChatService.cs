@@ -14,7 +14,8 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
     public async Task<List<TaskforceMessage>> GetMessagesAsync(string taskforceId, ViewerScope scope, int limit = 100, DateTime? olderAs = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, scope, cancellationToken))
+        // partners never see the taskforce chat, even on a released taskforce
+        if (scope.IsPartner || !await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, scope, cancellationToken))
         {
             return new();
         }
@@ -42,6 +43,11 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // partners have no chat access at all
+        if (actor.IsPartner())
+        {
+            throw new UnauthorizedAccessException("Partner haben keinen Zugriff auf den Taskforce-Chat.");
+        }
         if (!await Visibility.IsRecordVisibleAsync(db, nameof(Taskforce), taskforceId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Diese Taskforce ist für dich nicht zugänglich.");
@@ -71,6 +77,11 @@ public class TaskforceChatService(IDbContextFactory<AppDbContext> dbFactory, Tas
 
     public async Task DeleteAsync(string messageId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        // partners have no chat access at all
+        if (actor.IsPartner())
+        {
+            throw new UnauthorizedAccessException("Partner haben keinen Zugriff auf den Taskforce-Chat.");
+        }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var message = await db.TaskforceMessages.FirstOrDefaultAsync(n => n.Id == messageId, cancellationToken);
         if (message is null)
