@@ -230,6 +230,19 @@ else
 
     private async Task SeedDemoDataAsync()
     {
+        var parameters = new DialogParameters<DemoModeConfirmDialog>
+        {
+            { x => x.Heading, "Demo-Daten einspielen?" },
+            { x => x.ConfirmText, "Demo-Daten einspielen" },
+            { x => x.Consequence, SeedConsequence },
+        };
+        var dialog = await DialogService.ShowAsync<DemoModeConfirmDialog>("Demo-Daten einspielen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not true)
+        {
+            return; // not confirmed → nothing written
+        }
+
         _seeding = true;
         try
         {
@@ -245,6 +258,13 @@ else
             _seeding = false;
         }
     }
+
+    private RenderFragment SeedConsequence =>
+        @<MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            Es werden rund <b>14 Fraktionen</b> und <b>40 Personen</b> samt Beziehungen, Mitgliedschaften
+            und Beispiel-Dokumenten in die Datenbank <b>dieser Instanz</b> geschrieben.
+            Nur auf der Demo-Instanz ausführen, <b>niemals auf der Produktiv-Instanz mit echten Akten</b>.
+        </MudAlert>;
 
     private async Task LogoUploadAsync(IBrowserFile? file)
     {

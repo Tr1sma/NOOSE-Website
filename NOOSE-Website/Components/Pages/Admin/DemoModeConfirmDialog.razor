@@ -8,7 +8,7 @@
             <MudStack Spacing="3">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Large" />
-                    <MudText Typo="Typo.h6">Demo-Modus aktivieren?</MudText>
+                    <MudText Typo="Typo.h6">@Heading</MudText>
                 </MudStack>
                 <MudText Typo="Typo.body1">Willst du das wirklich?</MudText>
             </MudStack>
@@ -17,11 +17,18 @@
         {
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Error">Auswirkungen</MudText>
-                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
-                    Anonyme Besucher sehen <b>ALLE Daten dieser Instanz</b> – inklusive Verschlusssachen
-                    und Klarnamen – <b>ohne Login</b>. Nur auf der Demo-Instanz mit Beispieldaten aktivieren,
-                    niemals auf der Produktiv-Instanz mit echten Akten.
-                </MudAlert>
+                @if (Consequence is not null)
+                {
+                    @Consequence
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        Anonyme Besucher sehen <b>ALLE Daten dieser Instanz</b> – inklusive Verschlusssachen
+                        und Klarnamen – <b>ohne Login</b>. Nur auf der Demo-Instanz mit Beispieldaten aktivieren,
+                        niemals auf der Produktiv-Instanz mit echten Akten.
+                    </MudAlert>
+                }
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
                     Der „Weiter"-Button ist gesperrt, bis du die Auswirkungen gelesen hast.
                 </MudText>
@@ -61,7 +68,7 @@
         {
             <MudButton Color="Color.Error" Variant="Variant.Filled"
                        Disabled="@(!string.Equals(_typed?.Trim(), _challenge, StringComparison.OrdinalIgnoreCase))"
-                       OnClick="Confirm">Demo-Modus aktivieren</MudButton>
+                       OnClick="Confirm">@ConfirmText</MudButton>
         }
     </DialogActions>
 </MudDialog>
@@ -76,6 +83,15 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Heading shown on the first step.</summary>
+    [Parameter] public string Heading { get; set; } = "Demo-Modus aktivieren?";
+
+    /// <summary>Label of the final confirm button.</summary>
+    [Parameter] public string ConfirmText { get; set; } = "Demo-Modus aktivieren";
+
+    /// <summary>Consequence content for the second step; falls back to the demo-mode warning when null.</summary>
+    [Parameter] public RenderFragment? Consequence { get; set; }
 
     private int _step = 1;
     private int _lockSeconds = 10;
