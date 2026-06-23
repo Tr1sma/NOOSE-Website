@@ -23,21 +23,18 @@ internal sealed class DemoAwareAuthenticationStateProvider(
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
+        // primary path: the middleware sets HttpContext.User, which the framework persists as the
+        // circuit's state; this only backstops a reconnect that arrives anonymous. No SetAuthenticationState
+        // here on purpose (would re-notify mid-resolution).
         var state = await base.GetAuthenticationStateAsync();
         if (state.User.Identity?.IsAuthenticated == true)
         {
             return state;
         }
 
-        // anonymous circuit + demo mode → present the demo agent
-        if (await DemoActiveAsync())
-        {
-            var demo = new AuthenticationState(DemoIdentity.BuildPrincipal());
-            SetAuthenticationState(Task.FromResult(demo));
-            return demo;
-        }
-
-        return state;
+        return await DemoActiveAsync()
+            ? new AuthenticationState(DemoIdentity.BuildPrincipal())
+            : state;
     }
 
     protected override async Task<bool> ValidateAuthenticationStateAsync(

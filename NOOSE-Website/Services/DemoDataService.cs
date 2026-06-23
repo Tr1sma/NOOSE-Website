@@ -52,7 +52,12 @@ public class DemoDataService(
             IsHRB = true,
             RegisteredAt = DateTime.UtcNow,
         };
-        await userManager.CreateAsync(agent);
+        var result = await userManager.CreateAsync(agent);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Demo-Agent konnte nicht angelegt werden: " + string.Join("; ", result.Errors.Select(e => e.Description)));
+        }
         return 1;
     }
 
