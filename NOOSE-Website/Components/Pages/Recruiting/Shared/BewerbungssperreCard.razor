@@ -1,0 +1,42 @@
+@* Applicant-facing recruitment-ban notice; persists for the whole ban window. *@
+
+<MudStack Spacing="3" AlignItems="AlignItems.Center" Class="py-2">
+    <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Large" />
+    <MudText Typo="Typo.h5" Align="Align.Center">Bewerbung derzeit gesperrt</MudText>
+
+    @if (Ban.IsBlacklist)
+    {
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mud-text-secondary">
+            Eine erneute Bewerbung bei der NOOSE ist nicht möglich.
+        </MudText>
+    }
+    else if (Ban.BannedUntil is { } until)
+    {
+        <MudText Typo="Typo.body1" Align="Align.Center">
+            Gesperrt bis <b>@until.ToLocalTime().ToString("dd.MM.yyyy")</b>
+        </MudText>
+        <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">@Remaining(until)</MudChip>
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mud-text-secondary">
+            Ab diesem Datum kannst du dich erneut bewerben.
+        </MudText>
+    }
+
+    <MudText Typo="Typo.caption" Align="Align.Center" Class="mud-text-secondary mt-2">
+        Das Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.
+    </MudText>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public BewerbungssperreInfo Ban { get; set; } = default!;
+
+    private static string Remaining(DateTime untilUtc)
+    {
+        var left = untilUtc - DateTime.UtcNow;
+        if (left <= TimeSpan.Zero)
+        {
+            return "Läuft heute aus";
+        }
+        var days = (int)Math.Ceiling(left.TotalDays);
+        return days <= 1 ? "Noch weniger als 1 Tag" : $"Noch {days} Tage";
+    }
+}

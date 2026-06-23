@@ -26,17 +26,15 @@
 
             @if (_bewerbung.Status == BewerbungStatus.Abgelehnt || _bewerbung.Status == BewerbungStatus.Geschlossen)
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                    Dein Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.
-                </MudAlert>
-                @if (_ban is { IsBlacklist: false, BannedUntil: { } until })
+                @if (_ban is not null)
                 {
-                    <MudText Typo="Typo.body2" Class="mt-3">
-                        Du kannst dich ab dem <b>@until.ToLocalTime().ToString("dd.MM.yyyy")</b> erneut bewerben.
-                    </MudText>
+                    <BewerbungssperreCard Ban="_ban" />
                 }
-                else if (_ban is null)
+                else
                 {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                        Dein Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.
+                    </MudAlert>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                                Href="/portal" Class="mt-3">Neue Bewerbung</MudButton>
                 }

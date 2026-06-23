@@ -200,7 +200,11 @@ public class BewerbungService(
         }
 
         bewerbung.SecurityCheckPassed = passed;
-        if (!passed)
+        if (passed)
+        {
+            bewerbung.Status = BewerbungStatus.ImTest; // security cleared → advance to the test stage
+        }
+        else
         {
             bewerbung.Status = BewerbungStatus.Abgelehnt;
             bewerbung.DecidedByName = actor.GetCodename();
@@ -214,14 +218,15 @@ public class BewerbungService(
         {
             try { await sperren.BanAsync(bewerbung.ApplicantUserId, bewerbung.Id, bewerbung.Name, bewerbung.DecisionNote, actor, cancellationToken); }
             catch { /* best effort: the rejection itself is already saved */ }
-
-            try
-            {
-                await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
-                    "Deine Bewerbung wurde abgeschlossen.", "/portal/status", cancellationToken);
-            }
-            catch { /* best effort */ }
         }
+
+        try
+        {
+            await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
+                passed ? $"Statusänderung: {BewerbungStatusDisplay.Name(BewerbungStatus.ImTest)}" : "Deine Bewerbung wurde abgeschlossen.",
+                "/portal/status", cancellationToken);
+        }
+        catch { /* best effort */ }
     }
 
     public async Task LinkPersonAsync(string id, string? personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

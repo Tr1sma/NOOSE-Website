@@ -8,23 +8,10 @@
 
 <PageTitle>Bewerbung · NOOSE</PageTitle>
 
-@if (_blocked)
+@if (_blocked && _ban is not null)
 {
     <MudPaper Elevation="4" Class="pa-8">
-        <MudStack Spacing="3" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Large" />
-            <MudText Typo="Typo.h5" Align="Align.Center">Bewerbung derzeit nicht möglich</MudText>
-            <MudText Typo="Typo.body1" Align="Align.Center" Class="mud-text-secondary">
-                @if (_ban is { IsBlacklist: false, BannedUntil: { } until })
-                {
-                    <text>Du kannst dich ab dem @until.ToLocalTime().ToString("dd.MM.yyyy") erneut bei der NOOSE bewerben.</text>
-                }
-                else
-                {
-                    <text>Dein Auswahlverfahren wurde abgeschlossen. Eine erneute Bewerbung ist nicht möglich.</text>
-                }
-            </MudText>
-        </MudStack>
+        <BewerbungssperreCard Ban="_ban" />
     </MudPaper>
 }
 else if (_ready)

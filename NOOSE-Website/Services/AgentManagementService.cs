@@ -494,6 +494,8 @@ public class AgentManagementService(
 
         // recruiting: this person's own invites/applications go; applications they merely processed are detached
         await db.AgentInvites.IgnoreQueryFilters().Where(x => x.UsedByUserId == agentId).ExecuteDeleteAsync(cancellationToken);
+        // bans hold Restrict FKs to both the agent and the application -> purge before either drops
+        await db.Bewerbungssperren.IgnoreQueryFilters().Where(x => x.AgentId == agentId).ExecuteDeleteAsync(cancellationToken);
         await db.Bewerbungen.IgnoreQueryFilters().Where(x => x.ApplicantUserId == agentId).ExecuteDeleteAsync(cancellationToken);
         await db.Bewerbungen.IgnoreQueryFilters().Where(x => x.AssignedAgentId == agentId)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.AssignedAgentId, (string?)null), cancellationToken);
