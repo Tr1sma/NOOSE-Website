@@ -3,6 +3,9 @@
 ###############################################################################
 * text=auto
 
+# Shell scripts must keep LF even on Windows checkouts (bash chokes on CRLF).
+*.sh text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
