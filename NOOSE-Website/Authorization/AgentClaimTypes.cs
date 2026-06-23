@@ -9,6 +9,7 @@ public static class AgentClaimTypes
     public const string IsHRB = "noose:hrb";
     public const string IsAdmin = "noose:admin";
     public const string IsTeamLead = "noose:teamleitung";
+    public const string IsDemo = "noose:demo";
     public const string Codename = "noose:codename";
     public const string BadgeNumber = "noose:dienstnummer";
     public const string PartnerAgency = "noose:partnerbehoerde";

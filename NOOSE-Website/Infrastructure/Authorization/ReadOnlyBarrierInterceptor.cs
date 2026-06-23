@@ -33,7 +33,7 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
 
     private static void Require(DbContext? context, CurrentUserInfo user)
     {
-        if (context is null || (!user.IsOnlyReader && !user.IsPartner))
+        if (context is null || (!user.IsOnlyReader && !user.IsPartner && !user.IsDemo))
         {
             return;
         }

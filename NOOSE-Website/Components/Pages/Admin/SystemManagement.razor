@@ -4,6 +4,8 @@
 @using MudBlazor.Utilities
 @inject ISystemSettingService SettingService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IDemoDataService DemoData
 
 <PageTitle>System · NOOSE</PageTitle>
 
@@ -32,6 +34,22 @@ else
             <MudSwitch T="bool" @bind-Value="_input.MaintenanceModeActive" Color="Color.Error" Label="Wartungsmodus aktiv" />
             <MudTextField @bind-Value="_input.MaintenanceModeText" Label="Hinweistext (optional)" Variant="Variant.Outlined"
                           Class="mt-2" Placeholder="z. B. Geplante Wartung – wir sind in Kürze zurück." />
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Demo-Modus</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Macht die gesamte Website ohne Login als schreibgeschützte Vorschau mit Beispieldaten sichtbar
+                (Portfolio/Showcase). <b>Nur auf der Demo-Instanz aktivieren</b> – niemals mit echten Daten.
+            </MudText>
+            <AuthorizeView Policy="@Policies.Admin" Context="admin">
+                <MudSwitch T="bool" Value="_input.DemoModeActive" Color="Color.Error"
+                           Label="Demo-Modus aktiv (öffentlich, ohne Login)"
+                           ValueChanged="DemoModeToggleAsync" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
+                           StartIcon="@Icons.Material.Filled.DataObject" OnClick="SeedDemoDataAsync"
+                           Disabled="_seeding">Demo-Daten einspielen</MudButton>
+            </AuthorizeView>
         </MudPaper>
 
         <MudPaper Class="pa-4" Elevation="2">
@@ -130,6 +148,7 @@ else
 
     private bool _load = true;
     private bool _busy;
+    private bool _seeding;
     private SystemConfiguration? _configuration;
     private SystemConfigurationInput _input = new();
     private ClaimsPrincipal _user = default!;
@@ -187,6 +206,43 @@ else
         finally
         {
             _busy = false;
+        }
+    }
+
+    private async Task DemoModeToggleAsync(bool value)
+    {
+        if (value)
+        {
+            var dialog = await DialogService.ShowAsync<DemoModeConfirmDialog>("Demo-Modus aktivieren");
+            var result = await dialog.Result;
+            if (result is null || result.Canceled || result.Data is not true)
+            {
+                return; // not confirmed → stays off
+            }
+            _input.DemoModeActive = true;
+        }
+        else
+        {
+            _input.DemoModeActive = false;
+        }
+        await SaveAsync();
+    }
+
+    private async Task SeedDemoDataAsync()
+    {
+        _seeding = true;
+        try
+        {
+            var count = await DemoData.SeedAsync(_user);
+            Snackbar.Add($"Demo-Daten eingespielt ({count} neue Datensätze).", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _seeding = false;
         }
     }
 

@@ -74,6 +74,13 @@
                 </MudAlert>
             </AuthorizeView>
 
+            @if (_isDemo)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4 no-print">
+                    Demo-Modus: schreibgeschützte Vorschau mit Beispieldaten. Änderungen sind nicht möglich.
+                </MudAlert>
+            }
+
             @* Announcement banner, maintained by leadership/admins under /admin/system. *@
             @if (!string.IsNullOrWhiteSpace(_configuration?.BannerText))
             {
@@ -169,6 +176,7 @@
     private MudTheme _theme = NooseTheme.Theme;
     private bool _isAdmin;
     private bool _isPartner;
+    private bool _isDemo;
     private IReadOnlySet<string>? _allowedPartnerTypes;
 
     // re-evaluated each render
@@ -183,6 +191,7 @@
         {
             var user = (await AuthStateTask).User;
             _isAdmin = user.IsAdmin();
+            _isDemo = user.IsDemo();
             _isPartner = user.IsPartner();
             if (_isPartner)
             {

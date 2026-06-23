@@ -1,0 +1,121 @@
+@implements IDisposable
+
+@* Three-stage confirmation before enabling public demo mode (anonymous read access). *@
+<MudDialog>
+    <DialogContent>
+        @if (_step == 1)
+        {
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">Demo-Modus aktivieren?</MudText>
+                </MudStack>
+                <MudText Typo="Typo.body1">Willst du das wirklich?</MudText>
+            </MudStack>
+        }
+        else if (_step == 2)
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Error">Auswirkungen</MudText>
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                    Anonyme Besucher sehen <b>ALLE Daten dieser Instanz</b> – inklusive Verschlusssachen
+                    und Klarnamen – <b>ohne Login</b>. Nur auf der Demo-Instanz mit Beispieldaten aktivieren,
+                    niemals auf der Produktiv-Instanz mit echten Akten.
+                </MudAlert>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Der „Weiter"-Button ist gesperrt, bis du die Auswirkungen gelesen hast.
+                </MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6">Bestätigung</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Tippe das folgende Wort ab (es lässt sich nicht kopieren):
+                </MudText>
+                <div class="demo-word">
+                    @foreach (var ch in _challenge)
+                    {
+                        <span class="demo-letter" data-c="@ch"></span>
+                    }
+                </div>
+                <MudTextField @bind-Value="_typed" Immediate="true" Label="Wort eingeben"
+                              Variant="Variant.Outlined" autocomplete="off" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        @if (_step == 1)
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="GoToStep2">Ja, fortfahren</MudButton>
+        }
+        else if (_step == 2)
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Filled" Disabled="_lockSeconds > 0" OnClick="GoToStep3">
+                @(_lockSeconds > 0 ? $"Weiter ({_lockSeconds})" : "Weiter")
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Filled"
+                       Disabled="@(!string.Equals(_typed?.Trim(), _challenge, StringComparison.OrdinalIgnoreCase))"
+                       OnClick="Confirm">Demo-Modus aktivieren</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .demo-word { display:flex; gap:.4rem; font-size:2rem; font-weight:700; letter-spacing:.25rem;
+                 background:rgba(255,255,255,.05); padding:.75rem 1rem; border-radius:.5rem;
+                 user-select:none; -webkit-user-select:none; }
+    .demo-letter { pointer-events:none; }
+    .demo-letter::before { content:attr(data-c); }
+</style>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private int _step = 1;
+    private int _lockSeconds = 10;
+    private string _typed = string.Empty;
+    private readonly string _challenge = GenerateWord();
+    private System.Timers.Timer? _timer;
+
+    private void GoToStep2()
+    {
+        _step = 2;
+        _lockSeconds = 10;
+        _timer = new System.Timers.Timer(1000);
+        _timer.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(() =>
+            {
+                if (_lockSeconds > 0) _lockSeconds--;
+                if (_lockSeconds <= 0) { _timer?.Stop(); _timer?.Dispose(); _timer = null; }
+                StateHasChanged();
+            });
+        };
+        _timer.Start();
+    }
+
+    private void GoToStep3()
+    {
+        _timer?.Dispose();
+        _timer = null;
+        _step = 3;
+    }
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+
+    public void Dispose() => _timer?.Dispose();
+
+    // non-confusable uppercase letters (no I/O/Q)
+    private static string GenerateWord()
+    {
+        const string letters = "ABCDEFGHJKLMNPRSTUVWXYZ";
+        return string.Concat(Enumerable.Range(0, 6).Select(_ => letters[Random.Shared.Next(letters.Length)]));
+    }
+}

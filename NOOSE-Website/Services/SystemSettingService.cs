@@ -48,7 +48,8 @@ public partial class SystemSettingService(
                 ThemeSecondary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeSecondary)),
                 ThemeTertiary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeTertiary)),
                 LogoFileName: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoFileName)),
-                LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)));
+                LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)),
+                DemoModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.DemoModeActive), "true", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception)
         {
@@ -83,6 +84,7 @@ public partial class SystemSettingService(
         await SetAsync(db, SystemSettingKeys.ThemePrimary, Empty(input.ThemePrimary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.ThemeSecondary, Empty(input.ThemeSecondary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.ThemeTertiary, Empty(input.ThemeTertiary)?.Trim(), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.DemoModeActive, input.DemoModeActive ? "true" : "false", cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         cache.Remove(CacheKey);
@@ -156,7 +158,7 @@ public partial class SystemSettingService(
     }
 
     private static SystemConfiguration Default()
-        => new(false, null, null, BannerLevels.Info, null, null, null, null, null);
+        => new(false, null, null, BannerLevels.Info, null, null, null, null, null, false);
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 

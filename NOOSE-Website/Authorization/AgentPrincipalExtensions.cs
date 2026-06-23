@@ -48,6 +48,10 @@ public static class AgentPrincipalExtensions
     public static bool IsTeamLead(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTeamLead), "true", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Read-only public demo visitor (synthetic principal); reads everything, writes nothing.</summary>
+    public static bool IsDemo(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsDemo), "true", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Read-only supervision = TeamLead without admin: reads everything but writes nothing and never sees real names.</summary>
     public static bool IsOnlyReader(this ClaimsPrincipal user)
         => user.IsTeamLead() && !user.IsAdmin();
@@ -77,8 +81,8 @@ public static class AgentPrincipalExtensions
     public static bool HasPartnerRank(this ClaimsPrincipal user, PartnerAgency agency, PartnerRank minimum)
         => user.GetPartnerAgency() == agency && user.GetPartnerRank() is { } rank && rank >= minimum;
 
-    /// <summary>May write at all; false for read-only supervisors and partners. Sole source for write-control visibility.</summary>
-    public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader() && !user.IsPartner();
+    /// <summary>May write at all; false for read-only supervisors, partners and demo visitors. Sole source for write-control visibility.</summary>
+    public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader() && !user.IsPartner() && !user.IsDemo();
 
     /// <summary>Leadership = rank ≥ Supervisory Special Agent or admin.</summary>
     public static bool IsLeadership(this ClaimsPrincipal user)

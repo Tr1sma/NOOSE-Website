@@ -130,7 +130,7 @@ builder.Services.AddNooseAuthorization();
 
 // ---- Auth state ----
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider, DemoAwareAuthenticationStateProvider>();
 
 // ---- Services ----
 builder.Services.AddScoped<IAgentManagementService, AgentManagementService>();
@@ -197,6 +197,7 @@ builder.Services.AddSingleton<WatchlistDispatcher>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
+builder.Services.AddScoped<IDemoDataService, DemoDataService>();
 builder.Services.AddScoped<INavPreferencesService, NavPreferencesService>();
 builder.Services.AddScoped<INavLabelService, NavLabelService>();
 builder.Services.AddScoped<IPartnerVisibilityPolicyService, PartnerVisibilityPolicyService>();
@@ -252,6 +253,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseMiddleware<NOOSE_Website.Infrastructure.DemoModeMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseAntiforgery();

@@ -45,5 +45,5 @@ public class CurrentUserService(IHttpContextAccessor httpContextAccessor, Circui
     }
 
     private static CurrentUserInfo Build(ClaimsPrincipal user)
-        => new(user.GetAgentId(), user.GetCodename() ?? user.Identity?.Name, user.IsOnlyReader(), user.IsPartner());
+        => new(user.GetAgentId(), user.GetCodename() ?? user.Identity?.Name, user.IsOnlyReader(), user.IsPartner(), user.IsDemo());
 }
