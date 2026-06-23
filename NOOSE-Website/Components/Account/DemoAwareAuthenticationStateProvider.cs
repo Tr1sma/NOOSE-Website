@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities;
@@ -15,26 +16,42 @@ namespace NOOSE_Website.Components.Account;
 internal sealed class DemoAwareAuthenticationStateProvider(
     ILoggerFactory loggerFactory,
     IServiceScopeFactory scopeFactory,
-    IOptions<IdentityOptions> options)
+    IOptions<IdentityOptions> options,
+    IConfiguration configuration)
     : RevalidatingServerAuthenticationStateProvider(loggerFactory)
 {
+    // demo instance: present every anonymous visitor as the demo agent unconditionally (no DB check)
+    private readonly bool _forceDemo = configuration.GetValue<bool>("Demo:AutoSetup");
+
     // keep identical to the SecurityStampValidator interval in Program.cs
     protected override TimeSpan RevalidationInterval => TimeSpan.FromSeconds(30);
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
         // primary path: the middleware sets HttpContext.User, which the framework persists as the
-        // circuit's state; this only backstops a reconnect that arrives anonymous. No SetAuthenticationState
+        // circuit's state; this also backstops a reconnect that arrives anonymous. No SetAuthenticationState
         // here on purpose (would re-notify mid-resolution).
-        var state = await base.GetAuthenticationStateAsync();
-        if (state.User.Identity?.IsAuthenticated == true)
+        AuthenticationState? state = null;
+        try
+        {
+            state = await base.GetAuthenticationStateAsync();
+        }
+        catch
+        {
+            /* circuit without a seeded auth state: fall through to the demo backstop */
+        }
+
+        if (state?.User.Identity?.IsAuthenticated == true)
         {
             return state;
         }
 
-        return await DemoActiveAsync()
-            ? new AuthenticationState(DemoIdentity.BuildPrincipal())
-            : state;
+        if (_forceDemo || await DemoActiveAsync())
+        {
+            return new AuthenticationState(DemoIdentity.BuildPrincipal());
+        }
+
+        return state ?? new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
     }
 
     protected override async Task<bool> ValidateAuthenticationStateAsync(

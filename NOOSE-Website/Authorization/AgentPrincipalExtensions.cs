@@ -38,6 +38,10 @@ public static class AgentPrincipalExtensions
     public static bool IsAdmin(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsAdmin), "true", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Configured bootstrap admin (Discord ID in Bootstrap config); gate for demo mode and demo data.</summary>
+    public static bool IsBootstrapAdmin(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsBootstrap), "true", StringComparison.OrdinalIgnoreCase);
+
     public static bool IsTRU(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTRU), "true", StringComparison.OrdinalIgnoreCase);
 

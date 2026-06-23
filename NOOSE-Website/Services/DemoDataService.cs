@@ -11,7 +11,7 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Seeds the demo agent and a rich, interconnected example dataset; idempotent (skips existing by natural key) and admin-gated. Never auto-runs at startup.</summary>
+/// <summary>Seeds the demo agent and a rich, interconnected example dataset; idempotent (skips existing by natural key) and bootstrap-admin-gated. Never auto-runs at startup.</summary>
 public class DemoDataService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumbers,
@@ -19,7 +19,7 @@ public class DemoDataService(
 {
     public async Task<int> SeedAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireBootstrapAdmin(actor);
 
         var added = await EnsureDemoAgentAsync();
 

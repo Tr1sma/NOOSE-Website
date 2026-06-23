@@ -41,14 +41,22 @@ else
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                 Macht die gesamte Website ohne Login als schreibgeschützte Vorschau mit Beispieldaten sichtbar
                 (Portfolio/Showcase). <b>Nur auf der Demo-Instanz aktivieren</b> – niemals mit echten Daten.
+                Vorbehalten den <b>Bootstrap-Admins</b>.
             </MudText>
-            <AuthorizeView Policy="@Policies.Admin" Context="admin">
-                <MudSwitch T="bool" Value="_input.DemoModeActive" Color="Color.Error"
-                           Label="Demo-Modus aktiv (öffentlich, ohne Login)"
-                           ValueChanged="DemoModeToggleAsync" />
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
-                           StartIcon="@Icons.Material.Filled.DataObject" OnClick="SeedDemoDataAsync"
-                           Disabled="_seeding">Demo-Daten einspielen</MudButton>
+            <AuthorizeView Policy="@Policies.BootstrapAdmin" Context="bootstrap">
+                <Authorized>
+                    <MudSwitch T="bool" Value="_input.DemoModeActive" Color="Color.Error"
+                               Label="Demo-Modus aktiv (öffentlich, ohne Login)"
+                               ValueChanged="DemoModeToggleAsync" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
+                               StartIcon="@Icons.Material.Filled.DataObject" OnClick="SeedDemoDataAsync"
+                               Disabled="_seeding">Demo-Daten einspielen</MudButton>
+                </Authorized>
+                <NotAuthorized>
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Demo-Modus und Demo-Daten können nur von Bootstrap-Admins gesteuert werden.
+                    </MudAlert>
+                </NotAuthorized>
             </AuthorizeView>
         </MudPaper>
 
@@ -172,6 +180,7 @@ else
             ThemePrimary = _configuration.ThemePrimary,
             ThemeSecondary = _configuration.ThemeSecondary,
             ThemeTertiary = _configuration.ThemeTertiary,
+            DemoModeActive = _configuration.DemoModeActive,
         };
         _load = false;
     }

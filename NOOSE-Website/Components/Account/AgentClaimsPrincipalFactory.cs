@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Account;
 
@@ -10,7 +11,8 @@ namespace NOOSE_Website.Components.Account;
 public class AgentClaimsPrincipalFactory(
     UserManager<Agent> userManager,
     RoleManager<IdentityRole> roleManager,
-    IOptions<IdentityOptions> optionsAccessor)
+    IOptions<IdentityOptions> optionsAccessor,
+    IConfiguration configuration)
     : UserClaimsPrincipalFactory<Agent, IdentityRole>(userManager, roleManager, optionsAccessor)
 {
     protected override async Task<ClaimsIdentity> GenerateClaimsAsync(Agent user)
@@ -21,6 +23,7 @@ public class AgentClaimsPrincipalFactory(
         identity.AddClaim(new Claim(AgentClaimTypes.BadgeNumber, user.BadgeNumber ?? string.Empty));
         identity.AddClaim(new Claim(AgentClaimTypes.Status, user.Status.ToString()));
         identity.AddClaim(new Claim(AgentClaimTypes.IsAdmin, user.IsAdmin ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IsBootstrap, BootstrapAdmins.Contains(configuration, user.DiscordId) ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsTRU, user.IsTRU ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsHRB, user.IsHRB ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsTeamLead, user.IsTeamLead ? "true" : "false"));

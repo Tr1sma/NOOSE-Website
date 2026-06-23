@@ -526,18 +526,7 @@ public class AgentManagementService(
 
     /// <summary>True if the Discord ID is a configured bootstrap admin (single or list key).</summary>
     private bool IsBootstrapAdmin(string? discordId)
-    {
-        if (string.IsNullOrWhiteSpace(discordId))
-        {
-            return false;
-        }
-        if (string.Equals(configuration["Bootstrap:AdminDiscordId"]?.Trim(), discordId, StringComparison.Ordinal))
-        {
-            return true;
-        }
-        return (configuration.GetSection("Bootstrap:AdminDiscordIds").Get<string[]>() ?? [])
-            .Any(id => string.Equals(id?.Trim(), discordId, StringComparison.Ordinal));
-    }
+        => BootstrapAdmins.Contains(configuration, discordId);
 
     private async Task<Agent> GetOrThrow(string agentId)
     {

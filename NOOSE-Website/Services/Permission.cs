@@ -37,6 +37,16 @@ public static class Permission
         }
     }
 
+    /// <summary>Require a configured bootstrap admin (demo mode / demo data).</summary>
+    public static void RequireBootstrapAdmin(ClaimsPrincipal actor)
+    {
+        if (!actor.IsBootstrapAdmin())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist Bootstrap-Admins vorbehalten.");
+        }
+    }
+
     /// <summary>Require classification permission.</summary>
     public static void RequireMayAssignClassification(ClaimsPrincipal actor, DocumentClassification classification)
     {

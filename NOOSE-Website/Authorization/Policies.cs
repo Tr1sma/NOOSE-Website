@@ -12,6 +12,9 @@ public static class Policies
     /// <summary>Technical system role.</summary>
     public const string Admin = "Admin";
 
+    /// <summary>Configured bootstrap admin: only gate for demo mode and demo data.</summary>
+    public const string BootstrapAdmin = "BootstrapAdmin";
+
     /// <summary>May write at all (everyone except read-only supervision). For mutation controls in AuthorizeView.</summary>
     public const string WriteAccess = "Schreibrecht";
 

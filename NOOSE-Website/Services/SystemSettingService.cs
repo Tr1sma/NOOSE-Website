@@ -77,6 +77,15 @@ public partial class SystemSettingService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // demo mode is bootstrap-admin-only; a normal admin may save everything else, but never flip this
+        var currentDemo = string.Equals(
+            await ValueAsync(db, SystemSettingKeys.DemoModeActive, cancellationToken), "true", StringComparison.OrdinalIgnoreCase);
+        if (input.DemoModeActive != currentDemo)
+        {
+            Permission.RequireBootstrapAdmin(actor);
+        }
+
         await SetAsync(db, SystemSettingKeys.MaintenanceModeActive, input.MaintenanceModeActive ? "true" : "false", cancellationToken);
         await SetAsync(db, SystemSettingKeys.MaintenanceModeText, Empty(input.MaintenanceModeText), cancellationToken);
         await SetAsync(db, SystemSettingKeys.BannerText, Empty(input.BannerText), cancellationToken);
