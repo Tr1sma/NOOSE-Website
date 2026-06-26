@@ -78,9 +78,12 @@ else
                     </MudText>
                 }
 
-                @* attachments fan-out: internal only *@
+                @* tags + attachments fan-out: internal only *@
                 @if (!_isPartner)
                 {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Tags</MudText>
+                <TagChips EntityType="@nameof(Document)" EntityId="@_document.Id" User="_user" />
                 <MudDivider Class="my-3" />
                 <MudText Typo="Typo.subtitle2" Class="mb-2">Angehängt an (@_attachments.Count)</MudText>
                 @if (_attachments.Count == 0)
