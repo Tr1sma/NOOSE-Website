@@ -70,6 +70,12 @@ else
                     }
                 </MudStack>
 
+                @if (_b.SecurityCheckPassed == true)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                             Icon="@Icons.Material.Filled.VerifiedUser" Class="mb-2">Sicherheitsüberprüfung bestanden</MudChip>
+                }
+
                 @if (!BewerbungStatusDisplay.IsTerminal(_b.Status))
                 {
                     @if (_canWrite)
@@ -87,8 +93,6 @@ else
                                                OnClick="@(() => SetSecurity(true))">Sicherheit bestanden</MudButton>
                                     <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
                                                OnClick="@(() => SetSecurity(false))">Sicherheit nicht bestanden</MudButton>
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                               OnClick="@(() => SetStatus(BewerbungStatus.ImTest))">Zum Test</MudButton>
                                     <MudButton Variant="Variant.Outlined" Size="Size.Small"
                                                OnClick="@(() => SetStatus(BewerbungStatus.ImVorstellungsgespraech))">Zum Gespräch</MudButton>
                                 }
@@ -202,7 +206,15 @@ else
 
     private async Task SetSecurity(bool passed)
     {
-        try { await BewerbungService.SetSecurityResultAsync(Id, passed, _user); await LoadAsync(); }
+        try
+        {
+            await BewerbungService.SetSecurityResultAsync(Id, passed, _user);
+            await LoadAsync();
+            Snackbar.Add(passed
+                ? "Sicherheitsüberprüfung bestanden — Bewerbung im Test."
+                : "Sicherheitsüberprüfung nicht bestanden — Bewerbung abgelehnt.",
+                passed ? Severity.Success : Severity.Info);
+        }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 

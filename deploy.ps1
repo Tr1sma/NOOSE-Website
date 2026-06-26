@@ -8,6 +8,11 @@
     das zerschießt Dateien) -> per scp hochladen -> auf dem Server Dienst stoppen, Dateien
     tauschen (App_Data bleibt erhalten), Dienst starten, Health-Check.
 
+    Prod-Schutz: Vor dem Deploy wird geprueft, dass das Ziel KEINE Demo-Instanz ist
+    (Env-Flag Demo__AutoSetup). Auf den Prod-Server wird nur deployt, solange die Demo-Flag
+    false ist. Demo-Ziele werden am Service-/Pfadnamen ("demo") bzw. der Demo-IP erkannt und
+    uebersprungen; -AllowDemo erzwingt das Ueberspringen.
+
 .EXAMPLE
     .\deploy.ps1
         Standard-Deploy auf root@195.20.225.12.
@@ -19,6 +24,10 @@
 .EXAMPLE
     .\deploy.ps1 -NoPause
         Ohne "Enter zum Schließen" am Ende (fuer Terminal-/CI-Nutzung).
+
+.EXAMPLE
+    .\deploy.ps1 -Server root@31.70.104.128 -AppDir /var/www/noose-demo -Service noose-demo
+        Deploy auf die Demo-Instanz (Prod-Schutz wird automatisch uebersprungen).
 
 .NOTES
     Am besten aus einer bereits offenen PowerShell starten. Bei "Run with PowerShell" /
@@ -32,6 +41,7 @@ param(
     [string]$AppDir  = "/var/www/noose",
     [string]$Service = "noose",
     [switch]$SkipPublish,
+    [switch]$AllowDemo,
     [switch]$NoPause
 )
 
@@ -74,6 +84,31 @@ try {
     # ssh/scp vorab auf vollen Pfad aufloesen (PATH-unabhaengig).
     $scp = Resolve-Exe 'scp'
     $ssh = Resolve-Exe 'ssh'
+
+    # 0) Prod-Schutz: NICHT auf einen Server deployen, der als Demo-Instanz konfiguriert ist
+    #    (Env-Flag Demo__AutoSetup=true). Verhindert, dass ein Prod-Deploy versehentlich eine
+    #    Demo-Box trifft. Demo-Ziele werden automatisch erkannt und uebersprungen; -AllowDemo erzwingt das.
+    #    Laeuft VOR dem Publish (fail-fast) und fail-closed: kann das Flag nicht geprueft werden -> Abbruch.
+    $isDemoTarget = $AllowDemo -or ($Service -like '*demo*') -or ($AppDir -like '*demo*') -or ($Server -like '*31.70.104.128*')
+    if (-not $isDemoTarget) {
+        $envFile = "/etc/$Service/$Service.env"
+        $remoteCheck =
+            "FLAG=false; " +
+            "if systemctl show '$Service' -p Environment 2>/dev/null | grep -iqE 'Demo__AutoSetup=true'; then FLAG=true; fi; " +
+            "if [ -f '$envFile' ] && grep -iqE '^[[:space:]]*Demo__AutoSetup[[:space:]]*=[[:space:]]*true' '$envFile'; then FLAG=true; fi; " +
+            'echo "DEMO_FLAG=$FLAG"'
+        Write-Host "==> Prod-Schutz: pruefe Demo-Flag auf $Server ($envFile)" -ForegroundColor Cyan
+        $checkOutput = (& $ssh $Server $remoteCheck 2>&1 | Out-String)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Konnte das Demo-Flag nicht pruefen (ssh Exit $LASTEXITCODE). Aus Sicherheit abgebrochen.`nAusgabe: $checkOutput"
+        }
+        if ($checkOutput -match 'DEMO_FLAG=true') {
+            throw "ABBRUCH: '$Server' ist als DEMO-Instanz konfiguriert (Demo__AutoSetup=true). Auf den Prod-Server wird nur deployt, solange die Demo-Flag false ist.`nFuer einen bewussten Demo-Deploy: -Service mit 'demo' im Namen (z. B. noose-demo) oder -AllowDemo setzen."
+        }
+        Write-Host "    Demo-Flag = false -> Prod-Deploy erlaubt." -ForegroundColor DarkGray
+    } else {
+        Write-Host "==> Demo-Ziel erkannt -> Prod-Schutz (Demo-Flag-Check) uebersprungen." -ForegroundColor DarkYellow
+    }
 
     # 1) Release veroeffentlichen. Publish-Ordner vorher leeren, weil "dotnet publish" das Ziel NICHT
     #    aufraeumt: Altlasten frueherer Publishes wandern sonst mit ins Artefakt (so lagen z. B. noch

@@ -4,6 +4,8 @@
 @using MudBlazor.Utilities
 @inject ISystemSettingService SettingService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IDemoDataService DemoData
 
 <PageTitle>System · NOOSE</PageTitle>
 
@@ -32,6 +34,30 @@ else
             <MudSwitch T="bool" @bind-Value="_input.MaintenanceModeActive" Color="Color.Error" Label="Wartungsmodus aktiv" />
             <MudTextField @bind-Value="_input.MaintenanceModeText" Label="Hinweistext (optional)" Variant="Variant.Outlined"
                           Class="mt-2" Placeholder="z. B. Geplante Wartung – wir sind in Kürze zurück." />
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Demo-Modus</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Macht die gesamte Website ohne Login als schreibgeschützte Vorschau mit Beispieldaten sichtbar
+                (Portfolio/Showcase). <b>Nur auf der Demo-Instanz aktivieren</b> – niemals mit echten Daten.
+                Vorbehalten den <b>Bootstrap-Admins</b>.
+            </MudText>
+            <AuthorizeView Policy="@Policies.BootstrapAdmin" Context="bootstrap">
+                <Authorized>
+                    <MudSwitch T="bool" Value="_input.DemoModeActive" Color="Color.Error"
+                               Label="Demo-Modus aktiv (öffentlich, ohne Login)"
+                               ValueChanged="DemoModeToggleAsync" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mt-2"
+                               StartIcon="@Icons.Material.Filled.DataObject" OnClick="SeedDemoDataAsync"
+                               Disabled="_seeding">Demo-Daten einspielen</MudButton>
+                </Authorized>
+                <NotAuthorized>
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Demo-Modus und Demo-Daten können nur von Bootstrap-Admins gesteuert werden.
+                    </MudAlert>
+                </NotAuthorized>
+            </AuthorizeView>
         </MudPaper>
 
         <MudPaper Class="pa-4" Elevation="2">
@@ -130,6 +156,7 @@ else
 
     private bool _load = true;
     private bool _busy;
+    private bool _seeding;
     private SystemConfiguration? _configuration;
     private SystemConfigurationInput _input = new();
     private ClaimsPrincipal _user = default!;
@@ -153,6 +180,7 @@ else
             ThemePrimary = _configuration.ThemePrimary,
             ThemeSecondary = _configuration.ThemeSecondary,
             ThemeTertiary = _configuration.ThemeTertiary,
+            DemoModeActive = _configuration.DemoModeActive,
         };
         _load = false;
     }
@@ -189,6 +217,63 @@ else
             _busy = false;
         }
     }
+
+    private async Task DemoModeToggleAsync(bool value)
+    {
+        if (value)
+        {
+            var dialog = await DialogService.ShowAsync<DemoModeConfirmDialog>("Demo-Modus aktivieren");
+            var result = await dialog.Result;
+            if (result is null || result.Canceled || result.Data is not true)
+            {
+                return; // not confirmed → stays off
+            }
+            _input.DemoModeActive = true;
+        }
+        else
+        {
+            _input.DemoModeActive = false;
+        }
+        await SaveAsync();
+    }
+
+    private async Task SeedDemoDataAsync()
+    {
+        var parameters = new DialogParameters<DemoModeConfirmDialog>
+        {
+            { x => x.Heading, "Demo-Daten einspielen?" },
+            { x => x.ConfirmText, "Demo-Daten einspielen" },
+            { x => x.Consequence, SeedConsequence },
+        };
+        var dialog = await DialogService.ShowAsync<DemoModeConfirmDialog>("Demo-Daten einspielen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not true)
+        {
+            return; // not confirmed → nothing written
+        }
+
+        _seeding = true;
+        try
+        {
+            var count = await DemoData.SeedAsync(_user);
+            Snackbar.Add($"Demo-Daten eingespielt ({count} neue Datensätze).", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _seeding = false;
+        }
+    }
+
+    private RenderFragment SeedConsequence =>
+        @<MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            Es werden rund <b>14 Fraktionen</b> und <b>40 Personen</b> samt Beziehungen, Mitgliedschaften
+            und Beispiel-Dokumenten in die Datenbank <b>dieser Instanz</b> geschrieben.
+            Nur auf der Demo-Instanz ausführen, <b>niemals auf der Produktiv-Instanz mit echten Akten</b>.
+        </MudAlert>;
 
     private async Task LogoUploadAsync(IBrowserFile? file)
     {

@@ -12,6 +12,7 @@ public static class SystemSettingKeys
     public const string ThemeTertiary = "ThemeTertiary";
     public const string LogoFileName = "LogoDateiname";
     public const string LogoContentType = "LogoContentType";
+    public const string DemoModeActive = "DemoModusAktiv";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>
@@ -34,7 +35,8 @@ public sealed record SystemConfiguration(
     string? ThemeSecondary,
     string? ThemeTertiary,
     string? LogoFileName,
-    string? LogoContentType)
+    string? LogoContentType,
+    bool DemoModeActive)
 {
     public bool HasLogo => !string.IsNullOrWhiteSpace(LogoFileName);
 }
@@ -49,4 +51,5 @@ public class SystemConfigurationInput
     public string? ThemePrimary { get; set; }
     public string? ThemeSecondary { get; set; }
     public string? ThemeTertiary { get; set; }
+    public bool DemoModeActive { get; set; }
 }

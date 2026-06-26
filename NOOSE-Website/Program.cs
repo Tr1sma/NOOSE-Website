@@ -130,7 +130,18 @@ builder.Services.AddNooseAuthorization();
 
 // ---- Auth state ----
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+// demo instance (Demo:AutoSetup): a constant demo principal the framework can never seed or
+// revalidate away — a plain provider is not IHostEnvironmentAuthenticationStateProvider, so the
+// circuit start can't push an anonymous state past CascadingAuthenticationState (which would
+// dead-end on the disabled Discord login). Prod keeps the real revalidating provider.
+if (builder.Configuration.GetValue<bool>("Demo:AutoSetup"))
+{
+    builder.Services.AddScoped<AuthenticationStateProvider, DemoAuthenticationStateProvider>();
+}
+else
+{
+    builder.Services.AddScoped<AuthenticationStateProvider, DemoAwareAuthenticationStateProvider>();
+}
 
 // ---- Services ----
 builder.Services.AddScoped<IAgentManagementService, AgentManagementService>();
@@ -197,6 +208,7 @@ builder.Services.AddSingleton<WatchlistDispatcher>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IAnnouncementService, AnnouncementService>();
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
+builder.Services.AddScoped<IDemoDataService, DemoDataService>();
 builder.Services.AddScoped<INavPreferencesService, NavPreferencesService>();
 builder.Services.AddScoped<INavLabelService, NavLabelService>();
 builder.Services.AddScoped<IPartnerVisibilityPolicyService, PartnerVisibilityPolicyService>();
@@ -252,6 +264,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseMiddleware<NOOSE_Website.Infrastructure.DemoModeMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseAntiforgery();
@@ -283,6 +296,9 @@ using (var scope = app.Services.CreateScope())
 
     // seed the default recruiting message templates (idempotent)
     await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
+
+    // demo instance only (Demo:AutoSetup): seed demo data + enable demo mode without a login
+    await NOOSE_Website.Infrastructure.DemoAutoSetup.RunAsync(scope.ServiceProvider, builder.Configuration, app.Logger);
 }
 
 app.Run();

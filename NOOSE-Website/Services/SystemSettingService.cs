@@ -48,7 +48,8 @@ public partial class SystemSettingService(
                 ThemeSecondary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeSecondary)),
                 ThemeTertiary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeTertiary)),
                 LogoFileName: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoFileName)),
-                LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)));
+                LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)),
+                DemoModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.DemoModeActive), "true", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception)
         {
@@ -76,6 +77,15 @@ public partial class SystemSettingService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // demo mode is bootstrap-admin-only; a normal admin may save everything else, but never flip this
+        var currentDemo = string.Equals(
+            await ValueAsync(db, SystemSettingKeys.DemoModeActive, cancellationToken), "true", StringComparison.OrdinalIgnoreCase);
+        if (input.DemoModeActive != currentDemo)
+        {
+            Permission.RequireBootstrapAdmin(actor);
+        }
+
         await SetAsync(db, SystemSettingKeys.MaintenanceModeActive, input.MaintenanceModeActive ? "true" : "false", cancellationToken);
         await SetAsync(db, SystemSettingKeys.MaintenanceModeText, Empty(input.MaintenanceModeText), cancellationToken);
         await SetAsync(db, SystemSettingKeys.BannerText, Empty(input.BannerText), cancellationToken);
@@ -83,6 +93,7 @@ public partial class SystemSettingService(
         await SetAsync(db, SystemSettingKeys.ThemePrimary, Empty(input.ThemePrimary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.ThemeSecondary, Empty(input.ThemeSecondary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.ThemeTertiary, Empty(input.ThemeTertiary)?.Trim(), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.DemoModeActive, input.DemoModeActive ? "true" : "false", cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         cache.Remove(CacheKey);
@@ -156,7 +167,7 @@ public partial class SystemSettingService(
     }
 
     private static SystemConfiguration Default()
-        => new(false, null, null, BannerLevels.Info, null, null, null, null, null);
+        => new(false, null, null, BannerLevels.Info, null, null, null, null, null, false);
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 

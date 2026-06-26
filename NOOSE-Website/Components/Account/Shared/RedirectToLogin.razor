@@ -1,10 +1,18 @@
 @inject NavigationManager Navigation
+@inject NOOSE_Website.Services.ISystemSettingService Settings
 
 @* Redirects unauthenticated users to login, remembering the original target. *@
 
 @code {
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // demo instance has no login: never dead-end on the Discord page, just go home
+        if ((await Settings.GetAsync()).DemoModeActive)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
         var relativeUri = Navigation.ToBaseRelativePath(Navigation.Uri);
         var returnUrl = "/" + relativeUri;
         Navigation.NavigateTo(

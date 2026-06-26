@@ -189,21 +189,7 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
 
     /// <summary>Reads all bootstrap-admin Discord IDs from config (single <c>Bootstrap:AdminDiscordId</c> and list <c>Bootstrap:AdminDiscordIds</c>).</summary>
     private static HashSet<string> ReadBootstrapAdminIds(IConfiguration configuration)
-    {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-
-        var single = configuration["Bootstrap:AdminDiscordId"];
-        if (!string.IsNullOrWhiteSpace(single))
-            ids.Add(single.Trim());
-
-        foreach (var id in configuration.GetSection("Bootstrap:AdminDiscordIds").Get<string[]>() ?? [])
-        {
-            if (!string.IsNullOrWhiteSpace(id))
-                ids.Add(id.Trim());
-        }
-
-        return ids;
-    }
+        => BootstrapAdmins.Ids(configuration);
 
     private static async Task<Agent?> CreateAgentAsync(
         UserManager<Agent> userManager, ExternalLoginInfo info, IConfiguration configuration, ILogger logger,

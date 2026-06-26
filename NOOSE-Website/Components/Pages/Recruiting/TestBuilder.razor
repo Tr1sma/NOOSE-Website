@@ -60,8 +60,8 @@ else if (_model is not null)
 
     <MudPaper Elevation="2" Class="pa-4 mb-4">
         <MudText Typo="Typo.h6" Class="mb-2">Test bearbeiten</MudText>
-        <MudTextField @bind-Value="_model.Test.Title" Label="Titel" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
-        <MudTextField @bind-Value="_model.Test.Description" Label="Beschreibung" Variant="Variant.Outlined" Lines="2" Class="mb-2" />
+        <MudTextField @bind-Value="_model.Test.Title" Immediate="true" Label="Titel" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+        <MudTextField @bind-Value="_model.Test.Description" Immediate="true" Label="Beschreibung" Variant="Variant.Outlined" Lines="2" Class="mb-2" />
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
             <MudCheckBox T="bool" @bind-Value="_model.Test.IsActive" Label="Aktiv" />
             <MudNumericField T="int?" @bind-Value="_model.Test.PassPercent" Label="Bestehensgrenze % (leer = keine)" Min="0" Max="100"
@@ -77,7 +77,7 @@ else if (_model is not null)
                 <MudText Typo="Typo.subtitle2">Frage @qi · @TestQuestionTypeDisplay.Name(qe.Question.Type)</MudText>
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteQuestionAsync(qe.Question.Id))" />
             </MudStack>
-            <MudTextField @bind-Value="qe.Question.Prompt" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Fragetext" Variant="Variant.Outlined" Lines="2" Class="mb-2" />
+            <MudTextField @bind-Value="qe.Question.Prompt" Immediate="true" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Fragetext" Variant="Variant.Outlined" Lines="2" Class="mb-2" />
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
                 <MudCheckBox T="bool" @bind-Value="qe.Question.Required" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Pflichtfrage" />
                 <MudNumericField T="int" @bind-Value="qe.Question.Points" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Punkte" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:110px;" />
@@ -93,7 +93,7 @@ else if (_model is not null)
 
             @if (qe.Question.Type == TestQuestionType.FreeText)
             {
-                <MudTextField @bind-Value="qe.Question.Keywords" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Schlagwörter (eine pro Zeile oder mit Komma)"
+                <MudTextField @bind-Value="qe.Question.Keywords" Immediate="true" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Schlagwörter (eine pro Zeile oder mit Komma)"
                               Variant="Variant.Outlined" Lines="2" Class="mt-2"
                               HelperText="Treffer mit Tippfehler-Toleranz wie in der Suche." HelperTextOnFocus="true" />
                 <MudNumericField T="int?" @bind-Value="qe.Question.MinKeywordHits" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Mindesttreffer (leer = alle)"
@@ -107,7 +107,7 @@ else if (_model is not null)
                 @foreach (var o in qe.Options)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1">
-                        <MudTextField @bind-Value="o.Label" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:240px;" />
+                        <MudTextField @bind-Value="o.Label" Immediate="true" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:240px;" />
                         <MudCheckBox T="bool" @bind-Value="o.IsCorrect" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))" Label="Richtig" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteOptionAsync(qe.Question.Id, o.Id))" />
                     </MudStack>

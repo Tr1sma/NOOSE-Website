@@ -4,7 +4,7 @@ namespace NOOSE_Website.Components.Pages.Legal;
 public static class LegalData
 {
     /// <summary>External imprint URL.</summary>
-    public const string ImprintUrl = "https://modern-gaming.net/legal-notice/";
+    public const string ImprintUrl = "https://nullradix.de/impressum";
 
     /// <summary>Responsible party name.</summary>
     public const string Responsible = "David Dorn";
