@@ -10,22 +10,37 @@
 
 @if (_ready)
 {
-    <MudStack Spacing="4">
-        <MudPaper Elevation="4" Class="pa-6">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
-                <MudStack Spacing="0">
-                    <MudText Typo="Typo.h5">Status deiner Bewerbung</MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@_bewerbung.Name · Aktenzeichen @_bewerbung.CaseNumber</MudText>
+    <div style="display:flex;flex-direction:column;height:calc(100dvh - 180px);min-height:460px;gap:16px;">
+        @* compact status bar keeps the chat as the centrepiece *@
+        <MudPaper Elevation="4" Class="pa-4" Style="flex:0 0 auto;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(_bewerbung.Status)" Variant="Variant.Filled">
+                        @BewerbungStatusDisplay.Name(_bewerbung.Status)
+                    </MudChip>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.subtitle2" Style="line-height:1.15;">@_bewerbung.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Aktenzeichen @_bewerbung.CaseNumber</MudText>
+                    </MudStack>
                 </MudStack>
-                <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(_bewerbung.Status)" Variant="Variant.Filled">
-                    @BewerbungStatusDisplay.Name(_bewerbung.Status)
-                </MudChip>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    @if (_test is { Completed: false } && _bewerbung.Status == BewerbungStatus.ImTest)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Quiz" Href="/portal/test">Eignungstest ausfüllen</MudButton>
+                    }
+                    @if (_bewerbung.Status != BewerbungStatus.Abgelehnt && _bewerbung.Status != BewerbungStatus.Geschlossen)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                   EndIcon="@(_detailsOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                   OnClick="@(() => _detailsOpen = !_detailsOpen)">Details</MudButton>
+                    }
+                </MudStack>
             </MudStack>
-
-            <MudDivider Class="my-4" />
 
             @if (_bewerbung.Status == BewerbungStatus.Abgelehnt || _bewerbung.Status == BewerbungStatus.Geschlossen)
             {
+                <MudDivider Class="my-3" />
                 @if (_ban is not null)
                 {
                     <BewerbungssperreCard Ban="_ban" />
@@ -41,36 +56,37 @@
             }
             else
             {
-                <MudTimeline TimelinePosition="TimelinePosition.Start">
-                    @foreach (var step in Steps)
+                <MudCollapse Expanded="_detailsOpen">
+                    <MudDivider Class="my-3" />
+                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                        @foreach (var step in Steps)
+                        {
+                            <MudTimelineItem Color="@(StepReached(step) ? Color.Primary : Color.Default)"
+                                             Variant="@(step == _bewerbung.Status ? Variant.Filled : Variant.Outlined)">
+                                <MudText Typo="Typo.body2">@BewerbungStatusDisplay.Name(step)</MudText>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                    @if (_test is { Completed: true })
                     {
-                        <MudTimelineItem Color="@(StepReached(step) ? Color.Primary : Color.Default)"
-                                         Variant="@(step == _bewerbung.Status ? Variant.Filled : Variant.Outlined)">
-                            <MudText Typo="Typo.body2">@BewerbungStatusDisplay.Name(step)</MudText>
-                        </MudTimelineItem>
+                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                            Dein Eignungstest wurde übermittelt.
+                        </MudAlert>
                     }
-                </MudTimeline>
-            }
-
-            @if (_test is { Completed: false } && _bewerbung.Status == BewerbungStatus.ImTest)
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Quiz"
-                           Href="/portal/test" Class="mt-2">Eignungstest ausfüllen</MudButton>
-            }
-            else if (_test is { Completed: true })
-            {
-                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mt-2">
-                    Dein Eignungstest wurde übermittelt.
-                </MudAlert>
+                </MudCollapse>
             }
         </MudPaper>
 
-        <MudPaper Elevation="4" Class="pa-6">
-            <MudText Typo="Typo.h6" Class="mb-2">Kommunikation mit dem NOOSE</MudText>
-            <BewerbungMessagePanel BewerbungId="@_bewerbung.Id" User="_user"
-                                   Audience="BewerbungMessageAudience.Bewerber" IsApplicantView="true" CanWrite="true" />
+        @* chat takes all remaining viewport height *@
+        <MudPaper Elevation="4" Class="pa-4" Style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;">
+            <MudText Typo="Typo.subtitle1" Class="mb-2" Style="flex:0 0 auto;">Kommunikation mit dem NOOSE</MudText>
+            <div style="flex:1 1 auto;min-height:0;">
+                <BewerbungMessagePanel BewerbungId="@_bewerbung.Id" User="_user"
+                                       Audience="BewerbungMessageAudience.Bewerber" IsApplicantView="true"
+                                       CanWrite="true" CollapsibleComposer="true" HeightCss="100%" />
+            </div>
         </MudPaper>
-    </MudStack>
+    </div>
 }
 
 @code {
@@ -88,6 +104,7 @@
 
     private ClaimsPrincipal _user = default!;
     private bool _ready;
+    private bool _detailsOpen;
     private Bewerbung _bewerbung = default!;
     private TestView? _test;
     private BewerbungssperreInfo? _ban;
