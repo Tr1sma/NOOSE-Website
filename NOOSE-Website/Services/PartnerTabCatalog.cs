@@ -65,9 +65,9 @@ public static class PartnerTabCatalog
         }),
         new PartnerRecordType(nameof(Taskforce), "taskforces", "Taskforces", new PartnerTab[]
         {
-            new("stammdaten", "Stammdaten"), new("quellen", "Quellen"),
-            new("wiedervorlagen", "Wiedervorlagen"), new("kommentare", "Kommentare"), new("zusatzfelder", "Zusatzfelder"),
-            new("historie", "Zeitstrahl"),
+            new("stammdaten", "Stammdaten"), new("chat", "Chat"), new("beziehungen", "Beziehungen"),
+            new("quellen", "Quellen"), new("wiedervorlagen", "Wiedervorlagen"), new("kommentare", "Kommentare"),
+            new("zusatzfelder", "Zusatzfelder"), new("historie", "Zeitstrahl"),
         }),
         new PartnerRecordType(nameof(Document), "dokumente", "Dokumente", Array.Empty<PartnerTab>()),
         new PartnerRecordType(nameof(Law), "gesetze", "Gesetzbuch", Array.Empty<PartnerTab>()),
