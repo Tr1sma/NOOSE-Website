@@ -77,7 +77,7 @@
                         break;
                     case SourceType.Upload when IsImage(q.ContentType):
                         <div @onclick="@(() => OpenImageAsync(q))" style="cursor:pointer;width:max-content;" class="mt-1">
-                            <MudImage Src="@($"/dateien/quellen/{q.Id}?inline=1")" Alt="@q.OriginalName"
+                            <MudImage Src="@($"/dateien/quellen/{q.Id}?inline=true")" Alt="@q.OriginalName"
                                       Height="96" ObjectFit="ObjectFit.Cover" Class="rounded" />
                         </div>
                         break;
@@ -182,7 +182,7 @@
     {
         var imgs = _sources.Where(s => s.Type == SourceType.Upload && IsImage(s.ContentType)).ToList();
         var list = imgs
-            .Select(s => new ImageLightbox.LightboxImage($"/dateien/quellen/{s.Id}?inline=1", s.Title))
+            .Select(s => new ImageLightbox.LightboxImage($"/dateien/quellen/{s.Id}?inline=true", s.Title))
             .ToList();
         var start = imgs.FindIndex(s => s.Id == clicked.Id);
         await ImageLightbox.ShowAsync(DialogService, list, Math.Max(0, start));
@@ -208,7 +208,10 @@
                 }
 
                 using var ms = new MemoryStream();
-                await file.OpenReadStream(SourcesStorage.MaxBytes).CopyToAsync(ms);
+                await using (var stream = file.OpenReadStream(SourcesStorage.MaxBytes))
+                {
+                    await stream.CopyToAsync(ms);
+                }
                 var input = new SourceInput
                 {
                     Type = SourceType.Upload,

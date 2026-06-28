@@ -130,7 +130,10 @@ else
             {
                 // browser stream has no seek; buffer per file
                 await using var buffer = new MemoryStream();
-                await file.OpenReadStream(Storage.MaxBytes).CopyToAsync(buffer);
+                await using (var stream = file.OpenReadStream(Storage.MaxBytes))
+                {
+                    await stream.CopyToAsync(buffer);
+                }
                 buffer.Position = 0;
                 var title = result.Files.Count == 1 && !string.IsNullOrWhiteSpace(result.Title)
                     ? result.Title!
@@ -194,7 +197,7 @@ else
     {
         var imgs = _filtered.Where(f => IsImage(f.ContentType)).ToList();
         var list = imgs
-            .Select(f => new ImageLightbox.LightboxImage($"/dateien/bibliothek/{f.Id}?inline=1", f.Title))
+            .Select(f => new ImageLightbox.LightboxImage($"/dateien/bibliothek/{f.Id}?inline=true", f.Title))
             .ToList();
         var start = imgs.FindIndex(f => f.Id == file.Id);
         await ImageLightbox.ShowAsync(DialogService, list, Math.Max(0, start));
