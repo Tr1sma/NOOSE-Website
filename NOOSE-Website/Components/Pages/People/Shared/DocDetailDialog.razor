@@ -59,6 +59,11 @@
         {
             <MudButton StartIcon="@Icons.Material.Filled.Badge" OnClick="ToRecord">Zur Akte</MudButton>
         }
+        @* deletion is a leadership action *@
+        @if (User.IsLeadership())
+        {
+            <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        }
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Schließen</MudButton>
     </DialogActions>
 </MudDialog>
@@ -103,7 +108,28 @@
         }
     }
 
-    /// <summary>Shows the doc detail view; returns true if the doc was edited (so the caller can reload).</summary>
+    private async Task DeleteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Dok löschen?",
+            "Das Dok wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await DocService.DeleteAsync(Doc.Id, User);
+            Snackbar.Add("Dok gelöscht.", Severity.Success);
+            // signal reload; deleting a "shot" doc may reset life status
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    /// <summary>Shows the doc detail view; returns true if the doc was edited or deleted (so the caller can reload).</summary>
     public static async Task<bool> ShowAsync(IDialogService dialog, PersonDocDisplay display, ClaimsPrincipal user, bool showToRecord = true)
     {
         var doc = display.Doc;

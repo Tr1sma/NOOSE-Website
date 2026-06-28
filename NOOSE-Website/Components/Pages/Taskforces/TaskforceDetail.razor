@@ -111,14 +111,13 @@ else
                     <TaskforceAgentsPanel TaskforceId="@_taskforce.Id" User="_user" Changed="LeadRefreshAsync" />
                 </MudTabPanel>
                 }
-                @if (!_isPartner)
+                @if (TabOn("chat"))
                 {
                 <MudTabPanel Text="Chat" Icon="@Icons.Material.Filled.Forum">
                     <TaskforceChatPanel TaskforceId="@_taskforce.Id" User="_user" />
                 </MudTabPanel>
                 }
-                @* relations panel is write-enabled and not partner-scoped: internal only *@
-                @if (!_isPartner)
+                @if (TabOn("beziehungen"))
                 {
                 <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <TaskforceRelationsPanel TaskforceId="@_taskforce.Id" User="_user" />
@@ -179,8 +178,8 @@ else
         "stammdaten", "agents", "chat", "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 
-    // tabs that are write-enabled or not partner-scoped, hidden from partners regardless of tab config
-    private static readonly HashSet<string> _internalOnlyTabs = new() { "agents", "chat", "beziehungen" };
+    // assigned-agents tab exposes internal codenames; hidden from partners regardless of tab config
+    private static readonly HashSet<string> _internalOnlyTabs = new() { "agents" };
 
     // partner tab gating: null = no restriction (internal/unconfigured/individually released)
     private IReadOnlySet<string>? _visibleTabs;

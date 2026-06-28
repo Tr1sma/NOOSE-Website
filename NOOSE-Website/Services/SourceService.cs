@@ -56,6 +56,12 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             throw new InvalidOperationException("Ein Titel ist erforderlich.");
         }
 
+        // partners may only contribute documents they create — never uploads, links or cross-references
+        if (actor.IsPartner() && input.Type != SourceType.Document)
+        {
+            throw new UnauthorizedAccessException("Partner können nur Dokumente als Quelle hinzufügen.");
+        }
+
         await using var visDb = await dbFactory.CreateDbContextAsync(cancellationToken);
         if (!await Visibility.IsRecordVisibleAsync(visDb, entityType, entityId, ViewerScope.From(actor), cancellationToken))
         {

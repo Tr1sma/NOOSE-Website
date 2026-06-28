@@ -99,7 +99,8 @@
         var comments = await CommentService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User));
         // resolve all comment mentions in one batch
         var segments = await MentionService.ResolveManyAsync(
-            comments.Select(k => (string?)k.Text).ToList(), _mayClassifiedRead, User.GetAgentId());
+            comments.Select(k => (string?)k.Text).ToList(), _mayClassifiedRead, User.GetAgentId(),
+            partnerAgency: User.GetPartnerAgency());
         _entries = comments.Select((k, i) => new Entry(k, segments[i])).ToList();
         _load = false;
     }

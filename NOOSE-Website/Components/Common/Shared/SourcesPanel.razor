@@ -26,6 +26,13 @@
                 </MudButton>
             </MudStack>
         }
+        else if (_isPartner)
+        {
+            @* partners contribute documents on records released to them; created doc opens in the library *@
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Article" OnClick="NewDocumentAsync">
+                Dokument erstellen
+            </MudButton>
+        }
     </MudStack>
 
     @if (_load)
@@ -126,12 +133,14 @@
 
     private bool _load = true;
     private bool _mayWrite;
+    private bool _isPartner;
     private bool _canShareChildren;
     private List<Source> _sources = new();
 
     protected override async Task OnInitializedAsync()
     {
         _mayWrite = User.MayWrite();
+        _isPartner = User.IsPartner();
         // leadership: per-item release only matters when the record is shell-released
         if (User.IsLeadership())
         {
@@ -174,6 +183,10 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
+
+    // partner contribution: straight to the editor, attach=1 links the new document back on save
+    private void NewDocumentAsync()
+        => Nav.NavigateTo($"/dokumente/neu?entitaetTyp={Uri.EscapeDataString(EntityType)}&entitaetId={Uri.EscapeDataString(EntityId)}&attach=1");
 
     private static bool IsImage(string? contentType)
         => contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
@@ -240,6 +253,7 @@
             _load = false;
         }
     }
+
 
     private async Task RemoveAsync(Source source)
     {

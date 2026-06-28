@@ -7,6 +7,7 @@
 @inject ISourceService SourceService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject ILogger<DocumentEditor> Logger
 
 <PageTitle>@(_edit ? "Dokument bearbeiten" : "Neues Dokument") · NOOSE</PageTitle>
 
@@ -26,7 +27,11 @@ else
         <MudText Typo="Typo.h4">@(_edit ? "Dokument bearbeiten" : "Neues Dokument")</MudText>
         <MudSpacer />
         <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
-        <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
+        @* edit-mode save is for writers only; create-mode stays open so partners can author *@
+        @if (!_edit || _user.MayWrite())
+        {
+            <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
+        }
     </MudStack>
 
     <MudPaper Class="pa-4" Elevation="2">
@@ -112,7 +117,9 @@ else
 
         if (_edit)
         {
-            var document = await DocumentService.GetAsync(Id!, DocumentViewerScope.From(_user));
+            // partner-scoped load: a partner only opens documents released to them or authored by themselves
+            var document = await DocumentService.GetAsync(Id!, DocumentViewerScope.From(_user),
+                partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
             if (document is not null)
             {
                 _found = true;
@@ -219,7 +226,10 @@ else
         }
         catch (Exception ex)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            // diagnostic: each gate throws a distinct message, so this pins the failing layer
+            Logger.LogError(ex, "Document create/save failed (agent={Agent}, partner={Partner}, entity={EntityType}/{EntityId})",
+                _user.GetAgentId(), _user.IsPartner(), _entityType, _entityId);
+            Snackbar.Add($"{ex.GetType().Name}: {ex.Message}", Severity.Error);
         }
         finally
         {
@@ -247,7 +257,8 @@ else
         => _attach && !string.IsNullOrWhiteSpace(_entityType) && !string.IsNullOrWhiteSpace(_entityId);
 
     private string TargetBySave(string id)
-        => HasRecordsContext()
+        // partners don't see document sources on a record's Quellen tab, so open the created doc directly
+        => HasRecordsContext() && !_user.IsPartner()
             ? $"{SearchNavigation.Route(_entityType!, _entityId!)}?tab=quellen"
             : $"/dokumente/{id}";
 }

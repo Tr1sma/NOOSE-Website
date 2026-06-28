@@ -4,7 +4,7 @@
 @inject BewerbungBroadcaster Broadcaster
 @inject ISnackbar Snackbar
 
-<MudStack Spacing="2" Style="height:52vh;">
+<MudStack Spacing="2" Style="@($"height:{HeightCss};")">
     <div style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column-reverse; overflow-y:auto; gap:8px; padding:4px;">
         @if (_load)
         {
@@ -42,6 +42,14 @@
 
     @if (CanWrite)
     {
+        @if (CollapsibleComposer && !_composerOpen)
+        {
+            <MudButton FullWidth="true" Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Edit" Style="justify-content:flex-start;"
+                       OnClick="@(() => _composerOpen = true)">Antwort schreiben …</MudButton>
+        }
+        else
+        {
         <div>
             @if (ShowTemplates && _templates.Count > 0)
             {
@@ -90,11 +98,18 @@
                 <MudTextField @bind-Value="_text" Variant="Variant.Outlined" Lines="3"
                               Placeholder="@Placeholder" Immediate="true" />
             }
-            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-1">
+            <MudStack Row="true" AlignItems="AlignItems.Center"
+                      Justify="@(CollapsibleComposer ? Justify.SpaceBetween : Justify.FlexEnd)" Class="mt-1">
+                @if (CollapsibleComposer)
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="CloseComposer">Schließen</MudButton>
+                }
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="SendAsync" Disabled="@(_sends || ComposeEmpty)">Senden</MudButton>
             </MudStack>
         </div>
+        }
     }
 </MudStack>
 
@@ -106,6 +121,10 @@
     [Parameter] public bool CanWrite { get; set; } = true;
     [Parameter] public bool ShowTemplates { get; set; }
     [Parameter] public string? ApplicantName { get; set; }
+    // applicant view fills the page; default keeps the agent-side panel unchanged
+    [Parameter] public string HeightCss { get; set; } = "52vh";
+    // collapse composer to a one-line bar so reading gets the full height
+    [Parameter] public bool CollapsibleComposer { get; set; }
 
     private const string Placeholder = "Nachricht verfassen …";
     private bool _load = true;
@@ -118,6 +137,7 @@
     private DateTime? _pickDate;
     private TimeSpan? _pickTime;
     private string? _myId;
+    private bool _composerOpen;
     private List<BewerbungMessage> _messages = new();
     private List<DocumentTemplate> _templates = new();
 
@@ -245,7 +265,11 @@
             _needsTime = false;
             _pickDate = null;
             _pickTime = null;
-            if (_editor is not null)
+            if (CollapsibleComposer)
+            {
+                _composerOpen = false; // unmount editor; clean on reopen
+            }
+            else if (_editor is not null)
             {
                 await _editor.SetHtmlAsync(string.Empty); // broadcaster refreshes the thread
             }
@@ -255,6 +279,17 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
         _sends = false;
+    }
+
+    private void CloseComposer()
+    {
+        _composerOpen = false;
+        _text = string.Empty;
+        _html = string.Empty;
+        _needsDate = false;
+        _needsTime = false;
+        _pickDate = null;
+        _pickTime = null;
     }
 
     private void OnModified(string bewerbungId)

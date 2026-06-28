@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Notifications;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
 
@@ -14,6 +16,14 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
         typeof(AuditLog),
         typeof(AccessLog),
         typeof(Notification),
+    ];
+
+    // Content a partner may author; create only — modify/delete of existing rows stays blocked.
+    private static readonly HashSet<Type> PartnerAuthorable =
+    [
+        typeof(Document),
+        typeof(Source),
+        typeof(TaskforceMessage),
     ];
 
     public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -38,6 +48,9 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             return;
         }
 
+        // partners may author content (create only); read-only supervision and demo stay fully read-only
+        bool partnerMayAuthor = user.IsPartner && !user.IsOnlyReader && !user.IsDemo;
+
         context.ChangeTracker.DetectChanges();
         foreach (var entry in context.ChangeTracker.Entries())
         {
@@ -45,11 +58,17 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             {
                 continue;
             }
-            if (!Whitelist.Contains(entry.Entity.GetType()))
+            var type = entry.Entity.GetType();
+            if (Whitelist.Contains(type))
             {
-                throw new UnauthorizedAccessException(
-                    "Nur-Lese-Modus: Änderungen sind in der Aufsichtsrolle nicht möglich.");
+                continue;
             }
+            if (partnerMayAuthor && entry.State == EntityState.Added && PartnerAuthorable.Contains(type))
+            {
+                continue;
+            }
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in der Aufsichtsrolle nicht möglich.");
         }
     }
 }

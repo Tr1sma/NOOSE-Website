@@ -47,7 +47,7 @@
         }
     </div>
 
-    @if (_mayWrite)
+    @if (_mayPost)
     {
         <div>
             <MentionInput @bind-Text="_text" IsLeadership="_isLeadership"
@@ -75,6 +75,7 @@
     private bool _mayClassifiedRead;
     private bool _mayRealName;
     private bool _mayWrite;
+    private bool _mayPost;
     private string? _myId;
     private string _text = string.Empty;
     private List<Entry> _entries = new();
@@ -87,6 +88,8 @@
         _mayClassifiedRead = User.MayClassifiedRead();
         _mayRealName = User.MayRealNameSee();
         _mayWrite = User.MayWrite();
+        // partners may post but not retract; delete stays gated on _mayWrite
+        _mayPost = User.MayContribute();
         _myId = User.GetAgentId();
         Broadcaster.Modified += OnModified;
         await LoadAsync();
@@ -104,7 +107,8 @@
     private async Task<List<Entry>> ToEntriesAsync(List<TaskforceMessage> messages)
     {
         var segments = await MentionService.ResolveManyAsync(
-            messages.Select(n => (string?)n.Text).ToList(), _mayClassifiedRead, _myId);
+            messages.Select(n => (string?)n.Text).ToList(), _mayClassifiedRead, _myId,
+            partnerAgency: User.GetPartnerAgency());
         return messages.Select((n, i) => new Entry(n, segments[i])).ToList();
     }
 

@@ -4,7 +4,7 @@
 
 <MudTextField T="string" Value="@_text" ValueChanged="OnTextChanged" Immediate="true"
               Placeholder="@Placeholder" Variant="Variant.Outlined" Lines="2"
-              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
+              Adornment="@(_isPartner ? Adornment.None : Adornment.End)" AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
               OnAdornmentClick="ManualOpenAsync" AdornmentAriaLabel="Objekt verlinken"
               OnKeyDown="OnKeyDown" />
 
@@ -59,12 +59,16 @@
 
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
     private string? _meId;
+    private bool _isPartner;
 
     protected override async Task OnInitializedAsync()
     {
         if (AuthStateTask is not null)
         {
-            _meId = (await AuthStateTask).User.GetAgentId();
+            var user = (await AuthStateTask).User;
+            _meId = user.GetAgentId();
+            // partners post plain text: the @-picker is unscoped, so it stays disabled for them
+            _isPartner = user.IsPartner();
         }
     }
 
@@ -95,6 +99,10 @@
 
     private async Task PickerRefreshAsync()
     {
+        if (_isPartner)
+        {
+            return; // no unscoped record picker for partners
+        }
         var m = ActiveQuery.Match(_text);
         if (!m.Success || m.Groups[1].Value.Length < 1)
         {
@@ -134,6 +142,10 @@
 
     private async Task ReferencesRefreshAsync()
     {
+        if (_isPartner)
+        {
+            return; // partners can't insert tokens, so nothing to resolve/preview
+        }
         // only re-resolve when the token set changed
         var sig = string.Join(",", MentionParser.Parse(_text).Select(t => $"{t.Type}:{t.Id}"));
         if (sig == _referenceSignature)

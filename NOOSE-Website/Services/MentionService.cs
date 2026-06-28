@@ -1,7 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Parties;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -12,7 +19,14 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 {
     private const int CandidatesPerGroup = 5;
 
-    public async Task<IReadOnlyList<MentionSegment>> ResolveAsync(string? text, bool isLeadership, string? meId, CancellationToken cancellationToken = default)
+    // releasable record types whose name a partner mention may reveal once released; all other types are hidden from partners
+    private static readonly string[] PartnerReleasableMentionTypes =
+    {
+        nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
+        nameof(Operation), nameof(Case), nameof(Taskforce), nameof(Document),
+    };
+
+    public async Task<IReadOnlyList<MentionSegment>> ResolveAsync(string? text, bool isLeadership, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -28,10 +42,14 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // foreign taskforces stay unresolved -> shown as unavailable chip
         var map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
+        if (partnerAgency is { } agency)
+        {
+            await ApplyPartnerScopeAsync(db, map, agency, meId, cancellationToken);
+        }
         return Segment(text, tokens, map, isLeadership);
     }
 
-    public async Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> ResolveManyAsync(IReadOnlyList<string?> texts, bool isLeadership, string? meId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> ResolveManyAsync(IReadOnlyList<string?> texts, bool isLeadership, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
     {
         // collect all tokens from all texts and resolve in one query
         var tokenPerText = texts.Select(MentionParser.Parse).ToList();
@@ -47,6 +65,10 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
             // foreign taskforces stay unresolved
             map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
+            if (partnerAgency is { } agency)
+            {
+                await ApplyPartnerScopeAsync(db, map, agency, meId, cancellationToken);
+            }
         }
 
         var result = new List<IReadOnlyList<MentionSegment>>(texts.Count);
@@ -55,6 +77,45 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             result.Add(Segment(texts[i] ?? string.Empty, tokenPerText[i], map, isLeadership));
         }
         return result;
+    }
+
+    /// <summary>Drops resolved mentions a partner may not see (unreleased, classified, or a non-releasable type) so they render as a neutral unavailable chip — no name, Aktenzeichen or link.</summary>
+    private static async Task ApplyPartnerScopeAsync(
+        AppDbContext db, Dictionary<(string, string), RecordsReference.Resolution> map,
+        PartnerAgency agency, string? meId, CancellationToken cancellationToken)
+    {
+        if (map.Count == 0)
+        {
+            return;
+        }
+        var keep = new HashSet<(string, string)>();
+        foreach (var type in PartnerReleasableMentionTypes)
+        {
+            // classified targets are never partner-visible, so don't even consider them
+            var ids = map.Where(kv => kv.Key.Item1 == type && !kv.Value.Classified)
+                .Select(kv => kv.Key.Item2).Distinct().ToList();
+            if (ids.Count == 0)
+            {
+                continue;
+            }
+            foreach (var id in await PartnerVisibility.ReleasedParentIdsAsync(db, type, ids, agency, meId, cancellationToken))
+            {
+                keep.Add((type, id));
+            }
+            // a partner also sees a document they authored themselves, even without a share
+            if (type == nameof(Document) && meId is not null)
+            {
+                foreach (var id in await db.Documents.Where(d => ids.Contains(d.Id) && d.CreatedById == meId)
+                    .Select(d => d.Id).ToListAsync(cancellationToken))
+                {
+                    keep.Add((type, id));
+                }
+            }
+        }
+        foreach (var key in map.Keys.Where(k => !keep.Contains(k)).ToList())
+        {
+            map.Remove(key);
+        }
     }
 
     private static List<MentionSegment> Segment(string text, IReadOnlyList<MentionToken> tokens,

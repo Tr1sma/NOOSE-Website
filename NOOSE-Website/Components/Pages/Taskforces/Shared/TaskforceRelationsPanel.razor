@@ -5,9 +5,12 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Verknüpfte Personen &amp; Organisationen (@_list.Count)</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
-            Verknüpfung hinzufügen
-        </MudButton>
+        @if (_mayWrite)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="AddAsync">
+                Verknüpfung hinzufügen
+            </MudButton>
+        }
     </MudStack>
 
     @if (_load)
@@ -41,8 +44,11 @@
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>
                         }
                     </MudStack>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                   OnClick="@(() => RemoveAsync(v))" aria-label="Verknüpfung entfernen" />
+                    @if (_mayWrite)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveAsync(v))" aria-label="Verknüpfung entfernen" />
+                    }
                 </MudStack>
             </MudPaper>
         }
@@ -54,14 +60,20 @@
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private bool _load = true;
+    private bool _mayWrite;
     private List<LinkDisplay> _list = new();
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _mayWrite = User.MayWrite();
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
         _load = true;
-        _list = await LinkService.GetForRecordAsync(nameof(Taskforce), TaskforceId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        // partner-scoped: parent visibility + the "other side" is filtered to what the viewer may see
+        _list = await LinkService.GetForRecordAsync(nameof(Taskforce), TaskforceId, ViewerScope.From(User), LinkKind.Default);
         _load = false;
     }
 

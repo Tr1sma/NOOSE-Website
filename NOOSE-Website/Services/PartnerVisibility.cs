@@ -34,7 +34,10 @@ public static class PartnerVisibility
         {
             return false;
         }
-        if (!await HasShareAsync(db, entityType, entityId, agency, partnerAgentId, cancellationToken))
+        // a partner sees a document they authored themselves, even without an explicit share (still never if classified)
+        bool authored = entityType == nameof(Document) && partnerAgentId is not null
+            && await db.Documents.AnyAsync(d => d.Id == entityId && d.CreatedById == partnerAgentId, cancellationToken);
+        if (!authored && !await HasShareAsync(db, entityType, entityId, agency, partnerAgentId, cancellationToken))
         {
             return false;
         }
@@ -164,8 +167,9 @@ public static class PartnerVisibility
 
     public static IQueryable<Document> OnlyPartnerVisible(this IQueryable<Document> query, AppDbContext db, PartnerAgency agency, string? partnerAgentId)
         => query.Where(d => !(d.IsClassified || d.IsTRUClassified || d.IsHRBClassified)
-            && db.PartnerShares.Any(s => s.EntityType == nameof(Document) && s.EntityId == d.Id && s.Agency == agency
-                && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId)));
+            && ((partnerAgentId != null && d.CreatedById == partnerAgentId)
+                || db.PartnerShares.Any(s => s.EntityType == nameof(Document) && s.EntityId == d.Id && s.Agency == agency
+                    && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId))));
 
     public static IQueryable<Law> OnlyPartnerVisible(this IQueryable<Law> query, AppDbContext db, PartnerAgency agency, string? partnerAgentId)
         => query.Where(l => db.PartnerShares.Any(s => s.EntityType == nameof(Law) && s.EntityId == l.Id && s.Agency == agency

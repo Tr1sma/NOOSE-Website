@@ -88,6 +88,9 @@ public static class AgentPrincipalExtensions
     /// <summary>May write at all; false for read-only supervisors, partners and demo visitors. Sole source for write-control visibility.</summary>
     public static bool MayWrite(this ClaimsPrincipal user) => !user.IsOnlyReader() && !user.IsPartner() && !user.IsDemo();
 
+    /// <summary>May contribute content (post taskforce chat, author documents) = internal writers plus partner contributors, never read-only supervision or demo.</summary>
+    public static bool MayContribute(this ClaimsPrincipal user) => user.MayWrite() || user.IsPartner();
+
     /// <summary>Leadership = rank ≥ Supervisory Special Agent or admin.</summary>
     public static bool IsLeadership(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.SupervisorySpecialAgent;
