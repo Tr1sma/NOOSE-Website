@@ -33,7 +33,14 @@ else
             <MudTd DataLabel="Titel">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@FileIcon(context.ContentType)" Size="Size.Small" Color="Color.Primary" />
-                    <MudLink Href="@($"/dateien/bibliothek/{context.Id}")" Target="_blank">@context.Title</MudLink>
+                    @if (IsImage(context.ContentType))
+                    {
+                        <MudLink Style="cursor:pointer;" @onclick="@(() => OpenLightboxAsync(context))">@context.Title</MudLink>
+                    }
+                    else
+                    {
+                        <MudLink Href="@($"/dateien/bibliothek/{context.Id}")" Target="_blank">@context.Title</MudLink>
+                    }
                 </MudStack>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@context.OriginalName</MudText>
             </MudTd>
@@ -111,20 +118,28 @@ else
 
     private async Task UploadAsync()
     {
-        var result = await LibraryFileDialog.ShowAsync(DialogService, "Datei hochladen", DocumentViewerScope.AssignableOptions(_user));
-        if (result?.File is null)
+        var result = await LibraryFileDialog.ShowAsync(DialogService, "Dateien hochladen", DocumentViewerScope.AssignableOptions(_user));
+        if (result is null || result.Files.Count == 0)
         {
             return;
         }
         try
         {
-            // Buffer fully; browser stream has no seek.
-            await using var buffer = new MemoryStream();
-            await result.File.OpenReadStream(Storage.MaxBytes).CopyToAsync(buffer);
-            buffer.Position = 0;
-            await LibraryService.UploadAsync(result.Title, result.Category, result.Classification,
-                buffer, result.File.Name, result.File.ContentType, result.File.Size, _user);
-            Snackbar.Add("Datei hochgeladen.", Severity.Success);
+            var uploaded = 0;
+            foreach (var file in result.Files)
+            {
+                // browser stream has no seek; buffer per file
+                await using var buffer = new MemoryStream();
+                await file.OpenReadStream(Storage.MaxBytes).CopyToAsync(buffer);
+                buffer.Position = 0;
+                var title = result.Files.Count == 1 && !string.IsNullOrWhiteSpace(result.Title)
+                    ? result.Title!
+                    : Path.GetFileNameWithoutExtension(file.Name);
+                await LibraryService.UploadAsync(title, result.Category, result.Classification,
+                    buffer, file.Name, file.ContentType, file.Size, _user);
+                uploaded++;
+            }
+            Snackbar.Add(uploaded == 1 ? "Datei hochgeladen." : $"{uploaded} Dateien hochgeladen.", Severity.Success);
             await LoadAsync();
         }
         catch (Exception ex)
@@ -142,7 +157,7 @@ else
         }
         try
         {
-            await LibraryService.RefreshAsync(file.Id, result.Title, result.Category, result.Classification, _user);
+            await LibraryService.RefreshAsync(file.Id, result.Title ?? file.Title, result.Category, result.Classification, _user);
             Snackbar.Add("Gespeichert.", Severity.Success);
             await LoadAsync();
         }
@@ -170,6 +185,19 @@ else
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    private static bool IsImage(string contentType)
+        => contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+    private async Task OpenLightboxAsync(LibraryFile file)
+    {
+        var imgs = _filtered.Where(f => IsImage(f.ContentType)).ToList();
+        var list = imgs
+            .Select(f => new ImageLightbox.LightboxImage($"/dateien/bibliothek/{f.Id}?inline=1", f.Title))
+            .ToList();
+        var start = imgs.FindIndex(f => f.Id == file.Id);
+        await ImageLightbox.ShowAsync(DialogService, list, Math.Max(0, start));
     }
 
     private static string SizeText(long bytes) => bytes switch

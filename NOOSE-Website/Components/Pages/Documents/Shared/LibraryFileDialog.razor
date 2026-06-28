@@ -6,11 +6,11 @@
         <MudStack Spacing="3">
             @if (!IsProcessing)
             {
-                <MudFileUpload T="IBrowserFile" FilesChanged="FileSelected">
+                <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="FilesSelected" MaximumFileCount="20">
                     <CustomContent>
                         <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
                                    OnClick="@context.OpenFilePickerAsync">
-                            @(_file is null ? "Datei wählen…" : _file.Name)
+                            @(_files.Count == 0 ? "Dateien wählen…" : (_files.Count == 1 ? _files[0].Name : $"{_files.Count} Dateien gewählt"))
                         </MudButton>
                     </CustomContent>
                 </MudFileUpload>
@@ -22,8 +22,17 @@
                     <MudAlert Severity="Severity.Warning" Dense="true">@_warning</MudAlert>
                 }
             }
-            <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined" Required="true"
-                          RequiredError="Titel ist erforderlich" />
+            @if (IsProcessing || _files.Count <= 1)
+            {
+                <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                              RequiredError="Titel ist erforderlich" />
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    @_files.Count Dateien – Titel je Datei = Dateiname; Kategorie und Verschluss-Stufe gelten für alle.
+                </MudAlert>
+            }
             <MudTextField @bind-Value="_category" Label="Kategorie (optional)" Variant="Variant.Outlined"
                           Placeholder="z. B. Formular, SOP, Vorlage" />
             @if (_options.Count > 1)
@@ -42,7 +51,7 @@
     <DialogActions>
         <MudButton OnClick="Cancel">Abbrechen</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
-                   Disabled="@(string.IsNullOrWhiteSpace(_title) || (!IsProcessing && _file is null))">
+                   Disabled="@SaveDisabled">
             Speichern
         </MudButton>
     </DialogActions>
@@ -56,8 +65,13 @@
 
     private bool IsProcessing => Preset is not null;
 
-    private IBrowserFile? _file;
+    private IReadOnlyList<IBrowserFile> _files = Array.Empty<IBrowserFile>();
     private string? _warning;
+
+    // edit/single-upload require a title; multi-upload derives titles from filenames
+    private bool SaveDisabled =>
+        (!IsProcessing && _files.Count == 0)
+        || ((IsProcessing || _files.Count == 1) && string.IsNullOrWhiteSpace(_title));
     private string _title = string.Empty;
     private string? _category;
     private DocumentClassification _classification;
@@ -83,39 +97,40 @@
         }
     }
 
-    private void FileSelected(IBrowserFile? file)
+    private void FilesSelected(IReadOnlyList<IBrowserFile> files)
     {
         _warning = null;
-        if (file is null)
+        var valid = new List<IBrowserFile>();
+        var rejected = new List<string>();
+        foreach (var file in files)
         {
-            _file = null;
-            return;
+            if (file.Size > Storage.MaxBytes || !Storage.IsAllowedType(file.ContentType))
+            {
+                rejected.Add(file.Name);
+                continue;
+            }
+            valid.Add(file);
         }
-        if (file.Size > Storage.MaxBytes)
+        _files = valid;
+        if (rejected.Count > 0)
         {
-            _warning = $"Die Datei ist zu groß (max. {Storage.MaxBytes / (1024 * 1024)} MB).";
-            return;
+            _warning = $"Übersprungen (zu groß oder Typ nicht erlaubt): {string.Join(", ", rejected)}";
         }
-        if (!Storage.IsAllowedType(file.ContentType))
+        if (_files.Count == 1 && string.IsNullOrWhiteSpace(_title))
         {
-            _warning = "Dieser Dateityp ist nicht erlaubt.";
-            return;
-        }
-        _file = file;
-        if (string.IsNullOrWhiteSpace(_title))
-        {
-            // Prefill title from file name.
-            _title = Path.GetFileNameWithoutExtension(file.Name);
+            // Prefill title from the single file's name.
+            _title = Path.GetFileNameWithoutExtension(_files[0].Name);
         }
     }
 
     private void Cancel() => MudDialog.Cancel();
 
     private void Save()
-        => MudDialog.Close(DialogResult.Ok(new Result(_title.Trim(), _category, _classification, _file)));
+        => MudDialog.Close(DialogResult.Ok(new Result(
+            string.IsNullOrWhiteSpace(_title) ? null : _title.Trim(), _category, _classification, _files)));
 
-    /// <summary>Dialog result: metadata plus the chosen file (upload only).</summary>
-    public sealed record Result(string Title, string? Category, DocumentClassification Classification, IBrowserFile? File);
+    /// <summary>Dialog result: shared metadata plus the chosen files (upload only).</summary>
+    public sealed record Result(string? Title, string? Category, DocumentClassification Classification, IReadOnlyList<IBrowserFile> Files);
 
     /// <summary>Shows the dialog; returns the result or <c>null</c> if cancelled.</summary>
     public static async Task<Result?> ShowAsync(IDialogService dialog, string title,
