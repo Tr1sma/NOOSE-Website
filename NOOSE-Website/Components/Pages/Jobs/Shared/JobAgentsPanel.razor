@@ -31,7 +31,7 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Small" />
                         <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(a.Agent?.Rank)</MudChip>
+                        <AgentRankChip Agent="a.Agent" />
                     </MudStack>
                     @if (CanManage)
                     {
