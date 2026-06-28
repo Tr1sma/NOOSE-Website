@@ -1,0 +1,98 @@
+@* Shared full-screen image viewer with prev/next navigation. *@
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%;">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@(_index + 1) / @Images.Count</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Default" OnClick="Close" aria-label="Schließen" />
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <div tabindex="0" @ref="_container" @onkeydown="OnKeyDown"
+             style="outline:none;display:flex;align-items:center;justify-content:center;gap:8px;">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Large"
+                           Disabled="@(_index == 0)" OnClick="Prev" aria-label="Vorheriges Bild" />
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="flex:1;min-width:0;">
+                <MudImage Src="@Current.Url" ObjectFit="ObjectFit.Contain"
+                          Style="max-height:80vh;max-width:100%;" Class="rounded" />
+                @if (!string.IsNullOrWhiteSpace(Current.Caption))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Current.Caption</MudText>
+                }
+            </MudStack>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Large"
+                           Disabled="@(_index >= Images.Count - 1)" OnClick="Next" aria-label="Nächstes Bild" />
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<LightboxImage> Images { get; set; } = default!;
+    [Parameter] public int StartIndex { get; set; }
+
+    private int _index;
+    private ElementReference _container;
+
+    private LightboxImage Current => Images[_index];
+
+    protected override void OnInitialized()
+        => _index = Math.Clamp(StartIndex, 0, Math.Max(0, Images.Count - 1));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // focus so arrow keys work immediately
+            try { await _container.FocusAsync(); } catch { /* best effort */ }
+        }
+    }
+
+    private void Prev()
+    {
+        if (_index > 0) { _index--; }
+    }
+
+    private void Next()
+    {
+        if (_index < Images.Count - 1) { _index++; }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowLeft": Prev(); break;
+            case "ArrowRight": Next(); break;
+            case "Escape": Close(); break;
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    /// <summary>One image in the viewer.</summary>
+    public sealed record LightboxImage(string Url, string? Caption);
+
+    /// <summary>Opens the viewer over the given images, starting at the index.</summary>
+    public static Task ShowAsync(IDialogService dialog, IReadOnlyList<LightboxImage> images, int startIndex = 0)
+    {
+        if (images is null || images.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+        var parameters = new DialogParameters<ImageLightbox>
+        {
+            { x => x.Images, images },
+            { x => x.StartIndex, startIndex },
+        };
+        var options = new DialogOptions
+        {
+            FullWidth = true,
+            MaxWidth = MaxWidth.Large,
+            CloseOnEscapeKey = true,
+            CloseButton = false,
+        };
+        return dialog.ShowAsync<ImageLightbox>(null, parameters, options);
+    }
+}
