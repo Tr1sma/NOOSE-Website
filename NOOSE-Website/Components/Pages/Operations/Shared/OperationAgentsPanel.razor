@@ -32,7 +32,7 @@
                         <MudIcon Icon="@(a.IsInvestigationLead ? Icons.Material.Filled.LocalPolice : Icons.Material.Filled.Person)"
                                  Color="@(a.IsInvestigationLead ? Color.Warning : Color.Primary)" Size="Size.Small" />
                         <MudText Typo="Typo.body2"><b>@a.Agent?.Codename</b></MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(a.Agent?.Rank)</MudChip>
+                        <AgentRankChip Agent="a.Agent" />
                         @if (a.IsInvestigationLead)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Icon="@Icons.Material.Filled.LocalPolice">Ermittlungsleiter</MudChip>

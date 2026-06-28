@@ -1,0 +1,16 @@
+@* Rank chip for an agent: internal rank, or partner agency + partner rank for external accounts. *@
+
+@if (Agent?.PartnerAgency is { } agency)
+{
+    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+             Icon="@Icons.Material.Filled.Handshake">@PartnerRankDisplay.Full(agency, Agent.PartnerRank)</MudChip>
+}
+else
+{
+    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@RankDisplay.Name(Agent?.Rank)</MudChip>
+}
+
+@code {
+    /// <summary>Agent whose rank/affiliation to display; null renders the neutral placeholder.</summary>
+    [Parameter] public Agent? Agent { get; set; }
+}
