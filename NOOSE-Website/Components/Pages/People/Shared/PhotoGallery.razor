@@ -37,9 +37,11 @@
             @foreach (var photo in Photos)
             {
                 <MudPaper Class="pa-1" Elevation="2" Style="width:160px;">
-                    <MudImage Src="@($"/dateien/personen/foto/{photo.Id}")" Alt="@photo.OriginalName"
-                              Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded"
-                              Style="@($"object-position:{photo.FocalPointX}% {photo.FocalPointY}%")" />
+                    <div @onclick="@(() => OpenLightboxAsync(photo))" style="cursor:pointer;">
+                        <MudImage Src="@($"/dateien/personen/foto/{photo.Id}")" Alt="@photo.OriginalName"
+                                  Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded"
+                                  Style="@($"object-position:{photo.FocalPointX}% {photo.FocalPointY}%")" />
+                    </div>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="px-1">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                             @photo.OriginalName
@@ -80,6 +82,15 @@
             _canShareChildren = (await PartnerShareService.GetForRecordAsync(nameof(Person), PersonId))
                 .Any(s => s.Released && !s.IncludesChildren);
         }
+    }
+
+    private async Task OpenLightboxAsync(PersonPhoto photo)
+    {
+        var images = Photos
+            .Select(p => new ImageLightbox.LightboxImage($"/dateien/personen/foto/{p.Id}", p.OriginalName))
+            .ToList();
+        var start = Photos.IndexOf(photo);
+        await ImageLightbox.ShowAsync(DialogService, images, Math.Max(0, start));
     }
 
     private async Task UploadAsync(IReadOnlyList<IBrowserFile> files)

@@ -36,7 +36,7 @@
             @foreach (var photo in _photos)
             {
                 <MudPaper Class="pa-1" Elevation="2" Style="width:160px;">
-                    <div style="position:relative;">
+                    <div @onclick="@(() => OpenLightboxAsync(photo))" style="position:relative;cursor:pointer;">
                         <MudImage Src="@($"/dateien/fraktionen/foto/{photo.Id}")" Alt="@photo.OriginalName"
                                   Height="120" Width="150" ObjectFit="ObjectFit.Cover" Class="rounded" />
                         @if (photo.IsTitleImage)
@@ -95,6 +95,15 @@
     private async Task LoadAsync()
     {
         _photos = await FactionService.GetPhotosAsync(FactionId);
+    }
+
+    private async Task OpenLightboxAsync(FactionPhoto photo)
+    {
+        var images = _photos
+            .Select(p => new ImageLightbox.LightboxImage($"/dateien/fraktionen/foto/{p.Id}", p.OriginalName))
+            .ToList();
+        var start = _photos.IndexOf(photo);
+        await ImageLightbox.ShowAsync(DialogService, images, Math.Max(0, start));
     }
 
     private async Task UploadAsync(IReadOnlyList<IBrowserFile> files)
