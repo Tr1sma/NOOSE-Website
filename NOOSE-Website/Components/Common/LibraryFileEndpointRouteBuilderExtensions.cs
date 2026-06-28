@@ -15,6 +15,7 @@ public static class LibraryFileEndpointRouteBuilderExtensions
 
         group.MapGet("/{fileId}", async (
             string fileId,
+            [FromQuery] bool inline,
             [FromServices] ILibraryService library,
             [FromServices] ILibraryStorageService storage,
             [FromServices] IAccessLogService access,
@@ -41,8 +42,11 @@ public static class LibraryFileEndpointRouteBuilderExtensions
 
             await access.LogViewAsync(nameof(LibraryFile), fileId, cancellationToken);
 
-            // auto-disposed
-            return Results.File(stream, file.ContentType, file.OriginalName, enableRangeProcessing: true);
+            // auto-disposed; inline only for images, everything else stays a download
+            var isImage = file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+            return inline && isImage
+                ? Results.File(stream, file.ContentType, enableRangeProcessing: true)
+                : Results.File(stream, file.ContentType, file.OriginalName, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.ActiveAgent, Policies.InternalAgent);
 

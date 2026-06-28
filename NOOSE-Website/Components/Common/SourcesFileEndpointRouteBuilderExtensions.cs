@@ -15,6 +15,7 @@ public static class SourcesFileEndpointRouteBuilderExtensions
 
         group.MapGet("/{sourceId}", async (
             string sourceId,
+            [FromQuery] bool inline,
             [FromServices] ISourceService sourceService,
             [FromServices] ISourcesStorageService storage,
             [FromServices] IAccessLogService access,
@@ -42,8 +43,12 @@ public static class SourcesFileEndpointRouteBuilderExtensions
             await access.LogViewAsync(nameof(Source), sourceId, cancellationToken);
 
             // Results.File disposes the stream, no using
-            return Results.File(stream, source.ContentType ?? "application/octet-stream",
-                source.OriginalName, enableRangeProcessing: true);
+            // inline only for images; everything else stays a download
+            var isImage = source.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+            return inline && isImage
+                ? Results.File(stream, source.ContentType!, enableRangeProcessing: true)
+                : Results.File(stream, source.ContentType ?? "application/octet-stream",
+                    source.OriginalName, enableRangeProcessing: true);
         })
         .RequireAuthorization(Policies.ActiveAgent);
 
