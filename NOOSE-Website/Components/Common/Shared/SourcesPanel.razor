@@ -1,4 +1,5 @@
 @inject ISourceService SourceService
+@inject ISourcesStorageService SourcesStorage
 @inject IDialogService DialogService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -9,9 +10,21 @@
         <MudText Typo="Typo.subtitle1">Quellen &amp; Anhänge (@_sources.Count)</MudText>
         @if (_mayWrite)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
-                Quelle hinzufügen
-            </MudButton>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="UploadImagesAsync"
+                               Accept="image/*" MaximumFileCount="20">
+                    <CustomContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Image"
+                                   OnClick="@context.OpenFilePickerAsync" Disabled="_load">
+                            Bilder hochladen
+                        </MudButton>
+                    </CustomContent>
+                    <SelectedTemplate />
+                </MudFileUpload>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+                    Quelle hinzufügen
+                </MudButton>
+            </MudStack>
         }
     </MudStack>
 
@@ -61,6 +74,12 @@
                 {
                     case SourceType.Link:
                         <MudLink Href="@q.Url" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">@q.Url</MudLink>
+                        break;
+                    case SourceType.Upload when IsImage(q.ContentType):
+                        <div @onclick="@(() => OpenImageAsync(q))" style="cursor:pointer;width:max-content;" class="mt-1">
+                            <MudImage Src="@($"/dateien/quellen/{q.Id}?inline=1")" Alt="@q.OriginalName"
+                                      Height="96" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        </div>
                         break;
                     case SourceType.Upload:
                         <MudLink Href="@($"/dateien/quellen/{q.Id}")" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">
@@ -153,6 +172,69 @@
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static bool IsImage(string? contentType)
+        => contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+
+    private async Task OpenImageAsync(Source clicked)
+    {
+        var imgs = _sources.Where(s => s.Type == SourceType.Upload && IsImage(s.ContentType)).ToList();
+        var list = imgs
+            .Select(s => new ImageLightbox.LightboxImage($"/dateien/quellen/{s.Id}?inline=1", s.Title))
+            .ToList();
+        var start = imgs.FindIndex(s => s.Id == clicked.Id);
+        await ImageLightbox.ShowAsync(DialogService, list, Math.Max(0, start));
+    }
+
+    private async Task UploadImagesAsync(IReadOnlyList<IBrowserFile> files)
+    {
+        _load = true;
+        try
+        {
+            var uploaded = 0;
+            foreach (var file in files)
+            {
+                if (!IsImage(file.ContentType) || !SourcesStorage.IsAllowedType(file.ContentType))
+                {
+                    Snackbar.Add($"„{file.Name}“: kein erlaubtes Bild.", Severity.Warning);
+                    continue;
+                }
+                if (file.Size > SourcesStorage.MaxBytes)
+                {
+                    Snackbar.Add($"„{file.Name}“: zu groß (max. {SourcesStorage.MaxBytes / (1024 * 1024)} MB).", Severity.Warning);
+                    continue;
+                }
+
+                using var ms = new MemoryStream();
+                await file.OpenReadStream(SourcesStorage.MaxBytes).CopyToAsync(ms);
+                var input = new SourceInput
+                {
+                    Type = SourceType.Upload,
+                    Title = file.Name,
+                    FileContent = ms.ToArray(),
+                    OriginalName = file.Name,
+                    ContentType = file.ContentType,
+                    SizeBytes = file.Size,
+                };
+                await SourceService.CreateAsync(EntityType, EntityId, input, User);
+                uploaded++;
+            }
+
+            if (uploaded > 0)
+            {
+                Snackbar.Add(uploaded == 1 ? "Bild hochgeladen." : $"{uploaded} Bilder hochgeladen.", Severity.Success);
+                await LoadAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Upload fehlgeschlagen: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _load = false;
         }
     }
 
