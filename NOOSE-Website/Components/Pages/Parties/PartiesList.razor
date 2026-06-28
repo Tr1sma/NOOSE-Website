@@ -50,7 +50,7 @@ else
                 <CellTemplate>
                     @if (context.Item.IsClassified)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">@DocumentClassificationDisplay.ChipLabel(context.Item.SecrecyLevel)</MudChip>
                     }
                 </CellTemplate>
             </TemplateColumn>
@@ -96,7 +96,7 @@ else
         var mayClassifiedRead = user.MayClassifiedRead();
         var isPartner = user.IsPartner();
         var parties = await PartyService.GetListAsync(ViewerScope.From(user));
-        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Party));
+        var settings = await Recency.GetSettingsAsync(nameof(Party));
         var now = DateTime.UtcNow;
         _rows = parties.Select(p =>
         {
@@ -111,9 +111,10 @@ else
                 MemberCount = isPartner ? 0 : p.Members.Count(m => m.Person is not null && (mayClassifiedRead || !m.Person.IsClassified)),
                 Classification = p.Classification,
                 IsClassified = p.IsClassified,
+                SecrecyLevel = p.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+                Level = settings.AgingDisabled || p.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -140,6 +141,7 @@ else
         public int MemberCount { get; set; }
         public Classification Classification { get; set; }
         public bool IsClassified { get; set; }
+        public DocumentClassification SecrecyLevel { get; set; }
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }

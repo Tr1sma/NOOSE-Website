@@ -24,7 +24,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <PartyForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" />
+        <PartyForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
         Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
@@ -47,11 +47,13 @@ else
     private bool _load = true;
     private bool _saves;
     private string? _loadedId;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
     }
 
     // Component is reused across edit routes, so OnInitializedAsync does not re-run; reload on Id change with a guard.
@@ -74,7 +76,7 @@ else
                 Targets = p.Targets,
                 Remarks = p.Remarks,
                 Classification = p.Classification,
-                IsClassified = p.IsClassified,
+                SecrecyLevel = p.SecrecyLevel,
             };
         }
         _load = false;

@@ -12,7 +12,7 @@
 </MudStack>
 
 <MudForm @ref="_form">
-    <CaseForm Input="_input" ShowClassification="true" MayHighest="_mayHighest" IsLeadership="_isLeadership" />
+    <CaseForm Input="_input" ShowClassification="true" MayHighest="_mayHighest" IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
 </MudForm>
 
 <MudStack Row="true" Spacing="2" Class="mt-4">
@@ -29,12 +29,14 @@
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _saves;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _mayHighest = _user.MayHighestClassification();
         _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
     }
 
     private async Task SaveAsync()

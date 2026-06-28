@@ -74,6 +74,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
     public async Task<Faction> CreateAsync(FactionInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -91,7 +92,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             Targets = input.Targets.TrimToNull(),
             Description = input.Description.TrimToNull(),
             Classification = input.Classification,
-            IsClassified = input.IsClassified,
+            SecrecyLevel = input.SecrecyLevel,
             IsStateFaction = input.IsStateFaction,
             EstimatedMemberCount = input.EstimatedMemberCount,
         };
@@ -206,7 +207,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         faction.RecognitionColor = input.RecognitionColor.TrimToNull();
         faction.Targets = input.Targets.TrimToNull();
         faction.Description = input.Description.TrimToNull();
-        faction.IsClassified = input.IsClassified;
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
+        faction.SecrecyLevel = input.SecrecyLevel;
         faction.IsStateFaction = input.IsStateFaction;
         faction.EstimatedMemberCount = input.EstimatedMemberCount;
 
@@ -304,7 +306,11 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
     private static IQueryable<Faction> VisibleFactions(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Factions.Where(f => scope.MayClassifiedRead || !f.IsClassified);
+            : db.Factions.Where(f =>
+                !f.IsClassified
+                || scope.MayClassifiedRead
+                || (f.IsTRUClassified && scope.IsTru)
+                || (f.IsHRBClassified && scope.IsHrb));
 
     public async Task<List<FactionMember>> GetMembersAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default)
     {

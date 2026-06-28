@@ -99,7 +99,7 @@ else
         // Only assigned taskforces; leadership sees all
         var taskforces = await TaskforceService.GetListAsync(user.MayAllTaskforcesSee(), user.GetAgentId(),
             partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
-        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Taskforce));
+        var settings = await Recency.GetSettingsAsync(nameof(Taskforce));
         var now = DateTime.UtcNow;
         _rows = taskforces.Select(t =>
         {
@@ -114,7 +114,7 @@ else
                 IsClassified = t.IsClassified,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+                Level = settings.AgingDisabled || t.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;

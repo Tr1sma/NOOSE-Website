@@ -17,7 +17,7 @@ public class FactionInput
     public string? Description { get; set; }
     public Classification Classification { get; set; } = Classification.Unknown;
     public string? ClassificationJustification { get; set; }
-    public bool IsClassified { get; set; }
+    public DocumentClassification SecrecyLevel { get; set; } = DocumentClassification.None;
 
     /// <summary>State faction; never goes stale (recency stays "current").</summary>
     public bool IsStateFaction { get; set; }

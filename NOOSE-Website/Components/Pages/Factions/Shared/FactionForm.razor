@@ -36,13 +36,16 @@
                         Variant="Variant.Outlined" Placeholder="z. B. #1E88E5" Clearable="true" />
     </MudItem>
     <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
-        <MudSwitch T="bool" @bind-Value="Input.IsClassified" Color="Color.Warning"
-                   Label="Verschlusssache (nur Führung sichtbar)" />
-        @if (Input.IsClassified && !IsLeadership)
+        @if (SecrecyOptions.Count > 1)
         {
-            <MudText Typo="Typo.caption" Color="Color.Warning">
-                Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
-            </MudText>
+            <MudSelect T="DocumentClassification" @bind-Value="Input.SecrecyLevel" Label="Verschluss-Stufe"
+                       Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                       HelperText="Bestimmt, wer die Akte sehen darf." Class="mb-2">
+                @foreach (var o in SecrecyOptions)
+                {
+                    <MudSelectItem T="DocumentClassification" Value="@o">@DocumentClassificationDisplay.Label(o)</MudSelectItem>
+                }
+            </MudSelect>
         }
         <MudSwitch T="bool" @bind-Value="Input.IsStateFaction" Color="Color.Info"
                    Label="Staatsfraktion (wird nie als veraltet markiert)" />
@@ -163,6 +166,8 @@
     [Parameter] public bool MayHighest { get; set; }
     [Parameter] public bool IsLeadership { get; set; }
     [Parameter] public bool ShowMembers { get; set; }
+    /// <summary>Secrecy levels the current user may assign (DocumentViewerScope.AssignableOptions).</summary>
+    [Parameter] public IReadOnlyList<DocumentClassification> SecrecyOptions { get; set; } = Array.Empty<DocumentClassification>();
 
     private MudColor? _colour;
     private IReadOnlyList<string> _kindSuggestions = Array.Empty<string>();

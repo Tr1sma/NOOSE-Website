@@ -15,7 +15,7 @@ public class PersonGroupInput
     public Classification Classification { get; set; } = Classification.Unknown;
     public string? ClassificationJustification { get; set; }
     public int? EstimatedMemberCount { get; set; }
-    public bool IsClassified { get; set; }
+    public DocumentClassification SecrecyLevel { get; set; } = DocumentClassification.None;
 
     /// <summary>Initial members list.</summary>
     public List<GroupMemberInput> Members { get; set; } = new();

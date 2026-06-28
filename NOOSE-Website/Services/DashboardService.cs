@@ -53,9 +53,9 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         }
 
         // Stale records: per type past the configured red threshold, referenced by ModifiedAt ?? CreatedAt.
-        var thresholds = await recency.GetThresholdsAsync(cancellationToken);
+        var settings = await recency.GetAllSettingsAsync(cancellationToken);
         var now = DateTime.UtcNow;
-        DateTime CutoffDate(string type) => now.AddDays(-thresholds[type].StaleDays);
+        DateTime CutoffDate(string type) => now.AddDays(-settings[type].StaleDays);
         var sP = CutoffDate(nameof(Person));
         var sF = CutoffDate(nameof(Faction));
         var sG = CutoffDate(nameof(PersonGroup));
@@ -63,14 +63,15 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         var sO = CutoffDate(nameof(Operation));
         var sT = CutoffDate(nameof(Taskforce));
         var sV = CutoffDate(nameof(Case));
+        // A type with aging disabled contributes nothing; exempt records drop out per type.
         var staleRecords =
-              await db.People.CountAsync(p => (isLeadership || !p.IsClassified) && (p.ModifiedAt ?? p.CreatedAt) < sP, cancellationToken)
-            + await db.Factions.CountAsync(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && (f.ModifiedAt ?? f.CreatedAt) < sF, cancellationToken)
-            + await db.PersonGroups.CountAsync(g => (isLeadership || !g.IsClassified) && (g.ModifiedAt ?? g.CreatedAt) < sG, cancellationToken)
-            + await db.Parties.CountAsync(p => (isLeadership || !p.IsClassified) && (p.ModifiedAt ?? p.CreatedAt) < sPt, cancellationToken)
-            + await db.Operations.CountAsync(o => (isLeadership || !o.IsClassified) && (o.ModifiedAt ?? o.CreatedAt) < sO, cancellationToken)
-            + await db.Taskforces.OnlyVisible(db, isLeadership, meId).CountAsync(t => (t.ModifiedAt ?? t.CreatedAt) < sT, cancellationToken)
-            + await db.Cases.CountAsync(v => (isLeadership || !v.IsClassified) && (v.ModifiedAt ?? v.CreatedAt) < sV, cancellationToken);
+              (settings[nameof(Person)].AgingDisabled ? 0 : await db.People.CountAsync(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < sP, cancellationToken))
+            + (settings[nameof(Faction)].AgingDisabled ? 0 : await db.Factions.CountAsync(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled && (f.ModifiedAt ?? f.CreatedAt) < sF, cancellationToken))
+            + (settings[nameof(PersonGroup)].AgingDisabled ? 0 : await db.PersonGroups.CountAsync(g => (isLeadership || !g.IsClassified) && !g.AgingDisabled && (g.ModifiedAt ?? g.CreatedAt) < sG, cancellationToken))
+            + (settings[nameof(Party)].AgingDisabled ? 0 : await db.Parties.CountAsync(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < sPt, cancellationToken))
+            + (settings[nameof(Operation)].AgingDisabled ? 0 : await db.Operations.CountAsync(o => (isLeadership || !o.IsClassified) && !o.AgingDisabled && (o.ModifiedAt ?? o.CreatedAt) < sO, cancellationToken))
+            + (settings[nameof(Taskforce)].AgingDisabled ? 0 : await db.Taskforces.OnlyVisible(db, isLeadership, meId).CountAsync(t => !t.AgingDisabled && (t.ModifiedAt ?? t.CreatedAt) < sT, cancellationToken))
+            + (settings[nameof(Case)].AgingDisabled ? 0 : await db.Cases.CountAsync(v => (isLeadership || !v.IsClassified) && !v.AgingDisabled && (v.ModifiedAt ?? v.CreatedAt) < sV, cancellationToken));
 
         // The org tile bundles factions, groups and parties; operations are their own tile.
         return new DashboardMetrics(people, factions + groups + parties, operations, openCases, openRequests, classified, staleRecords);
@@ -80,93 +81,115 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var thresholds = await recency.GetThresholdsAsync(cancellationToken);
+        var settings = await recency.GetAllSettingsAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var result = new List<DashboardStaleRecord>();
 
         // Update need starts at the yellow threshold; load the oldest N per type, then globally sort and cap.
-        var (wP, vP) = thresholds[nameof(Person)];
-        var cutP = now.AddDays(-wP);
-        foreach (var x in await db.People
-            .Where(p => (isLeadership || !p.IsClassified) && (p.ModifiedAt ?? p.CreatedAt) < cutP)
-            .OrderBy(p => p.ModifiedAt ?? p.CreatedAt)
-            .Select(p => new { p.Id, p.Name, p.CaseNumber, Reference = p.ModifiedAt ?? p.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        // A type with aging disabled is skipped entirely; exempt records drop out per type.
+        var setP = settings[nameof(Person)];
+        if (!setP.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.Person, x.Name, x.CaseNumber, $"/personen/{x.Id}",
-                RecencyAssessment.Level(wP, vP, x.Reference, now), x.Reference));
+            var cutP = now.AddDays(-setP.WarningDays);
+            foreach (var x in await db.People
+                .Where(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < cutP)
+                .OrderBy(p => p.ModifiedAt ?? p.CreatedAt)
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, Reference = p.ModifiedAt ?? p.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.Person, x.Name, x.CaseNumber, $"/personen/{x.Id}",
+                    RecencyAssessment.Level(setP.WarningDays, setP.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
-        var (wF, vF) = thresholds[nameof(Faction)];
-        var cutF = now.AddDays(-wF);
-        foreach (var x in await db.Factions
-            .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && (f.ModifiedAt ?? f.CreatedAt) < cutF)
-            .OrderBy(f => f.ModifiedAt ?? f.CreatedAt)
-            .Select(f => new { f.Id, f.Name, f.CaseNumber, Reference = f.ModifiedAt ?? f.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        var setF = settings[nameof(Faction)];
+        if (!setF.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.Faction, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}",
-                RecencyAssessment.Level(wF, vF, x.Reference, now), x.Reference));
+            var cutF = now.AddDays(-setF.WarningDays);
+            foreach (var x in await db.Factions
+                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled && (f.ModifiedAt ?? f.CreatedAt) < cutF)
+                .OrderBy(f => f.ModifiedAt ?? f.CreatedAt)
+                .Select(f => new { f.Id, f.Name, f.CaseNumber, Reference = f.ModifiedAt ?? f.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.Faction, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}",
+                    RecencyAssessment.Level(setF.WarningDays, setF.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
-        var (wG, vG) = thresholds[nameof(PersonGroup)];
-        var cutG = now.AddDays(-wG);
-        foreach (var x in await db.PersonGroups
-            .Where(g => (isLeadership || !g.IsClassified) && (g.ModifiedAt ?? g.CreatedAt) < cutG)
-            .OrderBy(g => g.ModifiedAt ?? g.CreatedAt)
-            .Select(g => new { g.Id, g.Name, g.CaseNumber, Reference = g.ModifiedAt ?? g.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        var setG = settings[nameof(PersonGroup)];
+        if (!setG.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.PersonGroup, x.Name, x.CaseNumber, $"/personengruppen/{x.Id}",
-                RecencyAssessment.Level(wG, vG, x.Reference, now), x.Reference));
+            var cutG = now.AddDays(-setG.WarningDays);
+            foreach (var x in await db.PersonGroups
+                .Where(g => (isLeadership || !g.IsClassified) && !g.AgingDisabled && (g.ModifiedAt ?? g.CreatedAt) < cutG)
+                .OrderBy(g => g.ModifiedAt ?? g.CreatedAt)
+                .Select(g => new { g.Id, g.Name, g.CaseNumber, Reference = g.ModifiedAt ?? g.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.PersonGroup, x.Name, x.CaseNumber, $"/personengruppen/{x.Id}",
+                    RecencyAssessment.Level(setG.WarningDays, setG.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
-        var (wPt, vPt) = thresholds[nameof(Party)];
-        var cutPt = now.AddDays(-wPt);
-        foreach (var x in await db.Parties
-            .Where(p => (isLeadership || !p.IsClassified) && (p.ModifiedAt ?? p.CreatedAt) < cutPt)
-            .OrderBy(p => p.ModifiedAt ?? p.CreatedAt)
-            .Select(p => new { p.Id, p.Name, p.CaseNumber, Reference = p.ModifiedAt ?? p.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        var setPt = settings[nameof(Party)];
+        if (!setPt.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.Party, x.Name, x.CaseNumber, $"/parteien/{x.Id}",
-                RecencyAssessment.Level(wPt, vPt, x.Reference, now), x.Reference));
+            var cutPt = now.AddDays(-setPt.WarningDays);
+            foreach (var x in await db.Parties
+                .Where(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < cutPt)
+                .OrderBy(p => p.ModifiedAt ?? p.CreatedAt)
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, Reference = p.ModifiedAt ?? p.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.Party, x.Name, x.CaseNumber, $"/parteien/{x.Id}",
+                    RecencyAssessment.Level(setPt.WarningDays, setPt.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
-        var (wO, vO) = thresholds[nameof(Operation)];
-        var cutO = now.AddDays(-wO);
-        foreach (var x in await db.Operations
-            .Where(o => (isLeadership || !o.IsClassified) && (o.ModifiedAt ?? o.CreatedAt) < cutO)
-            .OrderBy(o => o.ModifiedAt ?? o.CreatedAt)
-            .Select(o => new { o.Id, Name = o.Title, o.CaseNumber, Reference = o.ModifiedAt ?? o.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        var setO = settings[nameof(Operation)];
+        if (!setO.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.Operation, x.Name, x.CaseNumber, $"/operationen/{x.Id}",
-                RecencyAssessment.Level(wO, vO, x.Reference, now), x.Reference));
+            var cutO = now.AddDays(-setO.WarningDays);
+            foreach (var x in await db.Operations
+                .Where(o => (isLeadership || !o.IsClassified) && !o.AgingDisabled && (o.ModifiedAt ?? o.CreatedAt) < cutO)
+                .OrderBy(o => o.ModifiedAt ?? o.CreatedAt)
+                .Select(o => new { o.Id, Name = o.Title, o.CaseNumber, Reference = o.ModifiedAt ?? o.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.Operation, x.Name, x.CaseNumber, $"/operationen/{x.Id}",
+                    RecencyAssessment.Level(setO.WarningDays, setO.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
-        var (wT, vT) = thresholds[nameof(Taskforce)];
-        var cutT = now.AddDays(-wT);
-        foreach (var x in await db.Taskforces.OnlyVisible(db, isLeadership, meId)
-            .Where(t => (t.ModifiedAt ?? t.CreatedAt) < cutT)
-            .OrderBy(t => t.ModifiedAt ?? t.CreatedAt)
-            .Select(t => new { t.Id, t.Name, t.CaseNumber, Reference = t.ModifiedAt ?? t.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        var setT = settings[nameof(Taskforce)];
+        if (!setT.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.Taskforce, x.Name, x.CaseNumber, $"/taskforces/{x.Id}",
-                RecencyAssessment.Level(wT, vT, x.Reference, now), x.Reference));
+            var cutT = now.AddDays(-setT.WarningDays);
+            foreach (var x in await db.Taskforces.OnlyVisible(db, isLeadership, meId)
+                .Where(t => !t.AgingDisabled && (t.ModifiedAt ?? t.CreatedAt) < cutT)
+                .OrderBy(t => t.ModifiedAt ?? t.CreatedAt)
+                .Select(t => new { t.Id, t.Name, t.CaseNumber, Reference = t.ModifiedAt ?? t.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.Taskforce, x.Name, x.CaseNumber, $"/taskforces/{x.Id}",
+                    RecencyAssessment.Level(setT.WarningDays, setT.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
-        var (wV, vV) = thresholds[nameof(Case)];
-        var cutV = now.AddDays(-wV);
-        foreach (var x in await db.Cases
-            .Where(v => (isLeadership || !v.IsClassified) && (v.ModifiedAt ?? v.CreatedAt) < cutV)
-            .OrderBy(v => v.ModifiedAt ?? v.CreatedAt)
-            .Select(v => new { v.Id, Name = v.Title, v.CaseNumber, Reference = v.ModifiedAt ?? v.CreatedAt })
-            .Take(max).ToListAsync(cancellationToken))
+        var setV = settings[nameof(Case)];
+        if (!setV.AgingDisabled)
         {
-            result.Add(new DashboardStaleRecord(DashboardRecordType.Case, x.Name, x.CaseNumber, $"/vorgaenge/{x.Id}",
-                RecencyAssessment.Level(wV, vV, x.Reference, now), x.Reference));
+            var cutV = now.AddDays(-setV.WarningDays);
+            foreach (var x in await db.Cases
+                .Where(v => (isLeadership || !v.IsClassified) && !v.AgingDisabled && (v.ModifiedAt ?? v.CreatedAt) < cutV)
+                .OrderBy(v => v.ModifiedAt ?? v.CreatedAt)
+                .Select(v => new { v.Id, Name = v.Title, v.CaseNumber, Reference = v.ModifiedAt ?? v.CreatedAt })
+                .Take(max).ToListAsync(cancellationToken))
+            {
+                result.Add(new DashboardStaleRecord(DashboardRecordType.Case, x.Name, x.CaseNumber, $"/vorgaenge/{x.Id}",
+                    RecencyAssessment.Level(setV.WarningDays, setV.StaleDays, x.Reference, now), x.Reference));
+            }
         }
 
         // Oldest first, then globally cap.

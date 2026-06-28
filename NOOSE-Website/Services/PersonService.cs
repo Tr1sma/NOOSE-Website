@@ -81,7 +81,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToList();
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // classified records only as duplicates for leadership (else the warning dialog leaks name + case number)
+        // restricted records only as duplicates for leadership (else the warning dialog leaks name + case number)
         return await db.People
             .Where(p => isLeadership || !p.IsClassified)
             .Include(p => p.PhoneNumbers)
@@ -93,6 +93,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
     public async Task<Person> CreateAsync(PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -105,7 +106,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             LifeStatus = input.LifeStatus,
             DeadUntil = input.LifeStatus == LifeStatus.Dead ? LifeStatusLogic.DeadUntilFrom(DateTime.UtcNow) : null,
             Classification = input.Classification,
-            IsClassified = input.IsClassified,
+            SecrecyLevel = input.SecrecyLevel,
         };
         ChildrenMap(person, input);
         await SuggestionsStageAsync(db, person, cancellationToken);
@@ -147,7 +148,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
 
         person.Name = input.Name.Trim();
         person.Description = input.Description.TrimToNull();
-        person.IsClassified = input.IsClassified;
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
+        person.SecrecyLevel = input.SecrecyLevel;
         person.LifeStatus = input.LifeStatus;
         if (input.LifeStatus == LifeStatus.Dead)
         {

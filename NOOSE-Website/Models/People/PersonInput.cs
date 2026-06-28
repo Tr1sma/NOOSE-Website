@@ -10,7 +10,7 @@ public class PersonInput
     public LifeStatus LifeStatus { get; set; } = LifeStatus.Alive;
     public Classification Classification { get; set; } = Classification.Unknown;
     public string? ClassificationJustification { get; set; }
-    public bool IsClassified { get; set; }
+    public DocumentClassification SecrecyLevel { get; set; } = DocumentClassification.None;
 
     public List<AliasInput> Aliases { get; set; } = new();
     public List<PhoneInput> PhoneNumbers { get; set; } = new();

@@ -17,7 +17,8 @@
                 <MudText Typo="Typo.h5">@Faction.Name</MudText>
                 @if (Faction.IsClassified)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="@DocumentClassificationDisplay.Label(Faction.SecrecyLevel)" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@DocumentClassificationDisplay.ChipLabel(Faction.SecrecyLevel)</MudChip>
                 }
                 @if (Faction.IsStateFaction)
                 {
@@ -46,13 +47,19 @@
 
         <MudDivider />
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            @* state factions never go stale: forced Fresh wins *@
-            <RecencyIndicator Level="@(Faction.IsStateFaction ? RecencyLevel.Fresh : (RecencyLevel?)null)"
-                               RecordsType="@nameof(Faction)" ReferenceDateUtc="@(Faction.ModifiedAt ?? Faction.CreatedAt)" />
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                Zuletzt aktualisiert: @((Faction.ModifiedAt ?? Faction.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-            </MudText>
+        <MudStack Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                @* state factions and exempt records never go stale: forced Fresh wins *@
+                <RecencyIndicator Level="@(Faction.IsStateFaction || Faction.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                                  RecordsType="@nameof(Faction)" ReferenceDateUtc="@(Faction.ModifiedAt ?? Faction.CreatedAt)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Zuletzt aktualisiert: @((Faction.ModifiedAt ?? Faction.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+                </MudText>
+            </MudStack>
+            <AuthorizeView Policy="@Policies.Leadership">
+                <MudSwitch T="bool" Value="Faction.AgingDisabled" ValueChanged="ToggleAgingAsync"
+                           Color="Color.Info" Size="Size.Small" Label="Veralterung deaktiviert" />
+            </AuthorizeView>
         </MudStack>
 
         @if (Faction.EstimatedMemberCount is > 0)
@@ -85,6 +92,32 @@
     [Parameter] public string? TitleImagePhotoId { get; set; }
 
     [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
+
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    [Inject] private IRecencyService Recency { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    /// <summary>Toggle this record's aging exemption.</summary>
+    private async Task ToggleAgingAsync(bool value)
+    {
+        if (User is null)
+        {
+            return;
+        }
+        try
+        {
+            await Recency.SetRecordExemptionAsync(nameof(Faction), Faction.Id, value, User);
+            Snackbar.Add(value ? "Veralterung für diese Akte deaktiviert." : "Veralterung wieder aktiv.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            StateHasChanged();
+        }
+    }
 
     private double Percent()
     {

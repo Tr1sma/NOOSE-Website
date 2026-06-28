@@ -143,6 +143,14 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Observation), x.Id)] = ($"Observation – {x.PersonName} ({x.Start.ToLocalTime():dd.MM.yyyy})", x.IsClassified, $"/personen/{x.PersonId}?tab=ueberwachung");
         }
 
+        // library documents: classified if any VS flag is set, leadership-gated below
+        var documentIds = pairs.Where(p => p.OtherType == nameof(Document)).Select(p => p.OtherId).Distinct().ToList();
+        foreach (var x in await db.Documents.Where(d => documentIds.Contains(d.Id))
+                     .Select(d => new { d.Id, d.Title, Classified = d.IsClassified || d.IsTRUClassified || d.IsHRBClassified }).ToListAsync(cancellationToken))
+        {
+            targets[(nameof(Document), x.Id)] = (string.IsNullOrWhiteSpace(x.Title) ? "Dokument" : x.Title, x.Classified, $"/dokumente/{x.Id}");
+        }
+
         // laws have no classification concept (knowledge base)
         var lawIds = pairs.Where(p => p.OtherType == nameof(Law)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Laws.Where(g => lawIds.Contains(g.Id))
@@ -155,7 +163,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         {
             nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
             nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
-            nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law),
+            nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law), nameof(Document),
         };
         // partners: only links to released, releasable-type records
         HashSet<(string, string)>? releasedTargets = null;
@@ -212,7 +220,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
 
         // don't let forged calls link to a classified target the actor can't see
         if (targetType is nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
-                or nameof(Operation) or nameof(Taskforce) or nameof(Case)
+                or nameof(Operation) or nameof(Taskforce) or nameof(Case) or nameof(Document)
             && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");

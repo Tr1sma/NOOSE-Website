@@ -26,9 +26,41 @@ public class Party : IAuditable, ISoftDelete
     [Column("Einstufung")]
     public Classification Classification { get; set; } = Classification.Unknown;
 
-    /// <summary>Classified: visible only to leadership/admin.</summary>
+    /// <summary>Restricted from general view; true when any secrecy level (leadership/TRU/HRB) is set.</summary>
     [Column("IstVerschlusssache")]
     public bool IsClassified { get; set; }
+
+    /// <summary>Restricted to TRU (implies IsClassified); selects the audience instead of leadership-only.</summary>
+    [Column("IstVerschlusssacheTRU")]
+    public bool IsTRUClassified { get; set; }
+
+    /// <summary>Restricted to HRB (implies IsClassified); selects the audience instead of leadership-only.</summary>
+    [Column("IstVerschlusssacheHRB")]
+    public bool IsHRBClassified { get; set; }
+
+    /// <summary>Unified secrecy level: None when unrestricted, else TRU/HRB by audience flag, otherwise leadership.</summary>
+    [NotMapped]
+    public DocumentClassification SecrecyLevel
+    {
+        get => !IsClassified ? DocumentClassification.None
+            : IsTRUClassified ? DocumentClassification.Tru
+            : IsHRBClassified ? DocumentClassification.Hrb
+            : DocumentClassification.Leadership;
+        set
+        {
+            IsClassified = value != DocumentClassification.None;
+            IsTRUClassified = value == DocumentClassification.Tru;
+            IsHRBClassified = value == DocumentClassification.Hrb;
+        }
+    }
+
+    /// <summary>Any secrecy level set (drives the lock indicator).</summary>
+    [NotMapped]
+    public bool IsRestricted => IsClassified || IsTRUClassified || IsHRBClassified;
+
+    /// <summary>Aging disabled: record never goes stale.</summary>
+    [Column("VeralterungDeaktiviert")]
+    public bool AgingDisabled { get; set; }
 
     public List<PartyMember> Members { get; set; } = new();
     public List<PartyAgent> Agents { get; set; } = new();

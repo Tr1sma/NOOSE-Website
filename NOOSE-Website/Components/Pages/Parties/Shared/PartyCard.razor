@@ -11,7 +11,8 @@
                 <MudText Typo="Typo.h5">@Party.Name</MudText>
                 @if (Party.IsClassified)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="@DocumentClassificationDisplay.Label(Party.SecrecyLevel)" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@DocumentClassificationDisplay.ChipLabel(Party.SecrecyLevel)</MudChip>
                 }
             </MudStack>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Party.CaseNumber</MudText>
@@ -30,11 +31,18 @@
 
         <MudDivider />
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <RecencyIndicator RecordsType="@nameof(Party)" ReferenceDateUtc="@(Party.ModifiedAt ?? Party.CreatedAt)" />
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                Zuletzt aktualisiert: @((Party.ModifiedAt ?? Party.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-            </MudText>
+        <MudStack Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <RecencyIndicator Level="@(Party.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                                  RecordsType="@nameof(Party)" ReferenceDateUtc="@(Party.ModifiedAt ?? Party.CreatedAt)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Zuletzt aktualisiert: @((Party.ModifiedAt ?? Party.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+                </MudText>
+            </MudStack>
+            <AuthorizeView Policy="@Policies.Leadership">
+                <MudSwitch T="bool" Value="Party.AgingDisabled" ValueChanged="ToggleAgingAsync"
+                           Color="Color.Info" Size="Size.Small" Label="Veralterung deaktiviert" />
+            </AuthorizeView>
         </MudStack>
     </MudStack>
 </MudPaper>
@@ -44,4 +52,30 @@
     [Parameter] public int MemberCount { get; set; }
 
     [Parameter] public IReadOnlyList<string> InvestigationLead { get; set; } = Array.Empty<string>();
+
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    [Inject] private IRecencyService Recency { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    /// <summary>Toggle this record's aging exemption.</summary>
+    private async Task ToggleAgingAsync(bool value)
+    {
+        if (User is null)
+        {
+            return;
+        }
+        try
+        {
+            await Recency.SetRecordExemptionAsync(nameof(Party), Party.Id, value, User);
+            Snackbar.Add(value ? "Veralterung für diese Akte deaktiviert." : "Veralterung wieder aktiv.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            StateHasChanged();
+        }
+    }
 }

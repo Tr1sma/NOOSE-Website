@@ -65,7 +65,7 @@ else
                 <CellTemplate>
                     @if (context.Item.IsClassified)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">@DocumentClassificationDisplay.ChipLabel(context.Item.SecrecyLevel)</MudChip>
                     }
                 </CellTemplate>
             </TemplateColumn>
@@ -110,7 +110,7 @@ else
     {
         var user = (await AuthStateTask).User;
         var operations = await OperationService.GetListAsync(ViewerScope.From(user));
-        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Operation));
+        var settings = await Recency.GetSettingsAsync(nameof(Operation));
         var now = DateTime.UtcNow;
         _rows = operations.Select(o =>
         {
@@ -125,9 +125,10 @@ else
                 Start = o.Start?.ToLocalTime(),
                 Classification = o.Classification,
                 IsClassified = o.IsClassified,
+                SecrecyLevel = o.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                Level = RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+                Level = settings.AgingDisabled || o.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -167,6 +168,7 @@ else
         public DateTime? Start { get; set; }
         public Classification Classification { get; set; }
         public bool IsClassified { get; set; }
+        public DocumentClassification SecrecyLevel { get; set; }
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }

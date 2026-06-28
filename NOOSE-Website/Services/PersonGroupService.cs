@@ -65,6 +65,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
     public async Task<PersonGroup> CreateAsync(PersonGroupInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -78,7 +79,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
             Kind = input.Kind,
             Classification = input.Classification,
             EstimatedMemberCount = input.EstimatedMemberCount,
-            IsClassified = input.IsClassified,
+            SecrecyLevel = input.SecrecyLevel,
         };
 
         if (input.Classification != Classification.Unknown)
@@ -178,7 +179,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         group.Targets = input.Targets.TrimToNull();
         group.Kind = input.Kind;
         group.EstimatedMemberCount = input.EstimatedMemberCount;
-        group.IsClassified = input.IsClassified;
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
+        group.SecrecyLevel = input.SecrecyLevel;
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -244,7 +246,11 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
     private static IQueryable<PersonGroup> VisiblePersonGroups(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.PersonGroups.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.PersonGroups.Where(g => scope.MayClassifiedRead || !g.IsClassified);
+            : db.PersonGroups.Where(g =>
+                !g.IsClassified
+                || scope.MayClassifiedRead
+                || (g.IsTRUClassified && scope.IsTru)
+                || (g.IsHRBClassified && scope.IsHrb));
 
     public async Task<List<PersonGroupMember>> GetMembersAsync(string groupId, ViewerScope scope, CancellationToken cancellationToken = default)
     {

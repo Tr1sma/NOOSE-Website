@@ -18,6 +18,10 @@ public class RecencyThreshold : IAuditable
     [Column("VeraltetTage")]
     public int StaleDays { get; set; }
 
+    /// <summary>Aging disabled for the whole type: no record of it goes stale.</summary>
+    [Column("VeralterungDeaktiviert")]
+    public bool AgingDisabled { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

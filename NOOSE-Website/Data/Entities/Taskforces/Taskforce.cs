@@ -31,6 +31,10 @@ public class Taskforce : IAuditable, ISoftDelete
     [Column("IstVerschlusssache")]
     public bool IsClassified { get; set; }
 
+    /// <summary>Aging disabled: record never goes stale.</summary>
+    [Column("VeralterungDeaktiviert")]
+    public bool AgingDisabled { get; set; }
+
     public List<TaskforceAgent> Agents { get; set; } = new();
 
     [Column("ErstelltAm")]

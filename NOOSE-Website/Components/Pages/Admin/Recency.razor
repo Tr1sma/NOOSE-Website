@@ -39,6 +39,7 @@ else
             <MudTh><MudTableSortLabel T="Row" SortBy="@(x => x.Display)">Aktentyp</MudTableSortLabel></MudTh>
             <MudTh Style="width:160px;"><MudTableSortLabel T="Row" SortBy="@(x => x.WarningDays)">Gelb ab (Tage)</MudTableSortLabel></MudTh>
             <MudTh Style="width:160px;"><MudTableSortLabel T="Row" SortBy="@(x => x.StaleDays)">Rot ab (Tage)</MudTableSortLabel></MudTh>
+            <MudTh Style="width:160px;">Veralterung</MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -48,6 +49,9 @@ else
             </MudTd>
             <MudTd DataLabel="Rot ab (Tage)">
                 <MudNumericField @bind-Value="context.StaleDays" Min="0" Max="3650" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudTd>
+            <MudTd DataLabel="Veralterung">
+                <MudSwitch T="bool" @bind-Value="context.AgingDisabled" Color="Color.Info" Label="deaktiviert" />
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
@@ -78,11 +82,11 @@ else
     private async Task LoadAsync()
     {
         _load = true;
-        var thresholds = await RecencyService.GetThresholdsAsync();
+        var settings = await RecencyService.GetAllSettingsAsync();
         _rows = RecencyService.SupportedTypes.Select(t =>
         {
-            var (warning, stale) = thresholds.TryGetValue(t.Type, out var s) ? s : (t.DefaultWarningDays, t.DefaultStaleDays);
-            return new Row { Type = t.Type, Display = t.Display, WarningDays = warning, StaleDays = stale };
+            var s = settings.TryGetValue(t.Type, out var v) ? v : new RecencySettings(t.DefaultWarningDays, t.DefaultStaleDays, false);
+            return new Row { Type = t.Type, Display = t.Display, WarningDays = s.WarningDays, StaleDays = s.StaleDays, AgingDisabled = s.AgingDisabled };
         }).ToList();
         _load = false;
     }
@@ -91,7 +95,7 @@ else
     {
         try
         {
-            await RecencyService.SaveAsync(row.Type, row.WarningDays, row.StaleDays, _user);
+            await RecencyService.SaveAsync(row.Type, row.WarningDays, row.StaleDays, row.AgingDisabled, _user);
             Snackbar.Add($"Schwellwerte für „{row.Display}“ gespeichert.", Severity.Success);
             await LoadAsync();
         }
@@ -107,5 +111,6 @@ else
         public string Display { get; set; } = string.Empty;
         public int WarningDays { get; set; }
         public int StaleDays { get; set; }
+        public bool AgingDisabled { get; set; }
     }
 }

@@ -16,5 +16,5 @@ public class OperationInput
     public string? Remarks { get; set; }
     public Classification Classification { get; set; } = Classification.Unknown;
     public string? ClassificationJustification { get; set; }
-    public bool IsClassified { get; set; }
+    public DocumentClassification SecrecyLevel { get; set; } = DocumentClassification.None;
 }

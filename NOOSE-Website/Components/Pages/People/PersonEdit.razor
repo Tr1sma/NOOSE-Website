@@ -40,15 +40,19 @@ else
             <MudItem xs="12">
                 <MudTextField @bind-Value="_input.Description" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
             </MudItem>
-            <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
-                <MudSwitch T="bool" @bind-Value="_input.IsClassified" Color="Color.Warning" Label="Verschlusssache (nur Führung sichtbar)" />
-                @if (_input.IsClassified && !_isLeadership)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Warning">
-                        Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
-                    </MudText>
-                }
-            </MudItem>
+            @if (_secrecyOptions.Count > 1)
+            {
+                <MudItem xs="12" md="6">
+                    <MudSelect T="DocumentClassification" @bind-Value="_input.SecrecyLevel" Label="Verschluss-Stufe"
+                               Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                               HelperText="Bestimmt, wer die Akte sehen darf.">
+                        @foreach (var o in _secrecyOptions)
+                        {
+                            <MudSelectItem T="DocumentClassification" Value="@o">@DocumentClassificationDisplay.Label(o)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
         </MudGrid>
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
             Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
@@ -78,11 +82,13 @@ else
     private bool _load = true;
     private bool _saves;
     private string? _loadedId;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
     }
 
     // Component is reused across edit routes, so OnInitializedAsync does not re-run; guard the Id-dependent load here or the old form stays.
@@ -105,7 +111,7 @@ else
                 // Prefill effective status so a harmless edit doesn't start a new death window.
                 LifeStatus = LifeStatusLogic.Effective(p.LifeStatus, p.DeadUntil, DateTime.UtcNow),
                 Classification = p.Classification,
-                IsClassified = p.IsClassified,
+                SecrecyLevel = p.SecrecyLevel,
                 Aliases = p.Aliases.Select(a => new AliasInput { AliasName = a.AliasName }).ToList(),
                 PhoneNumbers = p.PhoneNumbers.Select(t => new PhoneInput { Number = t.Number, Designation = t.Designation }).ToList(),
                 Vehicles = p.Vehicles.Select(f => new VehicleInput { Designation = f.Designation, LicensePlate = f.LicensePlate }).ToList(),

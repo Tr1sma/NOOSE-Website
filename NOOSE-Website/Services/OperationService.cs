@@ -62,6 +62,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
     public async Task<Operation> CreateAsync(OperationInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -79,7 +80,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             Result = input.Result.TrimToNull(),
             Remarks = input.Remarks.TrimToNull(),
             Classification = input.Classification,
-            IsClassified = input.IsClassified,
+            SecrecyLevel = input.SecrecyLevel,
         };
 
         if (input.Classification != Classification.Unknown)
@@ -129,9 +130,10 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         operation.Expiry = input.Expiry.TrimToNull();
         operation.Result = input.Result.TrimToNull();
         operation.Remarks = input.Remarks.TrimToNull();
-        operation.IsClassified = input.IsClassified;
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
+        operation.SecrecyLevel = input.SecrecyLevel;
 
-        await SuggestionsStageAsync(db, operation.IsClassified, input.Type, cancellationToken);
+        await SuggestionsStageAsync(db, operation.IsRestricted, input.Type, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -196,7 +198,11 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
     private static IQueryable<Operation> VisibleOperations(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Operations.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Operations.Where(o => scope.MayClassifiedRead || !o.IsClassified);
+            : db.Operations.Where(o =>
+                !o.IsClassified
+                || scope.MayClassifiedRead
+                || (o.IsTRUClassified && scope.IsTru)
+                || (o.IsHRBClassified && scope.IsHrb));
 
     public async Task<List<OperationAgent>> GetAgentsAsync(string operationId, CancellationToken cancellationToken = default)
     {

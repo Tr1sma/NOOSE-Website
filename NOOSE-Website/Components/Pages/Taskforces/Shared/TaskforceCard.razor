@@ -49,11 +49,18 @@
 
         <MudDivider />
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <RecencyIndicator RecordsType="@nameof(Taskforce)" ReferenceDateUtc="@(Taskforce.ModifiedAt ?? Taskforce.CreatedAt)" />
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                Zuletzt aktualisiert: @((Taskforce.ModifiedAt ?? Taskforce.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-            </MudText>
+        <MudStack Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <RecencyIndicator Level="@(Taskforce.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                                  RecordsType="@nameof(Taskforce)" ReferenceDateUtc="@(Taskforce.ModifiedAt ?? Taskforce.CreatedAt)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Zuletzt aktualisiert: @((Taskforce.ModifiedAt ?? Taskforce.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+                </MudText>
+            </MudStack>
+            <AuthorizeView Policy="@Policies.Leadership">
+                <MudSwitch T="bool" Value="Taskforce.AgingDisabled" ValueChanged="ToggleAgingAsync"
+                           Color="Color.Info" Size="Size.Small" Label="Veralterung deaktiviert" />
+            </AuthorizeView>
         </MudStack>
     </MudStack>
 </MudPaper>
@@ -63,4 +70,30 @@
 
     /// <summary>Taskforce lead (codename + role) for prominent display.</summary>
     [Parameter] public IReadOnlyList<(string Codename, TaskforceRole Role)> Lead { get; set; } = Array.Empty<(string, TaskforceRole)>();
+
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    [Inject] private IRecencyService Recency { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    /// <summary>Toggle this record's aging exemption.</summary>
+    private async Task ToggleAgingAsync(bool value)
+    {
+        if (User is null)
+        {
+            return;
+        }
+        try
+        {
+            await Recency.SetRecordExemptionAsync(nameof(Taskforce), Taskforce.Id, value, User);
+            Snackbar.Add(value ? "Veralterung für diese Akte deaktiviert." : "Veralterung wieder aktiv.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            StateHasChanged();
+        }
+    }
 }

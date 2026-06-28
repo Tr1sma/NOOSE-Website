@@ -65,6 +65,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
     public async Task<Party> CreateAsync(PartyInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -77,7 +78,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
             Targets = input.Targets.TrimToNull(),
             Remarks = input.Remarks.TrimToNull(),
             Classification = input.Classification,
-            IsClassified = input.IsClassified,
+            SecrecyLevel = input.SecrecyLevel,
         };
 
         if (input.Classification != Classification.Unknown)
@@ -177,7 +178,8 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         party.Description = input.Description.TrimToNull();
         party.Targets = input.Targets.TrimToNull();
         party.Remarks = input.Remarks.TrimToNull();
-        party.IsClassified = input.IsClassified;
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
+        party.SecrecyLevel = input.SecrecyLevel;
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -243,7 +245,11 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
     private static IQueryable<Party> VisibleParties(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Parties.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Parties.Where(p => scope.MayClassifiedRead || !p.IsClassified);
+            : db.Parties.Where(p =>
+                !p.IsClassified
+                || scope.MayClassifiedRead
+                || (p.IsTRUClassified && scope.IsTru)
+                || (p.IsHRBClassified && scope.IsHrb));
 
     public async Task<List<PartyMember>> GetMembersAsync(string partyId, ViewerScope scope, CancellationToken cancellationToken = default)
     {

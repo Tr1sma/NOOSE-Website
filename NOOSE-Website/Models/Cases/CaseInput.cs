@@ -13,5 +13,5 @@ public class CaseInput
     public string? ClosingNote { get; set; }
     public Classification Classification { get; set; } = Classification.Unknown;
     public string? ClassificationJustification { get; set; }
-    public bool IsClassified { get; set; }
+    public DocumentClassification SecrecyLevel { get; set; } = DocumentClassification.None;
 }

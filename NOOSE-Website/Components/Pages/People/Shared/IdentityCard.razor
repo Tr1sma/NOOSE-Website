@@ -24,7 +24,8 @@
                 <MudText Typo="Typo.h5">@Person.Name</MudText>
                 @if (Person.IsClassified)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="@DocumentClassificationDisplay.Label(Person.SecrecyLevel)" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@DocumentClassificationDisplay.ChipLabel(Person.SecrecyLevel)</MudChip>
                 }
             </MudStack>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Person.CaseNumber</MudText>
@@ -55,11 +56,18 @@
 
         <MudDivider />
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <RecencyIndicator RecordsType="@nameof(Person)" ReferenceDateUtc="@(Person.ModifiedAt ?? Person.CreatedAt)" />
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                Zuletzt aktualisiert: @((Person.ModifiedAt ?? Person.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-            </MudText>
+        <MudStack Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <RecencyIndicator Level="@(Person.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
+                                  RecordsType="@nameof(Person)" ReferenceDateUtc="@(Person.ModifiedAt ?? Person.CreatedAt)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Zuletzt aktualisiert: @((Person.ModifiedAt ?? Person.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
+                </MudText>
+            </MudStack>
+            <AuthorizeView Policy="@Policies.Leadership">
+                <MudSwitch T="bool" Value="Person.AgingDisabled" ValueChanged="ToggleAgingAsync"
+                           Color="Color.Info" Size="Size.Small" Label="Veralterung deaktiviert" />
+            </AuthorizeView>
         </MudStack>
         <MudStack Row="true" Spacing="4" Class="flex-wrap">
             @foreach (var (value, label) in Metrics())
@@ -77,6 +85,32 @@
     [Parameter, EditorRequired] public Person Person { get; set; } = default!;
 
     [Parameter] public IReadOnlyList<PersonAffiliation> Affiliations { get; set; } = [];
+
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    [Inject] private IRecencyService Recency { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    /// <summary>Toggle this record's aging exemption.</summary>
+    private async Task ToggleAgingAsync(bool value)
+    {
+        if (User is null)
+        {
+            return;
+        }
+        try
+        {
+            await Recency.SetRecordExemptionAsync(nameof(Person), Person.Id, value, User);
+            Snackbar.Add(value ? "Veralterung für diese Akte deaktiviert." : "Veralterung wieder aktiv.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            StateHasChanged();
+        }
+    }
 
     private IEnumerable<(int Value, string Label)> Metrics()
     {

@@ -24,7 +24,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <FactionForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" />
+        <FactionForm Input="_input" ShowClassification="false" IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
     </MudForm>
     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
         Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
@@ -44,6 +44,7 @@ else
     private FactionInput? _input;
     private ClaimsPrincipal _user = default!;
     private bool _isLeadership;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
     private bool _load = true;
     private bool _saves;
     private string? _loadedId;
@@ -52,6 +53,7 @@ else
     {
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
     }
 
     // Page is reused across edit routes, so OnInitializedAsync won't re-run; reload on Id change here.
@@ -79,7 +81,7 @@ else
                 Targets = f.Targets,
                 Description = f.Description,
                 Classification = f.Classification,
-                IsClassified = f.IsClassified,
+                SecrecyLevel = f.SecrecyLevel,
                 IsStateFaction = f.IsStateFaction,
                 EstimatedMemberCount = f.EstimatedMemberCount,
                 Ranks = f.Ranks.OrderBy(r => r.Order).Select(r => new RankInput { Id = r.Id, Designation = r.Designation }).ToList(),

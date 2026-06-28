@@ -39,15 +39,19 @@
                 }
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" md="6" Class="d-flex flex-column justify-center">
-            <MudSwitch T="bool" @bind-Value="_input.IsClassified" Color="Color.Warning" Label="Verschlusssache (nur Führung sichtbar)" />
-            @if (_input.IsClassified && !_isLeadership)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Warning">
-                    Achtung: Du verlierst als Nicht-Führung nach dem Speichern selbst den Zugriff auf diese Akte.
-                </MudText>
-            }
-        </MudItem>
+        @if (_secrecyOptions.Count > 1)
+        {
+            <MudItem xs="12" md="6">
+                <MudSelect T="DocumentClassification" @bind-Value="_input.SecrecyLevel" Label="Verschluss-Stufe"
+                           Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                           HelperText="Bestimmt, wer die Akte sehen darf.">
+                    @foreach (var o in _secrecyOptions)
+                    {
+                        <MudSelectItem T="DocumentClassification" Value="@o">@DocumentClassificationDisplay.Label(o)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        }
     </MudGrid>
 
     <MudDivider Class="my-4" />
@@ -69,12 +73,14 @@
     private bool _mayHighest;
     private bool _isLeadership;
     private bool _saves;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _mayHighest = _user.MayHighestClassification();
         _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
     }
 
     private async Task SaveAsync()

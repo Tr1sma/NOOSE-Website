@@ -78,7 +78,7 @@ else
                 <CellTemplate>
                     @if (context.Item.IsClassified)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="Verschlusssache" />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">@DocumentClassificationDisplay.ChipLabel(context.Item.SecrecyLevel)</MudChip>
                     }
                 </CellTemplate>
             </TemplateColumn>
@@ -124,7 +124,7 @@ else
         var mayClassifiedRead = user.MayClassifiedRead();
         var isPartner = user.IsPartner();
         var factions = await FactionService.GetListAsync(ViewerScope.From(user));
-        var (warningDays, staleDays) = await Recency.GetThresholdAsync(nameof(Faction));
+        var settings = await Recency.GetSettingsAsync(nameof(Faction));
         var now = DateTime.UtcNow;
         _rows = factions.Select(f =>
         {
@@ -144,10 +144,11 @@ else
                 ThreatConfidence = f.ThreatConfidence,
                 Hazard = HazardLevelLogic.From(f.ThreatScore),
                 IsClassified = f.IsClassified,
+                SecrecyLevel = f.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
-                // state factions never go stale
-                Level = f.IsStateFaction ? RecencyLevel.Fresh : RecencyAssessment.Level(warningDays, staleDays, referenceUtc, now),
+                // state factions and exempt records never go stale
+                Level = settings.AgingDisabled || f.IsStateFaction || f.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
         }).ToList();
         _load = false;
@@ -189,6 +190,7 @@ else
         public int? ThreatConfidence { get; set; }
         public HazardLevel Hazard { get; set; }
         public bool IsClassified { get; set; }
+        public DocumentClassification SecrecyLevel { get; set; }
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
         public RecencyLevel Level { get; set; }

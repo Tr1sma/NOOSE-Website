@@ -44,6 +44,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
     public async Task<List<Case>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // restricted records (any level) only surface in the write-path picker for leadership
         var query = db.Cases.Where(v => isLeadership || !v.IsClassified);
 
         var s = searchText?.Trim();
@@ -61,6 +62,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
     public async Task<Case> CreateAsync(CaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -77,7 +79,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             ClosingNote = input.ClosingNote.TrimToNull(),
             CompletedAt = isCompleted ? DateTime.UtcNow : null,
             Classification = input.Classification,
-            IsClassified = input.IsClassified,
+            SecrecyLevel = input.SecrecyLevel,
         };
 
         if (input.Classification != Classification.Unknown)
@@ -85,7 +87,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Case), @case.Id, input.Classification, input.ClassificationJustification, actor));
         }
 
-        await SuggestionsStageAsync(db, @case.IsClassified, input.Type, cancellationToken);
+        await SuggestionsStageAsync(db, @case.IsRestricted, input.Type, cancellationToken);
 
         db.Cases.Add(@case);
         await db.SaveChangesAsync(cancellationToken);
@@ -128,7 +130,8 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         @case.Description = input.Description.TrimToNull();
         @case.Summary = input.Summary.TrimToNull();
         @case.ClosingNote = input.ClosingNote.TrimToNull();
-        @case.IsClassified = input.IsClassified;
+        Permission.RequireMayAssignClassification(actor, input.SecrecyLevel);
+        @case.SecrecyLevel = input.SecrecyLevel;
 
         if (isCompleted && !wasCompleted)
         {
@@ -139,7 +142,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             @case.CompletedAt = null;
         }
 
-        await SuggestionsStageAsync(db, @case.IsClassified, input.Type, cancellationToken);
+        await SuggestionsStageAsync(db, @case.IsRestricted, input.Type, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -203,7 +206,11 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
     private static IQueryable<Case> VisibleCases(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Cases.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Cases.Where(v => scope.MayClassifiedRead || !v.IsClassified);
+            : db.Cases.Where(v =>
+                (!v.IsClassified && !v.IsTRUClassified && !v.IsHRBClassified)
+                || scope.MayClassifiedRead
+                || (v.IsTRUClassified && scope.IsTru)
+                || (v.IsHRBClassified && scope.IsHrb));
 
     public async Task<List<CaseAgent>> GetAgentsAsync(string caseId, CancellationToken cancellationToken = default)
     {
