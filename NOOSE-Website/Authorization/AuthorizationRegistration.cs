@@ -28,6 +28,9 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.WriteAccess, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.MayWrite()))
+            .AddPolicy(Policies.DocumentAuthor, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.MayWrite() || ctx.User.IsPartner()))
             .AddPolicy(Policies.OnlyReadMode, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsOnlyReader()))

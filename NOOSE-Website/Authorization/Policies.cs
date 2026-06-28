@@ -18,6 +18,9 @@ public static class Policies
     /// <summary>May write at all (everyone except read-only supervision). For mutation controls in AuthorizeView.</summary>
     public const string WriteAccess = "Schreibrecht";
 
+    /// <summary>May author a library document: writers or external partners (create only).</summary>
+    public const string DocumentAuthor = "DokumentErstellen";
+
     /// <summary>Read-only supervision active. For the global read-only banner.</summary>
     public const string OnlyReadMode = "NurLeseModus";
 
