@@ -2,8 +2,10 @@
     <MudStack Spacing="3">
         @if (!string.IsNullOrEmpty(TitleImagePhotoId))
         {
-            <MudImage Src="@($"/dateien/fraktionen/foto/{TitleImagePhotoId}")" Alt="Titelbild"
-                      Height="120" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+            <div @onclick="OpenLightboxAsync" style="cursor:pointer;">
+                <MudImage Src="@($"/dateien/fraktionen/foto/{TitleImagePhotoId}")" Alt="Titelbild"
+                          Height="120" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+            </div>
         }
         else
         {
@@ -98,6 +100,11 @@
 
     [Inject] private IRecencyService Recency { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+
+    private async Task OpenLightboxAsync()
+        => await ImageLightbox.ShowAsync(DialogService,
+            new[] { new ImageLightbox.LightboxImage($"/dateien/fraktionen/foto/{TitleImagePhotoId}", Faction.Name) });
 
     /// <summary>Toggle this record's aging exemption.</summary>
     private async Task ToggleAgingAsync(bool value)
