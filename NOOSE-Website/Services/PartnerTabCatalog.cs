@@ -94,6 +94,10 @@ public static class PartnerTabCatalog
         return ByPrefix.GetValueOrDefault(path.Split('/')[0])?.TypeKey;
     }
 
+    /// <summary>True for paths that self-guard partner visibility per record (documents: universal authoring + own-authored), so the coarse type gate must not apply.</summary>
+    public static bool IsTypeGateExempt(string? relativePath)
+        => TypeKeyForPath(relativePath) == nameof(Document);
+
     /// <summary>Route prefix for a type key, or null.</summary>
     public static string? PrefixForTypeKey(string typeKey)
         => ByTypeKey.GetValueOrDefault(typeKey)?.RoutePrefix;
