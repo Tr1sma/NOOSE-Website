@@ -60,6 +60,14 @@ else
             </MudPaper>
 
             <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <SourcesPanel EntityType="@nameof(Bewerbung)" EntityId="@_b.Id" User="_user" />
+            </MudPaper>
+
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <RecordLinksPanel EntityType="@nameof(Bewerbung)" EntityId="@_b.Id" User="_user" />
+            </MudPaper>
+
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
                 <MudText Typo="Typo.h6" Class="mb-2">Bearbeitung</MudText>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3" Wrap="Wrap.Wrap">
                     <MudText Typo="Typo.body2">Bearbeiter: <b>@Or(_b.AssignedAgentName)</b></MudText>

@@ -11,6 +11,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -52,6 +53,12 @@ public static class Visibility
         if (entityType == nameof(Agent))
         {
             return scope.MayClassifiedRead;
+        }
+        // applications: HRB or leadership, mirrors the page policy
+        if (entityType == nameof(Bewerbung))
+        {
+            return (scope.MayClassifiedRead || scope.IsHrb)
+                && await db.Bewerbungen.AnyAsync(b => b.Id == entityId, cancellationToken);
         }
 
         SecrecyRow? row = entityType switch

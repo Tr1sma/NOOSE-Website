@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -159,11 +160,23 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Law), x.Id)] = ($"{x.Paragraph} {x.Title} ({x.LawBook})", false, $"/gesetze/{x.Id}");
         }
 
+        // applications: HRB or leadership only; others see nothing (kept unresolved -> hidden below)
+        if ((isLeadership || scope.IsHrb) && scope.PartnerAgency is null)
+        {
+            var bewerbungIds = pairs.Where(p => p.OtherType == nameof(Bewerbung)).Select(p => p.OtherId).Distinct().ToList();
+            foreach (var x in await db.Bewerbungen.Where(b => bewerbungIds.Contains(b.Id))
+                         .Select(b => new { b.Id, b.Name, b.CaseNumber }).ToListAsync(cancellationToken))
+            {
+                targets[(nameof(Bewerbung), x.Id)] = ($"{x.Name} ({x.CaseNumber})", false, $"/bewerbungen/{x.Id}");
+            }
+        }
+
         var knownTypes = new[]
         {
             nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
             nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
             nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law), nameof(Document),
+            nameof(Bewerbung),
         };
         // partners: only links to released, releasable-type records
         HashSet<(string, string)>? releasedTargets = null;
