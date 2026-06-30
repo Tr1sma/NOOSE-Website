@@ -84,6 +84,8 @@ try {
     # ssh/scp vorab auf vollen Pfad aufloesen (PATH-unabhaengig).
     $scp = Resolve-Exe 'scp'
     $ssh = Resolve-Exe 'ssh'
+    # nie still haengen: Verbindungs-Timeout + neue Host-Keys automatisch akzeptieren (kein yes/no-Prompt).
+    $sshOpts = @('-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new')
 
     # 0) Prod-Schutz: NICHT auf einen Server deployen, der als Demo-Instanz konfiguriert ist
     #    (Env-Flag Demo__AutoSetup=true). Verhindert, dass ein Prod-Deploy versehentlich eine
@@ -98,7 +100,8 @@ try {
             "if [ -f '$envFile' ] && grep -iqE '^[[:space:]]*Demo__AutoSetup[[:space:]]*=[[:space:]]*true' '$envFile'; then FLAG=true; fi; " +
             'echo "DEMO_FLAG=$FLAG"'
         Write-Host "==> Prod-Schutz: pruefe Demo-Flag auf $Server ($envFile)" -ForegroundColor Cyan
-        $checkOutput = (& $ssh $Server $remoteCheck 2>&1 | Out-String)
+        # stderr NICHT in die Pipeline ziehen: sonst verschluckt Out-String den ssh-Passwort-/Host-Key-Prompt -> sieht aus wie haengen.
+        $checkOutput = (& $ssh @sshOpts $Server $remoteCheck | Out-String)
         if ($LASTEXITCODE -ne 0) {
             throw "Konnte das Demo-Flag nicht pruefen (ssh Exit $LASTEXITCODE). Aus Sicherheit abgebrochen.`nAusgabe: $checkOutput"
         }
@@ -145,7 +148,7 @@ try {
     Invoke-Step "Packe Artefakt (tar)" { tar -czf $tarball -C $publish . }
 
     # 3) Auf den Server kopieren
-    Invoke-Step "Lade auf Server hoch" { & $scp $tarball "${Server}:/tmp/noose-publish.tgz" }
+    Invoke-Step "Lade auf Server hoch" { & $scp @sshOpts $tarball "${Server}:/tmp/noose-publish.tgz" }
 
     # 4) Auf dem Server ausrollen: Dienst stoppen, Dateien tauschen (App_Data behalten),
     #    Rechte setzen, Dienst starten, kurz warten, Health pruefen. Alles per && -> fail-fast.
@@ -157,7 +160,7 @@ try {
               " && rm -f /tmp/noose-publish.tgz" +
               " && sleep 6" +
               " && curl -s -o /dev/null -w 'Health-Check: HTTP %{http_code}\n' http://127.0.0.1:5000/health"
-    Invoke-Step "Rolle auf dem Server aus" { & $ssh $Server $remote }
+    Invoke-Step "Rolle auf dem Server aus" { & $ssh @sshOpts $Server $remote }
 
     # 5) Lokales Artefakt aufraeumen
     Remove-Item $tarball -Force -ErrorAction SilentlyContinue
