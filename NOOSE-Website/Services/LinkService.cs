@@ -101,11 +101,21 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Taskforce), x.Id)] = ($"{x.Name} ({x.CaseNumber})", x.IsClassified, $"/taskforces/{x.Id}");
         }
 
+        // cases honour the viewer's full secrecy scope (TRU/HRB audience), not just leadership
         var caseIds = pairs.Where(p => p.OtherType == nameof(Case)).Select(p => p.OtherId).Distinct().ToList();
         foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
-                     .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified }).ToListAsync(cancellationToken))
+                     .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified, v.IsTRUClassified, v.IsHRBClassified }).ToListAsync(cancellationToken))
         {
-            targets[(nameof(Case), x.Id)] = ($"{x.Title} ({x.CaseNumber})", x.IsClassified, $"/vorgaenge/{x.Id}");
+            var level = !x.IsClassified ? DocumentClassification.None
+                : x.IsTRUClassified ? DocumentClassification.Tru
+                : x.IsHRBClassified ? DocumentClassification.Hrb
+                : DocumentClassification.Leadership;
+            if (!scope.CanSee(level))
+            {
+                continue;
+            }
+            // already vetted by CanSee; flag as unclassified so the leadership-only filter below never re-hides it
+            targets[(nameof(Case), x.Id)] = ($"{x.Title} ({x.CaseNumber})", false, $"/vorgaenge/{x.Id}");
         }
 
         // jobs have no classification concept (team board)
@@ -160,8 +170,8 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Law), x.Id)] = ($"{x.Paragraph} {x.Title} ({x.LawBook})", false, $"/gesetze/{x.Id}");
         }
 
-        // applications: HRB or leadership only; others see nothing (kept unresolved -> hidden below)
-        if ((isLeadership || scope.IsHrb) && scope.PartnerAgency is null)
+        // applications: HRB or leadership only (never read-only supervision); others see nothing (kept unresolved -> hidden below)
+        if (scope.MayRecruiting && scope.PartnerAgency is null)
         {
             var bewerbungIds = pairs.Where(p => p.OtherType == nameof(Bewerbung)).Select(p => p.OtherId).Distinct().ToList();
             foreach (var x in await db.Bewerbungen.Where(b => bewerbungIds.Contains(b.Id))
@@ -231,9 +241,9 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // don't let forged calls link to a classified target the actor can't see
+        // don't let forged calls link to a classified/restricted target the actor can't see
         if (targetType is nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
-                or nameof(Operation) or nameof(Taskforce) or nameof(Case) or nameof(Document)
+                or nameof(Operation) or nameof(Taskforce) or nameof(Case) or nameof(Document) or nameof(Bewerbung)
             && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");

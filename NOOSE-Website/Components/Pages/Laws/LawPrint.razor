@@ -60,7 +60,7 @@ else
         if (_law is not null && !user.IsPartner())
         {
             // partners: skip link fan-out
-            _links = await LinkService.GetForRecordAsync(nameof(Law), Id, user.IsLeadership(), user.GetAgentId());
+            _links = await LinkService.GetForRecordAsync(nameof(Law), Id, ViewerScope.From(user));
         }
         _load = false;
     }

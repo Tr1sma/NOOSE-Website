@@ -84,7 +84,7 @@ else
             partnerAgency: user.GetPartnerAgency(), partnerAgentId: user.GetAgentId());
         if (_taskforce is not null)
         {
-            _links = await LinkService.GetForRecordAsync(nameof(Taskforce), Id, user.MayAllTaskforcesSee(), user.GetAgentId());
+            _links = await LinkService.GetForRecordAsync(nameof(Taskforce), Id, ViewerScope.From(user));
             _comments = await CommentService.GetForRecordAsync(nameof(Taskforce), Id, ViewerScope.From(user));
             await AccessLog.LogViewAsync(nameof(Taskforce), Id);
         }

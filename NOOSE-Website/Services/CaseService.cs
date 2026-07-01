@@ -41,11 +41,21 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Case>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
+    public Task<List<Case>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default)
+        => SearchAsync(searchText, new ViewerScope(isLeadership, isLeadership, null, null), max, cancellationToken);
+
+    public async Task<List<Case>> SearchAsync(string? searchText, ViewerScope scope, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // restricted records (any level) only surface in the write-path picker for leadership
-        var query = db.Cases.Where(v => isLeadership || !v.IsClassified);
+        var mayClassified = scope.MayClassifiedRead;
+        var isTru = scope.IsTru;
+        var isHrb = scope.IsHrb;
+        // surface a restricted case only when the viewer's secrecy scope covers its level (TRU/HRB audience or leadership)
+        var query = db.Cases.Where(v =>
+            !v.IsClassified
+            || mayClassified
+            || (v.IsTRUClassified && isTru)
+            || (!v.IsTRUClassified && v.IsHRBClassified && isHrb));
 
         var s = searchText?.Trim();
         if (!string.IsNullOrEmpty(s))

@@ -123,7 +123,7 @@ else
             // partners: core only
             if (!user.IsPartner())
             {
-                _links = await LinkService.GetForRecordAsync(nameof(Operation), Id, isLeadership, user.GetAgentId());
+                _links = await LinkService.GetForRecordAsync(nameof(Operation), Id, scope);
                 _comments = await CommentService.GetForRecordAsync(nameof(Operation), Id, isLeadership);
             }
             await AccessLog.LogViewAsync(nameof(Operation), Id);

@@ -95,7 +95,7 @@ else
         if (_job is not null)
         {
             _assignments = await JobService.GetAssignmentsAsync(Id);
-            _links = await LinkService.GetForRecordAsync(nameof(Job), Id, user.IsLeadership(), user.GetAgentId());
+            _links = await LinkService.GetForRecordAsync(nameof(Job), Id, ViewerScope.From(user));
             _comments = await CommentService.GetForRecordAsync(nameof(Job), Id, user.IsLeadership());
             await AccessLog.LogViewAsync(nameof(Job), Id);
         }

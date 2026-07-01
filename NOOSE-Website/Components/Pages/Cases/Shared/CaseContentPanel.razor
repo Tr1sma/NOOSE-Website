@@ -76,6 +76,7 @@
     {
         nameof(Person), nameof(PersonDoc), nameof(Observation), nameof(Operation), nameof(Document),
         nameof(Taskforce), nameof(Faction), nameof(PersonGroup), nameof(Party), nameof(Agent),
+        nameof(Bewerbung),
     };
 
     private IEnumerable<IGrouping<string, LinkDisplay>> _grouped =>
@@ -139,6 +140,7 @@
         nameof(Agent) => "Agenten",
         nameof(Case) => "Vorgänge",
         nameof(Document) => "Dokumente",
+        nameof(Bewerbung) => "Bewerbungen",
         _ => type,
     };
 
@@ -155,6 +157,7 @@
         nameof(Agent) => Icons.Material.Filled.Person,
         nameof(Case) => Icons.Material.Filled.FolderSpecial,
         nameof(Document) => Icons.Material.Filled.Article,
+        nameof(Bewerbung) => Icons.Material.Filled.HowToReg,
         _ => Icons.Material.Filled.Hub,
     };
 }

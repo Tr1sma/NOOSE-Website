@@ -77,7 +77,7 @@
     {
         nameof(Person), nameof(PersonDoc), nameof(Observation), nameof(Operation), nameof(Case),
         nameof(Taskforce), nameof(Faction), nameof(PersonGroup), nameof(Party),
-        nameof(Document), nameof(Law), nameof(Agent), nameof(Job),
+        nameof(Document), nameof(Law), nameof(Agent), nameof(Job), nameof(Bewerbung),
     };
 
     private IEnumerable<IGrouping<string, LinkDisplay>> _grouped =>
@@ -94,7 +94,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var all = await LinkService.GetForRecordAsync(EntityType, EntityId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        var all = await LinkService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User), LinkKind.Default);
         _list = all.Where(v => !v.Automatic).ToList();
         _load = false;
     }
@@ -146,6 +146,7 @@
         nameof(Law) => "Gesetze",
         nameof(Agent) => "Agenten",
         nameof(Job) => "Aufgaben",
+        nameof(Bewerbung) => "Bewerbungen",
         _ => type,
     };
 
@@ -164,6 +165,7 @@
         nameof(Law) => Icons.Material.Filled.Gavel,
         nameof(Agent) => Icons.Material.Filled.Person,
         nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
+        nameof(Bewerbung) => Icons.Material.Filled.HowToReg,
         _ => Icons.Material.Filled.Hub,
     };
 }

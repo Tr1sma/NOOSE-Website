@@ -116,7 +116,7 @@ else
             // partners: core only
             if (!user.IsPartner())
             {
-                _links = await LinkService.GetForRecordAsync(nameof(Case), Id, isLeadership, user.GetAgentId());
+                _links = await LinkService.GetForRecordAsync(nameof(Case), Id, scope);
                 _comments = await CommentService.GetForRecordAsync(nameof(Case), Id, isLeadership);
             }
             await AccessLog.LogViewAsync(nameof(Case), Id);

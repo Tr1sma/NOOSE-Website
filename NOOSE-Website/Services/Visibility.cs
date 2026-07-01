@@ -55,6 +55,7 @@ public static class Visibility
             return scope.MayClassifiedRead;
         }
         // applications: HRB or leadership, mirrors the page policy
+        // (bool-shim callers like mention-notification fanout can only carry the leadership flag, so keep MayClassifiedRead here)
         if (entityType == nameof(Bewerbung))
         {
             return (scope.MayClassifiedRead || scope.IsHrb)

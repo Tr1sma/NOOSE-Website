@@ -119,7 +119,7 @@ else
             {
                 _members = await GroupService.GetMembersAsync(Id, scope);
                 _agents = await GroupService.GetAgentsAsync(Id);
-                _links = await LinkService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership, user.GetAgentId());
+                _links = await LinkService.GetForRecordAsync(nameof(PersonGroup), Id, scope);
                 _comments = await CommentService.GetForRecordAsync(nameof(PersonGroup), Id, isLeadership);
             }
             await AccessLog.LogViewAsync(nameof(PersonGroup), Id);

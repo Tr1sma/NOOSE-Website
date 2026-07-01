@@ -236,7 +236,7 @@ else
                 _members = await FactionService.GetMembersAsync(Id, scope);
                 _agents = await FactionService.GetAgentsAsync(Id);
                 _activities = await FactionService.GetActivitiesAsync(Id, scope);
-                _links = await LinkService.GetForRecordAsync(nameof(Faction), Id, isLeadership, user.GetAgentId());
+                _links = await LinkService.GetForRecordAsync(nameof(Faction), Id, scope);
                 _comments = await CommentService.GetForRecordAsync(nameof(Faction), Id, isLeadership);
             }
             await AccessLog.LogViewAsync(nameof(Faction), Id);

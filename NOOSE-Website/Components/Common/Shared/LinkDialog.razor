@@ -11,6 +11,7 @@
 @inject IJobService JobService
 @inject ILawService LawService
 @inject IDocumentService DocumentService
+@inject IBewerbungService BewerbungService
 
 <MudDialog>
     <DialogContent>
@@ -18,7 +19,7 @@
             <MudSelect T="string" Label="Aktentyp" @bind-Value="_targetType" @bind-Value:after="TypeSwitchedAsync"
                        Variant="Variant.Outlined" Dense="true"
                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category">
-                @foreach (var t in _types)
+                @foreach (var t in ShownTypes)
                 {
                     <MudSelectItem Value="@t.Value">@t.Display</MudSelectItem>
                 }
@@ -248,6 +249,22 @@
                         </ItemTemplate>
                     </MudAutocomplete>
                     break;
+
+                case nameof(Bewerbung):
+                    <MudAutocomplete T="Bewerbung" Label="Bewerbung" @bind-Value="_bewerbung" AutoFocus="true"
+                                     SearchFunc="@SearchBewerbungen" ToStringFunc="@(b => b?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.HowToReg">
+                        <ItemTemplate Context="b">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@b.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@b.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
             }
 
             <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
@@ -269,20 +286,26 @@
     [Parameter] public string? ExclusionPersonId { get; set; }
 
     // viewer context for search visibility
+    private ClaimsPrincipal? _user;
     private string? _meId;
     private bool _mayAllTf;
     private bool _mayClassified;
+    private bool _mayBewerbung;
     private DocumentViewerScope _docScope;
+    private ViewerScope _scope;
 
     protected override async Task OnInitializedAsync()
     {
         if (AuthStateTask is not null)
         {
             var user = (await AuthStateTask).User;
+            _user = user;
             _meId = user.GetAgentId();
             _mayAllTf = user.MayAllTaskforcesSee();
             _mayClassified = user.MayClassifiedRead();
+            _mayBewerbung = user.IsHrbOrLeadership();
             _docScope = DocumentViewerScope.From(user);
+            _scope = ViewerScope.From(user);
         }
     }
 
@@ -304,6 +327,10 @@
         new(nameof(Document), "Dokument"),
     };
 
+    // applications are HRB/leadership-only, so only offer the type to those viewers
+    private IEnumerable<TypeOption> ShownTypes =>
+        _mayBewerbung ? _types.Append(new(nameof(Bewerbung), "Bewerbung")) : _types;
+
     private string _targetType = nameof(Person);
     private string? _label;
 
@@ -320,11 +347,13 @@
     private ObservationDisplay? _observation;
     private Law? _law;
     private DocumentListItem? _document;
+    private Bewerbung? _bewerbung;
 
     // loaded on demand for client-side search
     private List<Agent>? _allAgents;
     private List<PersonDocDisplay>? _allDocs;
     private List<ObservationDisplay>? _allObservations;
+    private List<Bewerbung>? _allBewerbungen;
 
     private string? CurrentTargetId => _targetType switch
     {
@@ -341,6 +370,7 @@
         nameof(Observation) => _observation?.Obs.Id,
         nameof(Law) => _law?.Id,
         nameof(Document) => _document?.Id,
+        nameof(Bewerbung) => _bewerbung?.Id,
         _ => null,
     };
 
@@ -348,6 +378,7 @@
     {
         _person = null; _faction = null; _group = null; _party = null; _operation = null; _taskforce = null;
         _case = null; _job = null; _agent = null; _doc = null; _observation = null; _law = null; _document = null;
+        _bewerbung = null;
         if (_targetType == nameof(Agent) && _allAgents is null)
         {
             _allAgents = (await AgentService.GetAllAsync()).Where(a => a.Status == AgentStatus.Active).ToList();
@@ -359,6 +390,10 @@
         if (_targetType == nameof(Observation) && _allObservations is null)
         {
             _allObservations = await ObservationService.GetAllAsync(IsLeadership);
+        }
+        if (_targetType == nameof(Bewerbung) && _allBewerbungen is null && _user is not null)
+        {
+            _allBewerbungen = await BewerbungService.ListAsync(_user);
         }
     }
 
@@ -384,7 +419,7 @@
         => await TaskforceService.SearchAsync(value, _mayAllTf, _meId, 20, token);
 
     private async Task<IEnumerable<Case>> SearchCases(string value, CancellationToken token)
-        => await CaseService.SearchAsync(value, IsLeadership, 20, token);
+        => await CaseService.SearchAsync(value, _scope, 20, token);
 
     private async Task<IEnumerable<Law>> SearchLaws(string value, CancellationToken token)
         => await LawService.SearchAsync(value, 20, token);
@@ -394,6 +429,18 @@
 
     private async Task<IEnumerable<DocumentListItem>> SearchDocuments(string value, CancellationToken token)
         => await DocumentService.SearchAsync(value, _docScope, 20, token);
+
+    private Task<IEnumerable<Bewerbung>> SearchBewerbungen(string value, CancellationToken token)
+    {
+        var all = (IEnumerable<Bewerbung>?)_allBewerbungen ?? Array.Empty<Bewerbung>();
+        var s = value?.Trim();
+        if (!string.IsNullOrWhiteSpace(s))
+        {
+            all = all.Where(b => b.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                                || b.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+        return Task.FromResult(all);
+    }
 
     private Task<IEnumerable<Agent>> SearchAgents(string value, CancellationToken token)
     {
@@ -453,6 +500,7 @@
         nameof(PersonDoc) => DocText(_doc),
         nameof(Observation) => ObsText(_observation),
         nameof(Document) => _document?.Title,
+        nameof(Bewerbung) => _bewerbung?.Name,
         _ => null,
     };
 

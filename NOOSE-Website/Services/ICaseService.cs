@@ -15,6 +15,9 @@ public interface ICaseService
     Task<List<Case>> GetTrashAsync(CancellationToken cancellationToken = default);
     Task<List<Case>> SearchAsync(string? searchText, bool isLeadership, int max = 20, CancellationToken cancellationToken = default);
 
+    /// <summary>Search cases the viewer may see per their full secrecy scope (TRU/HRB audience, not just leadership).</summary>
+    Task<List<Case>> SearchAsync(string? searchText, ViewerScope scope, int max = 20, CancellationToken cancellationToken = default);
+
     Task<Case> CreateAsync(CaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RefreshAsync(string id, CaseInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

@@ -81,7 +81,7 @@
     private async Task LoadAsync()
     {
         _load = true;
-        var all = await LinkService.GetForRecordAsync(nameof(Appointment), AppointmentId, User.IsLeadership(), User.GetAgentId(), LinkKind.Default);
+        var all = await LinkService.GetForRecordAsync(nameof(Appointment), AppointmentId, ViewerScope.From(User), LinkKind.Default);
         _list = all.Where(v => !v.Automatic).ToList();
         _load = false;
     }
