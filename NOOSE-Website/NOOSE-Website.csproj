@@ -8,7 +8,28 @@
     <AssemblyName>$(AssemblyName.Replace(' ', '_'))</AssemblyName>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <UserSecretsId>d41f8a93-2c7b-4e16-9a55-0b3e7c1f6d28</UserSecretsId>
+    <VersionPrefix>1.0</VersionPrefix>
+    <BuildNumberFile>$(MSBuildProjectDirectory)\BuildNumber.txt</BuildNumberFile>
+    <!-- keep InformationalVersion a plain build number, no "+<git-hash>" suffix -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+
+  <!-- Auto build counter: bumps BuildNumber.txt on every real build (not IDE design-time evaluation).
+       Must run before GetAssemblyVersion, since that target (a GenerateAssemblyInfo dependency) is what
+       actually reads $(Version) into AssemblyVersion/FileVersion/InformationalVersion. -->
+  <Target Name="IncrementBuildNumber" BeforeTargets="GetAssemblyVersion"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' == 'true'">
+    <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
+      <Output TaskParameter="Lines" ItemName="_CurrentBuildNumberLines" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_CurrentBuildNumber>@(_CurrentBuildNumberLines)</_CurrentBuildNumber>
+      <_CurrentBuildNumber Condition="'$(_CurrentBuildNumber)' == ''">0</_CurrentBuildNumber>
+      <_NextBuildNumber>$([MSBuild]::Add($(_CurrentBuildNumber), 1))</_NextBuildNumber>
+      <Version>$(VersionPrefix).$(_NextBuildNumber)</Version>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(_NextBuildNumber)" Overwrite="true" />
+  </Target>
 
   <ItemGroup>
     <!-- UI -->
