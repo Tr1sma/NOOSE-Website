@@ -19,6 +19,19 @@
     der Kommunikation mit dem Bewerber – bleiben hier einsehbar.
 </MudText>
 
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <MudIcon Icon="@Icons.Material.Filled.ThumbDownAlt" Color="Color.Error" Size="Size.Large" />
+        <div>
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Ablehnungsquote</MudText>
+            <MudText Typo="Typo.h4">@RejectionRate.ToString("P0")</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @RejectedCount von @TotalCount Bewerbungen abgelehnt (inkl. Discord-Ära)
+            </MudText>
+        </div>
+    </MudStack>
+</MudPaper>
+
 <MudTabs Elevation="0" Rounded="true" Class="mb-2" @bind-ActivePanelIndex="_tab">
     <MudTabPanel Text="@($"Offen ({_open.Count})")" />
     <MudTabPanel Text="@($"Archiv ({_archived.Count})")" />
@@ -70,6 +83,14 @@ else
     private List<Bewerbung> _archived = new();
 
     private List<Bewerbung> Current => _tab switch { 1 => _archived, 2 => _all, _ => _open };
+
+    // applications handled over Discord before this system existed (fixed historical tally)
+    private const int LegacyAccepted = 20;
+    private const int LegacyRejected = 84;
+
+    private int RejectedCount => _all.Count(b => b.Status == BewerbungStatus.Abgelehnt) + LegacyRejected;
+    private int TotalCount => _all.Count + LegacyAccepted + LegacyRejected;
+    private double RejectionRate => TotalCount > 0 ? (double)RejectedCount / TotalCount : 0d;
 
     protected override async Task OnInitializedAsync()
     {
