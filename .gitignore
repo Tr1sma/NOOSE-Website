@@ -380,3 +380,6 @@ secrets.json
 # Die hochgeladenen Dateien liegen geschützt außerhalb von wwwroot unter App_Data/uploads.
 NOOSE-Website/App_Data/uploads/
 App_Data/uploads/
+
+# ----- NOOSE: Deploy-Artefakt (deploy.ps1 packt/entpackt es lokal) -----
+noose-publish.tgz
