@@ -149,6 +149,12 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
             ?? throw new InvalidOperationException("Dokument nicht gefunden.");
 
+        // partners may only edit documents they authored themselves
+        if (actor.IsPartner() && document.CreatedById != actor.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Partner dürfen nur selbst erstellte Dokumente bearbeiten.");
+        }
+
         var scope = DocumentViewerScope.From(actor);
         if (!scope.CanSee(document.Classification))
         {

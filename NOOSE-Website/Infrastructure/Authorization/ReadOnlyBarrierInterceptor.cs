@@ -67,6 +67,12 @@ public class ReadOnlyBarrierInterceptor(ICurrentUserService currentUserService) 
             {
                 continue;
             }
+            // a partner may edit a document they authored themselves (create handled above)
+            if (partnerMayAuthor && entry.State == EntityState.Modified
+                && entry.Entity is Document editDoc && editDoc.CreatedById == user.Id)
+            {
+                continue;
+            }
             throw new UnauthorizedAccessException(
                 "Nur-Lese-Modus: Änderungen sind in der Aufsichtsrolle nicht möglich.");
         }

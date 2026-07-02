@@ -22,6 +22,11 @@ public static class PartnerRoutes
     // create routes a partner may open despite the blanket create-block (document authoring is universal)
     private static readonly string[] AuthoringRoutes = { "dokumente/neu" };
 
+    /// <summary>True for the document editor (create or edit); per-record ownership is enforced server-side.</summary>
+    private static bool IsDocumentAuthoringRoute(string path)
+        => AuthoringRoutes.Contains(path)
+            || (path.StartsWith("dokumente/") && path.EndsWith("/bearbeiten"));
+
     /// <summary>True if a partner may open this relative path (dashboard and own profile always allowed).</summary>
     public static bool IsAllowed(string? relativePath)
     {
@@ -30,7 +35,7 @@ public static class PartnerRoutes
         {
             return true;
         }
-        if (AuthoringRoutes.Contains(path))
+        if (IsDocumentAuthoringRoute(path))
         {
             return true;
         }

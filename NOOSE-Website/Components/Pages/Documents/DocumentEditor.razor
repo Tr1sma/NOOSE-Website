@@ -27,8 +27,8 @@ else
         <MudText Typo="Typo.h4">@(_edit ? "Dokument bearbeiten" : "Neues Dokument")</MudText>
         <MudSpacer />
         <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
-        @* edit-mode save is for writers only; create-mode stays open so partners can author *@
-        @if (!_edit || _user.MayWrite())
+        @* edit-mode save is for writers or a partner editing their own document; create-mode stays open *@
+        @if (!_edit || _user.MayWrite() || _mayEditOwn)
         {
             <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
         }
@@ -88,6 +88,7 @@ else
     private bool _edit;
     private bool _found;
     private bool _saves;
+    private bool _mayEditOwn;
 
     private string _title = string.Empty;
     private string? _category;
@@ -123,6 +124,7 @@ else
             if (document is not null)
             {
                 _found = true;
+                _mayEditOwn = document.CreatedById == _user.GetAgentId();
                 _title = document.Title;
                 _category = document.Category;
                 _classification = document.Classification;

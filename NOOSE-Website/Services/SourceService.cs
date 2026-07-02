@@ -30,9 +30,22 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             .ToListAsync(cancellationToken);
         if (scope.PartnerAgency is { } agency)
         {
-            // partners: drop cross-ref source types, then apply child-release filter
-            sources = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
-            sources = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), sources, q => q.Id, agency, scope.MeId, cancellationToken);
+            var kept = new HashSet<string>();
+            // document sources: keep those whose target document the partner may see (own-authored or released, not classified)
+            foreach (var s in sources.Where(q => q.Type == SourceType.Document && q.TargetId != null))
+            {
+                if (await PartnerVisibility.IsRecordVisibleToPartnerAsync(
+                        db, nameof(Document), s.TargetId!, agency, scope.MeId, cancellationToken))
+                {
+                    kept.Add(s.Id);
+                }
+            }
+            // other sources keep the child-release filter; internal cross-refs stay hidden
+            var others = sources.Where(q => q.Type != SourceType.Internal && q.Type != SourceType.Document).ToList();
+            others = await PartnerVisibility.FilterChildrenAsync(db, entityType, entityId, nameof(Source), others, q => q.Id, agency, scope.MeId, cancellationToken);
+            foreach (var s in others) { kept.Add(s.Id); }
+            // preserve original pinned/date ordering
+            sources = sources.Where(q => kept.Contains(q.Id)).ToList();
         }
 
         // taskforce-internal sources: only taskforce members may see them, never partners
