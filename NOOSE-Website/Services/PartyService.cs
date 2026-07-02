@@ -169,10 +169,8 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Partei '{id}' nicht gefunden.");
 
-        if (party.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, party.SecrecyLevel);
 
         party.Name = input.Name.Trim();
         party.Description = input.Description.TrimToNull();
@@ -218,10 +216,8 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Partei '{id}' nicht gefunden.");
 
-        if (party.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, party.SecrecyLevel);
 
         party.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Party), id, @new, justification, actor));
@@ -281,10 +277,8 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == partyId, cancellationToken)
             ?? throw new InvalidOperationException($"Partei '{partyId}' nicht gefunden.");
-        if (party.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, party.SecrecyLevel);
 
         var personId = await PersonIdDetermineAsync(db, input.PersonId, input.NewPersonName, actor, cancellationToken);
         if (await db.PartyMembers.AnyAsync(m => m.PartyId == partyId && m.PersonId == personId, cancellationToken))
@@ -317,9 +311,10 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var member = await db.PartyMembers.Include(m => m.Party).FirstOrDefaultAsync(m => m.Id == memberId, cancellationToken)
             ?? throw new InvalidOperationException("Mitgliedschaft nicht gefunden.");
-        if (member.Party?.IsClassified == true && !actor.IsLeadership())
+        if (member.Party is { } memberParty)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, memberParty.SecrecyLevel);
         }
         member.Role = role.TrimToNull();
         member.IsLead = isLead;
@@ -336,9 +331,10 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         {
             return;
         }
-        if (member.Party?.IsClassified == true && !actor.IsLeadership())
+        if (member.Party is { } memberParty)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, memberParty.SecrecyLevel);
         }
         var personId = member.PersonId;
         // soft-delete keeps the membership as a history entry (exit date)
@@ -376,10 +372,8 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var party = await db.Parties.FirstOrDefaultAsync(p => p.Id == partyId, cancellationToken)
             ?? throw new InvalidOperationException($"Partei '{partyId}' nicht gefunden.");
-        if (party.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, party.SecrecyLevel);
         await RequireLeadershipOrELAsync(db, partyId, actor, cancellationToken);
         // only leadership may grant the lead flag
         if (asInvestigationLead)
@@ -412,9 +406,10 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         {
             return;
         }
-        if (allocation.Party?.IsClassified == true && !actor.IsLeadership())
+        if (allocation.Party is { } allocParty)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, allocParty.SecrecyLevel);
         }
         await RequireLeadershipOrELAsync(db, allocation.PartyId, actor, cancellationToken);
         db.PartyAgents.Remove(allocation);

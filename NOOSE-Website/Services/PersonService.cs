@@ -137,11 +137,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
-        // classified records editable by leadership only
-        if (person.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
 
         var altStatus = person.LifeStatus;
         var altDeadUntil = person.DeadUntil;
@@ -213,10 +210,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
 
-        if (person.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
 
         person.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Person), id, @new, justification, actor));
@@ -492,10 +487,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         // check existence and visibility before writing any file
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
-        if (person.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
 
         var fileName = await fileStorage.SaveAsync(content, contentType, cancellationToken);
         var photo = new PersonPhoto
@@ -530,9 +523,10 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         {
             return;
         }
-        if (photo.Person?.IsClassified == true && !actor.IsLeadership())
+        if (photo.Person is { } photoPerson)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, photoPerson.SecrecyLevel);
         }
         // remove the DB row (source of truth) before the file
         db.PersonPhotos.Remove(photo);

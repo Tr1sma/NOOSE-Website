@@ -169,10 +169,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         var group = await db.PersonGroups.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{id}' nicht gefunden.");
 
-        if (group.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, group.SecrecyLevel);
 
         group.Name = input.Name.Trim();
         group.Description = input.Description.TrimToNull();
@@ -219,10 +217,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         var group = await db.PersonGroups.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{id}' nicht gefunden.");
 
-        if (group.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, group.SecrecyLevel);
 
         group.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(PersonGroup), id, @new, justification, actor));
@@ -282,10 +278,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var group = await db.PersonGroups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{groupId}' nicht gefunden.");
-        if (group.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, group.SecrecyLevel);
 
         var personId = await PersonIdDetermineAsync(db, input.PersonId, input.NewPersonName, actor, cancellationToken);
         if (await db.PersonGroupMembers.AnyAsync(m => m.PersonGroupId == groupId && m.PersonId == personId, cancellationToken))
@@ -318,9 +312,10 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var member = await db.PersonGroupMembers.Include(m => m.PersonGroup).FirstOrDefaultAsync(m => m.Id == memberId, cancellationToken)
             ?? throw new InvalidOperationException("Mitgliedschaft nicht gefunden.");
-        if (member.PersonGroup?.IsClassified == true && !actor.IsLeadership())
+        if (member.PersonGroup is { } memberGroup)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, memberGroup.SecrecyLevel);
         }
         member.Role = role.TrimToNull();
         member.IsLead = isLead;
@@ -336,9 +331,10 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         {
             return;
         }
-        if (member.PersonGroup?.IsClassified == true && !actor.IsLeadership())
+        if (member.PersonGroup is { } memberGroup)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, memberGroup.SecrecyLevel);
         }
         var personId = member.PersonId;
         // soft-delete keeps the membership as a history entry (exit date)
@@ -376,10 +372,8 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var group = await db.PersonGroups.FirstOrDefaultAsync(g => g.Id == groupId, cancellationToken)
             ?? throw new InvalidOperationException($"Personengruppe '{groupId}' nicht gefunden.");
-        if (group.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, group.SecrecyLevel);
         await RequireLeadershipOrELAsync(db, groupId, actor, cancellationToken);
         // only leadership may grant the lead flag
         if (asInvestigationLead)
@@ -412,9 +406,10 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         {
             return;
         }
-        if (allocation.PersonGroup?.IsClassified == true && !actor.IsLeadership())
+        if (allocation.PersonGroup is { } allocGroup)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, allocGroup.SecrecyLevel);
         }
         await RequireLeadershipOrELAsync(db, allocation.PersonGroupId, actor, cancellationToken);
         db.PersonGroupAgents.Remove(allocation);

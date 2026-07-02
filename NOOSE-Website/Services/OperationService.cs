@@ -116,10 +116,8 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{id}' nicht gefunden.");
 
-        if (operation.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, operation.SecrecyLevel);
 
         operation.Title = input.Title.Trim();
         operation.Type = input.Type.TrimToNull();
@@ -171,10 +169,8 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{id}' nicht gefunden.");
 
-        if (operation.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, operation.SecrecyLevel);
 
         operation.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Operation), id, @new, justification, actor));
@@ -230,10 +226,8 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var operation = await db.Operations.FirstOrDefaultAsync(o => o.Id == operationId, cancellationToken)
             ?? throw new InvalidOperationException($"Operation '{operationId}' nicht gefunden.");
-        if (operation.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, operation.SecrecyLevel);
         await RequireLeadershipOrELAsync(db, operationId, actor, cancellationToken);
         // only leadership may grant the lead flag
         if (asInvestigationLead)
@@ -266,9 +260,10 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             return;
         }
-        if (allocation.Operation?.IsClassified == true && !actor.IsLeadership())
+        if (allocation.Operation is { } allocOperation)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, allocOperation.SecrecyLevel);
         }
         await RequireLeadershipOrELAsync(db, allocation.OperationId, actor, cancellationToken);
         db.OperationAgents.Remove(allocation);

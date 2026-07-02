@@ -117,10 +117,8 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
-        if (person.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
 
         var orgId = input.OrgId.TrimToNull();
         var obs = new Observation
@@ -152,9 +150,10 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
             .FirstOrDefaultAsync(o => o.Id == observationId, cancellationToken)
             ?? throw new InvalidOperationException($"Observation '{observationId}' nicht gefunden.");
 
-        if (obs.Person?.IsClassified == true && !actor.IsLeadership())
+        if (obs.Person is { } obsPerson)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, obsPerson.SecrecyLevel);
         }
 
         obs.Start = input.Start;
@@ -180,9 +179,10 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         {
             return;
         }
-        if (obs.Person?.IsClassified == true && !actor.IsLeadership())
+        if (obs.Person is { } obsPerson)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, obsPerson.SecrecyLevel);
         }
 
         var personId = obs.PersonId;

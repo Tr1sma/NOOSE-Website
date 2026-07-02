@@ -193,10 +193,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
             .FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
 
-        if (faction.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
         faction.Name = input.Name.Trim();
         faction.Kind = input.Kind.TrimToNull();
@@ -278,10 +276,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{id}' nicht gefunden.");
 
-        if (faction.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
         faction.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Faction), id, @new, justification, actor));
@@ -342,10 +338,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
-        if (faction.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
         var personId = await PersonIdDetermineAsync(db, input.PersonId, input.NewPersonName, actor, cancellationToken);
         if (await db.FactionMembers.AnyAsync(m => m.FactionId == factionId && m.PersonId == personId, cancellationToken))
@@ -380,9 +374,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var member = await db.FactionMembers.Include(m => m.Faction).FirstOrDefaultAsync(m => m.Id == memberId, cancellationToken)
             ?? throw new InvalidOperationException("Mitgliedschaft nicht gefunden.");
-        if (member.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (member.Faction is { } memberFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, memberFaction.SecrecyLevel);
         }
         member.Rank = rank.TrimToNull();
         member.IsLead = isLead;
@@ -400,9 +395,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             return;
         }
-        if (member.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (member.Faction is { } memberFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, memberFaction.SecrecyLevel);
         }
         var personId = member.PersonId;
         var factionId = member.FactionId;
@@ -445,10 +441,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
-        if (faction.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
         await RequireLeadershipOrELAsync(db, factionId, actor, cancellationToken);
         // Only leadership may grant the investigation-lead flag.
         if (asInvestigationLead)
@@ -481,9 +475,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             return;
         }
-        if (allocation.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (allocation.Faction is { } allocFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, allocFaction.SecrecyLevel);
         }
         await RequireLeadershipOrELAsync(db, allocation.FactionId, actor, cancellationToken);
         db.FactionAgents.Remove(allocation);
@@ -585,10 +580,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
-        if (faction.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
         db.FactionActivities.Add(new FactionActivity
         {
@@ -616,9 +609,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var activity = await db.FactionActivities.Include(a => a.Faction).FirstOrDefaultAsync(a => a.Id == activityId, cancellationToken)
             ?? throw new InvalidOperationException("Aktivität nicht gefunden.");
-        if (activity.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (activity.Faction is { } activityFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, activityFaction.SecrecyLevel);
         }
 
         activity.Title = title;
@@ -639,9 +633,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             return;
         }
-        if (activity.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (activity.Faction is { } activityFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, activityFaction.SecrecyLevel);
         }
         var factionId = activity.FactionId;
         db.FactionActivities.Remove(activity);
@@ -707,10 +702,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         // Check existence and visibility before writing a file.
         var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
             ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
-        if (faction.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
         // The first photo becomes the title image automatically.
         var isFirst = !await db.FactionPhotos.AnyAsync(f => f.FactionId == factionId, cancellationToken);
@@ -749,9 +742,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         {
             return;
         }
-        if (photo.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (photo.Faction is { } photoFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, photoFaction.SecrecyLevel);
         }
         // Remove the DB record first, then the file, so a storage error leaves no record pointing at a missing file.
         db.FactionPhotos.Remove(photo);
@@ -764,9 +758,10 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var photo = await db.FactionPhotos.Include(f => f.Faction).FirstOrDefaultAsync(f => f.Id == photoId, cancellationToken)
             ?? throw new InvalidOperationException($"Foto '{photoId}' nicht gefunden.");
-        if (photo.Faction?.IsClassified == true && !actor.IsLeadership())
+        if (photo.Faction is { } photoFaction)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, photoFaction.SecrecyLevel);
         }
 
         // Exactly one title image per faction: clear all siblings, mark this one.

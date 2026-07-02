@@ -121,10 +121,8 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var person = await db.People.FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
             ?? throw new InvalidOperationException($"Person '{personId}' nicht gefunden.");
-        if (person.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
 
         var doc = await CreateDocAsync(db, personId, input, cancellationToken);
         // measures feed both faction heat and the person score
@@ -157,9 +155,10 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
             .FirstOrDefaultAsync(d => d.Id == docId, cancellationToken)
             ?? throw new InvalidOperationException($"Dok '{docId}' nicht gefunden.");
 
-        if (doc.Person?.IsClassified == true && !actor.IsLeadership())
+        if (doc.Person is { } docPerson)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, docPerson.SecrecyLevel);
         }
 
         // capture old state before overwriting; status re-evaluation needs both
@@ -274,9 +273,10 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         {
             return;
         }
-        if (doc.Person?.IsClassified == true && !actor.IsLeadership())
+        if (doc.Person is { } docPerson)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, docPerson.SecrecyLevel);
         }
 
         // if this shot-doc set the current death window, undo the status on delete

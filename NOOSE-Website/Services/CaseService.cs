@@ -125,10 +125,8 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         var @case = await db.Cases.FirstOrDefaultAsync(v => v.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Vorgang '{id}' nicht gefunden.");
 
-        if (@case.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified case is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, @case.SecrecyLevel);
 
         // Track the completion timestamp with the status: set on close, clear when reopened.
         var wasCompleted = CaseStatusDisplay.IsCompleted(@case.Status);
@@ -190,10 +188,8 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         var @case = await db.Cases.FirstOrDefaultAsync(v => v.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Vorgang '{id}' nicht gefunden.");
 
-        if (@case.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified case is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, @case.SecrecyLevel);
 
         @case.Classification = @new;
         db.ClassificationHistory.Add(ClassificationHelper.Entry(nameof(Case), id, @new, justification, actor));
@@ -248,10 +244,8 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var @case = await db.Cases.FirstOrDefaultAsync(v => v.Id == caseId, cancellationToken)
             ?? throw new InvalidOperationException($"Vorgang '{caseId}' nicht gefunden.");
-        if (@case.IsClassified && !actor.IsLeadership())
-        {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
-        }
+        // classified case is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+        Permission.RequireMaySeeClassified(actor, @case.SecrecyLevel);
         await RequireLeadershipOrFFAsync(db, caseId, actor, cancellationToken);
         // Only leadership may grant the case-lead flag.
         if (asCaseLead)
@@ -284,9 +278,10 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         {
             return;
         }
-        if (allocation.Case?.IsClassified == true && !actor.IsLeadership())
+        if (allocation.Case is { } allocCase)
         {
-            throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
+            // classified case is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
+            Permission.RequireMaySeeClassified(actor, allocCase.SecrecyLevel);
         }
         await RequireLeadershipOrFFAsync(db, allocation.CaseId, actor, cancellationToken);
         db.CaseAgents.Remove(allocation);

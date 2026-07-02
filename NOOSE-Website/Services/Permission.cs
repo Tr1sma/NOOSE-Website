@@ -61,6 +61,16 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the actor's audience covers the record's secrecy level (leadership, or the record's own TRU/HRB).</summary>
+    public static void RequireMaySeeClassified(ClaimsPrincipal actor, DocumentClassification level)
+    {
+        if (!DocumentViewerScope.From(actor).CanSee(level))
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Akte ist als Verschlusssache nur für die zuständige Stelle (Führung, TRU oder HRB) zugänglich.");
+        }
+    }
+
     /// <summary>Require promotion authority.</summary>
     public static void RequirePromotionDecide(ClaimsPrincipal actor)
     {
