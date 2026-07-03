@@ -49,9 +49,10 @@ else
         <AuthorizeView Policy="@Policies.WriteAccess" Context="freigabe">
             <PartnerShareButton EntityType="@nameof(Document)" EntityId="@_document.Id" />
         </AuthorizeView>
-        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        @if (_mayEdit)
+        {
             <MudButton Href="@($"/dokumente/{_document.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
-        </AuthorizeView>
+        }
     </MudStack>
 
     <MudGrid>
@@ -131,6 +132,7 @@ else
     private Document? _document;
     private List<DocumentAttachment> _attachments = new();
     private bool _mayDelete;
+    private bool _mayEdit;
     private bool _isLeadership;
     private bool _canManageAccess;
     private ClaimsPrincipal _user = default!;
@@ -153,6 +155,12 @@ else
         _isLeadership = _user.IsLeadership();
         _isPartner = _user.IsPartner();
         _document = await DocumentService.GetAsync(Id, DocumentViewerScope.From(_user), partnerAgency: _user.GetPartnerAgency(), partnerAgentId: _user.GetAgentId());
+        if (_document is not null)
+        {
+            // creator keeps edit access even without general write rights (partners)
+            _mayEdit = _user.MayWrite()
+                || (_document.CreatedById is not null && _document.CreatedById == _user.GetAgentId());
+        }
         if (_document is not null && !_isPartner)
         {
             // partners: skip attachment fan-out
