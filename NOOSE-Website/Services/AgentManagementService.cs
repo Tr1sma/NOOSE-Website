@@ -397,6 +397,13 @@ public class AgentManagementService(
 
         var agent = await GetOrThrow(agentId);
 
+        // bootstrap admins re-grant themselves on next login
+        if (!isAdmin && IsBootstrapAdmin(agent.DiscordId))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap-Admins behalten ihre Admin-Rechte dauerhaft und können nicht entzogen werden.");
+        }
+
         // guard self-lockout and last admin
         if (!isAdmin && agent.IsAdmin)
         {
