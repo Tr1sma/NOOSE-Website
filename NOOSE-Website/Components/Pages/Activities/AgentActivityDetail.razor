@@ -117,11 +117,9 @@ else
 
     private async Task DeleteAsync()
     {
-        var confirmed = await DialogService.ShowMessageBox(
-            "Aktivität löschen?",
-            "Die Aktivität wird in den Papierkorb verschoben.",
-            yesText: "Löschen", cancelText: "Abbrechen");
-        if (confirmed != true)
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Aktivität löschen?",
+            "Die Aktivität wird in den Papierkorb verschoben.");
+        if (!ok)
         {
             return;
         }
