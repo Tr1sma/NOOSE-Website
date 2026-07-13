@@ -1,0 +1,137 @@
+@* A single activity: meta, rich-text body, tags and linked factions/groups. *@
+@page "/aktivitaeten/{Id}"
+@using System.Security.Claims
+@inject IAgentActivityService ActivityService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_view?.Activity.Title ?? "Aktivität") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_view is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Aktivität nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/aktivitaeten" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@_view.Activity.Title</MudText>
+        <MudSpacer />
+        @if (_canManage)
+        {
+            <MudButton Href="@($"/aktivitaeten/{Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+        }
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudStack Row="true" Spacing="4" Class="flex-wrap">
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mud-text-secondary" />
+                <MudText Typo="Typo.body2">@_view.OwnerName</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" Class="mud-text-secondary" />
+                <MudText Typo="Typo.body2">@_view.Activity.ActivityDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudStack>
+            @if (!string.IsNullOrWhiteSpace(_view.Activity.Kind))
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" Icon="@Icons.Material.Filled.Category">@_view.Activity.Kind</MudChip>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-2 mb-4" Elevation="1">
+        <TagChips EntityType="@nameof(AgentActivity)" EntityId="@_view.Activity.Id" User="_user" />
+    </MudPaper>
+
+    @if (_view.Orgs.Count > 0)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="1">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Verknüpfte Fraktionen / Personengruppen</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var org in _view.Orgs)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                             Color="@(org.TargetType == nameof(Faction) ? Color.Info : Color.Secondary)"
+                             Href="@OrgHref(org)">@org.DisplayName</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    <MudPaper Class="pa-4" Elevation="2">
+        @if (string.IsNullOrWhiteSpace(_view.Activity.ContentHtml))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Beschreibung.</MudText>
+        }
+        else
+        {
+            @* Sanitized server-side on save, so safe as MarkupString. *@
+            <div class="dokument-html">@((MarkupString)_view.Activity.ContentHtml)</div>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private AgentActivityDetailView? _view;
+    private bool _load = true;
+    private bool _canManage;
+    private string? _loadedId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _user = (await AuthStateTask).User;
+        _view = await ActivityService.GetDetailAsync(Id, ViewerScope.From(_user));
+        if (_view is not null)
+        {
+            var meId = _user.GetAgentId();
+            _canManage = _user.IsLeadership() || (meId is not null && _view.Activity.CreatedById == meId);
+        }
+        _load = false;
+    }
+
+    private static string OrgHref(AgentActivityOrgRef org)
+        => org.TargetType == nameof(Faction) ? $"/fraktionen/{org.TargetId}" : $"/personengruppen/{org.TargetId}";
+
+    private async Task DeleteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Aktivität löschen?",
+            "Die Aktivität wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await ActivityService.DeleteAsync(Id, _user);
+            Snackbar.Add("Aktivität gelöscht.", Severity.Success);
+            Nav.NavigateTo("/aktivitaeten");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

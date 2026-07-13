@@ -4,6 +4,7 @@ using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
@@ -288,6 +289,45 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
+            }
+        }
+
+        // ---- agent activities (unclassified: visible to all) ----
+        if (Active(nameof(AgentActivity)))
+        {
+            var q = db.AgentActivities.AsQueryable();
+            if (hasText)
+            {
+                q = q.Where(a => a.Title.Contains(s!)
+                    || (a.Kind != null && a.Kind.Contains(s!))
+                    || a.ContentHtml.Contains(s!));
+            }
+            if (hasTags)
+            {
+                q = q.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(AgentActivity) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
+            }
+            var hit = await q.OrderByDescending(a => a.ActivityDate).Take(MaxPerCategory)
+                .Select(a => new SearchHit(nameof(AgentActivity), a.Id, a.Title, a.Kind ?? string.Empty, string.Empty))
+                .ToListAsync(cancellationToken);
+
+            if (FuzzyActive(hit.Count))
+            {
+                var @base = db.AgentActivities.AsQueryable();
+                if (hasTags)
+                {
+                    @base = @base.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(AgentActivity) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
+                }
+                var raw = await @base.OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt).Take(FuzzyCandidatesMax)
+                    .Select(a => new { a.Id, a.Title, a.Kind })
+                    .ToListAsync(cancellationToken);
+                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, string.Empty, x.Kind ?? string.Empty,
+                    TextSimilarity.Tokens(x.Title, x.Kind)));
+                hit = FuzzySupplement(nameof(AgentActivity), hit, searchWords, candidates);
+            }
+
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(AgentActivity), "Aktivitäten", hit));
             }
         }
 

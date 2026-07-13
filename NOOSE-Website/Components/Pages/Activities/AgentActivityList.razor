@@ -1,0 +1,164 @@
+@* Everyone's activities, newest first; filter by text, date range, agent and kind. *@
+@page "/aktivitaeten"
+@inject IAgentActivityService ActivityService
+@inject NavigationManager Nav
+
+<PageTitle>Aktivitäten · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Aktivitäten</MudText>
+    <MudSpacer />
+    <AuthorizeView Policy="@Policies.Leadership">
+        <MudButton Href="/aktivitaeten/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+        <MudButton Href="/aktivitaeten/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aktivität</MudButton>
+    </AuthorizeView>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Dokumentiere deine eigenen Aktivitäten. Jeder sieht alle Aktivitäten; bearbeiten darf nur der Ersteller oder die Führung.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudDataGrid T="AgentActivityListItem" Items="_rows" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
+                 QuickFilter="Filter" Elevation="2" RowClick="@(args => Open(args.Item))" Dense="true">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_search" Placeholder="Suchen (Titel, Art, Agent, Inhalt)…" Immediate="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudDatePicker Date="_from" DateChanged="FromChanged" Label="Von" Editable="true" Clearable="true"
+                           DateFormat="dd.MM.yyyy" Variant="Variant.Outlined" Style="max-width:150px;" Margin="Margin.Dense" />
+            <MudDatePicker Date="_to" DateChanged="ToChanged" Label="Bis" Editable="true" Clearable="true"
+                           DateFormat="dd.MM.yyyy" Variant="Variant.Outlined" Style="max-width:150px;" Margin="Margin.Dense" Class="ml-2" />
+            <MudSelect T="string" Value="_agentFilter" ValueChanged="AgentSelected" Label="Agent" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:200px;" Class="ml-2">
+                <MudSelectItem T="string" Value="@("")">Alle</MudSelectItem>
+                @foreach (var a in _agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" Value="_kindFilter" ValueChanged="KindSelected" Label="Art" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:180px;" Class="ml-2">
+                <MudSelectItem T="string" Value="@("")">Alle</MudSelectItem>
+                @foreach (var k in _kinds)
+                {
+                    <MudSelectItem T="string" Value="@k">@k</MudSelectItem>
+                }
+            </MudSelect>
+        </ToolBarContent>
+        <Columns>
+            <TemplateColumn Title="Datum" Sortable="true" SortBy="x => x.ActivityDate">
+                <CellTemplate>@context.Item.ActivityDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Sortable="true" Title="Titel" SortBy="x => x.Title">
+                <CellTemplate>
+                    <MudLink Href="@($"/aktivitaeten/{context.Item.Id}")" @onclick:stopPropagation="true">@context.Item.Title</MudLink>
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Kind" Title="Art" />
+            <PropertyColumn Property="x => x.OwnerName" Title="Agent" />
+            <TemplateColumn Sortable="false" Title="Verknüpft">
+                <CellTemplate>
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                        @foreach (var org in context.Item.Orgs)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@(org.TargetType == nameof(Faction) ? Color.Info : Color.Secondary)">@org.DisplayName</MudChip>
+                        }
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Aktivitäten – lege die erste an.</MudText>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                    <MudButton Href="/aktivitaeten/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aktivität</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="AgentActivityListItem" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string _search = string.Empty;
+    private DateTime? _from;
+    private DateTime? _to;
+    private string _agentFilter = string.Empty;
+    private string _kindFilter = string.Empty;
+
+    private List<AgentActivityListItem> _rows = new();
+    private List<(string Id, string Name)> _agents = new();
+    private List<string> _kinds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _rows = await ActivityService.GetListAsync(ViewerScope.From(user));
+        _agents = _rows
+            .Where(r => !string.IsNullOrEmpty(r.OwnerId))
+            .Select(r => (Id: r.OwnerId!, Name: r.OwnerName))
+            .DistinctBy(a => a.Id)
+            .OrderBy(a => a.Name)
+            .ToList();
+        _kinds = _rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Kind))
+            .Select(r => r.Kind!)
+            .Distinct()
+            .OrderBy(k => k)
+            .ToList();
+        _load = false;
+    }
+
+    private void FromChanged(DateTime? d) { _from = d; StateHasChanged(); }
+    private void ToChanged(DateTime? d) { _to = d; StateHasChanged(); }
+    private void AgentSelected(string value) { _agentFilter = value ?? string.Empty; StateHasChanged(); }
+    private void KindSelected(string value) { _kindFilter = value ?? string.Empty; StateHasChanged(); }
+
+    private bool Filter(AgentActivityListItem z)
+    {
+        var local = z.ActivityDate.ToLocalTime().Date;
+        if (_from is not null && local < _from.Value.Date)
+        {
+            return false;
+        }
+        if (_to is not null && local > _to.Value.Date)
+        {
+            return false;
+        }
+        if (!string.IsNullOrEmpty(_agentFilter) && z.OwnerId != _agentFilter)
+        {
+            return false;
+        }
+        if (!string.IsNullOrEmpty(_kindFilter) && !string.Equals(z.Kind, _kindFilter, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            return true;
+        }
+        var s = _search.Trim();
+        return z.Title.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || (z.Kind?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || z.OwnerName.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.ContentPlain.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || z.Orgs.Any(o => o.DisplayName.Contains(s, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void Open(AgentActivityListItem z) => Nav.NavigateTo($"/aktivitaeten/{z.Id}");
+}

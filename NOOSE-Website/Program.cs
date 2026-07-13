@@ -184,6 +184,8 @@ builder.Services.AddScoped<IFactionService, FactionService>();
 builder.Services.AddScoped<IPersonGroupService, PersonGroupService>();
 builder.Services.AddScoped<IPartyService, PartyService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
+builder.Services.AddScoped<IAgentActivityService, AgentActivityService>();
+builder.Services.AddScoped<IActivityTemplateService, ActivityTemplateService>();
 builder.Services.AddScoped<ICaseService, CaseService>();
 builder.Services.AddScoped<ITaskforceService, TaskforceService>();
 builder.Services.AddScoped<ITaskforceChatService, TaskforceChatService>();
