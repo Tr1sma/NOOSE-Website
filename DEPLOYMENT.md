@@ -118,17 +118,27 @@ certbot renew --dry-run
 
 ### Backups der Datenbank
 
+**Ein-Befehl-Backup vom PC** (frischer Dump auf dem Server **+** Kopie auf den PC, aus dem Repo-Root):
+```powershell
+.\backup-db.ps1
+# Server-Kopie:  /root/backups/noose-<datum>_<zeit>.sql.gz
+# PC-Kopie:      %USERPROFILE%\NOOSE-Backups\noose-<datum>_<zeit>.sql.gz
+```
+Das Skript erzeugt den Dump per SSH (`--single-transaction`, inkl. Routinen/Events), prüft die
+Integrität, lädt ihn per `scp` herunter und vergleicht die Größen. Parameter (Defaults):
+`-Server root@195.20.225.12`, `-Database noose`, `-RemoteDir /root/backups`,
+`-LocalDir %USERPROFILE%\NOOSE-Backups`, `-RetentionDays 30`, `-NoPause`. Serverseitig werden Dumps
+älter als `-RetentionDays` aufgeräumt; die PC-Kopien (Offsite) bleiben **alle** erhalten.
+Setzt einen hinterlegten SSH-Key voraus (siehe Abschnitt SSH-Key).
+
+**Täglicher Server-Cron** (bereits in der root-crontab eingerichtet, 04:15 Uhr, 30 Tage Aufbewahrung):
+```
+15 4 * * * mkdir -p /root/backups && mysqldump --single-transaction --quick --routines --events noose | gzip > /root/backups/noose-$(date +\%F).sql.gz && find /root/backups -name "noose-*.sql.gz" -type f -mtime +30 -delete
+```
+
+**Restore** einer Kopie (auf dem Server):
 ```bash
-# Backup
-mysqldump --single-transaction noose | gzip > ~/noose-backup-$(date +%F).sql.gz
-
-# Restore
-gunzip < ~/noose-backup-2026-06-11.sql.gz | mysql noose
-```
-
-Optional als täglicher Cronjob (`crontab -e`):
-```
-15 4 * * * mysqldump --single-transaction noose | gzip > /root/backups/noose-$(date +\%F).sql.gz
+gunzip < /root/backups/noose-2026-07-13.sql.gz | mysql noose
 ```
 
 ---
