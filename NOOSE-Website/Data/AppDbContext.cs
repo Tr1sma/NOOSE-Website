@@ -69,7 +69,6 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FactionMember> FactionMembers => Set<FactionMember>();
     public DbSet<FactionAgent> FactionAgents => Set<FactionAgent>();
     public DbSet<FactionPhoto> FactionPhotos => Set<FactionPhoto>();
-    public DbSet<FactionActivity> FactionActivities => Set<FactionActivity>();
 
     // person groups
     public DbSet<PersonGroup> PersonGroups => Set<PersonGroup>();
@@ -512,18 +511,6 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.FactionId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(f => f.Photos).WithOne(x => x.Faction!)
                 .HasForeignKey(x => x.FactionId).OnDelete(DeleteBehavior.Cascade);
-            b.HasMany(f => f.Activities).WithOne(a => a.Faction!)
-                .HasForeignKey(a => a.FactionId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<FactionActivity>(b =>
-        {
-            b.Property(a => a.Title).HasMaxLength(200).IsRequired();
-            b.Property(a => a.Kind).HasMaxLength(100);
-            b.Property(a => a.Location).HasMaxLength(200);
-            b.Property(a => a.Description).HasMaxLength(4000);
-            b.HasIndex(a => a.FactionId);
-            b.HasIndex(a => a.Kind);
         });
 
         modelBuilder.Entity<FactionPhoto>(b =>

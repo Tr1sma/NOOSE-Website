@@ -1,6 +1,7 @@
 @page "/fraktionen/{Id}/druck"
 @layout PrintLayout
 @inject IFactionService FactionService
+@inject IAgentActivityService ActivityService
 @inject ILinkService LinkService
 @inject ICommentService CommentService
 @inject IAccessLogService AccessLog
@@ -180,19 +181,16 @@ else
                 {
                     <div class="druck-eintrag">
                         <div class="druck-eintrag-kopf">
-                            <b>@a.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @a.Title
+                            <b>@a.ActivityDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b> · @a.Title
                             @if (!string.IsNullOrWhiteSpace(a.Kind))
                             {
                                 <text> · @a.Kind</text>
                             }
-                            @if (!string.IsNullOrWhiteSpace(a.Location))
-                            {
-                                <text> · @a.Location</text>
-                            }
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(a.Description))
+                        @if (!string.IsNullOrWhiteSpace(a.ContentHtml))
                         {
-                            <div class="druck-mehrzeilig">@a.Description</div>
+                            @* Sanitized server-side on save, so safe as MarkupString. *@
+                            <div class="dokument-html">@((MarkupString)a.ContentHtml)</div>
                         }
                     </div>
                 }
@@ -214,7 +212,7 @@ else
     private Faction? _faction;
     private List<FactionMember> _members = new();
     private List<FactionAgent> _agents = new();
-    private List<FactionActivity> _activities = new();
+    private List<AgentActivity> _activities = new();
     private List<ClassificationHistory> _classificationHistory = new();
     private List<LinkDisplay> _links = new();
     private List<Comment> _comments = new();
@@ -235,7 +233,7 @@ else
             {
                 _members = await FactionService.GetMembersAsync(Id, scope);
                 _agents = await FactionService.GetAgentsAsync(Id);
-                _activities = await FactionService.GetActivitiesAsync(Id, scope);
+                _activities = await ActivityService.GetLinkedFullAsync(nameof(Faction), Id);
                 _links = await LinkService.GetForRecordAsync(nameof(Faction), Id, scope);
                 _comments = await CommentService.GetForRecordAsync(nameof(Faction), Id, isLeadership);
             }

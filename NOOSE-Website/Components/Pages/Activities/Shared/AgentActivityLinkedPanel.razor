@@ -1,7 +1,17 @@
-@* Read-only list of activities linked to a faction / person group, shown on its detail tab. *@
+@* Activities linked to a faction / person group, shown on its detail tab; add opens the pre-linked editor. *@
 @using System.Security.Claims
 @inject IAgentActivityService ActivityService
 @inject NavigationManager Nav
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+    <MudText Typo="Typo.subtitle1">Aktivitäten@(_rows.Count > 0 ? $" ({_rows.Count})" : "")</MudText>
+    <MudSpacer />
+    @if (_mayWrite)
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="Add">Aktivität hinzufügen</MudButton>
+    }
+</MudStack>
 
 @if (_load)
 {
@@ -38,13 +48,27 @@ else
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
     private bool _load = true;
+    private bool _mayWrite;
     private List<AgentActivityListItem> _rows = new();
 
     protected override async Task OnInitializedAsync()
     {
+        _mayWrite = User.MayWrite();
         _rows = await ActivityService.GetLinkedAsync(EntityType, EntityId, ViewerScope.From(User));
         _load = false;
     }
 
     private void Open(AgentActivityListItem a) => Nav.NavigateTo($"/aktivitaeten/{a.Id}");
+
+    // open the activities editor with this record pre-linked
+    private void Add()
+    {
+        var query = EntityType switch
+        {
+            nameof(Faction) => $"?fraktion={EntityId}",
+            nameof(PersonGroup) => $"?personengruppe={EntityId}",
+            _ => string.Empty,
+        };
+        Nav.NavigateTo($"/aktivitaeten/neu{query}");
+    }
 }

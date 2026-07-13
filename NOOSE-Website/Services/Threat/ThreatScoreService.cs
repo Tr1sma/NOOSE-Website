@@ -439,9 +439,15 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         var stock = await db.FactionInventories.Where(l => l.FactionId == factionId).Select(l => l.Designation).ToListAsync(ct);
         var routes = await db.FactionDrugRoutes.Where(d => d.FactionId == factionId).Select(d => d.Designation).ToListAsync(ct);
 
-        var activitiesRows = await db.FactionActivities
-            .Where(a => a.FactionId == factionId)
-            .Select(a => new { a.Kind, a.Timestamp, a.CreatedAt, a.ModifiedAt })
+        // Activity heat is driven by the AgentActivities linked to this faction.
+        var activityIds = await db.AgentActivityLinks
+            .Where(l => l.TargetType == nameof(Faction) && l.TargetId == factionId)
+            .Select(l => l.AgentActivityId)
+            .Distinct()
+            .ToListAsync(ct);
+        var activitiesRows = await db.AgentActivities
+            .Where(a => activityIds.Contains(a.Id))
+            .Select(a => new { a.Kind, Timestamp = a.ActivityDate, a.CreatedAt, a.ModifiedAt })
             .ToListAsync(ct);
         var activities = activitiesRows.Select(a => new ThreatActivity(a.Kind, a.Timestamp)).ToList();
 

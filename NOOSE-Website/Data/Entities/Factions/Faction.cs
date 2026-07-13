@@ -110,9 +110,6 @@ public class Faction : IAuditable, ISoftDelete
     /// <summary>Faction photos; one may be marked as the title image.</summary>
     public List<FactionPhoto> Photos { get; set; } = new();
 
-    /// <summary>Faction activities for the timeline.</summary>
-    public List<FactionActivity> Activities { get; set; } = new();
-
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

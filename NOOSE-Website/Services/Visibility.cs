@@ -72,11 +72,6 @@ public static class Visibility
                 .Where(f => f.Id == entityId)
                 .Select(f => new SecrecyRow(f.IsClassified, f.IsTRUClassified, f.IsHRBClassified))
                 .FirstOrDefaultAsync(cancellationToken),
-            // inherits parent faction
-            nameof(FactionActivity) => await db.FactionActivities
-                .Where(a => a.Id == entityId)
-                .Select(a => new SecrecyRow(a.Faction!.IsClassified, a.Faction!.IsTRUClassified, a.Faction!.IsHRBClassified))
-                .FirstOrDefaultAsync(cancellationToken),
             nameof(PersonGroup) => await db.PersonGroups
                 .Where(g => g.Id == entityId)
                 .Select(g => new SecrecyRow(g.IsClassified, g.IsTRUClassified, g.IsHRBClassified))
@@ -101,7 +96,7 @@ public static class Visibility
         };
 
         // classifiable types: visible per the viewer's secrecy scope (null = not found)
-        if (entityType is nameof(Person) or nameof(Faction) or nameof(FactionActivity) or nameof(PersonGroup)
+        if (entityType is nameof(Person) or nameof(Faction) or nameof(PersonGroup)
             or nameof(Party) or nameof(Operation) or nameof(Case))
         {
             return row is not null && scope.CanSee(LevelRestricted(row));

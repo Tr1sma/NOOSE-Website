@@ -147,16 +147,18 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 false, CalendarSource.PersonDoc, $"/personen/{d.PersonId}?tab=doks"));
         }
 
-        // faction activities
-        foreach (var fa in await db.FactionActivities
-            .Where(fa => (mayClassified || !fa.Faction!.IsClassified)
-                && fa.Timestamp >= sourceUtc && fa.Timestamp <= untilUtc)
-            .OrderBy(fa => fa.Timestamp).Take(PerSourceMax)
-            .Select(fa => new { fa.Id, fa.Title, fa.Kind, fa.Timestamp, fa.FactionId })
+        // faction activities (AgentActivities linked to a faction)
+        foreach (var fa in await db.AgentActivityLinks
+            .Where(l => l.TargetType == nameof(Faction))
+            .Join(db.AgentActivities.Where(a => a.ActivityDate >= sourceUtc && a.ActivityDate <= untilUtc),
+                l => l.AgentActivityId, a => a.Id, (l, a) => new { a.Id, a.Title, a.Kind, a.ActivityDate, FactionId = l.TargetId })
+            .Join(db.Factions.Where(f => mayClassified || !f.IsClassified),
+                x => x.FactionId, f => f.Id, (x, f) => x)
+            .OrderBy(x => x.ActivityDate).Take(PerSourceMax)
             .ToListAsync(ct))
         {
             var title = string.IsNullOrWhiteSpace(fa.Kind) ? fa.Title : $"{fa.Title} ({fa.Kind})";
-            entries.Add(new CalendarEntry($"fa:{fa.Id}", title, Local(fa.Timestamp), null,
+            entries.Add(new CalendarEntry($"fa:{fa.Id}:{fa.FactionId}", title, Local(fa.ActivityDate), null,
                 false, CalendarSource.FactionActivity, $"/fraktionen/{fa.FactionId}"));
         }
     }

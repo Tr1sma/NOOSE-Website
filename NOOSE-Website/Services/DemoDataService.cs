@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.People;
@@ -108,21 +109,33 @@ public class DemoDataService(
             }
             foreach (var a in spec.Activities)
             {
-                faction.Activities.Add(new FactionActivity
+                var activity = new AgentActivity
                 {
                     Title = a.Title,
                     Kind = a.Kind,
-                    Timestamp = DateTime.UtcNow.AddDays(-a.DaysAgo),
-                    Location = a.Location,
-                    Description = a.Description,
+                    ActivityDate = DateTime.UtcNow.AddDays(-a.DaysAgo),
+                    ContentHtml = DemoActivityHtml(a.Location, a.Description),
                     CreatedById = DemoIdentity.AgentId,
-                });
+                };
+                activity.Links.Add(new AgentActivityLink { TargetType = nameof(Faction), TargetId = faction.Id });
+                db.AgentActivities.Add(activity);
             }
             db.Factions.Add(faction);
             map[spec.Name] = faction;
             added++;
         }
         return (map, added);
+    }
+
+    // wrap demo location/description as sanitized-looking HTML for the rich-text body
+    private static string DemoActivityHtml(string? location, string? description)
+    {
+        var body = string.IsNullOrWhiteSpace(description) ? string.Empty : $"<p>{System.Net.WebUtility.HtmlEncode(description)}</p>";
+        if (!string.IsNullOrWhiteSpace(location))
+        {
+            body = $"<p><em>Ort: {System.Net.WebUtility.HtmlEncode(location)}</em></p>" + body;
+        }
+        return body;
     }
 
     private async Task<(Dictionary<string, Person> Map, int Added, HashSet<string> NewNames)> SeedPeopleAsync(AppDbContext db, CancellationToken ct)

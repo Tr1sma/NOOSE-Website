@@ -103,6 +103,8 @@ else
 
 @code {
     [Parameter] public string? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "fraktion")] public string? PreFactionId { get; set; }
+    [SupplyParameterFromQuery(Name = "personengruppe")] public string? PreGroupId { get; set; }
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private RichTextEditor _editor = default!;
@@ -156,9 +158,32 @@ else
             var now = DateTime.Now;
             _date = now.Date;
             _time = now.TimeOfDay;
+            await PrelinkAsync();
         }
 
         _load = false;
+    }
+
+    // seed org links from ?fraktion / ?personengruppe query params (opened from a record's activities tab)
+    private async Task PrelinkAsync()
+    {
+        var scope = ViewerScope.From(_user);
+        if (!string.IsNullOrWhiteSpace(PreFactionId))
+        {
+            var f = await FactionService.GetDetailAsync(PreFactionId, scope);
+            if (f is not null && !_orgs.Any(x => x.TargetType == nameof(Faction) && x.TargetId == f.Id))
+            {
+                _orgs.Add(new AgentActivityOrgRef { TargetType = nameof(Faction), TargetId = f.Id, DisplayName = $"{f.Name} (Fraktion)" });
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(PreGroupId))
+        {
+            var g = await GroupService.GetDetailAsync(PreGroupId, scope);
+            if (g is not null && !_orgs.Any(x => x.TargetType == nameof(PersonGroup) && x.TargetId == g.Id))
+            {
+                _orgs.Add(new AgentActivityOrgRef { TargetType = nameof(PersonGroup), TargetId = g.Id, DisplayName = $"{g.Name} (Gruppe)" });
+            }
+        }
     }
 
     private Task<IEnumerable<string>> SearchKinds(string value, CancellationToken token)

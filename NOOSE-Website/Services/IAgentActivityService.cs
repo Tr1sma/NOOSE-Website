@@ -16,6 +16,9 @@ public interface IAgentActivityService
     /// <summary>Activities linked to a faction / person group (for the org detail tab).</summary>
     Task<List<AgentActivityListItem>> GetLinkedAsync(string targetType, string targetId, ViewerScope scope, CancellationToken cancellationToken = default);
 
+    /// <summary>Full linked activities (incl. HTML body) for the print dossier.</summary>
+    Task<List<AgentActivity>> GetLinkedFullAsync(string targetType, string targetId, CancellationToken cancellationToken = default);
+
     /// <summary>Soft-deleted activities for the trash (leadership page).</summary>
     Task<List<AgentActivityListItem>> GetTrashAsync(CancellationToken cancellationToken = default);
 

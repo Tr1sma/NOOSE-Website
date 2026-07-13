@@ -48,18 +48,6 @@ public interface IFactionService
     /// <summary>Audit entries for the faction and its memberships; visibility-filtered.</summary>
     Task<List<AuditLog>> GetHistoryAsync(string factionId, bool isLeadership, CancellationToken cancellationToken = default);
 
-    /// <summary>Faction's own activity log, newest first; visibility-filtered, partner-filtered when scope is a partner.</summary>
-    Task<List<FactionActivity>> GetActivitiesAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default);
-
-    Task ActivityAddAsync(string factionId, ActivityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-
-    Task ActivityChangeAsync(string activityId, ActivityInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-
-    Task ActivityRemoveAsync(string activityId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-
-    /// <summary>Activity kinds already in use, for the free-text-with-suggestions picker.</summary>
-    Task<List<string>> GetActivityKindsAsync(CancellationToken cancellationToken = default);
-
     /// <summary>Faction photos (title image first, then by capture time).</summary>
     Task<List<FactionPhoto>> GetPhotosAsync(string factionId, CancellationToken cancellationToken = default);
 

@@ -11,7 +11,7 @@ using NOOSE_Website.Models.Activities;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IAgentActivityService" />
-public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : IAgentActivityService
+public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IAgentActivityService
 {
     private const int PlainSnippetMax = 1000;
 
@@ -63,6 +63,23 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : I
             .OrderByDescending(a => a.ActivityDate)
             .ToListAsync(cancellationToken);
         return await ProjectAsync(db, activities, scope, cancellationToken);
+    }
+
+    public async Task<List<AgentActivity>> GetLinkedFullAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var activityIds = await db.AgentActivityLinks
+            .Where(l => l.TargetType == targetType && l.TargetId == targetId)
+            .Select(l => l.AgentActivityId)
+            .ToListAsync(cancellationToken);
+        if (activityIds.Count == 0)
+        {
+            return new();
+        }
+        return await db.AgentActivities
+            .Where(a => activityIds.Contains(a.Id))
+            .OrderByDescending(a => a.ActivityDate)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<List<AgentActivityListItem>> GetTrashAsync(CancellationToken cancellationToken = default)
@@ -122,6 +139,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : I
 
         db.AgentActivities.Add(activity);
         await db.SaveChangesAsync(cancellationToken);
+        await RecomputeFactionsAsync(FactionLinkIds(activity.Links), cancellationToken);
         return activity;
     }
 
@@ -139,6 +157,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : I
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Aktivität '{id}' nicht gefunden.");
         RequireCreatorOrLeadership(activity, actor);
+        var beforeFactions = FactionLinkIds(activity.Links).ToList();
 
         activity.Title = title;
         activity.Kind = input.Kind.TrimToNull();
@@ -169,16 +188,19 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : I
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await RecomputeFactionsAsync(beforeFactions.Concat(FactionLinkIds(activity.Links)), cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var activity = await db.AgentActivities.FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
+        var activity = await db.AgentActivities.Include(a => a.Links).FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Aktivität '{id}' nicht gefunden.");
         RequireCreatorOrLeadership(activity, actor);
+        var factionIds = FactionLinkIds(activity.Links).ToList();
         db.AgentActivities.Remove(activity);
         await db.SaveChangesAsync(cancellationToken);
+        await RecomputeFactionsAsync(factionIds, cancellationToken);
     }
 
     public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -186,13 +208,14 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : I
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var activity = await db.AgentActivities.IgnoreQueryFilters()
+        var activity = await db.AgentActivities.IgnoreQueryFilters().Include(a => a.Links)
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Aktivität '{id}' nicht gefunden.");
         activity.IsDeleted = false;
         activity.DeletedAt = null;
         activity.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
+        await RecomputeFactionsAsync(FactionLinkIds(activity.Links), cancellationToken);
     }
 
     /// <summary>Throws unless the actor is leadership or the activity's creator.</summary>
@@ -295,6 +318,18 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory) : I
             }
         }
         return map;
+    }
+
+    private static IEnumerable<string> FactionLinkIds(IEnumerable<AgentActivityLink> links)
+        => links.Where(l => l.TargetType == nameof(Faction) && !string.IsNullOrEmpty(l.TargetId)).Select(l => l.TargetId);
+
+    // an activity is core of a faction's S1 heat, so linking/unlinking recomputes its score
+    private async Task RecomputeFactionsAsync(IEnumerable<string> factionIds, CancellationToken cancellationToken)
+    {
+        foreach (var factionId in factionIds.Distinct())
+        {
+            await threat.NewCalculateAsync(factionId, cancellationToken);
+        }
     }
 
     private static IEnumerable<AgentActivityOrgRef> DistinctOrgLinks(IEnumerable<AgentActivityOrgRef>? links)

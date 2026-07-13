@@ -239,27 +239,22 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             }
         }
 
-        // ---- 8) faction-specific ----
-        if (entityType == nameof(Faction))
+        // ---- 8) faction-specific: activities linked to this faction (internal only) ----
+        if (entityType == nameof(Faction) && !isPartner)
         {
-            var activities = await db.FactionActivities
-                .Where(a => a.FactionId == entityId)
-                .Select(a => new { a.Id, a.Title, a.Kind, a.Timestamp, a.Description, a.Location, a.CreatedById })
+            var activityIds = await db.AgentActivityLinks
+                .Where(l => l.TargetType == nameof(Faction) && l.TargetId == entityId)
+                .Select(l => l.AgentActivityId)
                 .ToListAsync(cancellationToken);
-            if (isPartner)
-            {
-                activities = await PartnerVisibility.FilterChildrenAsync(db, nameof(Faction), entityId, nameof(FactionActivity), activities, a => a.Id, agency!.Value, meId, cancellationToken);
-            }
+            var activities = await db.AgentActivities
+                .Where(a => activityIds.Contains(a.Id))
+                .Select(a => new { a.Title, a.Kind, a.ActivityDate, a.ContentHtml, a.CreatedById })
+                .ToListAsync(cancellationToken);
             foreach (var a in activities)
             {
                 Remember(actorIds, a.CreatedById);
                 var title = string.IsNullOrWhiteSpace(a.Kind) ? $"Aktivität: {a.Title}" : $"Aktivität ({a.Kind}): {a.Title}";
-                var detail = a.Description;
-                if (!string.IsNullOrWhiteSpace(a.Location))
-                {
-                    detail = string.IsNullOrWhiteSpace(detail) ? $"Ort: {a.Location}" : $"{detail} · Ort: {a.Location}";
-                }
-                raw.Add(new Raw(a.Timestamp, TimelineCategory.Activity, title, detail, null, a.CreatedById, null, null));
+                raw.Add(new Raw(a.ActivityDate, TimelineCategory.Activity, title, PlainSnippet(a.ContentHtml), null, a.CreatedById, null, null));
             }
         }
 
@@ -275,6 +270,18 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 ActorName(r, names), r.Href, r.Changes))
             .OrderByDescending(e => e.Timestamp)
             .ToList();
+    }
+
+    // strip HTML to a short plain-text timeline detail
+    private static string? PlainSnippet(string? html, int max = 200)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return null;
+        }
+        var text = System.Net.WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " "));
+        text = System.Text.RegularExpressions.Regex.Replace(text, "\\s+", " ").Trim();
+        return text.Length == 0 ? null : text.Length > max ? text[..max] + "…" : text;
     }
 
     private static async Task<(string[] Types, HashSet<string> Ids)> AuditSourceAsync(
