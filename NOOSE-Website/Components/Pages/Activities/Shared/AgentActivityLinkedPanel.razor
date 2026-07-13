@@ -1,0 +1,50 @@
+@* Read-only list of activities linked to a faction / person group, shown on its detail tab. *@
+@using System.Security.Claims
+@inject IAgentActivityService ActivityService
+@inject NavigationManager Nav
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine verknüpften Aktivitäten.</MudText>
+}
+else
+{
+    <MudList T="AgentActivityListItem" Dense="true">
+        @foreach (var a in _rows)
+        {
+            <MudListItem T="AgentActivityListItem" Icon="@Icons.Material.Filled.Bolt"
+                         OnClick="@(() => Open(a))" Style="cursor:pointer;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                    <MudText Typo="Typo.body1">@a.Title</MudText>
+                    @if (!string.IsNullOrWhiteSpace(a.Kind))
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@a.Kind</MudChip>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.OwnerName · @a.ActivityDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudStack>
+            </MudListItem>
+        }
+    </MudList>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _load = true;
+    private List<AgentActivityListItem> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rows = await ActivityService.GetLinkedAsync(EntityType, EntityId, ViewerScope.From(User));
+        _load = false;
+    }
+
+    private void Open(AgentActivityListItem a) => Nav.NavigateTo($"/aktivitaeten/{a.Id}");
+}

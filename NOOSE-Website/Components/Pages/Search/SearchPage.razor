@@ -35,6 +35,7 @@
             <MudCheckBox T="bool" @bind-Value="_katGroup" Label="Personengruppen" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katParty" Label="Parteien" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katOperation" Label="Operationen" Dense="true" />
+            <MudCheckBox T="bool" @bind-Value="_katActivity" Label="Aktivitäten" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katTaskforce" Label="Taskforces" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katCase" Label="Vorgänge" Dense="true" />
             <MudCheckBox T="bool" @bind-Value="_katLaw" Label="Gesetze" Dense="true" />
@@ -138,7 +139,7 @@ else
     private bool _mayClassifiedRead;
 
     private string _text = string.Empty;
-    private bool _katPerson = true, _katFaction = true, _katGroup = true, _katParty = true, _katOperation = true, _katTaskforce = true, _katCase = true, _katLaw = true, _katDoc = true, _katSource = true, _katComment = true;
+    private bool _katPerson = true, _katFaction = true, _katGroup = true, _katParty = true, _katOperation = true, _katActivity = true, _katTaskforce = true, _katCase = true, _katLaw = true, _katDoc = true, _katSource = true, _katComment = true;
     private bool _fuzzy;
     private bool _maxMode;
     private IReadOnlyCollection<string> _tagSelection = new HashSet<string>();
@@ -205,6 +206,7 @@ else
         if (_katGroup) categories.Add(nameof(PersonGroup));
         if (_katParty) categories.Add(nameof(Party));
         if (_katOperation) categories.Add(nameof(Operation));
+        if (_katActivity) categories.Add(nameof(AgentActivity));
         if (_katTaskforce) categories.Add(nameof(Taskforce));
         if (_katCase) categories.Add(nameof(Case));
         if (_katLaw) categories.Add(nameof(Law));
@@ -216,7 +218,7 @@ else
         {
             Text = _text,
             // All active means empty list (= all), else the chosen subset
-            Categories = categories.Count == 11 ? new() : categories,
+            Categories = categories.Count == 12 ? new() : categories,
             TagIds = _tagSelection.ToList(),
             Fuzzy = _fuzzy,
             MaxMode = _maxMode,
@@ -236,7 +238,7 @@ else
 
     private async Task SearchAsync()
     {
-        if (!_katPerson && !_katFaction && !_katGroup && !_katParty && !_katOperation && !_katTaskforce && !_katCase && !_katLaw && !_katDoc && !_katSource && !_katComment && !_maxMode)
+        if (!_katPerson && !_katFaction && !_katGroup && !_katParty && !_katOperation && !_katActivity && !_katTaskforce && !_katCase && !_katLaw && !_katDoc && !_katSource && !_katComment && !_maxMode)
         {
             Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
             return;
@@ -311,6 +313,7 @@ else
         _katGroup = katSet is null || katSet.Contains(nameof(PersonGroup));
         _katParty = katSet is null || katSet.Contains(nameof(Party));
         _katOperation = katSet is null || katSet.Contains(nameof(Operation));
+        _katActivity = katSet is null || katSet.Contains(nameof(AgentActivity));
         _katTaskforce = katSet is null || katSet.Contains(nameof(Taskforce));
         _katCase = katSet is null || katSet.Contains(nameof(Case));
         _katLaw = katSet is null || katSet.Contains(nameof(Law));
@@ -351,6 +354,7 @@ else
         nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
         nameof(Party) => Icons.Material.Filled.AccountBalance,
         nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(AgentActivity) => Icons.Material.Filled.Bolt,
         nameof(Taskforce) => Icons.Material.Filled.Groups2,
         nameof(Case) => Icons.Material.Filled.FolderSpecial,
         nameof(Law) => Icons.Material.Filled.Gavel,

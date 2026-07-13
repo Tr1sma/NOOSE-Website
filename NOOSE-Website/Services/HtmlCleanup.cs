@@ -45,7 +45,7 @@ public static class HtmlCleanup
         s.AllowedCssProperties.Clear();
         foreach (var prop in new[]
         {
-            "color", "background-color", "text-align",
+            "color", "background-color", "text-align", "font-size",
             "width", "height", "vertical-align",
             "border", "border-color", "border-style", "border-width",
         })

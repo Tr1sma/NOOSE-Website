@@ -140,6 +140,12 @@ else
                     <ActivitiesPanel FactionId="@_faction.Id" User="_user" />
                 </MudTabPanel>
                 }
+                @if (TabOn("agentaktivitaeten"))
+                {
+                <MudTabPanel Text="Verknüpfte Aktivitäten" Icon="@Icons.Material.Filled.Bolt">
+                    <AgentActivityLinkedPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </MudTabPanel>
+                }
                 @* partner-safe child service *@
                 @if (TabOn("fotos"))
                 {
@@ -230,7 +236,7 @@ else
     private int _activeTab;
     private static readonly string[] _tabs =
     {
-        "stammdaten", "mitglieder", "agents", "bestaende", "aktivitaeten", "fotos", "einstufung", "gefaehrdung", "doks",
+        "stammdaten", "mitglieder", "agents", "bestaende", "aktivitaeten", "agentaktivitaeten", "fotos", "einstufung", "gefaehrdung", "doks",
         "beziehungen", "quellen", "wiedervorlagen", "kommentare", "zusatzfelder", "historie",
     };
 

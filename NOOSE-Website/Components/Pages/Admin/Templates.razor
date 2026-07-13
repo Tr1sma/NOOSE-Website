@@ -20,12 +20,15 @@
     <MudTabPanel Text="Dokument-Vorlagen" Icon="@Icons.Material.Filled.Article">
         <DocumentTemplatesManagement />
     </MudTabPanel>
+    <MudTabPanel Text="Aktivitäts-Vorlagen" Icon="@Icons.Material.Filled.Bolt">
+        <ActivityTemplatesManagement />
+    </MudTabPanel>
 </MudTabs>
 
 @code {
     private int _activeTab;
     // Slugs in panel order; keep active tab in the URL.
-    private static readonly string[] _tabs = { "dok-vorlagen", "dokument-vorlagen" };
+    private static readonly string[] _tabs = { "dok-vorlagen", "dokument-vorlagen", "aktivitaet-vorlagen" };
 
     protected override void OnInitialized() => _activeTab = TabUrlState.Read(Nav, _tabs);
 }

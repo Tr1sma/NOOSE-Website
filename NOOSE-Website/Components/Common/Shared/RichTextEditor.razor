@@ -16,6 +16,9 @@
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
 
+    /// <summary>Optional CSS min-height for the editor area (e.g. "360px"); default keeps Quill's own height.</summary>
+    [Parameter] public string? MinHeight { get; set; }
+
     private ElementReference _element;
     private IJSObjectReference? _module;
     private DotNetObjectReference<RichTextEditor>? _ref;
@@ -31,9 +34,9 @@
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=4");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=5");
             _ref = DotNetObjectReference.Create(this);
-            await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty);
+            await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight);
             _ready = true;
         }
         catch (JSDisconnectedException)

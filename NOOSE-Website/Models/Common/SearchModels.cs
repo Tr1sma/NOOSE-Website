@@ -2,6 +2,7 @@ using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
@@ -42,6 +43,7 @@ public static class SearchNavigation
         nameof(PersonGroup) => $"/personengruppen/{targetId}",
         nameof(Party) => $"/parteien/{targetId}",
         nameof(Operation) => $"/operationen/{targetId}",
+        nameof(AgentActivity) => $"/aktivitaeten/{targetId}",
         nameof(Taskforce) => $"/taskforces/{targetId}",
         nameof(Case) => $"/vorgaenge/{targetId}",
         nameof(Job) => $"/aufgaben/{targetId}",

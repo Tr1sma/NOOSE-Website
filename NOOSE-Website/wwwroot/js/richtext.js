@@ -2,6 +2,19 @@
 
 let quillLadenPromise = null;
 let tabellenModulPromise = null; // table handler
+let groessenRegistriert = false;
+const SCHRIFTGROESSEN = ['0.75em', '1.5em', '2.5em']; // inline font-size values
+
+// register style-based size so font-size survives sanitization
+function registriereGroessen() {
+    if (groessenRegistriert || !window.Quill) {
+        return;
+    }
+    const SizeStyle = window.Quill.import('attributors/style/size');
+    SizeStyle.whitelist = SCHRIFTGROESSEN;
+    window.Quill.register(SizeStyle, true);
+    groessenRegistriert = true;
+}
 
 function ladeQuill() {
     if (window.Quill) {
@@ -59,15 +72,17 @@ function ladeTabellenModul() {
     return tabellenModulPromise;
 }
 
-export async function initRichText(element, dotnetRef, initialHtml) {
+export async function initRichText(element, dotnetRef, initialHtml, minHeight) {
     await ladeQuill();
     if (!element) {
         return;
     }
+    registriereGroessen();
     const tableHandler = await ladeTabellenModul();
 
     const toolbarGruppen = [
         [{ header: [1, 2, 3, false] }],
+        [{ size: ['0.75em', false, '1.5em', '2.5em'] }],
         ['bold', 'italic', 'underline', 'strike'],
         [{ list: 'ordered' }, { list: 'bullet' }],
         ['blockquote', 'code-block'],
@@ -90,6 +105,10 @@ export async function initRichText(element, dotnetRef, initialHtml) {
         placeholder: 'Dokument verfassen…',
         modules: module,
     });
+
+    if (minHeight) {
+        editor.root.style.minHeight = minHeight;
+    }
 
     if (initialHtml) {
         editor.clipboard.dangerouslyPasteHTML(initialHtml);

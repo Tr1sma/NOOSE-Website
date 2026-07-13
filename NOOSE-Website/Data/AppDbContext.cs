@@ -9,6 +9,7 @@ using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.Personnel;
 using NOOSE_Website.Data.Entities.People;
@@ -83,6 +84,11 @@ public class AppDbContext : IdentityDbContext<Agent>
     // operations
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<OperationAgent> OperationAgents => Set<OperationAgent>();
+
+    // agent activities + org links + templates
+    public DbSet<AgentActivity> AgentActivities => Set<AgentActivity>();
+    public DbSet<AgentActivityLink> AgentActivityLinks => Set<AgentActivityLink>();
+    public DbSet<ActivityTemplate> ActivityTemplates => Set<ActivityTemplate>();
 
     // cases
     public DbSet<Case> Cases => Set<Case>();
@@ -367,6 +373,16 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(d => d.Category);
             b.HasIndex(d => d.IsClassified);
             b.HasIndex(d => d.OwnerTaskforceId);
+        });
+
+        modelBuilder.Entity<ActivityTemplate>(b =>
+        {
+            b.Property(v => v.Name).HasMaxLength(120).IsRequired();
+            b.Property(v => v.Description).HasMaxLength(500);
+            b.Property(v => v.Kind).HasMaxLength(100);
+            b.Property(v => v.ContentHtml).HasColumnType("longtext");
+            b.HasIndex(v => v.Name);
+            b.HasIndex(v => v.IsActive);
         });
 
         modelBuilder.Entity<DocumentTemplate>(b =>
@@ -657,6 +673,29 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.OperationId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
+        });
+
+        modelBuilder.Entity<AgentActivity>(b =>
+        {
+            b.Property(a => a.Title).HasMaxLength(200).IsRequired();
+            b.Property(a => a.Kind).HasMaxLength(100);
+            b.Property(a => a.ContentHtml).HasColumnType("longtext");
+            b.HasIndex(a => a.Title);
+            b.HasIndex(a => a.Kind);
+            b.HasIndex(a => a.ActivityDate);
+            b.HasIndex(a => a.CreatedById);
+
+            b.HasMany(a => a.Links).WithOne(l => l.AgentActivity!)
+                .HasForeignKey(l => l.AgentActivityId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentActivityLink>(b =>
+        {
+            b.Property(l => l.TargetType).HasMaxLength(64).IsRequired();
+            b.Property(l => l.TargetId).HasMaxLength(64).IsRequired();
+            // fast path for the faction/group activities tab
+            b.HasIndex(l => new { l.TargetType, l.TargetId });
+            b.HasIndex(l => new { l.AgentActivityId, l.TargetType, l.TargetId }).IsUnique();
         });
 
         modelBuilder.Entity<Case>(b =>

@@ -32,6 +32,7 @@ public static class NavCatalog
         new NavEntry("personengruppen", "/personengruppen", Icons.Material.Filled.Diversity3, "Personengruppen", NavSection.Akten),
         new NavEntry("parteien", "/parteien", Icons.Material.Filled.AccountBalance, "Parteien", NavSection.Akten),
         new NavEntry("operationen", "/operationen", Icons.Material.Filled.Radar, "Operationen", NavSection.Akten),
+        new NavEntry("aktivitaeten", "/aktivitaeten", Icons.Material.Filled.Bolt, "Aktivitäten", NavSection.Akten),
         new NavEntry("taskforces", "/taskforces", Icons.Material.Filled.Groups2, "Taskforces", NavSection.Akten),
         new NavEntry("vorgaenge", "/vorgaenge", Icons.Material.Filled.FolderSpecial, "Vorgänge", NavSection.Akten),
         new NavEntry("aufgaben", "/aufgaben", Icons.Material.Filled.AssignmentTurnedIn, "Aufgaben", NavSection.Akten),

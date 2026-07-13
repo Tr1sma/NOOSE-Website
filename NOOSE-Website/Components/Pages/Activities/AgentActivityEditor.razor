@@ -1,0 +1,274 @@
+@* Create/edit a personal activity; rich-text body, kind, date and linked factions/groups. *@
+@page "/aktivitaeten/neu"
+@page "/aktivitaeten/{Id}/bearbeiten"
+@using System.Security.Claims
+@inject IAgentActivityService ActivityService
+@inject IActivityTemplateService TemplateService
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject ILogger<AgentActivityEditor> Logger
+
+<PageTitle>@(_edit ? "Aktivität bearbeiten" : "Neue Aktivität") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit && !_found)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Aktivität nicht gefunden.</MudAlert>
+}
+else if (_edit && !_mayEdit)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Aktivität darf nur ihr Ersteller oder die Führung bearbeiten.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="Cancel" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(_edit ? "Aktivität bearbeiten" : "Neue Aktivität")</MudText>
+        <MudSpacer />
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
+        <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudGrid>
+                <MudItem xs="12" md="7">
+                    <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                                  RequiredError="Titel ist erforderlich" AutoFocus="true" MaxLength="200"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Bolt" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudAutocomplete T="string" Label="Art (optional)" @bind-Value="_kind"
+                                     SearchFunc="@SearchKinds" Variant="Variant.Outlined" Clearable="true"
+                                     CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                                     MinCharacters="0" Immediate="true" MaxLength="100"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category"
+                                     HelperText="Kategorie wie Streife oder Ermittlung – tippen oder bestehende wählen." />
+                </MudItem>
+            </MudGrid>
+
+            <MudStack Row="true" Spacing="2">
+                <MudDatePicker @bind-Date="_date" Label="Datum" Editable="true" Variant="Variant.Outlined"
+                               DateFormat="dd.MM.yyyy" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Event" />
+                <MudTimePicker @bind-Time="_time" Label="Uhrzeit" Editable="true" Variant="Variant.Outlined"
+                               AmPm="false" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Schedule" />
+            </MudStack>
+
+            @if (!_edit && _templates.Count > 0)
+            {
+                <MudSelect T="string" Label="Vorlage übernehmen (optional)" Value="_selectedTemplateId"
+                           ValueChanged="TemplateApplyAsync" Variant="Variant.Outlined" Clearable="true"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
+                           HelperText="Füllt den Editor mit dem Vorlagen-Text vor.">
+                    @foreach (var v in _templates)
+                    {
+                        <MudSelectItem T="string" Value="@v.Id">@v.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Verknüpfte Fraktionen / Personengruppen</MudText>
+                <MudAutocomplete T="AgentActivityOrgRef" @ref="_orgAuto" Label="Fraktion oder Gruppe suchen und verknüpfen"
+                                 SearchFunc="@SearchOrgsAsync" ToStringFunc="@(o => o?.DisplayName ?? string.Empty)"
+                                 ValueChanged="OnOrgPicked" Variant="Variant.Outlined" Clearable="true"
+                                 ResetValueOnEmptyText="true" CoerceText="false" MinCharacters="1"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Hub" />
+                @if (_orgs.Count > 0)
+                {
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap mt-2">
+                        @foreach (var org in _orgs)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                     Color="@(org.TargetType == nameof(Faction) ? Color.Info : Color.Secondary)"
+                                     OnClose="@(() => RemoveOrg(org))">@org.DisplayName</MudChip>
+                        }
+                    </MudStack>
+                }
+            </div>
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Beschreibung</MudText>
+                <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" />
+            </div>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private RichTextEditor _editor = default!;
+    private MudAutocomplete<AgentActivityOrgRef> _orgAuto = default!;
+    private ClaimsPrincipal _user = default!;
+
+    private bool _load = true;
+    private bool _edit;
+    private bool _found;
+    private bool _mayEdit;
+    private bool _saves;
+
+    private string _title = string.Empty;
+    private string? _kind;
+    private DateTime? _date;
+    private TimeSpan? _time;
+    private string? _contentHtml;
+    private readonly List<AgentActivityOrgRef> _orgs = new();
+
+    private List<string> _kinds = new();
+    private List<ActivityTemplate> _templates = new();
+    private string? _selectedTemplateId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _edit = !string.IsNullOrEmpty(Id);
+        _kinds = await ActivityService.GetKindsAsync();
+
+        if (_edit)
+        {
+            var view = await ActivityService.GetDetailAsync(Id!, ViewerScope.From(_user));
+            if (view is not null)
+            {
+                _found = true;
+                var meId = _user.GetAgentId();
+                _mayEdit = _user.IsLeadership() || (meId is not null && view.Activity.CreatedById == meId);
+                _title = view.Activity.Title;
+                _kind = view.Activity.Kind;
+                var local = view.Activity.ActivityDate.ToLocalTime();
+                _date = local.Date;
+                _time = local.TimeOfDay;
+                _contentHtml = view.Activity.ContentHtml;
+                _orgs.AddRange(view.Orgs);
+            }
+        }
+        else
+        {
+            _mayEdit = _user.MayWrite();
+            _templates = await TemplateService.GetActiveAsync();
+            var now = DateTime.Now;
+            _date = now.Date;
+            _time = now.TimeOfDay;
+        }
+
+        _load = false;
+    }
+
+    private Task<IEnumerable<string>> SearchKinds(string value, CancellationToken token)
+    {
+        var v = value?.Trim() ?? string.Empty;
+        IEnumerable<string> hit = string.IsNullOrWhiteSpace(v)
+            ? _kinds
+            : _kinds.Where(a => a.Contains(v, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(hit);
+    }
+
+    private async Task<IEnumerable<AgentActivityOrgRef>> SearchOrgsAsync(string value, CancellationToken token)
+    {
+        var isLead = _user.IsLeadership();
+        var factions = await FactionService.SearchAsync(value, isLead, 8, token);
+        var groups = await GroupService.SearchAsync(value, isLead, 8, token);
+        var candidates = factions
+            .Select(f => new AgentActivityOrgRef { TargetType = nameof(Faction), TargetId = f.Id, DisplayName = $"{f.Name} (Fraktion)" })
+            .Concat(groups.Select(g => new AgentActivityOrgRef { TargetType = nameof(PersonGroup), TargetId = g.Id, DisplayName = $"{g.Name} (Gruppe)" }));
+        return candidates.Where(o => !_orgs.Any(x => x.TargetType == o.TargetType && x.TargetId == o.TargetId));
+    }
+
+    private async Task OnOrgPicked(AgentActivityOrgRef? org)
+    {
+        if (org is not null && !_orgs.Any(x => x.TargetType == org.TargetType && x.TargetId == org.TargetId))
+        {
+            _orgs.Add(org);
+        }
+        await _orgAuto.ClearAsync();
+    }
+
+    private void RemoveOrg(AgentActivityOrgRef org) => _orgs.Remove(org);
+
+    private async Task TemplateApplyAsync(string? templateId)
+    {
+        _selectedTemplateId = templateId;
+        if (string.IsNullOrEmpty(templateId))
+        {
+            return;
+        }
+        var template = _templates.FirstOrDefault(v => v.Id == templateId);
+        if (template is null)
+        {
+            return;
+        }
+        await _editor.SetHtmlAsync(template.ContentHtml);
+        if (string.IsNullOrWhiteSpace(_kind))
+        {
+            _kind = template.Kind;
+        }
+        if (string.IsNullOrWhiteSpace(_title))
+        {
+            _title = template.Name;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        var title = _title?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            Snackbar.Add("Bitte einen Titel angeben.", Severity.Warning);
+            return;
+        }
+        if (_date is null)
+        {
+            Snackbar.Add("Bitte ein Datum angeben.", Severity.Warning);
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var html = await _editor.GetHtmlAsync();
+            // combine date+time as local (Unspecified); service stores UTC
+            var input = new AgentActivityInput
+            {
+                Title = title,
+                Kind = _kind,
+                ActivityDate = _date.Value.Date + (_time ?? TimeSpan.Zero),
+                ContentHtml = html,
+                OrgLinks = _orgs.ToList(),
+            };
+
+            string id;
+            if (_edit)
+            {
+                await ActivityService.UpdateAsync(Id!, input, _user);
+                id = Id!;
+            }
+            else
+            {
+                var created = await ActivityService.CreateAsync(input, _user);
+                id = created.Id;
+            }
+
+            Snackbar.Add("Aktivität gespeichert.", Severity.Success);
+            Nav.NavigateTo($"/aktivitaeten/{id}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Activity save failed (agent={Agent}, edit={Edit})", _user.GetAgentId(), _edit);
+            Snackbar.Add($"{ex.GetType().Name}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private void Cancel()
+        => Nav.NavigateTo(_edit ? $"/aktivitaeten/{Id}" : "/aktivitaeten");
+}
