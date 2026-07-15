@@ -146,6 +146,7 @@ else
 // ---- Services ----
 builder.Services.AddScoped<IAgentManagementService, AgentManagementService>();
 builder.Services.AddScoped<IAccessLogService, AccessLogService>();
+builder.Services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
@@ -199,6 +200,8 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
 builder.Services.AddScoped<ISituationReportService, SituationReportService>();
 builder.Services.AddHostedService<SituationReportWorker>();
+builder.Services.AddHttpClient("discord");
+builder.Services.AddScoped<IDiscordWebhookService, DiscordWebhookService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddSingleton<NotificationBroadcaster>();
 builder.Services.AddSingleton<SharesBroadcaster>();

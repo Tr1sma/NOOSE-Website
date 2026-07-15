@@ -1,0 +1,136 @@
+@* Discord webhook routing: one channel per notification category. Saving is admin-only. *@
+@page "/admin/discord"
+@attribute [Authorize(Policy = Policies.AdminPage)]
+@inject IDiscordWebhookService Discord
+@inject ISnackbar Snackbar
+
+<PageTitle>Discord-Benachrichtigungen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.Notifications" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Discord-Benachrichtigungen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Leite In-App-Benachrichtigungen zusätzlich in Discord-Channels weiter – pro Kategorie ein eigener
+    Channel-Webhook. Nachrichten enthalten nur den Titel und einen (login-geschützten) Link, niemals
+    Klarnamen oder VS-Inhalte. Sensible Kategorien nur auf zugriffsbeschränkte Channels legen.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Spacing="4">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudSwitch T="bool" @bind-Value="_input.Enabled" Color="Color.Primary" Label="Discord-Weiterleitung aktiv" />
+            <MudTextField @bind-Value="_input.SiteBaseUrl" Label="Basis-URL für Links" Variant="Variant.Outlined"
+                          Class="mt-2" Placeholder="@DiscordWebhookConfig.DefaultBaseUrl"
+                          HelperText="Vorangestellt bei relativen Links in den Discord-Nachrichten." />
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-1">Channel je Kategorie</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                Trage pro Kategorie die Webhook-URL des Ziel-Channels ein (in Discord: Channel →
+                Einstellungen → Integrationen → Webhooks). Leer lassen = diese Kategorie nicht weiterleiten.
+            </MudText>
+            <MudStack Spacing="3">
+                @foreach (var type in _types)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@NotificationTypeDisplay.Icon(type)" Color="Color.Default" />
+                        <div style="min-width:190px;">
+                            <MudText Typo="Typo.body2">@NotificationTypeDisplay.Name(type)</MudText>
+                            @if (IsSensitive(type))
+                            {
+                                <MudTooltip Text="Kann VS-Akten oder personenbezogene Titel referenzieren – nur auf zugriffsbeschränkte Channels legen.">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                             Icon="@Icons.Material.Filled.Lock">sensibel</MudChip>
+                                </MudTooltip>
+                            }
+                        </div>
+                        <MudTextField @bind-Value="_webhooks[type]" Placeholder="https://discord.com/api/webhooks/…"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                        <MudTooltip Text="Test verwendet die zuletzt gespeicherte URL.">
+                            <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
+                                           OnClick="@(() => TestAsync(type))" aria-label="Test senden" />
+                        </MudTooltip>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <MudStack Row="true" Justify="Justify.FlexEnd">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync" Disabled="_saving">Speichern</MudButton>
+        </MudStack>
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private static readonly NotificationType[] _types = Enum.GetValues<NotificationType>();
+
+    private ClaimsPrincipal _user = new();
+    private DiscordWebhookConfigInput _input = new();
+    private readonly Dictionary<NotificationType, string?> _webhooks = new();
+    private bool _load = true;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        var config = await Discord.GetConfigAsync();
+        _input = new DiscordWebhookConfigInput
+        {
+            Enabled = config.Enabled,
+            SiteBaseUrl = config.SiteBaseUrl == DiscordWebhookConfig.DefaultBaseUrl ? null : config.SiteBaseUrl,
+        };
+        foreach (var type in _types)
+        {
+            _webhooks[type] = config.Webhooks.GetValueOrDefault(type);
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            _input.Webhooks = new Dictionary<NotificationType, string?>(_webhooks);
+            await Discord.SaveConfigAsync(_input, _user);
+            Snackbar.Add("Discord-Einstellungen gespeichert.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task TestAsync(NotificationType type)
+    {
+        try
+        {
+            var ok = await Discord.TestAsync(type, _user);
+            Snackbar.Add(ok ? "Test-Nachricht gesendet." : "Kein gespeicherter Webhook für diese Kategorie (erst speichern).",
+                ok ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    // categories whose titles may reference classified records or persons
+    private static bool IsSensitive(NotificationType type) => type is
+        NotificationType.Mention or NotificationType.RecordModified
+        or NotificationType.SituationReport or NotificationType.Recruiting;
+}

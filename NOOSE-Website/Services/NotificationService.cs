@@ -10,7 +10,8 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="INotificationService" />
-public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, NotificationBroadcaster broadcaster)
+public class NotificationService(
+    IDbContextFactory<AppDbContext> dbFactory, NotificationBroadcaster broadcaster, IDiscordWebhookService discord)
     : INotificationService
 {
     public async Task NotifyAsync(string? recipientId, NotificationType type, string title, string? href,
@@ -32,6 +33,12 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(recipientId);
+
+        // mirror to the category's Discord channel, pinging the recipient if their Discord id is known
+        var discordId = await db.Users.Where(u => u.Id == recipientId)
+            .Select(u => u.DiscordId).FirstOrDefaultAsync(cancellationToken);
+        await discord.PushAsync(type, title, href,
+            string.IsNullOrWhiteSpace(discordId) ? null : discordId, cancellationToken);
     }
 
     public async Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
@@ -86,6 +93,9 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         {
             broadcaster.Report(id);
         }
+
+        // one channel post per mention event (no per-recipient ping)
+        await discord.PushAsync(NotificationType.Mention, title, href, cancellationToken: cancellationToken);
     }
 
     public async Task NotifyManyAsync(IReadOnlyCollection<string> recipientIds, NotificationType type,
@@ -118,6 +128,9 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         {
             broadcaster.Report(id);
         }
+
+        // one channel post per broadcast event
+        await discord.PushAsync(type, title, href, cancellationToken: cancellationToken);
     }
 
     public async Task<List<Notification>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)

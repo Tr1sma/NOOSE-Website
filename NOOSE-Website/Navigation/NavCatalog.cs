@@ -25,6 +25,7 @@ public static class NavCatalog
         new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Primary, BadgeKey: "acknowledgments"),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten),
+        new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung", NavSection.Akten),
         new NavEntry("doks", "/doks", Icons.Material.Filled.Description, "Personen-Doks", NavSection.Akten),
         new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumente", NavSection.Akten),
         new NavEntry("observationen", "/observationen", Icons.Material.Filled.Visibility, "Observationen", NavSection.Akten),
@@ -63,6 +64,8 @@ public static class NavCatalog
         new NavEntry("admin.partner-sichtbarkeit", "/admin/partner-sichtbarkeit", Icons.Material.Filled.Handshake, "Partner-Sichtbarkeit", NavSection.VerwaltungAdmin),
         new NavEntry("admin.partner-freigabe", "/admin/partner-freigabe", Icons.Material.Filled.FolderShared, "Partner-Freigabe", NavSection.VerwaltungAdmin),
         new NavEntry("admin.system", "/admin/system", Icons.Material.Filled.SettingsApplications, "System", NavSection.VerwaltungAdmin),
+        new NavEntry("admin.discord", "/admin/discord", Icons.Material.Filled.Notifications, "Discord-Benachrichtigungen", NavSection.VerwaltungAdmin),
+        new NavEntry("admin.protokoll", "/admin/protokoll", Icons.Material.Filled.FactCheck, "Audit-Protokoll", NavSection.VerwaltungAdmin),
         new NavEntry("status", "/status", Icons.Material.Filled.MonitorHeart, "System-Status", NavSection.VerwaltungAdmin),
     };
 
