@@ -11,9 +11,10 @@
     <MudText Typo="Typo.h4">Discord-Benachrichtigungen</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Leite In-App-Benachrichtigungen zusätzlich in Discord-Channels weiter – pro Kategorie ein eigener
-    Channel-Webhook. Nachrichten enthalten nur den Titel und einen (login-geschützten) Link, niemals
-    Klarnamen oder VS-Inhalte. Sensible Kategorien nur auf zugriffsbeschränkte Channels legen.
+    Leite ausgewählte Ereignis-Kategorien zusätzlich in Discord-Channels weiter – pro Kategorie ein eigener
+    Channel-Webhook. Die Nachricht enthält nur einen generischen Hinweis und einen login-geschützten Link –
+    <b>niemals</b> Namen, Aktenzeichen, Notizen oder VS-Inhalte (die sieht man erst nach Login mit den nötigen
+    Rechten). Nur echte Broadcast-Kategorien sind weiterleitbar; persönliche Benachrichtigungen bleiben In-App.
 </MudText>
 
 @if (_load)
@@ -43,11 +44,11 @@ else
                         <MudIcon Icon="@NotificationTypeDisplay.Icon(type)" Color="Color.Default" />
                         <div style="min-width:190px;">
                             <MudText Typo="Typo.body2">@NotificationTypeDisplay.Name(type)</MudText>
-                            @if (IsSensitive(type))
+                            @if (IsInternal(type))
                             {
-                                <MudTooltip Text="Kann VS-Akten oder personenbezogene Titel referenzieren – nur auf zugriffsbeschränkte Channels legen.">
+                                <MudTooltip Text="Der Link kann auf eine eingestufte Akte führen – auf einen internen, zugriffsbeschränkten Channel legen.">
                                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
-                                             Icon="@Icons.Material.Filled.Lock">sensibel</MudChip>
+                                             Icon="@Icons.Material.Filled.Lock">intern</MudChip>
                                 </MudTooltip>
                             }
                         </div>
@@ -72,7 +73,7 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
-    private static readonly NotificationType[] _types = Enum.GetValues<NotificationType>();
+    private static readonly IReadOnlyList<NotificationType> _types = DiscordRouting.RoutableTypes;
 
     private ClaimsPrincipal _user = new();
     private DiscordWebhookConfigInput _input = new();
@@ -129,8 +130,6 @@ else
         }
     }
 
-    // categories whose titles may reference classified records or persons
-    private static bool IsSensitive(NotificationType type) => type is
-        NotificationType.Mention or NotificationType.RecordModified
-        or NotificationType.SituationReport or NotificationType.Recruiting;
+    // every routable category except the public board is internal (link may reach a classified record)
+    private static bool IsInternal(NotificationType type) => type is not NotificationType.Announcement;
 }

@@ -22,17 +22,20 @@ public class DiscordWebhookService(
     private const string CacheKey = "DiscordWebhookConfig";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
 
-    public async Task PushAsync(NotificationType type, string title, string? href, string? mentionDiscordId = null,
-        CancellationToken cancellationToken = default)
+    public async Task PushAsync(NotificationType type, string? href, CancellationToken cancellationToken = default)
     {
         try
         {
+            if (!DiscordRouting.IsRoutable(type))
+            {
+                return;
+            }
             var config = await GetCachedConfigAsync(cancellationToken);
             if (!config.Enabled || !config.Webhooks.TryGetValue(type, out var url) || string.IsNullOrWhiteSpace(url))
             {
                 return;
             }
-            await SendAsync(url, Compose(config.SiteBaseUrl, title, href, mentionDiscordId), cancellationToken);
+            await SendAsync(url, Compose(type, config.SiteBaseUrl, href), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -58,10 +61,10 @@ public class DiscordWebhookService(
         {
             throw new InvalidOperationException("Die Basis-URL muss mit https:// beginnen.");
         }
-        foreach (var (type, raw) in input.Webhooks)
+        foreach (var type in DiscordRouting.RoutableTypes)
         {
-            var url = Trim(raw);
-            if (url is not null && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            input.Webhooks.TryGetValue(type, out var raw);
+            if (Trim(raw) is { } url && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException($"Der Webhook für „{NotificationTypeDisplay.Name(type)}“ muss mit https:// beginnen.");
             }
@@ -70,7 +73,7 @@ public class DiscordWebhookService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await SetAsync(db, SystemSettingKeys.DiscordEnabled, input.Enabled ? "true" : "false", cancellationToken);
         await SetAsync(db, SystemSettingKeys.SiteBaseUrl, baseUrl, cancellationToken);
-        foreach (var type in Enum.GetValues<NotificationType>())
+        foreach (var type in DiscordRouting.RoutableTypes)
         {
             input.Webhooks.TryGetValue(type, out var raw);
             await SetAsync(db, SystemSettingKeys.DiscordWebhookPrefix + type, Trim(raw), cancellationToken);
@@ -105,14 +108,14 @@ public class DiscordWebhookService(
         return config;
     }
 
-    // only ping explicit user mentions, never @everyone/@here/roles
+    // content is app-authored and identity-free; suppress every mention so no <@id> in any field can ping
     private async Task<bool> SendAsync(string url, string content, CancellationToken cancellationToken)
     {
         var payload = new
         {
             content,
             username = "NOOSE",
-            allowed_mentions = new { parse = new[] { "users" } },
+            allowed_mentions = new { parse = Array.Empty<string>() },
         };
         var client = httpFactory.CreateClient("discord");
         using var response = await client.PostAsJsonAsync(url, payload, cancellationToken);
@@ -123,14 +126,10 @@ public class DiscordWebhookService(
         return response.IsSuccessStatusCode;
     }
 
-    private static string Compose(string baseUrl, string title, string? href, string? mentionDiscordId)
+    // generic per-category notice + login-gated link; NEVER the in-app title (which may carry names/notes/VS content)
+    private static string Compose(NotificationType type, string baseUrl, string? href)
     {
-        var sb = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(mentionDiscordId))
-        {
-            sb.Append("<@").Append(mentionDiscordId).Append("> ");
-        }
-        sb.Append(title);
+        var sb = new StringBuilder(Notice(type));
         var link = Link(baseUrl, href);
         if (link is not null)
         {
@@ -138,6 +137,16 @@ public class DiscordWebhookService(
         }
         return sb.ToString();
     }
+
+    private static string Notice(NotificationType type) => type switch
+    {
+        NotificationType.Announcement => "📢 Neue Ankündigung im Schwarzen Brett.",
+        NotificationType.Followup => "⏰ Eine Wiedervorlage ist fällig.",
+        NotificationType.SituationReport => "📊 Ein neuer Lagebericht liegt vor.",
+        NotificationType.Recruiting => "📝 Neue Aktivität im Bewerbungswesen.",
+        NotificationType.Mention => "💬 Es gibt eine neue Erwähnung in einer Akte.",
+        _ => "🔔 Neue Benachrichtigung.",
+    };
 
     // absolute href as-is; relative href joined onto the configured base
     private static string? Link(string baseUrl, string? href)
@@ -158,7 +167,7 @@ public class DiscordWebhookService(
         var enabled = string.Equals(values.GetValueOrDefault(SystemSettingKeys.DiscordEnabled), "true", StringComparison.OrdinalIgnoreCase);
         var baseUrl = Trim(values.GetValueOrDefault(SystemSettingKeys.SiteBaseUrl)) ?? DiscordWebhookConfig.DefaultBaseUrl;
         var map = new Dictionary<NotificationType, string?>();
-        foreach (var type in Enum.GetValues<NotificationType>())
+        foreach (var type in DiscordRouting.RoutableTypes)
         {
             map[type] = Trim(values.GetValueOrDefault(SystemSettingKeys.DiscordWebhookPrefix + type));
         }

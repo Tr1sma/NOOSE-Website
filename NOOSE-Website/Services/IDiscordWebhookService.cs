@@ -4,12 +4,11 @@ using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Posts notifications to per-category Discord channel webhooks. Best-effort: never throws into the caller.</summary>
+/// <summary>Posts a generic, identity-free notice plus a login-gated link to a per-category Discord channel. Best-effort: never throws into the caller.</summary>
 public interface IDiscordWebhookService
 {
-    /// <summary>Post to the channel mapped to this category; no-op if disabled or no URL configured. Optional user ping.</summary>
-    Task PushAsync(NotificationType type, string title, string? href, string? mentionDiscordId = null,
-        CancellationToken cancellationToken = default);
+    /// <summary>Post the category's generic notice (never the in-app title) to its channel; no-op if disabled, unroutable, or no URL configured.</summary>
+    Task PushAsync(NotificationType type, string? href, CancellationToken cancellationToken = default);
 
     /// <summary>Current routing config (fresh read) for the admin page.</summary>
     Task<DiscordWebhookConfig> GetConfigAsync(CancellationToken cancellationToken = default);

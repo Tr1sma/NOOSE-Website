@@ -33,12 +33,6 @@ public class NotificationService(
         await db.SaveChangesAsync(cancellationToken);
 
         broadcaster.Report(recipientId);
-
-        // mirror to the category's Discord channel, pinging the recipient if their Discord id is known
-        var discordId = await db.Users.Where(u => u.Id == recipientId)
-            .Select(u => u.DiscordId).FirstOrDefaultAsync(cancellationToken);
-        await discord.PushAsync(type, title, href,
-            string.IsNullOrWhiteSpace(discordId) ? null : discordId, cancellationToken);
     }
 
     public async Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
@@ -94,8 +88,8 @@ public class NotificationService(
             broadcaster.Report(id);
         }
 
-        // one channel post per mention event (no per-recipient ping)
-        await discord.PushAsync(NotificationType.Mention, title, href, cancellationToken: cancellationToken);
+        // one channel post per mention event (generic notice + link, no identities)
+        await discord.PushAsync(NotificationType.Mention, href, cancellationToken);
     }
 
     public async Task NotifyManyAsync(IReadOnlyCollection<string> recipientIds, NotificationType type,
@@ -129,8 +123,8 @@ public class NotificationService(
             broadcaster.Report(id);
         }
 
-        // one channel post per broadcast event
-        await discord.PushAsync(type, title, href, cancellationToken: cancellationToken);
+        // one channel post per broadcast event (generic notice + link, no identities)
+        await discord.PushAsync(type, href, cancellationToken);
     }
 
     public async Task<List<Notification>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)
