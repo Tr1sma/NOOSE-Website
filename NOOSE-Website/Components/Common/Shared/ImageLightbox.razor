@@ -2,16 +2,22 @@
 
 <MudDialog>
     <TitleContent>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width:100%;">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@(_index + 1) / @Images.Count</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="@(Images.Count > 1 ? Justify.SpaceBetween : Justify.FlexEnd)" Style="width:100%;">
+            @if (Images.Count > 1)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(_index + 1) / @Images.Count</MudText>
+            }
             <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Default" OnClick="Close" aria-label="Schließen" />
         </MudStack>
     </TitleContent>
     <DialogContent>
         <div tabindex="0" @ref="_container" @onkeydown="OnKeyDown"
              style="outline:none;display:flex;align-items:center;justify-content:center;gap:8px;">
-            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Large"
-                           Disabled="@(_index == 0)" OnClick="Prev" aria-label="Vorheriges Bild" />
+            @if (Images.Count > 1)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Large"
+                               Disabled="@(_index == 0)" OnClick="Prev" aria-label="Vorheriges Bild" />
+            }
             <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="flex:1;min-width:0;">
                 <MudImage Src="@Current.Url" ObjectFit="ObjectFit.Contain"
                           Style="max-height:80vh;max-width:100%;" Class="rounded" />
@@ -20,8 +26,11 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@Current.Caption</MudText>
                 }
             </MudStack>
-            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Large"
-                           Disabled="@(_index >= Images.Count - 1)" OnClick="Next" aria-label="Nächstes Bild" />
+            @if (Images.Count > 1)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Large"
+                               Disabled="@(_index >= Images.Count - 1)" OnClick="Next" aria-label="Nächstes Bild" />
+            }
         </div>
     </DialogContent>
 </MudDialog>

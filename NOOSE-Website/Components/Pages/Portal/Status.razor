@@ -4,6 +4,7 @@
 @inject IBewerbungService BewerbungService
 @inject IBewerbungTestService TestService
 @inject IBewerbungssperreService SperreService
+@inject IDialogService DialogService
 @inject NavigationManager Nav
 
 <PageTitle>Status · NOOSE</PageTitle>
@@ -37,6 +38,30 @@
                     }
                 </MudStack>
             </MudStack>
+
+            @if (_bewerbung.AttachmentFileNameSaved is not null)
+            {
+                @* own divider; both following branches emit their own *@
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Dein Anhang</MudText>
+                @if (IsImage(_bewerbung.AttachmentContentType))
+                {
+                    <div @onclick="OpenAttachmentAsync" style="cursor:pointer;width:max-content;" class="mt-1">
+                        <MudImage Src="@($"/dateien/bewerbungen/anhang/{_bewerbung.Id}?inline=true")" Alt="@_bewerbung.AttachmentOriginalName"
+                                  Height="96" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                    </div>
+                    <MudLink Href="@($"/dateien/bewerbungen/anhang/{_bewerbung.Id}")" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" Class="mr-1" />@(_bewerbung.AttachmentOriginalName ?? "Datei herunterladen")
+                    </MudLink>
+                }
+                else
+                {
+                    <MudButton Href="@($"/dateien/bewerbungen/anhang/{_bewerbung.Id}")" Target="_blank" Variant="Variant.Outlined"
+                               Size="Size.Small" StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-1">
+                        @(_bewerbung.AttachmentOriginalName ?? "Datei")
+                    </MudButton>
+                }
+            }
 
             @if (_bewerbung.Status == BewerbungStatus.Abgelehnt || _bewerbung.Status == BewerbungStatus.Geschlossen)
             {
@@ -133,4 +158,11 @@
     }
 
     private bool StepReached(BewerbungStatus step) => (int)_bewerbung.Status >= (int)step;
+
+    private static bool IsImage(string? contentType)
+        => contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+
+    private Task OpenAttachmentAsync()
+        => ImageLightbox.ShowAsync(DialogService,
+            [new ImageLightbox.LightboxImage($"/dateien/bewerbungen/anhang/{_bewerbung.Id}?inline=true", _bewerbung.AttachmentOriginalName)]);
 }

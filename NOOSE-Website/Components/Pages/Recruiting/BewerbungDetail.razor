@@ -3,6 +3,7 @@
 @inject IBewerbungService BewerbungService
 @inject BewerbungBroadcaster Broadcaster
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -52,10 +53,23 @@ else
                 }
                 @if (_b.AttachmentFileNameSaved is not null)
                 {
-                    <MudButton Href="@($"/dateien/bewerbungen/anhang/{_b.Id}")" Target="_blank" Variant="Variant.Outlined"
-                               Size="Size.Small" StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-3">
-                        Anhang: @(_b.AttachmentOriginalName ?? "Datei")
-                    </MudButton>
+                    @if (IsImage(_b.AttachmentContentType))
+                    {
+                        <div @onclick="OpenAttachmentAsync" style="cursor:pointer;width:max-content;" class="mt-3">
+                            <MudImage Src="@($"/dateien/bewerbungen/anhang/{_b.Id}?inline=true")" Alt="@_b.AttachmentOriginalName"
+                                      Height="96" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        </div>
+                        <MudLink Href="@($"/dateien/bewerbungen/anhang/{_b.Id}")" Target="_blank" Typo="Typo.body2" Class="d-block mt-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" Class="mr-1" />@(_b.AttachmentOriginalName ?? "Datei herunterladen")
+                        </MudLink>
+                    }
+                    else
+                    {
+                        <MudButton Href="@($"/dateien/bewerbungen/anhang/{_b.Id}")" Target="_blank" Variant="Variant.Outlined"
+                                   Size="Size.Small" StartIcon="@Icons.Material.Filled.AttachFile" Class="mt-3">
+                            Anhang: @(_b.AttachmentOriginalName ?? "Datei")
+                        </MudButton>
+                    }
                 }
             </MudPaper>
 
@@ -194,6 +208,13 @@ else
         _b = await BewerbungService.GetForHrbAsync(Id, _user);
         _load = false;
     }
+
+    private static bool IsImage(string? contentType)
+        => contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+
+    private Task OpenAttachmentAsync()
+        => ImageLightbox.ShowAsync(DialogService,
+            [new ImageLightbox.LightboxImage($"/dateien/bewerbungen/anhang/{_b!.Id}?inline=true", _b.AttachmentOriginalName)]);
 
     private async Task AssignSelf()
     {

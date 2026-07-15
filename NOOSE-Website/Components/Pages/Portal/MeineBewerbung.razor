@@ -39,7 +39,7 @@ else if (_ready)
                            StartIcon="@Icons.Material.Filled.AttachFile" for="anhang">
                     Anhang wählen (optional)
                 </MudButton>
-                <InputFile id="anhang" OnChange="OnFile" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" style="display:none;" />
+                <InputFile id="anhang" OnChange="OnFile" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif" style="display:none;" />
                 @if (_file is not null)
                 {
                     <MudText Typo="Typo.body2">@_file.Name</MudText>

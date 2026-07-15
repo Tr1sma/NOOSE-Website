@@ -13,6 +13,7 @@ public static class RecruitingFileEndpointRouteBuilderExtensions
 
         group.MapGet("/anhang/{bewerbungId}", async (
             string bewerbungId,
+            [FromQuery] bool? inline,
             [FromServices] IBewerbungService bewerbungService,
             [FromServices] ISourcesStorageService storage,
             HttpContext http,
@@ -23,9 +24,23 @@ public static class RecruitingFileEndpointRouteBuilderExtensions
             {
                 return Results.NotFound();
             }
-            Stream stream = storage.OpenRead(bewerbung.AttachmentFileNameSaved);
-            return Results.File(stream, bewerbung.AttachmentContentType ?? "application/octet-stream",
-                bewerbung.AttachmentOriginalName, enableRangeProcessing: true);
+
+            Stream stream;
+            try
+            {
+                stream = storage.OpenRead(bewerbung.AttachmentFileNameSaved);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return Results.NotFound();
+            }
+
+            // auto-disposed; inline only for images, everything else stays a download
+            var isImage = bewerbung.AttachmentContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+            return inline == true && isImage
+                ? Results.File(stream, bewerbung.AttachmentContentType!, enableRangeProcessing: true)
+                : Results.File(stream, bewerbung.AttachmentContentType ?? "application/octet-stream",
+                    bewerbung.AttachmentOriginalName, enableRangeProcessing: true);
         }).RequireAuthorization();
 
         return group;
