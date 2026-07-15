@@ -90,6 +90,25 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<Person>> FindByNamesAsync(IEnumerable<string> names, bool isLeadership, CancellationToken cancellationToken = default)
+    {
+        var set = names.Select(n => (n ?? string.Empty).Trim().ToLower())
+            .Where(s => s.Length > 0)
+            .Distinct()
+            .ToList();
+        if (set.Count == 0)
+        {
+            return new List<Person>();
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // classified records only for leadership; a hidden match yields a "create new" (minor duplicate), never a leak
+        return await db.People
+            .Where(p => isLeadership || !p.IsClassified)
+            .Where(p => set.Contains(p.Name.ToLower()))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Person> CreateAsync(PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         ClassificationHelper.CheckRankGate(input.Classification, actor);

@@ -369,6 +369,125 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
     private Task<string> PersonIdDetermineAsync(AppDbContext db, string? personId, string? newName, ClaimsPrincipal actor, CancellationToken cancellationToken)
         => MemberHelper.PersonIdDetermineAsync(db, personService, personId, newName, actor, cancellationToken);
 
+    public async Task<BulkMemberResult> MembersBulkApplyAsync(string factionId, IReadOnlyList<MemberInput> toAdd, IReadOnlyList<string> memberIdsToRemove, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        // Fail read-only actors before any person is created, so a denied run leaves no orphan records.
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var faction = await db.Factions.FirstOrDefaultAsync(f => f.Id == factionId, cancellationToken)
+            ?? throw new InvalidOperationException($"Fraktion '{factionId}' nicht gefunden.");
+        Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
+
+        // Which requested existing ids actually exist (batch, not per row).
+        var requestedIds = toAdd.Select(m => m.PersonId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+        var existingIds = requestedIds.Count == 0
+            ? new HashSet<string>()
+            : (await db.People.Where(p => requestedIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(cancellationToken)).ToHashSet();
+
+        // Create new persons first, each on its own transaction, so the outer transaction stays short.
+        var resolved = new List<(string PersonId, string? Rank, bool IsLead, bool IsNew)>();
+        var seenNewNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var created = 0;
+        foreach (var m in toAdd)
+        {
+            if (!string.IsNullOrWhiteSpace(m.PersonId))
+            {
+                if (existingIds.Contains(m.PersonId))
+                {
+                    resolved.Add((m.PersonId, m.Rank, m.IsLead, false));
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(m.NewPersonName))
+            {
+                var name = m.NewPersonName.Trim();
+                if (!seenNewNames.Add(name))
+                {
+                    continue;
+                }
+                var person = await personService.CreateAsync(new PersonInput { Name = name }, actor, cancellationToken);
+                resolved.Add((person.Id, m.Rank, m.IsLead, true));
+                created++;
+            }
+        }
+
+        var activeMemberPersonIds = (await db.FactionMembers
+            .Where(m => m.FactionId == factionId)
+            .Select(m => m.PersonId)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var addedExisting = 0;
+        var alreadyMembers = 0;
+        var affected = new HashSet<string>();
+        var seenPersonIds = new HashSet<string>();
+
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        foreach (var r in resolved)
+        {
+            if (!seenPersonIds.Add(r.PersonId))
+            {
+                continue;
+            }
+            if (activeMemberPersonIds.Contains(r.PersonId))
+            {
+                alreadyMembers++;
+                continue;
+            }
+            db.FactionMembers.Add(new FactionMember
+            {
+                FactionId = factionId,
+                PersonId = r.PersonId,
+                Rank = r.Rank.TrimToNull(),
+                IsLead = r.IsLead,
+            });
+            affected.Add(r.PersonId);
+            if (!r.IsNew)
+            {
+                addedExisting++;
+            }
+        }
+
+        var removed = 0;
+        if (memberIdsToRemove.Count > 0)
+        {
+            var removeIds = memberIdsToRemove.Distinct().ToList();
+            // FactionId filter is a required ownership check; default filter keeps it to active members.
+            var members = await db.FactionMembers
+                .Where(m => removeIds.Contains(m.Id) && m.FactionId == factionId)
+                .ToListAsync(cancellationToken);
+            foreach (var member in members)
+            {
+                db.FactionMembers.Remove(member);
+                affected.Add(member.PersonId);
+                removed++;
+            }
+        }
+
+        var changed = affected.Count > 0;
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            foreach (var pid in affected)
+            {
+                await FactionColleaguesSyncAsync(db, pid, cancellationToken);
+            }
+        }
+        await tx.CommitAsync(cancellationToken);
+
+        if (changed)
+        {
+            // One faction recompute reflects the final membership; per-person scores for everyone touched.
+            await threat.NewCalculateAsync(factionId, cancellationToken);
+            foreach (var pid in affected)
+            {
+                await threat.NewCalculatePersonScoreAsync(pid, cancellationToken);
+            }
+        }
+
+        return new BulkMemberResult(created, addedExisting, alreadyMembers, removed);
+    }
+
     public async Task MemberChangeAsync(string memberId, string? rank, bool isLead, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

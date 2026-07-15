@@ -64,3 +64,6 @@ public class MemberInput
     /// <summary>Auto-creates a new person if PersonId is empty.</summary>
     public string? NewPersonName { get; set; }
 }
+
+/// <summary>Outcome counts of a bulk member reconcile, for the summary message.</summary>
+public record BulkMemberResult(int Created, int AddedExisting, int AlreadyMembers, int Removed);

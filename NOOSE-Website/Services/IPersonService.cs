@@ -19,6 +19,9 @@ public interface IPersonService
     /// <summary>Possible duplicates by identical name or shared phone number (classified-filtered).</summary>
     Task<List<Person>> FindDuplicatesAsync(string name, IEnumerable<string> phoneNumbers, bool isLeadership, CancellationToken cancellationToken = default);
 
+    /// <summary>People whose name exactly matches (case-insensitive, trimmed) any of the given names, for bulk reconciliation; classified-filtered.</summary>
+    Task<List<Person>> FindByNamesAsync(IEnumerable<string> names, bool isLeadership, CancellationToken cancellationToken = default);
+
     Task<Person> CreateAsync(PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task RefreshAsync(string id, PersonInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

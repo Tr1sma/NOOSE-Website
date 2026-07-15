@@ -8,9 +8,14 @@
         <MudText Typo="Typo.subtitle1">Mitglieder (@_members.Count)</MudText>
         @if (_mayWrite)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="AddAsync">
-                Mitglied hinzufügen
-            </MudButton>
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.GroupAdd" OnClick="BulkAsync">
+                    Bulk hinzufügen
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="AddAsync">
+                    Mitglied hinzufügen
+                </MudButton>
+            </MudStack>
         }
     </MudStack>
 
@@ -102,6 +107,20 @@
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    private async Task BulkAsync()
+    {
+        var result = await BulkMemberDialog.ShowAsync(DialogService, FactionId, User, Ranks, _members);
+        if (result is null)
+        {
+            return;
+        }
+        await LoadAsync();
+        await Changed.InvokeAsync();
+        Snackbar.Add(
+            $"{result.Created} neu, {result.AddedExisting} zugeordnet, {result.AlreadyMembers} bereits Mitglied, {result.Removed} entfernt.",
+            Severity.Success);
     }
 
     private async Task EditAsync(FactionMember m)
