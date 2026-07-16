@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -372,6 +373,88 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             await CalculatePersonAsync(db, id, config, cancellationToken);
         }
         return ids.Count;
+    }
+
+    public async Task<ThreatScoreDistribution> PreviewFactionDistributionAsync(ThreatScoreConfiguration candidate, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var ids = await db.Factions.Select(f => f.Id).ToListAsync(cancellationToken);
+        var results = new List<ThreatScoreResult>(ids.Count);
+        foreach (var id in ids)
+        {
+            var f = await db.Factions.Where(x => x.Id == id)
+                .Select(x => new { x.IsStateFaction, x.Classification, x.EstimatedMemberCount, x.Estate, Captured = x.ModifiedAt ?? x.CreatedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (f is null)
+            {
+                continue;
+            }
+            var input = f.IsStateFaction
+                ? new ThreatScoreInput { IsStateFaction = true, Classification = f.Classification }
+                : await LoadInputAsync(db, id, f.Classification, f.EstimatedMemberCount,
+                    !string.IsNullOrWhiteSpace(f.Estate), f.Captured, cancellationToken);
+            results.Add(Calculate(input, now, candidate));
+        }
+        return Aggregate(results);
+    }
+
+    public async Task<ThreatScoreDistribution> PreviewPersonDistributionAsync(ThreatScoreConfiguration candidate, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var ids = await db.People.Select(p => p.Id).ToListAsync(cancellationToken);
+        var results = new List<ThreatScoreResult>(ids.Count);
+        foreach (var id in ids)
+        {
+            var p = await db.People.Where(x => x.Id == id)
+                .Select(x => new { x.Classification, x.LifeStatus, x.DeadUntil, Captured = x.ModifiedAt ?? x.CreatedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (p is null)
+            {
+                continue;
+            }
+            var input = await LoadPersonInputAsync(db, id, p.Classification, p.LifeStatus, p.DeadUntil, p.Captured, cancellationToken);
+            results.Add(CalculatePerson(input, now, candidate));
+        }
+        return Aggregate(results);
+    }
+
+    // buckets scored results into HazardLevel bands; excluded = null score (state factions)
+    private static ThreatScoreDistribution Aggregate(IReadOnlyList<ThreatScoreResult> results)
+    {
+        int scored = 0, excluded = 0, no = 0, low = 0, medium = 0, high = 0, critical = 0, triage = 0;
+        long sumScore = 0, sumConfidence = 0;
+        foreach (var r in results)
+        {
+            if (r.Score is not { } score)
+            {
+                excluded++;
+                continue;
+            }
+            scored++;
+            sumScore += score;
+            sumConfidence += r.Confidence ?? 0;
+            if (r.Detail.TriageFlag)
+            {
+                triage++;
+            }
+            switch (HazardLevelLogic.From(score))
+            {
+                case HazardLevel.No: no++; break;
+                case HazardLevel.Low: low++; break;
+                case HazardLevel.Medium: medium++; break;
+                case HazardLevel.High: high++; break;
+                default: critical++; break;
+            }
+        }
+        return new ThreatScoreDistribution(
+            results.Count, scored, excluded, no, low, medium, high, critical,
+            scored == 0 ? 0 : Math.Round((double)sumScore / scored, 1),
+            scored == 0 ? 0 : Math.Round((double)sumConfidence / scored, 1),
+            triage);
     }
 
     private static async Task CalculateFactionAsync(AppDbContext db, string factionId, ThreatScoreConfiguration config, CancellationToken ct)

@@ -72,7 +72,8 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
     /// <summary>Validate config invariants.</summary>
     public static void Validate(ThreatScoreConfiguration k)
     {
-        const double tol = 1e-9;
+        // matches the client-side gate tolerance so a config that passes the UI never throws here
+        const double tol = 1e-6;
 
         void Positive(double value, string name)
         {
