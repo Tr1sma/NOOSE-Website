@@ -92,7 +92,7 @@ public sealed class ThreatScoreConfiguration
         {
             var f = 100.0 / facSum;
             CapS1 *= f; CapS2 *= f; CapS3 *= f; CapS4 *= f;
-            CapS1 += 100.0 - (CapS1 + CapS2 + CapS3 + CapS4);
+            CapS1 = Math.Max(0, CapS1 + 100.0 - (CapS1 + CapS2 + CapS3 + CapS4));
         }
 
         // S2 sub-caps → CapS2 (keep RanksMaxPoints integer; residue on CapSize)
@@ -104,7 +104,8 @@ public sealed class ThreatScoreConfiguration
         {
             var sub = CapSize + RanksMaxPoints + LeadPoints + EstatePoints + CapWeapons + CapInfra;
             var f = sub <= 1e-9 ? 0 : CapS2 / sub;
-            RanksMaxPoints = (int)Math.Round(RanksMaxPoints * f, MidpointRounding.AwayFromZero);
+            // floor (not round) so the integer never exceeds its share → CapSize residue stays ≥ 0 and the sub-sum is exactly CapS2
+            RanksMaxPoints = (int)Math.Floor(RanksMaxPoints * f);
             LeadPoints *= f; EstatePoints *= f; CapWeapons *= f; CapInfra *= f; CapSize *= f;
             CapSize = Math.Max(0, CapSize + CapS2 - (CapSize + RanksMaxPoints + LeadPoints + EstatePoints + CapWeapons + CapInfra));
         }
@@ -119,7 +120,7 @@ public sealed class ThreatScoreConfiguration
         {
             var f = 100.0 / perSum;
             CapP1 *= f; CapP2 *= f; CapP3 *= f; CapP4 *= f; CapP5 *= f;
-            CapP1 += 100.0 - (CapP1 + CapP2 + CapP3 + CapP4 + CapP5);
+            CapP1 = Math.Max(0, CapP1 + 100.0 - (CapP1 + CapP2 + CapP3 + CapP4 + CapP5));
         }
 
         // P2 sub-caps → CapP2 (residue on PersonCapWeapons)
