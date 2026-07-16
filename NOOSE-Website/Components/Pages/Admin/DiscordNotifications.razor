@@ -1,6 +1,6 @@
 @* Discord webhook routing: one channel per notification category. Saving is admin-only. *@
 @page "/admin/discord"
-@attribute [Authorize(Policy = Policies.AdminPage)]
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject IDiscordWebhookService Discord
 @inject ISnackbar Snackbar
 

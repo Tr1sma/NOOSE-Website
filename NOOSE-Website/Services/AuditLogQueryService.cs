@@ -11,7 +11,7 @@ public class AuditLogQueryService(IDbContextFactory<AppDbContext> dbFactory) : I
 {
     public async Task<AuditLogPage> QueryChangesAsync(AuditLogFilter filter, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var q = db.AuditLogs.AsNoTracking().AsQueryable();
@@ -50,7 +50,7 @@ public class AuditLogQueryService(IDbContextFactory<AppDbContext> dbFactory) : I
 
     public async Task<AccessLogPage> QueryAccessAsync(AuditLogFilter filter, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var q = db.AccessLogs.AsNoTracking().AsQueryable();
@@ -85,7 +85,7 @@ public class AuditLogQueryService(IDbContextFactory<AppDbContext> dbFactory) : I
 
     public async Task<AuditFilterOptions> GetFilterOptionsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var agents = await db.Users.AsNoTracking()

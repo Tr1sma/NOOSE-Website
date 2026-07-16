@@ -239,6 +239,22 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
     }
 
+    public async Task WantedSetAsync(string id, bool wanted, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var person = await db.People.FirstOrDefaultAsync(p => p.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException($"Person '{id}' nicht gefunden.");
+
+        // cannot flag a classified record you are not cleared for
+        Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
+
+        person.IsWanted = wanted;
+        person.WantedReason = wanted && !string.IsNullOrWhiteSpace(reason) ? reason.Trim() : null;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

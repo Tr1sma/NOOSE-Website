@@ -53,7 +53,7 @@ public class DiscordWebhookService(
 
     public async Task SaveConfigAsync(DiscordWebhookConfigInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
 
         // light validation: URLs must be https when present
         var baseUrl = Trim(input.SiteBaseUrl);
@@ -85,7 +85,7 @@ public class DiscordWebhookService(
 
     public async Task<bool> TestAsync(NotificationType type, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
 
         var config = await GetConfigAsync(cancellationToken);
         if (!config.Webhooks.TryGetValue(type, out var url) || string.IsNullOrWhiteSpace(url))
@@ -130,13 +130,23 @@ public class DiscordWebhookService(
     private static string Compose(NotificationType type, string baseUrl, string? href)
     {
         var sb = new StringBuilder(Notice(type));
-        var link = Link(baseUrl, href);
+        // always deep-link to the relevant record; fall back to the category's landing page
+        var link = Link(baseUrl, href) ?? Link(baseUrl, FallbackRoute(type));
         if (link is not null)
         {
             sb.Append('\n').Append(link);
         }
         return sb.ToString();
     }
+
+    // category landing page used when a notification carries no record link
+    private static string FallbackRoute(NotificationType type) => type switch
+    {
+        NotificationType.Announcement => "/brett",
+        NotificationType.SituationReport => "/lageberichte",
+        NotificationType.Recruiting => "/bewerbungen",
+        _ => "/dashboard",
+    };
 
     private static string Notice(NotificationType type) => type switch
     {

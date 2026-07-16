@@ -40,6 +40,14 @@ public class Person : IAuditable, ISoftDelete
     [Column("IstVerschlusssacheHRB")]
     public bool IsHRBClassified { get; set; }
 
+    /// <summary>Manually flagged for the wanted board, independent of classification/fugitive status.</summary>
+    [Column("ZurFahndung")]
+    public bool IsWanted { get; set; }
+
+    /// <summary>Optional reason shown on the wanted board.</summary>
+    [Column("Fahndungsgrund")]
+    public string? WantedReason { get; set; }
+
     /// <summary>Unified secrecy level: None when unrestricted, else TRU/HRB by audience flag, otherwise leadership.</summary>
     [NotMapped]
     public DocumentClassification SecrecyLevel

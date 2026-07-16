@@ -1,6 +1,6 @@
 @* Central audit/access log viewer: who changed or viewed which record, when. Admin-only. *@
 @page "/admin/protokoll"
-@attribute [Authorize(Policy = Policies.AdminPage)]
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject IAuditLogQueryService AuditQuery
 @inject ISnackbar Snackbar
 
@@ -11,7 +11,7 @@
     <MudText Typo="Typo.h4">Audit-Protokoll</MudText>
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Zentrale Nachvollziehbarkeit: wer welche Akte wann geändert oder eingesehen hat. Nur für Admins.
+    Zentrale Nachvollziehbarkeit: wer welche Akte wann geändert oder eingesehen hat. Für Führung und Admins.
     Es werden je Filter höchstens @AuditLogFilter.MaxRows Treffer geladen – bei Bedarf enger filtern.
 </MudText>
 

@@ -1,0 +1,71 @@
+@* Manual wanted flag for a person (write-gated); surfaces the person on the Fahndung board. *@
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-3" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Color="@(IsWanted ? Color.Error : Color.Default)" />
+        <MudText Typo="Typo.subtitle1">Fahndung</MudText>
+        @if (IsWanted)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Zur Fahndung ausgeschrieben</MudChip>
+        }
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Schreibt die Person unabhängig von Einstufung und Lebensstatus manuell zur Fahndung aus (erscheint auf dem Fahndungs-Board).
+    </MudText>
+
+    @if (IsWanted && !string.IsNullOrWhiteSpace(WantedReason))
+    {
+        <MudText Typo="Typo.body2" Class="mb-2"><b>Grund:</b> @WantedReason</MudText>
+    }
+
+    @if (_mayWrite)
+    {
+        @if (!IsWanted)
+        {
+            <MudStack Spacing="2">
+                <MudTextField @bind-Value="_reason" Label="Fahndungsgrund (optional)" Variant="Variant.Outlined" Lines="2" />
+                <div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Campaign"
+                               OnClick="@(() => SetAsync(true))">Zur Fahndung ausschreiben</MudButton>
+                </div>
+            </MudStack>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Close"
+                       OnClick="@(() => SetAsync(false))">Fahndung aufheben</MudButton>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string PersonId { get; set; } = default!;
+    [Parameter] public bool IsWanted { get; set; }
+    [Parameter] public string? WantedReason { get; set; }
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _mayWrite;
+    private string? _reason;
+
+    protected override void OnInitialized() => _mayWrite = User.MayWrite();
+
+    // seed the editor with the current reason on (re)load
+    protected override void OnParametersSet() => _reason = WantedReason;
+
+    private async Task SetAsync(bool wanted)
+    {
+        try
+        {
+            await PersonService.WantedSetAsync(PersonId, wanted, wanted ? _reason : null, User);
+            Snackbar.Add(wanted ? "Person zur Fahndung ausgeschrieben." : "Fahndung aufgehoben.", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}
