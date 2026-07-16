@@ -1,4 +1,5 @@
 @page "/brett/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IAnnouncementService BoardService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar

@@ -55,8 +55,9 @@ public class AnnouncementService(
 
         var ids = rows.Select(r => r.Id).ToList();
 
+        // Hide team-lead/partner rows so counts and lists never show them.
         var ack = await db.AnnouncementAcknowledgments
-            .Where(q => ids.Contains(q.AnnouncementId))
+            .Where(q => ids.Contains(q.AnnouncementId) && !q.Agent!.IsTeamLead && q.Agent!.PartnerAgency == null)
             .Select(q => new { q.AnnouncementId, q.AgentId, q.AcknowledgedAt })
             .ToListAsync(cancellationToken);
         var ackPerId = ack.GroupBy(q => q.AnnouncementId).ToDictionary(g => g.Key, g => g.ToList());
@@ -121,7 +122,8 @@ public class AnnouncementService(
         }
 
         var allAck = a.AcknowledgmentRequired
-            ? await db.AnnouncementAcknowledgments.Where(q => q.AnnouncementId == a.Id)
+            ? await db.AnnouncementAcknowledgments
+                .Where(q => q.AnnouncementId == a.Id && !q.Agent!.IsTeamLead && q.Agent!.PartnerAgency == null)
                 .Select(q => new { q.AgentId, q.AcknowledgedAt, Codename = q.Agent!.Codename })
                 .ToListAsync(cancellationToken)
             : new();
@@ -339,13 +341,15 @@ public class AnnouncementService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // Reference nav forces the join, so the announcement's soft-delete filter hides trashed ones.
         return await db.AnnouncementAcknowledgments
-            .CountAsync(q => q.AgentId == meId && q.AcknowledgedAt == null && q.Announcement!.AcknowledgmentRequired, cancellationToken);
+            .CountAsync(q => q.AgentId == meId && q.AcknowledgedAt == null && q.Announcement!.AcknowledgmentRequired
+                && !q.Agent!.IsTeamLead && q.Agent!.PartnerAgency == null, cancellationToken);
     }
 
     /// <summary>Active agent ids in an announcement's audience.</summary>
     private static async Task<List<string>> RecipientIdsAsync(AppDbContext db, Announcement a, CancellationToken cancellationToken)
     {
-        var query = db.Users.Where(u => u.Status == AgentStatus.Active);
+        // Team leads (read-only supervision) and external partners are never acknowledgment recipients.
+        var query = db.Users.Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null);
         query = a.Audience switch
         {
             AnnouncementAudience.TruUnit => query.Where(u => u.IsTRU),

@@ -1,5 +1,6 @@
 @* Print view of a board announcement. *@
 @page "/brett/{Id}/druck"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @layout PrintLayout
 @inject IAnnouncementService AnnouncementService
 @inject IAccessLogService AccessLog
