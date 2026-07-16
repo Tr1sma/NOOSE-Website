@@ -1,6 +1,5 @@
 @page "/brett/{Id}"
 @inject IAnnouncementService BoardService
-@inject IMentionService MentionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
@@ -62,7 +61,8 @@ else
 
                     @if (!string.IsNullOrWhiteSpace(z.Content))
                     {
-                        <MentionText Segments="_segments" />
+                        @* Sanitized server-side on save, so safe as MarkupString. *@
+                        <div class="dokument-html">@((MarkupString)z.Content)</div>
                     }
                     else
                     {
@@ -105,7 +105,6 @@ else
 
     private bool _load = true;
     private AnnouncementView? _detail;
-    private IReadOnlyList<MentionSegment> _segments = Array.Empty<MentionSegment>();
     private ClaimsPrincipal _user = default!;
     private string? _loadedId;
 
@@ -131,9 +130,6 @@ else
     private async Task LoadAsync()
     {
         _detail = await BoardService.GetDetailAsync(Id, _user);
-        _segments = _detail is null || string.IsNullOrWhiteSpace(_detail.Row.Content)
-            ? Array.Empty<MentionSegment>()
-            : await MentionService.ResolveAsync(_detail.Row.Content, _user.MayClassifiedRead(), _user.GetAgentId());
         _load = false;
     }
 

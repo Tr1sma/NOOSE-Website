@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -214,7 +215,7 @@ public class AnnouncementService(
         {
             CaseNumber = await caseNumber.NextAsync(db, "N", cancellationToken),
             Title = input.Title.Trim(),
-            Content = input.Content?.Trim() ?? string.Empty,
+            Content = NormalizeContent(input.Content),
             Important = input.Important,
             Audience = input.Audience,
             TargetId = input.Audience == AnnouncementAudience.Taskforce ? input.TargetId : null,
@@ -266,9 +267,17 @@ public class AnnouncementService(
 
         // Only content is editable; audience/push/acknowledgment are fixed after creation.
         a.Title = input.Title.Trim();
-        a.Content = input.Content?.Trim() ?? string.Empty;
+        a.Content = NormalizeContent(input.Content);
         a.Important = input.Important;
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // Sanitize WYSIWYG HTML; an empty editor (Quill emits <p><br></p>) collapses to "" so title-only notes still read as no content.
+    private static string NormalizeContent(string? html)
+    {
+        var clean = HtmlCleanup.Clean(html);
+        var textOnly = Regex.Replace(clean, "<.*?>", string.Empty).Replace("&nbsp;", " ");
+        return string.IsNullOrWhiteSpace(textOnly) ? string.Empty : clean;
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

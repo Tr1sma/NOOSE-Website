@@ -12,13 +12,16 @@ public static class DiscordRouting
         NotificationType.SituationReport,
         NotificationType.Recruiting,
         NotificationType.Mention,
+        NotificationType.JobAssigned,
+        NotificationType.JobDueSoon,
     };
 
     public static bool IsRoutable(NotificationType type) => RoutableTypes.Contains(type);
 
     /// <summary>Category whose Discord post pings the specific recipient agents.</summary>
     public static bool PingsRecipients(NotificationType type)
-        => type is NotificationType.Mention or NotificationType.Followup;
+        => type is NotificationType.Mention or NotificationType.Followup
+                or NotificationType.JobAssigned or NotificationType.JobDueSoon;
 
     /// <summary>Category whose Discord post pings a configured role instead of individuals.</summary>
     public static bool PingsRole(NotificationType type)

@@ -20,7 +20,8 @@
 
         @if (!string.IsNullOrWhiteSpace(Row.Content))
         {
-            <MentionText Segments="Segments" />
+            @* Sanitized server-side on save, so safe as MarkupString. *@
+            <div class="dokument-html">@((MarkupString)Row.Content)</div>
         }
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
@@ -52,9 +53,6 @@
 
 @code {
     [Parameter, EditorRequired] public AnnouncementRow Row { get; set; } = default!;
-
-    /// <summary>Pre-resolved mention segments.</summary>
-    [Parameter, EditorRequired] public IReadOnlyList<MentionSegment> Segments { get; set; } = Array.Empty<MentionSegment>();
 
     /// <summary>Raised when the recipient acknowledges.</summary>
     [Parameter] public EventCallback OnAcknowledge { get; set; }

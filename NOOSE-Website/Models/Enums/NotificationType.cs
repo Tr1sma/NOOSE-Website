@@ -34,6 +34,9 @@ public enum NotificationType
 
     /// <summary>Recruiting/application event.</summary>
     Recruiting = 9,
+
+    /// <summary>Assigned task approaching its due date.</summary>
+    JobDueSoon = 10,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -51,6 +54,7 @@ public static class NotificationTypeDisplay
         NotificationType.AppointmentAssigned => "Termin",
         NotificationType.SituationReport => "Lagebericht",
         NotificationType.Recruiting => "Bewerbung",
+        NotificationType.JobDueSoon => "Aufgabe fällig",
         _ => "Benachrichtigung",
     };
 
@@ -67,6 +71,7 @@ public static class NotificationTypeDisplay
         NotificationType.AppointmentAssigned => Icons.Material.Filled.Event,
         NotificationType.SituationReport => Icons.Material.Filled.Assessment,
         NotificationType.Recruiting => Icons.Material.Filled.HowToReg,
+        NotificationType.JobDueSoon => Icons.Material.Filled.AssignmentLate,
         _ => Icons.Material.Filled.Notifications,
     };
 }

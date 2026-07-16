@@ -1,6 +1,5 @@
 @page "/brett"
 @inject IAnnouncementService BoardService
-@inject IMentionService MentionService
 @inject ISnackbar Snackbar
 
 <PageTitle>Schwarzes Brett · NOOSE</PageTitle>
@@ -25,16 +24,16 @@
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
-else if (_entries.Count == 0)
+else if (_rows.Count == 0)
 {
     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Ankündigungen am Brett.</MudAlert>
 }
 else
 {
     <MudStack Spacing="3">
-        @foreach (var e in _entries)
+        @foreach (var row in _rows)
         {
-            <AnnouncementCard Row="e.Row" Segments="e.Segments" OnAcknowledge="@(() => AcknowledgeAsync(e.Row))" />
+            <AnnouncementCard Row="row" OnAcknowledge="@(() => AcknowledgeAsync(row))" />
         }
     </MudStack>
 }
@@ -44,9 +43,7 @@ else
 
     private bool _load = true;
     private ClaimsPrincipal _user = default!;
-    private List<Entry> _entries = new();
-
-    private sealed record Entry(AnnouncementRow Row, IReadOnlyList<MentionSegment> Segments);
+    private List<AnnouncementRow> _rows = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -57,10 +54,7 @@ else
     private async Task LoadAsync()
     {
         _load = true;
-        var rows = await BoardService.GetBoardAsync(_user);
-        // resolve all mentions in one batch
-        var segments = await MentionService.ResolveManyAsync(rows.Select(z => (string?)z.Content).ToList(), _user.MayClassifiedRead(), _user.GetAgentId());
-        _entries = rows.Select((z, i) => new Entry(z, segments[i])).ToList();
+        _rows = await BoardService.GetBoardAsync(_user);
         _load = false;
     }
 

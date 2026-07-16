@@ -195,6 +195,8 @@ public class DiscordWebhookService(
         NotificationType.Announcement => "/brett",
         NotificationType.SituationReport => "/lageberichte",
         NotificationType.Recruiting => "/bewerbungen",
+        NotificationType.JobAssigned => "/aufgaben",
+        NotificationType.JobDueSoon => "/aufgaben",
         _ => "/dashboard",
     };
 
@@ -205,6 +207,8 @@ public class DiscordWebhookService(
         NotificationType.SituationReport => "📊 Ein neuer Lagebericht liegt vor.",
         NotificationType.Recruiting => "📝 Neue Aktivität im Bewerbungswesen.",
         NotificationType.Mention => "💬 Es gibt eine neue Erwähnung in einer Akte.",
+        NotificationType.JobAssigned => "📌 Dir wurde eine Aufgabe zugewiesen.",
+        NotificationType.JobDueSoon => "⏰ Eine Aufgabe wird bald fällig.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

@@ -12,7 +12,7 @@
 </MudStack>
 
 <MudForm @ref="_form">
-    <AnnouncementForm Input="_input" ShowBroadcastOptions="_isLeadership" IsLeadership="_isLeadership" />
+    <AnnouncementForm @ref="_contentForm" Input="_input" ShowBroadcastOptions="_isLeadership" IsLeadership="_isLeadership" />
 </MudForm>
 
 <MudStack Row="true" Spacing="2" Class="mt-4">
@@ -24,6 +24,7 @@
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private MudForm _form = default!;
+    private AnnouncementForm _contentForm = default!;
     private readonly AnnouncementInput _input = new();
     private ClaimsPrincipal _user = default!;
     private bool _isLeadership;
@@ -50,6 +51,7 @@
         _saves = true;
         try
         {
+            _input.Content = await _contentForm.GetContentHtmlAsync();
             var a = await BoardService.CreateAsync(_input, _user);
             Snackbar.Add($"Ankündigung {a.CaseNumber} veröffentlicht.", Severity.Success);
             Nav.NavigateTo($"/brett/{a.Id}");

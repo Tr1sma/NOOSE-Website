@@ -28,6 +28,7 @@ using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Statistics;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Followups;
+using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Statistics;
 
@@ -163,6 +164,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IRecencyService, RecencyService>();
 builder.Services.AddScoped<IFollowupService, FollowupService>();
 builder.Services.AddHostedService<FollowupDueWorker>();
+builder.Services.AddHostedService<JobDueSoonWorker>();
 builder.Services.AddScoped<ISourceService, SourceService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<ICommentService, CommentService>();

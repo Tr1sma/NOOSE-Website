@@ -29,7 +29,7 @@ else
     </MudStack>
 
     <MudForm @ref="_form">
-        <AnnouncementForm Input="_input" ShowBroadcastOptions="false" IsLeadership="_isLeadership" />
+        <AnnouncementForm @ref="_contentForm" Input="_input" ShowBroadcastOptions="false" IsLeadership="_isLeadership" />
     </MudForm>
     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
         Hinweis: Zielgruppe, Glocken-Push und Quittierung werden beim Anlegen festgelegt und sind hier nicht änderbar.
@@ -46,6 +46,7 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private MudForm _form = default!;
+    private AnnouncementForm _contentForm = default!;
     private AnnouncementInput? _input;
     private ClaimsPrincipal _user = default!;
     private bool _isLeadership;
@@ -107,6 +108,7 @@ else
         _saves = true;
         try
         {
+            _input.Content = await _contentForm.GetContentHtmlAsync();
             await BoardService.RefreshAsync(Id, _input, _user);
             Snackbar.Add("Änderungen gespeichert.", Severity.Success);
             Nav.NavigateTo($"/brett/{Id}");

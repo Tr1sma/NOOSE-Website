@@ -9,8 +9,7 @@
 
     <MudItem xs="12">
         <MudText Typo="Typo.subtitle2" Class="mb-1">Inhalt</MudText>
-        <MentionInput @bind-Text="_content" IsLeadership="IsLeadership"
-                        MayClassifiedRead="IsLeadership" MayRealName="IsLeadership" Placeholder="@Placeholder" />
+        <RichTextEditor @ref="_editor" Value="@_content" MinHeight="320px" />
     </MudItem>
 
     <MudItem xs="12">
@@ -72,20 +71,17 @@
     /// <summary>Show broadcast options (leadership, create only).</summary>
     [Parameter] public bool ShowBroadcastOptions { get; set; }
 
-    /// <summary>Controls real-name visibility in the mention picker.</summary>
+    /// <summary>Controls whether leadership-only broadcast targets are loaded.</summary>
     [Parameter] public bool IsLeadership { get; set; }
 
-    // constant: an inline @ in an attribute value would break the Razor parser
-    private const string Placeholder = "Text der Ankündigung … (Akten/Agenten verlinken per @)";
-
+    private RichTextEditor? _editor;
     private List<Taskforce> _taskforces = new();
 
-    // bind the optional content onto a non-null string
-    private string _content
-    {
-        get => Input.Content ?? string.Empty;
-        set => Input.Content = value;
-    }
+    // seed the editor with the (optional) stored HTML
+    private string _content => Input.Content ?? string.Empty;
+
+    /// <summary>Reads the final editor HTML so the parent can persist it on save.</summary>
+    public async Task<string?> GetContentHtmlAsync() => _editor is null ? Input.Content : await _editor.GetHtmlAsync();
 
     protected override async Task OnInitializedAsync()
     {

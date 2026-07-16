@@ -33,6 +33,10 @@ public class Job : IAuditable, ISoftDelete
     [Column("ErledigtAm")]
     public DateTime? DoneAt { get; set; }
 
+    /// <summary>Highest due reminder already sent; dedupes the recurring background check.</summary>
+    [Column("FaelligkeitErinnerungsstufe")]
+    public JobDueReminderStage DueReminderStage { get; set; } = JobDueReminderStage.None;
+
     /// <summary>Restricted: only assignees, creator and supervisors see the job; otherwise visible to all.</summary>
     [Column("IstEingeschraenkt")]
     public bool IsRestricted { get; set; }

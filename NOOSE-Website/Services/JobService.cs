@@ -152,13 +152,11 @@ public class JobService(
 
         await tx.CommitAsync(cancellationToken);
 
-        // notify after commit; creator gets none
+        // notify after commit; creator excluded via triggerId, also pings assignees on Discord
         var creatorId = actor.GetAgentId();
-        foreach (var agentId in valid.Distinct().Where(x => x != creatorId))
-        {
-            await notifications.NotifyAsync(agentId, NotificationType.JobAssigned,
-                $"Dir wurde eine Aufgabe zugewiesen: „{job.Title}“.", $"/aufgaben/{job.Id}", cancellationToken);
-        }
+        await notifications.NotifyManyAsync(valid.Distinct().ToList(), NotificationType.JobAssigned,
+            $"Dir wurde eine Aufgabe zugewiesen: „{job.Title}“.", $"/aufgaben/{job.Id}",
+            triggerId: creatorId, cancellationToken);
 
         return job;
     }
@@ -175,6 +173,11 @@ public class JobService(
         job.Title = input.Title.Trim();
         job.Description = input.Description.TrimToNull();
         job.Priority = input.Priority;
+        // rescheduled due date re-arms the due reminders
+        if (job.DueDate != input.DueDate)
+        {
+            job.DueReminderStage = JobDueReminderStage.None;
+        }
         job.DueDate = input.DueDate;
         job.IsRestricted = input.IsRestricted;
         SetStatus(job, input.Status);
@@ -255,8 +258,9 @@ public class JobService(
 
         if (agentId != actor.GetAgentId())
         {
-            await notifications.NotifyAsync(agentId, NotificationType.JobAssigned,
-                $"Dir wurde eine Aufgabe zugewiesen: „{job.Title}“.", $"/aufgaben/{job.Id}", cancellationToken);
+            await notifications.NotifyManyAsync(new[] { agentId }, NotificationType.JobAssigned,
+                $"Dir wurde eine Aufgabe zugewiesen: „{job.Title}“.", $"/aufgaben/{job.Id}",
+                triggerId: actor.GetAgentId(), cancellationToken);
         }
     }
 

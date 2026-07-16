@@ -2,7 +2,6 @@
 @page "/brett/{Id}/druck"
 @layout PrintLayout
 @inject IAnnouncementService AnnouncementService
-@inject IMentionService MentionService
 @inject IAccessLogService AccessLog
 
 <PageTitle>@(_detail is null ? "Druckansicht" : $"Ankündigung {_detail.Row.CaseNumber}") · NOOSE</PageTitle>
@@ -43,11 +42,12 @@ else
             </table>
         </section>
 
-        @if (_segments.Count > 0)
+        @if (!string.IsNullOrWhiteSpace(_detail.Row.Content))
         {
             <section>
                 <h2>Inhalt</h2>
-                <div class="druck-mehrzeilig"><MentionText Segments="_segments" /></div>
+                @* Sanitized server-side on save, so safe as MarkupString. *@
+                <div class="dokument-html">@((MarkupString)_detail.Row.Content)</div>
             </section>
         }
 
@@ -79,7 +79,6 @@ else
     private bool _load = true;
     private string? _printBy;
     private AnnouncementView? _detail;
-    private IReadOnlyList<MentionSegment> _segments = Array.Empty<MentionSegment>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,9 +88,6 @@ else
         _detail = await AnnouncementService.GetDetailAsync(Id, user);
         if (_detail is not null)
         {
-            _segments = string.IsNullOrWhiteSpace(_detail.Row.Content)
-                ? Array.Empty<MentionSegment>()
-                : await MentionService.ResolveAsync(_detail.Row.Content, user.MayClassifiedRead(), user.GetAgentId());
             await AccessLog.LogViewAsync(nameof(Announcement), Id);
         }
         _load = false;
