@@ -88,8 +88,8 @@ public class NotificationService(
             broadcaster.Report(id);
         }
 
-        // one channel post per mention event (generic notice + link, no identities)
-        await discord.PushAsync(NotificationType.Mention, href, cancellationToken);
+        // one channel post per mention event; pings the mentioned recipients directly
+        await discord.PushAsync(NotificationType.Mention, href, notified, cancellationToken);
     }
 
     public async Task NotifyManyAsync(IReadOnlyCollection<string> recipientIds, NotificationType type,
@@ -123,8 +123,8 @@ public class NotificationService(
             broadcaster.Report(id);
         }
 
-        // one channel post per broadcast event (generic notice + link, no identities)
-        await discord.PushAsync(type, href, cancellationToken);
+        // one channel post per broadcast event; role categories ping their role, personal categories ping these recipients
+        await discord.PushAsync(type, href, targets, cancellationToken);
     }
 
     public async Task<List<Notification>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)

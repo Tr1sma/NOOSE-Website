@@ -22,7 +22,8 @@ public class DiscordWebhookService(
     private const string CacheKey = "DiscordWebhookConfig";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
 
-    public async Task PushAsync(NotificationType type, string? href, CancellationToken cancellationToken = default)
+    public async Task PushAsync(NotificationType type, string? href,
+        IReadOnlyCollection<string>? recipientAgentIds, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -35,7 +36,8 @@ public class DiscordWebhookService(
             {
                 return;
             }
-            await SendAsync(url, Compose(type, config.SiteBaseUrl, href), cancellationToken);
+            var mention = await ResolveMentionAsync(type, recipientAgentIds, config, cancellationToken);
+            await SendAsync(url, Compose(type, config.SiteBaseUrl, href), mention, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -43,6 +45,41 @@ public class DiscordWebhookService(
             logger.LogWarning(ex, "Discord webhook push for {Type} failed.", type);
         }
     }
+
+    // personal categories ping the recipients; broadcast categories ping the configured role
+    private async Task<MentionSpec> ResolveMentionAsync(NotificationType type,
+        IReadOnlyCollection<string>? recipientAgentIds, DiscordWebhookConfig config, CancellationToken cancellationToken)
+    {
+        if (DiscordRouting.PingsRole(type))
+        {
+            var roleId = config.Roles.GetValueOrDefault(type);
+            return IsSnowflake(roleId) ? MentionSpec.Role(roleId!) : MentionSpec.None;
+        }
+        if (DiscordRouting.PingsRecipients(type) && recipientAgentIds is { Count: > 0 })
+        {
+            var ids = await ResolveDiscordIdsAsync(recipientAgentIds, cancellationToken);
+            if (ids.Count > 0)
+            {
+                return MentionSpec.Users(ids);
+            }
+        }
+        return MentionSpec.None;
+    }
+
+    // agent id -> Discord snowflake; drops empties and the demo placeholder, caps at Discord's 100-mention limit
+    private async Task<List<string>> ResolveDiscordIdsAsync(IReadOnlyCollection<string> agentIds, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var ids = await db.Users
+            .Where(u => agentIds.Contains(u.Id))
+            .Select(u => u.DiscordId)
+            .ToListAsync(cancellationToken);
+        return ids.Where(IsSnowflake).Distinct().Take(100).ToList()!;
+    }
+
+    // only numeric snowflakes are pingable (guards "" and the seeded "demo" user)
+    private static bool IsSnowflake(string? value)
+        => !string.IsNullOrEmpty(value) && value.All(char.IsAsciiDigit);
 
     public async Task<DiscordWebhookConfig> GetConfigAsync(CancellationToken cancellationToken = default)
     {
@@ -69,6 +106,14 @@ public class DiscordWebhookService(
                 throw new InvalidOperationException($"Der Webhook für „{NotificationTypeDisplay.Name(type)}“ muss mit https:// beginnen.");
             }
         }
+        foreach (var type in DiscordRouting.RoleRoutableTypes)
+        {
+            input.Roles.TryGetValue(type, out var rawRole);
+            if (Trim(rawRole) is { } role && !role.All(char.IsAsciiDigit))
+            {
+                throw new InvalidOperationException($"Die Rollen-ID für „{NotificationTypeDisplay.Name(type)}“ darf nur Ziffern enthalten.");
+            }
+        }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await SetAsync(db, SystemSettingKeys.DiscordEnabled, input.Enabled ? "true" : "false", cancellationToken);
@@ -77,6 +122,11 @@ public class DiscordWebhookService(
         {
             input.Webhooks.TryGetValue(type, out var raw);
             await SetAsync(db, SystemSettingKeys.DiscordWebhookPrefix + type, Trim(raw), cancellationToken);
+        }
+        foreach (var type in DiscordRouting.RoleRoutableTypes)
+        {
+            input.Roles.TryGetValue(type, out var rawRole);
+            await SetAsync(db, SystemSettingKeys.DiscordRolePrefix + type, Trim(rawRole), cancellationToken);
         }
         await db.SaveChangesAsync(cancellationToken);
 
@@ -94,7 +144,7 @@ public class DiscordWebhookService(
         }
         return await SendAsync(url,
             $"🔔 Test-Benachrichtigung ({NotificationTypeDisplay.Name(type)}) – die Anbindung funktioniert.",
-            cancellationToken);
+            MentionSpec.None, cancellationToken);
     }
 
     private async Task<DiscordWebhookConfig> GetCachedConfigAsync(CancellationToken cancellationToken)
@@ -108,14 +158,14 @@ public class DiscordWebhookService(
         return config;
     }
 
-    // content is app-authored and identity-free; suppress every mention so no <@id> in any field can ping
-    private async Task<bool> SendAsync(string url, string content, CancellationToken cancellationToken)
+    // body stays app-authored and identity-free; the optional prefix pings the target, and allowed_mentions is an explicit allow-list so nothing else (e.g. @everyone) can resolve
+    private async Task<bool> SendAsync(string url, string content, MentionSpec mention, CancellationToken cancellationToken)
     {
         var payload = new
         {
-            content,
+            content = mention.Prefix.Length > 0 ? $"{mention.Prefix} {content}" : content,
             username = "NOOSE",
-            allowed_mentions = new { parse = Array.Empty<string>() },
+            allowed_mentions = mention.AllowedMentions,
         };
         var client = httpFactory.CreateClient("discord");
         using var response = await client.PostAsJsonAsync(url, payload, cancellationToken);
@@ -181,7 +231,14 @@ public class DiscordWebhookService(
         {
             map[type] = Trim(values.GetValueOrDefault(SystemSettingKeys.DiscordWebhookPrefix + type));
         }
-        return new DiscordWebhookConfig(enabled, baseUrl, map);
+        var roles = new Dictionary<NotificationType, string?>();
+        foreach (var type in DiscordRouting.RoleRoutableTypes)
+        {
+            // unset falls back to the category default (same pattern as SiteBaseUrl)
+            roles[type] = Trim(values.GetValueOrDefault(SystemSettingKeys.DiscordRolePrefix + type))
+                ?? DiscordRouting.DefaultRole(type);
+        }
+        return new DiscordWebhookConfig(enabled, baseUrl, map, roles);
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -197,5 +254,20 @@ public class DiscordWebhookService(
         {
             row.Value = value;
         }
+    }
+
+    // ping prefix + matching allow-list; allow-lists (not parse) keep the ping scoped to exactly these targets
+    private readonly record struct MentionSpec(string Prefix, object AllowedMentions)
+    {
+        private static readonly object SuppressAll = new { parse = Array.Empty<string>() };
+
+        public static MentionSpec None => new(string.Empty, SuppressAll);
+
+        public static MentionSpec Role(string roleId)
+            => new($"<@&{roleId}>", new { parse = Array.Empty<string>(), roles = new[] { roleId } });
+
+        public static MentionSpec Users(IReadOnlyList<string> discordIds)
+            => new(string.Join(' ', discordIds.Select(id => $"<@{id}>")),
+                new { parse = Array.Empty<string>(), users = discordIds });
     }
 }

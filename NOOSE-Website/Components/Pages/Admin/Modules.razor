@@ -1,5 +1,5 @@
 @page "/admin/module"
-@attribute [Authorize(Policy = Policies.AdminPage)]
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
 @inject ITrainingModuleService ModuleService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -10,7 +10,7 @@
     <MudIcon Icon="@Icons.Material.Filled.School" Color="Color.Primary" Size="Size.Large" />
     <MudText Typo="Typo.h4">Ausbildungsmodule</MudText>
     <MudSpacer />
-    <AuthorizeView Policy="@Policies.Admin">
+    <AuthorizeView Policy="@Policies.Leadership">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
             Neues Modul
         </MudButton>
@@ -53,7 +53,7 @@ else
                 }
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
-                <AuthorizeView Policy="@Policies.Admin" Context="adminCtx">
+                <AuthorizeView Policy="@Policies.Leadership" Context="adminCtx">
                     <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
                                        OnClick="@(() => EditAsync(context))" aria-label="Modul bearbeiten" />

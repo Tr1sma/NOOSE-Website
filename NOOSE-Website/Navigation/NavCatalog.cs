@@ -61,8 +61,8 @@ public static class NavCatalog
         new NavEntry("admin.basisdaten", "/admin/basisdaten", Icons.Material.Filled.Storage, "Basisdaten", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.protokoll", "/admin/protokoll", Icons.Material.Filled.FactCheck, "Audit-Protokoll", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.discord", "/admin/discord", Icons.Material.Filled.Notifications, "Discord-Benachrichtigungen", NavSection.VerwaltungFuehrung),
+        new NavEntry("admin.module", "/admin/module", Icons.Material.Filled.School, "Ausbildungsmodule", NavSection.VerwaltungFuehrung),
 
-        new NavEntry("admin.module", "/admin/module", Icons.Material.Filled.School, "Ausbildungsmodule", NavSection.VerwaltungAdmin),
         new NavEntry("admin.partner-sichtbarkeit", "/admin/partner-sichtbarkeit", Icons.Material.Filled.Handshake, "Partner-Sichtbarkeit", NavSection.VerwaltungAdmin),
         new NavEntry("admin.partner-freigabe", "/admin/partner-freigabe", Icons.Material.Filled.FolderShared, "Partner-Freigabe", NavSection.VerwaltungAdmin),
         new NavEntry("admin.system", "/admin/system", Icons.Material.Filled.SettingsApplications, "System", NavSection.VerwaltungAdmin),

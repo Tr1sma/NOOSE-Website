@@ -29,7 +29,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task<TrainingModule> CreateAsync(ModuleInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
         var name = (input.Name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -56,7 +56,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task UpdateAsync(string moduleId, ModuleInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
         var name = (input.Name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -80,7 +80,7 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task DeleteAsync(string moduleId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireAdmin(actor);
+        Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var module = await db.TrainingModules.FirstOrDefaultAsync(m => m.Id == moduleId, cancellationToken);
         if (module is null)

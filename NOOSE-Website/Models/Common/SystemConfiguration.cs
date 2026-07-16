@@ -1,3 +1,5 @@
+using NOOSE_Website.Models.Enums;
+
 namespace NOOSE_Website.Models.Common;
 
 /// <summary>Key constants for the system-settings table.</summary>
@@ -14,12 +16,18 @@ public static class SystemSettingKeys
     public const string LogoContentType = "LogoContentType";
     public const string DemoModeActive = "DemoModusAktiv";
 
+    /// <summary>Min hazard level for auto-listing a person on the wanted board; manual entries always show.</summary>
+    public const string WantedBoardMinHazard = "FahndungMinGefahrenstufe";
+
     // Discord outgoing webhooks (one channel per notification category)
     public const string DiscordEnabled = "DiscordAktiv";
     public const string SiteBaseUrl = "SeitenBasisUrl";
 
     /// <summary>Row key of a category's webhook URL: prefix + NotificationType name.</summary>
     public const string DiscordWebhookPrefix = "DiscordWebhook.";
+
+    /// <summary>Row key of a category's Discord role mention: prefix + NotificationType name.</summary>
+    public const string DiscordRolePrefix = "DiscordRolle.";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>
@@ -43,7 +51,8 @@ public sealed record SystemConfiguration(
     string? ThemeTertiary,
     string? LogoFileName,
     string? LogoContentType,
-    bool DemoModeActive)
+    bool DemoModeActive,
+    HazardLevel WantedBoardMinHazard)
 {
     public bool HasLogo => !string.IsNullOrWhiteSpace(LogoFileName);
 }
@@ -59,4 +68,5 @@ public class SystemConfigurationInput
     public string? ThemeSecondary { get; set; }
     public string? ThemeTertiary { get; set; }
     public bool DemoModeActive { get; set; }
+    public HazardLevel WantedBoardMinHazard { get; set; } = HazardLevel.Critical;
 }

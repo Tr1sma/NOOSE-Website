@@ -7,6 +7,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -49,7 +50,8 @@ public partial class SystemSettingService(
                 ThemeTertiary: Empty(values.GetValueOrDefault(SystemSettingKeys.ThemeTertiary)),
                 LogoFileName: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoFileName)),
                 LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)),
-                DemoModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.DemoModeActive), "true", StringComparison.OrdinalIgnoreCase));
+                DemoModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.DemoModeActive), "true", StringComparison.OrdinalIgnoreCase),
+                WantedBoardMinHazard: ParseHazard(values.GetValueOrDefault(SystemSettingKeys.WantedBoardMinHazard)));
         }
         catch (Exception)
         {
@@ -94,6 +96,7 @@ public partial class SystemSettingService(
         await SetAsync(db, SystemSettingKeys.ThemeSecondary, Empty(input.ThemeSecondary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.ThemeTertiary, Empty(input.ThemeTertiary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.DemoModeActive, input.DemoModeActive ? "true" : "false", cancellationToken);
+        await SetAsync(db, SystemSettingKeys.WantedBoardMinHazard, HazardValid(input.WantedBoardMinHazard).ToString(), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         cache.Remove(CacheKey);
@@ -167,9 +170,16 @@ public partial class SystemSettingService(
     }
 
     private static SystemConfiguration Default()
-        => new(false, null, null, BannerLevels.Info, null, null, null, null, null, false);
+        => new(false, null, null, BannerLevels.Info, null, null, null, null, null, false, HazardLevel.Critical);
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    // stored as the enum name; unknown/missing falls back to the strictest default
+    private static HazardLevel ParseHazard(string? value)
+        => Enum.TryParse<HazardLevel>(value, out var level) && Enum.IsDefined(level) ? level : HazardLevel.Critical;
+
+    private static HazardLevel HazardValid(HazardLevel level)
+        => Enum.IsDefined(level) ? level : HazardLevel.Critical;
 
     private static async Task<string?> ValueAsync(AppDbContext db, string key, CancellationToken cancellationToken)
         => (await db.SystemSettings.FirstOrDefaultAsync(e => e.Key == key, cancellationToken))?.Value;

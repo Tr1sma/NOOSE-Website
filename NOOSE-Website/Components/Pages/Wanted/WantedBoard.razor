@@ -1,6 +1,7 @@
 @* Wanted board: classified, fugitive, and manually-wanted persons as tiles; visibility-filtered via ViewerScope. *@
 @page "/fahndung"
 @inject IPersonService PersonService
+@inject ISystemSettingService SettingService
 @inject NavigationManager Nav
 
 <PageTitle>Fahndung · NOOSE</PageTitle>
@@ -11,10 +12,13 @@
     <MudSpacer />
     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@_filtered.Count Akten</MudChip>
 </MudStack>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Eingestufte, flüchtige und manuell zur Fahndung ausgeschriebene Personen auf einen Blick – Prüffälle,
-    Verdachtsfälle, gesichert staatsgefährdende Personen, aktuell Flüchtige und manuelle Ausschreibungen.
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-1">
+    Personen ab der eingestellten Gefahrenstufe sowie manuell zur Fahndung ausgeschriebene Personen auf einen Blick.
+    Die Schwelle legen Admins unter „System“ fest; manuelle Ausschreibungen erscheinen immer.
     Klicke eine Kachel für die vollständige Akte.
+</MudText>
+<MudText Typo="Typo.caption" Class="mud-text-secondary mb-4 d-block">
+    Aktuelle Schwelle: ab Gefahrenstufe <b>@HazardLevelLogic.Name(_threshold)</b>
 </MudText>
 
 @if (_load)
@@ -109,12 +113,14 @@ else
     private bool _load = true;
     private string _search = string.Empty;
     private string _stufe = AllKey;
+    private HazardLevel _threshold = HazardLevel.Critical;
     private List<WantedRow> _all = new();
     private List<WantedRow> _filtered = new();
 
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
+        _threshold = (await SettingService.GetAsync()).WantedBoardMinHazard;
         var people = await PersonService.GetListAsync(ViewerScope.From(user));
         var now = DateTime.UtcNow;
 
@@ -137,7 +143,7 @@ else
                 IsWanted = p.IsWanted,
                 WantedReason = p.WantedReason,
             })
-            .Where(r => r.IsWanted || r.Classification != Classification.Unknown || r.EffectiveLifeStatus == LifeStatus.Fugitive)
+            .Where(r => r.IsWanted || r.Hazard >= _threshold)
             .OrderByDescending(r => r.IsWanted)
             .ThenByDescending(r => r.Classification)
             .ThenByDescending(r => r.ThreatScore ?? -1)

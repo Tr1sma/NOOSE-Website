@@ -78,6 +78,21 @@ else
         </MudPaper>
 
         <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Fahndung</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Ab welcher Gefahrenstufe Personen automatisch auf der <MudLink Href="/fahndung">Fahndungs-Seite</MudLink>
+                erscheinen. Manuell zur Fahndung ausgeschriebene Personen werden immer angezeigt – unabhängig von dieser Schwelle.
+            </MudText>
+            <MudSelect T="HazardLevel" @bind-Value="_input.WantedBoardMinHazard" Label="Mindest-Gefahrenstufe"
+                       Variant="Variant.Outlined" Dense="true" Style="max-width:260px;">
+                @foreach (var level in WantedHazardThresholds)
+                {
+                    <MudSelectItem T="HazardLevel" Value="@level">@HazardLevelLogic.Name(level)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-2">Theme-Farben</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                 Akzentfarben per Color-Picker wählen (oder Hex-Wert eintippen). „Zurücksetzen" stellt die
@@ -161,6 +176,10 @@ else
     private SystemConfigurationInput _input = new();
     private ClaimsPrincipal _user = default!;
 
+    // "Keine" is excluded: a floor of No would list every scored person
+    private static readonly HazardLevel[] WantedHazardThresholds =
+        { HazardLevel.Low, HazardLevel.Medium, HazardLevel.High, HazardLevel.Critical };
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
@@ -181,6 +200,7 @@ else
             ThemeSecondary = _configuration.ThemeSecondary,
             ThemeTertiary = _configuration.ThemeTertiary,
             DemoModeActive = _configuration.DemoModeActive,
+            WantedBoardMinHazard = _configuration.WantedBoardMinHazard,
         };
         _load = false;
     }

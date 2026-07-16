@@ -12,9 +12,11 @@
 </MudStack>
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
     Leite ausgewählte Ereignis-Kategorien zusätzlich in Discord-Channels weiter – pro Kategorie ein eigener
-    Channel-Webhook. Die Nachricht enthält nur einen generischen Hinweis und einen login-geschützten Link –
+    Channel-Webhook. Der Nachrichtentext enthält nur einen generischen Hinweis und einen login-geschützten Link –
     <b>niemals</b> Namen, Aktenzeichen, Notizen oder VS-Inhalte (die sieht man erst nach Login mit den nötigen
-    Rechten). Nur echte Broadcast-Kategorien sind weiterleitbar; persönliche Benachrichtigungen bleiben In-App.
+    Rechten). <b>Zusätzlich</b> wird angepingt: persönliche Kategorien (Erwähnung, Wiedervorlage) pingen die
+    betroffene(n) Person(en) direkt, Broadcast-Kategorien die je Kategorie konfigurierte Rolle. Der Ping verrät
+    nur <i>wer</i> bzw. <i>welche Rolle</i> gemeint ist – nicht den Inhalt.
 </MudText>
 
 @if (_load)
@@ -54,6 +56,19 @@ else
                         </div>
                         <MudTextField @bind-Value="_webhooks[type]" Placeholder="https://discord.com/api/webhooks/…"
                                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                        @if (DiscordRouting.PingsRole(type))
+                        {
+                            <MudTextField @bind-Value="_roles[type]" Label="Rollen-ID" Placeholder="@DiscordRouting.DefaultRole(type)"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;"
+                                          HelperText="Rolle, die bei diesem Ereignis gepingt wird." />
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Diese Kategorie pingt die betroffene(n) Person(en) direkt per Discord-Mention.">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.AlternateEmail">pingt Empfänger</MudChip>
+                            </MudTooltip>
+                        }
                         <MudTooltip Text="Test verwendet die zuletzt gespeicherte URL.">
                             <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
                                            OnClick="@(() => TestAsync(type))" aria-label="Test senden" />
@@ -78,6 +93,7 @@ else
     private ClaimsPrincipal _user = new();
     private DiscordWebhookConfigInput _input = new();
     private readonly Dictionary<NotificationType, string?> _webhooks = new();
+    private readonly Dictionary<NotificationType, string?> _roles = new();
     private bool _load = true;
     private bool _saving;
 
@@ -94,6 +110,10 @@ else
         {
             _webhooks[type] = config.Webhooks.GetValueOrDefault(type);
         }
+        foreach (var type in DiscordRouting.RoleRoutableTypes)
+        {
+            _roles[type] = config.Roles.GetValueOrDefault(type);
+        }
         _load = false;
     }
 
@@ -103,6 +123,7 @@ else
         try
         {
             _input.Webhooks = new Dictionary<NotificationType, string?>(_webhooks);
+            _input.Roles = new Dictionary<NotificationType, string?>(_roles);
             await Discord.SaveConfigAsync(_input, _user);
             Snackbar.Add("Discord-Einstellungen gespeichert.", Severity.Success);
         }
