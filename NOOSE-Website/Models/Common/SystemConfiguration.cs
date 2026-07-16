@@ -13,6 +13,13 @@ public static class SystemSettingKeys
     public const string LogoFileName = "LogoDateiname";
     public const string LogoContentType = "LogoContentType";
     public const string DemoModeActive = "DemoModusAktiv";
+
+    // Discord outgoing webhooks (one channel per notification category)
+    public const string DiscordEnabled = "DiscordAktiv";
+    public const string SiteBaseUrl = "SeitenBasisUrl";
+
+    /// <summary>Row key of a category's webhook URL: prefix + NotificationType name.</summary>
+    public const string DiscordWebhookPrefix = "DiscordWebhook.";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>

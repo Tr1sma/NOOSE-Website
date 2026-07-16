@@ -25,6 +25,7 @@ public static class NavCatalog
         new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Primary, BadgeKey: "acknowledgments"),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten),
+        new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung", NavSection.Akten),
         new NavEntry("doks", "/doks", Icons.Material.Filled.Description, "Personen-Doks", NavSection.Akten),
         new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumente", NavSection.Akten),
         new NavEntry("observationen", "/observationen", Icons.Material.Filled.Visibility, "Observationen", NavSection.Akten),
@@ -58,6 +59,8 @@ public static class NavCatalog
         new NavEntry("lageberichte", "/lageberichte", Icons.Material.Filled.Assessment, "Lageberichte", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.basisdaten", "/admin/basisdaten", Icons.Material.Filled.Storage, "Basisdaten", NavSection.VerwaltungFuehrung),
+        new NavEntry("admin.protokoll", "/admin/protokoll", Icons.Material.Filled.FactCheck, "Audit-Protokoll", NavSection.VerwaltungFuehrung),
+        new NavEntry("admin.discord", "/admin/discord", Icons.Material.Filled.Notifications, "Discord-Benachrichtigungen", NavSection.VerwaltungFuehrung),
 
         new NavEntry("admin.module", "/admin/module", Icons.Material.Filled.School, "Ausbildungsmodule", NavSection.VerwaltungAdmin),
         new NavEntry("admin.partner-sichtbarkeit", "/admin/partner-sichtbarkeit", Icons.Material.Filled.Handshake, "Partner-Sichtbarkeit", NavSection.VerwaltungAdmin),

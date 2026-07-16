@@ -10,7 +10,8 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="INotificationService" />
-public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, NotificationBroadcaster broadcaster)
+public class NotificationService(
+    IDbContextFactory<AppDbContext> dbFactory, NotificationBroadcaster broadcaster, IDiscordWebhookService discord)
     : INotificationService
 {
     public async Task NotifyAsync(string? recipientId, NotificationType type, string title, string? href,
@@ -86,6 +87,9 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         {
             broadcaster.Report(id);
         }
+
+        // one channel post per mention event (generic notice + link, no identities)
+        await discord.PushAsync(NotificationType.Mention, href, cancellationToken);
     }
 
     public async Task NotifyManyAsync(IReadOnlyCollection<string> recipientIds, NotificationType type,
@@ -118,6 +122,9 @@ public class NotificationService(IDbContextFactory<AppDbContext> dbFactory, Noti
         {
             broadcaster.Report(id);
         }
+
+        // one channel post per broadcast event (generic notice + link, no identities)
+        await discord.PushAsync(type, href, cancellationToken);
     }
 
     public async Task<List<Notification>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)

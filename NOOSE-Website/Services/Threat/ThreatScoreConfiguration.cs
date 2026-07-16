@@ -77,6 +77,66 @@ public sealed class ThreatScoreConfiguration
     /// <summary>Default instance.</summary>
     public static ThreatScoreConfiguration Default() => new();
 
+    /// <summary>Normalises the caps to satisfy the four sum invariants (S1–S4=100, S2-sub=CapS2, P1–P5=100, P2-sub=CapP2) while keeping relative weights. Rounding residue lands on the largest bucket; an all-zero group falls back to defaults.</summary>
+    public void Balance()
+    {
+        var d = Default();
+
+        // faction caps S1–S4 → 100 (residue on CapS1, the largest by default)
+        var facSum = CapS1 + CapS2 + CapS3 + CapS4;
+        if (facSum <= 1e-9)
+        {
+            (CapS1, CapS2, CapS3, CapS4) = (d.CapS1, d.CapS2, d.CapS3, d.CapS4);
+        }
+        else
+        {
+            var f = 100.0 / facSum;
+            CapS1 *= f; CapS2 *= f; CapS3 *= f; CapS4 *= f;
+            CapS1 = Math.Max(0, CapS1 + 100.0 - (CapS1 + CapS2 + CapS3 + CapS4));
+        }
+
+        // S2 sub-caps → CapS2 (keep RanksMaxPoints integer; residue on CapSize)
+        if (CapSize + RanksMaxPoints + LeadPoints + EstatePoints + CapWeapons + CapInfra <= 1e-9)
+        {
+            CapSize = d.CapSize; RanksMaxPoints = d.RanksMaxPoints; LeadPoints = d.LeadPoints;
+            EstatePoints = d.EstatePoints; CapWeapons = d.CapWeapons; CapInfra = d.CapInfra;
+        }
+        {
+            var sub = CapSize + RanksMaxPoints + LeadPoints + EstatePoints + CapWeapons + CapInfra;
+            var f = sub <= 1e-9 ? 0 : CapS2 / sub;
+            // floor (not round) so the integer never exceeds its share → CapSize residue stays ≥ 0 and the sub-sum is exactly CapS2
+            RanksMaxPoints = (int)Math.Floor(RanksMaxPoints * f);
+            LeadPoints *= f; EstatePoints *= f; CapWeapons *= f; CapInfra *= f; CapSize *= f;
+            CapSize = Math.Max(0, CapSize + CapS2 - (CapSize + RanksMaxPoints + LeadPoints + EstatePoints + CapWeapons + CapInfra));
+        }
+
+        // person caps P1–P5 → 100 (residue on CapP1)
+        var perSum = CapP1 + CapP2 + CapP3 + CapP4 + CapP5;
+        if (perSum <= 1e-9)
+        {
+            (CapP1, CapP2, CapP3, CapP4, CapP5) = (d.CapP1, d.CapP2, d.CapP3, d.CapP4, d.CapP5);
+        }
+        else
+        {
+            var f = 100.0 / perSum;
+            CapP1 *= f; CapP2 *= f; CapP3 *= f; CapP4 *= f; CapP5 *= f;
+            CapP1 = Math.Max(0, CapP1 + 100.0 - (CapP1 + CapP2 + CapP3 + CapP4 + CapP5));
+        }
+
+        // P2 sub-caps → CapP2 (residue on PersonCapWeapons)
+        var p2Sum = PersonCapWeapons + FugitivePoints;
+        if (p2Sum <= 1e-9)
+        {
+            PersonCapWeapons = CapP2; FugitivePoints = 0;
+        }
+        else
+        {
+            var f = CapP2 / p2Sum;
+            PersonCapWeapons *= f; FugitivePoints *= f;
+            PersonCapWeapons = Math.Max(0, PersonCapWeapons + CapP2 - (PersonCapWeapons + FugitivePoints));
+        }
+    }
+
     // ---- Severity keywords (fixed) ----
     private static readonly string[] KindHeavy =
         { "mord", "tötung", "toetung", "hinrichtung", "geiselnahme", "entführung", "entfuehrung", "anschlag", "terror" };

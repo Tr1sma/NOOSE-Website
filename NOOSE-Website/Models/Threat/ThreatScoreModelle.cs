@@ -100,3 +100,9 @@ public sealed class ThreatScoreDetail
 
 /// <summary>Result of a score run: persisted values (null on exclusion) plus breakdown.</summary>
 public sealed record ThreatScoreResult(int? Score, int? Confidence, ThreatScoreDetail Detail);
+
+/// <summary>Aggregated score distribution from a dry-run calibration preview (no persistence). Bands mirror HazardLevel (0 / &lt;25 / &lt;50 / &lt;75 / ≥75).</summary>
+public sealed record ThreatScoreDistribution(
+    int Total, int Scored, int Excluded,
+    int No, int Low, int Medium, int High, int Critical,
+    double AverageScore, double AverageConfidence, int TriageCount);
