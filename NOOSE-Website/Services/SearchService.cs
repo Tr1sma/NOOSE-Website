@@ -529,6 +529,14 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // relevance-rank each category (recall is LIKE; ordering happens here)
+        if (hasText)
+        {
+            for (var i = 0; i < groups.Count; i++)
+            {
+                groups[i] = groups[i] with { Hit = SearchRelevance.Rank(s!, groups[i].Hit) };
+            }
+        }
         return groups;
     }
 
@@ -651,8 +659,12 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // round-robin so people do not crowd out other categories
-        return Shuffle(people, factions, groups, parties, operations, taskforces, cases, jobs).Take(max).ToList();
+        // relevance-rank within each category, then round-robin so people do not crowd out other categories
+        return Shuffle(
+            SearchRelevance.RankQuick(s, people), SearchRelevance.RankQuick(s, factions),
+            SearchRelevance.RankQuick(s, groups), SearchRelevance.RankQuick(s, parties),
+            SearchRelevance.RankQuick(s, operations), SearchRelevance.RankQuick(s, taskforces),
+            SearchRelevance.RankQuick(s, cases), SearchRelevance.RankQuick(s, jobs)).Take(max).ToList();
     }
 
     // ---- partner search: only released, non-classified releasable records ----
@@ -688,7 +700,11 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             .Where(v => v.Title.Contains(s) || v.CaseNumber.Contains(s))
             .OrderBy(v => v.Title).Take(max)
             .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber)).ToListAsync(cancellationToken);
-        return Shuffle(people, factions, groups, parties, operations, taskforces, cases).Take(max).ToList();
+        return Shuffle(
+            SearchRelevance.RankQuick(s, people), SearchRelevance.RankQuick(s, factions),
+            SearchRelevance.RankQuick(s, groups), SearchRelevance.RankQuick(s, parties),
+            SearchRelevance.RankQuick(s, operations), SearchRelevance.RankQuick(s, taskforces),
+            SearchRelevance.RankQuick(s, cases)).Take(max).ToList();
     }
 
     /// <summary>Global search for partners: released, non-classified releasable records; no content/job categories.</summary>
@@ -870,6 +886,14 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
+        // relevance-rank each category (recall is LIKE; ordering happens here)
+        if (hasText)
+        {
+            for (var i = 0; i < groups.Count; i++)
+            {
+                groups[i] = groups[i] with { Hit = SearchRelevance.Rank(s!, groups[i].Hit) };
+            }
+        }
         return groups;
     }
 

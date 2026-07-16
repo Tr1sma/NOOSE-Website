@@ -30,6 +30,9 @@ public interface IPersonService
     /// <summary>Set classification. "Secured state-threatening" requires Senior Special Agent+ or Admin.</summary>
     Task ClassificationSetAsync(string id, Classification @new, string? justification, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Manually flag/unflag the person for the wanted board (write access + classified visibility required).</summary>
+    Task WantedSetAsync(string id, bool wanted, string? reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     /// <summary>Append-only classification history of the person, newest first; visibility-filtered.</summary>
     Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default);
 

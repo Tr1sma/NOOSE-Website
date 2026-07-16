@@ -1,0 +1,221 @@
+@* Wanted board: classified, fugitive, and manually-wanted persons as tiles; visibility-filtered via ViewerScope. *@
+@page "/fahndung"
+@inject IPersonService PersonService
+@inject NavigationManager Nav
+
+<PageTitle>Fahndung · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Fahndung</MudText>
+    <MudSpacer />
+    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@_filtered.Count Akten</MudChip>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Eingestufte, flüchtige und manuell zur Fahndung ausgeschriebene Personen auf einen Blick – Prüffälle,
+    Verdachtsfälle, gesichert staatsgefährdende Personen, aktuell Flüchtige und manuelle Ausschreibungen.
+    Klicke eine Kachel für die vollständige Akte.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudTextField @bind-Value="_search" @bind-Value:after="Apply" Placeholder="Suchen (Name, Aktenzeichen, Alias)…"
+                      Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Style="max-width:340px;" Class="mt-0" />
+        <MudSpacer />
+        <MudButton Size="Size.Small" Variant="@(_stufe == AllKey ? Variant.Filled : Variant.Outlined)"
+                   Color="Color.Primary" OnClick="@(() => SetFilter(AllKey))">Alle</MudButton>
+        @foreach (var c in ClassificationDisplay.All.Where(x => x != Classification.Unknown))
+        {
+            var key = c.ToString();
+            <MudButton Size="Size.Small" Variant="@(_stufe == key ? Variant.Filled : Variant.Outlined)"
+                       Color="Color.Primary" OnClick="@(() => SetFilter(key))">@ClassificationDisplay.Name(c)</MudButton>
+        }
+        <MudButton Size="Size.Small" Variant="@(_stufe == FugitiveKey ? Variant.Filled : Variant.Outlined)"
+                   Color="Color.Primary" OnClick="@(() => SetFilter(FugitiveKey))">Nur Flüchtige</MudButton>
+        <MudButton Size="Size.Small" Variant="@(_stufe == WantedKey ? Variant.Filled : Variant.Outlined)"
+                   Color="Color.Primary" OnClick="@(() => SetFilter(WantedKey))">Manuell ausgeschrieben</MudButton>
+    </MudStack>
+
+    @if (_filtered.Count == 0)
+    {
+        <MudPaper Class="pa-8" Elevation="0" Outlined="true">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Default" Size="Size.Large" />
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">Keine passenden Fahndungs-Akten.</MudText>
+            </MudStack>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            @foreach (var r in _filtered)
+            {
+                <MudItem xs="12" sm="6" md="4" lg="3">
+                    <MudPaper Elevation="2" Class="pa-4 cursor-pointer" @onclick="@(() => Open(r))"
+                              Style="@($"border-top:3px solid var(--mud-palette-{BorderSlot(r)});height:100%;")">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="1">
+                                <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@r.Name</MudText>
+                                @if (r.IsClassified)
+                                {
+                                    <MudTooltip Text="Verschlusssache">
+                                        <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" />
+                                    </MudTooltip>
+                                }
+                            </MudStack>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.CaseNumber</MudText>
+                            @if (r.IsWanted)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Campaign">Zur Fahndung</MudChip>
+                                @if (!string.IsNullOrWhiteSpace(r.WantedReason))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.WantedReason</MudText>
+                                }
+                            }
+                            <ClassificationBadge Value="r.Classification" />
+                            <LifeStatusBadge Status="r.LifeStatusRaw" DeadUntil="r.DeadUntil" />
+                            @if (r.ThreatScore is { } score)
+                            {
+                                <MudTooltip Text="@($"Bedrohungs-Score {score}/100" + (r.ThreatConfidence is { } k ? $" · Konfidenz {k} %" : ""))">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@DangerColour(r.Hazard)"
+                                             Icon="@Icons.Material.Filled.Warning">@HazardLevelLogic.Name(r.Hazard)</MudChip>
+                                </MudTooltip>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(r.Aliases))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary"><b>Aliase:</b> @r.Aliases</MudText>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const string AllKey = "__all";
+    private const string FugitiveKey = "__fugitive";
+    private const string WantedKey = "__wanted";
+
+    private bool _load = true;
+    private string _search = string.Empty;
+    private string _stufe = AllKey;
+    private List<WantedRow> _all = new();
+    private List<WantedRow> _filtered = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        var people = await PersonService.GetListAsync(ViewerScope.From(user));
+        var now = DateTime.UtcNow;
+
+        // wanted = under investigation (any classification) or currently fugitive
+        _all = people
+            .Select(p => new WantedRow
+            {
+                Id = p.Id,
+                CaseNumber = p.CaseNumber,
+                Name = p.Name,
+                Aliases = string.Join(", ", p.Aliases.Select(a => a.AliasName)),
+                Classification = p.Classification,
+                LifeStatusRaw = p.LifeStatus,
+                DeadUntil = p.DeadUntil,
+                EffectiveLifeStatus = LifeStatusLogic.Effective(p.LifeStatus, p.DeadUntil, now),
+                ThreatScore = p.ThreatScore,
+                ThreatConfidence = p.ThreatConfidence,
+                Hazard = HazardLevelLogic.From(p.ThreatScore),
+                IsClassified = p.IsClassified,
+                IsWanted = p.IsWanted,
+                WantedReason = p.WantedReason,
+            })
+            .Where(r => r.IsWanted || r.Classification != Classification.Unknown || r.EffectiveLifeStatus == LifeStatus.Fugitive)
+            .OrderByDescending(r => r.IsWanted)
+            .ThenByDescending(r => r.Classification)
+            .ThenByDescending(r => r.ThreatScore ?? -1)
+            .ThenBy(r => r.Name)
+            .ToList();
+
+        Apply();
+        _load = false;
+    }
+
+    private void SetFilter(string key)
+    {
+        _stufe = key;
+        Apply();
+    }
+
+    private void Apply()
+    {
+        IEnumerable<WantedRow> q = _all;
+
+        q = _stufe switch
+        {
+            FugitiveKey => q.Where(r => r.EffectiveLifeStatus == LifeStatus.Fugitive),
+            WantedKey => q.Where(r => r.IsWanted),
+            AllKey => q,
+            _ => Enum.TryParse<Classification>(_stufe, out var c) ? q.Where(r => r.Classification == c) : q,
+        };
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var s = _search.Trim();
+            q = q.Where(r => r.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
+                || r.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase)
+                || r.Aliases.Contains(s, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _filtered = q.ToList();
+    }
+
+    private void Open(WantedRow r) => Nav.NavigateTo($"/personen/{r.Id}");
+
+    // manually-wanted (unclassified) gets a red accent; otherwise follow the classification
+    private static string BorderSlot(WantedRow r) => r.IsWanted && r.Classification == Classification.Unknown
+        ? "error"
+        : PaletteSlot(r.Classification);
+
+    // top-border accent per classification
+    private static string PaletteSlot(Classification c) => c switch
+    {
+        Classification.SecuredStateThreatening => "error",
+        Classification.SuspicionCase => "warning",
+        Classification.ReviewCase => "info",
+        _ => "lines-default",
+    };
+
+    private static Color DangerColour(HazardLevel s) => s switch
+    {
+        HazardLevel.Critical or HazardLevel.High => Color.Error,
+        HazardLevel.Medium => Color.Warning,
+        HazardLevel.Low => Color.Info,
+        _ => Color.Default,
+    };
+
+    private sealed class WantedRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string CaseNumber { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Aliases { get; set; } = string.Empty;
+        public Classification Classification { get; set; }
+        public LifeStatus LifeStatusRaw { get; set; }
+        public DateTime? DeadUntil { get; set; }
+        public LifeStatus EffectiveLifeStatus { get; set; }
+        public int? ThreatScore { get; set; }
+        public int? ThreatConfidence { get; set; }
+        public HazardLevel Hazard { get; set; }
+        public bool IsClassified { get; set; }
+        public bool IsWanted { get; set; }
+        public string? WantedReason { get; set; }
+    }
+}

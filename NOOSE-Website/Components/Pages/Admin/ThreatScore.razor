@@ -120,9 +120,45 @@ else
     <MudStack Row="true" Spacing="2" Class="mb-6">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
                    Disabled="@(!IsValid || _saves)" OnClick="SaveAsync">Speichern</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Balance"
+                   OnClick="AutoBalance">Caps ausbalancieren</MudButton>
         <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.RestartAlt"
                    OnClick="OnDefaultReset">Auf Standard zurücksetzen</MudButton>
     </MudStack>
+
+    <MudDivider Class="my-4" />
+
+    <MudText Typo="Typo.h6" Class="mb-1">Vorschau am Echtbestand</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Dry-Run mit der aktuellen (auch ungespeicherten) Konfiguration – berechnet die Score-Verteilung über alle
+        Fraktionen und Personen, <b>ohne</b> zu speichern oder zu persistieren. So lassen sich Gewichte am echten
+        Datenbestand einstellen, bevor gespeichert und neu berechnet wird.
+    </MudText>
+    @if (!IsValid)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2">
+            Hinweis: Die Cap-Summen stimmen noch nicht – die Vorschau ist trotzdem informativ, die Skala aber verzerrt.
+        </MudAlert>
+    }
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Insights"
+               Disabled="_previewing" OnClick="PreviewAsync" Class="mb-3">
+        @if (_previewing)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            <span>Berechne Vorschau…</span>
+        }
+        else
+        {
+            <span>Vorschau berechnen</span>
+        }
+    </MudButton>
+    @if (_factionDist is not null && _personDist is not null)
+    {
+        <div class="d-flex flex-wrap gap-4 mb-4">
+            @DistCard("Fraktionen", _factionDist)
+            @DistCard("Personen", _personDist)
+        </div>
+    }
 
     <MudDivider Class="my-4" />
 
@@ -152,6 +188,9 @@ else
     private ClaimsPrincipal _user = default!;
     private bool _saves;
     private bool _calculates;
+    private bool _previewing;
+    private ThreatScoreDistribution? _factionDist;
+    private ThreatScoreDistribution? _personDist;
 
     protected override async Task OnInitializedAsync()
     {
@@ -164,10 +203,10 @@ else
     private double PersonCapsSum => _k is null ? 0 : _k.CapP1 + _k.CapP2 + _k.CapP3 + _k.CapP4 + _k.CapP5;
     private double P2SubSum => _k is null ? 0 : _k.PersonCapWeapons + _k.FugitivePoints;
 
-    private bool FactionSumOk => Math.Abs(FactionCapsSum - 100) < 0.001;
-    private bool S2SubOk => _k is not null && Math.Abs(S2SubSum - _k.CapS2) < 0.001;
-    private bool PersonSumOk => Math.Abs(PersonCapsSum - 100) < 0.001;
-    private bool P2SubOk => _k is not null && Math.Abs(P2SubSum - _k.CapP2) < 0.001;
+    private bool FactionSumOk => Math.Abs(FactionCapsSum - 100) < 1e-6;
+    private bool S2SubOk => _k is not null && Math.Abs(S2SubSum - _k.CapS2) < 1e-6;
+    private bool PersonSumOk => Math.Abs(PersonCapsSum - 100) < 1e-6;
+    private bool P2SubOk => _k is not null && Math.Abs(P2SubSum - _k.CapP2) < 1e-6;
     private bool IsValid => FactionSumOk && S2SubOk && PersonSumOk && P2SubOk;
 
     private async Task SaveAsync()
@@ -216,4 +255,53 @@ else
             _calculates = false;
         }
     }
+
+    private void AutoBalance()
+    {
+        if (_k is null)
+        {
+            return;
+        }
+        _k.Balance();
+        Snackbar.Add("Caps ausbalanciert (noch nicht gespeichert).", Severity.Info);
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (_k is null)
+        {
+            return;
+        }
+        _previewing = true;
+        try
+        {
+            _factionDist = await ScoreService.PreviewFactionDistributionAsync(_k, _user);
+            _personDist = await ScoreService.PreviewPersonDistributionAsync(_k, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _previewing = false;
+        }
+    }
+
+    private RenderFragment DistCard(string title, ThreatScoreDistribution d) => __builder =>
+    {
+        <MudPaper Class="pa-4" Elevation="2" Style="min-width:320px;flex:1;">
+            <MudText Typo="Typo.h6" Class="mb-1">@title</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                @d.Scored bewertet · Ø-Score @d.AverageScore · Ø-Konfidenz @d.AverageConfidence % · @d.TriageCount Triage@(d.Excluded > 0 ? $" · {d.Excluded} ausgenommen" : "")
+            </MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">Keine @d.No</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">Niedrig @d.Low</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">Mittel @d.Medium</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">Hoch @d.High</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Kritisch @d.Critical</MudChip>
+            </MudStack>
+        </MudPaper>
+    };
 }

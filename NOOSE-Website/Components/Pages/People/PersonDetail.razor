@@ -120,8 +120,11 @@ else
                 @if (TabOn("einstufung"))
                 {
                 <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
-                    <ClassificationPanel Current="_person.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
-                                     EntityType="@nameof(Person)" EntityId="@_person.Id" TargetDesignation="@($"{_person.Name} ({_person.CaseNumber})")" />
+                    <MudStack Spacing="3">
+                        <ClassificationPanel Current="_person.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
+                                         EntityType="@nameof(Person)" EntityId="@_person.Id" TargetDesignation="@($"{_person.Name} ({_person.CaseNumber})")" />
+                        <WantedPanel PersonId="@_person.Id" IsWanted="_person.IsWanted" WantedReason="@_person.WantedReason" User="_user" Changed="NewLoadAsync" />
+                    </MudStack>
                 </MudTabPanel>
                 }
                 @if (TabOn("gefaehrdung"))
