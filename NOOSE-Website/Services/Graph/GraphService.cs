@@ -20,7 +20,7 @@ namespace NOOSE_Website.Services;
 /// <inheritdoc cref="IGraphService" />
 public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphService
 {
-    private const int MaxNode = 250;
+    private const int MaxNode = 750;
 
     private const int MaxPathDepth = 12;
     private const int MaxVisited = 8000;
