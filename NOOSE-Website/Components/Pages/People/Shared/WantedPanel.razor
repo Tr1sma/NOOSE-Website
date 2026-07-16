@@ -49,11 +49,19 @@
 
     private bool _mayWrite;
     private string? _reason;
+    private string? _lastPersonId;
 
     protected override void OnInitialized() => _mayWrite = User.MayWrite();
 
-    // seed the editor with the current reason on (re)load
-    protected override void OnParametersSet() => _reason = WantedReason;
+    // seed the editor only when the person changes, so a parent re-render doesn't wipe in-progress typing
+    protected override void OnParametersSet()
+    {
+        if (_lastPersonId != PersonId)
+        {
+            _reason = WantedReason;
+            _lastPersonId = PersonId;
+        }
+    }
 
     private async Task SetAsync(bool wanted)
     {
