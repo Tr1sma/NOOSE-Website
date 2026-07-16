@@ -383,3 +383,4 @@ App_Data/uploads/
 
 # ----- NOOSE: Deploy-Artefakt (deploy.ps1 packt/entpackt es lokal) -----
 noose-publish.tgz
+/NOOSE-Website/BuildNumber.txt
