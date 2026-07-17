@@ -1,0 +1,152 @@
+@* Full-text editor for a personnel-record template (HTML body). *@
+@page "/admin/vorlagen/personal-vorlage/neu"
+@page "/admin/vorlagen/personal-vorlage/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@using System.Security.Claims
+@inject IPersonnelTemplateService TemplateService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_edit ? "Vorlage bearbeiten" : "Neue Personal-Vorlage") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_edit && !_found)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Vorlage nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="Cancel" aria-label="Zurück" />
+        <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(_edit ? "Personal-Vorlage bearbeiten" : "Neue Personal-Vorlage")</MudText>
+        <MudSpacer />
+        <MudButton OnClick="Cancel" Variant="Variant.Text" Color="Color.Default">Abbrechen</MudButton>
+        <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="_saves">Speichern</MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudGrid>
+                <MudItem xs="12" md="7">
+                    <MudTextField @bind-Value="_name" Label="Name der Vorlage" Variant="Variant.Outlined" Required="true"
+                                  RequiredError="Name ist erforderlich" AutoFocus="true" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudSelect T="PersonnelTemplateKind" @bind-Value="_kind" Label="Art" Variant="Variant.Outlined">
+                        @foreach (var k in PersonnelTemplateKindDisplay.All)
+                        {
+                            <MudSelectItem Value="k">@PersonnelTemplateKindDisplay.Name(k)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+            <MudTextField @bind-Value="_description" Label="Beschreibung (optional)" Lines="2" Variant="Variant.Outlined" />
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudSwitch @bind-Value="_isActive" Color="Color.Primary" Label="Aktiv (im Picker auswählbar)" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="_sorting" Label="Sortierung" Variant="Variant.Outlined" Min="0" />
+                </MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" />
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+
+    private RichTextEditor _editor = default!;
+    private ClaimsPrincipal _user = default!;
+
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _edit;
+    private bool _found;
+    private bool _saves;
+
+    private string _name = string.Empty;
+    private string? _description;
+    private PersonnelTemplateKind _kind = PersonnelTemplateKind.Commendation;
+    private bool _isActive = true;
+    private int _sorting;
+    private string? _contentHtml;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _edit = !string.IsNullOrEmpty(Id);
+
+        if (_edit)
+        {
+            var template = await TemplateService.GetAsync(Id!);
+            if (template is not null)
+            {
+                _found = true;
+                _name = template.Name;
+                _description = template.Description;
+                _kind = template.Kind;
+                _isActive = template.IsActive;
+                _sorting = template.Sorting;
+                _contentHtml = template.ContentHtml;
+            }
+        }
+
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        var name = _name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Snackbar.Add("Bitte einen Namen angeben.", Severity.Warning);
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            var html = await _editor.GetHtmlAsync();
+            var input = new PersonnelTemplateInput
+            {
+                Kind = _kind,
+                Name = name,
+                Description = _description,
+                ContentHtml = html,
+                IsActive = _isActive,
+                Sorting = _sorting,
+            };
+
+            if (_edit)
+            {
+                await TemplateService.RefreshAsync(Id!, input, _user);
+            }
+            else
+            {
+                await TemplateService.CreateAsync(input, _user);
+            }
+
+            Snackbar.Add("Vorlage gespeichert.", Severity.Success);
+            Nav.NavigateTo("/admin/vorlagen?tab=personal-vorlagen");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saves = false;
+        }
+    }
+
+    private void Cancel() => Nav.NavigateTo("/admin/vorlagen?tab=personal-vorlagen");
+}

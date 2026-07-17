@@ -88,6 +88,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<AgentActivity> AgentActivities => Set<AgentActivity>();
     public DbSet<AgentActivityLink> AgentActivityLinks => Set<AgentActivityLink>();
     public DbSet<ActivityTemplate> ActivityTemplates => Set<ActivityTemplate>();
+    public DbSet<PersonnelTemplate> PersonnelTemplates => Set<PersonnelTemplate>();
 
     // cases
     public DbSet<Case> Cases => Set<Case>();
@@ -392,6 +393,16 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.ContentHtml).HasColumnType("longtext");
             // no unique: soft-delete safe
             b.HasIndex(v => v.Name);
+            b.HasIndex(v => v.IsActive);
+        });
+
+        modelBuilder.Entity<PersonnelTemplate>(b =>
+        {
+            b.Property(v => v.Name).HasMaxLength(120).IsRequired();
+            b.Property(v => v.Description).HasMaxLength(500);
+            b.Property(v => v.ContentHtml).HasColumnType("longtext");
+            // uniqueness enforced per-kind in the service, not the DB (soft-delete safe)
+            b.HasIndex(v => v.Kind);
             b.HasIndex(v => v.IsActive);
         });
 
@@ -864,7 +875,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<AgentNote>(b =>
         {
-            b.Property(v => v.Text).HasMaxLength(4000).IsRequired();
+            b.Property(v => v.Text).HasColumnType("longtext").IsRequired();
             b.Property(v => v.AuthorName).HasMaxLength(128);
             b.HasIndex(v => new { v.AgentId, v.Kind });
             b.HasOne<Agent>().WithMany()
@@ -873,7 +884,7 @@ public class AppDbContext : IdentityDbContext<Agent>
 
         modelBuilder.Entity<AgentPromotionRequest>(b =>
         {
-            b.Property(a => a.Justification).HasMaxLength(2000);
+            b.Property(a => a.Justification).HasColumnType("longtext");
             b.Property(a => a.RequesterName).HasMaxLength(128);
             b.Property(a => a.DeciderName).HasMaxLength(128);
             b.Property(a => a.DecisionNote).HasMaxLength(2000);

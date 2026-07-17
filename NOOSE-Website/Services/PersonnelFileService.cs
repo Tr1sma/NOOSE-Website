@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -31,7 +32,7 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory) : I
     public async Task<AgentNote> NoteCreateAsync(string agentId, AgentNoteKind kind, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLeadership(actor);
-        var content = text?.Trim();
+        var content = NormalizeHtml(text);
         if (string.IsNullOrEmpty(content))
         {
             throw new InvalidOperationException("Der Vermerk darf nicht leer sein.");
@@ -102,16 +103,25 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory) : I
         {
             throw new InvalidOperationException("Für diesen Agenten ist bereits ein Beförderungsantrag offen.");
         }
+        var justificationHtml = NormalizeHtml(justification);
         var request = new AgentPromotionRequest
         {
             AgentId = agentId,
             TargetRank = targetRank,
-            Justification = string.IsNullOrWhiteSpace(justification) ? null : justification.Trim(),
+            Justification = string.IsNullOrEmpty(justificationHtml) ? null : justificationHtml,
             Status = PromotionStatus.Requested,
             RequesterName = actor.GetCodename(),
         };
         db.AgentPromotionRequests.Add(request);
         await db.SaveChangesAsync(cancellationToken);
         return request;
+    }
+
+    // Sanitize WYSIWYG HTML; an empty editor (Quill emits <p><br></p>) collapses to "".
+    private static string NormalizeHtml(string? html)
+    {
+        var clean = HtmlCleanup.Clean(html);
+        var textOnly = Regex.Replace(clean, "<.*?>", string.Empty).Replace("&nbsp;", " ");
+        return string.IsNullOrWhiteSpace(textOnly) ? string.Empty : clean;
     }
 }

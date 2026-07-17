@@ -1,6 +1,8 @@
+@inject IPersonnelTemplateService PersonnelTemplateService
+
 <MudDialog>
     <DialogContent>
-        <MudStack Spacing="3" Style="min-width:360px;">
+        <MudStack Spacing="3" Style="min-width:420px;">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Beförderungsantrag für <b>@Codename</b> (aktuell: @RankDisplay.Name(Current)).</MudText>
             <MudSelect T="Rank" @bind-Value="_target" Label="Ziel-Dienstgrad" Variant="Variant.Outlined">
                 @foreach (var d in RankDisplay.All)
@@ -8,8 +10,21 @@
                     <MudSelectItem Value="d">@RankDisplay.Name(d)</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField @bind-Value="_justification" Label="Begründung" Lines="3" Variant="Variant.Outlined"
-                          HelperText="Wird im Posteingang für die Entscheidung angezeigt." />
+            @if (_templates.Count > 0)
+            {
+                <MudSelect T="string" Value="_selectedTemplateId" ValueChanged="ApplyTemplateAsync" Label="Vorlage einfügen"
+                           Variant="Variant.Outlined" Dense="true" Clearable="true" Placeholder="Vorlage wählen …">
+                    @foreach (var t in _templates)
+                    {
+                        <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Begründung</MudText>
+                <RichTextEditor @ref="_editor" MinHeight="200px" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Wird im Posteingang für die Entscheidung angezeigt.</MudText>
+            </div>
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -25,11 +40,37 @@
     [Parameter] public Rank Current { get; set; } = Rank.JuniorAgent;
 
     private Rank _target;
-    private string? _justification;
+    private RichTextEditor _editor = default!;
+    private string? _selectedTemplateId;
+    private List<PersonnelTemplate> _templates = new();
 
-    protected override void OnInitialized() => _target = Current;
+    protected override async Task OnInitializedAsync()
+    {
+        _target = Current;
+        _templates = await PersonnelTemplateService.GetActiveAsync(PersonnelTemplateKind.Promotion);
+    }
 
-    private void Save() => MudDialog.Close(DialogResult.Ok(new Choice(_target, _justification)));
+    private async Task ApplyTemplateAsync(string? id)
+    {
+        _selectedTemplateId = null;
+        if (string.IsNullOrEmpty(id))
+        {
+            return;
+        }
+        var t = _templates.FirstOrDefault(x => x.Id == id);
+        if (t is null)
+        {
+            return;
+        }
+        await _editor.SetHtmlAsync(t.ContentHtml);
+    }
+
+    private async Task Save()
+    {
+        var html = await _editor.GetHtmlAsync();
+        MudDialog.Close(DialogResult.Ok(new Choice(_target, html)));
+    }
+
     private void Cancel() => MudDialog.Cancel();
 
     public record Choice(Rank TargetRank, string? Justification);
