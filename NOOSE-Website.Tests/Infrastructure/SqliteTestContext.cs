@@ -15,6 +15,15 @@ public sealed class SqliteTestContext : IDisposable
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
 
+        // The production database is MySQL; these tests exercise service logic, not referential
+        // integrity, so relax FK enforcement (EF's Sqlite provider turns it on by default) to allow
+        // seeding partial object graphs.
+        using (var pragma = _connection.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA foreign_keys = OFF;";
+            pragma.ExecuteNonQuery();
+        }
+
         Options = new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlite(_connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.AmbientTransactionWarning))

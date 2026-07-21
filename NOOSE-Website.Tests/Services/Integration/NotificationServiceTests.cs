@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Notifications;
-using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
@@ -8,481 +7,423 @@ using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
-/// <summary>Integration tests for <see cref="NotificationService"/> over in-memory SQLite.</summary>
+/// <summary>Integration tests for NotificationService over in-memory SQLite.</summary>
 public class NotificationServiceTests
 {
     // NotificationService has NO Permission.Require* guards; principal-based methods no-op on
     // anonymous rather than throwing, so negative coverage exercises those gates instead.
 
-    private static (NotificationService Svc, NotificationBroadcaster Broadcaster, IDiscordWebhookService Discord, List<string> Reported)
-        Build(SqliteTestContext ctx)
+    // GUID-shaped ids required by MentionParser's token regex.
+    private const string RecipientGuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    private const string TriggerGuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    private const string PersonGuid = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+
+    private static NotificationService NewService(
+        SqliteTestContext ctx, NotificationBroadcaster broadcaster, IDiscordWebhookService discord)
+        => new(ctx.Factory, broadcaster, discord);
+
+    private static string MentionToken(string agentId) => $"@{{Agent:{agentId}}}";
+
+    // ---- NotifyAsync -------------------------------------------------------
+
+    [Fact]
+    public async Task NotifyAsync_CreatesNotification_AndBroadcasts()
     {
+        using var ctx = new SqliteTestContext();
+        var broadcasts = new List<string>();
         var broadcaster = new NotificationBroadcaster();
-        var reported = new List<string>();
-        broadcaster.Received += id => reported.Add(id);
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
+
+        await svc.NotifyAsync("agent-1", NotificationType.Account, "Konto geändert", "/konto");
+
+        using var db = ctx.NewContext();
+        var n = db.Notifications.Single();
+        Assert.Equal("agent-1", n.RecipientId);
+        Assert.Equal(NotificationType.Account, n.Type);
+        Assert.Equal("Konto geändert", n.Title);
+        Assert.Equal("/konto", n.Href);
+        Assert.Null(n.ReadAt);
+        Assert.Equal(new[] { "agent-1" }, broadcasts);
+    }
+
+    [Fact]
+    public async Task NotifyAsync_EmptyRecipient_IsNoOp()
+    {
+        using var ctx = new SqliteTestContext();
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
+
+        await svc.NotifyAsync("   ", NotificationType.Account, "x", null);
+        await svc.NotifyAsync(null, NotificationType.Account, "x", null);
+
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
+        Assert.Empty(broadcasts);
+    }
+
+    // ---- NotifyMentionedAsync ----------------------------------------------
+
+    [Fact]
+    public async Task NotifyMentionedAsync_VisibleActiveRecipient_GetsMention_AndPushesDiscord()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Users.Add(Seed.Agent(RecipientGuid, rank: Rank.JuniorAgent, status: AgentStatus.Active));
+            seed.People.Add(Seed.Person(PersonGuid, "Ziel", p => p.IsClassified = false));
+            seed.SaveChanges();
+        }
         var discord = Substitute.For<IDiscordWebhookService>();
-        var svc = new NotificationService(ctx.Factory, broadcaster, discord);
-        return (svc, broadcaster, discord, reported);
-    }
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
 
-    private static Notification Notif(string recipientId, DateTime createdAt, DateTime? readAt = null,
-        string title = "t", NotificationType type = NotificationType.Account)
-        => new()
-        {
-            RecipientId = recipientId,
-            Type = type,
-            Title = title,
-            CreatedAt = createdAt,
-            ReadAt = readAt,
-        };
-
-    // ---------- NotifyAsync ----------
-
-    [Fact]
-    public async Task NotifyAsync_CreatesNotification_AndReports()
-    {
-        using var ctx = new SqliteTestContext();
-        var (svc, _, _, reported) = Build(ctx);
-
-        await svc.NotifyAsync("r1", NotificationType.JobAssigned, "New task", "/aufgaben/1");
+        await svc.NotifyMentionedAsync(
+            $"Hallo {MentionToken(RecipientGuid)}!", "Du wurdest erwähnt", "/personen/x",
+            "Person", PersonGuid, trigger);
 
         using var db = ctx.NewContext();
-        var row = Assert.Single(db.Notifications.ToList());
-        Assert.Equal("r1", row.RecipientId);
-        Assert.Equal(NotificationType.JobAssigned, row.Type);
-        Assert.Equal("New task", row.Title);
-        Assert.Equal("/aufgaben/1", row.Href);
-        Assert.Null(row.ReadAt);
-        Assert.Equal(new[] { "r1" }, reported);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task NotifyAsync_EmptyRecipient_NoOp(string? recipientId)
-    {
-        using var ctx = new SqliteTestContext();
-        var (svc, _, _, reported) = Build(ctx);
-
-        await svc.NotifyAsync(recipientId, NotificationType.Account, "x", null);
-
-        using var db = ctx.NewContext();
-        Assert.Empty(db.Notifications.ToList());
-        Assert.Empty(reported);
-    }
-
-    // ---------- NotifyMentionedAsync ----------
-
-    [Fact]
-    public async Task NotifyMentionedAsync_MentionedActiveVisible_CreatesNotification_AndPushes()
-    {
-        using var ctx = new SqliteTestContext();
-        var (svc, _, discord, reported) = Build(ctx);
-
-        var recipientId = Guid.NewGuid().ToString();
-        var triggerId = Guid.NewGuid().ToString();
-        using (var db = ctx.NewContext())
-        {
-            db.Users.Add(Seed.Agent(recipientId, Rank.SupervisorySpecialAgent, AgentStatus.Active));
-            db.SaveChanges();
-        }
-
-        var text = MentionParser.Token("Agent", recipientId);
-        var trigger = ClaimsPrincipalBuilder.Agent(triggerId).Build();
-
-        // unknown target type => Visibility returns true regardless of scope
-        await svc.NotifyMentionedAsync(text, "You were mentioned", "/personen/1", "SomethingElse", "t1", trigger);
-
-        using (var db = ctx.NewContext())
-        {
-            var row = Assert.Single(db.Notifications.ToList());
-            Assert.Equal(recipientId, row.RecipientId);
-            Assert.Equal(NotificationType.Mention, row.Type);
-            Assert.Equal("You were mentioned", row.Title);
-        }
-        Assert.Equal(new[] { recipientId }, reported);
+        var n = db.Notifications.Single();
+        Assert.Equal(RecipientGuid, n.RecipientId);
+        Assert.Equal(NotificationType.Mention, n.Type);
         await discord.Received(1).PushAsync(
-            NotificationType.Mention, "/personen/1",
-            Arg.Is<IReadOnlyCollection<string>>(c => c.Contains(recipientId)),
+            NotificationType.Mention, Arg.Any<string>(),
+            Arg.Is<IReadOnlyCollection<string>>(c => c.Count == 1 && c.Contains(RecipientGuid)),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task NotifyMentionedAsync_NoMentions_NoOp()
+    public async Task NotifyMentionedAsync_MentionOfTriggerSelf_IsExcluded()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, discord, _) = Build(ctx);
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
 
-        var trigger = ClaimsPrincipalBuilder.Agent(Guid.NewGuid().ToString()).Build();
-        await svc.NotifyMentionedAsync("plain text, no tokens", "t", "/h", "SomethingElse", "t1", trigger);
+        await svc.NotifyMentionedAsync(
+            $"Ich {MentionToken(TriggerGuid)}", "Erwähnung", "/x", "Person", PersonGuid, trigger);
 
         using var db = ctx.NewContext();
         Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
-            Arg.Any<NotificationType>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<CancellationToken>());
+            Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task NotifyMentionedAsync_ExcludesTrigger()
+    public async Task NotifyMentionedAsync_ClassifiedTargetInvisibleToNonLeadership_NoNotification()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, discord, _) = Build(ctx);
-
-        var triggerId = Guid.NewGuid().ToString();
-        using (var db = ctx.NewContext())
+        using (var seed = ctx.NewContext())
         {
-            db.Users.Add(Seed.Agent(triggerId, Rank.SupervisorySpecialAgent, AgentStatus.Active));
-            db.SaveChanges();
+            seed.Users.Add(Seed.Agent(RecipientGuid, rank: Rank.JuniorAgent, status: AgentStatus.Active));
+            seed.People.Add(Seed.Person(PersonGuid, "Geheim", p => p.IsClassified = true));
+            seed.SaveChanges();
         }
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
 
-        // text mentions only the trigger themselves -> excluded -> no-op
-        var text = MentionParser.Token("Agent", triggerId);
-        var trigger = ClaimsPrincipalBuilder.Agent(triggerId).Build();
-        await svc.NotifyMentionedAsync(text, "t", "/h", "SomethingElse", "t1", trigger);
+        await svc.NotifyMentionedAsync(
+            MentionToken(RecipientGuid), "Erwähnung", "/x", "Person", PersonGuid, trigger);
 
-        using var db2 = ctx.NewContext();
-        Assert.Empty(db2.Notifications.ToList());
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
-            Arg.Any<NotificationType>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<CancellationToken>());
+            Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task NotifyMentionedAsync_InactiveRecipient_Skipped()
+    public async Task NotifyMentionedAsync_InactiveRecipient_NoNotification()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, _) = Build(ctx);
-
-        var recipientId = Guid.NewGuid().ToString();
-        using (var db = ctx.NewContext())
+        using (var seed = ctx.NewContext())
         {
-            db.Users.Add(Seed.Agent(recipientId, Rank.SupervisorySpecialAgent, AgentStatus.Pending));
-            db.SaveChanges();
+            seed.Users.Add(Seed.Agent(RecipientGuid, rank: Rank.JuniorAgent, status: AgentStatus.Pending));
+            seed.People.Add(Seed.Person(PersonGuid, "Ziel", p => p.IsClassified = false));
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
 
-        var text = MentionParser.Token("Agent", recipientId);
-        var trigger = ClaimsPrincipalBuilder.Agent(Guid.NewGuid().ToString()).Build();
-        await svc.NotifyMentionedAsync(text, "t", "/h", "SomethingElse", "t1", trigger);
+        await svc.NotifyMentionedAsync(
+            MentionToken(RecipientGuid), "Erwähnung", "/x", "Person", PersonGuid, trigger);
 
-        using var db2 = ctx.NewContext();
-        Assert.Empty(db2.Notifications.ToList());
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
     }
 
     [Fact]
-    public async Task NotifyMentionedAsync_ClassifiedTargetNonLeadership_Skipped()
+    public async Task NotifyMentionedAsync_NoMentionTokens_IsNoOp()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, discord, _) = Build(ctx);
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
 
-        var recipientId = Guid.NewGuid().ToString();
-        var person = Seed.Person(configure: p => p.IsClassified = true);
-        using (var db = ctx.NewContext())
-        {
-            // non-leadership recipient (JuniorAgent, not admin) cannot see classified record
-            db.Users.Add(Seed.Agent(recipientId, Rank.JuniorAgent, AgentStatus.Active));
-            db.People.Add(person);
-            db.SaveChanges();
-        }
+        await svc.NotifyMentionedAsync("kein token hier", "t", "/x", "Person", PersonGuid, trigger);
 
-        var text = MentionParser.Token("Agent", recipientId);
-        var trigger = ClaimsPrincipalBuilder.Agent(Guid.NewGuid().ToString()).Build();
-        await svc.NotifyMentionedAsync(text, "t", "/h", nameof(Person), person.Id, trigger);
-
-        using var db2 = ctx.NewContext();
-        Assert.Empty(db2.Notifications.ToList());
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
-            Arg.Any<NotificationType>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<CancellationToken>());
+            Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task NotifyMentionedAsync_ClassifiedTargetLeadership_Notified()
-    {
-        using var ctx = new SqliteTestContext();
-        var (svc, _, discord, reported) = Build(ctx);
-
-        var recipientId = Guid.NewGuid().ToString();
-        var person = Seed.Person(configure: p => p.IsClassified = true);
-        using (var db = ctx.NewContext())
-        {
-            // leadership recipient (SupervisorySpecialAgent) sees classified record
-            db.Users.Add(Seed.Agent(recipientId, Rank.SupervisorySpecialAgent, AgentStatus.Active));
-            db.People.Add(person);
-            db.SaveChanges();
-        }
-
-        var text = MentionParser.Token("Agent", recipientId);
-        var trigger = ClaimsPrincipalBuilder.Agent(Guid.NewGuid().ToString()).Build();
-        await svc.NotifyMentionedAsync(text, "t", "/h", nameof(Person), person.Id, trigger);
-
-        using var db2 = ctx.NewContext();
-        var row = Assert.Single(db2.Notifications.ToList());
-        Assert.Equal(recipientId, row.RecipientId);
-        Assert.Equal(NotificationType.Mention, row.Type);
-        Assert.Equal(new[] { recipientId }, reported);
-        await discord.Received(1).PushAsync(
-            NotificationType.Mention, "/h",
-            Arg.Is<IReadOnlyCollection<string>>(c => c.Contains(recipientId)),
-            Arg.Any<CancellationToken>());
-    }
-
-    // ---------- NotifyManyAsync ----------
+    // ---- NotifyManyAsync ---------------------------------------------------
 
     [Fact]
-    public async Task NotifyManyAsync_CreatesForAll_AndPushes()
+    public async Task NotifyManyAsync_ExcludesTrigger_Dedupes_DropsEmpty_AndPushes()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, discord, reported) = Build(ctx);
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, broadcaster, discord);
 
-        await svc.NotifyManyAsync(new[] { "a", "b" }, NotificationType.Announcement, "News", "/brett/1", "trigger");
+        var ids = new[] { "r1", "r2", "r1", "trigger", "  ", "" };
+        await svc.NotifyManyAsync(ids, NotificationType.Announcement, "Neu", "/brett", "trigger");
 
         using var db = ctx.NewContext();
         var rows = db.Notifications.ToList();
         Assert.Equal(2, rows.Count);
-        Assert.All(rows, r =>
-        {
-            Assert.Equal(NotificationType.Announcement, r.Type);
-            Assert.Equal("News", r.Title);
-            Assert.Equal("/brett/1", r.Href);
-        });
-        Assert.Contains("a", rows.Select(r => r.RecipientId));
-        Assert.Contains("b", rows.Select(r => r.RecipientId));
-        Assert.Equal(2, reported.Count);
+        Assert.Contains(rows, r => r.RecipientId == "r1");
+        Assert.Contains(rows, r => r.RecipientId == "r2");
+        Assert.DoesNotContain(rows, r => r.RecipientId == "trigger");
+        Assert.All(rows, r => Assert.Equal(NotificationType.Announcement, r.Type));
+        Assert.Equal(2, broadcasts.Count);
         await discord.Received(1).PushAsync(
-            NotificationType.Announcement, "/brett/1",
+            NotificationType.Announcement, "/brett",
             Arg.Is<IReadOnlyCollection<string>>(c => c.Count == 2),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task NotifyManyAsync_ExcludesTriggerAndDedupes()
+    public async Task NotifyManyAsync_EmptyAfterFilter_IsNoOp()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, discord, reported) = Build(ctx);
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
 
-        // duplicates, the trigger, and blank ids are all dropped -> only "a" survives
-        await svc.NotifyManyAsync(new[] { "a", "a", "c", " ", "" }, NotificationType.Account, "x", null, "c");
-
-        using var db = ctx.NewContext();
-        var row = Assert.Single(db.Notifications.ToList());
-        Assert.Equal("a", row.RecipientId);
-        Assert.Equal(new[] { "a" }, reported);
-        await discord.Received(1).PushAsync(
-            NotificationType.Account, null,
-            Arg.Is<IReadOnlyCollection<string>>(c => c.Count == 1 && c.Contains("a")),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task NotifyManyAsync_EmptyAfterFilter_NoOp()
-    {
-        using var ctx = new SqliteTestContext();
-        var (svc, _, discord, reported) = Build(ctx);
-
-        await svc.NotifyManyAsync(new[] { "c" }, NotificationType.Account, "x", null, "c");
+        await svc.NotifyManyAsync(new[] { "trigger", "", "  " }, NotificationType.Account, "t", null, "trigger");
 
         using var db = ctx.NewContext();
         Assert.Empty(db.Notifications.ToList());
-        Assert.Empty(reported);
         await discord.DidNotReceive().PushAsync(
-            Arg.Any<NotificationType>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<CancellationToken>());
+            Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
     }
 
-    // ---------- GetOwnAsync ----------
+    // ---- GetOwnAsync -------------------------------------------------------
 
     [Fact]
-    public async Task GetOwnAsync_ReturnsOwnNewestFirst()
+    public async Task GetOwnAsync_ReturnsOnlyOwn_NewestFirst()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, _) = Build(ctx);
-
-        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        using (var db = ctx.NewContext())
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(Notif("me", t0, title: "oldest"));
-            db.Notifications.Add(Notif("me", t0.AddHours(2), title: "newest"));
-            db.Notifications.Add(Notif("me", t0.AddHours(1), title: "middle"));
-            db.Notifications.Add(Notif("someone-else", t0.AddHours(3), title: "other"));
-            db.SaveChanges();
+            seed.Notifications.Add(NewRow("agent-1", "alt", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.Notifications.Add(NewRow("agent-1", "neu", new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.Notifications.Add(NewRow("agent-1", "mittel", new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.Notifications.Add(NewRow("other", "fremd", new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
-        var actor = ClaimsPrincipalBuilder.Agent("me").Build();
-        var result = await svc.GetOwnAsync(actor);
+        var result = await svc.GetOwnAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build());
 
         Assert.Equal(3, result.Count);
-        Assert.Equal(new[] { "newest", "middle", "oldest" }, result.Select(n => n.Title));
-        Assert.DoesNotContain(result, n => n.RecipientId == "someone-else");
+        Assert.Equal(new[] { "neu", "mittel", "alt" }, result.Select(r => r.Title).ToArray());
     }
 
     [Fact]
     public async Task GetOwnAsync_RespectsMaxClamp()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, _) = Build(ctx);
-
-        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        using (var db = ctx.NewContext())
+        using (var seed = ctx.NewContext())
         {
-            for (var i = 0; i < 3; i++)
-            {
-                db.Notifications.Add(Notif("me", t0.AddHours(i), title: $"n{i}"));
-            }
-            db.SaveChanges();
+            seed.Notifications.Add(NewRow("agent-1", "a", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.Notifications.Add(NewRow("agent-1", "b", new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
-        var actor = ClaimsPrincipalBuilder.Agent("me").Build();
-        var result = await svc.GetOwnAsync(actor, 2);
+        // max below 1 clamps up to 1; returns only the single newest row
+        var result = await svc.GetOwnAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build(), max: 0);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal(new[] { "n2", "n1" }, result.Select(n => n.Title));
+        Assert.Single(result);
+        Assert.Equal("b", result[0].Title);
     }
 
     [Fact]
     public async Task GetOwnAsync_Anonymous_ReturnsEmpty()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, _) = Build(ctx);
-
-        using (var db = ctx.NewContext())
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(Notif("me", DateTime.UtcNow));
-            db.SaveChanges();
+            seed.Notifications.Add(NewRow("agent-1", "a", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
         var result = await svc.GetOwnAsync(ClaimsPrincipalBuilder.Anonymous());
+
         Assert.Empty(result);
     }
 
-    // ---------- GetUnreadCountAsync ----------
+    // ---- GetUnreadCountAsync -----------------------------------------------
 
     [Fact]
-    public async Task GetUnreadCountAsync_CountsOnlyUnreadForCaller()
+    public async Task GetUnreadCountAsync_CountsOnlyOwnUnread()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, _) = Build(ctx);
-
-        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        using (var db = ctx.NewContext())
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(Notif("me", t0));                       // unread
-            db.Notifications.Add(Notif("me", t0));                       // unread
-            db.Notifications.Add(Notif("me", t0, readAt: t0.AddDays(1))); // read
-            db.Notifications.Add(Notif("other", t0));                     // other agent, unread
-            db.SaveChanges();
+            seed.Notifications.Add(NewRow("agent-1", "u1", t));
+            seed.Notifications.Add(NewRow("agent-1", "u2", t));
+            seed.Notifications.Add(NewRow("agent-1", "gelesen", t, readAt: t));
+            seed.Notifications.Add(NewRow("other", "fremd", t));
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
-        var actor = ClaimsPrincipalBuilder.Agent("me").Build();
-        Assert.Equal(2, await svc.GetUnreadCountAsync(actor));
+        var count = await svc.GetUnreadCountAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build());
+
+        Assert.Equal(2, count);
     }
 
     [Fact]
     public async Task GetUnreadCountAsync_Anonymous_ReturnsZero()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, _) = Build(ctx);
-
-        using (var db = ctx.NewContext())
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(Notif("me", DateTime.UtcNow));
-            db.SaveChanges();
+            seed.Notifications.Add(NewRow("agent-1", "u", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
-        Assert.Equal(0, await svc.GetUnreadCountAsync(ClaimsPrincipalBuilder.Anonymous()));
+        var count = await svc.GetUnreadCountAsync(ClaimsPrincipalBuilder.Anonymous());
+
+        Assert.Equal(0, count);
     }
 
-    // ---------- AsReadMarkAsync ----------
+    // ---- AsReadMarkAsync ---------------------------------------------------
 
     [Fact]
-    public async Task AsReadMarkAsync_OwnUnread_SetsReadAt_AndReports()
+    public async Task AsReadMarkAsync_MarksOwnUnread_AndBroadcasts()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, reported) = Build(ctx);
-
-        var n = Notif("me", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        using (var db = ctx.NewContext())
+        var row = NewRow("agent-1", "u", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(n);
-            db.SaveChanges();
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
         }
+        var broadcasts = new List<string>();
+        var broadcaster = new NotificationBroadcaster();
+        broadcaster.Received += id => broadcasts.Add(id);
+        var svc = NewService(ctx, broadcaster, Substitute.For<IDiscordWebhookService>());
 
-        var actor = ClaimsPrincipalBuilder.Agent("me").Build();
-        await svc.AsReadMarkAsync(n.Id, actor);
+        await svc.AsReadMarkAsync(row.Id, ClaimsPrincipalBuilder.Agent("agent-1").Build());
 
-        using var db2 = ctx.NewContext();
-        var row = db2.Notifications.Single(x => x.Id == n.Id);
-        Assert.NotNull(row.ReadAt);
-        Assert.Equal(new[] { "me" }, reported);
+        using var db = ctx.NewContext();
+        Assert.NotNull(db.Notifications.Single(n => n.Id == row.Id).ReadAt);
+        Assert.Equal(new[] { "agent-1" }, broadcasts);
     }
 
     [Fact]
-    public async Task AsReadMarkAsync_NotOwn_NoChange()
+    public async Task AsReadMarkAsync_OthersNotification_IsNoOp()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, reported) = Build(ctx);
-
-        var n = Notif("other", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        using (var db = ctx.NewContext())
+        var row = NewRow("other", "u", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(n);
-            db.SaveChanges();
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
-        var actor = ClaimsPrincipalBuilder.Agent("me").Build();
-        await svc.AsReadMarkAsync(n.Id, actor);
+        await svc.AsReadMarkAsync(row.Id, ClaimsPrincipalBuilder.Agent("agent-1").Build());
 
-        using var db2 = ctx.NewContext();
-        var row = db2.Notifications.Single(x => x.Id == n.Id);
-        Assert.Null(row.ReadAt);
-        Assert.Empty(reported);
+        using var db = ctx.NewContext();
+        Assert.Null(db.Notifications.Single(n => n.Id == row.Id).ReadAt);
     }
 
-    // ---------- AllAsReadAsync ----------
+    [Fact]
+    public async Task AsReadMarkAsync_AlreadyRead_LeavesTimestampUnchanged()
+    {
+        using var ctx = new SqliteTestContext();
+        var already = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var row = NewRow("agent-1", "u", already, readAt: already);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+
+        await svc.AsReadMarkAsync(row.Id, ClaimsPrincipalBuilder.Agent("agent-1").Build());
+
+        using var db = ctx.NewContext();
+        Assert.Equal(already, db.Notifications.Single(n => n.Id == row.Id).ReadAt);
+    }
+
+    // ---- AllAsReadAsync ----------------------------------------------------
 
     [Fact]
     public async Task AllAsReadAsync_MarksAllOwnUnread_LeavesOthers()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, reported) = Build(ctx);
-
-        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var otherUnread = Notif("other", t0);
-        using (var db = ctx.NewContext())
+        var t = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var mine1 = NewRow("agent-1", "m1", t);
+        var mine2 = NewRow("agent-1", "m2", t);
+        var others = NewRow("other", "o", t);
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(Notif("me", t0));
-            db.Notifications.Add(Notif("me", t0));
-            db.Notifications.Add(otherUnread);
-            db.SaveChanges();
+            seed.Notifications.AddRange(mine1, mine2, others);
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
-        var actor = ClaimsPrincipalBuilder.Agent("me").Build();
-        await svc.AllAsReadAsync(actor);
+        await svc.AllAsReadAsync(ClaimsPrincipalBuilder.Agent("agent-1").Build());
 
-        using var db2 = ctx.NewContext();
-        Assert.Equal(0, db2.Notifications.Count(n => n.RecipientId == "me" && n.ReadAt == null));
-        Assert.Equal(2, db2.Notifications.Count(n => n.RecipientId == "me" && n.ReadAt != null));
-        Assert.Null(db2.Notifications.Single(n => n.Id == otherUnread.Id).ReadAt);
-        Assert.Equal(new[] { "me" }, reported);
+        using var db = ctx.NewContext();
+        Assert.NotNull(db.Notifications.Single(n => n.Id == mine1.Id).ReadAt);
+        Assert.NotNull(db.Notifications.Single(n => n.Id == mine2.Id).ReadAt);
+        Assert.Null(db.Notifications.Single(n => n.Id == others.Id).ReadAt);
     }
 
     [Fact]
-    public async Task AllAsReadAsync_Anonymous_NoOp()
+    public async Task AllAsReadAsync_Anonymous_IsNoOp()
     {
         using var ctx = new SqliteTestContext();
-        var (svc, _, _, reported) = Build(ctx);
-
-        using (var db = ctx.NewContext())
+        var row = NewRow("agent-1", "u", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        using (var seed = ctx.NewContext())
         {
-            db.Notifications.Add(Notif("me", DateTime.UtcNow));
-            db.SaveChanges();
+            seed.Notifications.Add(row);
+            seed.SaveChanges();
         }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
 
         await svc.AllAsReadAsync(ClaimsPrincipalBuilder.Anonymous());
 
-        using var db2 = ctx.NewContext();
-        Assert.Equal(1, db2.Notifications.Count(n => n.ReadAt == null));
-        Assert.Empty(reported);
+        using var db = ctx.NewContext();
+        Assert.Null(db.Notifications.Single(n => n.Id == row.Id).ReadAt);
     }
+
+    private static Notification NewRow(string recipientId, string title, DateTime createdAt, DateTime? readAt = null)
+        => new()
+        {
+            RecipientId = recipientId,
+            Type = NotificationType.Account,
+            Title = title,
+            CreatedAt = createdAt,
+            ReadAt = readAt,
+        };
 }

@@ -1,0 +1,496 @@
+using System.Security.Claims;
+using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Activities;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Timeline;
+using NOOSE_Website.Services;
+
+namespace NOOSE_Website.Tests.Services.Integration;
+
+/// <summary>Integration tests for <see cref="TimelineService"/> against in-memory SQLite. Read-only service: no Permission guard, visibility is the gate.</summary>
+public sealed class TimelineServiceTests
+{
+    private static TimelineService Build(SqliteTestContext ctx) => new(ctx.Factory);
+
+    // Rank >= SupervisorySpecialAgent(4) => IsLeadership() + MayClassifiedRead().
+    private static ClaimsPrincipal Leader()
+        => ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).WithCodename("Falcon").Build();
+
+    // Junior agent: not leadership, cannot read classified records.
+    private static ClaimsPrincipal Junior()
+        => ClaimsPrincipalBuilder.Agent("junior").WithRank(Rank.JuniorAgent).Build();
+
+    // External partner: read-only, sees only shared, non-classified records.
+    private static ClaimsPrincipal Partner()
+        => ClaimsPrincipalBuilder.Agent("partner1").AsPartner(PartnerAgency.LSPD, PartnerRank.Member).Build();
+
+    private static DateTime Utc(int day, int hour = 0)
+        => new(2026, 3, day, hour, 0, 0, DateTimeKind.Utc);
+
+    // ---------- visibility gate ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_NonexistentRecord_ReturnsEmpty()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "does-not-exist", Leader());
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_ClassifiedPerson_Junior_ReturnsEmpty()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", configure: p => p.IsClassified = true));
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "geheim", CreatedAt = Utc(1) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Junior());
+
+        // classified record is invisible to a non-privileged viewer even though events exist
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_ClassifiedPerson_Leader_ReturnsEntries()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", configure: p => p.IsClassified = true));
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "geheim", CreatedAt = Utc(1) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Single(result);
+        Assert.Equal(TimelineCategory.Comment, result[0].Category);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_Partner_UnsharedRecord_ReturnsEmpty()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "hallo", CreatedAt = Utc(1) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        // partner has no share on p1 => record not visible
+        var result = await svc.GetTimelineAsync("Person", "p1", Partner());
+
+        Assert.Empty(result);
+    }
+
+    // ---------- audit base ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_Audit_CreatedAndModified_MappedWithChanges()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "Person", EntityId = "p1", Action = AuditAction.Created,
+                AgentName = "Falcon", Timestamp = Utc(1),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "Person", EntityId = "p1", Action = AuditAction.Modified,
+                AgentName = "Hawk", Timestamp = Utc(2),
+                ChangesJson = "{\"Name\":[\"Alt\",\"Neu\"]}",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Equal(2, result.Count);
+        var created = Assert.Single(result.Where(e => e.Category == TimelineCategory.Asset));
+        Assert.Equal("Akte angelegt", created.Title);
+        Assert.Equal("Falcon", created.ActorName);
+
+        var modified = Assert.Single(result.Where(e => e.Category == TimelineCategory.Change));
+        Assert.Equal("Akte geändert", modified.Title);
+        Assert.NotNull(modified.Changes);
+        var change = Assert.Single(modified.Changes!);
+        Assert.Equal("Name", change.Field);
+        Assert.Equal("Alt", change.Alt);
+        Assert.Equal("Neu", change.New);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_Audit_LinkEntityType_Excluded()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "Person", EntityId = "p1", Action = AuditAction.Created, Timestamp = Utc(1),
+            });
+            // Link audit rows are filtered out of the audit base
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "Link", EntityId = "p1", Action = AuditAction.Created, Timestamp = Utc(2),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Single(result);
+        Assert.Equal(TimelineCategory.Asset, result[0].Category);
+    }
+
+    // ---------- classification history ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_ClassificationHistory_Mapped()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.ClassificationHistory.Add(new ClassificationHistory
+            {
+                EntityType = "Person", EntityId = "p1", Value = Classification.SuspicionCase,
+                Justification = "Neue Erkenntnisse", Timestamp = Utc(1), AgentName = "Falcon",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var entry = Assert.Single(result);
+        Assert.Equal(TimelineCategory.Classification, entry.Category);
+        Assert.StartsWith("Einstufung:", entry.Title);
+        Assert.Equal("Neue Erkenntnisse", entry.Detail);
+        Assert.Equal("Falcon", entry.ActorName);
+    }
+
+    // ---------- comments ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_Comment_Included_AndTruncated()
+    {
+        using var ctx = new SqliteTestContext();
+        var longText = new string('x', 200);
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Comments.Add(new Comment
+            {
+                EntityType = "Person", EntityId = "p1", Text = longText,
+                AuthorName = "Falcon", CreatedAt = Utc(1),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var entry = Assert.Single(result);
+        Assert.Equal(TimelineCategory.Comment, entry.Category);
+        Assert.Equal("Kommentar", entry.Title);
+        Assert.Equal("Falcon", entry.ActorName);
+        Assert.NotNull(entry.Detail);
+        Assert.EndsWith("…", entry.Detail!);
+        // truncated to 160 chars + ellipsis
+        Assert.Equal(161, entry.Detail!.Length);
+    }
+
+    // ---------- sources ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_Source_Included_ActorResolvedFromCodename()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Users.Add(Seed.Agent("author", configure: a => a.Codename = "Ghost"));
+            db.Sources.Add(new Source
+            {
+                EntityType = "Person", EntityId = "p1", Type = SourceType.Link,
+                Title = "Zeugenaussage", CreatedAt = Utc(1), CreatedById = "author",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var entry = Assert.Single(result);
+        Assert.Equal(TimelineCategory.Source, entry.Category);
+        Assert.Equal("Quelle hinzugefügt: Zeugenaussage", entry.Title);
+        Assert.Equal("Web-Link", entry.Detail);
+        // actor resolved from the seeded agent's codename via CreatedById
+        Assert.Equal("Ghost", entry.ActorName);
+    }
+
+    // ---------- followups ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_Followup_Done_EmitsTwoEntries()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Followups.Add(new Followup
+            {
+                EntityType = "Person", EntityId = "p1", DueAt = Utc(5),
+                Note = "Rückruf", Done = true, DoneAt = Utc(6),
+                CreatedAt = Utc(1), CreatedById = "author",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var followups = result.Where(e => e.Category == TimelineCategory.Followup).ToList();
+        Assert.Equal(2, followups.Count);
+        Assert.Contains(followups, e => e.Title == "Wiedervorlage angelegt");
+        Assert.Contains(followups, e => e.Title == "Wiedervorlage erledigt");
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_Followup_Open_EmitsOneEntry()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Followups.Add(new Followup
+            {
+                EntityType = "Person", EntityId = "p1", DueAt = Utc(5),
+                Note = "offen", Done = false, CreatedAt = Utc(1),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var entry = Assert.Single(result);
+        Assert.Equal(TimelineCategory.Followup, entry.Category);
+        Assert.Equal("Wiedervorlage angelegt", entry.Title);
+    }
+
+    // ---------- ordering ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_OrdersNewestFirst()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "oldest", CreatedAt = Utc(1) });
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "middle", CreatedAt = Utc(5) });
+            db.Comments.Add(new Comment { EntityType = "Person", EntityId = "p1", Text = "newest", CreatedAt = Utc(9) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Equal(3, result.Count);
+        Assert.True(result[0].Timestamp >= result[1].Timestamp);
+        Assert.True(result[1].Timestamp >= result[2].Timestamp);
+        Assert.Equal(Utc(9), result[0].Timestamp);
+        Assert.Equal(Utc(1), result[2].Timestamp);
+    }
+
+    // ---------- person-specific: relation, observation, photo, links ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_PersonRelation_Mapped()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.PersonRelations.Add(new PersonRelation
+            {
+                PersonAId = "p1", PersonBId = "p2", Type = RelationType.Ally,
+                Note = "Kompagnon", CreatedAt = Utc(1),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Relation));
+        Assert.StartsWith("Beziehung", entry.Title);
+        Assert.Equal("Kompagnon", entry.Detail);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_ObservationAndPhoto_Mapped()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.Observations.Add(new Observation
+            {
+                PersonId = "p1", Start = Utc(2), Location = "Hafen",
+                Sighting = "Übergabe beobachtet",
+            });
+            db.PersonPhotos.Add(new PersonPhoto
+            {
+                PersonId = "p1", OriginalName = "foto.jpg", FileNameSaved = "abc.jpg",
+                ContentType = "image/jpeg", CreatedAt = Utc(3),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var obs = Assert.Single(result.Where(e => e.Category == TimelineCategory.Observation));
+        Assert.StartsWith("Observation", obs.Title);
+        Assert.Contains("Hafen", obs.Title);
+        Assert.Equal("Übergabe beobachtet", obs.Detail);
+
+        var photo = Assert.Single(result.Where(e => e.Category == TimelineCategory.Photo));
+        Assert.Equal("Foto hinzugefügt", photo.Title);
+        Assert.Equal("foto.jpg", photo.Detail);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_Link_Mapped_AndDeletedEmitsRemoval()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.Links.Add(new Link
+            {
+                SourceType = "Person", SourceId = "p1", TargetType = "Person", TargetId = "p2",
+                Label = "Komplize", Automatic = false, CreatedAt = Utc(1),
+                IsDeleted = true, DeletedAt = Utc(4),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var links = result.Where(e => e.Category == TimelineCategory.Link).ToList();
+        // one "linked" entry + one "removed" entry for the soft-deleted link
+        Assert.Equal(2, links.Count);
+        Assert.Contains(links, e => e.Title.StartsWith("Verknüpft mit", StringComparison.Ordinal));
+        Assert.Contains(links, e => e.Title.Contains("entfernt", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_AutomaticLink_Excluded()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.Links.Add(new Link
+            {
+                SourceType = "Person", SourceId = "p1", TargetType = "Person", TargetId = "p2",
+                Automatic = true, CreatedAt = Utc(1),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        // automatic links are never shown on the timeline
+        Assert.Empty(result);
+    }
+
+    // ---------- faction-specific: activities + audit fan-out ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_FactionActivity_Mapped()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction("f1"));
+            var activity = new AgentActivity
+            {
+                Id = "act1", Title = "Streife", Kind = "Patrouille",
+                ActivityDate = Utc(2), ContentHtml = "<p>Alles ruhig</p>", CreatedById = "author",
+            };
+            db.AgentActivities.Add(activity);
+            db.AgentActivityLinks.Add(new AgentActivityLink
+            {
+                AgentActivityId = "act1", TargetType = "Faction", TargetId = "f1",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Faction", "f1", Leader());
+
+        var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Activity));
+        Assert.Contains("Aktivität", entry.Title);
+        Assert.Contains("Streife", entry.Title);
+        // HTML stripped to plain snippet
+        Assert.Equal("Alles ruhig", entry.Detail);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_FactionMemberAudit_MappedAsMembership()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction("f1"));
+            db.People.Add(Seed.Person("pm", "Member"));
+            var member = new FactionMember { Id = "m1", FactionId = "f1", PersonId = "pm", CreatedAt = Utc(1) };
+            db.FactionMembers.Add(member);
+            // audit row on the child member entity, discovered via the faction audit fan-out
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "FactionMember", EntityId = "m1", Action = AuditAction.Created,
+                AgentName = "Falcon", Timestamp = Utc(2),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Faction", "f1", Leader());
+
+        var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Membership));
+        Assert.Equal("Mitglied aufgenommen", entry.Title);
+        Assert.Equal("Falcon", entry.ActorName);
+    }
+}

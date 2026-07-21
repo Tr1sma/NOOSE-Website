@@ -19,7 +19,11 @@ public class EnumDisplayTests_A
 
     [Theory]
     [InlineData(AgentNoteKind.Commendation, "Belobigung")]
-    [InlineData(AgentNoteKind.Disciplinary, "Disziplinarisch")]
+    [InlineData(AgentNoteKind.Disciplinary, "Negativer Vermerk")]
+    [InlineData(AgentNoteKind.Specialization, "Spezialisierung")]
+    [InlineData(AgentNoteKind.Department, "Abteilung")]
+    [InlineData(AgentNoteKind.Training, "Ausbildung")]
+    [InlineData(AgentNoteKind.Information, "Information")]
     public void AgentNoteKind_Name_MapsEachValue(AgentNoteKind kind, string expected)
     {
         Assert.Equal(expected, AgentNoteKindDisplay.Name(kind));

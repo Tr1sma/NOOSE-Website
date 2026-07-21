@@ -20,6 +20,7 @@ public class DiscordWebhookModelsTests
         NotificationType.JobDueSoon,
         NotificationType.MeetingScheduled,
         NotificationType.MeetingReminder,
+        NotificationType.PersonnelEntry,
     };
 
     // Enum members NOT in the routable list.

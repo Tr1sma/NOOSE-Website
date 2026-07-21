@@ -9,6 +9,12 @@ namespace NOOSE_Website.Tests.Infrastructure;
 /// <summary>Factories for the most-referenced entities; every field has a sane default, override via the configure action.</summary>
 public static class Seed
 {
+    private static int _seq;
+
+    /// <summary>Unique case number per call; the Aktenzeichen column is uniquely indexed.</summary>
+    private static string NextCaseNumber(string prefix)
+        => $"NOOSE-{prefix}-2026-{System.Threading.Interlocked.Increment(ref _seq):0000}";
+
     public static Agent Agent(string id = "agent-1", Rank rank = Rank.SupervisorySpecialAgent,
         AgentStatus status = AgentStatus.Active, Action<Agent>? configure = null)
     {
@@ -33,7 +39,7 @@ public static class Seed
         {
             Id = id ?? Guid.NewGuid().ToString(),
             Name = name,
-            CaseNumber = "NOOSE-P-2026-0001",
+            CaseNumber = NextCaseNumber("P"),
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         };
         configure?.Invoke(p);
@@ -47,7 +53,7 @@ public static class Seed
         {
             Id = id ?? Guid.NewGuid().ToString(),
             Name = name,
-            CaseNumber = "NOOSE-F-2026-0001",
+            CaseNumber = NextCaseNumber("F"),
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         };
         configure?.Invoke(f);
@@ -61,7 +67,7 @@ public static class Seed
         {
             Id = id ?? Guid.NewGuid().ToString(),
             Title = title,
-            CaseNumber = "NOOSE-V-2026-0001",
+            CaseNumber = NextCaseNumber("V"),
             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         };
         configure?.Invoke(c);

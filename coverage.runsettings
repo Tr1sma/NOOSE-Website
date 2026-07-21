@@ -1,17 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Microsoft Code Coverage settings. Coverlet is not used: its Mono.Cecil build cannot
+     instrument .NET 10 assemblies. Run:
+       dotnet test NOOSE-Website.Tests --collect "Code Coverage" --settings coverage.runsettings
+     then narrow to the target namespaces with NOOSE-Website.Tests/coverage/coverage-summary.py. -->
 <RunSettings>
   <DataCollectionRunSettings>
     <DataCollectors>
-      <DataCollector friendlyName="XPlat code coverage">
+      <DataCollector friendlyName="Code Coverage">
         <Configuration>
-          <Format>cobertura</Format>
-          <!-- coverlet.collector in this setup only honors a whole-module include; namespace-type
-               filters and ExcludeByFile produce empty output here. The whole web module is
-               instrumented and the report is narrowed to Services/Authorization/Models afterwards. -->
-          <Include>[NOOSE-Website]*</Include>
-          <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
-          <SkipAutoProps>true</SkipAutoProps>
-          <UseSourceLink>false</UseSourceLink>
+          <CodeCoverage>
+            <Format>Cobertura</Format>
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*NOOSE-Website\.dll$</ModulePath>
+              </Include>
+              <Exclude>
+                <ModulePath>.*Tests\.dll$</ModulePath>
+              </Exclude>
+            </ModulePaths>
+            <!-- Classes marked [ExcludeFromCodeCoverage] (DI wiring, network client, demo-data
+                 fixtures) are dropped automatically. -->
+          </CodeCoverage>
         </Configuration>
       </DataCollector>
     </DataCollectors>
