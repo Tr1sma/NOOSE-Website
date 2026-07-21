@@ -1,0 +1,16 @@
+<MudTooltip Text="@Hint" Disabled="@(string.IsNullOrWhiteSpace(Hint))">
+    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+             Color="@MeetingAttendanceStatusDisplay.Colour(Status)"
+             Icon="@MeetingAttendanceStatusDisplay.Icon(Status)">
+        @MeetingAttendanceStatusDisplay.Name(Status)
+    </MudChip>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public MeetingAttendanceStatus Status { get; set; }
+    [Parameter] public MeetingAbsenceOrigin Origin { get; set; } = MeetingAbsenceOrigin.None;
+
+    private string? Hint => Origin == MeetingAbsenceOrigin.None
+        ? null
+        : MeetingAbsenceOriginDisplay.Name(Origin);
+}

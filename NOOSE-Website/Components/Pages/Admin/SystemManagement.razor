@@ -93,6 +93,35 @@ else
         </MudPaper>
 
         <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-2">Besprechungen – Auffälligkeiten</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Ab wann ein Agent in der <MudLink Href="/abmeldungen/uebersicht">Anwesenheits-Übersicht</MudLink>
+                hervorgehoben wird. Gezählt werden nur unentschuldigte Fehlzeiten in abgeschlossenen Besprechungen.
+            </MudText>
+            <MudGrid Spacing="2" Style="max-width:640px;">
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="int" @bind-Value="_input.MeetingWindowSize" Label="Fenstergröße"
+                                     Variant="Variant.Outlined" Min="1" Max="50"
+                                     HelperText="@($"Standard: {MeetingAnomalyDefaults.WindowSize}")" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="int" @bind-Value="_input.MeetingAnomalyYellow" Label="Gelb ab"
+                                     Variant="Variant.Outlined" Min="1" Max="50"
+                                     HelperText="@($"Standard: {MeetingAnomalyDefaults.Yellow}")" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="int" @bind-Value="_input.MeetingAnomalyRed" Label="Rot ab"
+                                     Variant="Variant.Outlined" Min="1" Max="50"
+                                     HelperText="@($"Standard: {MeetingAnomalyDefaults.Red}")" />
+                </MudItem>
+            </MudGrid>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
+                Agenten mit weniger abgeschlossenen Besprechungen als die Fenstergröße gelten als „Zu wenig Daten"
+                und werden nie markiert. Werte werden beim Speichern begradigt (Fenster ≥ Rot ≥ Gelb ≥ 1).
+            </MudAlert>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-2">Theme-Farben</MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
                 Akzentfarben per Color-Picker wählen (oder Hex-Wert eintippen). „Zurücksetzen" stellt die
@@ -201,6 +230,9 @@ else
             ThemeTertiary = _configuration.ThemeTertiary,
             DemoModeActive = _configuration.DemoModeActive,
             WantedBoardMinHazard = _configuration.WantedBoardMinHazard,
+            MeetingWindowSize = _configuration.MeetingWindowSize,
+            MeetingAnomalyYellow = _configuration.MeetingAnomalyYellow,
+            MeetingAnomalyRed = _configuration.MeetingAnomalyRed,
         };
         _load = false;
     }

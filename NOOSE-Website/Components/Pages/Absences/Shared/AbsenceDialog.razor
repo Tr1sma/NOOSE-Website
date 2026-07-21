@@ -1,0 +1,105 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:380px;">
+            <MudDatePicker @bind-Date="_from" @bind-Date:after="SyncTo" Label="Von" Editable="true"
+                           Variant="Variant.Outlined" DateFormat="dd.MM.yyyy"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Event" />
+
+            <MudDatePicker @bind-Date="_to" Label="Bis (einschließlich)" Editable="true"
+                           Variant="Variant.Outlined" DateFormat="dd.MM.yyyy"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.EventAvailable" />
+
+            <MudSelect T="AbsenceCategory" @bind-Value="_category" Label="Grund" Variant="Variant.Outlined" Dense="true"
+                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Category">
+                @foreach (var c in AbsenceCategoryDisplay.All)
+                {
+                    <MudSelectItem Value="@c">@AbsenceCategoryDisplay.Name(c)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_reason" Label="Anmerkung (optional)" Variant="Variant.Outlined"
+                          Lines="3" MaxLength="500" HelperText="Nur die Führung sieht diesen Text." />
+
+            @if (_days > 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@_days Tag(e) abgemeldet.</MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!Valid)">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public DateTime? From { get; set; }
+    [Parameter] public DateTime? To { get; set; }
+    [Parameter] public AbsenceCategory Category { get; set; } = AbsenceCategory.Vacation;
+    [Parameter] public string? Reason { get; set; }
+
+    private DateTime? _from;
+    private DateTime? _to;
+    private AbsenceCategory _category = AbsenceCategory.Vacation;
+    private string? _reason;
+
+    private bool Valid => _from is not null && _to is not null && _to >= _from;
+
+    private int _days => Valid ? (_to!.Value.Date - _from!.Value.Date).Days + 1 : 0;
+
+    protected override void OnInitialized()
+    {
+        _from = From ?? DateTime.Now.Date;
+        _to = To ?? _from;
+        _category = Category;
+        _reason = Reason;
+    }
+
+    // the most common sign-off is a single day, so mirror the start
+    private void SyncTo()
+    {
+        if (_from is null)
+        {
+            return;
+        }
+        if (_to is null || _to < _from)
+        {
+            _to = _from;
+        }
+    }
+
+    private void Save()
+    {
+        if (!Valid)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new AbsenceInput
+        {
+            From = _from,
+            To = _to,
+            Category = _category,
+            Reason = _reason,
+        }));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the dialog; returns the input or null on cancel.</summary>
+    public static async Task<AbsenceInput?> ShowAsync(IDialogService dialog, string title = "Abmelden",
+        DateTime? from = null, DateTime? to = null, AbsenceCategory category = AbsenceCategory.Vacation, string? reason = null)
+    {
+        var parameters = new DialogParameters<AbsenceDialog>
+        {
+            { x => x.From, from },
+            { x => x.To, to },
+            { x => x.Category, category },
+            { x => x.Reason, reason },
+        };
+        var reference = await dialog.ShowAsync<AbsenceDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: AbsenceInput input } ? input : null;
+    }
+}

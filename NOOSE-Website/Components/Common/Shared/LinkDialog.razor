@@ -12,6 +12,7 @@
 @inject ILawService LawService
 @inject IDocumentService DocumentService
 @inject IBewerbungService BewerbungService
+@inject IMeetingService MeetingService
 
 <MudDialog>
     <DialogContent>
@@ -265,6 +266,22 @@
                         </ItemTemplate>
                     </MudAutocomplete>
                     break;
+
+                case nameof(Meeting):
+                    <MudAutocomplete T="Meeting" Label="Besprechung" @bind-Value="_meeting" AutoFocus="true"
+                                     SearchFunc="@SearchMeetings" ToStringFunc="@(m => m?.Title ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups">
+                        <ItemTemplate Context="m">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">@m.Title</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@m.CaseNumber</MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                    break;
             }
 
             <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
@@ -325,6 +342,7 @@
         new(nameof(Observation), "Observation"),
         new(nameof(Law), "Gesetz/Paragraf"),
         new(nameof(Document), "Dokument"),
+        new(nameof(Meeting), "Besprechung"),
     };
 
     // applications are HRB/leadership-only, so only offer the type to those viewers
@@ -348,6 +366,7 @@
     private Law? _law;
     private DocumentListItem? _document;
     private Bewerbung? _bewerbung;
+    private Meeting? _meeting;
 
     // loaded on demand for client-side search
     private List<Agent>? _allAgents;
@@ -371,6 +390,7 @@
         nameof(Law) => _law?.Id,
         nameof(Document) => _document?.Id,
         nameof(Bewerbung) => _bewerbung?.Id,
+        nameof(Meeting) => _meeting?.Id,
         _ => null,
     };
 
@@ -378,7 +398,7 @@
     {
         _person = null; _faction = null; _group = null; _party = null; _operation = null; _taskforce = null;
         _case = null; _job = null; _agent = null; _doc = null; _observation = null; _law = null; _document = null;
-        _bewerbung = null;
+        _bewerbung = null; _meeting = null;
         if (_targetType == nameof(Agent) && _allAgents is null)
         {
             _allAgents = (await AgentService.GetAllAsync()).Where(a => a.Status == AgentStatus.Active).ToList();
@@ -429,6 +449,9 @@
 
     private async Task<IEnumerable<DocumentListItem>> SearchDocuments(string value, CancellationToken token)
         => await DocumentService.SearchAsync(value, _docScope, 20, token);
+
+    private async Task<IEnumerable<Meeting>> SearchMeetings(string value, CancellationToken token)
+        => await MeetingService.SearchAsync(value, 20, token);
 
     private Task<IEnumerable<Bewerbung>> SearchBewerbungen(string value, CancellationToken token)
     {
@@ -501,6 +524,7 @@
         nameof(Observation) => ObsText(_observation),
         nameof(Document) => _document?.Title,
         nameof(Bewerbung) => _bewerbung?.Name,
+        nameof(Meeting) => _meeting?.Title,
         _ => null,
     };
 

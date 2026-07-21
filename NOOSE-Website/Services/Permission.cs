@@ -91,6 +91,26 @@ public static class Permission
         }
     }
 
+    /// <summary>Require read access to leadership-level content; read-only supervision is admitted.</summary>
+    public static void RequireClassifiedRead(ClaimsPrincipal actor)
+    {
+        if (!actor.MayClassifiedRead())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Auswertung ist der Führung und der Aufsicht vorbehalten.");
+        }
+    }
+
+    /// <summary>Require the right to author meetings and agenda items.</summary>
+    public static void RequireMeetingWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayHighestClassification() || !actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Besprechungen und Tagesordnungspunkte darf nur Senior Special Agent aufwärts oder ein Admin bearbeiten.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

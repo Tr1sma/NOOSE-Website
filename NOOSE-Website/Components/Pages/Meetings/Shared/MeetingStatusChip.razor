@@ -1,0 +1,17 @@
+<MudChip T="string" Size="@Size" Variant="Variant.Outlined" Color="@Colour">
+    @MeetingStatusDisplay.Name(Status)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public MeetingStatus Status { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private Color Colour => Status switch
+    {
+        MeetingStatus.Planned => Color.Info,
+        MeetingStatus.Held => Color.Success,
+        MeetingStatus.Canceled => Color.Error,
+        MeetingStatus.Postponed => Color.Warning,
+        _ => Color.Default,
+    };
+}

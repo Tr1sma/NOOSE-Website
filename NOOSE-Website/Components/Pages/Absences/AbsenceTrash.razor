@@ -1,0 +1,94 @@
+@page "/abmeldungen/papierkorb"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject IAbsenceService AbsenceService
+@inject ISnackbar Snackbar
+
+<PageTitle>Papierkorb – Abmeldungen · NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/abmeldungen" aria-label="Zurück" />
+    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Papierkorb – Abmeldungen</MudText>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Gelöschte Abmeldungen. Die Führung kann sie wiederherstellen; sie erscheinen dann wieder in der Liste.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_absences.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Der Papierkorb ist leer.</MudAlert>
+}
+else
+{
+    <MudTable Items="_absences" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Agent</MudTh>
+            <MudTh><MudTableSortLabel T="Absence" SortBy="@(x => x.FromDate)">Von</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Absence" SortBy="@(x => x.ToDate)">Bis</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel T="Absence" SortBy="@(x => x.Days)">Tage</MudTableSortLabel></MudTh>
+            <MudTh>Grund</MudTh>
+            <MudTh><MudTableSortLabel T="Absence" SortBy="@(x => x.DeletedAt)" InitialDirection="SortDirection.Descending">Gelöscht am</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            @* GetTrashAsync includes the Agent; the id is only a defensive fallback *@
+            <MudTd DataLabel="Agent"><MudText Typo="Typo.body2">@(context.Agent?.Codename ?? context.AgentId)</MudText></MudTd>
+            <MudTd DataLabel="Von"><MudText Typo="Typo.body2">@context.FromDate.ToString("dd.MM.yyyy")</MudText></MudTd>
+            <MudTd DataLabel="Bis"><MudText Typo="Typo.body2">@context.ToDate.ToString("dd.MM.yyyy")</MudText></MudTd>
+            <MudTd DataLabel="Tage"><MudText Typo="Typo.body2">@context.Days</MudText></MudTd>
+            <MudTd DataLabel="Grund"><AbsenceCategoryChip Category="@context.Category" /></MudTd>
+            <MudTd DataLabel="Gelöscht am">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.DeletedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                @* LeadershipPage admits read-only supervision, for whom RestoreAsync throws *@
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="write">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Restore"
+                               OnClick="@(() => RestoreAsync(context))">Wiederherstellen</MudButton>
+                </AuthorizeView>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private bool _load = true;
+    private List<Absence> _absences = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _absences = await AbsenceService.GetTrashAsync();
+        _load = false;
+    }
+
+    private async Task RestoreAsync(Absence absence)
+    {
+        var user = (await AuthStateTask!).User;
+        try
+        {
+            await AbsenceService.RestoreAsync(absence.Id, user);
+            Snackbar.Add("Abmeldung wiederhergestellt.", Severity.Success);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        await LoadAsync();
+    }
+}

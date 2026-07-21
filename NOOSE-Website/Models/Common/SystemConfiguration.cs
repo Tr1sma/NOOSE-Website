@@ -19,6 +19,15 @@ public static class SystemSettingKeys
     /// <summary>Min hazard level for auto-listing a person on the wanted board; manual entries always show.</summary>
     public const string WantedBoardMinHazard = "FahndungMinGefahrenstufe";
 
+    /// <summary>How many closed meetings the attendance anomaly check looks back over.</summary>
+    public const string MeetingWindowSize = "BesprechungFensterGroesse";
+
+    /// <summary>Unexcused absences within the window that turn an agent yellow.</summary>
+    public const string MeetingAnomalyYellow = "BesprechungAnomalieGelb";
+
+    /// <summary>Unexcused absences within the window that turn an agent red.</summary>
+    public const string MeetingAnomalyRed = "BesprechungAnomalieRot";
+
     // Discord outgoing webhooks (one channel per notification category)
     public const string DiscordEnabled = "DiscordAktiv";
     public const string SiteBaseUrl = "SeitenBasisUrl";
@@ -52,7 +61,10 @@ public sealed record SystemConfiguration(
     string? LogoFileName,
     string? LogoContentType,
     bool DemoModeActive,
-    HazardLevel WantedBoardMinHazard)
+    HazardLevel WantedBoardMinHazard,
+    int MeetingWindowSize,
+    int MeetingAnomalyYellow,
+    int MeetingAnomalyRed)
 {
     public bool HasLogo => !string.IsNullOrWhiteSpace(LogoFileName);
 }
@@ -69,4 +81,15 @@ public class SystemConfigurationInput
     public string? ThemeTertiary { get; set; }
     public bool DemoModeActive { get; set; }
     public HazardLevel WantedBoardMinHazard { get; set; } = HazardLevel.Critical;
+    public int MeetingWindowSize { get; set; } = MeetingAnomalyDefaults.WindowSize;
+    public int MeetingAnomalyYellow { get; set; } = MeetingAnomalyDefaults.Yellow;
+    public int MeetingAnomalyRed { get; set; } = MeetingAnomalyDefaults.Red;
+}
+
+/// <summary>Code defaults for the attendance anomaly thresholds.</summary>
+public static class MeetingAnomalyDefaults
+{
+    public const int WindowSize = 5;
+    public const int Yellow = 2;
+    public const int Red = 3;
 }

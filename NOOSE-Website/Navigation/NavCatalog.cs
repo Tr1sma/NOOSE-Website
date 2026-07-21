@@ -23,6 +23,7 @@ public static class NavCatalog
         new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.Primary),
         new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Primary),
         new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Primary, BadgeKey: "acknowledgments"),
+        new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Meine Abmeldungen", NavSection.Primary),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten),
         new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung", NavSection.Akten),
@@ -41,6 +42,7 @@ public static class NavCatalog
         new NavEntry("suche", "/suche", Icons.Material.Filled.Search, "Globale Suche", NavSection.Akten),
         new NavEntry("graph", "/graph", Icons.Material.Filled.Hub, "Beziehungsgraph", NavSection.Akten),
         new NavEntry("organigramm", "/organigramm", Icons.Material.Filled.AccountTree, "Organigramm", NavSection.Akten),
+        new NavEntry("besprechungen", "/besprechungen", Icons.Material.Filled.Groups, "Besprechungen", NavSection.Akten),
         new NavEntry("kalender", "/kalender", Icons.Material.Filled.CalendarMonth, "Kalender", NavSection.Akten),
         new NavEntry("statistik", "/statistik", Icons.Material.Filled.QueryStats, "Statistik", NavSection.Akten),
 
@@ -56,6 +58,7 @@ public static class NavCatalog
         new NavEntry("admin.custom-felder", "/admin/custom-felder", Icons.Material.Filled.Tune, "Custom-Felder", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.aktualitaet", "/admin/aktualitaet", Icons.Material.Filled.Timelapse, "Aktualität", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.bedrohungs-score", "/admin/bedrohungs-score", Icons.Material.Filled.Speed, "Bedrohungs-Score", NavSection.VerwaltungFuehrung),
+        new NavEntry("abmeldungen.uebersicht", "/abmeldungen/uebersicht", Icons.Material.Filled.EventBusy, "Abmeldungen & Anwesenheit", NavSection.VerwaltungFuehrung),
         new NavEntry("lageberichte", "/lageberichte", Icons.Material.Filled.Assessment, "Lageberichte", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung),
         new NavEntry("admin.basisdaten", "/admin/basisdaten", Icons.Material.Filled.Storage, "Basisdaten", NavSection.VerwaltungFuehrung),

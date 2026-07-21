@@ -13,6 +13,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Recruiting;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -181,12 +182,34 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             }
         }
 
+        // meetings have no classification concept; only their agenda is rank-gated
+        var meetingIds = pairs.Where(p => p.OtherType == nameof(Meeting)).Select(p => p.OtherId).Distinct().ToList();
+        foreach (var x in await db.Meetings.Where(m => meetingIds.Contains(m.Id))
+                     .Select(m => new { m.Id, m.Title, m.CaseNumber }).ToListAsync(cancellationToken))
+        {
+            targets[(nameof(Meeting), x.Id)] = ($"{x.Title} ({x.CaseNumber})", false, $"/besprechungen/{x.Id}");
+        }
+
+        // agenda items: rank 3+ only; others keep them unresolved -> hidden below
+        if (scope.MayAgenda)
+        {
+            var itemIds = pairs.Where(p => p.OtherType == nameof(MeetingAgendaItem)).Select(p => p.OtherId).Distinct().ToList();
+            foreach (var x in await db.MeetingAgendaItems.Where(p => itemIds.Contains(p.Id))
+                         .Join(db.Meetings, p => p.MeetingId, m => m.Id,
+                               (p, m) => new { p.Id, p.Title, MeetingId = m.Id, MeetingTitle = m.Title })
+                         .ToListAsync(cancellationToken))
+            {
+                targets[(nameof(MeetingAgendaItem), x.Id)] =
+                    ($"{x.MeetingTitle} – {x.Title}", false, $"/besprechungen/{x.MeetingId}?tab=agenda#top-{x.Id}");
+            }
+        }
+
         var knownTypes = new[]
         {
             nameof(Person), nameof(Faction), nameof(PersonGroup), nameof(Party),
             nameof(Operation), nameof(Taskforce), nameof(Case), nameof(Agent),
             nameof(PersonDoc), nameof(Observation), nameof(Job), nameof(Law), nameof(Document),
-            nameof(Bewerbung),
+            nameof(Bewerbung), nameof(Meeting), nameof(MeetingAgendaItem),
         };
         // partners: only links to released, releasable-type records
         HashSet<(string, string)>? releasedTargets = null;
@@ -244,6 +267,7 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         // don't let forged calls link to a classified/restricted target the actor can't see
         if (targetType is nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party)
                 or nameof(Operation) or nameof(Taskforce) or nameof(Case) or nameof(Document) or nameof(Bewerbung)
+                or nameof(Meeting) or nameof(MeetingAgendaItem)
             && !await Visibility.IsRecordVisibleAsync(db, targetType, targetId, ViewerScope.From(actor), cancellationToken))
         {
             throw new UnauthorizedAccessException("Auf diese Akte darfst du nicht verlinken (Verschlusssache oder nicht vorhanden).");

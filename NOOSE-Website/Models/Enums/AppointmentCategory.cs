@@ -21,7 +21,7 @@ public static class AppointmentCategoryDisplay
     public static string Name(AppointmentCategory category) => category switch
     {
         AppointmentCategory.CourtDate => "Gerichtstermin",
-        AppointmentCategory.Meeting => "Besprechung",
+        AppointmentCategory.Meeting => "Interner Termin",
         AppointmentCategory.Deployment => "Einsatz",
         AppointmentCategory.Deadline => "Frist",
         AppointmentCategory.Misc => "Sonstiges",

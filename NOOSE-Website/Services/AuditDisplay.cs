@@ -16,6 +16,12 @@ public static class AuditDisplay
         "ErstelltAm", "ErstelltVonId", "GeaendertAm", "GeaendertVonId",
         "GeloeschtAm", "GeloeschtVonId", "IstGeloescht",
         "PersonId", "FraktionId", "PersonengruppeId", "AgentId",
+        "ProtokollHtml", "NotizHtml", "BesprechungId",
+        "AnwesenheitAbgeschlossenAm", "ErinnerungGesendetAm",
+        // the interceptor stamps CLR property names, so these are what actually match;
+        // hides the large minutes/notes HTML bodies and the FK/dedupe meta of the new entities
+        "MinutesHtml", "NotesHtml", "MeetingId", "AttendanceClosedAt", "ReminderSentAt",
+        "PreviousMeetingId", "CarriedFromItemId", "AcknowledgedById", "DoneById", "MarkedById",
     };
 
     private static readonly Dictionary<string, string> Labels = new(StringComparer.Ordinal)
@@ -33,6 +39,12 @@ public static class AuditDisplay
         ["Rang"] = "Rang", ["Rolle"] = "Rolle", ["IstLeitung"] = "Leitung",
         ["GeschaetzteMitgliederzahl"] = "Geschätzte Mitgliederzahl", ["Label"] = "Bezeichnung",
         ["Codename"] = "Codename", ["Klarname"] = "Klarname", ["Dienstnummer"] = "Dienstnummer",
+        ["VonDatum"] = "Von", ["BisDatum"] = "Bis (einschließlich)", ["Tage"] = "Tage",
+        ["Abmeldegrund"] = "Abmeldegrund", ["KenntnisGenommenAm"] = "Kenntnis genommen am",
+        ["KenntnisGenommenVonName"] = "Kenntnis genommen von",
+        ["Titel"] = "Titel", ["Beginn"] = "Beginn", ["Ende"] = "Ende", ["Ort"] = "Ort",
+        ["Sortierung"] = "Reihenfolge", ["Erledigt"] = "Erledigt", ["Herkunft"] = "Herkunft",
+        ["AgentCodename"] = "Agent", ["ErfasstAm"] = "Erfasst am",
     };
 
     /// <summary>Parses JSON into field changes; empty on null/invalid.</summary>
@@ -89,8 +101,14 @@ public static class AuditDisplay
                 {
                     return "—";
                 }
+                // whole-day fields carry no instant, so never shift them into a time zone
+                if ((field is "VonDatum" or "BisDatum")
+                    && DateOnly.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+                {
+                    return day.ToString("dd.MM.yyyy");
+                }
                 // format dates
-                if ((field is "Zeitpunkt" or "TotBis")
+                if ((field is "Zeitpunkt" or "TotBis" or "Beginn" or "Ende")
                     && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
                 {
                     return dt.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
@@ -107,6 +125,8 @@ public static class AuditDisplay
         "Einstufung" => ClassificationDisplay.Name((Classification)n),
         "Lebensstatus" => LifeStatusDisplay.Name((LifeStatus)n),
         "Ausgang" => MeasureOutcomeDisplay.Name((MeasureOutcome)n),
+        "Abmeldegrund" => AbsenceCategoryDisplay.Name((AbsenceCategory)n),
+        "Herkunft" => MeetingAbsenceOriginDisplay.Name((MeetingAbsenceOrigin)n),
         _ => n.ToString(),
     };
 }

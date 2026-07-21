@@ -1,0 +1,16 @@
+<MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@Colour"
+         Icon="@AbsenceCategoryDisplay.Icon(Category)">
+    @AbsenceCategoryDisplay.Name(Category)
+</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public AbsenceCategory Category { get; set; }
+
+    // sick stands out; the rest are equivalent planning states
+    private Color Colour => Category switch
+    {
+        AbsenceCategory.Sick => Color.Warning,
+        AbsenceCategory.Vacation => Color.Info,
+        _ => Color.Default,
+    };
+}

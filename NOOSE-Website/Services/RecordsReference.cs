@@ -11,6 +11,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -167,6 +168,17 @@ public static class RecordsReference
                 {
                     map[(nameof(Appointment), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Appointment), x.Id));
                 }
+            }
+        }
+
+        // agenda items are deliberately absent: ResolveAsync carries no rank, so it must not expose their titles
+        var meetingIds = OpenIds(nameof(Meeting));
+        if (meetingIds.Count > 0)
+        {
+            foreach (var x in await db.Meetings.Where(m => meetingIds.Contains(m.Id))
+                .Select(m => new { m.Id, m.Title, m.CaseNumber }).ToListAsync(ct))
+            {
+                map[(nameof(Meeting), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Meeting), x.Id));
             }
         }
 

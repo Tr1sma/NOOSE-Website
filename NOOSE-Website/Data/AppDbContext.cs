@@ -19,6 +19,8 @@ using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Data.Entities.Recruiting;
+using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -127,6 +129,15 @@ public class AppDbContext : IdentityDbContext<Agent>
     // calendar appointments & participants
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<AppointmentAssignment> AppointmentAssignments => Set<AppointmentAssignment>();
+
+    // agent sign-offs over whole days
+    public DbSet<Absence> Absences => Set<Absence>();
+
+    // meetings, agenda, per-meeting sign-offs & the frozen attendance roster
+    public DbSet<Meeting> Meetings => Set<Meeting>();
+    public DbSet<MeetingAgendaItem> MeetingAgendaItems => Set<MeetingAgendaItem>();
+    public DbSet<MeetingSignOff> MeetingSignOffs => Set<MeetingSignOff>();
+    public DbSet<MeetingAttendance> MeetingAttendances => Set<MeetingAttendance>();
 
     // ---- announcements ----
     public DbSet<Announcement> Announcements => Set<Announcement>();
@@ -770,6 +781,94 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(z => z.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(z => new { z.AppointmentId, z.AgentId }).IsUnique();
             b.HasIndex(z => z.AgentId);
+        });
+
+        // ---- absences & meetings ----
+        modelBuilder.Entity<Absence>(b =>
+        {
+            b.Property(a => a.AgentId).HasMaxLength(64).IsRequired();
+            b.Property(a => a.Reason).HasMaxLength(500);
+            b.Property(a => a.AcknowledgedById).HasMaxLength(64);
+            b.Property(a => a.AcknowledgedByName).HasMaxLength(128);
+
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(a => a.Agent).WithMany()
+                .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(a => a.AcknowledgedById).OnDelete(DeleteBehavior.SetNull);
+
+            // "is X away on day D" plus the agent's own list
+            b.HasIndex(a => new { a.AgentId, a.FromDate, a.ToDate });
+            // "who is away on day D", no agent predicate
+            b.HasIndex(a => new { a.FromDate, a.ToDate, a.AgentId });
+            b.HasIndex(a => a.AcknowledgedAt);
+        });
+
+        modelBuilder.Entity<Meeting>(b =>
+        {
+            b.Property(m => m.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(m => m.Title).HasMaxLength(200).IsRequired();
+            b.Property(m => m.Location).HasMaxLength(200);
+            b.Property(m => m.MinutesHtml).HasColumnType("longtext");
+            b.Property(m => m.PreviousMeetingId).HasMaxLength(64);
+
+            b.HasIndex(m => m.CaseNumber).IsUnique();
+            b.HasIndex(m => m.Title);
+            // reminder worker plus list sorting
+            b.HasIndex(m => new { m.Start, m.Status });
+            // anomaly evaluation window
+            b.HasIndex(m => new { m.Status, m.AttendanceClosedAt, m.Start });
+
+            // one-to-one clone chain; the unique index makes a double clone impossible
+            b.HasOne<Meeting>().WithOne()
+                .HasForeignKey<Meeting>(m => m.PreviousMeetingId).OnDelete(DeleteBehavior.Restrict);
+
+            b.HasMany(m => m.AgendaItems).WithOne(p => p.Meeting!)
+                .HasForeignKey(p => p.MeetingId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MeetingAgendaItem>(b =>
+        {
+            b.Property(p => p.MeetingId).HasMaxLength(64).IsRequired();
+            b.Property(p => p.Title).HasMaxLength(300).IsRequired();
+            b.Property(p => p.NotesHtml).HasColumnType("longtext");
+            b.Property(p => p.DoneById).HasMaxLength(64);
+            b.Property(p => p.CarriedFromItemId).HasMaxLength(64);
+
+            b.HasIndex(p => new { p.MeetingId, p.Sorting });
+        });
+
+        modelBuilder.Entity<MeetingSignOff>(b =>
+        {
+            b.Property(s => s.MeetingId).HasMaxLength(64).IsRequired();
+            b.Property(s => s.AgentId).HasMaxLength(64).IsRequired();
+            b.Property(s => s.Reason).HasMaxLength(500);
+
+            b.HasOne(s => s.Meeting).WithMany()
+                .HasForeignKey(s => s.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(s => s.Agent).WithMany()
+                .HasForeignKey(s => s.AgentId).OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(s => new { s.MeetingId, s.AgentId }).IsUnique();
+        });
+
+        modelBuilder.Entity<MeetingAttendance>(b =>
+        {
+            b.Property(t => t.MeetingId).HasMaxLength(64).IsRequired();
+            b.Property(t => t.AgentId).HasMaxLength(64).IsRequired();
+            b.Property(t => t.AgentCodename).HasMaxLength(128);
+            b.Property(t => t.Reason).HasMaxLength(500);
+            b.Property(t => t.MarkedById).HasMaxLength(64);
+
+            b.HasOne(t => t.Meeting).WithMany()
+                .HasForeignKey(t => t.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(t => t.Agent).WithMany()
+                .HasForeignKey(t => t.AgentId).OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(t => new { t.MeetingId, t.AgentId }).IsUnique();
+            b.HasIndex(t => t.AgentId);
         });
 
         // ---- announcements ----

@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Statistics;
 
 namespace NOOSE_Website.Services;
 
@@ -40,6 +41,12 @@ public partial class SystemSettingService(
             var values = await db.SystemSettings
                 .ToDictionaryAsync(e => e.Key, e => e.Value, cancellationToken);
 
+            // normalise on read too, so a hand-edited row cannot invert yellow and red
+            var (window, yellow, red) = AttendanceAnomalyLogic.Coherent(
+                ParseCount(values.GetValueOrDefault(SystemSettingKeys.MeetingWindowSize), MeetingAnomalyDefaults.WindowSize),
+                ParseCount(values.GetValueOrDefault(SystemSettingKeys.MeetingAnomalyYellow), MeetingAnomalyDefaults.Yellow),
+                ParseCount(values.GetValueOrDefault(SystemSettingKeys.MeetingAnomalyRed), MeetingAnomalyDefaults.Red));
+
             configuration = new SystemConfiguration(
                 MaintenanceModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.MaintenanceModeActive), "true", StringComparison.OrdinalIgnoreCase),
                 MaintenanceModeText: Empty(values.GetValueOrDefault(SystemSettingKeys.MaintenanceModeText)),
@@ -51,7 +58,10 @@ public partial class SystemSettingService(
                 LogoFileName: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoFileName)),
                 LogoContentType: Empty(values.GetValueOrDefault(SystemSettingKeys.LogoContentType)),
                 DemoModeActive: string.Equals(values.GetValueOrDefault(SystemSettingKeys.DemoModeActive), "true", StringComparison.OrdinalIgnoreCase),
-                WantedBoardMinHazard: ParseHazard(values.GetValueOrDefault(SystemSettingKeys.WantedBoardMinHazard)));
+                WantedBoardMinHazard: ParseHazard(values.GetValueOrDefault(SystemSettingKeys.WantedBoardMinHazard)),
+                MeetingWindowSize: window,
+                MeetingAnomalyYellow: yellow,
+                MeetingAnomalyRed: red);
         }
         catch (Exception)
         {
@@ -97,6 +107,12 @@ public partial class SystemSettingService(
         await SetAsync(db, SystemSettingKeys.ThemeTertiary, Empty(input.ThemeTertiary)?.Trim(), cancellationToken);
         await SetAsync(db, SystemSettingKeys.DemoModeActive, input.DemoModeActive ? "true" : "false", cancellationToken);
         await SetAsync(db, SystemSettingKeys.WantedBoardMinHazard, HazardValid(input.WantedBoardMinHazard).ToString(), cancellationToken);
+
+        var (window, yellow, red) = AttendanceAnomalyLogic.Coherent(
+            input.MeetingWindowSize, input.MeetingAnomalyYellow, input.MeetingAnomalyRed);
+        await SetAsync(db, SystemSettingKeys.MeetingWindowSize, window.ToString(), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.MeetingAnomalyYellow, yellow.ToString(), cancellationToken);
+        await SetAsync(db, SystemSettingKeys.MeetingAnomalyRed, red.ToString(), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         cache.Remove(CacheKey);
@@ -170,7 +186,12 @@ public partial class SystemSettingService(
     }
 
     private static SystemConfiguration Default()
-        => new(false, null, null, BannerLevels.Info, null, null, null, null, null, false, HazardLevel.Critical);
+        => new(false, null, null, BannerLevels.Info, null, null, null, null, null, false, HazardLevel.Critical,
+               MeetingAnomalyDefaults.WindowSize, MeetingAnomalyDefaults.Yellow, MeetingAnomalyDefaults.Red);
+
+    // unparseable or missing falls back to the code default
+    private static int ParseCount(string? value, int fallback)
+        => int.TryParse(value, out var n) ? n : fallback;
 
     private static string? Empty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 

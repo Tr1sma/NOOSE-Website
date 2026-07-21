@@ -1,0 +1,262 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Models.Absences;
+using NOOSE_Website.Models.Enums;
+
+namespace NOOSE_Website.Services;
+
+/// <summary>Absences are self-service and effective at once; leadership only acknowledges them.</summary>
+public class AbsenceService(
+    IDbContextFactory<AppDbContext> dbFactory,
+    INotificationService notifications) : IAbsenceService
+{
+    /// <summary>A single sign-off may not silence the anomaly detection for years.</summary>
+    private const int MaxSpanDays = 180;
+
+    public async Task<List<AbsenceRow>> GetListAsync(bool mayAll, string? meId, DateOnly? from = null, DateOnly? to = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = db.Absences.AsNoTracking().OnlyVisible(mayAll, meId);
+        if (from is { } f)
+        {
+            query = query.Where(a => a.ToDate >= f);
+        }
+        if (to is { } t)
+        {
+            query = query.Where(a => a.FromDate <= t);
+        }
+
+        var rows = await query
+            .OrderByDescending(a => a.FromDate)
+            .Select(a => new
+            {
+                a.Id,
+                a.AgentId,
+                Codename = a.Agent!.Codename,
+                a.FromDate,
+                a.ToDate,
+                a.Days,
+                a.Category,
+                a.Reason,
+                a.AcknowledgedAt,
+                a.AcknowledgedByName,
+                a.CreatedById,
+            })
+            .ToListAsync(cancellationToken);
+
+        // leadership may edit any absence; an owner only their own, and only while it has not lapsed
+        var today = DateOnly.FromDateTime(MeetingTime.Local(DateTime.UtcNow));
+        return rows.Select(a => new AbsenceRow(
+            a.Id, a.AgentId, a.Codename, a.FromDate, a.ToDate, a.Days, a.Category,
+            // free text never leaves the server for viewers who may not read it
+            mayAll || a.AgentId == meId ? a.Reason : null,
+            a.AcknowledgedAt, a.AcknowledgedByName,
+            mayAll || (a.AgentId == meId && a.ToDate >= today))).ToList();
+    }
+
+    public async Task<Absence?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Absences.AsNoTracking()
+            .OnlyVisible(mayAll, meId)
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+    }
+
+    public async Task<List<Absence>> GetTrashAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Absences.AsNoTracking()
+            .IgnoreQueryFilters()
+            // the trash page shows the codename, not the raw agent id
+            .Include(a => a.Agent)
+            .Where(a => a.IsDeleted)
+            .OrderByDescending(a => a.DeletedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Absence> CreateAsync(AbsenceInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+
+        var agentId = actor.GetAgentId()
+            ?? throw new UnauthorizedAccessException("Ohne Agenten-Kontext ist keine Abmeldung möglich.");
+        var (from, to) = Validated(input);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        var absence = new Absence
+        {
+            AgentId = agentId,
+            FromDate = from,
+            ToDate = to,
+            Days = to.DayNumber - from.DayNumber + 1,
+            Category = input.Category,
+            Reason = string.IsNullOrWhiteSpace(input.Reason) ? null : input.Reason.Trim(),
+        };
+        db.Absences.Add(absence);
+        await db.SaveChangesAsync(cancellationToken);
+
+        await LeadershipNotifyAsync(db, absence, agentId, cancellationToken);
+        return absence;
+    }
+
+    public async Task RefreshAsync(string id, AbsenceInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+        var (from, to) = Validated(input);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var absence = await db.Absences.FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException($"Abmeldung '{id}' nicht gefunden.");
+
+        RequireLeadershipOrOwner(absence, actor);
+        RequireNotPast(absence, actor);
+        // block moving the coverage into the past: it would backdate an excuse onto a missed meeting
+        if (!actor.IsLeadership() && to < DateOnly.FromDateTime(MeetingTime.Local(DateTime.UtcNow)))
+        {
+            throw new UnauthorizedAccessException(
+                "Eine Abmeldung kann nur die Führung rückwirkend datieren.");
+        }
+
+        absence.FromDate = from;
+        absence.ToDate = to;
+        absence.Days = to.DayNumber - from.DayNumber + 1;
+        absence.Category = input.Category;
+        absence.Reason = string.IsNullOrWhiteSpace(input.Reason) ? null : input.Reason.Trim();
+        // any change resets leadership's acknowledgement so they re-review the new period
+        absence.AcknowledgedAt = null;
+        absence.AcknowledgedById = null;
+        absence.AcknowledgedByName = null;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var absence = await db.Absences.FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException($"Abmeldung '{id}' nicht gefunden.");
+
+        RequireLeadershipOrOwner(absence, actor);
+        RequireNotPast(absence, actor);
+
+        db.Absences.Remove(absence);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var absence = await db.Absences.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException($"Abmeldung '{id}' nicht gefunden.");
+
+        absence.IsDeleted = false;
+        absence.DeletedAt = null;
+        absence.DeletedById = null;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AcknowledgeAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var absence = await db.Absences.FirstOrDefaultAsync(a => a.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException($"Abmeldung '{id}' nicht gefunden.");
+
+        // idempotent: acknowledging twice is not an error
+        if (absence.AcknowledgedAt is not null)
+        {
+            return;
+        }
+
+        absence.AcknowledgedAt = DateTime.UtcNow;
+        absence.AcknowledgedById = actor.GetAgentId();
+        absence.AcknowledgedByName = actor.GetCodename();
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Throws unless the actor is leadership or the absent agent themselves.</summary>
+    private static void RequireLeadershipOrOwner(Absence absence, ClaimsPrincipal actor)
+    {
+        if (actor.IsLeadership())
+        {
+            return;
+        }
+        var agentId = actor.GetAgentId();
+        if (string.IsNullOrEmpty(agentId) || absence.AgentId != agentId)
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Abmeldung darf nur der abgemeldete Agent selbst oder die Führung bearbeiten.");
+        }
+    }
+
+    /// <summary>A finished absence is evidence for the attendance statistics; only leadership may still touch it.</summary>
+    private static void RequireNotPast(Absence absence, ClaimsPrincipal actor)
+    {
+        if (actor.IsLeadership())
+        {
+            return;
+        }
+        if (absence.ToDate < DateOnly.FromDateTime(MeetingTime.Local(DateTime.UtcNow)))
+        {
+            throw new UnauthorizedAccessException(
+                "Eine bereits abgelaufene Abmeldung kann nur noch die Führung ändern.");
+        }
+    }
+
+    private static (DateOnly From, DateOnly To) Validated(AbsenceInput input)
+    {
+        if (input.From is not { } from || input.To is not { } to)
+        {
+            throw new InvalidOperationException("Bitte Von- und Bis-Datum angeben.");
+        }
+
+        var fromDay = DateOnly.FromDateTime(from);
+        var toDay = DateOnly.FromDateTime(to);
+        if (toDay < fromDay)
+        {
+            throw new InvalidOperationException("Das Bis-Datum darf nicht vor dem Von-Datum liegen.");
+        }
+        if (toDay.DayNumber - fromDay.DayNumber + 1 > MaxSpanDays)
+        {
+            throw new InvalidOperationException($"Eine Abmeldung darf höchstens {MaxSpanDays} Tage umfassen.");
+        }
+        return (fromDay, toDay);
+    }
+
+    /// <summary>Best effort; the free-text reason deliberately stays out of the title.</summary>
+    private async Task LeadershipNotifyAsync(AppDbContext db, Absence absence, string actorId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var codename = await db.Users.AsNoTracking()
+                .Where(u => u.Id == actorId).Select(u => u.Codename)
+                .FirstOrDefaultAsync(cancellationToken) ?? "Unbekannt";
+
+            var recipients = await db.Users.AsNoTracking()
+                .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null
+                         && (u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent))
+                .Select(u => u.Id)
+                .ToListAsync(cancellationToken);
+
+            var title = $"Abmeldung: {codename} vom {absence.FromDate:dd.MM.yyyy} bis {absence.ToDate:dd.MM.yyyy} "
+                      + $"({AbsenceCategoryDisplay.Name(absence.Category)}).";
+
+            await notifications.NotifyManyAsync(recipients, NotificationType.AbsenceFiled,
+                title.Length > 300 ? title[..297] + "…" : title, "/abmeldungen/uebersicht", actorId, cancellationToken);
+        }
+        catch { /* best effort */ }
+    }
+}

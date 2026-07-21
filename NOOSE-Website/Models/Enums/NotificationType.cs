@@ -37,6 +37,15 @@ public enum NotificationType
 
     /// <summary>Assigned task approaching its due date.</summary>
     JobDueSoon = 10,
+
+    /// <summary>New meeting scheduled.</summary>
+    MeetingScheduled = 11,
+
+    /// <summary>Meeting starting soon.</summary>
+    MeetingReminder = 12,
+
+    /// <summary>Agent filed an absence.</summary>
+    AbsenceFiled = 13,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -55,6 +64,9 @@ public static class NotificationTypeDisplay
         NotificationType.SituationReport => "Lagebericht",
         NotificationType.Recruiting => "Bewerbung",
         NotificationType.JobDueSoon => "Aufgabe fällig",
+        NotificationType.MeetingScheduled => "Besprechung",
+        NotificationType.MeetingReminder => "Besprechung beginnt bald",
+        NotificationType.AbsenceFiled => "Abmeldung",
         _ => "Benachrichtigung",
     };
 
@@ -72,6 +84,9 @@ public static class NotificationTypeDisplay
         NotificationType.SituationReport => Icons.Material.Filled.Assessment,
         NotificationType.Recruiting => Icons.Material.Filled.HowToReg,
         NotificationType.JobDueSoon => Icons.Material.Filled.AssignmentLate,
+        NotificationType.MeetingScheduled => Icons.Material.Filled.Groups,
+        NotificationType.MeetingReminder => Icons.Material.Filled.NotificationsActive,
+        NotificationType.AbsenceFiled => Icons.Material.Filled.EventBusy,
         _ => Icons.Material.Filled.Notifications,
     };
 }

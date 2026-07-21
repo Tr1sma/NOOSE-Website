@@ -1,0 +1,72 @@
+<MudStack Spacing="3">
+    <MudTextField @bind-Value="Input.Title" Label="Titel" Variant="Variant.Outlined" Required="true"
+                  MaxLength="200" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Groups" />
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6">
+            <MudDatePicker @bind-Date="_startDate" @bind-Date:after="Sync" Label="Beginn (Datum)" Editable="true"
+                           Variant="Variant.Outlined" DateFormat="dd.MM.yyyy" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTimePicker @bind-Time="_startTime" @bind-Time:after="Sync" Label="Beginn (Uhrzeit)" Editable="true"
+                           Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudDatePicker @bind-Date="_endDate" @bind-Date:after="Sync" Label="Ende (Datum, optional)" Editable="true"
+                           Variant="Variant.Outlined" DateFormat="dd.MM.yyyy" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTimePicker @bind-Time="_endTime" @bind-Time:after="Sync" Label="Ende (Uhrzeit, optional)" Editable="true"
+                           Variant="Variant.Outlined" Clearable="true" />
+        </MudItem>
+    </MudGrid>
+
+    <MudTextField @bind-Value="Input.Location" Label="Ort (optional)" Variant="Variant.Outlined"
+                  MaxLength="200" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Place" />
+
+    @if (ShowStatus)
+    {
+        <MudSelect T="MeetingStatus" @bind-Value="Input.Status" Label="Status" Variant="Variant.Outlined" Dense="true">
+            @foreach (var s in MeetingStatusDisplay.All)
+            {
+                <MudSelectItem Value="@s">@MeetingStatusDisplay.Name(s)</MudSelectItem>
+            }
+        </MudSelect>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public MeetingInput Input { get; set; } = default!;
+
+    /// <summary>Status is only editable on an existing meeting.</summary>
+    [Parameter] public bool ShowStatus { get; set; }
+
+    private DateTime? _startDate;
+    private TimeSpan? _startTime;
+    private DateTime? _endDate;
+    private TimeSpan? _endTime;
+
+    protected override void OnInitialized()
+    {
+        if (Input.Start is { } s)
+        {
+            _startDate = s.Date;
+            _startTime = s.TimeOfDay;
+        }
+        if (Input.End is { } e)
+        {
+            _endDate = e.Date;
+            _endTime = e.TimeOfDay;
+        }
+    }
+
+    // Merge date + time; missing time defaults to 00:00
+    private void Sync()
+    {
+        Input.Start = Combo(_startDate, _startTime);
+        Input.End = Combo(_endDate, _endTime);
+    }
+
+    private static DateTime? Combo(DateTime? date, TimeSpan? time)
+        => date is { } d ? d.Date + (time ?? TimeSpan.Zero) : null;
+}

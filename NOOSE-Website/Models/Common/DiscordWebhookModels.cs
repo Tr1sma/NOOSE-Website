@@ -14,12 +14,16 @@ public static class DiscordRouting
         NotificationType.Mention,
         NotificationType.JobAssigned,
         NotificationType.JobDueSoon,
+        NotificationType.MeetingScheduled,
+        NotificationType.MeetingReminder,
     };
 
     public static bool IsRoutable(NotificationType type) => RoutableTypes.Contains(type);
 
     /// <summary>Category whose Discord post pings the specific recipient agents.</summary>
     public static bool PingsRecipients(NotificationType type)
+        // MeetingReminder pings the role, not individuals: a per-person mention list in a shared
+        // channel is the complement of the absence set and would leak who filed an absence
         => type is NotificationType.Mention or NotificationType.Followup
                 or NotificationType.JobAssigned or NotificationType.JobDueSoon;
 

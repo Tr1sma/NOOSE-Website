@@ -10,6 +10,8 @@ public enum CalendarSource
     Followup = 4,
     FactionActivity = 5,
     PersonDoc = 6,
+    Meeting = 7,
+    Absence = 8,
 }
 
 /// <summary>Requested calendar view.</summary>
@@ -44,6 +46,8 @@ public static class CalendarDisplay
         CalendarSource.Followup => "#D29922",
         CalendarSource.FactionActivity => "#7C8CF8",
         CalendarSource.PersonDoc => "#A371F7",
+        CalendarSource.Meeting => "#22D3EE",
+        CalendarSource.Absence => "#DB61A2",
         _ => "#8B98A8",
     };
 
@@ -56,6 +60,8 @@ public static class CalendarDisplay
         CalendarSource.Followup => "Wiedervorlagen",
         CalendarSource.FactionActivity => "Fraktions-Aktivitäten",
         CalendarSource.PersonDoc => "Personen-Doks",
+        CalendarSource.Meeting => "Besprechungen",
+        CalendarSource.Absence => "Meine Abmeldungen",
         _ => "—",
     };
 
@@ -68,5 +74,7 @@ public static class CalendarDisplay
         CalendarSource.Followup,
         CalendarSource.FactionActivity,
         CalendarSource.PersonDoc,
+        CalendarSource.Meeting,
+        CalendarSource.Absence,
     };
 }

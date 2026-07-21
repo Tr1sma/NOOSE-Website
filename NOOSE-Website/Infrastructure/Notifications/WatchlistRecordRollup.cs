@@ -14,6 +14,8 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Abstractions;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
@@ -71,6 +73,11 @@ public static class WatchlistRecordRollup
             case Notification:
             case SavedSearch:
             case WatchlistEntry:
+            case Meeting:
+            case MeetingAgendaItem:
+            case MeetingAttendance:
+            case MeetingSignOff:
+            case Absence:
                 return Array.Empty<(string, string)>();
 
             default:

@@ -1,0 +1,258 @@
+@page "/besprechungen/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IMeetingService MeetingService
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(_meeting?.Title ?? "Besprechung") – NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_meeting is null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">Besprechung nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4 flex-wrap">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/besprechungen" aria-label="Zurück" />
+            <MudStack Spacing="0">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.h5">@_meeting.Title</MudText>
+                    <MeetingStatusChip Status="@_meeting.Status" />
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @_meeting.CaseNumber · @MeetingTime.Local(_meeting.Start).ToString("dd.MM.yyyy HH:mm") Uhr
+                    @if (_meeting.Location is { } ort)
+                    {
+                        <text> · @ort</text>
+                    }
+                </MudText>
+            </MudStack>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+            @* rank AND write: a rank-3 read-only supervisor must not see controls that always throw *@
+            @if (_mayAgendaWrite)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.EventRepeat"
+                           OnClick="NextAsync" Disabled="@(_hasNext || _cloning)">
+                    Nächste Besprechung
+                </MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Edit"
+                           Href="@($"/besprechungen/{Id}/bearbeiten")">Bearbeiten</MudButton>
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                               OnClick="DeleteAsync" aria-label="Besprechung löschen" />
+            }
+        </MudStack>
+    </MudStack>
+
+    @* KeepPanelsAlive: switching tabs must not tear down the note editor and lose unsaved text *@
+    <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="1" Rounded="true" ApplyEffectsToContainer="true"
+             KeepPanelsAlive="true"
+             @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
+
+        @if (_mayAgenda)
+        {
+            <MudTabPanel Text="Tagesordnung" Icon="@Icons.Material.Filled.ChecklistRtl">
+                <MeetingAgendaPanel MeetingId="@Id" User="_user" CanEdit="_mayAgendaWrite" CanNote="_isLeadership" />
+            </MudTabPanel>
+        }
+
+        <MudTabPanel Text="Anwesenheit" Icon="@Icons.Material.Filled.HowToReg">
+            <MeetingAttendancePanel MeetingId="@Id" User="_user" CanManage="_isLeadership"
+                                    MeetingStart="_meeting.Start"
+                                    Closed="@(_meeting.AttendanceClosedAt is not null)"
+                                    Changed="ReloadAsync" @key="_attendanceKey" />
+        </MudTabPanel>
+
+        @if (_mayAgenda)
+        {
+            <MudTabPanel Text="Protokoll" Icon="@Icons.Material.Filled.Article">
+                @if (_isLeadership)
+                {
+                    <RichTextEditor @ref="_minutesEditor" Value="@_meeting.MinutesHtml" MinHeight="320px" />
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
+                        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="MinutesSaveAsync"
+                                   Disabled="@_saving">Protokoll speichern</MudButton>
+                    </MudStack>
+                }
+                else if (!string.IsNullOrWhiteSpace(_meeting.MinutesHtml))
+                {
+                    <div class="dokument-html">@((MarkupString)_meeting.MinutesHtml)</div>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch kein Protokoll erfasst.</MudText>
+                }
+            </MudTabPanel>
+        }
+
+        <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.Hub">
+            <RecordLinksPanel EntityType="@nameof(Meeting)" EntityId="@Id" User="_user" />
+            <MudDivider Class="my-3" />
+            <LinkSuggestionPanel EntityType="@nameof(Meeting)" EntityId="@Id" User="_user" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+            <CommentPanel EntityType="@nameof(Meeting)" EntityId="@Id" User="_user" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+            <SourcesPanel EntityType="@nameof(Meeting)" EntityId="@Id" User="_user" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+            <TimelinePanel EntityType="@nameof(Meeting)" EntityId="@Id" User="_user" @key="_historyKey" />
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private static readonly string[] _allTabs =
+    {
+        "agenda", "anwesenheit", "protokoll", "verknuepfungen", "kommentare", "quellen", "historie",
+    };
+
+    private Meeting? _meeting;
+    private ClaimsPrincipal _user = new();
+    private RichTextEditor? _minutesEditor;
+    private string? _loadedId;
+    private bool _load = true;
+    private bool _saving;
+    private bool _cloning;
+    private bool _hasNext;
+    private bool _mayAgenda;
+    private bool _mayAgendaWrite;
+    private bool _isLeadership;
+    private int _activeTab;
+    private Guid _historyKey = Guid.NewGuid();
+    private Guid _attendanceKey = Guid.NewGuid();
+
+    // the tab index counts rendered panels, so the gated ones must be filtered out first
+    private string[] _renderTabs = Array.Empty<string>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+
+        _user = (await AuthStateTask!).User;
+        _mayAgenda = _user.MayMeetingRead();
+        // read-only supervision passes the rank checks but must never get a write control
+        _mayAgendaWrite = _user.MayHighestClassification() && _user.MayWrite();
+        _isLeadership = _user.IsLeadership() && _user.MayWrite();
+        _renderTabs = _allTabs.Where(t => _mayAgenda || (t != "agenda" && t != "protokoll")).ToArray();
+        // fresh keys per meeting so the kept-alive panels reload when navigating A -> B
+        _attendanceKey = Guid.NewGuid();
+        _historyKey = Guid.NewGuid();
+        _cloning = false;
+
+        await LoadAsync();
+        _activeTab = TabUrlState.Read(Nav, _renderTabs);
+        _loadedId = Id;
+
+        await AccessLog.LogViewAsync(nameof(Meeting), Id);
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _meeting = await MeetingService.GetDetailAsync(Id);
+        _hasNext = _meeting is not null && await MeetingService.HasNextAsync(Id);
+        _load = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+        _historyKey = Guid.NewGuid();
+    }
+
+    private async Task MinutesSaveAsync()
+    {
+        if (_minutesEditor is null)
+        {
+            return;
+        }
+        _saving = true;
+        try
+        {
+            // read the definitive HTML straight from Quill
+            var html = await _minutesEditor.GetHtmlAsync();
+            await MeetingService.MinutesAsync(Id, html, _user);
+            Snackbar.Add("Protokoll gespeichert.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task NextAsync()
+    {
+        // guard the double click: the unique index would otherwise surface as a DB error
+        _cloning = true;
+        try
+        {
+            var next = await MeetingService.NextCreateAsync(Id, _user);
+            Snackbar.Add($"Folgebesprechung {next.CaseNumber} angelegt.", Severity.Success);
+            Nav.NavigateTo($"/besprechungen/{next.Id}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _cloning = false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            _hasNext = true;
+            _cloning = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Besprechung löschen?",
+            "Die Besprechung wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await MeetingService.DeleteAsync(Id, _user);
+            Snackbar.Add("Besprechung gelöscht.", Severity.Success);
+            Nav.NavigateTo("/besprechungen");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+}

@@ -1,0 +1,116 @@
+@page "/besprechungen"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IMeetingService MeetingService
+@inject NavigationManager Nav
+
+<PageTitle>Besprechungen – NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" Size="Size.Large" />
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h5">Besprechungen</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Alle Besprechungen der Behörde, dauerhaft archiviert.
+            </MudText>
+        </MudStack>
+    </MudStack>
+    @if (_mayCreate)
+    {
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add"
+                   Href="/besprechungen/neu">Neue Besprechung</MudButton>
+    }
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_list.Count == 0)
+{
+    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">Es gibt noch keine Besprechungen.</MudAlert>
+}
+else
+{
+    <MudTable Items="_list" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1"
+              OnRowClick="@((TableRowClickEventArgs<MeetingListItem> e) => Open(e.Item))" T="MeetingListItem"
+              Style="cursor:pointer;">
+        <HeaderContent>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Titel</MudTh>
+            <MudTh>Beginn</MudTh>
+            <MudTh>Ort</MudTh>
+            <MudTh>TOPs</MudTh>
+            <MudTh>Status</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.CaseNumber</MudText>
+            </MudTd>
+            <MudTd DataLabel="Titel">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <b>@context.Title</b>
+                    @if (context.OwnSignedOff)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+                                 Icon="@Icons.Material.Filled.EventBusy">Abgemeldet</MudChip>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Beginn">@MeetingTime.Local(context.Start).ToString("dd.MM.yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Ort">@(context.Location ?? "—")</MudTd>
+            <MudTd DataLabel="TOPs">@context.AgendaCount</MudTd>
+            <MudTd DataLabel="Status"><MeetingStatusChip Status="@context.Status" /></MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (_total > _list.Count)
+    {
+        <MudStack Row="true" Justify="Justify.Center" Class="mt-4">
+            <MudButton Variant="Variant.Outlined" OnClick="MoreAsync">Weitere laden (@_list.Count / @_total)</MudButton>
+        </MudStack>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private const int PageSize = 50;
+
+    private List<MeetingListItem> _list = new();
+    private bool _load = true;
+    private int _total;
+    private string? _meId;
+    private bool _mayCreate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask!).User;
+        _meId = user.GetAgentId();
+        // rank AND write, matching Permission.RequireMeetingWrite
+        _mayCreate = user.MayHighestClassification() && user.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _total = await MeetingService.GetCountAsync();
+        _list = await MeetingService.GetListAsync(_meId, take: PageSize);
+        _load = false;
+    }
+
+    private async Task MoreAsync()
+    {
+        var more = await MeetingService.GetListAsync(_meId, skip: _list.Count, take: PageSize);
+        _list.AddRange(more);
+    }
+
+    private void Open(MeetingListItem? item)
+    {
+        if (item is not null)
+        {
+            Nav.NavigateTo($"/besprechungen/{item.Id}");
+        }
+    }
+}

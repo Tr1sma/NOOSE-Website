@@ -1,0 +1,174 @@
+@page "/abmeldungen"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IAbsenceService AbsenceService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Meine Abmeldungen – NOOSE</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Primary" Size="Size.Large" />
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h5">Meine Abmeldungen</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Für einen Zeitraum abmelden. Wer abgemeldet ist, gilt bei Besprechungen automatisch als entschuldigt.
+            </MudText>
+        </MudStack>
+    </MudStack>
+    <AuthorizeView Policy="@Policies.WriteAccess">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="CreateAsync">Abmelden</MudButton>
+    </AuthorizeView>
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_list.Count == 0)
+{
+    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
+        Du hast dich bisher nicht abgemeldet.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="_list" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1">
+        <HeaderContent>
+            <MudTh>Zeitraum</MudTh>
+            <MudTh>Tage</MudTh>
+            <MudTh>Grund</MudTh>
+            <MudTh>Anmerkung</MudTh>
+            <MudTh>Kenntnisnahme</MudTh>
+            <MudTh Style="width:110px;"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Zeitraum">
+                <b>@context.FromDate.ToString("dd.MM.yyyy")</b>
+                @if (context.ToDate != context.FromDate)
+                {
+                    <text> – <b>@context.ToDate.ToString("dd.MM.yyyy")</b></text>
+                }
+            </MudTd>
+            <MudTd DataLabel="Tage">@context.Days</MudTd>
+            <MudTd DataLabel="Grund"><AbsenceCategoryChip Category="@context.Category" /></MudTd>
+            <MudTd DataLabel="Anmerkung">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.Reason ?? "—")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Kenntnisnahme">
+                @if (context.AcknowledgedAt is { } at)
+                {
+                    <MudTooltip Text="@($"Durch {context.AcknowledgedByName ?? "die Führung"} am {at.ToLocalTime():dd.MM.yyyy HH:mm}")">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                 Icon="@Icons.Material.Filled.CheckCircle">Erfolgt</MudChip>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Offen</MudChip>
+                }
+            </MudTd>
+            <MudTd>
+                @if (context.MayEdit)
+                {
+                    <AuthorizeView Policy="@Policies.WriteAccess" Context="write">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditAsync(context))" aria-label="Abmeldung bearbeiten" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => DeleteAsync(context))" aria-label="Abmeldung löschen" />
+                    </AuthorizeView>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private List<AbsenceRow> _list = new();
+    private bool _load = true;
+    private string? _meId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask!).User;
+        _meId = user.GetAgentId();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        // own list only; the leadership overview is a separate page
+        _list = await AbsenceService.GetListAsync(false, _meId);
+        _load = false;
+    }
+
+    private async Task CreateAsync()
+    {
+        var input = await AbsenceDialog.ShowAsync(DialogService);
+        if (input is null)
+        {
+            return;
+        }
+        await RunAsync(async () =>
+        {
+            var user = (await AuthStateTask!).User;
+            await AbsenceService.CreateAsync(input, user);
+            Snackbar.Add("Abmeldung eingetragen.", Severity.Success);
+        });
+    }
+
+    private async Task EditAsync(AbsenceRow row)
+    {
+        var input = await AbsenceDialog.ShowAsync(DialogService, "Abmeldung bearbeiten",
+            row.FromDate.ToDateTime(TimeOnly.MinValue), row.ToDate.ToDateTime(TimeOnly.MinValue),
+            row.Category, row.Reason);
+        if (input is null)
+        {
+            return;
+        }
+        await RunAsync(async () =>
+        {
+            var user = (await AuthStateTask!).User;
+            await AbsenceService.RefreshAsync(row.Id, input, user);
+            Snackbar.Add("Abmeldung geändert.", Severity.Success);
+        });
+    }
+
+    private async Task DeleteAsync(AbsenceRow row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Abmeldung löschen?",
+            $"Die Abmeldung vom {row.FromDate:dd.MM.yyyy} bis {row.ToDate:dd.MM.yyyy} wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(async () =>
+        {
+            var user = (await AuthStateTask!).User;
+            await AbsenceService.DeleteAsync(row.Id, user);
+            Snackbar.Add("Abmeldung gelöscht.", Severity.Success);
+        });
+    }
+
+    /// <summary>Runs a write and surfaces the service's German message instead of a circuit error.</summary>
+    private async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+}

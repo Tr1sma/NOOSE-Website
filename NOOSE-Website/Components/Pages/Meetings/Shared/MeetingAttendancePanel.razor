@@ -1,0 +1,297 @@
+@inject IMeetingService MeetingService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @if (_own is { } own)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Dein Status:</MudText>
+                    <AttendanceStateChip Status="@own.Status" Origin="@own.Origin" />
+                    @if (own.From is { } f && own.To is { } t)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            (@f.ToString("dd.MM.yyyy") – @t.ToString("dd.MM.yyyy"))
+                        </MudText>
+                    }
+                </MudStack>
+                @* self sign-off only before the meeting starts; afterwards only leadership corrects the roster *@
+                @if (!Closed && !_started)
+                {
+                    <AuthorizeView Policy="@Policies.WriteAccess">
+                        @if (own.Origin == MeetingAbsenceOrigin.MeetingSignOff)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       StartIcon="@Icons.Material.Filled.Undo" OnClick="SignOffRevokeAsync">
+                                Abmeldung zurückziehen
+                            </MudButton>
+                        }
+                        else if (own.Origin != MeetingAbsenceOrigin.Absence)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.EventBusy" OnClick="SignOffAsync">
+                                Für diese Besprechung abmelden
+                            </MudButton>
+                        }
+                    </AuthorizeView>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3 flex-wrap">
+        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+            @foreach (var s in MeetingAttendanceStatusDisplay.All)
+            {
+                var count = _rows.Count(r => r.Status == s);
+                if (count > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                             Color="@MeetingAttendanceStatusDisplay.Colour(s)">
+                        @MeetingAttendanceStatusDisplay.Name(s): @count
+                    </MudChip>
+                }
+            }
+        </MudStack>
+        @if (CanManage && !Closed)
+        {
+            <MudStack Row="true" Spacing="2">
+                <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.DoneAll" OnClick="AllRemainingPresentAsync">
+                    Alle Übrigen als anwesend
+                </MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Lock" OnClick="CloseAsync">
+                    Anwesenheit abschließen
+                </MudButton>
+            </MudStack>
+        }
+        else if (CanManage && Closed)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.LockOpen" OnClick="ReopenAsync">
+                Anwesenheit wieder öffnen
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (Closed)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+            Die Anwesenheit ist abgeschlossen. Spätere Abmeldungen ändern diese Liste nicht mehr.
+        </MudAlert>
+    }
+
+    @if (_rows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">Kein Agent auf der Teilnehmerliste.</MudAlert>
+    }
+    else if (CanManage || _mayReason)
+    {
+        <MudTable Items="_rows" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1" T="MeetingAttendanceRow">
+            <HeaderContent>
+                <MudTh Style="width:150px;">Status</MudTh>
+                <MudTh>Agent</MudTh>
+                <MudTh>Grund</MudTh>
+                @if (CanManage && !Closed)
+                {
+                    <MudTh Style="width:190px;"></MudTh>
+                }
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Status"><AttendanceStateChip Status="@context.Status" Origin="@context.Origin" /></MudTd>
+                <MudTd DataLabel="Agent">
+                    <b>@context.Codename</b>
+                    @if (context.Rank is { } r)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-2">@RankDisplay.Name(r)</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Grund">
+                    @if (context.From is { } f && context.To is { } t)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @f.ToString("dd.MM.yyyy") – @t.ToString("dd.MM.yyyy")
+                        </MudText>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(context.Reason))
+                    {
+                        <MudTooltip Text="@context.Reason">
+                            <MudIcon Icon="@Icons.Material.Filled.Notes" Size="Size.Small" Class="ml-1" />
+                        </MudTooltip>
+                    }
+                </MudTd>
+                @if (CanManage && !Closed)
+                {
+                    <MudTd>
+                        <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small"
+                                           OnClick="@(() => SetAsync(context.AgentId, MeetingAttendanceStatus.Present))"
+                                           aria-label="Als anwesend markieren" />
+                            @* lets leadership excuse an agent who notified after the meeting began *@
+                            <MudIconButton Icon="@Icons.Material.Filled.EventBusy" Color="Color.Info" Size="Size.Small"
+                                           OnClick="@(() => SetAsync(context.AgentId, MeetingAttendanceStatus.SignedOff))"
+                                           aria-label="Als abgemeldet markieren" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => SetAsync(context.AgentId, MeetingAttendanceStatus.Missing))"
+                                           aria-label="Als fehlend markieren" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                                           OnClick="@(() => SetAsync(context.AgentId, MeetingAttendanceStatus.Open))"
+                                           aria-label="Markierung zurücksetzen" />
+                        </MudButtonGroup>
+                    </MudTd>
+                }
+            </RowTemplate>
+        </MudTable>
+    }
+    else
+    {
+        <MudList T="string" Dense="true">
+            @foreach (var row in _rows)
+            {
+                <MudListItem T="string" Icon="@MeetingAttendanceStatusDisplay.Icon(row.Status)">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body2"><b>@row.Codename</b></MudText>
+                        <AttendanceStateChip Status="@row.Status" Origin="@row.Origin" />
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public string MeetingId { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Leadership may tick attendance and close it.</summary>
+    [Parameter] public bool CanManage { get; set; }
+
+    /// <summary>Attendance is frozen; the list is history now.</summary>
+    [Parameter] public bool Closed { get; set; }
+
+    /// <summary>Meeting start (UTC); self sign-off is offered only before it.</summary>
+    [Parameter] public DateTime MeetingStart { get; set; }
+
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private List<MeetingAttendanceRow> _rows = new();
+    private bool _load = true;
+    private string? _meId;
+    private bool _mayReason;
+    private bool _started;
+
+    private MeetingAttendanceRow? _own => _meId is null ? null : _rows.FirstOrDefault(r => r.AgentId == _meId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _meId = User.GetAgentId();
+        _mayReason = User.MayClassifiedRead();
+        _started = MeetingStart <= DateTime.UtcNow;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        // reading the free-text reason follows the classified-read rule, not the write rule
+        _rows = await MeetingService.GetAttendanceAsync(MeetingId, User.MayClassifiedRead(), _meId);
+        _load = false;
+    }
+
+    private Task SetAsync(string agentId, MeetingAttendanceStatus status)
+        => RunAsync(() => MeetingService.AttendanceSetAsync(MeetingId, agentId, status, User));
+
+    private async Task AllRemainingPresentAsync()
+    {
+        var open = _rows.Where(r => r.Status == MeetingAttendanceStatus.Open).Select(r => r.AgentId).ToList();
+        if (open.Count == 0)
+        {
+            Snackbar.Add("Es ist niemand mehr offen.", Severity.Info);
+            return;
+        }
+        await RunAsync(async () =>
+        {
+            foreach (var agentId in open)
+            {
+                await MeetingService.AttendanceSetAsync(MeetingId, agentId, MeetingAttendanceStatus.Present, User);
+            }
+        });
+    }
+
+    private async Task CloseAsync()
+    {
+        var missing = _rows.Count(r => r.Status is MeetingAttendanceStatus.Open or MeetingAttendanceStatus.Missing);
+        var everyoneMissing = _rows.Count > 0
+            && _rows.All(r => r.Status is MeetingAttendanceStatus.Open or MeetingAttendanceStatus.Missing);
+
+        // nobody ticked at all almost always means the list was simply forgotten, so name that explicitly
+        var ok = everyoneMissing
+            ? await ConfirmDialog.ShowAsync(DialogService, "Wirklich alle als fehlend erfassen?",
+                $"Es wurde niemand als anwesend oder abgemeldet erfasst. Alle {_rows.Count} Agenten werden "
+                + "dauerhaft als unentschuldigt fehlend gespeichert und fließen so in die Auffälligkeiten ein.")
+            : await ConfirmDialog.ShowAsync(DialogService, "Anwesenheit abschließen?",
+                $"{missing} Agent(en) werden als fehlend erfasst. Danach ist die Liste dauerhaft eingefroren.");
+        if (!ok)
+        {
+            return;
+        }
+
+        await RunAsync(() => MeetingService.CloseAttendanceAsync(MeetingId, everyoneMissing, User));
+    }
+
+    private async Task ReopenAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Anwesenheit wieder öffnen?",
+            "Die erfassten Zeilen werden verworfen und die Besprechung zählt nicht mehr in der Auswertung.");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => MeetingService.ReopenAttendanceAsync(MeetingId, User));
+    }
+
+    private async Task SignOffAsync()
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Für diese Besprechung abmelden",
+            "Du wirst für diese Besprechung als abgemeldet geführt.", "Abmelden", "Grund (optional)");
+        if (reason is null)
+        {
+            return;
+        }
+        await RunAsync(() => MeetingService.SignOffAsync(MeetingId, reason, User));
+    }
+
+    private Task SignOffRevokeAsync()
+        => RunAsync(() => MeetingService.SignOffRevokeAsync(MeetingId, User));
+
+    /// <summary>Runs a write and surfaces the service's German message instead of a circuit error.</summary>
+    private async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+            await Changed.InvokeAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            // reload even on failure so a partial multi-write does not leave stale rows on screen
+            await LoadAsync();
+        }
+    }
+}

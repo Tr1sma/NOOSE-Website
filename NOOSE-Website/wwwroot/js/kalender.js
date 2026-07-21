@@ -11,6 +11,8 @@ const QUELLE_FARBE = {
     4: '#D29922', // Wiedervorlage
     5: '#7C8CF8', // Fraktions-Aktivitaet
     6: '#A371F7', // Personen-Dok
+    7: '#22D3EE', // Besprechung
+    8: '#DB61A2', // Abmeldung
 };
 
 const instanzen = new Map(); // id → instance

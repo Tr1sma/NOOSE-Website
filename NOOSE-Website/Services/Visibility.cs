@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Recruiting;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -112,6 +113,10 @@ public static class Visibility
             nameof(Job) => await db.Jobs.AnyAsync(a => a.Id == entityId, cancellationToken),
             nameof(Appointment) => await db.Appointments.AnyAsync(t => t.Id == entityId, cancellationToken),
             nameof(Law) => await db.Laws.AnyAsync(g => g.Id == entityId, cancellationToken),
+            nameof(Meeting) => await db.Meetings.AnyAsync(m => m.Id == entityId, cancellationToken),
+            // agenda stays behind the rank gate
+            nameof(MeetingAgendaItem) => scope.MayAgenda
+                && await db.MeetingAgendaItems.AnyAsync(p => p.Id == entityId, cancellationToken),
             // unknown type = visible
             _ => true,
         };
@@ -120,5 +125,7 @@ public static class Visibility
     /// <summary>True if record is visible to caller; leadership-scoped shim around the full scope check.</summary>
     public static Task<bool> IsRecordVisibleAsync(
         AppDbContext db, string entityType, string entityId, bool isLeadership, CancellationToken cancellationToken = default, string? meId = null)
-        => IsRecordVisibleAsync(db, entityType, entityId, new ViewerScope(isLeadership, isLeadership, meId, null), cancellationToken);
+        // leadership (rank 4) implies the agenda rank (3), so the shim may carry it
+        => IsRecordVisibleAsync(db, entityType, entityId,
+               new ViewerScope(isLeadership, isLeadership, meId, null, MayAgenda: isLeadership), cancellationToken);
 }

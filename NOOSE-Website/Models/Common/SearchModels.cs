@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Meetings;
 
 namespace NOOSE_Website.Models.Common;
 
@@ -48,6 +49,7 @@ public static class SearchNavigation
         nameof(Case) => $"/vorgaenge/{targetId}",
         nameof(Job) => $"/aufgaben/{targetId}",
         nameof(Appointment) => $"/kalender/{targetId}",
+        nameof(Meeting) => $"/besprechungen/{targetId}",
         nameof(Document) => $"/dokumente/{targetId}",
         nameof(Law) => $"/gesetze/{targetId}",
         _ => $"/personen/{targetId}",

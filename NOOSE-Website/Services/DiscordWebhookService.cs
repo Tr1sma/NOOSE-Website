@@ -197,6 +197,8 @@ public class DiscordWebhookService(
         NotificationType.Recruiting => "/bewerbungen",
         NotificationType.JobAssigned => "/aufgaben",
         NotificationType.JobDueSoon => "/aufgaben",
+        NotificationType.MeetingScheduled => "/besprechungen",
+        NotificationType.MeetingReminder => "/besprechungen",
         _ => "/dashboard",
     };
 
@@ -209,6 +211,8 @@ public class DiscordWebhookService(
         NotificationType.Mention => "💬 Es gibt eine neue Erwähnung in einer Akte.",
         NotificationType.JobAssigned => "📌 Dir wurde eine Aufgabe zugewiesen.",
         NotificationType.JobDueSoon => "⏰ Eine Aufgabe wird bald fällig.",
+        NotificationType.MeetingScheduled => "📅 Eine neue Besprechung wurde angesetzt.",
+        NotificationType.MeetingReminder => "⏰ Eine Besprechung beginnt bald.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

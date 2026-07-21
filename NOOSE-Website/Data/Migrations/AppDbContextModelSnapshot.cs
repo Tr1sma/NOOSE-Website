@@ -154,6 +154,92 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Absences.Absence", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("AcknowledgedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("KenntnisGenommenAm");
+
+                    b.Property<string>("AcknowledgedById")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("KenntnisGenommenVonId");
+
+                    b.Property<string>("AcknowledgedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("KenntnisGenommenVonName");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("int")
+                        .HasColumnName("Abmeldegrund");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<int>("Days")
+                        .HasColumnType("int")
+                        .HasColumnName("Tage");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<DateOnly>("FromDate")
+                        .HasColumnType("date")
+                        .HasColumnName("VonDatum");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Grund");
+
+                    b.Property<DateOnly>("ToDate")
+                        .HasColumnType("date")
+                        .HasColumnName("BisDatum");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcknowledgedAt");
+
+                    b.HasIndex("AcknowledgedById");
+
+                    b.HasIndex("AgentId", "FromDate", "ToDate");
+
+                    b.HasIndex("FromDate", "ToDate", "AgentId");
+
+                    b.ToTable("Abmeldungen");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Activities.AgentActivity", b =>
                 {
                     b.Property<string>("Id")
@@ -2864,6 +2950,298 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("AufgabeZuweisungen");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.Meeting", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("AttendanceClosedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("AnwesenheitAbgeschlossenAm");
+
+                    b.Property<string>("CaseNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("Aktenzeichen");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<DateTime?>("End")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("Ende");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Ort");
+
+                    b.Property<string>("MinutesHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ProtokollHtml");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("PreviousMeetingId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("VorherigeBesprechungId");
+
+                    b.Property<DateTime?>("ReminderDaySentAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("Erinnerung1TagGesendetAm");
+
+                    b.Property<DateTime?>("ReminderSoonSentAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("Erinnerung30MinGesendetAm");
+
+                    b.Property<DateTime>("Start")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("Beginn");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseNumber")
+                        .IsUnique();
+
+                    b.HasIndex("PreviousMeetingId")
+                        .IsUnique();
+
+                    b.HasIndex("Title");
+
+                    b.HasIndex("Start", "Status");
+
+                    b.HasIndex("Status", "AttendanceClosedAt", "Start");
+
+                    b.ToTable("Besprechungen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.MeetingAgendaItem", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CarriedFromItemId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("UebernommenVonPunktId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<bool>("Done")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Erledigt");
+
+                    b.Property<DateTime?>("DoneAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErledigtAm");
+
+                    b.Property<string>("DoneById")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("ErledigtVonId");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<string>("MeetingId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("BesprechungId");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("NotesHtml")
+                        .HasColumnType("longtext")
+                        .HasColumnName("NotizHtml");
+
+                    b.Property<int>("Sorting")
+                        .HasColumnType("int")
+                        .HasColumnName("Sortierung");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MeetingId", "Sorting");
+
+                    b.ToTable("BesprechungPunkte");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.MeetingAttendance", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentCodename")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("AgentCodename");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("MarkedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErfasstAm");
+
+                    b.Property<string>("MarkedById")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("ErfasstVonId");
+
+                    b.Property<string>("MeetingId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("BesprechungId");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("int")
+                        .HasColumnName("Herkunft");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Grund");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.HasIndex("MeetingId", "AgentId")
+                        .IsUnique();
+
+                    b.ToTable("BesprechungAnwesenheiten");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.MeetingSignOff", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<string>("MeetingId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("BesprechungId");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Grund");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.HasIndex("MeetingId", "AgentId")
+                        .IsUnique();
+
+                    b.ToTable("BesprechungAbmeldungen");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Notifications.Notification", b =>
                 {
                     b.Property<string>("Id")
@@ -5435,6 +5813,22 @@ namespace NOOSE_Website.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Absences.Absence", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AcknowledgedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Activities.AgentActivityLink", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Activities.AgentActivity", "AgentActivity")
@@ -5694,6 +6088,63 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Agent");
 
                     b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.Meeting", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Meetings.Meeting", null)
+                        .WithOne()
+                        .HasForeignKey("NOOSE_Website.Data.Entities.Meetings.Meeting", "PreviousMeetingId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.MeetingAgendaItem", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Meetings.Meeting", "Meeting")
+                        .WithMany("AgendaItems")
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Meeting");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.MeetingAttendance", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Meetings.Meeting", "Meeting")
+                        .WithMany()
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+
+                    b.Navigation("Meeting");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.MeetingSignOff", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Meetings.Meeting", "Meeting")
+                        .WithMany()
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+
+                    b.Navigation("Meeting");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Operations.OperationAgent", b =>
@@ -6109,6 +6560,11 @@ namespace NOOSE_Website.Data.Migrations
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Jobs.Job", b =>
                 {
                     b.Navigation("Assignments");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.Meeting", b =>
+                {
+                    b.Navigation("AgendaItems");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Operations.Operation", b =>

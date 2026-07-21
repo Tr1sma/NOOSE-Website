@@ -78,6 +78,7 @@
         nameof(Person), nameof(PersonDoc), nameof(Observation), nameof(Operation), nameof(Case),
         nameof(Taskforce), nameof(Faction), nameof(PersonGroup), nameof(Party),
         nameof(Document), nameof(Law), nameof(Agent), nameof(Job), nameof(Bewerbung),
+        nameof(Meeting), nameof(MeetingAgendaItem),
     };
 
     private IEnumerable<IGrouping<string, LinkDisplay>> _grouped =>
@@ -147,6 +148,8 @@
         nameof(Agent) => "Agenten",
         nameof(Job) => "Aufgaben",
         nameof(Bewerbung) => "Bewerbungen",
+        nameof(Meeting) => "Besprechungen",
+        nameof(MeetingAgendaItem) => "Tagesordnungspunkte",
         _ => type,
     };
 
@@ -166,6 +169,8 @@
         nameof(Agent) => Icons.Material.Filled.Person,
         nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
         nameof(Bewerbung) => Icons.Material.Filled.HowToReg,
+        nameof(Meeting) => Icons.Material.Filled.Groups,
+        nameof(MeetingAgendaItem) => Icons.Material.Filled.ChecklistRtl,
         _ => Icons.Material.Filled.Hub,
     };
 }

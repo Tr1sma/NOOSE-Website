@@ -92,6 +92,53 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                     false, CalendarSource.Followup, mayName ? parents.Href : null));
             }
         }
+
+        // zone conversion is not translatable
+        var fromDay = MeetingTime.Day(sourceUtc);
+        var untilDay = MeetingTime.Day(untilUtc);
+
+        // meetings
+        var meetings = await db.Meetings
+            .Where(m => m.Start <= untilUtc && (m.End ?? m.Start) >= sourceUtc)
+            .OrderBy(m => m.Start).Take(PerSourceMax)
+            .Select(m => new { m.Id, m.Title, m.Start, m.End, m.Status })
+            .ToListAsync(ct);
+        if (meetings.Count > 0)
+        {
+            var ids = meetings.Select(m => m.Id).ToList();
+            // uncapped: a dropped row would falsely un-excuse
+            var signedOff = (await db.MeetingSignOffs
+                .Where(s => s.AgentId == meId && ids.Contains(s.MeetingId))
+                .Select(s => s.MeetingId)
+                .ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
+            var excusedSpans = await db.Absences
+                .Where(a => a.AgentId == meId && a.FromDate <= untilDay && a.ToDate >= fromDay)
+                .Select(a => new { a.FromDate, a.ToDate })
+                .ToListAsync(ct);
+            foreach (var m in meetings)
+            {
+                var day = MeetingTime.Day(m.Start);
+                // sign-off and absence both excuse; the meeting page shows the same
+                var excused = signedOff.Contains(m.Id)
+                    || excusedSpans.Any(a => a.FromDate <= day && a.ToDate >= day);
+                entries.Add(new CalendarEntry($"bes:{m.Id}", m.Title, Local(m.Start), LocalOpt(m.End),
+                    false, CalendarSource.Meeting, $"/besprechungen/{m.Id}",
+                    excused || MeetingStatusDisplay.IsObsolete(m.Status)));
+            }
+        }
+
+        // own absences
+        foreach (var ab in await db.Absences
+            .Where(ab => ab.AgentId == meId && ab.FromDate <= untilDay && ab.ToDate >= fromDay)
+            .OrderBy(ab => ab.FromDate).Take(PerSourceMax)
+            .Select(ab => new { ab.Id, ab.FromDate, ab.ToDate, ab.Category })
+            .ToListAsync(ct))
+        {
+            // already unspecified; Local() would shift a second time
+            entries.Add(new CalendarEntry($"abm:{ab.Id}", $"Abgemeldet: {AbsenceCategoryDisplay.Name(ab.Category)}",
+                ab.FromDate.ToDateTime(TimeOnly.MinValue), ab.ToDate.ToDateTime(TimeOnly.MinValue),
+                true, CalendarSource.Absence, "/abmeldungen"));
+        }
     }
 
     // ---- authority calendar ----
@@ -160,6 +207,18 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             var title = string.IsNullOrWhiteSpace(fa.Kind) ? fa.Title : $"{fa.Title} ({fa.Kind})";
             entries.Add(new CalendarEntry($"fa:{fa.Id}:{fa.FactionId}", title, Local(fa.ActivityDate), null,
                 false, CalendarSource.FactionActivity, $"/fraktionen/{fa.FactionId}"));
+        }
+
+        // meetings; absences stay out, they are semi-private
+        foreach (var m in await db.Meetings
+            .Where(m => m.Start <= untilUtc && (m.End ?? m.Start) >= sourceUtc)
+            .OrderBy(m => m.Start).Take(PerSourceMax)
+            .Select(m => new { m.Id, m.Title, m.Start, m.End, m.Status })
+            .ToListAsync(ct))
+        {
+            entries.Add(new CalendarEntry($"bes:{m.Id}", m.Title, Local(m.Start), LocalOpt(m.End),
+                false, CalendarSource.Meeting, $"/besprechungen/{m.Id}",
+                MeetingStatusDisplay.IsObsolete(m.Status)));
         }
     }
 

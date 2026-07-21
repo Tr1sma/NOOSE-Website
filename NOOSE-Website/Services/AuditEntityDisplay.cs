@@ -23,6 +23,11 @@ public static class AuditEntityDisplay
         "Law" => "Gesetz",
         "Announcement" => "Ankündigung",
         "Agent" => "Agent",
+        "Meeting" => "Besprechung",
+        "MeetingAgendaItem" => "Tagesordnungspunkt",
+        "MeetingAttendance" => "Anwesenheit",
+        "MeetingSignOff" => "Abmeldung (Besprechung)",
+        "Absence" => "Abmeldung",
         _ => type,
     };
 
@@ -42,6 +47,9 @@ public static class AuditEntityDisplay
         "Document" => $"/dokumente/{id}",
         "Law" => $"/gesetze/{id}",
         "Agent" => $"/personal/{id}",
+        "Meeting" => $"/besprechungen/{id}",
+        // absences have no detail page; the audit viewer is admin-only, so point at the overview
+        "Absence" => "/abmeldungen/uebersicht",
         _ => null,
     };
 }

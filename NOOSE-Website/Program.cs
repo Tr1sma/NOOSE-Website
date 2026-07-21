@@ -29,6 +29,7 @@ using NOOSE_Website.Infrastructure.Statistics;
 using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Infrastructure.Jobs;
+using NOOSE_Website.Infrastructure.Meetings;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Statistics;
 
@@ -178,6 +179,10 @@ builder.Services.AddScoped<ITimelineService, TimelineService>();
 builder.Services.AddScoped<IOrgChartService, OrgChartService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
+builder.Services.AddScoped<IAbsenceService, AbsenceService>();
+builder.Services.AddScoped<IAttendanceStatisticsService, AttendanceStatisticsService>();
+builder.Services.AddScoped<IMeetingService, MeetingService>();
+builder.Services.AddHostedService<MeetingReminderWorker>();
 builder.Services.AddScoped<IThreatScoreConfigService, ThreatScoreConfigService>();
 builder.Services.AddScoped<IThreatScoreService, ThreatScoreService>();
 builder.Services.AddHostedService<ThreatScoreSweepWorker>();

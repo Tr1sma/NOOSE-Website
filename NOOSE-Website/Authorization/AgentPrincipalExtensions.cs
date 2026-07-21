@@ -110,6 +110,10 @@ public static class AgentPrincipalExtensions
     public static bool MayHighestClassification(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.SeniorSpecialAgent;
 
+    /// <summary>May READ meeting agendas and minutes = highest-classification rank or read-only supervision. Sole source of this rule.</summary>
+    public static bool MayMeetingRead(this ClaimsPrincipal user)
+        => user.MayHighestClassification() || user.IsOnlyReader();
+
     /// <summary>May decide promotions = rank ≥ Deputy Director or admin.</summary>
     public static bool MayPromotionDecide(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.DeputyDirector;
