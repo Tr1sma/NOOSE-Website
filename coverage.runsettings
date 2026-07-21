@@ -5,9 +5,10 @@
       <DataCollector friendlyName="XPlat code coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <!-- Post-processing narrows to Services/Authorization/Models; file excludes only speed up
-               instrumentation by skipping the large generated surfaces. -->
-          <ExcludeByFile>**/Migrations/**/*.cs,**/*.razor,**/*.g.cs</ExcludeByFile>
+          <!-- coverlet.collector in this setup only honors a whole-module include; namespace-type
+               filters and ExcludeByFile produce empty output here. The whole web module is
+               instrumented and the report is narrowed to Services/Authorization/Models afterwards. -->
+          <Include>[NOOSE-Website]*</Include>
           <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
           <SkipAutoProps>true</SkipAutoProps>
           <UseSourceLink>false</UseSourceLink>
