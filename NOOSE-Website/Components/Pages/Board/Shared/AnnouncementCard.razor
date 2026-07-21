@@ -18,12 +18,6 @@
             <AnnouncementAudienceChip Audience="Row.Audience" Display="@Row.TargetDisplay" />
         </MudStack>
 
-        @if (!string.IsNullOrWhiteSpace(Row.Content))
-        {
-            @* Sanitized server-side on save, so safe as MarkupString. *@
-            <div class="dokument-html">@((MarkupString)Row.Content)</div>
-        }
-
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 @Row.CaseNumber · @Row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(Row.CreatorCodename ?? "System")
