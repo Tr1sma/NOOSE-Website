@@ -155,14 +155,12 @@ public class BewerbungService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var bewerbung = await GetOrThrow(db, id, cancellationToken);
 
-        if (BewerbungStatusDisplay.IsTerminal(bewerbung.Status))
-        {
-            throw new InvalidOperationException("Diese Bewerbung ist bereits abgeschlossen.");
-        }
         if (!IsTransitionAllowed(bewerbung.Status, target))
         {
             throw new InvalidOperationException(
-                $"Wechsel von „{BewerbungStatusDisplay.Name(bewerbung.Status)}“ zu „{BewerbungStatusDisplay.Name(target)}“ ist nicht möglich.");
+                BewerbungStatusDisplay.IsTerminal(bewerbung.Status)
+                    ? "Diese Bewerbung ist bereits abgeschlossen."
+                    : $"Wechsel von „{BewerbungStatusDisplay.Name(bewerbung.Status)}“ zu „{BewerbungStatusDisplay.Name(target)}“ ist nicht möglich.");
         }
 
         bewerbung.Status = target;
@@ -179,6 +177,19 @@ public class BewerbungService(
         {
             try { await sperren.BanAsync(bewerbung.ApplicantUserId, bewerbung.Id, bewerbung.Name, Trim(note), actor, cancellationToken); }
             catch { /* best effort: the rejection itself is already saved */ }
+        }
+
+        if (target is BewerbungStatus.Angenommen)
+        {
+            try
+            {
+                var ban = await sperren.GetActiveAsync(bewerbung.ApplicantUserId, cancellationToken);
+                if (ban is { IsBlacklist: false })
+                {
+                    await sperren.LiftAsync(ban.Id, actor, cancellationToken); // lift only the temp ban
+                }
+            }
+            catch { /* best effort */ }
         }
 
         try
@@ -447,6 +458,17 @@ public class BewerbungService(
 
     private static bool IsTransitionAllowed(BewerbungStatus current, BewerbungStatus target)
     {
+        // re-deciding between the two decision states stays open
+        if ((current, target) is (BewerbungStatus.Angenommen, BewerbungStatus.Abgelehnt)
+                              or (BewerbungStatus.Abgelehnt, BewerbungStatus.Angenommen))
+        {
+            return true;
+        }
+        // a closed application is final
+        if (BewerbungStatusDisplay.IsTerminal(current))
+        {
+            return false;
+        }
         // closing or rejecting is allowed from any non-terminal state
         if (target is BewerbungStatus.Abgelehnt or BewerbungStatus.Geschlossen)
         {

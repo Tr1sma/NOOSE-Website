@@ -146,6 +146,23 @@ else
                         Abgeschlossen@(string.IsNullOrWhiteSpace(_b.DecidedByName) ? "" : $" von {_b.DecidedByName}")@(_b.DecidedAt is { } d ? $" am {d.ToLocalTime():dd.MM.yyyy HH:mm}" : "").
                         @if (!string.IsNullOrWhiteSpace(_b.DecisionNote)) { <text> Notiz: @_b.DecisionNote</text> }
                     </MudAlert>
+                    @if (_canWrite && _b.Status is BewerbungStatus.Angenommen or BewerbungStatus.Abgelehnt)
+                    {
+                        <MudStack Spacing="2" Class="mt-3">
+                            <MudTextField @bind-Value="_note" Label="Notiz (für Entscheidungsänderung)"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                            @if (_b.Status == BewerbungStatus.Angenommen)
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => SetStatus(BewerbungStatus.Abgelehnt))">Doch ablehnen</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                           OnClick="@(() => SetStatus(BewerbungStatus.Angenommen))">Doch annehmen</MudButton>
+                            }
+                        </MudStack>
+                    }
                 }
             </MudPaper>
 
