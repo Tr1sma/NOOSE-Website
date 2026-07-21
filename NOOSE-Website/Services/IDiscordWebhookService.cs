@@ -10,6 +10,11 @@ public interface IDiscordWebhookService
     /// <summary>Post the category's generic notice (never the in-app title) to its channel and ping the recipients or the configured role; no-op if disabled, unroutable, or no URL configured.</summary>
     Task PushAsync(NotificationType type, string? href, IReadOnlyCollection<string>? recipientAgentIds, CancellationToken cancellationToken = default);
 
+    /// <summary>Post a personnel-file entry as a rich "EINTRAG" embed to the PersonnelEntry channel, pinging the subject agent. Best-effort; no-op if disabled or no URL configured.</summary>
+    Task PushPersonnelEntryAsync(string subjectAgentId, string subjectDisplay, string artLabel,
+        DateTime entryDate, string reasonPlain, IReadOnlyList<string> executorDisplays,
+        string? href, CancellationToken cancellationToken = default);
+
     /// <summary>Current routing config (fresh read) for the admin page.</summary>
     Task<DiscordWebhookConfig> GetConfigAsync(CancellationToken cancellationToken = default);
 

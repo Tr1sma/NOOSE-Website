@@ -9,9 +9,11 @@ public interface IPersonnelFileService
 {
     Task<List<AgentRankHistory>> GetRankHistoryAsync(string agentId, CancellationToken cancellationToken = default);
 
-    Task<List<AgentNote>> GetNotesAsync(string agentId, AgentNoteKind kind, CancellationToken cancellationToken = default);
-    /// <summary>Create a note (commendation/disciplinary) - leadership only.</summary>
-    Task<AgentNote> NoteCreateAsync(string agentId, AgentNoteKind kind, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    /// <summary>Personnel-file entries; kind == null returns every kind (newest entry-date first).</summary>
+    Task<List<AgentNote>> GetNotesAsync(string agentId, AgentNoteKind? kind = null, CancellationToken cancellationToken = default);
+    /// <summary>Create a personnel-file entry - leadership only; posts a Discord embed pinging the subject.</summary>
+    Task<AgentNote> NoteCreateAsync(string agentId, AgentNoteKind kind, string? artFreetext, DateTime entryDate,
+        IReadOnlyCollection<string> executorAgentIds, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     /// <summary>Delete a note - author or leadership.</summary>
     Task NoteDeleteAsync(string noteId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

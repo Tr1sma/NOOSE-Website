@@ -16,6 +16,7 @@ public static class DiscordRouting
         NotificationType.JobDueSoon,
         NotificationType.MeetingScheduled,
         NotificationType.MeetingReminder,
+        NotificationType.PersonnelEntry,
     };
 
     public static bool IsRoutable(NotificationType type) => RoutableTypes.Contains(type);
@@ -25,7 +26,8 @@ public static class DiscordRouting
         // MeetingReminder pings the role, not individuals: a per-person mention list in a shared
         // channel is the complement of the absence set and would leak who filed an absence
         => type is NotificationType.Mention or NotificationType.Followup
-                or NotificationType.JobAssigned or NotificationType.JobDueSoon;
+                or NotificationType.JobAssigned or NotificationType.JobDueSoon
+                or NotificationType.PersonnelEntry;
 
     /// <summary>Category whose Discord post pings a configured role instead of individuals.</summary>
     public static bool PingsRole(NotificationType type)

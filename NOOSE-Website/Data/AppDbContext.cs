@@ -976,6 +976,8 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(v => v.Text).HasColumnType("longtext").IsRequired();
             b.Property(v => v.AuthorName).HasMaxLength(128);
+            b.Property(v => v.ArtFreetext).HasMaxLength(128);
+            b.Property(v => v.Ausfuehrende).HasColumnType("longtext");
             b.HasIndex(v => new { v.AgentId, v.Kind });
             b.HasOne<Agent>().WithMany()
                 .HasForeignKey(v => v.AgentId).OnDelete(DeleteBehavior.Restrict);

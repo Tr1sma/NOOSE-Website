@@ -11,7 +11,7 @@
 @if (_blocked && _ban is not null)
 {
     <MudPaper Elevation="4" Class="pa-8">
-        <BewerbungssperreCard Ban="_ban" />
+        <BewerbungssperreCard Ban="_ban" DecisionStatus="_lastStatus" />
     </MudPaper>
 }
 else if (_ready)
@@ -64,6 +64,7 @@ else if (_ready)
     private bool _blocked;
     private bool _busy;
     private BewerbungssperreInfo? _ban;
+    private BewerbungStatus? _lastStatus;
     private readonly BewerbungSubmitModel _model = new();
     private IBrowserFile? _file;
 
@@ -76,6 +77,7 @@ else if (_ready)
             return;
         }
         var own = await BewerbungService.GetOwnAsync(_user);
+        _lastStatus = own?.Status;
         if (own is not null && own.Status != BewerbungStatus.Abgelehnt && own.Status != BewerbungStatus.Geschlossen)
         {
             // an open or accepted application already exists

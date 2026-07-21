@@ -4,6 +4,7 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Authorization;
 
 /// <summary>Registers all authorization policies.</summary>
+[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 public static class AuthorizationRegistration
 {
     public static IServiceCollection AddNooseAuthorization(this IServiceCollection services)

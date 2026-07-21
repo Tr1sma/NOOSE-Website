@@ -13,6 +13,7 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <summary>Seeds the demo agent and a rich, interconnected example dataset; idempotent (skips existing by natural key) and bootstrap-admin-gated. Never auto-runs at startup.</summary>
+[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 public class DemoDataService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumbers,

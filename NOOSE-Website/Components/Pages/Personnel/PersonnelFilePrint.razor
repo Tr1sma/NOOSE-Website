@@ -70,38 +70,23 @@ else
             </section>
         }
 
-        @if (_commendations.Count > 0)
+        @if (_notes.Count > 0)
         {
             <section>
-                <h2>Belobigungen</h2>
-                @foreach (var v in _commendations)
+                <h2>Vermerke</h2>
+                @foreach (var v in _notes)
                 {
                     <div class="druck-eintrag">
                         <div class="druck-eintrag-kopf">
-                            <b>@v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
+                            <b>@v.ArtLabel</b>
+                            <text> · @v.EntryDate.ToString("dd.MM.yyyy HH:mm")</text>
                             @if (!string.IsNullOrWhiteSpace(v.AuthorName))
                             {
                                 <text> · @v.AuthorName</text>
                             }
-                        </div>
-                        <div class="dokument-html">@((MarkupString)v.Text)</div>
-                    </div>
-                }
-            </section>
-        }
-
-        @if (_disciplinary.Count > 0)
-        {
-            <section>
-                <h2>Disziplinarisches</h2>
-                @foreach (var v in _disciplinary)
-                {
-                    <div class="druck-eintrag">
-                        <div class="druck-eintrag-kopf">
-                            <b>@v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
-                            @if (!string.IsNullOrWhiteSpace(v.AuthorName))
+                            @if (ExecutorNames(v) is { Length: > 0 } exec)
                             {
-                                <text> · @v.AuthorName</text>
+                                <text> · Auszuführende: @exec</text>
                             }
                         </div>
                         <div class="dokument-html">@((MarkupString)v.Text)</div>
@@ -142,12 +127,15 @@ else
     private string? _printBy;
     private Agent? _agent;
     private List<AgentRankHistory> _rankHistory = new();
-    private List<AgentNote> _commendations = new();
-    private List<AgentNote> _disciplinary = new();
+    private List<AgentNote> _notes = new();
     private List<AgentModuleStatus> _completedModules = new();
+    private Dictionary<string, string> _agentNames = new();
 
     private static string DisplayName(Agent a)
         => string.IsNullOrWhiteSpace(a.Codename) ? "Unbenannter Agent" : a.Codename;
+
+    private string ExecutorNames(AgentNote v)
+        => string.Join(", ", v.ExecutorIds.Select(id => _agentNames.GetValueOrDefault(id)).Where(n => !string.IsNullOrEmpty(n)));
 
     protected override async Task OnInitializedAsync()
     {
@@ -158,9 +146,9 @@ else
         _agent = await AgentService.FindAsync(Id);
         if (_agent is not null)
         {
+            _agentNames = (await AgentService.GetSelectableAsync()).ToDictionary(a => a.Id, a => a.Codename);
             _rankHistory = await PersonnelFileService.GetRankHistoryAsync(Id);
-            _commendations = await PersonnelFileService.GetNotesAsync(Id, AgentNoteKind.Commendation);
-            _disciplinary = await PersonnelFileService.GetNotesAsync(Id, AgentNoteKind.Disciplinary);
+            _notes = await PersonnelFileService.GetNotesAsync(Id);
             _completedModules = (await ModuleService.GetStatusForAgentAsync(Id)).Where(m => m.IsCompleted).ToList();
             await AccessLog.LogViewAsync(nameof(Agent), Id);
         }

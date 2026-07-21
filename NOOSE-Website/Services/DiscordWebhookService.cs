@@ -13,6 +13,7 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IDiscordWebhookService" />
+[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 public class DiscordWebhookService(
     IHttpClientFactory httpFactory,
     IDbContextFactory<AppDbContext> dbFactory,
@@ -45,6 +46,56 @@ public class DiscordWebhookService(
             logger.LogWarning(ex, "Discord webhook push for {Type} failed.", type);
         }
     }
+
+    // rich "EINTRAG" embed to the personnel channel; pings only the subject agent
+    public async Task PushPersonnelEntryAsync(string subjectAgentId, string subjectDisplay, string artLabel,
+        DateTime entryDate, string reasonPlain, IReadOnlyList<string> executorDisplays,
+        string? href, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var config = await GetCachedConfigAsync(cancellationToken);
+            if (!config.Enabled
+                || !config.Webhooks.TryGetValue(NotificationType.PersonnelEntry, out var url)
+                || string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            var subjectIds = await ResolveDiscordIdsAsync(new[] { subjectAgentId }, cancellationToken);
+            var mention = subjectIds.Count > 0 ? MentionSpec.Users(subjectIds) : MentionSpec.None;
+
+            var link = Link(config.SiteBaseUrl, href);
+            var executors = executorDisplays.Count > 0 ? string.Join(", ", executorDisplays) : "—";
+            var embed = new
+            {
+                title = "📝 EINTRAG",
+                description = link,
+                color = 0x00B8D4, // NOOSE cyan
+                footer = new { text = "National Office of Security Enforcement" },
+                fields = new object[]
+                {
+                    new { name = "👤 Name", value = Field(subjectDisplay), inline = false },
+                    new { name = "🏷️ Art", value = Field(artLabel), inline = true },
+                    new { name = "📅 Datum", value = entryDate.ToString("dddd, d. MMMM yyyy 'um' HH:mm"), inline = true },
+                    new { name = "📋 Begründung", value = Field(Truncate(reasonPlain, 1024)), inline = false },
+                    new { name = "👮 Auszuführender", value = Field(executors), inline = false },
+                },
+            };
+            await SendEmbedAsync(url, mention, embed, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            /* best effort */
+            logger.LogWarning(ex, "Discord personnel-entry embed failed.");
+        }
+    }
+
+    // Discord rejects empty field values
+    private static string Field(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string Truncate(string value, int max)
+        => value.Length <= max ? value : value[..(max - 1)] + "…";
 
     // personal categories ping the recipients; broadcast categories ping the configured role
     private async Task<MentionSpec> ResolveMentionAsync(NotificationType type,
@@ -176,6 +227,25 @@ public class DiscordWebhookService(
         return response.IsSuccessStatusCode;
     }
 
+    // embed payload with an optional ping prefix; allowed_mentions stays an explicit allow-list
+    private async Task<bool> SendEmbedAsync(string url, MentionSpec mention, object embed, CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            content = mention.Prefix.Length > 0 ? mention.Prefix : (string?)null,
+            username = "NOOSE",
+            embeds = new[] { embed },
+            allowed_mentions = mention.AllowedMentions,
+        };
+        var client = httpFactory.CreateClient("discord");
+        using var response = await client.PostAsJsonAsync(url, payload, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("Discord webhook (embed) returned {Status}.", (int)response.StatusCode);
+        }
+        return response.IsSuccessStatusCode;
+    }
+
     // generic per-category notice + login-gated link; NEVER the in-app title (which may carry names/notes/VS content)
     private static string Compose(NotificationType type, string baseUrl, string? href)
     {
@@ -199,6 +269,7 @@ public class DiscordWebhookService(
         NotificationType.JobDueSoon => "/aufgaben",
         NotificationType.MeetingScheduled => "/besprechungen",
         NotificationType.MeetingReminder => "/besprechungen",
+        NotificationType.PersonnelEntry => "/personal",
         _ => "/dashboard",
     };
 
@@ -213,6 +284,7 @@ public class DiscordWebhookService(
         NotificationType.JobDueSoon => "⏰ Eine Aufgabe wird bald fällig.",
         NotificationType.MeetingScheduled => "📅 Eine neue Besprechung wurde angesetzt.",
         NotificationType.MeetingReminder => "⏰ Eine Besprechung beginnt bald.",
+        NotificationType.PersonnelEntry => "📝 Neuer Personalakten-Eintrag.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

@@ -68,12 +68,14 @@
                 <MudDivider Class="my-3" />
                 @if (_ban is not null)
                 {
-                    <BewerbungssperreCard Ban="_ban" />
+                    <BewerbungssperreCard Ban="_ban" DecisionStatus="_bewerbung.Status" />
                 }
                 else
                 {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                        Dein Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.
+                    <MudAlert Severity="@(_bewerbung.Status == BewerbungStatus.Abgelehnt ? Severity.Error : Severity.Info)" Variant="Variant.Outlined">
+                        @(_bewerbung.Status == BewerbungStatus.Abgelehnt
+                            ? "Deine Bewerbung wurde abgelehnt. Weitere Auskünfte werden nicht erteilt."
+                            : "Dein Auswahlverfahren wurde abgeschlossen. Weitere Auskünfte werden nicht erteilt.")
                     </MudAlert>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                                Href="/portal" Class="mt-3">Neue Bewerbung</MudButton>

@@ -3,6 +3,7 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <summary>Static, declarative dataset for the public demo instance: factions, people, memberships, relations and faction conflicts. Pure data — the apply/idempotency logic lives in DemoDataService.</summary>
+[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
 internal static class DemoDataSeed
 {
     internal sealed record FactionSpec(

@@ -1,51 +1,102 @@
-@* Commendation or disciplinary notes (rich text); add/delete is leadership-only. *@
+@* Personnel-file entries (all kinds); add/delete is leadership-only and posts a Discord "EINTRAG" pinging the subject. *@
 @inject IPersonnelFileService PersonnelFileService
+@inject IAgentManagementService AgentService
 @inject IPersonnelTemplateService PersonnelTemplateService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudText Typo="Typo.subtitle1">@Title (@_notes.Count)</MudText>
-
     <AuthorizeView Policy="@Policies.Leadership">
-        <MudStack Spacing="2">
-            @if (_templates.Count > 0)
-            {
-                <MudSelect T="string" Value="_selectedTemplateId" ValueChanged="ApplyTemplateAsync" Label="Vorlage einfügen"
-                           Variant="Variant.Outlined" Dense="true" Clearable="true" Placeholder="Vorlage wählen …">
-                    @foreach (var t in _templates)
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudSelect T="AgentNoteKind" @bind-Value="_kind" @bind-Value:after="OnKindChanged" Label="Art"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px;">
+                        @foreach (var k in AgentNoteKindDisplay.All)
+                        {
+                            <MudSelectItem T="AgentNoteKind" Value="@k">@AgentNoteKindDisplay.Name(k)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField @bind-Value="_artFreetext" Label="Art-Freitext (optional)" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" Style="min-width:220px;" HelperText="Überschreibt die Kategorie-Bezeichnung." />
+                    <MudDatePicker @bind-Date="_entryDate" Label="Datum" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Style="min-width:180px;" />
+                    <MudTimePicker @bind-Time="_entryTime" Label="Uhrzeit" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Style="min-width:140px;" />
+                </MudStack>
+
+                <MudSelect T="string" Label="Auszuführende" MultiSelection="true"
+                           SelectedValues="_executorIds" SelectedValuesChanged="OnExecutorsChanged"
+                           MultiSelectionTextFunc="@DisplaySelection" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.ManageAccounts">
+                    @foreach (var a in _agents)
                     {
-                        <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+                        <MudSelectItem T="string" Value="@a.Id">@a.Codename (@RankDisplay.Name(a.Rank))</MudSelectItem>
                     }
                 </MudSelect>
-            }
-            <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" />
-            <div>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newHtml))">Hinzufügen</MudButton>
-            </div>
-        </MudStack>
+
+                @if (_templates.Count > 0)
+                {
+                    <MudSelect T="string" Value="_selectedTemplateId" ValueChanged="ApplyTemplateAsync" Label="Vorlage einfügen"
+                               Variant="Variant.Outlined" Dense="true" Clearable="true" Placeholder="Vorlage wählen …">
+                        @foreach (var t in _templates)
+                        {
+                            <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" />
+                <div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newHtml))">Hinzufügen</MudButton>
+                </div>
+            </MudStack>
+        </MudPaper>
     </AuthorizeView>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.subtitle1">Einträge (@Filtered.Count)</MudText>
+        <MudSpacer />
+        <MudSelect T="AgentNoteKind?" @bind-Value="_filterKind" Label="Filter" Variant="Variant.Outlined" Dense="true"
+                   Clearable="true" Style="min-width:220px;" Placeholder="Alle Arten">
+            @foreach (var k in AgentNoteKindDisplay.All)
+            {
+                <MudSelectItem T="AgentNoteKind?" Value="@k">@AgentNoteKindDisplay.Name(k)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
 
     @if (_load)
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
-    else if (_notes.Count == 0)
+    else if (Filtered.Count == 0)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Einträge.</MudText>
     }
     else
     {
-        @foreach (var v in _notes)
+        @foreach (var v in Filtered)
         {
             <MudPaper Class="pa-3" Elevation="1">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
-                    <div>
+                    <div style="flex:1;">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">📝 Eintrag</MudText>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
+                            <MudChip T="string" Size="Size.Small" Color="@AgentNoteKindDisplay.ChipColor(v.Kind)"
+                                     Variant="Variant.Text" Icon="@Icons.Material.Filled.Label">@v.ArtLabel</MudChip>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                📅 @v.EntryDate.ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                        </MudStack>
                         @* Sanitized server-side on save, so safe as MarkupString. *@
                         <div class="dokument-html">@((MarkupString)v.Text)</div>
+                        @if (ExecutorNames(v) is { Length: > 0 } exec)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">👮 @exec</MudText>
+                        }
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            @(string.IsNullOrWhiteSpace(v.AuthorName) ? "—" : v.AuthorName) · @v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            @(string.IsNullOrWhiteSpace(v.AuthorName) ? "—" : v.AuthorName) · erfasst @v.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
                         </MudText>
                     </div>
                     <AuthorizeView Policy="@Policies.Leadership">
@@ -60,7 +111,6 @@
 
 @code {
     [Parameter, EditorRequired] public string AgentId { get; set; } = default!;
-    [Parameter, EditorRequired] public AgentNoteKind Kind { get; set; }
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
@@ -71,19 +121,27 @@
     private ClaimsPrincipal _user = default!;
     private List<AgentNote> _notes = new();
     private List<PersonnelTemplate> _templates = new();
+    private List<Agent> _agents = new();
+    private Dictionary<string, string> _agentNames = new();
 
-    private string Title => Kind == AgentNoteKind.Commendation ? "Belobigungen" : "Disziplinarisches";
+    private AgentNoteKind _kind = AgentNoteKind.Commendation;
+    private string? _artFreetext;
+    private DateTime? _entryDate = DateTime.Now;
+    private TimeSpan? _entryTime = DateTime.Now.TimeOfDay;
+    private IReadOnlyCollection<string> _executorIds = new List<string>();
+    private AgentNoteKind? _filterKind;
 
-    private PersonnelTemplateKind TemplateKind => Kind == AgentNoteKind.Commendation
-        ? PersonnelTemplateKind.Commendation
-        : PersonnelTemplateKind.Disciplinary;
+    private List<AgentNote> Filtered =>
+        _filterKind is { } k ? _notes.Where(n => n.Kind == k).ToList() : _notes;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _agents = await AgentService.GetSelectableAsync();
+        _agentNames = _agents.ToDictionary(a => a.Id, a => a.Codename);
         if (_user.IsLeadership())
         {
-            _templates = await PersonnelTemplateService.GetActiveAsync(TemplateKind);
+            await LoadTemplatesAsync();
         }
         await LoadAsync();
     }
@@ -91,9 +149,34 @@
     private async Task LoadAsync()
     {
         _load = true;
-        _notes = await PersonnelFileService.GetNotesAsync(AgentId, Kind);
+        _notes = await PersonnelFileService.GetNotesAsync(AgentId);
         _load = false;
     }
+
+    private async Task LoadTemplatesAsync()
+    {
+        _templates = TemplateKind is { } tk ? await PersonnelTemplateService.GetActiveAsync(tk) : new();
+    }
+
+    private PersonnelTemplateKind? TemplateKind => _kind switch
+    {
+        AgentNoteKind.Commendation => PersonnelTemplateKind.Commendation,
+        AgentNoteKind.Disciplinary => PersonnelTemplateKind.Disciplinary,
+        _ => null,
+    };
+
+    private async Task OnKindChanged() => await LoadTemplatesAsync();
+
+    private void OnExecutorsChanged(IReadOnlyCollection<string> ids) => _executorIds = ids?.ToList() ?? new();
+
+    private string DisplaySelection(IReadOnlyList<string> ids)
+    {
+        var names = ids.Select(id => _agentNames.GetValueOrDefault(id, id)).ToList();
+        return names.Count == 0 ? string.Empty : string.Join(", ", names);
+    }
+
+    private string ExecutorNames(AgentNote v)
+        => string.Join(", ", v.ExecutorIds.Select(id => _agentNames.GetValueOrDefault(id)).Where(n => !string.IsNullOrEmpty(n)));
 
     private async Task ApplyTemplateAsync(string? id)
     {
@@ -125,8 +208,13 @@
         _saves = true;
         try
         {
-            await PersonnelFileService.NoteCreateAsync(AgentId, Kind, html, _user);
+            var when = (_entryDate ?? DateTime.Now).Date + (_entryTime ?? TimeSpan.Zero);
+            await PersonnelFileService.NoteCreateAsync(AgentId, _kind, _artFreetext, when, _executorIds.ToList(), html, _user);
             _newHtml = string.Empty;
+            _artFreetext = null;
+            _executorIds = new List<string>();
+            _entryDate = DateTime.Now;
+            _entryTime = DateTime.Now.TimeOfDay;
             await _editor.SetHtmlAsync(string.Empty);
             await LoadAsync();
         }

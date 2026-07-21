@@ -46,6 +46,9 @@ public enum NotificationType
 
     /// <summary>Agent filed an absence.</summary>
     AbsenceFiled = 13,
+
+    /// <summary>New personnel-file entry.</summary>
+    PersonnelEntry = 14,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -67,6 +70,7 @@ public static class NotificationTypeDisplay
         NotificationType.MeetingScheduled => "Besprechung",
         NotificationType.MeetingReminder => "Besprechung beginnt bald",
         NotificationType.AbsenceFiled => "Abmeldung",
+        NotificationType.PersonnelEntry => "Personalakte-Eintrag",
         _ => "Benachrichtigung",
     };
 
@@ -87,6 +91,7 @@ public static class NotificationTypeDisplay
         NotificationType.MeetingScheduled => Icons.Material.Filled.Groups,
         NotificationType.MeetingReminder => Icons.Material.Filled.NotificationsActive,
         NotificationType.AbsenceFiled => Icons.Material.Filled.EventBusy,
+        NotificationType.PersonnelEntry => Icons.Material.Filled.Description,
         _ => Icons.Material.Filled.Notifications,
     };
 }
