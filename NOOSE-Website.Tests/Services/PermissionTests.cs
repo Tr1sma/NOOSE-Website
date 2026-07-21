@@ -1,0 +1,443 @@
+using System.Security.Claims;
+using NOOSE_Website.Authorization;
+using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services;
+using NOOSE_Website.Tests.Infrastructure;
+using Xunit;
+
+namespace NOOSE_Website.Tests.Services;
+
+/// <summary>Covers all 12 Permission.Require* server-side guards: pass paths, throw paths, ladders and boundaries.</summary>
+public sealed class PermissionTests
+{
+    private static void AssertAllowed(Action guard)
+        => Assert.Null(Record.Exception(guard));
+
+    private static void AssertDenied(Action guard)
+        => Assert.Throws<UnauthorizedAccessException>(guard);
+
+    // ---------------------------------------------------------------- RequireLeadership
+
+    [Theory]
+    [InlineData(Rank.JuniorAgent, false)]
+    [InlineData(Rank.SpecialAgent, false)]
+    [InlineData(Rank.SeniorSpecialAgent, false)]
+    [InlineData(Rank.SupervisorySpecialAgent, true)]
+    [InlineData(Rank.DeputyDirector, true)]
+    [InlineData(Rank.Director, true)]
+    public void RequireLeadership_byRank_gatesAtSupervisory(Rank rank, bool allowed)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(rank);
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequireLeadership(actor));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequireLeadership(actor));
+        }
+    }
+
+    [Fact]
+    public void RequireLeadership_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireLeadership(actor));
+    }
+
+    [Fact]
+    public void RequireLeadership_anonymous_throws()
+        => AssertDenied(() => Permission.RequireLeadership(ClaimsPrincipalBuilder.Anonymous()));
+
+    // ---------------------------------------------------------------- RequireWriteAccess
+
+    [Fact]
+    public void RequireWriteAccess_plainAgent_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent();
+        AssertAllowed(() => Permission.RequireWriteAccess(actor));
+    }
+
+    [Fact]
+    public void RequireWriteAccess_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireWriteAccess(actor));
+    }
+
+    [Fact]
+    public void RequireWriteAccess_teamLeadWithAdmin_passes()
+    {
+        // TeamLead + admin is NOT an only-reader, so writes are allowed.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead().AsAdmin();
+        AssertAllowed(() => Permission.RequireWriteAccess(actor));
+    }
+
+    [Fact]
+    public void RequireWriteAccess_demoVisitor_passes()
+    {
+        // This guard only blocks only-readers and partners; demo is not gated here.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsDemo();
+        AssertAllowed(() => Permission.RequireWriteAccess(actor));
+    }
+
+    [Fact]
+    public void RequireWriteAccess_onlyReader_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead();
+        AssertDenied(() => Permission.RequireWriteAccess(actor));
+    }
+
+    [Fact]
+    public void RequireWriteAccess_partner_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.LSPD, PartnerRank.Member);
+        AssertDenied(() => Permission.RequireWriteAccess(actor));
+    }
+
+    // ---------------------------------------------------------------- RequireAdmin
+
+    [Fact]
+    public void RequireAdmin_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireAdmin(actor));
+    }
+
+    [Fact]
+    public void RequireAdmin_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent();
+        AssertDenied(() => Permission.RequireAdmin(actor));
+    }
+
+    [Fact]
+    public void RequireAdmin_leadershipRankWithoutFlag_throws()
+    {
+        // Admin is a flag, never derived from rank.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director);
+        AssertDenied(() => Permission.RequireAdmin(actor));
+    }
+
+    [Fact]
+    public void RequireAdmin_anonymous_throws()
+        => AssertDenied(() => Permission.RequireAdmin(ClaimsPrincipalBuilder.Anonymous()));
+
+    // ---------------------------------------------------------------- RequireBootstrapAdmin
+
+    [Fact]
+    public void RequireBootstrapAdmin_bootstrap_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsBootstrap();
+        AssertAllowed(() => Permission.RequireBootstrapAdmin(actor));
+    }
+
+    [Fact]
+    public void RequireBootstrapAdmin_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent();
+        AssertDenied(() => Permission.RequireBootstrapAdmin(actor));
+    }
+
+    [Fact]
+    public void RequireBootstrapAdmin_adminWithoutBootstrap_throws()
+    {
+        // Bootstrap is distinct from admin.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertDenied(() => Permission.RequireBootstrapAdmin(actor));
+    }
+
+    // ---------------------------------------------------------------- RequireMayAssignClassification
+
+    [Fact]
+    public void RequireMayAssignClassification_none_passesForAnyone()
+    {
+        // None short-circuits before any viewer-scope check.
+        AssertAllowed(() => Permission.RequireMayAssignClassification(
+            ClaimsPrincipalBuilder.Agent(), DocumentClassification.None));
+        AssertAllowed(() => Permission.RequireMayAssignClassification(
+            ClaimsPrincipalBuilder.Anonymous(), DocumentClassification.None));
+    }
+
+    [Theory]
+    // Leadership level: only classified-readers may assign.
+    [InlineData(DocumentClassification.Leadership, false, false, false, false)]
+    [InlineData(DocumentClassification.Leadership, false, false, true, true)]
+    // Tru level: classified-readers OR TRU.
+    [InlineData(DocumentClassification.Tru, false, false, false, false)]
+    [InlineData(DocumentClassification.Tru, true, false, false, true)]
+    [InlineData(DocumentClassification.Tru, false, false, true, true)]
+    // Hrb level: classified-readers OR HRB.
+    [InlineData(DocumentClassification.Hrb, false, false, false, false)]
+    [InlineData(DocumentClassification.Hrb, false, true, false, true)]
+    [InlineData(DocumentClassification.Hrb, false, false, true, true)]
+    public void RequireMayAssignClassification_higherLevels_gatedByViewerScope(
+        DocumentClassification classification, bool tru, bool hrb, bool leadership, bool allowed)
+    {
+        var builder = ClaimsPrincipalBuilder.Agent();
+        if (tru) builder.AsTru();
+        if (hrb) builder.AsHrb();
+        if (leadership) builder.WithRank(Rank.SupervisorySpecialAgent);
+        ClaimsPrincipal actor = builder.Build();
+
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequireMayAssignClassification(actor, classification));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequireMayAssignClassification(actor, classification));
+        }
+    }
+
+    [Fact]
+    public void RequireMayAssignClassification_truLevel_hrbMemberOnly_throws()
+    {
+        // HRB flag does not unlock the TRU level.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsHrb();
+        AssertDenied(() => Permission.RequireMayAssignClassification(actor, DocumentClassification.Tru));
+    }
+
+    [Fact]
+    public void RequireMayAssignClassification_leadershipLevel_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireMayAssignClassification(actor, DocumentClassification.Leadership));
+    }
+
+    // ---------------------------------------------------------------- RequireMaySeeClassified
+
+    [Fact]
+    public void RequireMaySeeClassified_noneLevel_passesForAnyone()
+    {
+        // None is visible to all; CanSee(None) is always true.
+        AssertAllowed(() => Permission.RequireMaySeeClassified(
+            ClaimsPrincipalBuilder.Agent(), DocumentClassification.None));
+    }
+
+    [Theory]
+    [InlineData(DocumentClassification.Leadership, false, false, false, false)]
+    [InlineData(DocumentClassification.Leadership, false, false, true, true)]
+    [InlineData(DocumentClassification.Tru, false, false, false, false)]
+    [InlineData(DocumentClassification.Tru, true, false, false, true)]
+    [InlineData(DocumentClassification.Hrb, false, false, false, false)]
+    [InlineData(DocumentClassification.Hrb, false, true, false, true)]
+    public void RequireMaySeeClassified_gatedByViewerScope(
+        DocumentClassification level, bool tru, bool hrb, bool leadership, bool allowed)
+    {
+        var builder = ClaimsPrincipalBuilder.Agent();
+        if (tru) builder.AsTru();
+        if (hrb) builder.AsHrb();
+        if (leadership) builder.WithRank(Rank.SupervisorySpecialAgent);
+        ClaimsPrincipal actor = builder.Build();
+
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequireMaySeeClassified(actor, level));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequireMaySeeClassified(actor, level));
+        }
+    }
+
+    [Fact]
+    public void RequireMaySeeClassified_onlyReader_seesLeadershipLevel()
+    {
+        // Read-only supervision reads classified content.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead();
+        AssertAllowed(() => Permission.RequireMaySeeClassified(actor, DocumentClassification.Leadership));
+    }
+
+    // ---------------------------------------------------------------- RequirePromotionDecide
+
+    [Theory]
+    [InlineData(Rank.JuniorAgent, false)]
+    [InlineData(Rank.SpecialAgent, false)]
+    [InlineData(Rank.SeniorSpecialAgent, false)]
+    [InlineData(Rank.SupervisorySpecialAgent, false)]
+    [InlineData(Rank.DeputyDirector, true)]
+    [InlineData(Rank.Director, true)]
+    public void RequirePromotionDecide_byRank_gatesAtDeputyDirector(Rank rank, bool allowed)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(rank);
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequirePromotionDecide(actor));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequirePromotionDecide(actor));
+        }
+    }
+
+    [Fact]
+    public void RequirePromotionDecide_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequirePromotionDecide(actor));
+    }
+
+    [Fact]
+    public void RequirePromotionDecide_anonymous_throws()
+        => AssertDenied(() => Permission.RequirePromotionDecide(ClaimsPrincipalBuilder.Anonymous()));
+
+    // ---------------------------------------------------------------- RequireHighestClassification
+
+    [Theory]
+    [InlineData(Rank.JuniorAgent, false)]
+    [InlineData(Rank.SpecialAgent, false)]
+    [InlineData(Rank.SeniorSpecialAgent, true)]
+    [InlineData(Rank.SupervisorySpecialAgent, true)]
+    [InlineData(Rank.DeputyDirector, true)]
+    [InlineData(Rank.Director, true)]
+    public void RequireHighestClassification_byRank_gatesAtSeniorSpecial(Rank rank, bool allowed)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(rank);
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequireHighestClassification(actor));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequireHighestClassification(actor));
+        }
+    }
+
+    [Fact]
+    public void RequireHighestClassification_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireHighestClassification(actor));
+    }
+
+    [Fact]
+    public void RequireHighestClassification_rankless_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent();
+        AssertDenied(() => Permission.RequireHighestClassification(actor));
+    }
+
+    // ---------------------------------------------------------------- RequireClassifiedRead
+
+    [Fact]
+    public void RequireClassifiedRead_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireClassifiedRead(actor));
+    }
+
+    [Fact]
+    public void RequireClassifiedRead_leadershipRank_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SupervisorySpecialAgent);
+        AssertAllowed(() => Permission.RequireClassifiedRead(actor));
+    }
+
+    [Fact]
+    public void RequireClassifiedRead_onlyReader_passes()
+    {
+        // Read-only supervision is admitted to classified reads.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead();
+        AssertAllowed(() => Permission.RequireClassifiedRead(actor));
+    }
+
+    [Fact]
+    public void RequireClassifiedRead_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent();
+        AssertDenied(() => Permission.RequireClassifiedRead(actor));
+    }
+
+    [Fact]
+    public void RequireClassifiedRead_partner_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.DoJ, PartnerRank.Chief);
+        AssertDenied(() => Permission.RequireClassifiedRead(actor));
+    }
+
+    // ---------------------------------------------------------------- RequireMeetingWrite
+
+    [Fact]
+    public void RequireMeetingWrite_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireMeetingWrite(actor));
+    }
+
+    [Fact]
+    public void RequireMeetingWrite_seniorSpecialAgent_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SeniorSpecialAgent);
+        AssertAllowed(() => Permission.RequireMeetingWrite(actor));
+    }
+
+    [Fact]
+    public void RequireMeetingWrite_belowHighestClassification_throws()
+    {
+        // Fails the highest-classification half.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SpecialAgent);
+        AssertDenied(() => Permission.RequireMeetingWrite(actor));
+    }
+
+    [Fact]
+    public void RequireMeetingWrite_onlyReaderWithHighRank_throws()
+    {
+        // Has the classification rank but is read-only, so fails the write half.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SeniorSpecialAgent).AsTeamLead();
+        AssertDenied(() => Permission.RequireMeetingWrite(actor));
+    }
+
+    // ---------------------------------------------------------------- RequireHrbOrLeadership
+
+    [Fact]
+    public void RequireHrbOrLeadership_hrbFlag_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsHrb();
+        AssertAllowed(() => Permission.RequireHrbOrLeadership(actor));
+    }
+
+    [Fact]
+    public void RequireHrbOrLeadership_leadershipRank_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SupervisorySpecialAgent);
+        AssertAllowed(() => Permission.RequireHrbOrLeadership(actor));
+    }
+
+    [Fact]
+    public void RequireHrbOrLeadership_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireHrbOrLeadership(actor));
+    }
+
+    [Fact]
+    public void RequireHrbOrLeadership_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SpecialAgent);
+        AssertDenied(() => Permission.RequireHrbOrLeadership(actor));
+    }
+
+    // ---------------------------------------------------------------- RequireApplicant
+
+    [Fact]
+    public void RequireApplicant_applicantStatus_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Applicant);
+        AssertAllowed(() => Permission.RequireApplicant(actor));
+    }
+
+    [Theory]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Pending)]
+    [InlineData(AgentStatus.Blocked)]
+    public void RequireApplicant_nonApplicantStatus_throws(AgentStatus status)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
+        AssertDenied(() => Permission.RequireApplicant(actor));
+    }
+
+    [Fact]
+    public void RequireApplicant_anonymous_throws()
+        => AssertDenied(() => Permission.RequireApplicant(ClaimsPrincipalBuilder.Anonymous()));
+}

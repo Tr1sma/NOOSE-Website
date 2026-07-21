@@ -1,0 +1,301 @@
+using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Enums;
+
+namespace NOOSE_Website.Tests.Models;
+
+public class DiscordWebhookModelsTests
+{
+    private const string HrbRoleId = "1515098218545938442";
+    private const string NooseRoleId = "1479854499853238475";
+
+    // Routable set per RoutableTypes list in the source.
+    private static readonly NotificationType[] RoutableTypesList =
+    {
+        NotificationType.Announcement,
+        NotificationType.Followup,
+        NotificationType.SituationReport,
+        NotificationType.Recruiting,
+        NotificationType.Mention,
+        NotificationType.JobAssigned,
+        NotificationType.JobDueSoon,
+        NotificationType.MeetingScheduled,
+        NotificationType.MeetingReminder,
+    };
+
+    // Enum members NOT in the routable list.
+    private static readonly NotificationType[] NonRoutableTypesList =
+    {
+        NotificationType.RequestDecided,
+        NotificationType.Account,
+        NotificationType.RecordModified,
+        NotificationType.AppointmentAssigned,
+        NotificationType.AbsenceFiled,
+    };
+
+    // ----- IsRoutable: true branch -----
+
+    [Theory]
+    [InlineData(NotificationType.Announcement)]
+    [InlineData(NotificationType.Followup)]
+    [InlineData(NotificationType.SituationReport)]
+    [InlineData(NotificationType.Recruiting)]
+    [InlineData(NotificationType.Mention)]
+    [InlineData(NotificationType.JobAssigned)]
+    [InlineData(NotificationType.JobDueSoon)]
+    [InlineData(NotificationType.MeetingScheduled)]
+    [InlineData(NotificationType.MeetingReminder)]
+    public void IsRoutable_forRoutableTypes_returnsTrue(NotificationType type)
+    {
+        Assert.True(DiscordRouting.IsRoutable(type));
+    }
+
+    // ----- IsRoutable: false branch -----
+
+    [Theory]
+    [InlineData(NotificationType.RequestDecided)]
+    [InlineData(NotificationType.Account)]
+    [InlineData(NotificationType.RecordModified)]
+    [InlineData(NotificationType.AppointmentAssigned)]
+    [InlineData(NotificationType.AbsenceFiled)]
+    public void IsRoutable_forNonRoutableTypes_returnsFalse(NotificationType type)
+    {
+        Assert.False(DiscordRouting.IsRoutable(type));
+    }
+
+    [Fact]
+    public void IsRoutable_forUndefinedEnumValue_returnsFalse()
+    {
+        Assert.False(DiscordRouting.IsRoutable((NotificationType)999));
+    }
+
+    // ----- PingsRecipients: true branch -----
+
+    [Theory]
+    [InlineData(NotificationType.Mention)]
+    [InlineData(NotificationType.Followup)]
+    [InlineData(NotificationType.JobAssigned)]
+    [InlineData(NotificationType.JobDueSoon)]
+    public void PingsRecipients_forRecipientCategories_returnsTrue(NotificationType type)
+    {
+        Assert.True(DiscordRouting.PingsRecipients(type));
+    }
+
+    // ----- PingsRecipients: false branch (routable non-recipients) -----
+
+    [Theory]
+    [InlineData(NotificationType.Announcement)]
+    [InlineData(NotificationType.SituationReport)]
+    [InlineData(NotificationType.Recruiting)]
+    [InlineData(NotificationType.MeetingScheduled)]
+    [InlineData(NotificationType.MeetingReminder)]
+    public void PingsRecipients_forRoutableRoleCategories_returnsFalse(NotificationType type)
+    {
+        Assert.False(DiscordRouting.PingsRecipients(type));
+    }
+
+    // ----- PingsRecipients: false branch (non-routable) -----
+
+    [Theory]
+    [InlineData(NotificationType.RequestDecided)]
+    [InlineData(NotificationType.Account)]
+    [InlineData(NotificationType.RecordModified)]
+    [InlineData(NotificationType.AppointmentAssigned)]
+    [InlineData(NotificationType.AbsenceFiled)]
+    public void PingsRecipients_forNonRoutableTypes_returnsFalse(NotificationType type)
+    {
+        Assert.False(DiscordRouting.PingsRecipients(type));
+    }
+
+    [Fact]
+    public void PingsRecipients_forUndefinedEnumValue_returnsFalse()
+    {
+        Assert.False(DiscordRouting.PingsRecipients((NotificationType)999));
+    }
+
+    // ----- PingsRole: true branch (routable AND not a recipient) -----
+
+    [Theory]
+    [InlineData(NotificationType.Announcement)]
+    [InlineData(NotificationType.SituationReport)]
+    [InlineData(NotificationType.Recruiting)]
+    [InlineData(NotificationType.MeetingScheduled)]
+    [InlineData(NotificationType.MeetingReminder)]
+    public void PingsRole_forRoutableRoleCategories_returnsTrue(NotificationType type)
+    {
+        Assert.True(DiscordRouting.PingsRole(type));
+    }
+
+    // ----- PingsRole: false branch (routable but recipient) -----
+
+    [Theory]
+    [InlineData(NotificationType.Mention)]
+    [InlineData(NotificationType.Followup)]
+    [InlineData(NotificationType.JobAssigned)]
+    [InlineData(NotificationType.JobDueSoon)]
+    public void PingsRole_forRecipientCategories_returnsFalse(NotificationType type)
+    {
+        Assert.False(DiscordRouting.PingsRole(type));
+    }
+
+    // ----- PingsRole: false branch (not routable) -----
+
+    [Theory]
+    [InlineData(NotificationType.RequestDecided)]
+    [InlineData(NotificationType.Account)]
+    [InlineData(NotificationType.RecordModified)]
+    [InlineData(NotificationType.AppointmentAssigned)]
+    [InlineData(NotificationType.AbsenceFiled)]
+    public void PingsRole_forNonRoutableTypes_returnsFalse(NotificationType type)
+    {
+        Assert.False(DiscordRouting.PingsRole(type));
+    }
+
+    [Fact]
+    public void PingsRole_forUndefinedEnumValue_returnsFalse()
+    {
+        Assert.False(DiscordRouting.PingsRole((NotificationType)999));
+    }
+
+    // ----- PingsRole / PingsRecipients partition invariant -----
+
+    [Fact]
+    public void PingsRole_andPingsRecipients_areMutuallyExclusive()
+    {
+        foreach (NotificationType type in Enum.GetValues<NotificationType>())
+        {
+            Assert.False(
+                DiscordRouting.PingsRole(type) && DiscordRouting.PingsRecipients(type),
+                $"{type} must not both ping role and recipients");
+        }
+    }
+
+    [Fact]
+    public void RoutableTypes_partitionIntoRoleAndRecipientExactlyOnce()
+    {
+        foreach (NotificationType type in RoutableTypesList)
+        {
+            // Every routable type pings exactly one of role or recipients.
+            Assert.True(
+                DiscordRouting.PingsRole(type) ^ DiscordRouting.PingsRecipients(type),
+                $"{type} should ping exactly one target");
+        }
+    }
+
+    // ----- DefaultRole: Recruiting arm vs. fallback arm -----
+
+    [Fact]
+    public void DefaultRole_forRecruiting_returnsHrbRole()
+    {
+        Assert.Equal(HrbRoleId, DiscordRouting.DefaultRole(NotificationType.Recruiting));
+    }
+
+    [Theory]
+    [InlineData(NotificationType.Announcement)]
+    [InlineData(NotificationType.Followup)]
+    [InlineData(NotificationType.SituationReport)]
+    [InlineData(NotificationType.Mention)]
+    [InlineData(NotificationType.JobAssigned)]
+    [InlineData(NotificationType.JobDueSoon)]
+    [InlineData(NotificationType.MeetingScheduled)]
+    [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.RequestDecided)]
+    [InlineData(NotificationType.Account)]
+    [InlineData(NotificationType.RecordModified)]
+    [InlineData(NotificationType.AppointmentAssigned)]
+    [InlineData(NotificationType.AbsenceFiled)]
+    public void DefaultRole_forNonRecruiting_returnsNooseRole(NotificationType type)
+    {
+        Assert.Equal(NooseRoleId, DiscordRouting.DefaultRole(type));
+    }
+
+    [Fact]
+    public void DefaultRole_forUndefinedEnumValue_returnsNooseRole()
+    {
+        Assert.Equal(NooseRoleId, DiscordRouting.DefaultRole((NotificationType)999));
+    }
+
+    // ----- RoutableTypes / RoleRoutableTypes contents -----
+
+    [Fact]
+    public void RoutableTypes_containsExactlyTheExpectedCategories()
+    {
+        Assert.Equal(RoutableTypesList.Length, DiscordRouting.RoutableTypes.Count);
+        foreach (NotificationType type in RoutableTypesList)
+        {
+            Assert.Contains(type, DiscordRouting.RoutableTypes);
+        }
+        foreach (NotificationType type in NonRoutableTypesList)
+        {
+            Assert.DoesNotContain(type, DiscordRouting.RoutableTypes);
+        }
+    }
+
+    [Fact]
+    public void RoleRoutableTypes_isExactlyTheRoutableRoleCategories()
+    {
+        NotificationType[] expected =
+        {
+            NotificationType.Announcement,
+            NotificationType.SituationReport,
+            NotificationType.Recruiting,
+            NotificationType.MeetingScheduled,
+            NotificationType.MeetingReminder,
+        };
+
+        Assert.Equal(expected.Length, DiscordRouting.RoleRoutableTypes.Count);
+        foreach (NotificationType type in expected)
+        {
+            Assert.Contains(type, DiscordRouting.RoleRoutableTypes);
+        }
+
+        // Every entry pings a role and none ping recipients.
+        foreach (NotificationType type in DiscordRouting.RoleRoutableTypes)
+        {
+            Assert.True(DiscordRouting.PingsRole(type));
+            Assert.False(DiscordRouting.PingsRecipients(type));
+        }
+    }
+
+    // ----- DiscordWebhookConfig record -----
+
+    [Fact]
+    public void DiscordWebhookConfig_DefaultBaseUrl_isNooseInfo()
+    {
+        Assert.Equal("https://noose.info", DiscordWebhookConfig.DefaultBaseUrl);
+    }
+
+    [Fact]
+    public void DiscordWebhookConfig_storesConstructorValues()
+    {
+        var webhooks = new Dictionary<NotificationType, string?>
+        {
+            [NotificationType.Announcement] = "https://hook/announce",
+        };
+        var roles = new Dictionary<NotificationType, string?>
+        {
+            [NotificationType.Recruiting] = "role-1",
+        };
+
+        var config = new DiscordWebhookConfig(true, "https://example.test", webhooks, roles);
+
+        Assert.True(config.Enabled);
+        Assert.Equal("https://example.test", config.SiteBaseUrl);
+        Assert.Same(webhooks, config.Webhooks);
+        Assert.Same(roles, config.Roles);
+    }
+
+    // ----- DiscordWebhookConfigInput defaults -----
+
+    [Fact]
+    public void DiscordWebhookConfigInput_defaults_areEmptyAndDisabled()
+    {
+        var input = new DiscordWebhookConfigInput();
+
+        Assert.False(input.Enabled);
+        Assert.Null(input.SiteBaseUrl);
+        Assert.NotNull(input.Webhooks);
+        Assert.Empty(input.Webhooks);
+        Assert.NotNull(input.Roles);
+        Assert.Empty(input.Roles);
+    }
+}
