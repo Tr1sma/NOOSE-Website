@@ -293,44 +293,63 @@ public class MeetingService(
 
     // ---- agenda ----
 
-    public async Task<List<MeetingAgendaItem>> GetAgendaAsync(string meetingId, bool mayAgenda, CancellationToken cancellationToken = default)
+    public async Task<List<MeetingAgendaItem>> GetAgendaAsync(string meetingId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
-        // fail-closed: the agenda is rank-gated
-        if (!mayAgenda)
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // fail-closed: rank/supervision see it at once, everyone else only 2h after the meeting
+        if (!scope.MayAgenda && !await AgendaOpenAsync(db, meetingId, scope, cancellationToken))
         {
             return new();
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.MeetingAgendaItems.AsNoTracking()
             .Where(p => p.MeetingId == meetingId)
             .OrderBy(p => p.Sorting)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<string?> GetItemNoteAsync(string itemId, bool mayAgenda, CancellationToken cancellationToken = default)
+    public async Task<string?> GetItemNoteAsync(string itemId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
-        if (!mayAgenda)
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!scope.MayAgenda && !await ItemAgendaOpenAsync(db, itemId, scope, cancellationToken))
         {
             return null;
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.MeetingAgendaItems.AsNoTracking()
             .Where(p => p.Id == itemId).Select(p => p.NotesHtml)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // recompute the time gate server-side so a caller can never widen it
+    private static async Task<bool> AgendaOpenAsync(AppDbContext db, string meetingId, ViewerScope scope, CancellationToken cancellationToken)
+    {
+        var when = await db.Meetings.AsNoTracking()
+            .Where(m => m.Id == meetingId)
+            .Select(m => new { m.Start, m.End })
+            .FirstOrDefaultAsync(cancellationToken);
+        return when is not null && MeetingVisibility.MayReadAgenda(scope, when.Start, when.End, DateTime.UtcNow);
+    }
+
+    private static async Task<bool> ItemAgendaOpenAsync(AppDbContext db, string itemId, ViewerScope scope, CancellationToken cancellationToken)
+    {
+        var when = await db.MeetingAgendaItems.AsNoTracking()
+            .Where(p => p.Id == itemId)
+            .Join(db.Meetings, p => p.MeetingId, m => m.Id, (p, m) => new { m.Start, m.End })
+            .FirstOrDefaultAsync(cancellationToken);
+        return when is not null && MeetingVisibility.MayReadAgenda(scope, when.Start, when.End, DateTime.UtcNow);
     }
 
     public async Task<Dictionary<string, IReadOnlyList<LinkDisplay>>> GetAgendaLinksAsync(
         string meetingId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         var result = new Dictionary<string, IReadOnlyList<LinkDisplay>>(StringComparer.Ordinal);
-        if (!scope.MayAgenda)
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!scope.MayAgenda && !await AgendaOpenAsync(db, meetingId, scope, cancellationToken))
         {
             return result;
         }
-
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
         var itemIds = await db.MeetingAgendaItems.AsNoTracking()
             .Where(p => p.MeetingId == meetingId).Select(p => p.Id)

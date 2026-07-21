@@ -34,9 +34,9 @@ public interface IMeetingService
     /// <summary>True if a follow-up meeting was already cloned from this one.</summary>
     Task<bool> HasNextAsync(string meetingId, CancellationToken cancellationToken = default);
 
-    Task<List<MeetingAgendaItem>> GetAgendaAsync(string meetingId, bool mayAgenda, CancellationToken cancellationToken = default);
+    Task<List<MeetingAgendaItem>> GetAgendaAsync(string meetingId, ViewerScope scope, CancellationToken cancellationToken = default);
 
-    Task<string?> GetItemNoteAsync(string itemId, bool mayAgenda, CancellationToken cancellationToken = default);
+    Task<string?> GetItemNoteAsync(string itemId, ViewerScope scope, CancellationToken cancellationToken = default);
 
     /// <summary>All agenda-item links of one meeting in a single round trip, filtered like LinkService would.</summary>
     Task<Dictionary<string, IReadOnlyList<LinkDisplay>>> GetAgendaLinksAsync(string meetingId, ViewerScope scope,

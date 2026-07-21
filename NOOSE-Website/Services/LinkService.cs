@@ -190,17 +190,21 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
             targets[(nameof(Meeting), x.Id)] = ($"{x.Title} ({x.CaseNumber})", false, $"/besprechungen/{x.Id}");
         }
 
-        // agenda items: rank 3+ only; others keep them unresolved -> hidden below
-        if (scope.MayAgenda)
+        // agenda items: rank 3+ see all; other internal viewers see an item 2h after its meeting; partners never
+        var agendaItemIds = pairs.Where(p => p.OtherType == nameof(MeetingAgendaItem)).Select(p => p.OtherId).Distinct().ToList();
+        if (agendaItemIds.Count > 0 && !scope.IsPartner)
         {
-            var itemIds = pairs.Where(p => p.OtherType == nameof(MeetingAgendaItem)).Select(p => p.OtherId).Distinct().ToList();
-            foreach (var x in await db.MeetingAgendaItems.Where(p => itemIds.Contains(p.Id))
+            var now = DateTime.UtcNow;
+            foreach (var x in await db.MeetingAgendaItems.Where(p => agendaItemIds.Contains(p.Id))
                          .Join(db.Meetings, p => p.MeetingId, m => m.Id,
-                               (p, m) => new { p.Id, p.Title, MeetingId = m.Id, MeetingTitle = m.Title })
+                               (p, m) => new { p.Id, p.Title, MeetingId = m.Id, MeetingTitle = m.Title, m.Start, m.End })
                          .ToListAsync(cancellationToken))
             {
-                targets[(nameof(MeetingAgendaItem), x.Id)] =
-                    ($"{x.MeetingTitle} – {x.Title}", false, $"/besprechungen/{x.MeetingId}?tab=agenda#top-{x.Id}");
+                if (scope.MayAgenda || now >= MeetingVisibility.PublicFrom(x.Start, x.End))
+                {
+                    targets[(nameof(MeetingAgendaItem), x.Id)] =
+                        ($"{x.MeetingTitle} – {x.Title}", false, $"/besprechungen/{x.MeetingId}?tab=agenda#top-{x.Id}");
+                }
             }
         }
 

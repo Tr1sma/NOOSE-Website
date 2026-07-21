@@ -114,12 +114,27 @@ public static class Visibility
             nameof(Appointment) => await db.Appointments.AnyAsync(t => t.Id == entityId, cancellationToken),
             nameof(Law) => await db.Laws.AnyAsync(g => g.Id == entityId, cancellationToken),
             nameof(Meeting) => await db.Meetings.AnyAsync(m => m.Id == entityId, cancellationToken),
-            // agenda stays behind the rank gate
-            nameof(MeetingAgendaItem) => scope.MayAgenda
-                && await db.MeetingAgendaItems.AnyAsync(p => p.Id == entityId, cancellationToken),
+            // agenda: rank/supervision at once, any other internal agent 2h after the meeting, partners never
+            nameof(MeetingAgendaItem) => await AgendaItemVisibleAsync(db, entityId, scope, cancellationToken),
             // unknown type = visible
             _ => true,
         };
+    }
+
+    /// <summary>Agenda item visibility: leadership keeps its immediate access; other internal agents gain it 2h after the meeting.</summary>
+    private static async Task<bool> AgendaItemVisibleAsync(
+        AppDbContext db, string itemId, ViewerScope scope, CancellationToken cancellationToken)
+    {
+        // preserve the exact rank-gate behaviour: existence only, independent of the meeting time
+        if (scope.MayAgenda)
+        {
+            return await db.MeetingAgendaItems.AnyAsync(p => p.Id == itemId, cancellationToken);
+        }
+        var when = await db.MeetingAgendaItems.AsNoTracking()
+            .Where(p => p.Id == itemId)
+            .Join(db.Meetings, p => p.MeetingId, m => m.Id, (p, m) => new { m.Start, m.End })
+            .FirstOrDefaultAsync(cancellationToken);
+        return when is not null && MeetingVisibility.MayReadAgenda(scope, when.Start, when.End, DateTime.UtcNow);
     }
 
     /// <summary>True if record is visible to caller; leadership-scoped shim around the full scope check.</summary>

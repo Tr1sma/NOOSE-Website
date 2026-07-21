@@ -44,6 +44,15 @@ public sealed class MeetingServiceTests
     private static ClaimsPrincipal ReaderActor() =>
         ClaimsPrincipalBuilder.Agent("reader").AsTeamLead().Build();
 
+    // rank/supervision early access to agendas (MayAgenda set)
+    private static ViewerScope MayAgendaScope() => new(true, true, "lead", null, MayAgenda: true);
+
+    // internal agent without the agenda rank: sees an agenda only once its meeting is 2h past
+    private static ViewerScope InternalNoAgendaScope() => new(false, false, "low", null, MayAgenda: false);
+
+    // external partner: never sees an agenda, however old the meeting
+    private static ViewerScope PartnerScope() => new(false, false, "p", PartnerAgency.DoJ, MayAgenda: false);
+
     private static Meeting NewMeeting(string id, DateTime start, string title = "Wochenrunde",
         Action<Meeting>? configure = null)
     {
@@ -435,7 +444,8 @@ public sealed class MeetingServiceTests
         }
         var (svc, _, _, _) = Build(ctx);
 
-        Assert.Empty(await svc.GetAgendaAsync("m1", mayAgenda: false));
+        // no meeting row and no early-access rank -> fail closed
+        Assert.Empty(await svc.GetAgendaAsync("m1", InternalNoAgendaScope()));
     }
 
     [Fact]
@@ -450,8 +460,69 @@ public sealed class MeetingServiceTests
         }
         var (svc, _, _, _) = Build(ctx);
 
-        var items = await svc.GetAgendaAsync("m1", mayAgenda: true);
+        var items = await svc.GetAgendaAsync("m1", MayAgendaScope());
         Assert.Equal(new[] { "First", "Second" }, items.Select(i => i.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task GetAgendaAsync_OpensToInternalAgent_TwoHoursAfterMeeting()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Meetings.Add(NewMeeting("m1", DateTime.UtcNow.AddHours(-3)));
+            db.MeetingAgendaItems.Add(new MeetingAgendaItem { MeetingId = "m1", Title = "A", Sorting = 10 });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _) = Build(ctx);
+
+        Assert.Single(await svc.GetAgendaAsync("m1", InternalNoAgendaScope()));
+    }
+
+    [Fact]
+    public async Task GetAgendaAsync_StaysClosedToInternalAgent_WithinTwoHours()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Meetings.Add(NewMeeting("m1", DateTime.UtcNow.AddHours(-1)));
+            db.MeetingAgendaItems.Add(new MeetingAgendaItem { MeetingId = "m1", Title = "A", Sorting = 10 });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _) = Build(ctx);
+
+        Assert.Empty(await svc.GetAgendaAsync("m1", InternalNoAgendaScope()));
+    }
+
+    [Fact]
+    public async Task GetAgendaAsync_StaysClosedToPartner_EvenAfterMeeting()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Meetings.Add(NewMeeting("m1", DateTime.UtcNow.AddHours(-5)));
+            db.MeetingAgendaItems.Add(new MeetingAgendaItem { MeetingId = "m1", Title = "A", Sorting = 10 });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _) = Build(ctx);
+
+        Assert.Empty(await svc.GetAgendaAsync("m1", PartnerScope()));
+    }
+
+    [Fact]
+    public async Task GetAgendaAsync_MeasuresWindowFromEnd_WhenEndSet()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            // started 5h ago but ended only 1h ago -> end+2h not yet reached
+            db.Meetings.Add(NewMeeting("m1", DateTime.UtcNow.AddHours(-5), configure: m => m.End = DateTime.UtcNow.AddHours(-1)));
+            db.MeetingAgendaItems.Add(new MeetingAgendaItem { MeetingId = "m1", Title = "A", Sorting = 10 });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _) = Build(ctx);
+
+        Assert.Empty(await svc.GetAgendaAsync("m1", InternalNoAgendaScope()));
     }
 
     [Fact]
@@ -465,8 +536,24 @@ public sealed class MeetingServiceTests
         }
         var (svc, _, _, _) = Build(ctx);
 
-        Assert.Null(await svc.GetItemNoteAsync("it", mayAgenda: false));
-        Assert.Equal("<p>note</p>", await svc.GetItemNoteAsync("it", mayAgenda: true));
+        // no meeting row and no early-access rank -> null
+        Assert.Null(await svc.GetItemNoteAsync("it", InternalNoAgendaScope()));
+        Assert.Equal("<p>note</p>", await svc.GetItemNoteAsync("it", MayAgendaScope()));
+    }
+
+    [Fact]
+    public async Task GetItemNoteAsync_OpensToInternalAgent_TwoHoursAfterMeeting()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Meetings.Add(NewMeeting("m1", DateTime.UtcNow.AddHours(-3)));
+            db.MeetingAgendaItems.Add(new MeetingAgendaItem { Id = "it", MeetingId = "m1", Title = "A", NotesHtml = "<p>note</p>" });
+            db.SaveChanges();
+        }
+        var (svc, _, _, _) = Build(ctx);
+
+        Assert.Equal("<p>note</p>", await svc.GetItemNoteAsync("it", InternalNoAgendaScope()));
     }
 
     [Fact]

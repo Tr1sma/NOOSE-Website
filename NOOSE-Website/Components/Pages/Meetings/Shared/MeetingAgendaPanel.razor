@@ -134,20 +134,20 @@ else
     private string? _newTitle;
     private bool _load = true;
     private bool _saving;
-    private bool _mayAgenda;
+    private ViewerScope _scope;
 
     protected override async Task OnInitializedAsync()
     {
-        _mayAgenda = User.MayMeetingRead();
+        _scope = ViewerScope.From(User);
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _load = true;
-        _items = await MeetingService.GetAgendaAsync(MeetingId, _mayAgenda);
+        _items = await MeetingService.GetAgendaAsync(MeetingId, _scope);
         // one bulk query instead of a RecordLinksPanel per item
-        _links = await MeetingService.GetAgendaLinksAsync(MeetingId, ViewerScope.From(User));
+        _links = await MeetingService.GetAgendaLinksAsync(MeetingId, _scope);
         _load = false;
     }
 
@@ -168,7 +168,7 @@ else
             _itemEditor = null;
             return;
         }
-        var html = await MeetingService.GetItemNoteAsync(itemId, _mayAgenda) ?? string.Empty;
+        var html = await MeetingService.GetItemNoteAsync(itemId, _scope) ?? string.Empty;
         _noteHtml = html;
         _expandedId = itemId;
     }

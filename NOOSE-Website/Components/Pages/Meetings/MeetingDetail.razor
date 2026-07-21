@@ -149,17 +149,20 @@ else
         }
 
         _user = (await AuthStateTask!).User;
-        _mayAgenda = _user.MayMeetingRead();
         // read-only supervision passes the rank checks but must never get a write control
         _mayAgendaWrite = _user.MayHighestClassification() && _user.MayWrite();
         _isLeadership = _user.IsLeadership() && _user.MayWrite();
-        _renderTabs = _allTabs.Where(t => _mayAgenda || (t != "agenda" && t != "protokoll")).ToArray();
         // fresh keys per meeting so the kept-alive panels reload when navigating A -> B
         _attendanceKey = Guid.NewGuid();
         _historyKey = Guid.NewGuid();
         _cloning = false;
 
         await LoadAsync();
+
+        // agenda and minutes open to any internal agent 2h after the meeting; leadership sees them at once
+        _mayAgenda = _meeting is not null
+            && MeetingVisibility.MayReadAgenda(_user, _meeting.Start, _meeting.End, DateTime.UtcNow);
+        _renderTabs = _allTabs.Where(t => _mayAgenda || (t != "agenda" && t != "protokoll")).ToArray();
         _activeTab = TabUrlState.Read(Nav, _renderTabs);
         _loadedId = Id;
 
