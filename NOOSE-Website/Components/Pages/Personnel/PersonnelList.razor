@@ -24,6 +24,11 @@ else
                      Text="@($"NOOSE ({CountInternal})")" />
         <MudTabPanel Icon="@Icons.Material.Filled.Handshake" IconColor="Color.Info"
                      Text="@($"Partner ({CountPartner})")" />
+        @if (_isLeadership)
+        {
+            <MudTabPanel Icon="@Icons.Material.Filled.PersonOff" IconColor="Color.Error"
+                         Text="@($"Gekündigt ({CountTerminated})")" />
+        }
     </MudTabs>
 
     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
@@ -61,16 +66,23 @@ else
             {
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.RealName)">Klarname</MudTableSortLabel></MudTh>
             }
-            @if (_tab == 1)
+            @if (_tab == 2)
+            {
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Rank)">Letzter Dienstgrad</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.TerminatedAt)" InitialDirection="SortDirection.Descending">Gekündigt am</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.TerminatedByName)">Gekündigt von</MudTableSortLabel></MudTh>
+                <MudTh>Grund</MudTh>
+            }
+            else if (_tab == 1)
             {
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.PartnerAgency)">Behörde</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.PartnerRank)">Partner-Rang</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => StatusName(x.Status))">Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AgentStatusDisplay.Name(x.Status))">Status</MudTableSortLabel></MudTh>
             }
             else
             {
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.Rank)">Dienstgrad</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => StatusName(x.Status))">Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => AgentStatusDisplay.Name(x.Status))">Status</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IsTRU)">TRU</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.IsHRB)">HRB</MudTableSortLabel></MudTh>
             }
@@ -85,16 +97,27 @@ else
             {
                 <MudTd DataLabel="Klarname"><MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.RealName ?? "—")</MudText></MudTd>
             }
-            @if (_tab == 1)
+            @if (_tab == 2)
+            {
+                <MudTd DataLabel="Letzter Dienstgrad">@RankDisplay.Name(context.Rank)</MudTd>
+                <MudTd DataLabel="Gekündigt am">@(context.TerminatedAt?.ToLocalTime().ToString("dd.MM.yyyy") ?? "—")</MudTd>
+                <MudTd DataLabel="Gekündigt von">@(context.TerminatedByName ?? "—")</MudTd>
+                <MudTd DataLabel="Grund">
+                    <MudTooltip Text="@context.TerminationReason">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Shorten(context.TerminationReason)</MudText>
+                    </MudTooltip>
+                </MudTd>
+            }
+            else if (_tab == 1)
             {
                 <MudTd DataLabel="Behörde">@PartnerAgencyDisplay.Name(context.PartnerAgency)</MudTd>
                 <MudTd DataLabel="Partner-Rang">@PartnerRankDisplay.Full(context.PartnerAgency, context.PartnerRank)</MudTd>
-                <MudTd DataLabel="Status">@StatusName(context.Status)</MudTd>
+                <MudTd DataLabel="Status">@AgentStatusDisplay.Name(context.Status)</MudTd>
             }
             else
             {
                 <MudTd DataLabel="Dienstgrad">@RankDisplay.Name(context.Rank)</MudTd>
-                <MudTd DataLabel="Status">@StatusName(context.Status)</MudTd>
+                <MudTd DataLabel="Status">@AgentStatusDisplay.Name(context.Status)</MudTd>
                 <MudTd DataLabel="TRU">@(context.IsTRU ? "TRU" : "")</MudTd>
                 <MudTd DataLabel="HRB">@(context.IsHRB ? "HRB" : "")</MudTd>
             }
@@ -113,6 +136,7 @@ else
 
     private bool _load = true;
     private bool _mayRealName;
+    private bool _isLeadership;
     private string _search = string.Empty;
     private int _tab;
     private PartnerAgency? _agencyFilter;
@@ -123,7 +147,12 @@ else
     {
         get
         {
-            var query = _agents.Where(a => _tab == 1 ? a.PartnerAgency != null : a.PartnerAgency == null);
+            var query = _tab switch
+            {
+                2 => _agents.Where(a => a.Status == AgentStatus.Terminated),
+                1 => _agents.Where(a => a.PartnerAgency != null && a.Status != AgentStatus.Terminated),
+                _ => _agents.Where(a => a.PartnerAgency == null && a.Status != AgentStatus.Terminated),
+            };
             if (_tab == 1)
             {
                 if (_agencyFilter is { } agency)
@@ -146,12 +175,15 @@ else
         }
     }
 
-    private int CountInternal => _agents.Count(a => a.PartnerAgency == null);
-    private int CountPartner => _agents.Count(a => a.PartnerAgency != null);
+    private int CountInternal => _agents.Count(a => a.PartnerAgency == null && a.Status != AgentStatus.Terminated);
+    private int CountPartner => _agents.Count(a => a.PartnerAgency != null && a.Status != AgentStatus.Terminated);
+    private int CountTerminated => _agents.Count(a => a.Status == AgentStatus.Terminated);
 
     protected override async Task OnInitializedAsync()
     {
-        _mayRealName = (await AuthStateTask).User.MayRealNameSee();
+        var user = (await AuthStateTask).User;
+        _mayRealName = user.MayRealNameSee();
+        _isLeadership = user.IsLeadership();
         // TeamLeads invisible in RP; blocked accounts hidden too
         _agents = (await AgentService.GetAllAsync())
             .Where(a => !a.IsTeamLead && a.Status != AgentStatus.Blocked)
@@ -167,11 +199,7 @@ else
         }
     }
 
-    private static string StatusName(AgentStatus s) => s switch
-    {
-        AgentStatus.Active => "Aktiv",
-        AgentStatus.Pending => "Ausstehend",
-        AgentStatus.Blocked => "Gesperrt",
-        _ => "—",
-    };
+    private static string Shorten(string? text)
+        => string.IsNullOrWhiteSpace(text) ? "—"
+            : text.Length <= 60 ? text : text[..60] + "…";
 }

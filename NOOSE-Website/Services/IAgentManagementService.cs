@@ -67,8 +67,18 @@ public interface IAgentManagementService
     /// <summary>Kill-switch: status Blocked and end all sessions immediately.</summary>
     Task BlockAsync(string agentId, string reason, ClaimsPrincipal actor);
 
-    /// <summary>Lift a block; status becomes Active.</summary>
+    /// <summary>Lift a block; status becomes Active. Refuses terminated agents - those go through the personnel file.</summary>
     Task UnblockAsync(string agentId, ClaimsPrincipal actor);
+
+    /// <summary>Terminate an agent: status Terminated, admin rights dropped, permanent recruitment blacklist,
+    /// sessions end at the next revalidation. Optionally files a personnel-file entry and posts a Discord embed.
+    /// Leadership only; blocked for self, applicants, the last admin, and bootstrap admins.</summary>
+    Task TerminateAsync(string agentId, string reason, bool createNote, bool postDiscord,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Revoke a termination: status Active, termination fields cleared, blacklist entry lifted.
+    /// The personnel-file entry and the audit trail are kept.</summary>
+    Task TerminationRevokeAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Hard-delete an agent: purge personnel/junction rows and drop the user (severs the Discord
     /// login, so a re-login creates a fresh Pending account). Keeps authored content and audit logs.

@@ -195,6 +195,9 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.DiscordUsername).HasMaxLength(64);
             b.Property(a => a.AvatarUrl).HasMaxLength(512);
             b.Property(a => a.BlockedReason).HasMaxLength(512);
+            b.Property(a => a.TerminatedById).HasMaxLength(64);
+            b.Property(a => a.TerminatedByName).HasMaxLength(128);
+            b.Property(a => a.TerminationReason).HasMaxLength(2000);
             // longtext for JSON
             b.Property(a => a.NavPreferencesJson).HasColumnType("longtext");
             b.HasIndex(a => a.DiscordId).IsUnique();

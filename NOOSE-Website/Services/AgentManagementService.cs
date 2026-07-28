@@ -7,6 +7,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 
@@ -18,6 +19,7 @@ public class AgentManagementService(
     AppDbContext db,
     IDbContextFactory<AppDbContext> dbFactory,
     INotificationService notifications,
+    IDiscordWebhookService discord,
     IConfiguration configuration) : IAgentManagementService
 {
     public async Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default)
@@ -445,11 +447,155 @@ public class AgentManagementService(
         Permission.RequireLeadership(actor);
 
         var agent = await GetOrThrow(agentId);
+        if (agent.Status == AgentStatus.Terminated)
+        {
+            throw new InvalidOperationException(
+                "Gekündigte Agenten werden über die Personalakte reaktiviert, nicht über die Entsperrung.");
+        }
         agent.Status = AgentStatus.Active;
         agent.BlockedReason = null;
 
         Audit(agent, AuditAction.Modified, actor, "Entsperrt");
         await Save(agent, newStamp: true);
+    }
+
+    public async Task TerminateAsync(string agentId, string reason, bool createNote, bool postDiscord,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new InvalidOperationException("Eine Begründung ist für die Kündigung erforderlich.");
+        }
+        if (actor.GetAgentId() == agentId)
+        {
+            throw new InvalidOperationException("Du kannst dich nicht selbst kündigen.");
+        }
+
+        var agent = await GetOrThrow(agentId);
+
+        if (agent.Status == AgentStatus.Terminated)
+        {
+            throw new InvalidOperationException("Dieser Agent ist bereits gekündigt.");
+        }
+        if (agent.Status == AgentStatus.Applicant)
+        {
+            throw new InvalidOperationException("Bewerber werden über die Bewerbungsverwaltung abgelehnt, nicht gekündigt.");
+        }
+        // a bootstrap admin re-activates itself on the next login, so the termination would not stick
+        if (IsBootstrapAdmin(agent.DiscordId))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap-Admins können nicht gekündigt werden (sie würden sich beim nächsten Login reaktivieren).");
+        }
+        if (agent.IsAdmin && await db.Users.CountAsync(u => u.IsAdmin, cancellationToken) <= 1)
+        {
+            throw new InvalidOperationException("Der letzte verbliebene Admin kann nicht gekündigt werden.");
+        }
+
+        var trimmed = reason.Trim();
+        var actorName = actor.GetCodename();
+        var subjectDisplay = string.IsNullOrWhiteSpace(agent.RealName)
+            ? agent.Codename
+            : $"{agent.RealName} - {agent.Codename}";
+
+        agent.Status = AgentStatus.Terminated;
+        agent.TerminatedAt = DateTime.UtcNow;
+        agent.TerminatedById = actor.GetAgentId();
+        agent.TerminatedByName = actorName;
+        agent.TerminationReason = trimmed;
+        // a dead account must not keep propping up the last-admin guard
+        agent.IsAdmin = false;
+
+        await BlacklistAdd(agent, subjectDisplay, trimmed, actorName, cancellationToken);
+
+        if (createNote)
+        {
+            db.AgentNotes.Add(new AgentNote
+            {
+                AgentId = agent.Id,
+                Kind = AgentNoteKind.Termination,
+                EntryDate = agent.TerminatedAt.Value,
+                Text = HtmlCleanup.Clean($"<p>{System.Net.WebUtility.HtmlEncode(trimmed)}</p>"),
+                AuthorName = actorName,
+            });
+        }
+
+        Audit(agent, AuditAction.Modified, actor, $"Gekündigt: {trimmed}");
+        // flushes the agent, the blacklist entry, the note and the audit row in one SaveChanges
+        await Save(agent, newStamp: true);
+
+        if (postDiscord)
+        {
+            try
+            {
+                await discord.PushPersonnelEntryAsync(agent.Id, subjectDisplay,
+                    AgentNoteKindDisplay.Name(AgentNoteKind.Termination), agent.TerminatedAt.Value,
+                    trimmed, new[] { actorName ?? string.Empty }, $"/personal/{agent.Id}", cancellationToken);
+            }
+            catch { /* best effort */ }
+        }
+    }
+
+    public async Task TerminationRevokeAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        var agent = await GetOrThrow(agentId);
+        if (agent.Status != AgentStatus.Terminated)
+        {
+            throw new InvalidOperationException("Dieser Agent ist nicht gekündigt.");
+        }
+
+        agent.Status = AgentStatus.Active;
+        agent.TerminatedAt = null;
+        agent.TerminatedById = null;
+        agent.TerminatedByName = null;
+        agent.TerminationReason = null;
+
+        var blacklisted = await db.Bewerbungssperren
+            .Where(s => s.AgentId == agentId && s.IsBlacklist)
+            .ToListAsync(cancellationToken);
+        foreach (var entry in blacklisted)
+        {
+            db.Bewerbungssperren.Remove(entry); // interceptor soft-deletes
+        }
+
+        Audit(agent, AuditAction.Modified, actor, "Kündigung zurückgenommen");
+        await Save(agent, newStamp: true);
+    }
+
+    /// <summary>Stage a permanent recruitment blacklist entry on the shared context; no-op if one is already active.</summary>
+    private async Task BlacklistAdd(Agent agent, string subjectDisplay, string reason, string? actorName,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var active = await db.Bewerbungssperren
+            .Where(s => s.AgentId == agent.Id && (s.IsBlacklist || s.BannedUntil > now))
+            .ToListAsync(cancellationToken);
+
+        if (active.Any(s => s.IsBlacklist))
+        {
+            return;
+        }
+        // the permanent blacklist supersedes any running temporary ban
+        foreach (var temp in active)
+        {
+            db.Bewerbungssperren.Remove(temp);
+        }
+        db.Bewerbungssperren.Add(new Bewerbungssperre
+        {
+            AgentId = agent.Id,
+            DiscordId = agent.DiscordId,
+            ApplicantName = subjectDisplay,
+            IsBlacklist = true,
+            BannedUntil = null,
+            Reason = $"Kündigung: {reason}",
+            CreatedByName = actorName,
+        });
     }
 
     public async Task DeleteAccountAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

@@ -12,6 +12,7 @@ public enum CalendarSource
     PersonDoc = 6,
     Meeting = 7,
     Absence = 8,
+    TeamAbsence = 9,
 }
 
 /// <summary>Requested calendar view.</summary>
@@ -48,6 +49,8 @@ public static class CalendarDisplay
         CalendarSource.PersonDoc => "#A371F7",
         CalendarSource.Meeting => "#22D3EE",
         CalendarSource.Absence => "#DB61A2",
+        // muted sibling of the own-absence pink
+        CalendarSource.TeamAbsence => "#B07C9E",
         _ => "#8B98A8",
     };
 
@@ -62,6 +65,7 @@ public static class CalendarDisplay
         CalendarSource.PersonDoc => "Personen-Doks",
         CalendarSource.Meeting => "Besprechungen",
         CalendarSource.Absence => "Meine Abmeldungen",
+        CalendarSource.TeamAbsence => "Team-Abmeldungen",
         _ => "—",
     };
 
@@ -76,5 +80,6 @@ public static class CalendarDisplay
         CalendarSource.PersonDoc,
         CalendarSource.Meeting,
         CalendarSource.Absence,
+        CalendarSource.TeamAbsence,
     };
 }

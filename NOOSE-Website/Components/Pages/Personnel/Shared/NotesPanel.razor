@@ -13,7 +13,7 @@
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                     <MudSelect T="AgentNoteKind" @bind-Value="_kind" @bind-Value:after="OnKindChanged" Label="Art"
                                Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px;">
-                        @foreach (var k in AgentNoteKindDisplay.All)
+                        @foreach (var k in AgentNoteKindDisplay.Creatable)
                         {
                             <MudSelectItem T="AgentNoteKind" Value="@k">@AgentNoteKindDisplay.Name(k)</MudSelectItem>
                         }

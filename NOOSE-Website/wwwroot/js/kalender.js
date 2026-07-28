@@ -13,6 +13,7 @@ const QUELLE_FARBE = {
     6: '#A371F7', // Personen-Dok
     7: '#22D3EE', // Besprechung
     8: '#DB61A2', // Abmeldung
+    9: '#B07C9E', // Team-Abmeldung
 };
 
 const instanzen = new Map(); // id → instance

@@ -23,12 +23,21 @@ public class AbsenceService(
         => MentionNotify.DeltaAsync(notifications, oldReason, newReason, "einer Abmeldung", nameof(Agent), agentId,
             actor, cancellationToken, href: "/abmeldungen/uebersicht");
 
-    public async Task<List<AbsenceRow>> GetListAsync(bool mayAll, string? meId, DateOnly? from = null, DateOnly? to = null,
-        CancellationToken cancellationToken = default)
+    /// <summary>The page asks, the principal decides: only leadership and oversight ever reach All.</summary>
+    private static AbsenceViewScope Granted(ClaimsPrincipal viewer, AbsenceViewScope requested)
+        => requested == AbsenceViewScope.All && !viewer.MayClassifiedRead()
+            ? AbsenceViewScope.Team
+            : requested;
+
+    public async Task<List<AbsenceRow>> GetListAsync(ClaimsPrincipal viewer, AbsenceViewScope requested,
+        DateOnly? from = null, DateOnly? to = null, CancellationToken cancellationToken = default)
     {
+        var scope = Granted(viewer, requested);
+        var meId = viewer.GetAgentId();
+
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Absences.AsNoTracking().OnlyVisible(mayAll, meId);
+        var query = db.Absences.AsNoTracking().OnlyVisible(scope, meId);
         if (from is { } f)
         {
             query = query.Where(a => a.ToDate >= f);
@@ -57,20 +66,28 @@ public class AbsenceService(
             .ToListAsync(cancellationToken);
 
         // leadership may edit any absence; an owner only their own, and only while it has not lapsed
-        var today = DateOnly.FromDateTime(MeetingTime.Local(DateTime.UtcNow));
-        return rows.Select(a => new AbsenceRow(
-            a.Id, a.AgentId, a.Codename, a.FromDate, a.ToDate, a.Days, a.Category,
-            // free text never leaves the server for viewers who may not read it
-            mayAll || a.AgentId == meId ? a.Reason : null,
-            a.AcknowledgedAt, a.AcknowledgedByName,
-            mayAll || (a.AgentId == meId && a.ToDate >= today))).ToList();
+        var today = MeetingTime.Day(DateTime.UtcNow);
+        var full = scope == AbsenceViewScope.All;
+        return rows.Select(a =>
+        {
+            var mine = a.AgentId == meId;
+            return new AbsenceRow(
+                a.Id, a.AgentId, a.Codename, a.FromDate, a.ToDate, a.Days, a.Category,
+                // free text never leaves the server for viewers who may not read it
+                full || mine ? a.Reason : null,
+                // acknowledgement is a leadership workflow signal, not peer information
+                full || mine ? a.AcknowledgedAt : null,
+                full || mine ? a.AcknowledgedByName : null,
+                full || (mine && a.ToDate >= today));
+        }).ToList();
     }
 
-    public async Task<Absence?> GetDetailAsync(string id, bool mayAll, string? meId, CancellationToken cancellationToken = default)
+    public async Task<Absence?> GetDetailAsync(string id, ClaimsPrincipal viewer, AbsenceViewScope requested,
+        CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Absences.AsNoTracking()
-            .OnlyVisible(mayAll, meId)
+            .OnlyVisible(Granted(viewer, requested), viewer.GetAgentId())
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 

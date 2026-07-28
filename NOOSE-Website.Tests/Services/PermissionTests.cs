@@ -431,6 +431,7 @@ public sealed class PermissionTests
     [InlineData(AgentStatus.Active)]
     [InlineData(AgentStatus.Pending)]
     [InlineData(AgentStatus.Blocked)]
+    [InlineData(AgentStatus.Terminated)]
     public void RequireApplicant_nonApplicantStatus_throws(AgentStatus status)
     {
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);

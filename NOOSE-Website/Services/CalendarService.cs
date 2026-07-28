@@ -139,6 +139,18 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 ab.FromDate.ToDateTime(TimeOnly.MinValue), ab.ToDate.ToDateTime(TimeOnly.MinValue),
                 true, CalendarSource.Absence, "/abmeldungen"));
         }
+
+        // team absences: foreign agents only, and never the free-text reason
+        foreach (var ab in await db.Absences.RosterVisible()
+            .Where(ab => ab.AgentId != meId && ab.FromDate <= untilDay && ab.ToDate >= fromDay)
+            .OrderBy(ab => ab.FromDate).Take(PerSourceMax)
+            .Select(ab => new { ab.Id, ab.FromDate, ab.ToDate, ab.Category, Codename = ab.Agent!.Codename })
+            .ToListAsync(ct))
+        {
+            entries.Add(new CalendarEntry($"tabm:{ab.Id}", $"{ab.Codename}: {AbsenceCategoryDisplay.Name(ab.Category)}",
+                ab.FromDate.ToDateTime(TimeOnly.MinValue), ab.ToDate.ToDateTime(TimeOnly.MinValue),
+                true, CalendarSource.TeamAbsence, "/abmeldungen"));
+        }
     }
 
     // ---- authority calendar ----

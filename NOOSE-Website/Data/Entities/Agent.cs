@@ -57,6 +57,15 @@ public class Agent : IdentityUser
     [Column("GesperrtGrund")]
     public string? BlockedReason { get; set; }
 
+    [Column("GekuendigtAm")]
+    public DateTime? TerminatedAt { get; set; }
+    [Column("GekuendigtVonId")]
+    public string? TerminatedById { get; set; }
+    [Column("GekuendigtVonName")]
+    public string? TerminatedByName { get; set; }
+    [Column("Kuendigungsgrund")]
+    public string? TerminationReason { get; set; }
+
     [Column("DiscordRollenSyncAm")]
     public DateTime? DiscordRolesSyncAt { get; set; }
 

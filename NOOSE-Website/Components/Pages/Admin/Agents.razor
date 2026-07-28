@@ -33,6 +33,8 @@ else
                      Text="@($"Teamleitung ({CountTeamLead})")" />
         <MudTabPanel Icon="@Icons.Material.Filled.Handshake" IconColor="Color.Info"
                      Text="@($"Partner ({CountPartner})")" />
+        <MudTabPanel Icon="@Icons.Material.Filled.PersonOff" IconColor="Color.Error"
+                     Text="@($"Gekündigt ({CountTerminated})")" />
     </MudTabs>
 
     @if (_tab == 3)
@@ -93,6 +95,12 @@ else
                 {
                     <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block mt-1">Grund: @context.BlockedReason</MudText>
                 }
+                @if (context.Status == AgentStatus.Terminated)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block mt-1">
+                        Gekündigt am @(context.TerminatedAt?.ToLocalTime().ToString("dd.MM.yyyy") ?? "—")@(string.IsNullOrWhiteSpace(context.TerminatedByName) ? "" : $" durch {context.TerminatedByName}")@(string.IsNullOrWhiteSpace(context.TerminationReason) ? "" : $" · {context.TerminationReason}")
+                    </MudText>
+                }
             </MudTd>
             <MudTd DataLabel="Dienstgrad">
                 @if (context.PartnerAgency is { } partnerAgency)
@@ -122,8 +130,8 @@ else
             </MudTd>
             <MudTd DataLabel="Status">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudIcon Icon="@StatusIcon(context.Status)" Color="@StatusColour(context.Status)" Size="Size.Small" />
-                    <MudText Typo="Typo.body2" Color="@StatusColour(context.Status)">@AgentStatusDisplay.Name(context.Status)</MudText>
+                    <MudIcon Icon="@AgentStatusDisplay.Icon(context.Status)" Color="@AgentStatusDisplay.Colour(context.Status)" Size="Size.Small" />
+                    <MudText Typo="Typo.body2" Color="@AgentStatusDisplay.Colour(context.Status)">@AgentStatusDisplay.Name(context.Status)</MudText>
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="TRU">
@@ -162,7 +170,16 @@ else
                                            OnClick="() => ChangeAffiliation(context)" aria-label="Zugehörigkeit ändern" />
                         </MudTooltip>
                     }
-                    @if (context.Status == AgentStatus.Blocked)
+                    @if (context.Status == AgentStatus.Terminated)
+                    {
+                        @* Sperren würde die Kündigungsdaten überschreiben; Rücknahme sitzt in der Personalakte. *@
+                        <MudTooltip Text="Kündigung wird in der Personalakte zurückgenommen">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                       StartIcon="@Icons.Material.Filled.Badge"
+                                       Href="@($"/personal/{context.Id}")">Personalakte</MudButton>
+                        </MudTooltip>
+                    }
+                    else if (context.Status == AgentStatus.Blocked)
                     {
                         <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
                                    StartIcon="@Icons.Material.Filled.LockOpen"
@@ -177,8 +194,12 @@ else
                     }
                     @if (context.Id != _myId)
                     {
-                        <MudTooltip Text="Account vollständig löschen (unwiderruflich)">
+                        @* Deleting purges the recruitment blacklist along with the account. *@
+                        <MudTooltip Text="@(context.Status == AgentStatus.Terminated
+                                              ? "Nicht möglich: Das Löschen würde den Blacklist-Eintrag mit entfernen."
+                                              : "Account vollständig löschen (unwiderruflich)")">
                             <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" Color="Color.Error"
+                                           Disabled="@(context.Status == AgentStatus.Terminated)"
                                            OnClick="() => DeleteAccount(context)" aria-label="Account vollständig löschen" />
                         </MudTooltip>
                     }
@@ -221,6 +242,7 @@ else
         1 => _agents.Where(a => a.Status == AgentStatus.Blocked),
         2 => _agents.Where(a => a.Status == AgentStatus.Active && a.IsTeamLead),
         3 => PartnerAgents,
+        4 => _agents.Where(a => a.Status == AgentStatus.Terminated).OrderByDescending(a => a.TerminatedAt),
         _ => _agents.Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null),
     };
 
@@ -251,6 +273,7 @@ else
     private int CountBlocked => _agents.Count(a => a.Status == AgentStatus.Blocked);
     private int CountTeamLead => _agents.Count(a => a.Status == AgentStatus.Active && a.IsTeamLead);
     private int CountPartner => _agents.Count(a => a.Status == AgentStatus.Active && a.PartnerAgency != null);
+    private int CountTerminated => _agents.Count(a => a.Status == AgentStatus.Terminated);
 
     protected override async Task OnInitializedAsync()
     {
@@ -495,19 +518,4 @@ else
         => string.Join(" · ", new[] { agent.RealName, agent.BadgeNumber }
             .Where(s => !string.IsNullOrWhiteSpace(s)));
 
-    private static Color StatusColour(AgentStatus status) => status switch
-    {
-        AgentStatus.Active => Color.Success,
-        AgentStatus.Pending => Color.Warning,
-        AgentStatus.Blocked => Color.Error,
-        _ => Color.Default,
-    };
-
-    private static string StatusIcon(AgentStatus status) => status switch
-    {
-        AgentStatus.Active => Icons.Material.Filled.CheckCircle,
-        AgentStatus.Pending => Icons.Material.Filled.HourglassTop,
-        AgentStatus.Blocked => Icons.Material.Filled.Block,
-        _ => Icons.Material.Filled.Help,
-    };
 }

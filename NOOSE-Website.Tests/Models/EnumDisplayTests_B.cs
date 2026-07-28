@@ -453,16 +453,31 @@ public class EnumDisplayTests_B
     [InlineData(AgentStatus.Pending, "Ausstehend")]
     [InlineData(AgentStatus.Active, "Aktiv")]
     [InlineData(AgentStatus.Blocked, "Gesperrt")]
+    [InlineData(AgentStatus.Applicant, "Bewerber")]
+    [InlineData(AgentStatus.Terminated, "Gekündigt")]
     public void AgentStatusName_definedValue_mapsToLabel(AgentStatus status, string expected)
         => Assert.Equal(expected, AgentStatusDisplay.Name(status));
 
     [Fact]
-    public void AgentStatusName_applicant_fallsThroughToDash()
-        => Assert.Equal("—", AgentStatusDisplay.Name(AgentStatus.Applicant));
-
-    [Fact]
     public void AgentStatusName_undefinedValue_returnsDash()
         => Assert.Equal("—", AgentStatusDisplay.Name((AgentStatus)99));
+
+    [Theory]
+    [InlineData(AgentStatus.Active, Color.Success)]
+    [InlineData(AgentStatus.Pending, Color.Warning)]
+    [InlineData(AgentStatus.Blocked, Color.Error)]
+    [InlineData(AgentStatus.Terminated, Color.Error)]
+    public void AgentStatusColour_definedValue_mapsToColour(AgentStatus status, Color expected)
+        => Assert.Equal(expected, AgentStatusDisplay.Colour(status));
+
+    [Fact]
+    public void AgentStatusColour_undefinedValue_returnsDefault()
+        => Assert.Equal(Color.Default, AgentStatusDisplay.Colour((AgentStatus)99));
+
+    [Fact]
+    public void AgentStatusIcon_terminated_differsFromBlocked()
+        => Assert.NotEqual(AgentStatusDisplay.Icon(AgentStatus.Blocked),
+            AgentStatusDisplay.Icon(AgentStatus.Terminated));
 
     // ---------------------------------------------------------------------
     // LifeStatusDisplay

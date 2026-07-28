@@ -245,7 +245,7 @@ else if (_report is { } r)
             ("Abmeldungen", _report.AbsenceCountsPerMonth),
             ("Unentschuldigt", _report.MissingCountsPerMonth),
         };
-        _all = await AbsenceService.GetListAsync(true, user.GetAgentId());
+        _all = await AbsenceService.GetListAsync(user, AbsenceViewScope.All);
         Filter();
         _load = false;
     }

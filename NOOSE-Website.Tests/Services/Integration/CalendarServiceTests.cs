@@ -278,6 +278,70 @@ public sealed class CalendarServiceTests
         Assert.Equal("abm:ab1", abs.Id);
         Assert.True(abs.WholeDay);
         Assert.Equal("Abgemeldet: Urlaub", abs.Title);
+
+        // the foreign row moves to its own source instead of being dropped
+        var team = Assert.Single(entries, e => e.Source == CalendarSource.TeamAbsence);
+        Assert.Equal("tabm:foreign", team.Id);
+    }
+
+    [Fact]
+    public async Task GetEntriesAsync_MyMode_TeamAbsence_CarriesCodenameAndNeverTheReason()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("me"));
+            db.Users.Add(Seed.Agent("other"));
+            db.Absences.Add(new Absence
+            {
+                Id = "foreign",
+                AgentId = "other",
+                FromDate = new DateOnly(2026, 6, 10),
+                ToDate = new DateOnly(2026, 6, 12),
+                Category = AbsenceCategory.Sick,
+                Reason = "streng geheim",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PlainViewer(), CalendarMode.My);
+
+        var team = Assert.Single(entries, e => e.Source == CalendarSource.TeamAbsence);
+        Assert.Equal("Codename-other: Krank", team.Title);
+        Assert.DoesNotContain("geheim", team.Title, StringComparison.OrdinalIgnoreCase);
+        Assert.True(team.WholeDay);
+        Assert.Equal("/abmeldungen", team.Href);
+    }
+
+    [Fact]
+    public async Task GetEntriesAsync_MyMode_TeamAbsence_ExcludesTeamLeadBlockedAndPartner()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("me"));
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("blocked", status: AgentStatus.Blocked));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            foreach (var agentId in new[] { "tl", "blocked", "partner" })
+            {
+                db.Absences.Add(new Absence
+                {
+                    Id = "ab-" + agentId,
+                    AgentId = agentId,
+                    FromDate = new DateOnly(2026, 6, 10),
+                    ToDate = new DateOnly(2026, 6, 12),
+                    Category = AbsenceCategory.Vacation,
+                });
+            }
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PlainViewer(), CalendarMode.My);
+
+        Assert.DoesNotContain(entries, e => e.Source == CalendarSource.TeamAbsence);
     }
 
     // --------------------------------------------------------- authority mode
@@ -407,5 +471,6 @@ public sealed class CalendarServiceTests
 
         Assert.Contains(entries, e => e.Source == CalendarSource.Meeting && e.Id == "bes:m1");
         Assert.DoesNotContain(entries, e => e.Source == CalendarSource.Absence);
+        Assert.DoesNotContain(entries, e => e.Source == CalendarSource.TeamAbsence);
     }
 }

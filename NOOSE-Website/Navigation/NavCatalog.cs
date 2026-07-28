@@ -23,7 +23,7 @@ public static class NavCatalog
         new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.Primary),
         new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Primary),
         new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Primary, BadgeKey: "acknowledgments"),
-        new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Meine Abmeldungen", NavSection.Primary),
+        new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Abmeldungen", NavSection.Primary),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten),
         new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung", NavSection.Akten),

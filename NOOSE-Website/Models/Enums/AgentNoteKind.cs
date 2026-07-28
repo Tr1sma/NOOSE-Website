@@ -11,11 +11,24 @@ public enum AgentNoteKind
     Department = 3,
     Training = 4,
     Information = 5,
+    Termination = 6,
 }
 
 /// <summary>Display labels and chip colors.</summary>
 public static class AgentNoteKindDisplay
 {
+    /// <summary>Kinds an operator may pick when writing an entry by hand.</summary>
+    public static readonly IReadOnlyList<AgentNoteKind> Creatable = new[]
+    {
+        AgentNoteKind.Commendation,
+        AgentNoteKind.Disciplinary,
+        AgentNoteKind.Specialization,
+        AgentNoteKind.Department,
+        AgentNoteKind.Training,
+        AgentNoteKind.Information,
+    };
+
+    /// <summary>Every kind, including the ones only the system writes; use for filters.</summary>
     public static readonly IReadOnlyList<AgentNoteKind> All = new[]
     {
         AgentNoteKind.Commendation,
@@ -24,6 +37,7 @@ public static class AgentNoteKindDisplay
         AgentNoteKind.Department,
         AgentNoteKind.Training,
         AgentNoteKind.Information,
+        AgentNoteKind.Termination,
     };
 
     public static string Name(AgentNoteKind kind) => kind switch
@@ -34,6 +48,7 @@ public static class AgentNoteKindDisplay
         AgentNoteKind.Department => "Abteilung",
         AgentNoteKind.Training => "Ausbildung",
         AgentNoteKind.Information => "Information",
+        AgentNoteKind.Termination => "Kündigung",
         _ => "—",
     };
 
@@ -45,6 +60,7 @@ public static class AgentNoteKindDisplay
         AgentNoteKind.Department => Color.Tertiary,
         AgentNoteKind.Training => Color.Warning,
         AgentNoteKind.Information => Color.Info,
+        AgentNoteKind.Termination => Color.Error,
         _ => Color.Default,
     };
 }

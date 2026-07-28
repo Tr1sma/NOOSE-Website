@@ -91,13 +91,13 @@
     private HashSet<CalendarSource> _activeSources = new(_legendMy);
 
     private string SubtitleText => _mode == CalendarMode.My
-        ? "Meine Termine, mir zugewiesene Aufgaben, meine fälligen Wiedervorlagen, Besprechungen & meine Abmeldungen."
+        ? "Meine Termine, mir zugewiesene Aufgaben, meine fälligen Wiedervorlagen, Besprechungen & Abmeldungen im Team."
         : "Öffentliche Termine, Operationen, Überwachungsfenster, Personen-Doks, Fraktions-Aktivitäten & Besprechungen.";
 
     private static readonly CalendarSource[] _legendMy =
     {
         CalendarSource.Appointment, CalendarSource.Job, CalendarSource.Followup,
-        CalendarSource.Meeting, CalendarSource.Absence,
+        CalendarSource.Meeting, CalendarSource.Absence, CalendarSource.TeamAbsence,
     };
     private static readonly CalendarSource[] _legendAuthority =
     {
@@ -120,7 +120,7 @@
         try
         {
             // Bump ?v= when kalender.js changes
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=7");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/kalender.js?v=8");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             // Render empty; FullCalendar reports its range (datesSet) and data loads then

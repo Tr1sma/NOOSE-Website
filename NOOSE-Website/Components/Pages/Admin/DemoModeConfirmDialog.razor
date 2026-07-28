@@ -38,17 +38,7 @@
         {
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6">Bestätigung</MudText>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Tippe das folgende Wort ab (es lässt sich nicht kopieren):
-                </MudText>
-                <div class="demo-word">
-                    @foreach (var ch in _challenge)
-                    {
-                        <span class="demo-letter" data-c="@ch"></span>
-                    }
-                </div>
-                <MudTextField @bind-Value="_typed" Immediate="true" Label="Wort eingeben"
-                              Variant="Variant.Outlined" autocomplete="off" />
+                <ChallengeWordInput Length="6" MatchedChanged="@(m => _matched = m)" />
             </MudStack>
         }
     </DialogContent>
@@ -67,19 +57,11 @@
         else
         {
             <MudButton Color="Color.Error" Variant="Variant.Filled"
-                       Disabled="@(!string.Equals(_typed?.Trim(), _challenge, StringComparison.OrdinalIgnoreCase))"
+                       Disabled="@(!_matched)"
                        OnClick="Confirm">@ConfirmText</MudButton>
         }
     </DialogActions>
 </MudDialog>
-
-<style>
-    .demo-word { display:flex; gap:.4rem; font-size:2rem; font-weight:700; letter-spacing:.25rem;
-                 background:rgba(255,255,255,.05); padding:.75rem 1rem; border-radius:.5rem;
-                 user-select:none; -webkit-user-select:none; }
-    .demo-letter { pointer-events:none; }
-    .demo-letter::before { content:attr(data-c); }
-</style>
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
@@ -95,8 +77,7 @@
 
     private int _step = 1;
     private int _lockSeconds = 10;
-    private string _typed = string.Empty;
-    private readonly string _challenge = GenerateWord();
+    private bool _matched;
     private System.Timers.Timer? _timer;
 
     private void GoToStep2()
@@ -127,11 +108,4 @@
     private void Cancel() => MudDialog.Cancel();
 
     public void Dispose() => _timer?.Dispose();
-
-    // non-confusable uppercase letters (no I/O/Q)
-    private static string GenerateWord()
-    {
-        const string letters = "ABCDEFGHJKLMNPRSTUVWXYZ";
-        return string.Concat(Enumerable.Range(0, 6).Select(_ => letters[Random.Shared.Next(letters.Length)]));
-    }
 }

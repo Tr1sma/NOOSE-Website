@@ -4,13 +4,13 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Meine Abmeldungen – NOOSE</PageTitle>
+<PageTitle>Abmeldungen – NOOSE</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
         <MudIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Primary" Size="Size.Large" />
         <MudStack Spacing="0">
-            <MudText Typo="Typo.h5">Meine Abmeldungen</MudText>
+            <MudText Typo="Typo.h5">Abmeldungen</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Für einen Zeitraum abmelden. Wer abgemeldet ist, gilt bei Besprechungen automatisch als entschuldigt.
             </MudText>
@@ -22,97 +22,198 @@
     </AuthorizeView>
 </MudStack>
 
-@if (_load)
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Class="mb-3"
+         ActivePanelIndex="_tab" ActivePanelIndexChanged="TabChangedAsync">
+    <MudTabPanel Icon="@Icons.Material.Filled.EventBusy" IconColor="Color.Primary" Text="Meine Abmeldungen" />
+    <MudTabPanel Icon="@Icons.Material.Filled.Groups" IconColor="Color.Info" Text="Team" />
+</MudTabs>
+
+@if (_tab == 0)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-}
-else if (_list.Count == 0)
-{
-    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
-        Du hast dich bisher nicht abgemeldet.
-    </MudAlert>
-}
-else
-{
-    <MudTable Items="_list" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1">
-        <HeaderContent>
-            <MudTh>Zeitraum</MudTh>
-            <MudTh>Tage</MudTh>
-            <MudTh>Grund</MudTh>
-            <MudTh>Anmerkung</MudTh>
-            <MudTh>Kenntnisnahme</MudTh>
-            <MudTh Style="width:110px;"></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Zeitraum">
-                <b>@context.FromDate.ToString("dd.MM.yyyy")</b>
-                @if (context.ToDate != context.FromDate)
-                {
-                    <text> – <b>@context.ToDate.ToString("dd.MM.yyyy")</b></text>
-                }
-            </MudTd>
-            <MudTd DataLabel="Tage">@context.Days</MudTd>
-            <MudTd DataLabel="Grund"><AbsenceCategoryChip Category="@context.Category" /></MudTd>
-            <MudTd DataLabel="Anmerkung">
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    @if (context.Reason is null)
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_list.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
+            Du hast dich bisher nicht abgemeldet.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_list" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1">
+            <HeaderContent>
+                <MudTh>Zeitraum</MudTh>
+                <MudTh>Tage</MudTh>
+                <MudTh>Grund</MudTh>
+                <MudTh>Anmerkung</MudTh>
+                <MudTh>Kenntnisnahme</MudTh>
+                <MudTh Style="width:110px;"></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Zeitraum">
+                    <b>@context.FromDate.ToString("dd.MM.yyyy")</b>
+                    @if (context.ToDate != context.FromDate)
                     {
-                        <text>—</text>
+                        <text> – <b>@context.ToDate.ToString("dd.MM.yyyy")</b></text>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Tage">@context.Days</MudTd>
+                <MudTd DataLabel="Grund"><AbsenceCategoryChip Category="@context.Category" /></MudTd>
+                <MudTd DataLabel="Anmerkung">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @if (context.Reason is null)
+                        {
+                            <text>—</text>
+                        }
+                        else
+                        {
+                            <MentionDisplay Text="@context.Reason" />
+                        }
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Kenntnisnahme">
+                    @if (context.AcknowledgedAt is { } at)
+                    {
+                        <MudTooltip Text="@($"Durch {context.AcknowledgedByName ?? "die Führung"} am {at.ToLocalTime():dd.MM.yyyy HH:mm}")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.CheckCircle">Erfolgt</MudChip>
+                        </MudTooltip>
                     }
                     else
                     {
-                        <MentionDisplay Text="@context.Reason" />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Offen</MudChip>
                     }
-                </MudText>
-            </MudTd>
-            <MudTd DataLabel="Kenntnisnahme">
-                @if (context.AcknowledgedAt is { } at)
+                </MudTd>
+                <MudTd>
+                    @if (context.MayEdit)
+                    {
+                        <AuthorizeView Policy="@Policies.WriteAccess" Context="write">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                                           OnClick="@(() => EditAsync(context))" aria-label="Abmeldung bearbeiten" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(context))" aria-label="Abmeldung löschen" />
+                        </AuthorizeView>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3 flex-wrap">
+        @if (!_teamLoad)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Today" Color="Color.Primary" Size="Size.Small" />
+            <MudText Typo="Typo.body2">
+                @if (_todayNames.Count == 0)
                 {
-                    <MudTooltip Text="@($"Durch {context.AcknowledgedByName ?? "die Führung"} am {at.ToLocalTime():dd.MM.yyyy HH:mm}")">
-                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
-                                 Icon="@Icons.Material.Filled.CheckCircle">Erfolgt</MudChip>
-                    </MudTooltip>
+                    <text>Heute ist niemand abgemeldet.</text>
                 }
                 else
                 {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Offen</MudChip>
+                    <text>Heute abgemeldet: <b>@string.Join(" · ", _todayNames)</b></text>
                 }
-            </MudTd>
-            <MudTd>
-                @if (context.MayEdit)
-                {
-                    <AuthorizeView Policy="@Policies.WriteAccess" Context="write">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
-                                       OnClick="@(() => EditAsync(context))" aria-label="Abmeldung bearbeiten" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                       OnClick="@(() => DeleteAsync(context))" aria-label="Abmeldung löschen" />
-                    </AuthorizeView>
-                }
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+            </MudText>
+        }
+        <MudSpacer />
+        <MudSwitch T="bool" Value="_withPast" ValueChanged="PastToggledAsync" Color="Color.Primary"
+                   Label="Auch vergangene anzeigen" />
+    </MudStack>
+
+    @if (_teamLoad)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_team is null || _team.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
+            @(_withPast ? "Es liegen keine Abmeldungen vor." : "Aktuell ist niemand abgemeldet.")
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_team" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1" T="AbsenceRow">
+            <HeaderContent>
+                <MudTh>Agent</MudTh>
+                <MudTh>Zeitraum</MudTh>
+                <MudTh>Tage</MudTh>
+                <MudTh>Grund</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Agent"><b>@context.Codename</b></MudTd>
+                <MudTd DataLabel="Zeitraum">
+                    @context.FromDate.ToString("dd.MM.yyyy")
+                    @if (context.ToDate != context.FromDate)
+                    {
+                        <text> – @context.ToDate.ToString("dd.MM.yyyy")</text>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Tage">@context.Days</MudTd>
+                <MudTd DataLabel="Grund"><AbsenceCategoryChip Category="@context.Category" /></MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
 }
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
+    private ClaimsPrincipal _user = default!;
     private List<AbsenceRow> _list = new();
     private bool _load = true;
-    private string? _meId;
+    private int _tab;
+
+    // null until the team tab is opened for the first time
+    private List<AbsenceRow>? _team;
+    private List<string> _todayNames = new();
+    private bool _teamLoad;
+    private bool _withPast;
 
     protected override async Task OnInitializedAsync()
     {
-        var user = (await AuthStateTask!).User;
-        _meId = user.GetAgentId();
+        _user = (await AuthStateTask!).User;
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
         _load = true;
-        // own list only; the leadership overview is a separate page
-        _list = await AbsenceService.GetListAsync(false, _meId);
+        // own list only; the team roster lives on the second tab
+        _list = await AbsenceService.GetListAsync(_user, AbsenceViewScope.Own);
         _load = false;
+    }
+
+    private async Task TabChangedAsync(int index)
+    {
+        _tab = index;
+        // the team list is fetched on first visit, not on page load
+        if (index == 1 && _team is null)
+        {
+            await TeamLoadAsync();
+        }
+    }
+
+    private async Task PastToggledAsync(bool value)
+    {
+        _withPast = value;
+        await TeamLoadAsync();
+    }
+
+    private async Task TeamLoadAsync()
+    {
+        _teamLoad = true;
+        var today = MeetingTime.Day(DateTime.UtcNow);
+        // running and upcoming by default; the switch drops the window
+        _team = await AbsenceService.GetListAsync(_user, AbsenceViewScope.Team, _withPast ? null : today);
+        _todayNames = _team.Where(a => a.FromDate <= today && a.ToDate >= today)
+            .Select(a => a.Codename)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        _teamLoad = false;
     }
 
     private async Task CreateAsync()
@@ -124,8 +225,7 @@ else
         }
         await RunAsync(async () =>
         {
-            var user = (await AuthStateTask!).User;
-            await AbsenceService.CreateAsync(input, user);
+            await AbsenceService.CreateAsync(input, _user);
             Snackbar.Add("Abmeldung eingetragen.", Severity.Success);
         });
     }
@@ -141,8 +241,7 @@ else
         }
         await RunAsync(async () =>
         {
-            var user = (await AuthStateTask!).User;
-            await AbsenceService.RefreshAsync(row.Id, input, user);
+            await AbsenceService.RefreshAsync(row.Id, input, _user);
             Snackbar.Add("Abmeldung geändert.", Severity.Success);
         });
     }
@@ -157,8 +256,7 @@ else
         }
         await RunAsync(async () =>
         {
-            var user = (await AuthStateTask!).User;
-            await AbsenceService.DeleteAsync(row.Id, user);
+            await AbsenceService.DeleteAsync(row.Id, _user);
             Snackbar.Add("Abmeldung gelöscht.", Severity.Success);
         });
     }
@@ -170,6 +268,12 @@ else
         {
             await action();
             await LoadAsync();
+            // own change invalidates the cached roster
+            _team = null;
+            if (_tab == 1)
+            {
+                await TeamLoadAsync();
+            }
         }
         catch (UnauthorizedAccessException ex)
         {

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Models.Absences;
 using NOOSE_Website.Models.Enums;
@@ -46,6 +47,18 @@ public class AbsenceServiceTests
         return abs;
     }
 
+    /// <summary>Creates the agent row up front so the absence seeder does not fall back to defaults.</summary>
+    private static void SeedAgent(SqliteTestContext ctx, string id, Action<Agent> configure)
+    {
+        using var db = ctx.NewContext();
+        if (db.Users.Any(u => u.Id == id))
+        {
+            return;
+        }
+        db.Users.Add(Seed.Agent(id, configure: configure));
+        db.SaveChanges();
+    }
+
     private static ClaimsPrincipal Owner(string id) => ClaimsPrincipalBuilder.Agent(id).Build();
 
     private static ClaimsPrincipal Leader(string id = "lead", string codename = "Chief")
@@ -57,7 +70,7 @@ public class AbsenceServiceTests
     // ---------- GetListAsync ----------
 
     [Fact]
-    public async Task GetListAsync_NotMayAll_ReturnsOnlyOwn()
+    public async Task GetListAsync_OwnScope_ReturnsOnlyOwn()
     {
         using var ctx = new SqliteTestContext();
         var (svc, _) = Build(ctx);
@@ -65,7 +78,7 @@ public class AbsenceServiceTests
         SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3));
         SeedAbsence(ctx, "a2", Today.AddDays(1), Today.AddDays(3));
 
-        var rows = await svc.GetListAsync(mayAll: false, meId: "a1");
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Own);
 
         var row = Assert.Single(rows);
         Assert.Equal("a1", row.AgentId);
@@ -74,7 +87,7 @@ public class AbsenceServiceTests
     }
 
     [Fact]
-    public async Task GetListAsync_MayAll_ReturnsAll_NewestFirst()
+    public async Task GetListAsync_AllScope_ReturnsAll_NewestFirst()
     {
         using var ctx = new SqliteTestContext();
         var (svc, _) = Build(ctx);
@@ -82,13 +95,13 @@ public class AbsenceServiceTests
         SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(2));   // later FromDate
         SeedAbsence(ctx, "a2", Today.AddDays(-10), Today.AddDays(-8)); // earlier FromDate
 
-        var rows = await svc.GetListAsync(mayAll: true, meId: "someoneElse");
+        var rows = await svc.GetListAsync(Leader("someoneElse"), AbsenceViewScope.All);
 
         Assert.Equal(2, rows.Count);
         // ordered by FromDate descending
         Assert.Equal("a1", rows[0].AgentId);
         Assert.Equal("a2", rows[1].AgentId);
-        // mayAll => reason visible even for others, and MayEdit is always true
+        // All => reason visible even for others, and MayEdit is always true
         Assert.All(rows, r => Assert.Equal("geheim", r.Reason));
         Assert.All(rows, r => Assert.True(r.MayEdit));
     }
@@ -103,7 +116,8 @@ public class AbsenceServiceTests
         var overlap = SeedAbsence(ctx, "a1", Today.AddDays(-2), Today.AddDays(2));
         var after = SeedAbsence(ctx, "a1", Today.AddDays(15), Today.AddDays(20));
 
-        var rows = await svc.GetListAsync(mayAll: false, meId: "a1", from: Today.AddDays(-5), to: Today.AddDays(5));
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Own,
+            from: Today.AddDays(-5), to: Today.AddDays(5));
 
         var row = Assert.Single(rows);
         Assert.Equal(overlap.Id, row.Id);
@@ -120,10 +134,174 @@ public class AbsenceServiceTests
         var past = SeedAbsence(ctx, "a1", Today.AddDays(-10), Today.AddDays(-5));
         var future = SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(5));
 
-        var rows = await svc.GetListAsync(mayAll: false, meId: "a1");
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Own);
 
         Assert.False(rows.Single(r => r.Id == past.Id).MayEdit);
         Assert.True(rows.Single(r => r.Id == future.Id).MayEdit);
+    }
+
+    // ---------- GetListAsync, team scope ----------
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_IncludesRosterPeersAndOwn()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "a2", Today.AddDays(2), Today.AddDays(4));
+
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Team);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, r => r.AgentId == "a1");
+        Assert.Contains(rows, r => r.AgentId == "a2");
+        Assert.Contains(rows, r => r.Codename == "Codename-a2");
+    }
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_RedactsForeignReason_KeepsOwn()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "a2", Today.AddDays(2), Today.AddDays(4));
+
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Team);
+
+        Assert.Equal("geheim", rows.Single(r => r.AgentId == "a1").Reason);
+        Assert.Null(rows.Single(r => r.AgentId == "a2").Reason);
+    }
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_RedactsForeignAcknowledgement()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        void Acknowledged(Absence a)
+        {
+            a.AcknowledgedAt = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+            a.AcknowledgedById = "lead";
+            a.AcknowledgedByName = "Chief";
+        }
+
+        SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3), Acknowledged);
+        SeedAbsence(ctx, "a2", Today.AddDays(2), Today.AddDays(4), Acknowledged);
+
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Team);
+
+        var own = rows.Single(r => r.AgentId == "a1");
+        Assert.NotNull(own.AcknowledgedAt);
+        Assert.Equal("Chief", own.AcknowledgedByName);
+
+        var foreign = rows.Single(r => r.AgentId == "a2");
+        Assert.Null(foreign.AcknowledgedAt);
+        Assert.Null(foreign.AcknowledgedByName);
+    }
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_MayEditFalseForForeignRows()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "a2", Today.AddDays(2), Today.AddDays(4));
+
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Team);
+
+        Assert.True(rows.Single(r => r.AgentId == "a1").MayEdit);
+        Assert.False(rows.Single(r => r.AgentId == "a2").MayEdit);
+    }
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_ExcludesTeamLeadBlockedAndPartnerAgents()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAgent(ctx, "tl", a => a.IsTeamLead = true);
+        SeedAgent(ctx, "blocked", a => a.Status = AgentStatus.Blocked);
+        SeedAgent(ctx, "partner", a => a.PartnerAgency = PartnerAgency.LSPD);
+
+        SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "tl", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "blocked", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "partner", Today.AddDays(1), Today.AddDays(3));
+
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Team);
+
+        var row = Assert.Single(rows);
+        Assert.Equal("a1", row.AgentId);
+    }
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_IncludesOwnRowEvenWhenOffRoster()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAgent(ctx, "tl", a => a.IsTeamLead = true);
+        SeedAbsence(ctx, "tl", Today.AddDays(1), Today.AddDays(3));
+
+        var rows = await svc.GetListAsync(Owner("tl"), AbsenceViewScope.Team);
+
+        var row = Assert.Single(rows);
+        Assert.Equal("tl", row.AgentId);
+        Assert.Equal("geheim", row.Reason); // still the owner's own free text
+    }
+
+    [Fact]
+    public async Task GetListAsync_TeamScope_FromWindow_DropsLapsedAbsences()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        var lapsed = SeedAbsence(ctx, "a2", Today.AddDays(-10), Today.AddDays(-5));
+        var running = SeedAbsence(ctx, "a2", Today.AddDays(-1), Today.AddDays(2));
+        var upcoming = SeedAbsence(ctx, "a2", Today.AddDays(7), Today.AddDays(9));
+
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.Team, from: Today);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, r => r.Id == running.Id);
+        Assert.Contains(rows, r => r.Id == upcoming.Id);
+        Assert.DoesNotContain(rows, r => r.Id == lapsed.Id);
+    }
+
+    [Fact]
+    public async Task GetListAsync_RequestedAll_NonLeadership_ClampsToTeam()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAgent(ctx, "blocked", a => a.Status = AgentStatus.Blocked);
+        SeedAbsence(ctx, "a2", Today.AddDays(1), Today.AddDays(3));
+        SeedAbsence(ctx, "blocked", Today.AddDays(1), Today.AddDays(3));
+
+        // a plain agent asking for everything gets team redaction, not leadership access
+        var rows = await svc.GetListAsync(Owner("a1"), AbsenceViewScope.All);
+
+        var row = Assert.Single(rows);
+        Assert.Equal("a2", row.AgentId);
+        Assert.Null(row.Reason);
+        Assert.False(row.MayEdit);
+    }
+
+    [Fact]
+    public async Task GetListAsync_RequestedAll_OnlyReader_KeepsReason()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        SeedAbsence(ctx, "a1", Today.AddDays(1), Today.AddDays(3));
+
+        // read-only supervision reads classified content, so it is not clamped
+        var rows = await svc.GetListAsync(OnlyReader(), AbsenceViewScope.All);
+
+        Assert.Equal("geheim", Assert.Single(rows).Reason);
     }
 
     // ---------- GetDetailAsync ----------
@@ -136,22 +314,33 @@ public class AbsenceServiceTests
 
         var abs = SeedAbsence(ctx, "a1", Today, Today.AddDays(2));
 
-        var result = await svc.GetDetailAsync(abs.Id, mayAll: false, meId: "a1");
+        var result = await svc.GetDetailAsync(abs.Id, Owner("a1"), AbsenceViewScope.Own);
 
         Assert.NotNull(result);
         Assert.Equal(abs.Id, result!.Id);
     }
 
     [Fact]
-    public async Task GetDetailAsync_NotVisibleToOther_ReturnsNull_ButMayAllSees()
+    public async Task GetDetailAsync_NotVisibleInOwnScope_ReturnsNull_ButAllScopeSees()
     {
         using var ctx = new SqliteTestContext();
         var (svc, _) = Build(ctx);
 
         var abs = SeedAbsence(ctx, "a1", Today, Today.AddDays(2));
 
-        Assert.Null(await svc.GetDetailAsync(abs.Id, mayAll: false, meId: "a2"));
-        Assert.NotNull(await svc.GetDetailAsync(abs.Id, mayAll: true, meId: "a2"));
+        Assert.Null(await svc.GetDetailAsync(abs.Id, Owner("a2"), AbsenceViewScope.Own));
+        Assert.NotNull(await svc.GetDetailAsync(abs.Id, Leader("a2"), AbsenceViewScope.All));
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_TeamScope_ReturnsForeignRosterRow()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        var abs = SeedAbsence(ctx, "a1", Today, Today.AddDays(2));
+
+        Assert.NotNull(await svc.GetDetailAsync(abs.Id, Owner("a2"), AbsenceViewScope.Team));
     }
 
     // ---------- GetTrashAsync ----------

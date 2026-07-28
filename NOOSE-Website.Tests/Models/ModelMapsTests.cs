@@ -190,6 +190,7 @@ public class ModelMapsTests
     [InlineData(CalendarSource.PersonDoc, "#A371F7")]
     [InlineData(CalendarSource.Meeting, "#22D3EE")]
     [InlineData(CalendarSource.Absence, "#DB61A2")]
+    [InlineData(CalendarSource.TeamAbsence, "#B07C9E")]
     public void Colour_knownSource_returnsMappedHex(CalendarSource source, string expected)
     {
         Assert.Equal(expected, CalendarDisplay.Colour(source));
@@ -218,6 +219,7 @@ public class ModelMapsTests
     [InlineData(CalendarSource.PersonDoc, "Personen-Doks")]
     [InlineData(CalendarSource.Meeting, "Besprechungen")]
     [InlineData(CalendarSource.Absence, "Meine Abmeldungen")]
+    [InlineData(CalendarSource.TeamAbsence, "Team-Abmeldungen")]
     public void Name_knownSource_returnsGermanLabel(CalendarSource source, string expected)
     {
         Assert.Equal(expected, CalendarDisplay.Name(source));
@@ -236,7 +238,7 @@ public class ModelMapsTests
     // ---------------------------------------------------------------
 
     [Fact]
-    public void CalendarAll_containsAllNineSourcesInDeclarationOrder()
+    public void CalendarAll_containsAllTenSourcesInDeclarationOrder()
     {
         Assert.Equal(
             new[]
@@ -250,6 +252,7 @@ public class ModelMapsTests
                 CalendarSource.PersonDoc,
                 CalendarSource.Meeting,
                 CalendarSource.Absence,
+                CalendarSource.TeamAbsence,
             },
             CalendarDisplay.All);
     }

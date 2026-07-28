@@ -1,3 +1,5 @@
+using MudBlazor;
+
 namespace NOOSE_Website.Models.Enums;
 
 /// <summary>Display labels.</summary>
@@ -26,7 +28,7 @@ public static class RankDisplay
     };
 }
 
-/// <summary>Display labels.</summary>
+/// <summary>Display labels, chip colours and icons.</summary>
 public static class AgentStatusDisplay
 {
     public static string Name(AgentStatus status) => status switch
@@ -34,6 +36,28 @@ public static class AgentStatusDisplay
         AgentStatus.Pending => "Ausstehend",
         AgentStatus.Active => "Aktiv",
         AgentStatus.Blocked => "Gesperrt",
+        AgentStatus.Applicant => "Bewerber",
+        AgentStatus.Terminated => "Gekündigt",
         _ => "—",
+    };
+
+    public static Color Colour(AgentStatus status) => status switch
+    {
+        AgentStatus.Active => Color.Success,
+        AgentStatus.Pending => Color.Warning,
+        AgentStatus.Blocked => Color.Error,
+        AgentStatus.Applicant => Color.Info,
+        AgentStatus.Terminated => Color.Error,
+        _ => Color.Default,
+    };
+
+    public static string Icon(AgentStatus status) => status switch
+    {
+        AgentStatus.Active => Icons.Material.Filled.CheckCircle,
+        AgentStatus.Pending => Icons.Material.Filled.HourglassTop,
+        AgentStatus.Blocked => Icons.Material.Filled.Block,
+        AgentStatus.Applicant => Icons.Material.Filled.HowToReg,
+        AgentStatus.Terminated => Icons.Material.Filled.PersonOff,
+        _ => Icons.Material.Filled.HelpOutline,
     };
 }

@@ -2,6 +2,8 @@
 @inject IAgentManagementService AgentService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>@(_agent?.Codename ?? "Personalakte") · NOOSE</PageTitle>
 
@@ -29,8 +31,36 @@ else
         </MudTooltip>
             <FollowButton EntityType="@nameof(Agent)" EntityId="@_agent.Id" User="_user" />
             <JobCreateButton EntityType="@nameof(Agent)" EntityId="@_agent.Id" />
+            @if (_agent.Status == AgentStatus.Terminated && _mayWrite)
+            {
+                <MudButton StartIcon="@Icons.Material.Filled.RestoreFromTrash" Color="Color.Success"
+                           Variant="Variant.Outlined" Size="Size.Small" OnClick="TerminationRevoke">
+                    Kündigung zurücknehmen
+                </MudButton>
+            }
+            else if (_mayTerminate)
+            {
+                <MudButton StartIcon="@Icons.Material.Filled.PersonRemove" Color="Color.Error"
+                           Variant="Variant.Outlined" Size="Size.Small" OnClick="Terminate">
+                    Kündigen
+                </MudButton>
+            }
         }
     </MudStack>
+
+    @if (_agent.Status == AgentStatus.Terminated)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.PersonOff" Class="mb-4">
+            <MudText Typo="Typo.subtitle2">
+                Gekündigt am @(_agent.TerminatedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                @(string.IsNullOrWhiteSpace(_agent.TerminatedByName) ? "" : $" durch {_agent.TerminatedByName}")
+            </MudText>
+            @if (_isLeadership && !string.IsNullOrWhiteSpace(_agent.TerminationReason))
+            {
+                <MudText Typo="Typo.body2" Class="mt-1">@_agent.TerminationReason</MudText>
+            }
+        </MudAlert>
+    }
 
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
@@ -73,6 +103,7 @@ else
     private bool _load = true;
     private bool _isLeadership;
     private bool _mayRealName;
+    private bool _mayWrite;
     private Agent? _agent;
     private ClaimsPrincipal _user = default!;
     private Guid _reloadKey = Guid.NewGuid();
@@ -87,6 +118,7 @@ else
         _user = (await AuthStateTask).User;
         _isLeadership = _user.IsLeadership();
         _mayRealName = _user.MayRealNameSee();
+        _mayWrite = _user.MayWrite();
         _tabs = _isLeadership
             ? new[] { "verlauf", "vermerke", "befoerderungen", "module", "kommentare" }
             : new[] { "verlauf", "vermerke", "befoerderungen", "module" };
@@ -110,6 +142,69 @@ else
     private async Task TargetDecisionAsync()
     {
         // Approved promotion changes rank; reload agent + history
+        _agent = await AgentService.FindAsync(AgentId);
+        _reloadKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    // Self, applicants, the already-terminated and the read-only supervision are excluded
+    private bool _mayTerminate => _mayWrite
+                                  && _agent is { Status: not (AgentStatus.Applicant or AgentStatus.Terminated) }
+                                  && _agent.Id != _user.GetAgentId();
+
+    private async Task Terminate()
+    {
+        if (_agent is null)
+        {
+            return;
+        }
+        var display = _mayRealName && !string.IsNullOrWhiteSpace(_agent.RealName)
+            ? $"{_agent.RealName} ({_agent.Codename})"
+            : _agent.Codename;
+        var choice = await TerminationDialog.ShowAsync(DialogService, display);
+        if (choice is null)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.TerminateAsync(_agent.Id, choice.Reason, choice.CreateNote, choice.PostDiscord, _user);
+            Snackbar.Add($"{display} wurde gekündigt.", Severity.Warning);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task TerminationRevoke()
+    {
+        if (_agent is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Kündigung zurücknehmen?",
+            "Der Account wird wieder aktiv und der Blacklist-Eintrag entfernt. Admin-Rechte werden nicht wiederhergestellt.",
+            "Zurücknehmen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.TerminationRevokeAsync(_agent.Id, _user);
+            Snackbar.Add("Kündigung zurückgenommen.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
         _agent = await AgentService.FindAsync(AgentId);
         _reloadKey = Guid.NewGuid();
         StateHasChanged();

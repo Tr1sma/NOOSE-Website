@@ -45,6 +45,19 @@ else
                         <tr><th>Einheit</th><td>HRB (Human Resources Branch)</td></tr>
                     }
                     <tr><th>Registriert am</th><td>@_agent.RegisteredAt.ToLocalTime().ToString("dd.MM.yyyy")</td></tr>
+                    @if (_agent.Status == AgentStatus.Terminated)
+                    {
+                        <tr>
+                            <th>Gekündigt</th>
+                            <td>
+                                @(_agent.TerminatedAt?.ToLocalTime().ToString("dd.MM.yyyy") ?? "—")@(string.IsNullOrWhiteSpace(_agent.TerminatedByName) ? "" : $" durch {_agent.TerminatedByName}")
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrWhiteSpace(_agent.TerminationReason))
+                        {
+                            <tr><th>Kündigungsgrund</th><td>@_agent.TerminationReason</td></tr>
+                        }
+                    }
                 </tbody>
             </table>
         </section>

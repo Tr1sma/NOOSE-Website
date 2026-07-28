@@ -8,4 +8,6 @@ public enum AgentStatus
     Blocked = 2,
     /// <summary>Public applicant; Discord-authenticated but not an agent, access limited to the applicant portal.</summary>
     Applicant = 3,
+    /// <summary>Terminated agent; account denied and put on the recruitment blacklist.</summary>
+    Terminated = 4,
 }

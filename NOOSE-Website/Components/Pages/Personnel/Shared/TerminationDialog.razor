@@ -1,0 +1,81 @@
+@* Two-stage confirmation before terminating an agent. *@
+<MudDialog>
+    <DialogContent>
+        @if (_step == 1)
+        {
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.PersonRemove" Color="Color.Error" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">@AgentDisplay kündigen?</MudText>
+                </MudStack>
+                <MudText Typo="Typo.body1">Sind Sie sicher?</MudText>
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                    <MudText Typo="Typo.body2">Die Kündigung bewirkt:</MudText>
+                    <ul class="mt-2 mb-0">
+                        <li>Der Account wird gesperrt – laufende Sitzungen enden innerhalb von 30 Sekunden.</li>
+                        <li>Eine erneute Anmeldung wird abgewiesen.</li>
+                        <li>Die Person wird dauerhaft auf die Bewerbungs-Blacklist gesetzt.</li>
+                        <li>Admin-Rechte werden entzogen.</li>
+                    </ul>
+                </MudAlert>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6">Bestätigung</MudText>
+                <MudTextField @bind-Value="_reason" Label="Begründung" Lines="3" Variant="Variant.Outlined"
+                              AutoFocus="true" Immediate="true" Required="true"
+                              RequiredError="Bitte eine Begründung angeben." />
+                <MudStack Spacing="0">
+                    <MudCheckBox @bind-Value="_createNote" Color="Color.Primary" Dense="true"
+                                 Label="Vermerk in der Personalakte anlegen" />
+                    <MudCheckBox @bind-Value="_postDiscord" Color="Color.Primary" Dense="true"
+                                 Label="Discord-Embed posten" />
+                </MudStack>
+                <ChallengeWordInput Length="5" MatchedChanged="@(m => _matched = m)" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        @if (_step == 1)
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="@(() => _step = 2)">Ja, fortfahren</MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Filled"
+                       Disabled="@(!_matched || string.IsNullOrWhiteSpace(_reason))"
+                       OnClick="Confirm">Kündigen</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string AgentDisplay { get; set; } = string.Empty;
+
+    /// <summary>What the operator confirmed: reason plus the two opt-out side effects.</summary>
+    public record Choice(string Reason, bool CreateNote, bool PostDiscord);
+
+    private int _step = 1;
+    private string _reason = string.Empty;
+    private bool _createNote = true;
+    private bool _postDiscord = true;
+    private bool _matched;
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(new Choice(_reason.Trim(), _createNote, _postDiscord)));
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the dialog; returns the operator's choice or null on cancel.</summary>
+    public static async Task<Choice?> ShowAsync(IDialogService dialog, string agentDisplay)
+    {
+        var parameters = new DialogParameters<TerminationDialog> { { x => x.AgentDisplay, agentDisplay } };
+        var options = new DialogOptions { CloseOnEscapeKey = false, BackdropClick = false };
+        var reference = await dialog.ShowAsync<TerminationDialog>($"{agentDisplay} kündigen", parameters, options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Choice choice } ? choice : null;
+    }
+}
