@@ -6,6 +6,7 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.Storage;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Recruiting;
 
@@ -198,6 +199,9 @@ public class BewerbungService(
                 $"Statusänderung: {BewerbungStatusDisplay.Name(target)}", "/portal/status", cancellationToken);
         }
         catch { /* best effort */ }
+
+        await MentionNotify.DeltaAsync(notifications, null, bewerbung.DecisionNote,
+            "einer Bewerbungs-Entscheidung", nameof(Bewerbung), id, actor, cancellationToken);
     }
 
     public async Task SetSecurityResultAsync(string id, bool passed, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -323,7 +327,7 @@ public class BewerbungService(
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
             await notifications.NotifyMentionedAsync(content, $"{who} hat dich in einer Bewerbung erwähnt.",
-                $"/bewerbungen/{id}", nameof(Bewerbung), id, actor, cancellationToken);
+                SearchNavigation.Route(nameof(Bewerbung), id), nameof(Bewerbung), id, actor, cancellationToken);
         }
         catch { /* best effort */ }
 

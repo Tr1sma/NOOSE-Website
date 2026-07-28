@@ -41,7 +41,8 @@ public sealed class PersonGroupServiceTests
             ctx.Factory,
             caseNo,
             person ?? Substitute.For<IPersonService>(),
-            threat ?? Substitute.For<IThreatScoreService>());
+            threat ?? Substitute.For<IThreatScoreService>(),
+            Substitute.For<INotificationService>());
     }
 
     private static PersonGroup Group(string id, string name = "Die Bande", Action<PersonGroup>? configure = null)

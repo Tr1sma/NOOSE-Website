@@ -4,6 +4,7 @@ let quillLadenPromise = null;
 let tabellenModulPromise = null; // table handler
 let groessenRegistriert = false;
 const SCHRIFTGROESSEN = ['0.75em', '1.5em', '2.5em']; // inline font-size values
+const SCROLL_TOLERANZ = 2; // ignore sub-pixel drift
 
 // register style-based size so font-size survives sanitization
 function registriereGroessen() {
@@ -14,6 +15,65 @@ function registriereGroessen() {
     SizeStyle.whitelist = SCHRIFTGROESSEN;
     window.Quill.register(SizeStyle, true);
     groessenRegistriert = true;
+}
+
+// quill focuses hidden nodes; suppress the induced scroll
+function entschaerfeFokus(node) {
+    if (!node || node.__nooseFokusOhneScroll || typeof node.focus !== 'function') {
+        return;
+    }
+    const originalFokus = node.focus;
+    node.focus = function (optionen) {
+        return originalFokus.call(this, Object.assign({}, optionen, { preventScroll: true }));
+    };
+    node.__nooseFokusOhneScroll = true;
+}
+
+// window plus every scrollable ancestor (dialog body)
+function sammleScrollStand(node) {
+    const stand = [{ ziel: window, x: window.scrollX, y: window.scrollY }];
+    let eltern = node ? node.parentElement : null;
+    while (eltern && eltern !== document.body && eltern !== document.documentElement) {
+        if (eltern.scrollHeight > eltern.clientHeight || eltern.scrollWidth > eltern.clientWidth) {
+            stand.push({ ziel: eltern, x: eltern.scrollLeft, y: eltern.scrollTop });
+        }
+        eltern = eltern.parentElement;
+    }
+    return stand;
+}
+
+// only correct real drift
+function stelleScrollStandHer(stand) {
+    for (const eintrag of stand) {
+        if (eintrag.ziel === window) {
+            if (Math.abs(window.scrollY - eintrag.y) > SCROLL_TOLERANZ
+                || Math.abs(window.scrollX - eintrag.x) > SCROLL_TOLERANZ) {
+                window.scrollTo(eintrag.x, eintrag.y);
+            }
+            continue;
+        }
+        if (Math.abs(eintrag.ziel.scrollTop - eintrag.y) > SCROLL_TOLERANZ) {
+            eintrag.ziel.scrollTop = eintrag.y;
+        }
+        if (Math.abs(eintrag.ziel.scrollLeft - eintrag.x) > SCROLL_TOLERANZ) {
+            eintrag.ziel.scrollLeft = eintrag.x;
+        }
+    }
+}
+
+// second layer for engines without preventScroll
+function haengeScrollWaechterAn(element) {
+    if (!element || element.__nooseScrollWaechter) {
+        return;
+    }
+    // capture runs before quill's own handler
+    element.addEventListener('paste', () => {
+        const stand = sammleScrollStand(element);
+        requestAnimationFrame(() => stelleScrollStandHer(stand));
+        // quill finishes inside setTimeout(1)
+        setTimeout(() => stelleScrollStandHer(stand), 40);
+    }, true);
+    element.__nooseScrollWaechter = true;
 }
 
 function ladeQuill() {
@@ -105,6 +165,11 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight) {
         placeholder: 'Dokument verfassen…',
         modules: module,
     });
+
+    // must run before any content injection
+    entschaerfeFokus(editor.root);
+    entschaerfeFokus(editor.clipboard && editor.clipboard.container);
+    haengeScrollWaechterAn(element);
 
     if (minHeight) {
         editor.root.style.minHeight = minHeight;

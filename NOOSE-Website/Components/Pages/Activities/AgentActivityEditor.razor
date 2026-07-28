@@ -4,6 +4,7 @@
 @using System.Security.Claims
 @inject IAgentActivityService ActivityService
 @inject IActivityTemplateService TemplateService
+@inject IPlaceholderService Placeholder
 @inject IFactionService FactionService
 @inject IPersonGroupService GroupService
 @inject ISnackbar Snackbar
@@ -65,7 +66,7 @@ else
                 <MudSelect T="string" Label="Vorlage übernehmen (optional)" Value="_selectedTemplateId"
                            ValueChanged="TemplateApplyAsync" Variant="Variant.Outlined" Clearable="true"
                            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Dvr"
-                           HelperText="Füllt den Editor mit dem Vorlagen-Text vor.">
+                           HelperText="Füllt den Editor mit dem Vorlagen-Text vor und ersetzt die Platzhalter. Zuerst Fraktion/Gruppe verknüpfen, dann Vorlage wählen.">
                     @foreach (var v in _templates)
                     {
                         <MudSelectItem T="string" Value="@v.Id">@v.Name</MudSelectItem>
@@ -229,7 +230,10 @@ else
         {
             return;
         }
-        await _editor.SetHtmlAsync(template.ContentHtml);
+        // first linked org (if any) is the record context for {{Name}}/{{Aktenzeichen}}
+        var org = _orgs.FirstOrDefault();
+        var html = await Placeholder.ApplyAsync(template.ContentHtml, org?.TargetType, org?.TargetId, _user);
+        await _editor.SetHtmlAsync(html);
         if (string.IsNullOrWhiteSpace(_kind))
         {
             _kind = template.Kind;

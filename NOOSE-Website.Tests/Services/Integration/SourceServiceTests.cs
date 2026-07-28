@@ -20,7 +20,7 @@ public sealed class SourceServiceTests
     private static (SourceService Svc, ISourcesStorageService Storage) Build(SqliteTestContext ctx)
     {
         var storage = Substitute.For<ISourcesStorageService>();
-        return (new SourceService(ctx.Factory, storage), storage);
+        return (new SourceService(ctx.Factory, storage, Substitute.For<INotificationService>()), storage);
     }
 
     // Rank >= SupervisorySpecialAgent(4) or admin => IsLeadership() + MayAllTaskforcesSee().

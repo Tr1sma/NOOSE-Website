@@ -179,7 +179,16 @@ else if (_report is { } r)
                     <MudTd DataLabel="Tage">@context.Days</MudTd>
                     <MudTd DataLabel="Grund"><AbsenceCategoryChip Category="@context.Category" /></MudTd>
                     <MudTd DataLabel="Anmerkung">
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@(context.Reason ?? "—")</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @if (context.Reason is null)
+                            {
+                                <text>—</text>
+                            }
+                            else
+                            {
+                                <MentionDisplay Text="@context.Reason" />
+                            }
+                        </MudText>
                     </MudTd>
                     <MudTd DataLabel="Kenntnisnahme">
                         @if (context.AcknowledgedAt is { } at)

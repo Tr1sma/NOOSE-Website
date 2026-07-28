@@ -17,7 +17,7 @@
 
     @if (IsWanted && !string.IsNullOrWhiteSpace(WantedReason))
     {
-        <MudText Typo="Typo.body2" Class="mb-2"><b>Grund:</b> @WantedReason</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2"><b>Grund:</b> <MentionDisplay Text="@WantedReason" User="User" /></MudText>
     }
 
     @if (_mayWrite)
@@ -25,7 +25,8 @@
         @if (!IsWanted)
         {
             <MudStack Spacing="2">
-                <MudTextField @bind-Value="_reason" Label="Fahndungsgrund (optional)" Variant="Variant.Outlined" Lines="2" />
+                <MentionInput @bind-Text="_reason" Label="Fahndungsgrund (optional)" Lines="2"
+                              HelperText="@MentionInput.Hint" />
                 <div>
                     <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Campaign"
                                OnClick="@(() => SetAsync(true))">Zur Fahndung ausschreiben</MudButton>

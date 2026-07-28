@@ -29,11 +29,11 @@ else
                     <tr><th>Geltungsbereich</th><td>@TaskforceScopeDisplay.Name(_taskforce.Scope)</td></tr>
                     @if (!string.IsNullOrWhiteSpace(_taskforce.Purpose))
                     {
-                        <tr><th>Zweck</th><td class="druck-mehrzeilig">@_taskforce.Purpose</td></tr>
+                        <tr><th>Zweck</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_taskforce.Purpose" Plain="true" /></td></tr>
                     }
                     @if (!string.IsNullOrWhiteSpace(_taskforce.Remarks))
                     {
-                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig">@_taskforce.Remarks</td></tr>
+                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_taskforce.Remarks" Plain="true" /></td></tr>
                     }
                     <tr><th>Zuletzt aktualisiert</th><td>@((_taskforce.ModifiedAt ?? _taskforce.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
                 </tbody>

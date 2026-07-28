@@ -59,7 +59,7 @@ else
                     <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_person.Classification)</td></tr>
                     @if (!string.IsNullOrWhiteSpace(_person.Description))
                     {
-                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_person.Description</td></tr>
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_person.Description" Plain="true" /></td></tr>
                     }
                     <tr><th>Zuletzt aktualisiert</th><td>@((_person.ModifiedAt ?? _person.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
                 </tbody>
@@ -139,7 +139,16 @@ else
                                 <td>@b.OtherPersonName</td>
                                 <td>@b.OtherPersonCaseNumber</td>
                                 <td>@RelationTypeDisplay.Name(b.Type)</td>
-                                <td>@(string.IsNullOrWhiteSpace(b.Note) ? "—" : b.Note)</td>
+                                <td>
+                                    @if (string.IsNullOrWhiteSpace(b.Note))
+                                    {
+                                        <text>—</text>
+                                    }
+                                    else
+                                    {
+                                        <MentionDisplay Text="@b.Note" Plain="true" />
+                                    }
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -175,11 +184,11 @@ else
                                 }
                                 @if (!string.IsNullOrWhiteSpace(d.Doc.Reason))
                                 {
-                                    <tr><th>Grund</th><td class="druck-mehrzeilig">@d.Doc.Reason</td></tr>
+                                    <tr><th>Grund</th><td class="druck-mehrzeilig"><MentionDisplay Text="@d.Doc.Reason" Plain="true" /></td></tr>
                                 }
                                 @if (!string.IsNullOrWhiteSpace(d.Doc.ReceivedInformation))
                                 {
-                                    <tr><th>Erhaltene Informationen</th><td class="druck-mehrzeilig">@d.Doc.ReceivedInformation</td></tr>
+                                    <tr><th>Erhaltene Informationen</th><td class="druck-mehrzeilig"><MentionDisplay Text="@d.Doc.ReceivedInformation" Plain="true" /></td></tr>
                                 }
                             </tbody>
                         </table>
@@ -215,11 +224,11 @@ else
                                 }
                                 @if (!string.IsNullOrWhiteSpace(o.Obs.Sighting))
                                 {
-                                    <tr><th>Beobachtung</th><td class="druck-mehrzeilig">@o.Obs.Sighting</td></tr>
+                                    <tr><th>Beobachtung</th><td class="druck-mehrzeilig"><MentionDisplay Text="@o.Obs.Sighting" Plain="true" /></td></tr>
                                 }
                                 @if (!string.IsNullOrWhiteSpace(o.Obs.Result))
                                 {
-                                    <tr><th>Ergebnis</th><td class="druck-mehrzeilig">@o.Obs.Result</td></tr>
+                                    <tr><th>Ergebnis</th><td class="druck-mehrzeilig"><MentionDisplay Text="@o.Obs.Result" Plain="true" /></td></tr>
                                 }
                             </tbody>
                         </table>

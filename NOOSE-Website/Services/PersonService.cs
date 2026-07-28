@@ -15,7 +15,9 @@ using NOOSE_Website.Models.People;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonService" />
-public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, IProfileSuggestionService suggestion, ICaseNumberService caseNumber, IThreatScoreService threat) : IPersonService
+public class PersonService(
+    IDbContextFactory<AppDbContext> dbFactory, IFileStorageService fileStorage, IProfileSuggestionService suggestion,
+    ICaseNumberService caseNumber, IThreatScoreService threat, INotificationService notifications) : IPersonService
 {
     public async Task<List<Person>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
@@ -140,6 +142,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await tx.CommitAsync(cancellationToken);
         // compute the initial person score (inputs now committed)
         await threat.NewCalculatePersonScoreAsync(person.Id, cancellationToken);
+        await MentionNotify.DeltaAsync(notifications, null, person.Description, "einer Personenakte",
+            nameof(Person), person.Id, actor, cancellationToken);
         return person;
     }
 
@@ -161,6 +165,7 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
 
         var altStatus = person.LifeStatus;
         var altDeadUntil = person.DeadUntil;
+        var oldMentions = person.Description;
 
         person.Name = input.Name.Trim();
         person.Description = input.Description.TrimToNull();
@@ -191,6 +196,8 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         await db.SaveChangesAsync(cancellationToken);
         // weapons and fugitive status affect the person score
         await threat.NewCalculatePersonScoreAsync(id, cancellationToken);
+        await MentionNotify.DeltaAsync(notifications, oldMentions, person.Description, "einer Personenakte",
+            nameof(Person), id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -250,9 +257,13 @@ public class PersonService(IDbContextFactory<AppDbContext> dbFactory, IFileStora
         // cannot flag a classified record you are not cleared for
         Permission.RequireMaySeeClassified(actor, person.SecrecyLevel);
 
+        var oldMentions = person.WantedReason;
         person.IsWanted = wanted;
         person.WantedReason = wanted && !string.IsNullOrWhiteSpace(reason) ? reason.Trim() : null;
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, person.WantedReason, "einer Fahndung",
+            nameof(Person), id, actor, cancellationToken);
     }
 
     public async Task<List<ClassificationHistory>> GetClassificationHistoryAsync(string id, ViewerScope scope, CancellationToken cancellationToken = default)

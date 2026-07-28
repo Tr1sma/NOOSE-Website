@@ -104,7 +104,7 @@
                     </MudStack>
                     @if (!string.IsNullOrWhiteSpace(b.Note))
                     {
-                        <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">@b.Note</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary"><MentionDisplay Text="@b.Note" User="User" /></MudText>
                     }
                 </MudPaper>
             }

@@ -51,15 +51,18 @@
     }
 
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Description" Label="Sachverhalt / Beschreibung" Lines="4" Variant="Variant.Outlined"
-                      HelperText="Worum geht es in diesem Vorgang?" />
+        <MentionInput Text="@(Input.Description ?? string.Empty)" TextChanged="@(v => Input.Description = v)"
+                      Label="Sachverhalt / Beschreibung" Lines="4"
+                      HelperText="@($"Worum geht es in diesem Vorgang? {MentionInput.Hint}")" />
     </MudItem>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Summary" Label="Aktueller Stand / Zusammenfassung" Lines="3" Variant="Variant.Outlined"
+        <MentionInput Text="@(Input.Summary ?? string.Empty)" TextChanged="@(v => Input.Summary = v)"
+                      Label="Aktueller Stand / Zusammenfassung" Lines="3"
                       HelperText="Kurzer Stand der Ermittlung." />
     </MudItem>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.ClosingNote" Label="Abschlussvermerk" Lines="3" Variant="Variant.Outlined"
+        <MentionInput Text="@(Input.ClosingNote ?? string.Empty)" TextChanged="@(v => Input.ClosingNote = v)"
+                      Label="Abschlussvermerk" Lines="3"
                       HelperText="Vermerk beim Abschluss des Vorgangs (optional)." />
     </MudItem>
 </MudGrid>

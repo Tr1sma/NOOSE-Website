@@ -50,8 +50,9 @@
     }
 
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Description" Label="Beschreibung (optional)" Lines="4" Variant="Variant.Outlined"
-                      HelperText="Worum geht es bei dieser Aufgabe?" />
+        <MentionInput Text="@(Input.Description ?? string.Empty)" TextChanged="@(v => Input.Description = v)"
+                      Label="Beschreibung (optional)" Lines="4"
+                      HelperText="@($"Worum geht es bei dieser Aufgabe? {MentionInput.Hint}")" />
     </MudItem>
 </MudGrid>
 

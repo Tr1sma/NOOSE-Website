@@ -261,7 +261,8 @@ else
     private async Task SignOffAsync()
     {
         var reason = await ReasonDialog.ShowAsync(DialogService, "Für diese Besprechung abmelden",
-            "Du wirst für diese Besprechung als abgemeldet geführt.", "Abmelden", "Grund (optional)");
+            "Du wirst für diese Besprechung als abgemeldet geführt.", "Abmelden", "Grund (optional)",
+            mentions: true);
         if (reason is null)
         {
             return;

@@ -13,8 +13,12 @@ using NOOSE_Website.Models.People;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IParteiService" />
-public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion, IPersonService personService, IThreatScoreService threat) : IPartyService
+public class PartyService(
+    IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion,
+    IPersonService personService, IThreatScoreService threat, INotificationService notifications) : IPartyService
 {
+    private static string MentionScope(Party p) => MentionNotify.Scope(p.Description, p.Targets, p.Remarks);
+
     public async Task<List<Party>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -160,6 +164,9 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         }
 
         await tx.CommitAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, MentionScope(party), "einer Parteiakte",
+            nameof(Party), party.Id, actor, cancellationToken);
         return party;
     }
 
@@ -172,6 +179,7 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
         Permission.RequireMaySeeClassified(actor, party.SecrecyLevel);
 
+        var oldMentions = MentionScope(party);
         party.Name = input.Name.Trim();
         party.Description = input.Description.TrimToNull();
         party.Targets = input.Targets.TrimToNull();
@@ -180,6 +188,9 @@ public class PartyService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumber
         party.SecrecyLevel = input.SecrecyLevel;
 
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(party), "einer Parteiakte",
+            nameof(Party), id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

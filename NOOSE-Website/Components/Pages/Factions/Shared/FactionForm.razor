@@ -66,14 +66,17 @@
     }
 
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Estate" Label="Anwesen" Lines="2" Variant="Variant.Outlined"
+        <MentionInput Text="@(Input.Estate ?? string.Empty)" TextChanged="@(v => Input.Estate = v)"
+                      Label="Anwesen" Lines="2"
                       HelperText="Sitz/Anwesen der Fraktion – Adresse und Notizen (optional)." />
     </MudItem>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Targets" Label="Ziele" Lines="2" Variant="Variant.Outlined" />
+        <MentionInput Text="@(Input.Targets ?? string.Empty)" TextChanged="@(v => Input.Targets = v)"
+                      Label="Ziele" Lines="2" />
     </MudItem>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Description" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+        <MentionInput Text="@(Input.Description ?? string.Empty)" TextChanged="@(v => Input.Description = v)"
+                      Label="Beschreibung" Lines="3" HelperText="@MentionInput.Hint" />
     </MudItem>
 </MudGrid>
 

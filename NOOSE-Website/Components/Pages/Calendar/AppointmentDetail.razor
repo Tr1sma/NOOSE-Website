@@ -110,7 +110,7 @@ else
                 <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     @if (!string.IsNullOrWhiteSpace(_appointment.Description))
                     {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_appointment.Description</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_appointment.Description" /></MudText>
                     }
                     else
                     {

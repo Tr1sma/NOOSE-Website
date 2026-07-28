@@ -79,21 +79,21 @@ else
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Ziele</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_party.Targets</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_party.Targets" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_party.Description))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_party.Description</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_party.Description" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_party.Remarks))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Bemerkungen</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_party.Remarks</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_party.Remarks" /></MudText>
                             </div>
                         }
                         @if (string.IsNullOrWhiteSpace(_party.Targets) && string.IsNullOrWhiteSpace(_party.Description) && string.IsNullOrWhiteSpace(_party.Remarks))

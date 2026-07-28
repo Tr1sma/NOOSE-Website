@@ -12,7 +12,9 @@ using NOOSE_Website.Models.Common;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ISourceService" />
-public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesStorageService storage) : ISourceService
+public class SourceService(
+    IDbContextFactory<AppDbContext> dbFactory, ISourcesStorageService storage, INotificationService notifications)
+    : ISourceService
 {
     public async Task<List<Source>> GetForRecordAsync(string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
@@ -176,6 +178,10 @@ public class SourceService(IDbContextFactory<AppDbContext> dbFactory, ISourcesSt
             storage.Delete(source.FileNameSaved);
             throw;
         }
+
+        await MentionNotify.DeltaAsync(notifications, null, source.Description, "einer Quelle",
+            entityType, entityId, actor, cancellationToken);
+
         return source;
     }
 

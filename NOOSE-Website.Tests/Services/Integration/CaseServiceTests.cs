@@ -16,13 +16,14 @@ public sealed class CaseServiceTests
 {
     // ---------- construction / helpers ----------
 
-    private static CaseService Build(SqliteTestContext ctx)
+    private static CaseService Build(SqliteTestContext ctx, INotificationService? notifications = null)
     {
         var caseNo = Substitute.For<ICaseNumberService>();
         caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("NOOSE-V-2026-0001");
         var suggestion = Substitute.For<IProfileSuggestionService>();
-        return new CaseService(ctx.Factory, caseNo, suggestion);
+        return new CaseService(ctx.Factory, caseNo, suggestion,
+            notifications ?? Substitute.For<INotificationService>());
     }
 
     // Director => IsLeadership() and MayHighestClassification().
@@ -143,6 +144,31 @@ public sealed class CaseServiceTests
     }
 
     // ---------- RefreshAsync ----------
+
+    [Fact]
+    public async Task RefreshAsync_NotifiesMentionDelta_WithOldAndNewBodyText()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Cases.Add(NewCase("c9", configure: c => c.Description = "Sachverhalt alt"));
+            db.SaveChanges();
+        }
+        var notifications = Substitute.For<INotificationService>();
+        var svc = Build(ctx, notifications);
+
+        var input = Input(title: "Neu");
+        input.Description = "Sachverhalt neu";
+        await svc.RefreshAsync("c9", input, Director());
+
+        // old text carries the previous body so already-pinged agents are not pinged again
+        await notifications.Received(1).NotifyMentionedDeltaAsync(
+            Arg.Is<string?>(s => s != null && s.Contains("Sachverhalt alt")),
+            Arg.Is<string?>(s => s != null && s.Contains("Sachverhalt neu")),
+            Arg.Any<string>(), Arg.Any<string?>(),
+            Arg.Is<string>(t => t == "Case"), Arg.Is<string>(i => i == "c9"),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task RefreshAsync_UpdatesFields_AndSetsCompletedAt()

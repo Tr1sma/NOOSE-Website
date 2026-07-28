@@ -47,7 +47,7 @@
                 </MudStack>
                 @if (!string.IsNullOrWhiteSpace(doc.Reason))
                 {
-                    <MudText Typo="Typo.body2" Class="mt-1"><b>Grund:</b> @doc.Reason</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-1"><b>Grund:</b> <MentionDisplay Text="@doc.Reason" /></MudText>
                 }
                 @* Linked record as link; otherwise free-text fallback. *@
                 @if (display.OrgRoute is not null)
@@ -62,7 +62,7 @@
                 }
                 @if (!string.IsNullOrWhiteSpace(doc.ReceivedInformation))
                 {
-                    <MudText Typo="Typo.body2" Class="mt-1">@doc.ReceivedInformation</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-1"><MentionDisplay Text="@doc.ReceivedInformation" /></MudText>
                 }
                 <MudStack Row="true" Spacing="2" Class="mt-2">
                     @if (doc.TruthSerum)

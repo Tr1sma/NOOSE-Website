@@ -9,6 +9,7 @@ using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
@@ -60,7 +61,14 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             RequesterName = actor.GetCodename(),
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        await NotifyMentionsAsync(justification, "Begründung", targetType, targetId, actor, cancellationToken);
     }
+
+    private Task NotifyMentionsAsync(string? text, string what, string targetType, string targetId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+        => MentionNotify.DeltaAsync(notifications, null, text, $"einer {what} zu einem Antrag",
+            targetType, targetId, actor, cancellationToken);
 
     public async Task<List<Request>> GetOpenAsync(bool isLeadership, CancellationToken cancellationToken = default)
     {
@@ -146,6 +154,9 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
                 "/profil", cancellationToken);
         }
         catch { /* best effort */ }
+
+        await NotifyMentionsAsync(request.DecisionNote, "Entscheidung", request.TargetType, request.TargetId,
+            actor, cancellationToken);
     }
 
     /// <summary>Set classification on target record.</summary>

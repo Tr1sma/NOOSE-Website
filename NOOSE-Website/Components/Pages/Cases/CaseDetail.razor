@@ -79,21 +79,21 @@ else
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Sachverhalt / Beschreibung</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_case.Description</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_case.Description" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_case.Summary))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Aktueller Stand</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_case.Summary</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_case.Summary" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_case.ClosingNote))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Abschlussvermerk</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_case.ClosingNote</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_case.ClosingNote" /></MudText>
                             </div>
                         }
                         @if (string.IsNullOrWhiteSpace(_case.Description) && string.IsNullOrWhiteSpace(_case.Summary) && string.IsNullOrWhiteSpace(_case.ClosingNote))

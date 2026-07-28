@@ -52,7 +52,7 @@ else
                 </MudTd>
                 <MudTd DataLabel="Gewünscht"><ClassificationBadge Value="context.TargetClassification" /></MudTd>
                 <MudTd DataLabel="Begründung">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Justification) ? "—" : context.Justification)</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@if (string.IsNullOrWhiteSpace(context.Justification)) { <text>—</text> } else { <MentionDisplay Text="@context.Justification" /> }</MudText>
                 </MudTd>
                 <MudTd DataLabel="Beantragt">
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
@@ -274,7 +274,7 @@ else
                     <MudLink Href="@($"/personal/{context.AgentId}")" Typo="Typo.body2">@AgentName(context.AgentId)</MudLink>
                 </MudTd>
                 <MudTd DataLabel="Ziel-Dienstgrad"><MudText Typo="Typo.body2">@RankDisplay.Name(context.TargetRank)</MudText></MudTd>
-                <MudTd DataLabel="Begründung"><MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Justification) ? "—" : context.Justification)</MudText></MudTd>
+                <MudTd DataLabel="Begründung"><MudText Typo="Typo.caption" Class="mud-text-secondary">@if (string.IsNullOrWhiteSpace(context.Justification)) { <text>—</text> } else { <MentionDisplay Text="@context.Justification" /> }</MudText></MudTd>
                 <MudTd DataLabel="Beantragt">
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
                 </MudTd>
@@ -338,7 +338,7 @@ else
                              Color="@(context.FreigabeIncludesChildren ? Color.Success : Color.Default)" Size="Size.Small" />
                 </MudTd>
                 <MudTd DataLabel="Begründung">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(string.IsNullOrWhiteSpace(context.Justification) ? "—" : context.Justification)</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@if (string.IsNullOrWhiteSpace(context.Justification)) { <text>—</text> } else { <MentionDisplay Text="@context.Justification" /> }</MudText>
                 </MudTd>
                 <MudTd DataLabel="Beantragt">
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.RequesterName ?? "—") · @context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
@@ -437,7 +437,7 @@ else
                 : "Der Antrag wird abgelehnt. Eine Notiz ist optional.",
             confirmText: approved ? "Genehmigen" : "Ablehnen",
             label: "Notiz (optional)",
-            colour: approved ? Color.Success : Color.Error);
+            colour: approved ? Color.Success : Color.Error, mentions: true);
         if (note is null)
         {
             return; // Abgebrochen
@@ -603,7 +603,7 @@ else
                 : "Der Antrag wird abgelehnt. Eine Notiz ist optional.",
             confirmText: approved ? "Genehmigen" : "Ablehnen",
             label: "Notiz (optional)",
-            colour: approved ? Color.Success : Color.Error);
+            colour: approved ? Color.Success : Color.Error, mentions: true);
         if (note is null)
         {
             return; // abgebrochen

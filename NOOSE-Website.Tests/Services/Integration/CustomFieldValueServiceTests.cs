@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -10,7 +11,7 @@ namespace NOOSE_Website.Tests.Services.Integration;
 public sealed class CustomFieldValueServiceTests
 {
     private static CustomFieldValueService Build(SqliteTestContext ctx)
-        => new(ctx.Factory);
+        => new(ctx.Factory, Substitute.For<INotificationService>());
 
     // Neither method calls a Permission guard; any principal is accepted by SetAsync.
     private static ClaimsPrincipal Actor()

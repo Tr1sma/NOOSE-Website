@@ -36,7 +36,8 @@ public sealed class PartyServiceTests
             caseNo,
             suggestion ?? Substitute.For<IProfileSuggestionService>(),
             person ?? Substitute.For<IPersonService>(),
-            threat ?? Substitute.For<IThreatScoreService>());
+            threat ?? Substitute.For<IThreatScoreService>(),
+            Substitute.For<INotificationService>());
     }
 
     private static Party NewParty(string id, string name = "Grove Street", Action<Party>? configure = null)

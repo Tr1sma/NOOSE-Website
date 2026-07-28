@@ -34,10 +34,11 @@ public sealed class ObservationServiceTests
     private static ViewerScope PartnerScope()
         => new(MayClassifiedRead: false, MayAllTaskforces: false, MeId: "partner-1", PartnerAgency: PartnerAgency.DoJ);
 
-    private static (ObservationService Svc, IThreatScoreService Threat) Build(SqliteTestContext ctx)
+    private static (ObservationService Svc, IThreatScoreService Threat) Build(
+        SqliteTestContext ctx, INotificationService? notifications = null)
     {
         var threat = Substitute.For<IThreatScoreService>();
-        var svc = new ObservationService(ctx.Factory, threat);
+        var svc = new ObservationService(ctx.Factory, threat, notifications ?? Substitute.For<INotificationService>());
         return (svc, threat);
     }
 
@@ -233,6 +234,29 @@ public sealed class ObservationServiceTests
     }
 
     // ---------- CreateAsync ----------
+
+    [Fact]
+    public async Task CreateAsync_NotifiesMentions_ScopedToBothTextFields_GatedOnThePerson()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p7"));
+            db.SaveChanges();
+        }
+        var notifications = Substitute.For<INotificationService>();
+        var (svc, _) = Build(ctx, notifications);
+        var input = new ObservationInput { Start = T0, Sighting = "Treffen", Result = "Folgerung" };
+
+        await svc.CreateAsync("p7", input, Leader());
+
+        // both free-text fields are scanned as one; gate is the person, not the observation
+        await notifications.Received(1).NotifyMentionedDeltaAsync(
+            Arg.Is<string?>(s => s == null), Arg.Is<string?>(s => s == "Treffen Folgerung"),
+            Arg.Any<string>(), Arg.Any<string?>(),
+            Arg.Is<string>(t => t == "Person"), Arg.Is<string>(i => i == "p7"),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task CreateAsync_PersistsObservation_AndRecomputesScore()

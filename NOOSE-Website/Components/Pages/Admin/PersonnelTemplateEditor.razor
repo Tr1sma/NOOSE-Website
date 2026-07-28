@@ -4,6 +4,7 @@
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
 @using System.Security.Claims
 @inject IPersonnelTemplateService TemplateService
+@inject IPlaceholderService Placeholder
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
@@ -53,6 +54,21 @@ else
                     <MudNumericField @bind-Value="_sorting" Label="Sortierung" Variant="Variant.Outlined" Min="0" />
                 </MudItem>
             </MudGrid>
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                <MudText Typo="Typo.body2" Class="mb-1">Verfügbare Platzhalter (beim Anlegen des Eintrags automatisch ersetzt):</MudText>
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                    @foreach (var (token, description) in Placeholder.AvailablePlaceholder)
+                    {
+                        <MudTooltip Text="@description">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info">@token</MudChip>
+                        </MudTooltip>
+                    }
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    {{Name}} ist der Codename des Agenten, dessen Personalakte bearbeitet wird; {{Agent}} und {{Dienstgrad}} beziehen sich auf die eintragende Person. {{Aktenzeichen}} bleibt leer.
+                </MudText>
+            </MudAlert>
 
             <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
             <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" />

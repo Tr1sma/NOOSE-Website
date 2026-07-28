@@ -32,7 +32,7 @@ public sealed class PersonDocServiceTests
     {
         var person = Substitute.For<IPersonService>();
         var threat = Substitute.For<IThreatScoreService>();
-        var svc = new PersonDocService(ctx.Factory, person, threat);
+        var svc = new PersonDocService(ctx.Factory, person, threat, Substitute.For<INotificationService>());
         return (svc, person, threat);
     }
 

@@ -35,14 +35,14 @@
             {
                 <div>
                     <MudText Typo="Typo.subtitle2">Beobachtung</MudText>
-                    <MudText Typo="Typo.body2">@Obs.Sighting</MudText>
+                    <MudText Typo="Typo.body2"><MentionDisplay Text="@Obs.Sighting" /></MudText>
                 </div>
             }
             @if (!string.IsNullOrWhiteSpace(Obs.Result))
             {
                 <div>
                     <MudText Typo="Typo.subtitle2">Ergebnis / Folgerung</MudText>
-                    <MudText Typo="Typo.body2">@Obs.Result</MudText>
+                    <MudText Typo="Typo.body2"><MentionDisplay Text="@Obs.Result" /></MudText>
                 </div>
             }
         </MudStack>

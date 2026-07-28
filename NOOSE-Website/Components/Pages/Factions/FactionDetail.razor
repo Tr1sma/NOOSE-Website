@@ -90,21 +90,21 @@ else
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Anwesen</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_faction.Estate</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_faction.Estate" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_faction.Targets))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Ziele</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_faction.Targets</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_faction.Targets" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_faction.Description))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_faction.Description</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_faction.Description" /></MudText>
                             </div>
                         }
                         <ProfileList Title="Ränge" Values="@_faction.Ranks.OrderBy(r => r.Order).Select(r => r.Designation)" />

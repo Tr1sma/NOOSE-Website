@@ -202,7 +202,7 @@ public static class RecordsReference
                 .Select(u => new { u.Id, u.Codename }).ToListAsync(ct))
             {
                 map[(nameof(Agent), x.Id)] = new(string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannter Agent)" : x.Codename,
-                    false, $"/personal/{x.Id}");
+                    false, SearchNavigation.Route(nameof(Agent), x.Id));
             }
         }
     }

@@ -35,16 +35,33 @@ public class NotificationService(
         broadcaster.Report(recipientId);
     }
 
-    public async Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
+    public Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
         ClaimsPrincipal trigger, CancellationToken cancellationToken = default)
+        => FanOutMentionsAsync(MentionedAgentIds(text, trigger), title, href, targetType, targetId, cancellationToken);
+
+    public Task NotifyMentionedDeltaAsync(string? oldText, string? newText, string title, string? href,
+        string targetType, string targetId, ClaimsPrincipal trigger, CancellationToken cancellationToken = default)
     {
-        // exclude self, dedupe
+        // already-mentioned agents were pinged on the earlier save
+        var known = MentionedAgentIds(oldText, trigger).ToHashSet(StringComparer.Ordinal);
+        var added = MentionedAgentIds(newText, trigger).Where(id => !known.Contains(id)).ToList();
+        return FanOutMentionsAsync(added, title, href, targetType, targetId, cancellationToken);
+    }
+
+    /// <summary>Agent ids mentioned in the text, without the trigger, deduplicated.</summary>
+    private static List<string> MentionedAgentIds(string? text, ClaimsPrincipal trigger)
+    {
         var triggerId = trigger.GetAgentId();
-        var agentIds = MentionParser.Parse(text)
+        return MentionParser.Parse(text)
             .Where(t => t.Type == nameof(Agent) && t.Id != triggerId)
             .Select(t => t.Id)
             .Distinct()
             .ToList();
+    }
+
+    private async Task FanOutMentionsAsync(IReadOnlyList<string> agentIds, string title, string? href,
+        string targetType, string targetId, CancellationToken cancellationToken)
+    {
         if (agentIds.Count == 0)
         {
             return;

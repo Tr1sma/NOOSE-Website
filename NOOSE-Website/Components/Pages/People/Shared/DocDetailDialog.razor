@@ -20,7 +20,7 @@
             }
             @if (!string.IsNullOrWhiteSpace(Doc.Reason))
             {
-                <MudText Typo="Typo.body2"><b>Grund:</b> @Doc.Reason</MudText>
+                <MudText Typo="Typo.body2"><b>Grund:</b> <MentionDisplay Text="@Doc.Reason" /></MudText>
             }
             @* Linked record as link; otherwise free-text fallback. *@
             @if (OrgRoute is not null)
@@ -35,7 +35,7 @@
             {
                 <div>
                     <MudText Typo="Typo.subtitle2">Erhaltene Informationen</MudText>
-                    <MudText Typo="Typo.body2">@Doc.ReceivedInformation</MudText>
+                    <MudText Typo="Typo.body2"><MentionDisplay Text="@Doc.ReceivedInformation" /></MudText>
                 </div>
             }
             @if (Doc.TruthSerum || Doc.MemoryDeleted)

@@ -87,14 +87,14 @@ else
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Sinn / Zweck</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_taskforce.Purpose</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_taskforce.Purpose" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_taskforce.Remarks))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Bemerkungen</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_taskforce.Remarks</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_taskforce.Remarks" /></MudText>
                             </div>
                         }
                         @if (string.IsNullOrWhiteSpace(_taskforce.Purpose) && string.IsNullOrWhiteSpace(_taskforce.Remarks))

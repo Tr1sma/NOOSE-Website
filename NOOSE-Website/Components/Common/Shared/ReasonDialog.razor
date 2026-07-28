@@ -4,9 +4,18 @@
         {
             <MudText Typo="Typo.body2" Class="mb-3">@Text</MudText>
         }
-        <MudTextField @bind-Value="_reason" Label="@Label" Lines="2" Variant="Variant.Outlined"
-                      AutoFocus="true" Immediate="true"
-                      Required="@MandatoryReason" RequiredError="Bitte eine Begründung angeben." />
+        @if (Mentions)
+        {
+            <MentionInput @bind-Text="_reason" Label="@Label" Lines="2" HelperText="@MentionInput.Hint"
+                          AutoFocus="true" Required="@MandatoryReason"
+                          RequiredError="Bitte eine Begründung angeben." />
+        }
+        else
+        {
+            <MudTextField @bind-Value="_reason" Label="@Label" Lines="2" Variant="Variant.Outlined"
+                          AutoFocus="true" Immediate="true"
+                          Required="@MandatoryReason" RequiredError="Bitte eine Begründung angeben." />
+        }
         @if (_error)
         {
             <MudText Typo="Typo.caption" Color="Color.Error">Bitte eine Begründung angeben.</MudText>
@@ -28,6 +37,9 @@
     [Parameter] public bool MandatoryReason { get; set; }
     [Parameter] public Color Colour { get; set; } = Color.Primary;
 
+    /// <summary>Opt-in @-picker; off where the text is shown to the person being acted on (e.g. a block reason).</summary>
+    [Parameter] public bool Mentions { get; set; }
+
     private string _reason = string.Empty;
     private bool _error;
 
@@ -45,7 +57,8 @@
 
     /// <summary>Shows the dialog; returns the reason or null on cancel.</summary>
     public static async Task<string?> ShowAsync(IDialogService dialog, string title, string? text,
-        string confirmText = "Bestätigen", string label = "Begründung", bool mandatoryReason = false, Color colour = Color.Primary)
+        string confirmText = "Bestätigen", string label = "Begründung", bool mandatoryReason = false,
+        Color colour = Color.Primary, bool mentions = false)
     {
         var parameters = new DialogParameters<ReasonDialog>
         {
@@ -55,6 +68,7 @@
             { x => x.ConfirmText, confirmText },
             { x => x.MandatoryReason, mandatoryReason },
             { x => x.Colour, colour },
+            { x => x.Mentions, mentions },
         };
         var reference = await dialog.ShowAsync<ReasonDialog>(title, parameters);
         var result = await reference.Result;

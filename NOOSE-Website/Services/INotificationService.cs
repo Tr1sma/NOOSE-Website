@@ -15,6 +15,10 @@ public interface INotificationService
     Task NotifyMentionedAsync(string? text, string title, string? href, string targetType, string targetId,
         ClaimsPrincipal trigger, CancellationToken cancellationToken = default);
 
+    /// <summary>Same as <see cref="NotifyMentionedAsync"/> but only for mentions added since the old text, so re-saving an edited field never pings twice.</summary>
+    Task NotifyMentionedDeltaAsync(string? oldText, string? newText, string title, string? href, string targetType,
+        string targetId, ClaimsPrincipal trigger, CancellationToken cancellationToken = default);
+
     /// <summary>Broadcast the same notification to many recipients, excluding the trigger and deduplicated; empty list = no-op.</summary>
     Task NotifyManyAsync(IReadOnlyCollection<string> recipientIds, NotificationType type, string title,
         string? href, string? triggerId, CancellationToken cancellationToken = default);

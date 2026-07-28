@@ -79,7 +79,7 @@ else
                                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Campaign">Zur Fahndung</MudChip>
                                 @if (!string.IsNullOrWhiteSpace(r.WantedReason))
                                 {
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@r.WantedReason</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary"><MentionDisplay Text="@r.WantedReason" /></MudText>
                                 }
                             }
                             <ClassificationBadge Value="r.Classification" />

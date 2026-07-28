@@ -27,8 +27,10 @@
                 </MudGrid>
 
                 <MudTextField @bind-Value="_input.Location" Label="Ort" Variant="Variant.Outlined" />
-                <MudTextField @bind-Value="_input.Sighting" Label="Beobachtung" Lines="3" Variant="Variant.Outlined" />
-                <MudTextField @bind-Value="_input.Result" Label="Ergebnis / Folgerung" Lines="2" Variant="Variant.Outlined" />
+                <MentionInput Text="@(_input.Sighting ?? string.Empty)" TextChanged="@(v => _input.Sighting = v)"
+                              Label="Beobachtung" Lines="3" HelperText="@MentionInput.Hint" />
+                <MentionInput Text="@(_input.Result ?? string.Empty)" TextChanged="@(v => _input.Result = v)"
+                              Label="Ergebnis / Folgerung" Lines="2" />
 
                 <MudAutocomplete T="Agent" Label="Beobachtender Agent" @bind-Value="_agent"
                                  SearchFunc="@SearchAgents" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"

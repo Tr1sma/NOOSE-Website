@@ -13,8 +13,12 @@ using NOOSE_Website.Models.People;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonengruppeService" />
-public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IPersonService personService, IThreatScoreService threat) : IPersonGroupService
+public class PersonGroupService(
+    IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IPersonService personService,
+    IThreatScoreService threat, INotificationService notifications) : IPersonGroupService
 {
+    private static string MentionScope(PersonGroup g) => MentionNotify.Scope(g.Description, g.Targets);
+
     public async Task<List<PersonGroup>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -160,6 +164,9 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         }
 
         await tx.CommitAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, MentionScope(group), "einer Gruppenakte",
+            nameof(PersonGroup), group.Id, actor, cancellationToken);
         return group;
     }
 
@@ -172,6 +179,7 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
         Permission.RequireMaySeeClassified(actor, group.SecrecyLevel);
 
+        var oldMentions = MentionScope(group);
         group.Name = input.Name.Trim();
         group.Description = input.Description.TrimToNull();
         group.Targets = input.Targets.TrimToNull();
@@ -181,6 +189,9 @@ public class PersonGroupService(IDbContextFactory<AppDbContext> dbFactory, ICase
         group.SecrecyLevel = input.SecrecyLevel;
 
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(group), "einer Gruppenakte",
+            nameof(PersonGroup), id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

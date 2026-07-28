@@ -8,8 +8,19 @@
     }
     else if (seg.Hidden)
     {
-        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
-                 Icon="@Icons.Material.Filled.Lock" Class="mx-1">Verschlusssache</MudChip>
+        if (Plain)
+        {
+            <text>Verschlusssache</text>
+        }
+        else
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                     Icon="@Icons.Material.Filled.Lock" Class="mx-1">Verschlusssache</MudChip>
+        }
+    }
+    else if (Plain)
+    {
+        @seg.Text
     }
     else if (!string.IsNullOrEmpty(seg.Href))
     {
@@ -28,6 +39,9 @@
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<MentionSegment> Segments { get; set; } = Array.Empty<MentionSegment>();
 
+    /// <summary>Renders references as bare text instead of chips/links; for print views.</summary>
+    [Parameter] public bool Plain { get; set; }
+
     private static string Symbol(string? type) => type switch
     {
         nameof(Person) => Icons.Material.Filled.Badge,
@@ -36,6 +50,11 @@
         nameof(Party) => Icons.Material.Filled.AccountBalance,
         nameof(Operation) => Icons.Material.Filled.Radar,
         nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
+        nameof(Appointment) => Icons.Material.Filled.Event,
+        nameof(Meeting) => Icons.Material.Filled.Groups,
+        nameof(Document) => Icons.Material.Filled.Article,
         nameof(Source) => Icons.Material.Filled.AttachFile,
         nameof(Agent) => Icons.Material.Filled.Person,
         _ => Icons.Material.Filled.Link,

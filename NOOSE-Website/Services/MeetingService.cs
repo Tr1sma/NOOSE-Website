@@ -837,6 +837,9 @@ public class MeetingService(
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, reason, "einer Abmeldung",
+            nameof(Meeting), meetingId, actor, cancellationToken);
     }
 
     public async Task SignOffRevokeAsync(string meetingId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

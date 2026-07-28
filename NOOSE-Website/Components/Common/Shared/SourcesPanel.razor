@@ -104,7 +104,7 @@
                         </MudLink>
                         break;
                     case SourceType.FreeText:
-                        <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@q.Description</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1"><MentionDisplay Text="@q.Description" User="User" /></MudText>
                         break;
                     case SourceType.Document when q.TargetId is not null:
                         <MudLink Href="@($"/dokumente/{q.TargetId}")" Typo="Typo.body2" Class="d-block mt-1">
@@ -115,7 +115,7 @@
 
                 @if (q.Type != SourceType.FreeText && !string.IsNullOrWhiteSpace(q.Description))
                 {
-                    <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary">@q.Description</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-1 mud-text-secondary"><MentionDisplay Text="@q.Description" User="User" /></MudText>
                 }
 
                 <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">

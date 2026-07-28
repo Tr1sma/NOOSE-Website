@@ -12,7 +12,8 @@
                     <MudSelectItem T="RelationType" Value="@t">@RelationTypeDisplay.Name(t)</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField @bind-Value="_note" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" MaxLength="500" />
+            <MentionInput @bind-Text="_note" Label="Notiz (optional)" Lines="2" MaxLength="500"
+                          HelperText="@MentionInput.Hint" />
         </MudStack>
     </DialogContent>
     <DialogActions>

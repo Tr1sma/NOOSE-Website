@@ -28,15 +28,15 @@ else
                     <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_party.Classification)</td></tr>
                     @if (!string.IsNullOrWhiteSpace(_party.Targets))
                     {
-                        <tr><th>Ziele</th><td class="druck-mehrzeilig">@_party.Targets</td></tr>
+                        <tr><th>Ziele</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_party.Targets" Plain="true" /></td></tr>
                     }
                     @if (!string.IsNullOrWhiteSpace(_party.Description))
                     {
-                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_party.Description</td></tr>
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_party.Description" Plain="true" /></td></tr>
                     }
                     @if (!string.IsNullOrWhiteSpace(_party.Remarks))
                     {
-                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig">@_party.Remarks</td></tr>
+                        <tr><th>Bemerkungen</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_party.Remarks" Plain="true" /></td></tr>
                     }
                     <tr><th>Zuletzt aktualisiert</th><td>@((_party.ModifiedAt ?? _party.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
                 </tbody>

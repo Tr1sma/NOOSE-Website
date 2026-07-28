@@ -270,4 +270,70 @@ public class MentionParserTests
         string token = MentionParser.Token("Person", "not-a-guid");
         Assert.Empty(MentionParser.Parse(token));
     }
+
+    // ---------- Strip ----------
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Strip_NullOrEmpty_ReturnsEmpty(string? text)
+    {
+        Assert.Equal(string.Empty, MentionParser.Strip(text));
+    }
+
+    [Fact]
+    public void Strip_TextWithoutToken_IsUnchanged()
+    {
+        const string text = "Ganz normaler Text ohne Erwähnung.";
+        Assert.Equal(text, MentionParser.Strip(text));
+    }
+
+    [Fact]
+    public void Strip_TextWithBareAtSign_IsUnchanged()
+    {
+        // A lone '@' takes the regex path but matches nothing.
+        Assert.Equal("Mail an a@b.de", MentionParser.Strip("Mail an a@b.de"));
+    }
+
+    [Fact]
+    public void Strip_SingleToken_RemovesItAndCollapsesGap()
+    {
+        string text = $"Treffen mit {MentionParser.Token("Person", Guid1)} im Hafen";
+        Assert.Equal("Treffen mit im Hafen", MentionParser.Strip(text));
+    }
+
+    [Fact]
+    public void Strip_MultipleTokens_RemovesAll()
+    {
+        string text = $"{MentionParser.Token("Agent", Guid1)} und {MentionParser.Token("Faction", Guid2)}";
+        Assert.Equal("und", MentionParser.Strip(text));
+    }
+
+    [Fact]
+    public void Strip_TokenOnly_ReturnsEmpty()
+    {
+        Assert.Equal(string.Empty, MentionParser.Strip(MentionParser.Token("Person", Guid1)));
+    }
+
+    [Fact]
+    public void Strip_LeadingAndTrailingToken_TrimsEdges()
+    {
+        string text = $"{MentionParser.Token("Person", Guid1)} Mitte {MentionParser.Token("Person", Guid2)}";
+        Assert.Equal("Mitte", MentionParser.Strip(text));
+    }
+
+    [Fact]
+    public void Strip_InvalidToken_IsKept()
+    {
+        // Strip uses the same regex as Parse, so a non-GUID id is not a token.
+        const string text = "Text @{Person:not-a-guid} Ende";
+        Assert.Equal(text, MentionParser.Strip(text));
+    }
+
+    [Fact]
+    public void Strip_PreservesNewlines()
+    {
+        string text = $"Zeile1\nZeile2 {MentionParser.Token("Person", Guid1)}";
+        Assert.Equal("Zeile1\nZeile2", MentionParser.Strip(text));
+    }
 }

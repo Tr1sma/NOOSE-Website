@@ -38,7 +38,8 @@ else
                 </MudSelect>
             </MudItem>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_input.Description" Label="Beschreibung" Lines="3" Variant="Variant.Outlined" />
+                <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                              Label="Beschreibung" Lines="3" HelperText="@MentionInput.Hint" />
             </MudItem>
             @if (_secrecyOptions.Count > 1)
             {

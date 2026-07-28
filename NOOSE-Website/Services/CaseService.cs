@@ -11,8 +11,12 @@ using NOOSE_Website.Models.Cases;
 
 namespace NOOSE_Website.Services;
 
-public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion) : ICaseService
+public class CaseService(
+    IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion,
+    INotificationService notifications) : ICaseService
 {
+    private static string MentionScope(Case v) => MentionNotify.Scope(v.Description, v.Summary, v.ClosingNote);
+
     public async Task<List<Case>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -116,6 +120,9 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         }
 
         await tx.CommitAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, MentionScope(@case), "einem Vorgang",
+            nameof(Case), @case.Id, actor, cancellationToken);
         return @case;
     }
 
@@ -131,6 +138,7 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
         // Track the completion timestamp with the status: set on close, clear when reopened.
         var wasCompleted = CaseStatusDisplay.IsCompleted(@case.Status);
         var isCompleted = CaseStatusDisplay.IsCompleted(input.Status);
+        var oldMentions = MentionScope(@case);
 
         @case.Title = input.Title.Trim();
         @case.Type = input.Type.TrimToNull();
@@ -152,6 +160,9 @@ public class CaseService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberS
 
         await SuggestionsStageAsync(db, @case.IsRestricted, input.Type, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(@case), "einem Vorgang",
+            nameof(Case), @case.Id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

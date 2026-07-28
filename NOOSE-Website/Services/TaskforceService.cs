@@ -11,8 +11,12 @@ using NOOSE_Website.Models.Taskforces;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ITaskforceService" />
-public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber) : ITaskforceService
+public class TaskforceService(
+    IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, INotificationService notifications)
+    : ITaskforceService
 {
+    private static string MentionScope(Taskforce t) => MentionNotify.Scope(t.Purpose, t.Remarks);
+
     public async Task<List<Taskforce>> GetListAsync(bool mayAll, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -119,6 +123,9 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
 
         await tx.CommitAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, MentionScope(taskforce), "einer Taskforce",
+            nameof(Taskforce), taskforce.Id, actor, cancellationToken);
         return taskforce;
     }
 
@@ -133,6 +140,7 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
 
+        var oldMentions = MentionScope(taskforce);
         taskforce.Name = input.Name.Trim();
         taskforce.Purpose = input.Purpose.TrimToNull();
         taskforce.Scope = input.Scope;
@@ -140,6 +148,9 @@ public class TaskforceService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         taskforce.IsClassified = input.IsClassified;
 
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(taskforce), "einer Taskforce",
+            nameof(Taskforce), id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

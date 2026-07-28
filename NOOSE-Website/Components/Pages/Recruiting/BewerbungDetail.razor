@@ -129,8 +129,8 @@ else
                                                OnClick="@(() => SetStatus(BewerbungStatus.Angenommen))">Annehmen</MudButton>
                                 }
                             </MudStack>
-                            <MudTextField @bind-Value="_note" Label="Notiz (für Annahme/Ablehnung/Schließen)" Variant="Variant.Outlined"
-                                          Margin="Margin.Dense" Lines="2" />
+                            <MentionInput @bind-Text="_note" Label="Notiz (für Annahme/Ablehnung/Schließen)"
+                                          Lines="2" HelperText="@MentionInput.Hint" />
                             <MudStack Row="true" Spacing="2">
                                 <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                            OnClick="@(() => SetStatus(BewerbungStatus.Abgelehnt))">Ablehnen</MudButton>
@@ -144,13 +144,13 @@ else
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
                         Abgeschlossen@(string.IsNullOrWhiteSpace(_b.DecidedByName) ? "" : $" von {_b.DecidedByName}")@(_b.DecidedAt is { } d ? $" am {d.ToLocalTime():dd.MM.yyyy HH:mm}" : "").
-                        @if (!string.IsNullOrWhiteSpace(_b.DecisionNote)) { <text> Notiz: @_b.DecisionNote</text> }
+                        @if (!string.IsNullOrWhiteSpace(_b.DecisionNote)) { <text> Notiz: <MentionDisplay Text="@_b.DecisionNote" /></text> }
                     </MudAlert>
                     @if (_canWrite && _b.Status is BewerbungStatus.Angenommen or BewerbungStatus.Abgelehnt)
                     {
                         <MudStack Spacing="2" Class="mt-3">
-                            <MudTextField @bind-Value="_note" Label="Notiz (für Entscheidungsänderung)"
-                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                            <MentionInput @bind-Text="_note" Label="Notiz (für Entscheidungsänderung)"
+                                          Lines="2" HelperText="@MentionInput.Hint" />
                             @if (_b.Status == BewerbungStatus.Angenommen)
                             {
                                 <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"

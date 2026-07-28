@@ -28,7 +28,7 @@ public sealed class PersonServiceTests
         caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("NOOSE-P-2026-0001");
         var threat = Substitute.For<IThreatScoreService>();
-        var svc = new PersonService(ctx.Factory, fileStorage, suggestion, caseNo, threat);
+        var svc = new PersonService(ctx.Factory, fileStorage, suggestion, caseNo, threat, Substitute.For<INotificationService>());
         return (svc, fileStorage, suggestion, caseNo, threat);
     }
 

@@ -92,8 +92,8 @@
                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.PersonAdd" />
             }
             <MudCheckBox T="bool" @bind-Value="_reqIncludesChildren" Color="Color.Primary" Label="Ganze Akte (inklusive Unterpunkte)" Class="mb-3" />
-            <MudTextField @bind-Value="_reqJustification" Label="Begründung" Variant="Variant.Outlined"
-                          Lines="3" Required="true" Placeholder="Warum sollte diese Akte freigegeben werden?" />
+            <MentionInput @bind-Text="_reqJustification" Label="Begründung" Lines="3" Required="true"
+                          Placeholder="Warum sollte diese Akte freigegeben werden?" HelperText="@MentionInput.Hint" />
         }
     </DialogContent>
     <DialogActions>

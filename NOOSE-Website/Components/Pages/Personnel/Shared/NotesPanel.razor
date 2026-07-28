@@ -2,6 +2,7 @@
 @inject IPersonnelFileService PersonnelFileService
 @inject IAgentManagementService AgentService
 @inject IPersonnelTemplateService PersonnelTemplateService
+@inject IPlaceholderService Placeholder
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -190,8 +191,10 @@
         {
             return;
         }
-        _newHtml = t.ContentHtml;
-        await _editor.SetHtmlAsync(t.ContentHtml);
+        // {{Name}} resolves to the agent this personnel file belongs to
+        var html = await Placeholder.ApplyAsync(t.ContentHtml, nameof(Agent), AgentId, _user);
+        _newHtml = html;
+        await _editor.SetHtmlAsync(html);
     }
 
     private async Task AddAsync()

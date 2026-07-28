@@ -60,7 +60,8 @@ public sealed class FactionServiceTests
             suggestion ?? Substitute.For<IProfileSuggestionService>(),
             personService ?? Substitute.For<IPersonService>(),
             photo ?? PhotoStorage(),
-            threat ?? Substitute.For<IThreatScoreService>());
+            threat ?? Substitute.For<IThreatScoreService>(),
+            Substitute.For<INotificationService>());
 
     // ==================== GetListAsync ====================
 

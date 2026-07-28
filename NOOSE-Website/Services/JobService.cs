@@ -158,6 +158,9 @@ public class JobService(
             $"Dir wurde eine Aufgabe zugewiesen: „{job.Title}“.", $"/aufgaben/{job.Id}",
             triggerId: creatorId, cancellationToken);
 
+        await MentionNotify.DeltaAsync(notifications, null, job.Description, "einer Aufgabe",
+            nameof(Job), job.Id, actor, cancellationToken);
+
         return job;
     }
 
@@ -170,6 +173,7 @@ public class JobService(
         RequireCreatorOrLeadership(job, actor);
 
         var alterStatus = job.Status;
+        var oldMentions = job.Description;
         job.Title = input.Title.Trim();
         job.Description = input.Description.TrimToNull();
         job.Priority = input.Priority;
@@ -184,6 +188,8 @@ public class JobService(
         await db.SaveChangesAsync(cancellationToken);
 
         await NotifyCreatorOnDoneAsync(job, alterStatus, actor, cancellationToken);
+        await MentionNotify.DeltaAsync(notifications, oldMentions, job.Description, "einer Aufgabe",
+            nameof(Job), job.Id, actor, cancellationToken);
     }
 
     public async Task StatusSetAsync(string id, JobStatus status, ClaimsPrincipal actor,

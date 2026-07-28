@@ -79,21 +79,21 @@ else
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Ablauf</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_operation.Expiry</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_operation.Expiry" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_operation.Result))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Ergebnis</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_operation.Result</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_operation.Result" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_operation.Remarks))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Bemerkungen</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;">@_operation.Remarks</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-line;"><MentionDisplay Text="@_operation.Remarks" /></MudText>
                             </div>
                         }
                         @if (string.IsNullOrWhiteSpace(_operation.Expiry) && string.IsNullOrWhiteSpace(_operation.Result) && string.IsNullOrWhiteSpace(_operation.Remarks))

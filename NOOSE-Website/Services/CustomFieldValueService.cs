@@ -1,12 +1,14 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) : ICustomFieldValueService
+public class CustomFieldValueService(
+    IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : ICustomFieldValueService
 {
     public async Task<List<CustomFieldValueDisplay>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default, ViewerScope? scope = null)
     {
@@ -67,6 +69,8 @@ public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) 
             .Where(w => w.EntityType == entityType && w.EntityId == entityId)
             .ToListAsync(cancellationToken);
         var existingPerDef = existing.ToDictionary(w => w.CustomFieldDefinitionId);
+        // all values as one text: mentions are pinged per save, not per field
+        var oldText = string.Join(" ", existing.Select(w => w.Value));
 
         foreach (var def in definitions)
         {
@@ -99,5 +103,9 @@ public class CustomFieldValueService(IDbContextFactory<AppDbContext> dbFactory) 
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        var newText = MentionNotify.Scope(definitions.Select(d => valuesPerDefinition.GetValueOrDefault(d.Id)).ToArray());
+        await MentionNotify.DeltaAsync(notifications, oldText, newText, "einem Zusatzfeld",
+            entityType, entityId, actor, cancellationToken);
     }
 }

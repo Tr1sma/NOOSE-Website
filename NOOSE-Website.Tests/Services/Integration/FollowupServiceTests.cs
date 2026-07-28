@@ -6,13 +6,15 @@ using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
 /// <summary>Integration tests for <see cref="FollowupService"/> against in-memory SQLite.</summary>
 public sealed class FollowupServiceTests
 {
-    private static FollowupService Build(SqliteTestContext ctx) => new(ctx.Factory);
+    private static FollowupService Build(SqliteTestContext ctx, INotificationService? notifications = null)
+        => new(ctx.Factory, notifications ?? Substitute.For<INotificationService>());
 
     // Rank >= SupervisorySpecialAgent(4) or admin => IsLeadership() + MayClassifiedRead().
     private static ClaimsPrincipal Leader(string id = "lead")
@@ -141,6 +143,56 @@ public sealed class FollowupServiceTests
         Assert.Equal("me", stored.ResponsibleAgentId); // null selection defaults to the creator
         Assert.Equal(due, stored.DueAt);
         Assert.False(stored.Done);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NotifiesMentions_GatedOnTheHostRecord()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p9"));
+            db.SaveChanges();
+        }
+        var notifications = Substitute.For<INotificationService>();
+        var svc = Build(ctx, notifications);
+        var due = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        await svc.CreateAsync("Person", "p9", new FollowupInput(due, "Notiz", null), Junior("me"));
+
+        // host record, never the Followup itself: Visibility treats an unknown type as visible
+        await notifications.Received(1).NotifyMentionedDeltaAsync(
+            Arg.Is<string?>(s => s == null), Arg.Is<string?>(s => s == "Notiz"),
+            Arg.Any<string>(), Arg.Any<string?>(),
+            Arg.Is<string>(t => t == "Person"), Arg.Is<string>(i => i == "p9"),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NotifiesOnlyTheDelta()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p10"));
+            db.Followups.Add(MakeFollowup("Person", "p10", f =>
+            {
+                f.Id = "w10";
+                f.Note = "alt";
+                f.CreatedById = "me";
+            }));
+            db.SaveChanges();
+        }
+        var notifications = Substitute.For<INotificationService>();
+        var svc = Build(ctx, notifications);
+
+        await svc.RefreshAsync("w10", new FollowupInput(Future, "neu", null), Junior("me"));
+
+        await notifications.Received(1).NotifyMentionedDeltaAsync(
+            Arg.Is<string?>(s => s == "alt"), Arg.Is<string?>(s => s == "neu"),
+            Arg.Any<string>(), Arg.Any<string?>(),
+            Arg.Is<string>(t => t == "Person"), Arg.Is<string>(i => i == "p10"),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

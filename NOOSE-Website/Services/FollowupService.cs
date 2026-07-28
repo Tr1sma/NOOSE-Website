@@ -9,8 +9,10 @@ using NOOSE_Website.Models.Common;
 
 namespace NOOSE_Website.Services;
 
-public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollowupService
+public class FollowupService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : IFollowupService
 {
+    private const string Mentioned = "einer Wiedervorlage";
+
     public async Task<List<FollowupItem>> GetForRecordAsync(string entityType, string entityId,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
@@ -78,15 +80,19 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
 
         var responsibleId = await DetermineResponsibleAsync(db, input.ResponsibleAgentId, actor, cancellationToken);
 
+        var note = input.Note.TrimToNull();
         db.Followups.Add(new Followup
         {
             EntityType = entityType,
             EntityId = entityId,
             DueAt = input.DueAt.ToUniversalTime(),
-            Note = input.Note.TrimToNull(),
+            Note = note,
             ResponsibleAgentId = responsibleId,
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, note, Mentioned, entityType, entityId,
+            actor, cancellationToken);
     }
 
     public async Task RefreshAsync(string id, FollowupInput input, ClaimsPrincipal actor,
@@ -103,10 +109,14 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory) : IFollo
         {
             w.NotifiedAt = null;
         }
+        var oldNote = w.Note;
         w.DueAt = newDue;
         w.Note = input.Note.TrimToNull();
         w.ResponsibleAgentId = await DetermineResponsibleAsync(db, input.ResponsibleAgentId, actor, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldNote, w.Note, Mentioned, w.EntityType, w.EntityId,
+            actor, cancellationToken);
     }
 
     public async Task CompleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

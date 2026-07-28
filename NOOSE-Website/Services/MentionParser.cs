@@ -26,4 +26,19 @@ public static partial class MentionParser
 
     /// <summary>Builds the storage token for a reference: <c>@{Type:Id}</c>.</summary>
     public static string Token(string type, string id) => $"@{{{type}:{id}}}";
+
+    [GeneratedRegex(@"[ \t]{2,}")]
+    private static partial Regex GapRegex();
+
+    /// <summary>Drops all tokens for contexts that never resolve them (search snippets, fuzzy matching, exports).</summary>
+    public static string Strip(string? text)
+    {
+        // no '@' means no token; skips the regex on the overwhelming majority of texts
+        if (string.IsNullOrEmpty(text) || !text.Contains('@'))
+        {
+            return text ?? string.Empty;
+        }
+        var bare = TokenRegex().Replace(text, " ");
+        return GapRegex().Replace(bare, " ").Trim();
+    }
 }

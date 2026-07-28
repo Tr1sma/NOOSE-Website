@@ -1,4 +1,5 @@
 @inject IFollowupService FollowupService
+@inject IMentionService MentionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IPartnerShareService PartnerShareService
@@ -52,7 +53,7 @@
 
                     @if (!string.IsNullOrWhiteSpace(w.Note))
                     {
-                        <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@w.Note</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1"><MentionText Segments="Segments(w)" /></MudText>
                     }
                     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
                         Zuständig: @(w.ResponsibleCodename ?? "—")
@@ -90,7 +91,7 @@
                                 </MudStack>
                                 @if (!string.IsNullOrWhiteSpace(w.Note))
                                 {
-                                    <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-wrap;">@w.Note</MudText>
+                                    <MudText Typo="Typo.body2" Class="mt-1"><MentionText Segments="Segments(w)" /></MudText>
                                 }
                             </MudPaper>
                         }
@@ -110,6 +111,10 @@
     private bool _canShareChildren;
     private List<FollowupItem> _open = new();
     private List<FollowupItem> _done = new();
+    private Dictionary<string, IReadOnlyList<MentionSegment>> _segments = new();
+
+    private IReadOnlyList<MentionSegment> Segments(FollowupItem w)
+        => _segments.TryGetValue(w.Id, out var s) ? s : new[] { new MentionSegment(false, w.Note ?? string.Empty) };
 
     protected override async Task OnInitializedAsync()
     {
@@ -128,6 +133,10 @@
         var all = await FollowupService.GetForRecordAsync(EntityType, EntityId, User);
         _open = all.Where(w => !w.Done).ToList();
         _done = all.Where(w => w.Done).ToList();
+        // resolve all notes in one batch
+        var resolved = await MentionService.ResolveManyAsync(all.Select(w => w.Note).ToList(),
+            User.MayClassifiedRead(), User.GetAgentId(), partnerAgency: User.GetPartnerAgency());
+        _segments = all.Select((w, i) => (w.Id, resolved[i])).ToDictionary(x => x.Id, x => x.Item2);
         _load = false;
     }
 

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -366,6 +367,40 @@ public sealed class PlaceholderServiceTests
         var result = await svc.ApplyAsync("{{Name}}|{{Aktenzeichen}}", nameof(Taskforce), "t1", Leader());
 
         Assert.Equal("TF Sturm|NOOSE-TF-2026-0001", result);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ResolvesAgent_UsingCodename_AndNoCaseNumber()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", configure: a => { a.Codename = "Wolf"; a.RealName = "Klaus Klarname"; }));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.ApplyAsync("{{Name}}|{{Aktenzeichen}}", nameof(Agent), "a1", Leader());
+
+        // Codename, never the real name; agents carry no case number.
+        Assert.Equal("Wolf|", result);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Agent_NonLeadership_DoesNotResolve()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", configure: a => a.Codename = "Wolf"));
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        // Agent records are leadership-only => a junior agent resolves nothing.
+        var result = await svc.ApplyAsync("[{{Name}}]", nameof(Agent), "a1", Regular());
+
+        Assert.Equal("[]", result);
     }
 
     [Fact]

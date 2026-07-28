@@ -9,6 +9,8 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Recruiting;
 
 namespace NOOSE_Website.Models.Common;
 
@@ -27,7 +29,11 @@ public class SearchCriteria
 }
 
 /// <summary>A single search hit. Category is the CLR type of the source; TargetType null means category is the target type.</summary>
-public record SearchHit(string Category, string TargetId, string Title, string Snippet, string CaseNumber, string? TargetType = null);
+public record SearchHit(string Category, string TargetId, string Title, string Snippet, string CaseNumber, string? TargetType = null)
+{
+    /// <summary>Stripped here rather than at the ~20 call sites: result lists render the snippet raw and never resolve mention tokens.</summary>
+    public string Snippet { get; init; } = NOOSE_Website.Services.MentionParser.Strip(Snippet);
+}
 
 /// <summary>Hits of one category bundled for grouped display.</summary>
 public record SearchResultGroup(string Category, string Display, List<SearchHit> Hit);
@@ -52,6 +58,8 @@ public static class SearchNavigation
         nameof(Meeting) => $"/besprechungen/{targetId}",
         nameof(Document) => $"/dokumente/{targetId}",
         nameof(Law) => $"/gesetze/{targetId}",
+        nameof(Agent) => $"/personal/{targetId}",
+        nameof(Bewerbung) => $"/bewerbungen/{targetId}",
         _ => $"/personen/{targetId}",
     };
 

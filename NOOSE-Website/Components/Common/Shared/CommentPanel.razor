@@ -10,9 +10,7 @@
     @if (_mayWrite)
     {
         <MudStack Spacing="2">
-            <MentionInput @bind-Text="_newText" IsLeadership="_isLeadership"
-                            MayClassifiedRead="_mayClassifiedRead" MayRealName="_mayRealName"
-                            Placeholder="@Placeholder" OnSubmit="AddAsync" />
+            <MentionInput @bind-Text="_newText" Placeholder="@Placeholder" OnSubmit="AddAsync" />
             <MudStack Row="true" Justify="Justify.FlexEnd">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newText))">

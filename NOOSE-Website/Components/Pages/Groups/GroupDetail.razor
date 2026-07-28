@@ -79,14 +79,14 @@ else
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Ziele</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_group.Targets</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_group.Targets" /></MudText>
                             </div>
                         }
                         @if (!string.IsNullOrWhiteSpace(_group.Description))
                         {
                             <div>
                                 <MudText Typo="Typo.subtitle2">Beschreibung</MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_group.Description</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_group.Description" /></MudText>
                             </div>
                         }
                         @if (string.IsNullOrWhiteSpace(_group.Targets) && string.IsNullOrWhiteSpace(_group.Description))

@@ -81,7 +81,14 @@ else
             <MudTd DataLabel="Grund">
                 <MudText Typo="Typo.body2" Class="mud-text-secondary"
                          Style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                    @(string.IsNullOrWhiteSpace(context.Doc.Reason) ? "—" : context.Doc.Reason)
+                    @if (string.IsNullOrWhiteSpace(context.Doc.Reason))
+                    {
+                        <text>—</text>
+                    }
+                    else
+                    {
+                        <MentionDisplay Text="@context.Doc.Reason" />
+                    }
                 </MudText>
             </MudTd>
         </RowTemplate>

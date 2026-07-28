@@ -3,7 +3,9 @@
 @inject IMentionService MentionService
 
 <MudTextField T="string" Value="@_text" ValueChanged="OnTextChanged" Immediate="true"
-              Placeholder="@Placeholder" Variant="Variant.Outlined" Lines="2"
+              Label="@Label" Placeholder="@Placeholder" HelperText="@HelperText" Variant="Variant.Outlined"
+              Lines="@Lines" MaxLength="@MaxLength" Disabled="@Disabled" Class="@Class"
+              Required="@Required" RequiredError="@RequiredError" AutoFocus="@AutoFocus"
               Adornment="@(_isPartner ? Adornment.None : Adornment.End)" AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
               OnAdornmentClick="ManualOpenAsync" AdornmentAriaLabel="Objekt verlinken"
               OnKeyDown="OnKeyDown" />
@@ -46,20 +48,31 @@
 }
 
 @code {
+    @* a literal @ can't sit in a Razor attribute, so callers bind this instead *@
+    /// <summary>Discovery hint for helper texts; the @-picker is otherwise easy to miss.</summary>
+    public const string Hint = "Verlinken per @.";
+
     [Parameter] public string Text { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> TextChanged { get; set; }
-    [Parameter] public bool IsLeadership { get; set; }
-    /// <summary>Whether the viewer may see classified records.</summary>
-    [Parameter] public bool MayClassifiedRead { get; set; }
-    /// <summary>Whether the viewer may see real names.</summary>
-    [Parameter] public bool MayRealName { get; set; }
     [Parameter] public string? Placeholder { get; set; }
     /// <summary>Raised on Ctrl+Enter.</summary>
     [Parameter] public EventCallback OnSubmit { get; set; }
 
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public int Lines { get; set; } = 2;
+    [Parameter] public int MaxLength { get; set; } = 524288;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public bool Required { get; set; }
+    [Parameter] public string? RequiredError { get; set; }
+    [Parameter] public bool AutoFocus { get; set; }
+
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
     private string? _meId;
     private bool _isPartner;
+    private bool _mayClassifiedRead;
+    private bool _mayRealName;
 
     protected override async Task OnInitializedAsync()
     {
@@ -69,6 +82,8 @@
             _meId = user.GetAgentId();
             // partners post plain text: the @-picker is unscoped, so it stays disabled for them
             _isPartner = user.IsPartner();
+            _mayClassifiedRead = user.MayClassifiedRead();
+            _mayRealName = user.MayRealNameSee();
         }
     }
 
@@ -110,7 +125,7 @@
             _candidates = new();
             return;
         }
-        _candidates = await MentionService.CandidatesAsync(m.Groups[1].Value, MayClassifiedRead, MayRealName, _meId);
+        _candidates = await MentionService.CandidatesAsync(m.Groups[1].Value, _mayClassifiedRead, _mayRealName, _meId);
         _pickerOpen = _candidates.Count > 0;
     }
 
@@ -158,7 +173,7 @@
             _references = new();
             return;
         }
-        var segments = await MentionService.ResolveAsync(_text, MayClassifiedRead, _meId);
+        var segments = await MentionService.ResolveAsync(_text, _mayClassifiedRead, _meId);
         _references = segments.Where(s => s.IsReference).ToList();
     }
 
@@ -191,6 +206,11 @@
         nameof(Party) => Icons.Material.Filled.AccountBalance,
         nameof(Operation) => Icons.Material.Filled.Radar,
         nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
+        nameof(Appointment) => Icons.Material.Filled.Event,
+        nameof(Meeting) => Icons.Material.Filled.Groups,
+        nameof(Document) => Icons.Material.Filled.Article,
         nameof(Source) => Icons.Material.Filled.AttachFile,
         nameof(Agent) => Icons.Material.Filled.Person,
         _ => Icons.Material.Filled.Link,
@@ -204,6 +224,11 @@
         nameof(Party) => "Partei",
         nameof(Operation) => "Operation",
         nameof(Taskforce) => "Taskforce",
+        nameof(Case) => "Vorgang",
+        nameof(Job) => "Aufgabe",
+        nameof(Appointment) => "Termin",
+        nameof(Meeting) => "Besprechung",
+        nameof(Document) => "Dokument",
         nameof(Source) => "Quelle",
         nameof(Agent) => "Agent",
         _ => "",

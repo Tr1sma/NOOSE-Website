@@ -44,7 +44,7 @@
                     „Gesichert staatsgefährdend“ kann erst ab Senior Special Agent direkt gesetzt werden.
                 </MudAlert>
             }
-            <MudTextField @bind-Value="_justification" Immediate="true" Lines="2" Variant="Variant.Outlined"
+            <MentionInput @bind-Text="_justification" Lines="2" HelperText="@MentionInput.Hint"
                           Label="@(_isRequest ? "Begründung (für den Antrag erforderlich)" : "Begründung (optional)")" />
             <div>
                 @if (_isRequest)
@@ -98,7 +98,7 @@
                     </MudText>
                     @if (!string.IsNullOrWhiteSpace(v.Justification))
                     {
-                        <MudText Typo="Typo.body2">@v.Justification</MudText>
+                        <MudText Typo="Typo.body2"><MentionDisplay Text="@v.Justification" /></MudText>
                     }
                 </MudTimelineItem>
             }

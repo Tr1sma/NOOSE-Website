@@ -29,7 +29,7 @@ public sealed class RelationServiceTests
     private static ViewerScope PlainScope() => ViewerScope.From(Junior());
 
     private static RelationService NewService(SqliteTestContext ctx, IThreatScoreService? threat = null)
-        => new(ctx.Factory, threat ?? Substitute.For<IThreatScoreService>());
+        => new(ctx.Factory, threat ?? Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>());
 
     private static PersonRelation NewRelation(string id, string aId, string bId, RelationType type,
         DateTime createdAt, string? note = null)

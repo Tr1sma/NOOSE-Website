@@ -12,8 +12,12 @@ using NOOSE_Website.Models.Operations;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IOperationService" />
-public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion) : IOperationService
+public class OperationService(
+    IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion,
+    INotificationService notifications) : IOperationService
 {
+    private static string MentionScope(Operation o) => MentionNotify.Scope(o.Expiry, o.Result, o.Remarks);
+
     public async Task<List<Operation>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -107,6 +111,9 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
 
         await tx.CommitAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, null, MentionScope(operation), "einer Operation",
+            nameof(Operation), operation.Id, actor, cancellationToken);
         return operation;
     }
 
@@ -119,6 +126,7 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
         Permission.RequireMaySeeClassified(actor, operation.SecrecyLevel);
 
+        var oldMentions = MentionScope(operation);
         operation.Title = input.Title.Trim();
         operation.Type = input.Type.TrimToNull();
         operation.Status = input.Status;
@@ -133,6 +141,9 @@ public class OperationService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
         await SuggestionsStageAsync(db, operation.IsRestricted, input.Type, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(operation), "einer Operation",
+            nameof(Operation), operation.Id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

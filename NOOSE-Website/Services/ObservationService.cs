@@ -5,13 +5,23 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IObservationService" />
-public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IObservationService
+public class ObservationService(
+    IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat, INotificationService notifications)
+    : IObservationService
 {
+    private const string Mentioned = "einer Beobachtung";
+
+    private Task NotifyMentionsAsync(string? oldText, string? newText, string personId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+        => MentionNotify.DeltaAsync(notifications, oldText, newText, Mentioned, nameof(Person), personId,
+            actor, cancellationToken);
+
     public async Task<List<ObservationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -139,6 +149,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
         await db.SaveChangesAsync(cancellationToken);
         // feeds person score
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
+        await NotifyMentionsAsync(null, MentionNotify.Scope(obs.Sighting, obs.Result), personId, actor, cancellationToken);
         return obs;
     }
 
@@ -156,6 +167,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
             Permission.RequireMaySeeClassified(actor, obsPerson.SecrecyLevel);
         }
 
+        var oldText = MentionNotify.Scope(obs.Sighting, obs.Result);
         obs.Start = input.Start;
         obs.End = input.End;
         obs.Location = input.Location.TrimToNull();
@@ -168,6 +180,7 @@ public class ObservationService(IDbContextFactory<AppDbContext> dbFactory, IThre
 
         await db.SaveChangesAsync(cancellationToken);
         await threat.NewCalculatePersonScoreAsync(obs.PersonId, cancellationToken);
+        await NotifyMentionsAsync(oldText, MentionNotify.Scope(obs.Sighting, obs.Result), obs.PersonId, actor, cancellationToken);
         return obs;
     }
 

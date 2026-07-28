@@ -35,8 +35,8 @@
             switch (f.Definition.FieldType)
             {
                 case CustomFieldType.Multiline:
-                    <MudTextField T="string" Label="@label" Lines="3" Variant="Variant.Outlined"
-                                  Value="@_values[id]" ValueChanged="@(v => _values[id] = v)" />
+                    <MentionInput Label="@label" Lines="3" HelperText="@MentionInput.Hint"
+                                  Text="@(_values[id] ?? string.Empty)" TextChanged="@(v => _values[id] = v)" />
                     break;
                 case CustomFieldType.Number:
                     <MudNumericField T="decimal?" Label="@label" Variant="Variant.Outlined" Culture="@CultureInfo.InvariantCulture"

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Models.Enums;
@@ -8,8 +9,15 @@ using NOOSE_Website.Models.Common;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IRelationService" />
-public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat) : IRelationService
+public class RelationService(
+    IDbContextFactory<AppDbContext> dbFactory, IThreatScoreService threat, INotificationService notifications)
+    : IRelationService
 {
+    private Task NotifyMentionsAsync(string? oldNote, string? newNote, string personId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+        => MentionNotify.DeltaAsync(notifications, oldNote, newNote, "einer Beziehung", nameof(Person), personId,
+            actor, cancellationToken);
+
     public async Task<List<RelationDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -84,6 +92,7 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
         // relation affects the score of both persons
         await threat.NewCalculatePersonScoreAsync(personAId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personBId, cancellationToken);
+        await NotifyMentionsAsync(null, note, personAId, actor, cancellationToken);
     }
 
     public async Task UpdateAsync(string relationId, RelationType type, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -105,6 +114,7 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
                     "Eine Beziehung dieses Typs besteht bereits zwischen den beiden Personen.");
         }
         bool typeChanged = relation.Type != type;
+        var oldNote = relation.Note;
         relation.Type = type;
         relation.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         await db.SaveChangesAsync(cancellationToken);
@@ -114,6 +124,7 @@ public class RelationService(IDbContextFactory<AppDbContext> dbFactory, IThreatS
             await threat.NewCalculatePersonScoreAsync(relation.PersonAId, cancellationToken);
             await threat.NewCalculatePersonScoreAsync(relation.PersonBId, cancellationToken);
         }
+        await NotifyMentionsAsync(oldNote, relation.Note, relation.PersonAId, actor, cancellationToken);
     }
 
     public async Task RemoveAsync(string relationId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

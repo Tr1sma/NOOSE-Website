@@ -16,8 +16,10 @@ public static class TextSimilarity
     {
         var quantity = new HashSet<string>(StringComparer.Ordinal);
         var word = new StringBuilder();
-        foreach (var text in texts)
+        foreach (var raw in texts)
         {
+            // mention tokens are storage syntax; splitting them would index "agent" and GUID fragments as words
+            var text = MentionParser.Strip(raw);
             if (string.IsNullOrEmpty(text))
             {
                 continue;

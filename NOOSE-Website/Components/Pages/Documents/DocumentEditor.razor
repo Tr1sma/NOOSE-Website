@@ -1,6 +1,7 @@
 @* WYSIWYG editor to create/edit a library document; may attach to a record or preselect a template via query. *@
 @page "/dokumente/neu"
 @page "/dokumente/{Id}/bearbeiten"
+@using NOOSE_Website.Infrastructure
 @inject IDocumentService DocumentService
 @inject IDocumentTemplateService TemplateService
 @inject IPlaceholderService Placeholder
@@ -133,7 +134,10 @@ else
         }
         else
         {
-            _templates = await TemplateService.GetActiveAsync();
+            // recruiting letters share this table but use the bare-word token scheme, which this editor cannot fill
+            _templates = (await TemplateService.GetActiveAsync())
+                .Where(v => !string.Equals(v.Category, RecruitingSeeder.TemplateCategory, StringComparison.OrdinalIgnoreCase))
+                .ToList();
             // Editor reads the value only on init, so inject the template into the initial content.
             if (!string.IsNullOrEmpty(templateId))
             {

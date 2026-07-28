@@ -33,11 +33,11 @@ else
                     }
                     @if (!string.IsNullOrWhiteSpace(_group.Targets))
                     {
-                        <tr><th>Ziele</th><td class="druck-mehrzeilig">@_group.Targets</td></tr>
+                        <tr><th>Ziele</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_group.Targets" Plain="true" /></td></tr>
                     }
                     @if (!string.IsNullOrWhiteSpace(_group.Description))
                     {
-                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig">@_group.Description</td></tr>
+                        <tr><th>Beschreibung</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_group.Description" Plain="true" /></td></tr>
                     }
                     <tr><th>Zuletzt aktualisiert</th><td>@((_group.ModifiedAt ?? _group.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
                 </tbody>

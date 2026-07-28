@@ -1,5 +1,6 @@
 @implements IAsyncDisposable
 @inject IBewerbungService BewerbungService
+@inject IMentionService MentionService
 @inject IDocumentTemplateService TemplateService
 @inject BewerbungBroadcaster Broadcaster
 @inject ISnackbar Snackbar
@@ -25,6 +26,10 @@
                         @if (_richMode)
                         {
                             <div class="dokument-html bewerbung-chat-html mud-typography-body2">@((MarkupString)m.Text)</div>
+                        }
+                        else if (_segments.TryGetValue(m.Id, out var segments))
+                        {
+                            <MudText Typo="Typo.body2"><MentionText Segments="segments" /></MudText>
                         }
                         else
                         {
@@ -95,8 +100,7 @@
             }
             else
             {
-                <MudTextField @bind-Value="_text" Variant="Variant.Outlined" Lines="3"
-                              Placeholder="@Placeholder" Immediate="true" />
+                <MentionInput @bind-Text="_text" Lines="3" Placeholder="@Placeholder" OnSubmit="SendAsync" />
             }
             <MudStack Row="true" AlignItems="AlignItems.Center"
                       Justify="@(CollapsibleComposer ? Justify.SpaceBetween : Justify.FlexEnd)" Class="mt-1">
@@ -126,7 +130,7 @@
     // collapse composer to a one-line bar so reading gets the full height
     [Parameter] public bool CollapsibleComposer { get; set; }
 
-    private const string Placeholder = "Nachricht verfassen …";
+    private const string Placeholder = "Nachricht verfassen … (Verlinken per @, Strg+Enter sendet)";
     private bool _load = true;
     private bool _sends;
     private string _text = string.Empty;
@@ -137,8 +141,12 @@
     private DateTime? _pickDate;
     private TimeSpan? _pickTime;
     private string? _myId;
+    private bool _isLeadership;
+    private bool _mayClassifiedRead;
+    private bool _mayRealName;
     private bool _composerOpen;
     private List<BewerbungMessage> _messages = new();
+    private Dictionary<string, IReadOnlyList<MentionSegment>> _segments = new();
     private List<DocumentTemplate> _templates = new();
 
     // applicant-facing thread is rich text (formatting preserved); internal thread stays plain text + mentions
@@ -152,6 +160,9 @@
     protected override async Task OnInitializedAsync()
     {
         _myId = User.GetAgentId();
+        _isLeadership = User.IsLeadership();
+        _mayClassifiedRead = User.MayClassifiedRead();
+        _mayRealName = User.MayRealNameSee();
         Broadcaster.Modified += OnModified;
         await LoadAsync();
         if (ShowTemplates)
@@ -171,12 +182,30 @@
         try
         {
             _messages = await BewerbungService.GetMessagesAsync(BewerbungId, Audience, User);
+            await SegmentsRefreshAsync();
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
         _load = false;
+    }
+
+    /// <summary>Batch-resolves the internal thread's mentions; the applicant thread carries none.</summary>
+    private async Task SegmentsRefreshAsync()
+    {
+        _segments = new();
+        if (_richMode || _messages.Count == 0)
+        {
+            return;
+        }
+        var resolved = await MentionService.ResolveManyAsync(
+            _messages.Select(m => (string?)m.Text).ToList(), _mayClassifiedRead, _myId,
+            partnerAgency: User.GetPartnerAgency());
+        for (var i = 0; i < _messages.Count; i++)
+        {
+            _segments[_messages[i].Id] = resolved[i];
+        }
     }
 
     private bool IsOwn(BewerbungMessage m)

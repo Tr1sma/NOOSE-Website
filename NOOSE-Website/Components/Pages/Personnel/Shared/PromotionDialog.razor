@@ -1,4 +1,5 @@
 @inject IPersonnelTemplateService PersonnelTemplateService
+@inject IPlaceholderService Placeholder
 
 <MudDialog>
     <DialogContent>
@@ -35,17 +36,21 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
+    [Parameter] public string AgentId { get; set; } = string.Empty;
     [Parameter] public string Codename { get; set; } = string.Empty;
     [Parameter] public Rank Current { get; set; } = Rank.JuniorAgent;
 
     private Rank _target;
     private RichTextEditor _editor = default!;
+    private ClaimsPrincipal _user = default!;
     private string? _selectedTemplateId;
     private List<PersonnelTemplate> _templates = new();
 
     protected override async Task OnInitializedAsync()
     {
+        _user = (await AuthStateTask).User;
         _target = Current;
         _templates = await PersonnelTemplateService.GetActiveAsync(PersonnelTemplateKind.Promotion);
     }
@@ -62,7 +67,9 @@
         {
             return;
         }
-        await _editor.SetHtmlAsync(t.ContentHtml);
+        // {{Name}} resolves to the agent being promoted
+        var html = await Placeholder.ApplyAsync(t.ContentHtml, nameof(Agent), AgentId, _user);
+        await _editor.SetHtmlAsync(html);
     }
 
     private async Task Save()
@@ -75,10 +82,11 @@
 
     public record Choice(Rank TargetRank, string? Justification);
 
-    public static async Task<Choice?> ShowAsync(IDialogService dialog, string codename, Rank current)
+    public static async Task<Choice?> ShowAsync(IDialogService dialog, string agentId, string codename, Rank current)
     {
         var parameters = new DialogParameters<PromotionDialog>
         {
+            { x => x.AgentId, agentId },
             { x => x.Codename, codename },
             { x => x.Current, current },
         };

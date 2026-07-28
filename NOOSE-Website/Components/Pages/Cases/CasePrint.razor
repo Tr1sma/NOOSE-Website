@@ -46,7 +46,7 @@ else
         {
             <section>
                 <h2>Sachverhalt</h2>
-                <div class="druck-mehrzeilig">@_case.Description</div>
+                <div class="druck-mehrzeilig"><MentionDisplay Text="@_case.Description" Plain="true" /></div>
             </section>
         }
 
@@ -54,7 +54,7 @@ else
         {
             <section>
                 <h2>Aktueller Stand</h2>
-                <div class="druck-mehrzeilig">@_case.Summary</div>
+                <div class="druck-mehrzeilig"><MentionDisplay Text="@_case.Summary" Plain="true" /></div>
             </section>
         }
 
@@ -62,7 +62,7 @@ else
         {
             <section>
                 <h2>Abschlussvermerk</h2>
-                <div class="druck-mehrzeilig">@_case.ClosingNote</div>
+                <div class="druck-mehrzeilig"><MentionDisplay Text="@_case.ClosingNote" Plain="true" /></div>
             </section>
         }
 

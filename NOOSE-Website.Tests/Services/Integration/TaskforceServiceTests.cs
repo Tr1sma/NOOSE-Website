@@ -27,7 +27,7 @@ public sealed class TaskforceServiceTests
         var caseNo = Substitute.For<ICaseNumberService>();
         caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("NOOSE-TF-2026-0001");
-        return new TaskforceService(ctx.Factory, caseNo);
+        return new TaskforceService(ctx.Factory, caseNo, Substitute.For<INotificationService>());
     }
 
     private static Taskforce Tf(string id, string name = "Alpha TF", Action<Taskforce>? cfg = null)

@@ -112,7 +112,7 @@ else
                     </MudStack>
                     @if (!string.IsNullOrWhiteSpace(a.DecisionNote))
                     {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">Notiz: @a.DecisionNote</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">Notiz: <MentionDisplay Text="@a.DecisionNote" /></MudText>
                     }
                 }
             </MudStack>

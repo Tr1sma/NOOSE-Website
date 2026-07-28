@@ -13,8 +13,13 @@ using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
-public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion, IPersonService personService, IFactionPhotoStorageService photoStorage, IThreatScoreService threat) : IFactionService
+public class FactionService(
+    IDbContextFactory<AppDbContext> dbFactory, ICaseNumberService caseNumber, IProfileSuggestionService suggestion,
+    IPersonService personService, IFactionPhotoStorageService photoStorage, IThreatScoreService threat,
+    INotificationService notifications) : IFactionService
 {
+    private static string MentionScope(Faction f) => MentionNotify.Scope(f.Description, f.Targets, f.Estate);
+
     public async Task<List<Faction>> GetListAsync(ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -178,6 +183,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await tx.CommitAsync(cancellationToken);
         // Initial threat score now that classification/members/stocks exist.
         await threat.NewCalculateAsync(faction.Id, cancellationToken);
+        await MentionNotify.DeltaAsync(notifications, null, MentionScope(faction), "einer Fraktionsakte",
+            nameof(Faction), faction.Id, actor, cancellationToken);
         return faction;
     }
 
@@ -196,6 +203,7 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         // classified record is writable by leadership or the record's own audience (TRU/HRB), not leadership alone
         Permission.RequireMaySeeClassified(actor, faction.SecrecyLevel);
 
+        var oldMentions = MentionScope(faction);
         faction.Name = input.Name.Trim();
         faction.Kind = input.Kind.TrimToNull();
         faction.Radio = input.Radio.TrimToNull();
@@ -239,6 +247,8 @@ public class FactionService(IDbContextFactory<AppDbContext> dbFactory, ICaseNumb
         await db.SaveChangesAsync(cancellationToken);
         // Master data affects the score.
         await threat.NewCalculateAsync(id, cancellationToken);
+        await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(faction), "einer Fraktionsakte",
+            nameof(Faction), id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

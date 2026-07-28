@@ -31,7 +31,7 @@ public sealed class OperationServiceTests
         caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
               .Returns("NOOSE-OP-2026-0001");
         var suggestion = Substitute.For<IProfileSuggestionService>();
-        var svc = new OperationService(ctx.Factory, caseNo, suggestion);
+        var svc = new OperationService(ctx.Factory, caseNo, suggestion, Substitute.For<INotificationService>());
         return (svc, suggestion);
     }
 

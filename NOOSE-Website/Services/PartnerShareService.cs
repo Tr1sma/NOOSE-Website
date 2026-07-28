@@ -11,13 +11,19 @@ using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Requests;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPartnerShareService" />
-public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IPartnerShareService
+public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory, INotificationService notifications) : IPartnerShareService
 {
+    private Task NotifyMentionsAsync(string? text, string what, string targetType, string targetId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+        => MentionNotify.DeltaAsync(notifications, null, text, $"einer {what} zu einer Freigabe",
+            targetType, targetId, actor, cancellationToken);
+
     public async Task<IReadOnlyList<PartnerShareState>> GetForRecordAsync(string entityType, string entityId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -284,6 +290,8 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
             RequesterName = actor.GetCodename(),
         });
         await db.SaveChangesAsync(cancellationToken);
+
+        await NotifyMentionsAsync(justification, "Begründung", entityType, entityId, actor, cancellationToken);
     }
 
     public async Task<List<Request>> GetPendingPartnerShareRequestsAsync(CancellationToken cancellationToken = default)
@@ -320,6 +328,9 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
 
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
+
+        await NotifyMentionsAsync(request.DecisionNote, "Entscheidung", request.TargetType, request.TargetId,
+            actor, cancellationToken);
     }
 
     public async Task RejectPartnerShareRequestAsync(ClaimsPrincipal actor, string requestId, string? note,
@@ -341,6 +352,9 @@ public class PartnerShareService(IDbContextFactory<AppDbContext> dbFactory) : IP
         request.DecisionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
 
         await db.SaveChangesAsync(cancellationToken);
+
+        await NotifyMentionsAsync(request.DecisionNote, "Entscheidung", request.TargetType, request.TargetId,
+            actor, cancellationToken);
     }
 
     private static async Task<string> GetDesignationAsync(AppDbContext db, string entityType, string entityId, CancellationToken ct)

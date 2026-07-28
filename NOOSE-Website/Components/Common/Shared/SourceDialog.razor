@@ -30,11 +30,13 @@
                         <MudTextField @bind-Value="_input.Url" Label="URL" Variant="Variant.Outlined"
                                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link"
                                       Placeholder="https://…" />
-                        <MudTextField @bind-Value="_input.Description" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
 
                     case SourceType.FreeText:
-                        <MudTextField @bind-Value="_input.Description" Label="Inhalt" Lines="5" Variant="Variant.Outlined"
+                        <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      Label="Inhalt" Lines="5" HelperText="@MentionInput.Hint"
                                       Required="true" RequiredError="Bitte einen Text eingeben" />
                         break;
 
@@ -61,7 +63,8 @@
                                    OnClick="NewDocument">
                             Neues Dokument erstellen
                         </MudButton>
-                        <MudTextField @bind-Value="_input.Description" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
 
                     case SourceType.Internal:
@@ -103,7 +106,8 @@
                                 </ItemTemplate>
                             </MudAutocomplete>
                         }
-                        <MudTextField @bind-Value="_input.Description" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
 
                     case SourceType.Upload:
@@ -124,7 +128,8 @@
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
                             Erlaubt: PDF, Bilder, Office-Dokumente, Text, ZIP – max. @(Storage.MaxBytes / (1024 * 1024)) MB.
                         </MudText>
-                        <MudTextField @bind-Value="_input.Description" Label="Notiz (optional)" Lines="2" Variant="Variant.Outlined" />
+                        <MentionInput Text="@(_input.Description ?? string.Empty)" TextChanged="@(v => _input.Description = v)"
+                                      Label="Notiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
                         break;
                 }
             </MudStack>

@@ -98,6 +98,9 @@ public class AppointmentService(
                 $"Du bist als Teilnehmer eingetragen: „{appointment.Title}“.", $"/kalender/{appointment.Id}", cancellationToken);
         }
 
+        await MentionNotify.DeltaAsync(notifications, null, appointment.Description, "einem Termin",
+            nameof(Appointment), appointment.Id, actor, cancellationToken);
+
         return appointment;
     }
 
@@ -111,6 +114,7 @@ public class AppointmentService(
             ?? throw new InvalidOperationException($"Termin '{id}' nicht gefunden.");
         RequireCreatorOrLeadership(appointment, actor);
 
+        var oldMentions = appointment.Description;
         appointment.Title = input.Title.Trim();
         appointment.Category = input.Category;
         appointment.Status = input.Status;
@@ -121,6 +125,9 @@ public class AppointmentService(
         appointment.Description = input.Description.TrimToNull();
         appointment.Visibility = input.Visibility;
         await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldMentions, appointment.Description, "einem Termin",
+            nameof(Appointment), appointment.Id, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

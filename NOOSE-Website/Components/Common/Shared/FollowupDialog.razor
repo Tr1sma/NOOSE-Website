@@ -7,8 +7,8 @@
                            Variant="Variant.Outlined" DateFormat="dd.MM.yyyy"
                            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Event" />
 
-            <MudTextField @bind-Value="_note" Label="Notiz (optional)" Variant="Variant.Outlined"
-                          Lines="3" MaxLength="500" HelperText="Worum geht es bei dieser Wiedervorlage?" />
+            <MentionInput @bind-Text="_note" Label="Notiz (optional)" Lines="3" MaxLength="500"
+                          HelperText="@($"Worum geht es bei dieser Wiedervorlage? {MentionInput.Hint}")" />
 
             <MudAutocomplete T="Agent" Label="Zuständig (optional)" @bind-Value="_agent"
                              SearchFunc="@SearchAgents" ToStringFunc="@(a => a is null ? string.Empty : a.Codename)"
@@ -47,14 +47,14 @@
     [Parameter] public bool MayRealName { get; set; }
 
     private DateTime? _due;
-    private string? _note;
+    private string _note = string.Empty;
     private Agent? _agent;
     private List<Agent> _all = new();
 
     protected override async Task OnInitializedAsync()
     {
         _due = (DueAt ?? DateTime.UtcNow.AddDays(1)).ToLocalTime().Date;
-        _note = Note;
+        _note = Note ?? string.Empty;
 
         var all = await AgentService.GetAllAsync();
         _all = all.Where(a => a.Status == AgentStatus.Active).ToList();

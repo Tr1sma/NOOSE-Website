@@ -5,14 +5,24 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.People;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IPersonDokService" />
-public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPersonService personService, IThreatScoreService threat) : IPersonDocService
+public class PersonDocService(
+    IDbContextFactory<AppDbContext> dbFactory, IPersonService personService, IThreatScoreService threat,
+    INotificationService notifications) : IPersonDocService
 {
+    private const string Mentioned = "einem Personen-Dok";
+
+    private Task NotifyMentionsAsync(string? oldText, string? newText, string personId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+        => MentionNotify.DeltaAsync(notifications, oldText, newText, Mentioned, nameof(Person), personId,
+            actor, cancellationToken);
+
     public async Task<List<PersonDocDisplay>> GetForPersonAsync(string personId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -128,6 +138,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         // measures feed both faction heat and the person score
         await threat.NewCalculateForPersonAsync(personId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);
+        await NotifyMentionsAsync(null, MentionNotify.Scope(doc.Reason, doc.ReceivedInformation), personId, actor, cancellationToken);
         return doc;
     }
 
@@ -144,6 +155,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         var doc = await CreateDocAsync(db, person.Id, input, cancellationToken);
         await threat.NewCalculateForPersonAsync(person.Id, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(person.Id, cancellationToken);
+        await NotifyMentionsAsync(null, MentionNotify.Scope(doc.Reason, doc.ReceivedInformation), person.Id, actor, cancellationToken);
         return doc;
     }
 
@@ -164,6 +176,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         // capture old state before overwriting; status re-evaluation needs both
         var altOutcome = doc.Outcome;
         var altTimestamp = doc.Timestamp;
+        var oldText = MentionNotify.Scope(doc.Reason, doc.ReceivedInformation);
 
         doc.Timestamp = input.Timestamp;
         doc.Reason = input.Reason.TrimToNull();
@@ -187,6 +200,7 @@ public class PersonDocService(IDbContextFactory<AppDbContext> dbFactory, IPerson
         // changed outcome/timestamp affects faction heat and the person score
         await threat.NewCalculateForPersonAsync(doc.PersonId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(doc.PersonId, cancellationToken);
+        await NotifyMentionsAsync(oldText, MentionNotify.Scope(doc.Reason, doc.ReceivedInformation), doc.PersonId, actor, cancellationToken);
         return doc;
     }
 

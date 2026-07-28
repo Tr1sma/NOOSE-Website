@@ -24,12 +24,13 @@
     </MudItem>
 
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Purpose" Label="Sinn / Zweck" Lines="4" Variant="Variant.Outlined"
-                      HelperText="Auftrag und Ziel der Taskforce." />
+        <MentionInput Text="@(Input.Purpose ?? string.Empty)" TextChanged="@(v => Input.Purpose = v)"
+                      Label="Sinn / Zweck" Lines="4"
+                      HelperText="@($"Auftrag und Ziel der Taskforce. {MentionInput.Hint}")" />
     </MudItem>
     <MudItem xs="12">
-        <MudTextField @bind-Value="Input.Remarks" Label="Bemerkungen" Lines="3" Variant="Variant.Outlined"
-                      HelperText="Interne Vermerke." />
+        <MentionInput Text="@(Input.Remarks ?? string.Empty)" TextChanged="@(v => Input.Remarks = v)"
+                      Label="Bemerkungen" Lines="3" HelperText="Interne Vermerke." />
     </MudItem>
 </MudGrid>
 

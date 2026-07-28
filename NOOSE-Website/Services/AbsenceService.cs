@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Models.Absences;
 using NOOSE_Website.Models.Enums;
@@ -15,6 +16,12 @@ public class AbsenceService(
 {
     /// <summary>A single sign-off may not silence the anomaly detection for years.</summary>
     private const int MaxSpanDays = 180;
+
+    /// <summary>Gated on the agent record, i.e. leadership — which mirrors who may read the reason at all.</summary>
+    private Task NotifyMentionsAsync(string? oldReason, string? newReason, string agentId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+        => MentionNotify.DeltaAsync(notifications, oldReason, newReason, "einer Abmeldung", nameof(Agent), agentId,
+            actor, cancellationToken, href: "/abmeldungen/uebersicht");
 
     public async Task<List<AbsenceRow>> GetListAsync(bool mayAll, string? meId, DateOnly? from = null, DateOnly? to = null,
         CancellationToken cancellationToken = default)
@@ -102,6 +109,7 @@ public class AbsenceService(
         await db.SaveChangesAsync(cancellationToken);
 
         await LeadershipNotifyAsync(db, absence, agentId, cancellationToken);
+        await NotifyMentionsAsync(null, absence.Reason, agentId, actor, cancellationToken);
         return absence;
     }
 
@@ -123,6 +131,7 @@ public class AbsenceService(
                 "Eine Abmeldung kann nur die Führung rückwirkend datieren.");
         }
 
+        var oldReason = absence.Reason;
         absence.FromDate = from;
         absence.ToDate = to;
         absence.Days = to.DayNumber - from.DayNumber + 1;
@@ -133,6 +142,8 @@ public class AbsenceService(
         absence.AcknowledgedById = null;
         absence.AcknowledgedByName = null;
         await db.SaveChangesAsync(cancellationToken);
+
+        await NotifyMentionsAsync(oldReason, absence.Reason, absence.AgentId, actor, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

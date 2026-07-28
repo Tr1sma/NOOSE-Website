@@ -1,0 +1,56 @@
+@* Resolves and renders one text's mention tokens. For lists use ResolveManyAsync + MentionText instead (N+1). *@
+@inject IMentionService MentionService
+
+@if (_segments is null)
+{
+    @Text
+}
+else
+{
+    <MentionText Segments="_segments" Plain="@Plain" />
+}
+
+@code {
+    [Parameter] public string? Text { get; set; }
+
+    /// <summary>Viewer; falls back to the cascading authentication state.</summary>
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+
+    /// <summary>Renders references as bare text instead of chips/links; for print views.</summary>
+    [Parameter] public bool Plain { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private IReadOnlyList<MentionSegment>? _segments;
+    private string? _resolved;
+    private bool _touched;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_touched && _resolved == Text)
+        {
+            return;
+        }
+        _touched = true;
+        _resolved = Text;
+        _segments = null;
+
+        // no token -> render raw, no service call
+        if (MentionParser.Parse(Text).Count == 0)
+        {
+            return;
+        }
+
+        var user = User;
+        if (user is null && AuthStateTask is not null)
+        {
+            user = (await AuthStateTask).User;
+        }
+        if (user is null)
+        {
+            return;
+        }
+        _segments = await MentionService.ResolveAsync(Text, user.MayClassifiedRead(), user.GetAgentId(),
+            partnerAgency: user.GetPartnerAgency());
+    }
+}

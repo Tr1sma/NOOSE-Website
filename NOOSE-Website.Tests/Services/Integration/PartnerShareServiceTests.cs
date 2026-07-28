@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
+using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -12,7 +13,7 @@ namespace NOOSE_Website.Tests.Services.Integration;
 public sealed class PartnerShareServiceTests
 {
     private static PartnerShareService CreateService(SqliteTestContext ctx)
-        => new(ctx.Factory);
+        => new(ctx.Factory, Substitute.For<INotificationService>());
 
     private static PartnerShare SeedShare(SqliteTestContext ctx, string entityType, string entityId,
         PartnerAgency agency, string? partnerAgentId = null, bool includesChildren = false)

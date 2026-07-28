@@ -173,6 +173,126 @@ public class NotificationServiceTests
             Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
     }
 
+    // ---- NotifyMentionedDeltaAsync -----------------------------------------
+
+    // Seeds one active recipient plus a visible person record, the shared setup for the delta tests.
+    private static void SeedRecipientAndTarget(SqliteTestContext ctx, string recipientId = RecipientGuid)
+    {
+        using var seed = ctx.NewContext();
+        seed.Users.Add(Seed.Agent(recipientId, rank: Rank.JuniorAgent, status: AgentStatus.Active));
+        seed.People.Add(Seed.Person(PersonGuid, "Ziel", p => p.IsClassified = false));
+        seed.SaveChanges();
+    }
+
+    [Fact]
+    public async Task NotifyMentionedDeltaAsync_NewToken_Notifies()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedRecipientAndTarget(ctx);
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
+
+        await svc.NotifyMentionedDeltaAsync(
+            "Sachverhalt ohne Erwähnung", $"Sachverhalt mit {MentionToken(RecipientGuid)}",
+            "Erwähnung", "/x", "Person", PersonGuid, trigger);
+
+        using var db = ctx.NewContext();
+        Assert.Equal(RecipientGuid, db.Notifications.Single().RecipientId);
+    }
+
+    [Fact]
+    public async Task NotifyMentionedDeltaAsync_UnchangedToken_DoesNotNotifyAgain()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedRecipientAndTarget(ctx);
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var svc = NewService(ctx, new NotificationBroadcaster(), discord);
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
+        var token = MentionToken(RecipientGuid);
+
+        // same mention, only surrounding prose edited -> no second ping
+        await svc.NotifyMentionedDeltaAsync(
+            $"Fassung eins {token}", $"Fassung zwei {token}", "Erwähnung", "/x", "Person", PersonGuid, trigger);
+
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
+        await discord.DidNotReceive().PushAsync(
+            Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NotifyMentionedDeltaAsync_RemovedToken_DoesNotNotify()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedRecipientAndTarget(ctx);
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
+
+        await svc.NotifyMentionedDeltaAsync(
+            $"Mit {MentionToken(RecipientGuid)}", "Ohne", "Erwähnung", "/x", "Person", PersonGuid, trigger);
+
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
+    }
+
+    [Fact]
+    public async Task NotifyMentionedDeltaAsync_NullOldText_BehavesLikeFullNotify()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedRecipientAndTarget(ctx);
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
+
+        await svc.NotifyMentionedDeltaAsync(
+            null, MentionToken(RecipientGuid), "Erwähnung", "/x", "Person", PersonGuid, trigger);
+
+        using var db = ctx.NewContext();
+        Assert.Equal(RecipientGuid, db.Notifications.Single().RecipientId);
+    }
+
+    [Fact]
+    public async Task NotifyMentionedDeltaAsync_OnlyTheAddedAgentIsNotified()
+    {
+        const string SecondGuid = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+        using var ctx = new SqliteTestContext();
+        SeedRecipientAndTarget(ctx);
+        using (var seed = ctx.NewContext())
+        {
+            seed.Users.Add(Seed.Agent(SecondGuid, rank: Rank.JuniorAgent, status: AgentStatus.Active));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
+
+        await svc.NotifyMentionedDeltaAsync(
+            MentionToken(RecipientGuid), $"{MentionToken(RecipientGuid)} und {MentionToken(SecondGuid)}",
+            "Erwähnung", "/x", "Person", PersonGuid, trigger);
+
+        using var db = ctx.NewContext();
+        Assert.Equal(SecondGuid, db.Notifications.Single().RecipientId);
+    }
+
+    [Fact]
+    public async Task NotifyMentionedDeltaAsync_ClassifiedTargetInvisibleToNonLeadership_NoNotification()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var seed = ctx.NewContext())
+        {
+            seed.Users.Add(Seed.Agent(RecipientGuid, rank: Rank.JuniorAgent, status: AgentStatus.Active));
+            seed.People.Add(Seed.Person(PersonGuid, "Geheim", p => p.IsClassified = true));
+            seed.SaveChanges();
+        }
+        var svc = NewService(ctx, new NotificationBroadcaster(), Substitute.For<IDiscordWebhookService>());
+        var trigger = ClaimsPrincipalBuilder.Agent(TriggerGuid).Build();
+
+        await svc.NotifyMentionedDeltaAsync(
+            null, MentionToken(RecipientGuid), "Erwähnung", "/x", "Person", PersonGuid, trigger);
+
+        using var db = ctx.NewContext();
+        Assert.Empty(db.Notifications.ToList());
+    }
+
     // ---- NotifyManyAsync ---------------------------------------------------
 
     [Fact]

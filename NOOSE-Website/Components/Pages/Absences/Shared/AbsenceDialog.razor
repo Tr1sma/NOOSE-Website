@@ -17,8 +17,8 @@
                 }
             </MudSelect>
 
-            <MudTextField @bind-Value="_reason" Label="Anmerkung (optional)" Variant="Variant.Outlined"
-                          Lines="3" MaxLength="500" HelperText="Nur die Führung sieht diesen Text." />
+            <MentionInput @bind-Text="_reason" Label="Anmerkung (optional)" Lines="3" MaxLength="500"
+                          HelperText="@($"Nur die Führung sieht diesen Text. {MentionInput.Hint}")" />
 
             @if (_days > 0)
             {

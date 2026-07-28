@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -20,8 +21,8 @@ public partial class PlaceholderService(IDbContextFactory<AppDbContext> dbFactor
 {
     public IReadOnlyList<(string Token, string Description)> AvailablePlaceholder { get; } = new[]
     {
-        ("{{Name}}", "Name der Akte, an die das Dokument gehängt wird"),
-        ("{{Aktenzeichen}}", "Aktenzeichen dieser Akte"),
+        ("{{Name}}", "Name der Akte bzw. des Agenten, an die/den der Text gehängt wird"),
+        ("{{Aktenzeichen}}", "Aktenzeichen dieser Akte (Agenten haben keins)"),
         ("{{Datum}}", "Aktuelles Datum (TT.MM.JJJJ)"),
         ("{{Uhrzeit}}", "Aktuelle Uhrzeit (HH:MM)"),
         ("{{Agent}}", "Dein Codename"),
@@ -114,6 +115,12 @@ public partial class PlaceholderService(IDbContextFactory<AppDbContext> dbFactor
             {
                 var x = await db.Jobs.Where(a => a.Id == id).Select(a => new { Name = a.Title, a.CaseNumber }).FirstOrDefaultAsync(ct);
                 return (x?.Name ?? string.Empty, x?.CaseNumber ?? string.Empty);
+            }
+            case nameof(Agent):
+            {
+                // codename, never the real name — personnel templates are read by non-real-name viewers too
+                var x = await db.Users.Where(a => a.Id == id).Select(a => a.Codename).FirstOrDefaultAsync(ct);
+                return (x ?? string.Empty, string.Empty);
             }
             default:
                 return (string.Empty, string.Empty);

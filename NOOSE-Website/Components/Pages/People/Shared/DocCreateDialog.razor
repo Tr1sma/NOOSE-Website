@@ -79,7 +79,8 @@
                         Amnestie-Spritze: Person lebt weiter, verliert aber ihre Erinnerung.
                     </MudAlert>
                 }
-                <MudTextField @bind-Value="_input.Reason" Label="Grund" Lines="2" Variant="Variant.Outlined" />
+                <MentionInput Text="@(_input.Reason ?? string.Empty)" TextChanged="@(v => _input.Reason = v)"
+                              Label="Grund" Lines="2" HelperText="@MentionInput.Hint" />
 
                 @* Prefer linking an existing record; otherwise free text. *@
                 <MudRadioGroup T="string" @bind-Value="Type">
@@ -107,7 +108,8 @@
                 }
                 <MudTextField @bind-Value="_input.Faction" Label="Fraktionszugehörigkeit (Freitext)" Variant="Variant.Outlined"
                               HelperText="Freitext-Fallback, wenn die Organisation nicht als Akte existiert." />
-                <MudTextField @bind-Value="_input.ReceivedInformation" Label="Erhaltene Informationen" Lines="3" Variant="Variant.Outlined" />
+                <MentionInput Text="@(_input.ReceivedInformation ?? string.Empty)" TextChanged="@(v => _input.ReceivedInformation = v)"
+                              Label="Erhaltene Informationen" Lines="3" />
                 <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
             </MudStack>
         </MudForm>
