@@ -37,9 +37,9 @@
                                   Margin="Margin.Dense" Variant="Variant.Outlined"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                                   OnKeyDown="SearchKeyDown" Class="d-none d-md-flex mt-0" Style="max-width:240px;" />
-                    @* Search icon for small screens (no search field/Ctrl+K). *@
-                    <MudIconButton Icon="@Icons.Material.Filled.Search" Color="Color.Inherit" Href="/suche"
-                                   Class="d-flex d-md-none" aria-label="Suche" title="Suche" />
+                    @* Small screens have no search field and no Ctrl+K, so open the palette here. *@
+                    <MudIconButton Icon="@Icons.Material.Filled.Search" Color="Color.Inherit" OnClick="OpenPaletteAsync"
+                                   Class="d-flex d-md-none" aria-label="Suchen und springen" title="Suchen und springen" />
                     <NotificationBell User="auth.User" />
                     <MudLink Href="/profil" Underline="Underline.None" Color="Color.Inherit"
                              Class="d-flex align-center" title="Mein Profil">
@@ -61,8 +61,10 @@
         </AuthorizeView>
     </MudAppBar>
 
+    @* wide enough for the 64px area rail plus the entry panel; capped so it fits small phones *@
     <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always"
-               Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md">
+               Variant="DrawerVariant.Responsive" Breakpoint="Breakpoint.Md"
+               Width="300px" Class="noose-drawer" Style="max-width:88vw;">
         <NavMenu />
     </MudDrawer>
 
@@ -81,7 +83,7 @@
                 </MudAlert>
             }
 
-            @* Announcement banner, maintained by leadership/admins under /admin/system. *@
+            @* Announcement banner, maintained by leadership/admins under /einstellungen?tab=system. *@
             @if (!string.IsNullOrWhiteSpace(_configuration?.BannerText))
             {
                 <MudAlert Severity="@BannerSeverity" Dense="true" Class="mb-4 no-print">@_configuration!.BannerText</MudAlert>
@@ -91,7 +93,7 @@
             {
                 <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4 no-print">
                     Wartungsmodus aktiv – normale Agenten sehen derzeit nur die Wartungsseite.
-                    Deaktivieren unter <MudLink Href="/admin/system" Color="Color.Inherit"><b>System</b></MudLink>.
+                    Deaktivieren unter <MudLink Href="/einstellungen?tab=system" Color="Color.Inherit"><b>System</b></MudLink>.
                 </MudAlert>
             }
 
@@ -154,17 +156,11 @@
     @* Command palette (Ctrl+K), only for signed-in agents. *@
     <AuthorizeView>
         <Authorized Context="cp">
-            <CommandPalette />
+            <CommandPalette @ref="_palette" />
             <RecentsTracker />
         </Authorized>
     </AuthorizeView>
 </MudLayout>
-
-<div id="blazor-error-ui" data-nosnippet>
-    Ein unerwarteter Fehler ist aufgetreten.
-    <a href="." class="reload">Neu laden</a>
-    <span class="dismiss">🗙</span>
-</div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
@@ -245,6 +241,10 @@
             _ = NavPrefs.SetDrawerOpenAsync(_agentId, _drawerOpen);
         }
     }
+
+    private CommandPalette? _palette;
+
+    private Task OpenPaletteAsync() => _palette?.Open() ?? Task.CompletedTask;
 
     private void SearchKeyDown(KeyboardEventArgs e)
     {

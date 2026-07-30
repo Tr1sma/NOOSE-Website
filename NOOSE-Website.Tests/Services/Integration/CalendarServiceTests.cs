@@ -279,13 +279,12 @@ public sealed class CalendarServiceTests
         Assert.True(abs.WholeDay);
         Assert.Equal("Abgemeldet: Urlaub", abs.Title);
 
-        // the foreign row moves to its own source instead of being dropped
-        var team = Assert.Single(entries, e => e.Source == CalendarSource.TeamAbsence);
-        Assert.Equal("tabm:foreign", team.Id);
+        // foreign absences belong to the authority calendar, not to mine
+        Assert.DoesNotContain(entries, e => e.Source == CalendarSource.TeamAbsence);
     }
 
     [Fact]
-    public async Task GetEntriesAsync_MyMode_TeamAbsence_CarriesCodenameAndNeverTheReason()
+    public async Task GetEntriesAsync_AuthorityMode_TeamAbsence_CarriesCodenameAndNeverTheReason()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -305,7 +304,7 @@ public sealed class CalendarServiceTests
         }
         var svc = Build(ctx);
 
-        var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PlainViewer(), CalendarMode.My);
+        var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PlainViewer(), CalendarMode.Authority);
 
         var team = Assert.Single(entries, e => e.Source == CalendarSource.TeamAbsence);
         Assert.Equal("Codename-other: Krank", team.Title);
@@ -315,7 +314,7 @@ public sealed class CalendarServiceTests
     }
 
     [Fact]
-    public async Task GetEntriesAsync_MyMode_TeamAbsence_ExcludesTeamLeadBlockedAndPartner()
+    public async Task GetEntriesAsync_AuthorityMode_TeamAbsence_ExcludesTeamLeadBlockedAndPartner()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -339,7 +338,7 @@ public sealed class CalendarServiceTests
         }
         var svc = Build(ctx);
 
-        var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PlainViewer(), CalendarMode.My);
+        var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PlainViewer(), CalendarMode.Authority);
 
         Assert.DoesNotContain(entries, e => e.Source == CalendarSource.TeamAbsence);
     }
@@ -448,20 +447,29 @@ public sealed class CalendarServiceTests
     }
 
     [Fact]
-    public async Task GetEntriesAsync_AuthorityMode_IncludesMeeting_ButExcludesAbsences()
+    public async Task GetEntriesAsync_AuthorityMode_IncludesMeetingAndForeignAbsences_ButNeverMyOwn()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
         {
             db.Users.Add(Seed.Agent("me"));
+            db.Users.Add(Seed.Agent("other"));
             db.Meetings.Add(NewMeeting("m1", Mid));
             db.Absences.Add(new Absence
             {
-                Id = "ab1",
+                Id = "mine",
                 AgentId = "me",
                 FromDate = new DateOnly(2026, 6, 10),
                 ToDate = new DateOnly(2026, 6, 12),
                 Category = AbsenceCategory.Vacation,
+            });
+            db.Absences.Add(new Absence
+            {
+                Id = "foreign",
+                AgentId = "other",
+                FromDate = new DateOnly(2026, 6, 10),
+                ToDate = new DateOnly(2026, 6, 12),
+                Category = AbsenceCategory.Sick,
             });
             db.SaveChanges();
         }
@@ -470,7 +478,10 @@ public sealed class CalendarServiceTests
         var entries = await svc.GetEntriesAsync(WindowStart, WindowEnd, PrivilegedViewer(), CalendarMode.Authority);
 
         Assert.Contains(entries, e => e.Source == CalendarSource.Meeting && e.Id == "bes:m1");
+
+        // only the other agents' absences; my own stay in my calendar
+        var team = Assert.Single(entries, e => e.Source == CalendarSource.TeamAbsence);
+        Assert.Equal("tabm:foreign", team.Id);
         Assert.DoesNotContain(entries, e => e.Source == CalendarSource.Absence);
-        Assert.DoesNotContain(entries, e => e.Source == CalendarSource.TeamAbsence);
     }
 }

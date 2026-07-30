@@ -1,0 +1,142 @@
+@page "/parteien/neu"
+@page "/parteien/{Id}/bearbeiten"
+@inject IPartyService PartyService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Partei bearbeiten" : "Neue Partei") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Partei nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.AccountBalance)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Partei bearbeiten" : "Neue Partei anlegen")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <PartyForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
+                   ShowMembers="@(!IsEdit)" IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+        </MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Anlegen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/parteien/{Id}" : "/parteien";
+
+    private MudForm _form = default!;
+    private PartyInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _mayHighest;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayHighest = _user.MayHighestClassification();
+        _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
+    }
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+
+        if (!IsEdit)
+        {
+            _input = new PartyInput();
+            _load = false;
+            return;
+        }
+
+        var p = await PartyService.GetDetailAsync(Id!, ViewerScope.From(_user));
+        if (p is not null)
+        {
+            _input = new PartyInput
+            {
+                Name = p.Name,
+                Description = p.Description,
+                Targets = p.Targets,
+                Remarks = p.Remarks,
+                Classification = p.Classification,
+                SecrecyLevel = p.SecrecyLevel,
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await PartyService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/parteien/{Id}");
+            }
+            else
+            {
+                var party = await PartyService.CreateAsync(_input, _user);
+                Snackbar.Add($"Partei {party.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/parteien/{party.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

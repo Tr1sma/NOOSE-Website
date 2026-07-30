@@ -18,14 +18,17 @@ public sealed class NavPreferences
     /// <summary>Remembered drawer open state.</summary>
     public bool DrawerOpen { get; set; } = true;
 
-    /// <summary>Section names the user has collapsed.</summary>
+    /// <summary>Legacy collapsed sections; unused since the icon rail, kept so a save cannot drop it.</summary>
     public HashSet<string> CollapsedGroups { get; set; } = [];
+
+    /// <summary>Drawer area shown last, as NavArea.ToString(); null = derive from the route.</summary>
+    public string? LastArea { get; set; }
 
     /// <summary>Recently visited pages/records, newest first, capped.</summary>
     public List<RecentItem> Recents { get; set; } = [];
 
     /// <summary>Schema version for future migrations.</summary>
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
 }
 
 /// <summary>A pinned page or record in the favorites quick-access list.</summary>

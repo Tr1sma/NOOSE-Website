@@ -201,6 +201,8 @@ builder.Services.AddScoped<ITaskforceChatService, TaskforceChatService>();
 builder.Services.AddScoped<IMentionService, MentionService>();
 builder.Services.AddSingleton<TaskforceChatBroadcaster>();
 builder.Services.AddScoped<IObservationService, ObservationService>();
+// fans the global recycle bin out over every record service, so restore keeps its guards
+builder.Services.AddScoped<ITrashService, TrashService>();
 builder.Services.AddScoped<IPersonnelFileService, PersonnelFileService>();
 builder.Services.AddScoped<ITrainingModuleService, TrainingModuleService>();
 builder.Services.AddScoped<IRequestService, RequestService>();
@@ -251,7 +253,11 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
+    .AddInteractiveServerComponents(options =>
+    {
+        // client retries for ~350s; outlive that so a network flap keeps unsaved input
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(10);
+    })
     .AddHubOptions(options =>
     {
         // 5 MB: the RichTextEditor streams full HTML over SignalR — do not lower

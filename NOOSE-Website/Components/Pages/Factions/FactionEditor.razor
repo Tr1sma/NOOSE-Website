@@ -1,0 +1,154 @@
+@page "/fraktionen/neu"
+@page "/fraktionen/{Id}/bearbeiten"
+@inject IFactionService FactionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Fraktion bearbeiten" : "Neue Fraktion") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Fraktion nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Groups)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Fraktion bearbeiten" : "Neue Fraktion anlegen")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <FactionForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="@(!IsEdit && _mayHighest)"
+                     IsLeadership="_isLeadership" ShowMembers="@(!IsEdit)" SecrecyOptions="_secrecyOptions" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+        </MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Anlegen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/fraktionen/{Id}" : "/fraktionen";
+
+    private MudForm _form = default!;
+    private FactionInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _mayHighest;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayHighest = _user.MayHighestClassification();
+        _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
+    }
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+
+        if (!IsEdit)
+        {
+            _input = new FactionInput();
+            _load = false;
+            return;
+        }
+
+        var f = await FactionService.GetDetailAsync(Id!, ViewerScope.From(_user));
+        if (f is not null)
+        {
+            _input = new FactionInput
+            {
+                Name = f.Name,
+                Kind = f.Kind,
+                Radio = f.Radio,
+                Darkchat = f.Darkchat,
+                IssuingTimes = f.IssuingTimes,
+                Estate = f.Estate,
+                RecognitionColor = f.RecognitionColor,
+                Targets = f.Targets,
+                Description = f.Description,
+                Classification = f.Classification,
+                SecrecyLevel = f.SecrecyLevel,
+                IsStateFaction = f.IsStateFaction,
+                EstimatedMemberCount = f.EstimatedMemberCount,
+                Ranks = f.Ranks.OrderBy(r => r.Order).Select(r => new RankInput { Id = r.Id, Designation = r.Designation }).ToList(),
+                WeaponStock = f.WeaponStock.Select(w => new StockInput { Designation = w.Designation, Quantity = w.Quantity }).ToList(),
+                Inventory = f.Inventory.Select(l => new StockInput { Designation = l.Designation, Quantity = l.Quantity }).ToList(),
+                // Quantity field carries the note for drug routes
+                DrugRoutes = f.DrugRoutes.Select(d => new StockInput { Designation = d.Designation, Quantity = d.Note }).ToList(),
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await FactionService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/fraktionen/{Id}");
+            }
+            else
+            {
+                var faction = await FactionService.CreateAsync(_input, _user);
+                Snackbar.Add($"Fraktion {faction.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/fraktionen/{faction.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

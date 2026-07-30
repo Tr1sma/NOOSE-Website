@@ -1,0 +1,164 @@
+@page "/kalender/neu"
+@page "/kalender/{Id}/bearbeiten"
+@inject IAppointmentService AppointmentService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Termin bearbeiten" : "Neuer Termin") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_noAccess)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Diesen Termin darf nur sein Ersteller oder die Führung bearbeiten.
+        <MudButton Href="@BackHref" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zum Termin</MudButton>
+    </MudAlert>
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Termin nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.EventNote)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Termin bearbeiten" : "Neuen Termin anlegen")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <AppointmentForm Input="_input" ShowAssignment="@(!IsEdit)" @bind-AgentIds="_agentIds" @key="_loadedId" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Teilnehmer werden im Termin unter „Teilnehmer" verwaltet.
+        </MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Anlegen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/kalender/{Id}" : "/kalender";
+
+    private MudForm _form = default!;
+    private AppointmentInput? _input;
+    private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _noAccess;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+    }
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+        _noAccess = false;
+
+        if (!IsEdit)
+        {
+            _agentIds = new HashSet<string>();
+            // Prefill next full hour (local RP time)
+            var now = DateTime.Now;
+            _input = new AppointmentInput
+            {
+                Start = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1),
+            };
+            _load = false;
+            return;
+        }
+
+        var t = await AppointmentService.GetDetailAsync(Id!, _user);
+        if (t is not null)
+        {
+            // Mirror the server-side creator/leadership write gate in the UI
+            if (!_user.IsLeadership() && t.CreatedById != _user.GetAgentId())
+            {
+                _noAccess = true;
+            }
+            else
+            {
+                _input = new AppointmentInput
+                {
+                    Title = t.Title,
+                    Category = t.Category,
+                    Status = t.Status,
+                    Location = t.Location,
+                    Start = UtcByLocal(t.Start),
+                    End = t.End is { } e ? UtcByLocal(e) : null,
+                    AllDay = t.AllDay,
+                    Description = t.Description,
+                    Visibility = t.Visibility,
+                };
+            }
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null || _saves)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await AppointmentService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/kalender/{Id}");
+            }
+            else
+            {
+                var appointment = await AppointmentService.CreateAsync(_input, _agentIds.ToList(), _user);
+                Snackbar.Add($"Termin {appointment.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/kalender/{appointment.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+
+    private static DateTime UtcByLocal(DateTime utc)
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+}

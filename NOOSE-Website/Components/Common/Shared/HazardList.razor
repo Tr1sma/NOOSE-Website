@@ -1,0 +1,53 @@
+@* Ranked hazard list used for both factions and people on the dashboard. *@
+@using NOOSE_Website.Models.Dashboard
+@inject NavigationManager Nav
+
+@if (Items.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">@EmptyText</MudText>
+}
+else
+{
+    <div class="dashboard-fraktionsliste">
+        <MudList T="string" Dense="true">
+            @foreach (var item in Items)
+            {
+                <MudListItem T="string" OnClick="@(() => Open(item.Href))" Style="cursor:pointer;">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <span style="@Dot(item.Level)"></span>
+                            <div>
+                                <MudText Typo="Typo.body2"><b>@item.Name</b></MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@item.CaseNumber</MudText>
+                            </div>
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@HazardLevelLogic.Name(item.Level)</MudText>
+                    </MudStack>
+                </MudListItem>
+            }
+        </MudList>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DashboardFactionHazard> Items { get; set; } = [];
+    [Parameter] public string EmptyText { get; set; } = "Noch keine Einträge.";
+
+    // index matches HazardLevel order
+    private static readonly string[] Colours = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" };
+
+    private static string Dot(HazardLevel level)
+    {
+        var i = (int)level;
+        var colour = i >= 0 && i < Colours.Length ? Colours[i] : Colours[0];
+        return $"display:inline-block;width:12px;height:12px;border-radius:50%;background:{colour};flex:none;";
+    }
+
+    private void Open(string? href)
+    {
+        if (!string.IsNullOrEmpty(href))
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+}

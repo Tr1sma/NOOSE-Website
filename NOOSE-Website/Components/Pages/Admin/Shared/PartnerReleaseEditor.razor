@@ -1,0 +1,108 @@
+@* Which records a partner agency may see; the agency selector lives on the parent panel. *@
+@inject IPartnerShareService ShareService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+    Gib alle Akten eines Typs auf einen Klick frei. Das legt behördenweite Freigaben an – der Partner
+    sieht damit alle nicht als Verschlusssache eingestuften Akten dieses Typs.
+</MudText>
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-6">
+    Hinweis: Später neu angelegte Akten musst du erneut freigeben. Einzelne Akten gibst du weiterhin
+    über den „Freigegeben“-Schalter auf der jeweiligen Detailseite frei.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (var t in _summaries)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.subtitle1">@t.DisplayName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @t.SharedRecords von @t.TotalRecords für @PartnerAgencyDisplay.Name(Agency) freigegeben
+                            </MudText>
+                        </div>
+                        <MudCheckBox T="bool" Value="@_wholeRecord.GetValueOrDefault(t.TypeKey)"
+                                     ValueChanged="@(v => _wholeRecord[t.TypeKey] = v)" Dense="true"
+                                     Color="Color.Primary" Label="Ganze Akte" />
+                    </MudStack>
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.LockOpen" Disabled="@(_busy || t.TotalRecords == 0)"
+                                   OnClick="@(() => ReleaseAsync(t.TypeKey, true))">Alle freigeben</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.LockReset" Disabled="@(_busy || t.SharedRecords == 0)"
+                                   OnClick="@(() => ReleaseAsync(t.TypeKey, false))">Freigaben entfernen</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Agency whose releases are edited; owned by the parent panel.</summary>
+    [Parameter] public PartnerAgency Agency { get; set; }
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _busy;
+    private PartnerAgency? _loadedAgency;
+    private IReadOnlyList<PartnerTypeShareSummary> _summaries = new List<PartnerTypeShareSummary>();
+    private readonly Dictionary<string, bool> _wholeRecord = new();
+
+    // the parent swaps the agency without recreating this component, so react to parameters
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (_loadedAgency == Agency)
+        {
+            return;
+        }
+        _loadedAgency = Agency;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _summaries = await ShareService.GetTypeSummariesAsync(Agency);
+        foreach (var t in _summaries)
+        {
+            _wholeRecord.TryAdd(t.TypeKey, false);
+        }
+        _load = false;
+    }
+
+    private async Task ReleaseAsync(string typeKey, bool released)
+    {
+        _busy = true;
+        try
+        {
+            var whole = _wholeRecord.GetValueOrDefault(typeKey);
+            var count = await ShareService.SetTypeAsync(typeKey, Agency, released, whole, _user);
+            var name = _summaries.FirstOrDefault(s => s.TypeKey == typeKey)?.DisplayName ?? typeKey;
+            Snackbar.Add(released
+                ? $"{count} {name} für {PartnerAgencyDisplay.Name(Agency)} freigegeben."
+                : $"{count} Freigabe(n) entfernt ({name}).", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

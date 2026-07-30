@@ -3,6 +3,7 @@
 @using NOOSE_Website.Models.Navigation
 @inject INavPreferencesService NavPrefs
 @inject IPartnerVisibilityPolicyService PartnerPolicy
+@inject IAuthorizationService Authorization
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -19,37 +20,28 @@
                         Blende nicht genutzte Einträge mit dem Auge aus, ziehe Einträge in deine Wunsch-Reihenfolge
                         und markiere häufig genutzte mit dem Stern als Favorit.
                     </MudText>
+                    @* zones mirror the drawer's areas, so a drag lands where the entry actually shows up *@
                     <MudDropContainer T="NavEntry" @ref="_menuContainer" Items="_menuItems"
-                                      ItemsSelector="@((item, zone) => item.Section.ToString() == zone)"
-                                      CanDrop="@((item, zone) => item.Section.ToString() == zone)"
+                                      ItemsSelector="@((item, zone) => item.Area.ToString() == zone)"
+                                      CanDrop="@((item, zone) => item.Area.ToString() == zone)"
                                       ItemDropped="OnMenuDropAsync">
                         <ChildContent>
-                            @if (_isPartner)
+                            @foreach (var area in _zones)
                             {
-                                @MenuZone(NavSection.Partner)
-                            }
-                            else
-                            {
-                                <AuthorizeView Policy="@Policies.InternalAgent" Context="ia">
-                                    @MenuZone(NavSection.Primary)
-                                    @MenuZone(NavSection.Akten)
-                                    <AuthorizeView Policy="@Policies.HighestClassificationPage" Context="hc">
-                                        @MenuZone(NavSection.VerwaltungFreigaben)
-                                        <AuthorizeView Policy="@Policies.LeadershipPage" Context="lp">
-                                            @MenuZone(NavSection.VerwaltungFuehrung)
-                                            <AuthorizeView Policy="@Policies.AdminPage" Context="ap">
-                                                @MenuZone(NavSection.VerwaltungAdmin)
-                                            </AuthorizeView>
-                                        </AuthorizeView>
-                                    </AuthorizeView>
-                                </AuthorizeView>
+                                @MenuZone(area)
                             }
                         </ChildContent>
                         <ItemRenderer>
                             <MudPaper Class="d-flex align-center pa-2 mb-1" Elevation="1" Style="@(IsHidden(context) ? "opacity:.45;" : null)">
                                 <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mr-2 mud-text-secondary" Size="Size.Small" />
                                 <MudIcon Icon="@context.Icon" Class="mr-2" Size="Size.Small" />
-                                <MudText Typo="Typo.body2">@context.Label</MudText>
+                                <div class="d-flex flex-column">
+                                    <MudText Typo="Typo.body2">@context.Label</MudText>
+                                    @if (!string.IsNullOrWhiteSpace(context.Description))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Description</MudText>
+                                    }
+                                </div>
                                 <MudSpacer />
                                 <MudIconButton Icon="@(IsFavorite(context) ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)"
                                                Color="@(IsFavorite(context) ? Color.Warning : Color.Default)" Size="Size.Small"
@@ -119,6 +111,8 @@
     private ClaimsPrincipal _user = default!;
     private NavPreferences _prefs = new();
     private IReadOnlySet<string>? _allowedPartnerTypes;
+    private readonly Dictionary<string, bool> _policyOk = new(StringComparer.Ordinal);
+    private List<NavArea> _zones = new();
     private List<NavEntry> _menuItems = new();
     private List<NavFavorite> _favItems = new();
     private List<NavEntry> _startOptions = new();
@@ -152,20 +146,39 @@
     private async Task ReloadAsync()
     {
         _prefs = await NavPrefs.GetAsync(_agentId);
-        _menuItems = _isPartner
-            ? NavPersonalization.Ordered(NavCatalog.PartnerRecordEntries(_allowedPartnerTypes), _prefs).ToList()
-            : NavSectionPolicy.InternalSections.SelectMany(s => NavPersonalization.Ordered(NavCatalog.Section(s), _prefs)).ToList();
+
+        if (_isPartner)
+        {
+            _menuItems = NavPersonalization.Ordered(NavCatalog.PartnerRecordEntries(_allowedPartnerTypes), _prefs).ToList();
+            _zones = [NavArea.Partner];
+            _startOptions = NavCatalog.PartnerRecordEntries(_allowedPartnerTypes).ToList();
+        }
+        else
+        {
+            // same per-policy snapshot the drawer takes, so the customizer never offers a hidden entry
+            foreach (var policy in NavAreaCatalog.DistinctPolicies)
+            {
+                _policyOk[policy] = (await Authorization.AuthorizeAsync(_user, policy)).Succeeded;
+            }
+            _zones = new List<NavArea> { NavArea.Primary }
+                .Concat(NavAreaCatalog.Areas)
+                .Where(a => Permitted(a).Any())
+                .ToList();
+            _menuItems = _zones.SelectMany(a => NavPersonalization.Ordered(Permitted(a), _prefs)).ToList();
+            _startOptions = _zones.SelectMany(Permitted).ToList();
+        }
+
         _favItems = _prefs.Favorites.ToList();
-        _startOptions = _isPartner
-            ? NavCatalog.PartnerRecordEntries(_allowedPartnerTypes).ToList()
-            : NavCatalog.Section(NavSection.Primary).Concat(NavCatalog.Section(NavSection.Akten)).ToList();
         _menuContainer?.Refresh();
         _favContainer?.Refresh();
     }
 
-    private RenderFragment MenuZone(NavSection section) =>@<div class="mb-2">
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">@NavSectionPolicy.Name(section)</MudText>
-        <MudDropZone T="NavEntry" Identifier="@section.ToString()" AllowReorder="true" Class="pa-1" />
+    private IEnumerable<NavEntry> Permitted(NavArea area)
+        => NavAreaCatalog.Entries(area).Where(e => _policyOk.GetValueOrDefault(NavSectionPolicy.For(e.Section)));
+
+    private RenderFragment MenuZone(NavArea area) =>@<div class="mb-2">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@NavAreaCatalog.Name(area)</MudText>
+        <MudDropZone T="NavEntry" Identifier="@area.ToString()" AllowReorder="true" Class="pa-1" />
     </div>;
 
     private bool IsFavorite(NavEntry e) => _prefs.Favorites.Any(f => f.Kind == "page" && f.Key == e.Key);
@@ -190,15 +203,14 @@
         {
             return;
         }
-        var sectionItems = _menuItems.Where(e => e.Section == item.Section).ToList();
-        sectionItems.Remove(item);
-        sectionItems.Insert(Math.Clamp(info.IndexInZone, 0, sectionItems.Count), item);
+        var areaItems = _menuItems.Where(e => e.Area == item.Area).ToList();
+        areaItems.Remove(item);
+        areaItems.Insert(Math.Clamp(info.IndexInZone, 0, areaItems.Count), item);
 
-        var sections = _isPartner ? new[] { NavSection.Partner } : NavSectionPolicy.InternalSections;
         var ordered = new List<string>();
-        foreach (var s in sections)
+        foreach (var area in _zones)
         {
-            var items = s == item.Section ? sectionItems : _menuItems.Where(e => e.Section == s).ToList();
+            var items = area == item.Area ? areaItems : _menuItems.Where(e => e.Area == area).ToList();
             ordered.AddRange(items.Select(e => e.Key));
         }
         await RunAsync(() => NavPrefs.SetOrderAsync(_agentId, ordered));

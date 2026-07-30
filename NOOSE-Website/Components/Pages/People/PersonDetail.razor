@@ -69,12 +69,10 @@ else
             }
             else
             {
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
-                     @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
+            <RecordSectionRail>
                 @if (TabOn("steckbrief"))
                 {
-                <MudTabPanel Text="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
+                <RecordSection Group="Akte" Slug="steckbrief" Label="Steckbrief" Icon="@Icons.Material.Filled.ContactPage">
                     @{
                         var hasProfile = !string.IsNullOrWhiteSpace(_person.Description)
                             || _person.Aliases.Count > 0 || _person.PhoneNumbers.Count > 0
@@ -103,33 +101,33 @@ else
                             </MudStack>
                         </MudStack>
                     }
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("doks"))
                 {
-                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                <RecordSection Group="Ermittlung" Slug="doks" Label="Doks" Icon="@Icons.Material.Filled.Description">
                     <DocPanel PersonId="@_person.Id" User="_user" PersonChanged="NewLoadAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("ueberwachung"))
                 {
-                <MudTabPanel Text="Überwachung" Icon="@Icons.Material.Filled.Visibility">
+                <RecordSection Group="Ermittlung" Slug="ueberwachung" Label="Überwachung" Icon="@Icons.Material.Filled.Visibility">
                     <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("einstufung"))
                 {
-                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                <RecordSection Group="Akte" Slug="einstufung" Label="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <MudStack Spacing="3">
                         <ClassificationPanel Current="_person.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                          EntityType="@nameof(Person)" EntityId="@_person.Id" TargetDesignation="@($"{_person.Name} ({_person.CaseNumber})")" />
                         <WantedPanel PersonId="@_person.Id" IsWanted="_person.IsWanted" WantedReason="@_person.WantedReason" User="_user" Changed="NewLoadAsync" />
                     </MudStack>
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("gefaehrdung"))
                 {
-                <MudTabPanel Text="Gefährdung" Icon="@Icons.Material.Filled.Warning">
+                <RecordSection Group="Akte" Slug="gefaehrdung" Label="Gefährdung" Icon="@Icons.Material.Filled.Warning">
                     @if (LifeStatusLogic.IsDeadWindow(_person.LifeStatus, _person.DeadUntil, DateTime.UtcNow)
                          && LifeStatusLogic.RemainingMinutes(_person.DeadUntil, DateTime.UtcNow) is { } restMin)
                     {
@@ -139,29 +137,29 @@ else
                     }
                     <HazardPanel Score="_person.ThreatScore" Confidence="_person.ThreatConfidence"
                                       DetailJson="@_person.ThreatDetailJson" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("fotos"))
                 {
-                <MudTabPanel Text="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
+                <RecordSection Group="Anhänge" Slug="fotos" Label="Fotos" Icon="@Icons.Material.Filled.PhotoLibrary">
                     <PhotoGallery PersonId="@_person.Id" Photos="_person.Photos" User="_user" Changed="NewLoadAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("quellen"))
                 {
-                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                <RecordSection Group="Anhänge" Slug="quellen" Label="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("wiedervorlagen"))
                 {
-                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                <RecordSection Group="Verlauf" Slug="wiedervorlagen" Label="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("verknuepfungen"))
                 {
-                <MudTabPanel Text="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
+                <RecordSection Group="Ermittlung" Slug="verknuepfungen" Label="Verknüpfungen" Icon="@Icons.Material.Filled.AccountTree">
                     <LinkPanel PersonId="@_person.Id" User="_user" />
                     @* Link suggestions reveal other records: internal only. *@
                     @if (!_isPartner)
@@ -169,34 +167,34 @@ else
                         <MudDivider Class="my-4" />
                         <LinkSuggestionPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                     }
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("zugehoerigkeit"))
                 {
-                <MudTabPanel Text="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
+                <RecordSection Group="Ermittlung" Slug="zugehoerigkeit" Label="Zugehörigkeit" Icon="@Icons.Material.Filled.Groups">
                     <AffiliationsPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" @key="_historyKey" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("kommentare"))
                 {
-                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                <RecordSection Group="Verlauf" Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("zusatzfelder"))
                 {
-                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                <RecordSection Group="Akte" Slug="zusatzfelder" Label="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* Timeline filters cross-refs for partners. *@
                 @if (TabOn("historie"))
                 {
-                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
-                </MudTabPanel>
+                </RecordSection>
                 }
-            </MudTabs>
+            </RecordSectionRail>
             }
         </MudItem>
     </MudGrid>
@@ -216,8 +214,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // Order must match the MudTabPanels.
-    private int _activeTab;
+    // Slugs of every section on this page; the rail owns which one is active.
     private static readonly string[] _tabs =
     {
         "steckbrief", "doks", "ueberwachung", "einstufung", "gefaehrdung", "fotos", "quellen", "wiedervorlagen",
@@ -228,7 +225,7 @@ else
     private IReadOnlySet<string>? _visibleTabs;
     private List<string> _renderTabs = new();
     private bool TabOn(string slug) => _visibleTabs is null || _visibleTabs.Contains(slug);
-    private void RebuildRenderTabs() => _renderTabs = _tabs.Where(s => (s != "agents" || !_isPartner) && TabOn(s)).ToList();
+    private void RebuildRenderTabs() => _renderTabs = _tabs.Where(TabOn).ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -249,7 +246,6 @@ else
         _load = true;
         _person = null;
         await LoadAsync();
-        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_person is not null)
         {
             await AccessLog.LogViewAsync(nameof(Person), _person.Id);
@@ -258,7 +254,7 @@ else
 
     private async Task LoadAsync()
     {
-        // Don't set _load=true on reload: it would unmount MudTabs and reset to the first tab.
+        // Don't set _load=true on reload: it would unmount the rail and reset to the first section.
         var scope = ViewerScope.From(_user);
         _person = await PersonService.GetDetailAsync(Id, scope);
         _classificationHistory = _person is null

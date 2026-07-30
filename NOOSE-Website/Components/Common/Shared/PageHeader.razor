@@ -1,0 +1,46 @@
+@* Shared page header: icon, title, actions row and an optional explanatory line. *@
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+    @if (!string.IsNullOrEmpty(BackHref))
+    {
+        <MudTooltip Text="@BackText">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="@BackText" />
+        </MudTooltip>
+    }
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <MudIcon Icon="@Icon" Color="@IconColour" Size="Size.Large" />
+    }
+    <MudText Typo="Typo.h4">@Title</MudText>
+    <MudSpacer />
+    @Actions
+</MudStack>
+
+@if (SubtitleContent is not null)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">@SubtitleContent</MudText>
+}
+else if (!string.IsNullOrWhiteSpace(Subtitle))
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">@Subtitle</MudText>
+}
+else
+{
+    <div class="mb-6"></div>
+}
+
+@code {
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public Color IconColour { get; set; } = Color.Primary;
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    /// <summary>Plain explanatory line under the title; ignored when SubtitleContent is set.</summary>
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Explanatory line that needs markup (links, chips).</summary>
+    [Parameter] public RenderFragment? SubtitleContent { get; set; }
+
+    [Parameter] public string? BackHref { get; set; }
+    [Parameter] public string BackText { get; set; } = "Zurück";
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

@@ -1,0 +1,26 @@
+@* Everything about one partner agency: which records are released, and what each rank sees of them. *@
+
+<MudPaper Class="pa-4 mb-6" Elevation="2">
+    <MudSelect T="PartnerAgency" @bind-Value="_agency" Label="Behörde"
+               Dense="true" Variant="Variant.Outlined" Style="max-width:260px;">
+        @foreach (var a in PartnerAgencyDisplay.All)
+        {
+            <MudSelectItem T="PartnerAgency" Value="@a">@PartnerAgencyDisplay.Name(a)</MudSelectItem>
+        }
+    </MudSelect>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+        Beide Abschnitte unten beziehen sich auf diese Behörde.
+    </MudText>
+</MudPaper>
+
+<MudText Typo="Typo.h6" Class="mb-2">Freigegebene Akten</MudText>
+<PartnerReleaseEditor Agency="_agency" />
+
+<MudDivider Class="my-8" />
+
+<MudText Typo="Typo.h6" Class="mb-2">Sichtbarkeit je Rang</MudText>
+<PartnerVisibilityEditor Agency="_agency" />
+
+@code {
+    private PartnerAgency _agency = PartnerAgency.DoJ;
+}

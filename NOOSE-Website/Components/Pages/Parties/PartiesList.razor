@@ -10,7 +10,7 @@
     <MudText Typo="Typo.h4">Parteien</MudText>
     <MudSpacer />
     <AuthorizeView Policy="@Policies.Leadership">
-        <MudButton Href="/parteien/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+        <MudButton Href="/papierkorb?tab=parteien" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
     <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
         <MudButton Href="/parteien/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Partei</MudButton>

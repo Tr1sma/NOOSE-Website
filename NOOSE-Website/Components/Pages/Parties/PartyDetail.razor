@@ -68,12 +68,10 @@ else
             }
             else
             {
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
-                     @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
+            <RecordSectionRail>
                 @if (TabOn("stammdaten"))
                 {
-                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                <RecordSection Group="Akte" Slug="stammdaten" Label="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_party.Targets))
                         {
@@ -101,73 +99,73 @@ else
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
                         }
                     </MudStack>
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("mitglieder"))
                 {
-                <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Group">
+                <RecordSection Group="Struktur" Slug="mitglieder" Label="Mitglieder" Icon="@Icons.Material.Filled.Group">
                     <PartyMembersPanel PartyId="@_party.Id" User="_user" Changed="MembersModifiedAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* assigned NOOSE agents: internal only *@
                 @if (!_isPartner)
                 {
-                <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                <RecordSection Group="Struktur" Slug="agents" Label="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <PartyAgentsPanel PartyId="@_party.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("einstufung"))
                 {
-                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                <RecordSection Group="Akte" Slug="einstufung" Label="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_party.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Party)" EntityId="@_party.Id" TargetDesignation="@($"{_party.Name} ({_party.CaseNumber})")" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("doks"))
                 {
-                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                <RecordSection Group="Ermittlung" Slug="doks" Label="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDocsPanel OrgType="@nameof(Party)" OrgId="@_party.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe child services *@
                 @if (TabOn("beziehungen"))
                 {
-                <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
+                <RecordSection Group="Struktur" Slug="beziehungen" Label="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgRelationsPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("quellen"))
                 {
-                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                <RecordSection Group="Anhänge" Slug="quellen" Label="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("wiedervorlagen"))
                 {
-                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                <RecordSection Group="Verlauf" Slug="wiedervorlagen" Label="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("kommentare"))
                 {
-                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                <RecordSection Group="Verlauf" Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("zusatzfelder"))
                 {
-                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                <RecordSection Group="Akte" Slug="zusatzfelder" Label="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe: timeline filters cross-refs for partners *@
                 @if (TabOn("historie"))
                 {
-                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Party)" EntityId="@_party.Id" User="_user" @key="_historyKey" />
-                </MudTabPanel>
+                </RecordSection>
                 }
-            </MudTabs>
+            </RecordSectionRail>
             }
         </MudItem>
     </MudGrid>
@@ -187,8 +185,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // order must match MudTabPanels
-    private int _activeTab;
+    // every section slug on this page; the rail owns which one is active
     private static readonly string[] _tabs =
     {
         "stammdaten", "mitglieder", "agents", "einstufung", "doks",
@@ -218,7 +215,6 @@ else
         _load = true;
         _party = null;
         await LoadAsync();
-        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_party is not null)
         {
             await AccessLog.LogViewAsync(nameof(Party), _party.Id);
@@ -227,7 +223,7 @@ else
 
     private async Task LoadAsync()
     {
-        // Do not set _load=true on reload: re-mounting MudTabs would jump to the first tab.
+        // Do not set _load=true on reload: re-mounting the rail would jump to the first section.
         var scope = ViewerScope.From(_user);
         _party = await PartyService.GetDetailAsync(Id, scope);
         if (_party is not null)

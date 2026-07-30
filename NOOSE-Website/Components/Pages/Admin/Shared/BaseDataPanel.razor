@@ -1,0 +1,97 @@
+@* Read-only reference of the code-defined value lists behind the record forms. *@
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+    Fest hinterlegte Wertelisten. Sie sind hier dokumentiert und werden bei Bedarf per Code-Änderung
+    erweitert. Alles, was sich pflegen lässt, steht als eigener Abschnitt links in dieser Seite.
+</MudText>
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-6">
+    Ausserhalb dieser Seite gepflegt:
+    <MudLink Href="/fraktionen">Fraktionsliste</MudLink> ·
+    <MudLink Href="/gesetze">Gesetzbuch</MudLink>
+</MudText>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Dienstgrade</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var dg in RankDisplay.All)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@RankDisplay.Name(dg)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Einstufungen</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var e in ClassificationDisplay.All)
+                {
+                    <ClassificationBadge Value="e" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Maßnahme-Ausgänge (Doks)</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var a in MeasureOutcomeDisplay.All)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@MeasureOutcomeDisplay.Name(a)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Beziehungstypen (Person ↔ Person)</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var t in RelationTypeDisplay.All)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@RelationTypeDisplay.Name(t)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Taskforce-Geltungsbereiche</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var g in TaskforceScopeDisplay.All)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@TaskforceScopeDisplay.Name(g)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Lebensstatus</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var s in LifeStatusDisplay.All)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@LifeStatusDisplay.Name(s)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Gruppen-Arten</MudText>
+            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                @foreach (var a in GroupsKindDisplay.All)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@GroupsKindDisplay.Name(a)</MudChip>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>

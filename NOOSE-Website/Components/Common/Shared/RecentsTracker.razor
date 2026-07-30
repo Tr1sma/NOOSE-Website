@@ -74,6 +74,7 @@
             return true;
         }
         return p == "suche" || p.StartsWith("suche/", StringComparison.Ordinal)
+            || p == "papierkorb" || p == "einstellungen"
             || p.EndsWith("/neu", StringComparison.Ordinal) || p.EndsWith("/bearbeiten", StringComparison.Ordinal)
             || p.EndsWith("/druck", StringComparison.Ordinal) || p.EndsWith("/papierkorb", StringComparison.Ordinal)
             || p.StartsWith("admin/", StringComparison.Ordinal) || p.StartsWith("account/", StringComparison.Ordinal);

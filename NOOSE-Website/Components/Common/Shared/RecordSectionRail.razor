@@ -1,0 +1,104 @@
+@* Vertical, grouped section rail for record detail pages; keeps the active section in the ?tab= query. *@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@* instantiates the RecordSection children so they can register; they render no markup of their own *@
+<CascadingValue Value="this" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+<MudPaper Elevation="2" Class="d-flex flex-column flex-md-row record-rail-shell">
+    <nav class="record-rail" aria-label="Abschnitte">
+        @foreach (var group in Grouped())
+        {
+            @if (!string.IsNullOrWhiteSpace(group.Key))
+            {
+                <MudText Typo="Typo.overline" Class="px-4 pt-3 pb-1 mud-text-secondary d-block">@group.Key</MudText>
+            }
+            @foreach (var section in group)
+            {
+                <MudButton FullWidth="true"
+                           Variant="@(IsActive(section) ? Variant.Filled : Variant.Text)"
+                           Color="@(IsActive(section) ? Color.Primary : Color.Default)"
+                           StartIcon="@section.Icon"
+                           OnClick="@(() => ActivateAsync(section.Slug))"
+                           aria-current="@(IsActive(section) ? "true" : null)">
+                    @section.Label
+                </MudButton>
+            }
+        }
+    </nav>
+    @* keyed: a new element per section, so the pane starts at the top instead of
+       inheriting the previous section's scroll offset *@
+    <div class="flex-grow-1 pa-4 record-rail-content" @key="Active?.Slug">
+        @Active?.ChildContent
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private readonly List<RecordSection> _sections = [];
+    private string? _activeSlug;
+    private bool _registrationsChanged;
+
+    private RecordSection? Active
+        => _sections.FirstOrDefault(s => s.Slug == _activeSlug) ?? _sections.FirstOrDefault();
+
+    private bool IsActive(RecordSection section) => ReferenceEquals(section, Active);
+
+    protected override void OnInitialized()
+    {
+        _activeSlug = QueryState.Read(Nav, "tab");
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    // browser back/forward and record-to-record navigation both land here; clicking a
+    // section uses replaceState instead, which does not raise this event
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+        => _ = InvokeAsync(() =>
+        {
+            _activeSlug = QueryState.Read(Nav, "tab");
+            StateHasChanged();
+        });
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+
+    internal void Register(RecordSection section)
+    {
+        if (!_sections.Contains(section))
+        {
+            _sections.Add(section);
+            _registrationsChanged = true;
+        }
+    }
+
+    internal void Unregister(RecordSection section)
+    {
+        if (_sections.Remove(section))
+        {
+            _registrationsChanged = true;
+        }
+    }
+
+    // children register while this component is already rendering, so redraw once they are all in
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_registrationsChanged)
+        {
+            _registrationsChanged = false;
+            StateHasChanged();
+        }
+    }
+
+    // declaration order decides both group order and the order within a group
+    private IEnumerable<IGrouping<string, RecordSection>> Grouped()
+        => _sections.GroupBy(s => s.Group ?? string.Empty);
+
+    private async Task ActivateAsync(string slug)
+    {
+        _activeSlug = slug;
+        await QueryState.WriteAsync(JS, Nav, ("tab", slug));
+    }
+}

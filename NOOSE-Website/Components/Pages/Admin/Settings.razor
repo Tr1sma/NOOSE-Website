@@ -1,0 +1,90 @@
+@page "/einstellungen"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+
+<PageTitle>Einstellungen · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.SettingsApplications"
+            Title="Einstellungen"
+            Subtitle="Alles, was sich an der Seite konfigurieren lässt, an einer Stelle." />
+
+@* Admin-only sections are wrapped, so they neither render nor register a rail button. *@
+<RecordSectionRail>
+    <AuthorizeView Policy="@Policies.AdminPage" Context="systemSection">
+        <RecordSection Group="Betrieb" Slug="system" Label="System &amp; Erscheinungsbild"
+                       Icon="@Icons.Material.Filled.SettingsApplications">
+            <SystemSettingsPanel />
+        </RecordSection>
+    </AuthorizeView>
+
+    <RecordSection Group="Betrieb" Slug="discord" Label="Discord-Benachrichtigungen"
+                   Icon="@Icons.Material.Filled.Notifications">
+        <DiscordPanel />
+    </RecordSection>
+
+    <AuthorizeView Policy="@Policies.AdminPage" Context="statusSection">
+        <RecordSection Group="Betrieb" Slug="status" Label="System-Status"
+                       Icon="@Icons.Material.Filled.MonitorHeart">
+            <SystemStatusPanel />
+        </RecordSection>
+    </AuthorizeView>
+
+    <RecordSection Group="Akten-Konfiguration" Slug="custom-felder" Label="Custom-Felder"
+                   Icon="@Icons.Material.Filled.Tune">
+        <CustomFieldDefinitionsPanel />
+    </RecordSection>
+    <RecordSection Group="Akten-Konfiguration" Slug="tags" Label="Tags"
+                   Icon="@Icons.Material.Filled.Label">
+        <TagsPanel />
+    </RecordSection>
+    <RecordSection Group="Akten-Konfiguration" Slug="aktualitaet" Label="Aktualitäts-Ampel"
+                   Icon="@Icons.Material.Filled.Timelapse">
+        <RecencyPanel />
+    </RecordSection>
+    <RecordSection Group="Akten-Konfiguration" Slug="bedrohungs-score" Label="Bedrohungs-Score"
+                   Icon="@Icons.Material.Filled.Speed">
+        <ThreatScorePanel />
+    </RecordSection>
+
+    @* the former /admin/vorlagen tab page: one rail section per template family *@
+    <RecordSection Group="Vorlagen" Slug="vorlagen-dok" Label="Dok-Vorlagen"
+                   Icon="@Icons.Material.Filled.Dvr">
+        <DocTemplatesManagement />
+    </RecordSection>
+    <RecordSection Group="Vorlagen" Slug="vorlagen-dokument" Label="Dokument-Vorlagen"
+                   Icon="@Icons.Material.Filled.Article">
+        <DocumentTemplatesManagement />
+    </RecordSection>
+    <RecordSection Group="Vorlagen" Slug="vorlagen-aktivitaet" Label="Aktivitäts-Vorlagen"
+                   Icon="@Icons.Material.Filled.Bolt">
+        <ActivityTemplatesManagement />
+    </RecordSection>
+    <RecordSection Group="Vorlagen" Slug="vorlagen-personal" Label="Personal-Vorlagen"
+                   Icon="@Icons.Material.Filled.Badge">
+        <PersonnelTemplatesManagement />
+    </RecordSection>
+
+    <RecordSection Group="Personal" Slug="module" Label="Ausbildungsmodule"
+                   Icon="@Icons.Material.Filled.School">
+        <TrainingModulesPanel />
+    </RecordSection>
+    <RecordSection Group="Personal" Slug="einladungen" Label="Einladungen"
+                   Icon="@Icons.Material.Filled.PersonAddAlt">
+        <InvitesPanel />
+    </RecordSection>
+
+    <AuthorizeView Policy="@Policies.AdminPage" Context="partnerSection">
+        <RecordSection Group="Partnerbehörden" Slug="partner" Label="Sichtbarkeit &amp; Freigaben"
+                       Icon="@Icons.Material.Filled.Handshake">
+            <PartnerPanel />
+        </RecordSection>
+    </AuthorizeView>
+
+    <RecordSection Group="Nachweis" Slug="protokoll" Label="Audit-Protokoll"
+                   Icon="@Icons.Material.Filled.FactCheck">
+        <AuditLogPanel />
+    </RecordSection>
+    <RecordSection Group="Nachweis" Slug="basisdaten" Label="Wertelisten"
+                   Icon="@Icons.Material.Filled.Storage">
+        <BaseDataPanel />
+    </RecordSection>
+</RecordSectionRail>

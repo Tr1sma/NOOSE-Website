@@ -1,0 +1,47 @@
+@* Routes removed in V1.5; bookmarks, stored recents and old links land here. *@
+@page "/personen/papierkorb"
+@page "/fraktionen/papierkorb"
+@page "/personengruppen/papierkorb"
+@page "/parteien/papierkorb"
+@page "/vorgaenge/papierkorb"
+@page "/operationen/papierkorb"
+@page "/taskforces/papierkorb"
+@page "/aufgaben/papierkorb"
+@page "/brett/papierkorb"
+@page "/kalender/papierkorb"
+@page "/besprechungen/papierkorb"
+@page "/aktivitaeten/papierkorb"
+@page "/admin/system"
+@page "/admin/discord"
+@page "/status"
+@page "/admin/custom-felder"
+@page "/admin/tags"
+@page "/tags"
+@page "/admin/aktualitaet"
+@page "/admin/bedrohungs-score"
+@page "/admin/vorlagen"
+@page "/admin/dok-vorlagen"
+@page "/dok-vorlagen"
+@page "/admin/module"
+@page "/admin/einladungen"
+@page "/admin/partner-sichtbarkeit"
+@page "/admin/partner-freigabe"
+@page "/admin/protokoll"
+@page "/admin/basisdaten"
+@page "/abmeldungen/papierkorb"
+@page "/abmeldungen/uebersicht"
+@page "/observationen"
+@page "/doks"
+@page "/bewerbungen/sperren"
+@page "/bewerbungs-vorlagen"
+@page "/bewerbungs-tests"
+@page "/lageberichte"
+@using NOOSE_Website.Navigation
+@inject NavigationManager Nav
+
+@code {
+    // no own [Authorize]: the destination enforces its own policy after the hop
+    protected override void OnInitialized()
+        => Nav.NavigateTo(
+            LegacyRoutes.Target(Nav.ToBaseRelativePath(Nav.Uri)) ?? "/dashboard", replace: true);
+}

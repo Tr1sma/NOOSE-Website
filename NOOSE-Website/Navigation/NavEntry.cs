@@ -6,7 +6,13 @@ namespace NOOSE_Website.Navigation;
 public enum NavSection
 {
     Primary,
+    MeinDienst,
     Akten,
+    VorgaengeEinsaetze,
+    Fahndung,
+    Wissen,
+    Analyse,
+    Dienststelle,
     VerwaltungFreigaben,
     VerwaltungBewerbungen,
     VerwaltungFuehrung,
@@ -21,5 +27,7 @@ public sealed record NavEntry(
     string Icon,
     string Label,
     NavSection Section,
+    NavArea Area,
     NavLinkMatch Match = NavLinkMatch.Prefix,
-    string? BadgeKey = null);
+    string? BadgeKey = null,
+    string? Description = null);

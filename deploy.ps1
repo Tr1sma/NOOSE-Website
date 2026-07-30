@@ -158,8 +158,7 @@ try {
               " && chown -R www-data:www-data $AppDir" +
               " && systemctl start $Service" +
               " && rm -f /tmp/noose-publish.tgz" +
-              " && sleep 6" +
-              " && curl -s -o /dev/null -w 'Health-Check: HTTP %{http_code}\n' http://127.0.0.1:5000/health"
+              ' && { i=0; while [ $i -lt 30 ]; do curl -sf -o /dev/null http://127.0.0.1:5000/health && { echo "Health-Check: OK"; exit 0; }; i=$((i + 1)); sleep 2; done; echo "Health-Check: FEHLGESCHLAGEN (kein 200 nach 60s)"; exit 1; }'
     Invoke-Step "Rolle auf dem Server aus" { & $ssh @sshOpts $Server $remote }
 
     # 5) Lokales Artefakt aufraeumen

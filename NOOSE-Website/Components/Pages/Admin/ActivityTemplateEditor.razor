@@ -148,7 +148,7 @@ else
             }
 
             Snackbar.Add("Vorlage gespeichert.", Severity.Success);
-            Nav.NavigateTo("/admin/vorlagen?tab=aktivitaet-vorlagen");
+            Nav.NavigateTo("/einstellungen?tab=vorlagen-aktivitaet");
         }
         catch (Exception ex)
         {
@@ -160,5 +160,5 @@ else
         }
     }
 
-    private void Cancel() => Nav.NavigateTo("/admin/vorlagen?tab=aktivitaet-vorlagen");
+    private void Cancel() => Nav.NavigateTo("/einstellungen?tab=vorlagen-aktivitaet");
 }

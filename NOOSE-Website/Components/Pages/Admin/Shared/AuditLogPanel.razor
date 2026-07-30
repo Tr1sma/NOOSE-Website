@@ -1,0 +1,230 @@
+@* Central audit/access log viewer: who changed or viewed which record, when. Admin-only. *@
+@inject IAuditLogQueryService AuditQuery
+@inject ISnackbar Snackbar
+
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Zentrale Nachvollziehbarkeit: wer welche Akte wann geändert oder eingesehen hat. Für Führung und Admins.
+    Es werden je Filter höchstens @AuditLogFilter.MaxRows Treffer geladen – bei Bedarf enger filtern.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_filter.AgentId" Label="Agent" Clearable="true"
+                       Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var a in _options.Agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@(string.IsNullOrWhiteSpace(a.Codename) ? "(unbenannt)" : a.Codename)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_filter.EntityType" Label="Objekt-Typ" Clearable="true"
+                       Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var t in _options.EntityTypes)
+                {
+                    <MudSelectItem T="string" Value="@t">@AuditEntityDisplay.Label(t)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker @bind-Date="_from" Label="Von" Editable="true" DateFormat="dd.MM.yyyy"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker @bind-Date="_to" Label="Bis" Editable="true" DateFormat="dd.MM.yyyy"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="AuditAction?" @bind-Value="_filter.Action" Label="Aktion (nur Änderungen)" Clearable="true"
+                       Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var ac in _actions)
+                {
+                    <MudSelectItem T="AuditAction?" Value="@((AuditAction?)ac)">@ActionName(ac)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="_filter.EntityId" Label="Objekt-ID (optional)" Clearable="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="12" md="6" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterAlt"
+                       OnClick="ApplyAsync" Disabled="_busy">Filtern</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Clear"
+                       OnClick="ResetAsync" Disabled="_busy">Zurücksetzen</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_busy)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
+    <MudTabPanel Text="Änderungen" Icon="@Icons.Material.Filled.EditNote">
+        @if (_changes?.Capped == true)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                @_changes.TotalCount Treffer insgesamt – es werden die neuesten @_changes.Rows.Count angezeigt. Filter verfeinern für ältere Einträge.
+            </MudAlert>
+        }
+        <MudTable Items="_changes?.Rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0" Dense="true"
+                  Loading="_busy" LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh>Zeitpunkt</MudTh>
+                <MudTh>Agent</MudTh>
+                <MudTh>Objekt</MudTh>
+                <MudTh>Aktion</MudTh>
+                <MudTh>Änderungen</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Zeitpunkt">@context.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</MudTd>
+                <MudTd DataLabel="Agent">@(string.IsNullOrWhiteSpace(context.AgentName) ? "System" : context.AgentName)</MudTd>
+                <MudTd DataLabel="Objekt">@RecordLink(context.EntityType, context.EntityId)</MudTd>
+                <MudTd DataLabel="Aktion">
+                    <MudChip T="string" Size="Size.Small" Color="@ActionColour(context.Action)" Variant="Variant.Filled">@ActionName(context.Action)</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Änderungen">
+                    @{
+                        var changes = AuditDisplay.Parse(context.ChangesJson);
+                    }
+                    @if (changes.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="0">
+                            @foreach (var fc in changes)
+                            {
+                                <MudText Typo="Typo.caption"><b>@fc.Field:</b> @fc.Alt → @fc.New</MudText>
+                            }
+                        </MudStack>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Keine Änderungen für diesen Filter.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Zugriffe" Icon="@Icons.Material.Filled.Visibility">
+        @if (_access?.Capped == true)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                @_access.TotalCount Treffer insgesamt – es werden die neuesten @_access.Rows.Count angezeigt. Filter verfeinern für ältere Einträge.
+            </MudAlert>
+        }
+        <MudTable Items="_access?.Rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0" Dense="true"
+                  Loading="_busy" LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh>Zeitpunkt</MudTh>
+                <MudTh>Agent</MudTh>
+                <MudTh>Eingesehenes Objekt</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Zeitpunkt">@context.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</MudTd>
+                <MudTd DataLabel="Agent">@(string.IsNullOrWhiteSpace(context.AgentName) ? "System" : context.AgentName)</MudTd>
+                <MudTd DataLabel="Eingesehenes Objekt">@RecordLink(context.EntityType, context.EntityId)</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Keine Zugriffe für diesen Filter.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private static readonly AuditAction[] _actions = { AuditAction.Created, AuditAction.Modified, AuditAction.Deleted, AuditAction.Restored };
+
+    private ClaimsPrincipal _user = new();
+    private AuditLogFilter _filter = new();
+    private AuditFilterOptions _options = new(Array.Empty<AuditAgentOption>(), Array.Empty<string>());
+    private DateTime? _from;
+    private DateTime? _to;
+    private AuditLogPage _changes = new(Array.Empty<AuditChangeRow>(), 0);
+    private AccessLogPage _access = new(Array.Empty<AuditAccessRow>(), 0);
+    private bool _busy = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _options = await AuditQuery.GetFilterOptionsAsync(_user);
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync() => await ReloadAsync();
+
+    private async Task ResetAsync()
+    {
+        _filter = new AuditLogFilter();
+        _from = null;
+        _to = null;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            // pickers are Berlin-local dates; treat "Bis" as inclusive whole day
+            _filter.FromUtc = _from?.Date.ToUniversalTime();
+            _filter.ToUtc = _to?.Date.AddDays(1).ToUniversalTime();
+            _changes = await AuditQuery.QueryChangesAsync(_filter, _user);
+            _access = await AuditQuery.QueryAccessAsync(_filter, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Protokoll konnte nicht geladen werden: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private RenderFragment RecordLink(string type, string id) => __builder =>
+    {
+        var label = AuditEntityDisplay.Label(type);
+        var route = AuditEntityDisplay.Route(type, id);
+        if (route is null)
+        {
+            <MudText Typo="Typo.body2">@label</MudText>
+        }
+        else
+        {
+            <MudLink Href="@route">@label</MudLink>
+        }
+    };
+
+    private static string ActionName(AuditAction a) => a switch
+    {
+        AuditAction.Created => "Erstellt",
+        AuditAction.Modified => "Geändert",
+        AuditAction.Deleted => "Gelöscht",
+        AuditAction.Restored => "Wiederhergestellt",
+        _ => a.ToString(),
+    };
+
+    private static Color ActionColour(AuditAction a) => a switch
+    {
+        AuditAction.Created => Color.Success,
+        AuditAction.Modified => Color.Info,
+        AuditAction.Deleted => Color.Error,
+        AuditAction.Restored => Color.Warning,
+        _ => Color.Default,
+    };
+}

@@ -104,7 +104,7 @@ else
                 await TemplateService.CreateAsync(_name, _description, html, _isActive, _user);
             }
             Snackbar.Add("Vorlage gespeichert.", Severity.Success);
-            Nav.NavigateTo("/bewerbungs-vorlagen");
+            Nav.NavigateTo("/bewerbungen?tab=vorlagen");
         }
         catch (Exception ex)
         {
@@ -116,5 +116,5 @@ else
         }
     }
 
-    private void Cancel() => Nav.NavigateTo("/bewerbungs-vorlagen");
+    private void Cancel() => Nav.NavigateTo("/bewerbungen?tab=vorlagen");
 }

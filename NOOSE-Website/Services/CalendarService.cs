@@ -32,7 +32,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         }
         else
         {
-            await LoadAuthorityAsync(db, sourceUtc, untilUtc, mayClassified, entries, cancellationToken);
+            await LoadAuthorityAsync(db, sourceUtc, untilUtc, mayClassified, meId, entries, cancellationToken);
         }
 
         return entries;
@@ -140,22 +140,12 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 true, CalendarSource.Absence, "/abmeldungen"));
         }
 
-        // team absences: foreign agents only, and never the free-text reason
-        foreach (var ab in await db.Absences.RosterVisible()
-            .Where(ab => ab.AgentId != meId && ab.FromDate <= untilDay && ab.ToDate >= fromDay)
-            .OrderBy(ab => ab.FromDate).Take(PerSourceMax)
-            .Select(ab => new { ab.Id, ab.FromDate, ab.ToDate, ab.Category, Codename = ab.Agent!.Codename })
-            .ToListAsync(ct))
-        {
-            entries.Add(new CalendarEntry($"tabm:{ab.Id}", $"{ab.Codename}: {AbsenceCategoryDisplay.Name(ab.Category)}",
-                ab.FromDate.ToDateTime(TimeOnly.MinValue), ab.ToDate.ToDateTime(TimeOnly.MinValue),
-                true, CalendarSource.TeamAbsence, "/abmeldungen"));
-        }
+        // other agents' absences live in the authority calendar, not here
     }
 
     // ---- authority calendar ----
     private async Task LoadAuthorityAsync(AppDbContext db, DateTime sourceUtc, DateTime untilUtc, bool mayClassified,
-        List<CalendarEntry> entries, CancellationToken ct)
+        string? meId, List<CalendarEntry> entries, CancellationToken ct)
     {
         // public appointments
         foreach (var t in await db.Appointments.ForAuthority(mayClassified)
@@ -221,7 +211,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 false, CalendarSource.FactionActivity, $"/fraktionen/{fa.FactionId}"));
         }
 
-        // meetings; absences stay out, they are semi-private
+        // meetings
         foreach (var m in await db.Meetings
             .Where(m => m.Start <= untilUtc && (m.End ?? m.Start) >= sourceUtc)
             .OrderBy(m => m.Start).Take(PerSourceMax)
@@ -231,6 +221,20 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             entries.Add(new CalendarEntry($"bes:{m.Id}", m.Title, Local(m.Start), LocalOpt(m.End),
                 false, CalendarSource.Meeting, $"/besprechungen/{m.Id}",
                 MeetingStatusDisplay.IsObsolete(m.Status)));
+        }
+
+        // other agents' absences: never the free-text reason, and RosterVisible hides invisible agents
+        var fromDay = MeetingTime.Day(sourceUtc);
+        var untilDay = MeetingTime.Day(untilUtc);
+        foreach (var ab in await db.Absences.RosterVisible()
+            .Where(ab => ab.AgentId != meId && ab.FromDate <= untilDay && ab.ToDate >= fromDay)
+            .OrderBy(ab => ab.FromDate).Take(PerSourceMax)
+            .Select(ab => new { ab.Id, ab.FromDate, ab.ToDate, ab.Category, Codename = ab.Agent!.Codename })
+            .ToListAsync(ct))
+        {
+            entries.Add(new CalendarEntry($"tabm:{ab.Id}", $"{ab.Codename}: {AbsenceCategoryDisplay.Name(ab.Category)}",
+                ab.FromDate.ToDateTime(TimeOnly.MinValue), ab.ToDate.ToDateTime(TimeOnly.MinValue),
+                true, CalendarSource.TeamAbsence, "/abmeldungen"));
         }
     }
 

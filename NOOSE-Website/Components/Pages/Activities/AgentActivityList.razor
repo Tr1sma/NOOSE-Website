@@ -3,14 +3,14 @@
 @inject IAgentActivityService ActivityService
 @inject NavigationManager Nav
 
-<PageTitle>Aktivitäten · NOOSE</PageTitle>
+<PageTitle>Dienst-Aktivitäten · NOOSE</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
     <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Aktivitäten</MudText>
+    <MudText Typo="Typo.h4">Dienst-Aktivitäten</MudText>
     <MudSpacer />
     <AuthorizeView Policy="@Policies.Leadership">
-        <MudButton Href="/aktivitaeten/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+        <MudButton Href="/papierkorb?tab=aktivitaeten" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
     <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
         <MudButton Href="/aktivitaeten/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aktivität</MudButton>

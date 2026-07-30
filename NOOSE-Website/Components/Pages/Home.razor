@@ -3,6 +3,7 @@
 @inject IDashboardService Dashboard
 @inject IFollowupService FollowupService
 @inject NavigationManager Nav
+@inject IAuthorizationService Authorization
 
 <PageTitle>Dashboard · NOOSE</PageTitle>
 
@@ -38,80 +39,40 @@ else
 {
 <MudGrid>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Personen-Akten</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.People)</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.Badge" Label="Personen-Akten" Value="@Number(k => k.People)"
+                  Href="/personen" Hint="Alle für dich sichtbaren Personen-Akten" />
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Organisationen</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.FactionsAndGroups)</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.Groups" Label="Organisationen" Value="@Number(k => k.FactionsAndGroups)"
+                  Href="/fraktionen" Hint="Fraktionen und Personengruppen zusammen" />
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Radar" Color="Color.Primary" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Operationen</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.Operations)</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.Radar" Label="Operationen" Value="@Number(k => k.Operations)"
+                  Href="/operationen" Hint="Erfasste Einsätze" />
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Color="Color.Primary" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Vorgänge</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.OpenCases)</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.FolderSpecial" Label="Offene Vorgänge" Value="@Number(k => k.OpenCases)"
+                  Href="/vorgaenge" Hint="Ermittlungsakten, die noch nicht abgeschlossen sind" />
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Inbox" Color="Color.Warning" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Anträge</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.OpenRequests)</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.Inbox" Colour="Color.Warning" Label="Offene Anträge" Value="@Number(k => k.OpenRequests)"
+                  Href="@(_mayShares ? "/admin/freigaben" : null)" Hint="Anträge und Registrierungen im Posteingang" />
     </MudItem>
     @* Classified count is itself classified; leadership-only tile. *@
     @if (_isLeadership)
     {
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Error" />
-                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Verschlusssachen</MudText>
-                </MudStack>
-                <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.Classified)</MudText>
-            </MudPaper>
+            <StatTile Icon="@Icons.Material.Filled.Lock" Colour="Color.Error" Label="Verschlusssachen" Value="@Number(k => k.Classified)"
+                      Hint="Als Verschlusssache eingestufte Akten" />
         </MudItem>
     }
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Timelapse" Color="Color.Warning" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Veraltete Akten</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@Number(k => k.StaleRecords)</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.Timelapse" Colour="Color.Warning" Label="Veraltete Akten" Value="@Number(k => k.StaleRecords)"
+                  Hint="Akten jenseits der Aktualitäts-Schwelle" />
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Color="Color.Info" />
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Fällige Wiedervorlagen</MudText>
-            </MudStack>
-            <MudText Typo="Typo.h4" Class="mt-2">@(_load ? "…" : _myDue.Count.ToString())</MudText>
-        </MudPaper>
+        <StatTile Icon="@Icons.Material.Filled.EventRepeat" Colour="Color.Info" Label="Fällige Wiedervorlagen"
+                  Value="@(_load ? "…" : _myDue.Count.ToString())" Hint="Deine Wiedervorlagen, die heute oder früher fällig sind" />
     </MudItem>
 </MudGrid>
 
@@ -138,32 +99,7 @@ else if (_distributions is { } v)
         <MudItem xs="12" md="6" Class="d-flex">
             <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
                 <MudText Typo="Typo.h6" Class="mb-2">Fraktionen nach Gefährdung</MudText>
-                @if (_factionsHazard.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Fraktionen erfasst.</MudText>
-                }
-                else
-                {
-                    <div class="dashboard-fraktionsliste">
-                        <MudList T="string" Dense="true">
-                            @foreach (var f in _factionsHazard)
-                            {
-                                <MudListItem T="string" OnClick="@(() => OpenRecord(f.Href))" Style="cursor:pointer;">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                            <span style="@($"display:inline-block;width:12px;height:12px;border-radius:50%;background:{HazardColour(f.Level)};flex:none;")"></span>
-                                            <div>
-                                                <MudText Typo="Typo.body2"><b>@f.Name</b></MudText>
-                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.CaseNumber</MudText>
-                                            </div>
-                                        </MudStack>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@HazardLevelLogic.Name(f.Level)</MudText>
-                                    </MudStack>
-                                </MudListItem>
-                            }
-                        </MudList>
-                    </div>
-                }
+                <HazardList Items="_factionsHazard" EmptyText="Noch keine Fraktionen erfasst." />
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -172,32 +108,7 @@ else if (_distributions is { } v)
         <MudItem xs="12" md="6" Class="d-flex">
             <MudPaper Class="pa-4 flex-grow-1" Elevation="2">
                 <MudText Typo="Typo.h6" Class="mb-2">Personen nach Gefährdung</MudText>
-                @if (_peopleHazard.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine bewerteten Personen.</MudText>
-                }
-                else
-                {
-                    <div class="dashboard-fraktionsliste">
-                        <MudList T="string" Dense="true">
-                            @foreach (var p in _peopleHazard)
-                            {
-                                <MudListItem T="string" OnClick="@(() => OpenRecord(p.Href))" Style="cursor:pointer;">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                            <span style="@($"display:inline-block;width:12px;height:12px;border-radius:50%;background:{HazardColour(p.Level)};flex:none;")"></span>
-                                            <div>
-                                                <MudText Typo="Typo.body2"><b>@p.Name</b></MudText>
-                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@p.CaseNumber</MudText>
-                                            </div>
-                                        </MudStack>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@HazardLevelLogic.Name(p.Level)</MudText>
-                                    </MudStack>
-                                </MudListItem>
-                            }
-                        </MudList>
-                    </div>
-                }
+                <HazardList Items="_peopleHazard" EmptyText="Noch keine bewerteten Personen." />
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="6" Class="d-flex">
@@ -338,6 +249,7 @@ else if (_distributions is { } v)
     private bool _load = true;
     private bool _isLeadership;
     private bool _isPartner;
+    private bool _mayShares;
     private DashboardMetrics? _metrics;
     private DashboardDistributions? _distributions;
     private List<DashboardChange> _changes = new();
@@ -349,7 +261,6 @@ else if (_distributions is { } v)
     // Colour order must match the segment order in DashboardService
     private static readonly string[] _coloursClassification = { "#9BA8B8", "#22D3EE", "#D29922", "#F85149" };
     private static readonly string[] _coloursOutcome = { "#22D3EE", "#3FB950", "#D29922", "#F85149" };
-    private static readonly string[] _coloursHazard = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" };
     private static readonly string[] _coloursRequests = { "#22D3EE", "#3FB950", "#7C8CF8", "#D29922", "#F85149" };
 
     protected override async Task OnInitializedAsync()
@@ -363,6 +274,8 @@ else if (_distributions is { } v)
             return;
         }
         _isLeadership = user.IsLeadership();
+        // same gate as the page itself, so the tile never links somewhere the viewer is refused
+        _mayShares = (await Authorization.AuthorizeAsync(user, Policies.HighestClassificationPage)).Succeeded;
         var meId = user.GetAgentId(); // for taskforce-membership visibility of metrics/lists
         _metrics = await Dashboard.GetMetricsAsync(_isLeadership, meId);
         _distributions = await Dashboard.GetDistributionsAsync(_isLeadership, meId);
@@ -372,12 +285,6 @@ else if (_distributions is { } v)
         _factionsHazard = await Dashboard.GetFactionsByHazardAsync(_isLeadership);
         _peopleHazard = await Dashboard.GetPeopleByHazardAsync(_isLeadership);
         _load = false;
-    }
-
-    private string HazardColour(HazardLevel level)
-    {
-        var i = (int)level;
-        return i >= 0 && i < _coloursHazard.Length ? _coloursHazard[i] : "#9BA8B8";
     }
 
     private void OpenRecord(string? href)

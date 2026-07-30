@@ -1,0 +1,18 @@
+@page "/papierkorb"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@inject ITrashService TrashService
+
+<PageTitle>Papierkorb · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Delete"
+            Title="Papierkorb"
+            Subtitle="Gelöschte Akten aller Typen an einer Stelle — wiederherstellbar durch die Führung." />
+
+<RecordSectionRail>
+    @foreach (var kind in TrashService.Kinds)
+    {
+        <RecordSection Slug="@kind.Key" Label="@kind.Label" Icon="@kind.Icon">
+            <TrashPanel Kind="@kind.Key" />
+        </RecordSection>
+    }
+</RecordSectionRail>

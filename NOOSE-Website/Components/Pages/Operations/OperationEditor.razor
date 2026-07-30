@@ -1,0 +1,147 @@
+@page "/operationen/neu"
+@page "/operationen/{Id}/bearbeiten"
+@inject IOperationService OperationService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Operation bearbeiten" : "Neue Operation") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Operation nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Radar)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Operation bearbeiten" : "Neue Operation anlegen")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <OperationForm @key="_loadedId" Input="_input" ShowClassification="@(!IsEdit)" MayHighest="_mayHighest"
+                       IsLeadership="_isLeadership" SecrecyOptions="_secrecyOptions" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Die Einstufung wird in der Akte unter „Einstufung" geändert (mit Verlauf und Rang-Prüfung).
+        </MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Anlegen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/operationen/{Id}" : "/operationen";
+
+    private MudForm _form = default!;
+    private OperationInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _mayHighest;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+    private IReadOnlyList<DocumentClassification> _secrecyOptions = Array.Empty<DocumentClassification>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayHighest = _user.MayHighestClassification();
+        _isLeadership = _user.IsLeadership();
+        _secrecyOptions = DocumentViewerScope.AssignableOptions(_user);
+    }
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+
+        if (!IsEdit)
+        {
+            _input = new OperationInput();
+            _load = false;
+            return;
+        }
+
+        var o = await OperationService.GetDetailAsync(Id!, ViewerScope.From(_user));
+        if (o is not null)
+        {
+            _input = new OperationInput
+            {
+                Title = o.Title,
+                Type = o.Type,
+                Status = o.Status,
+                Location = o.Location,
+                Start = o.Start,
+                End = o.End,
+                Expiry = o.Expiry,
+                Result = o.Result,
+                Remarks = o.Remarks,
+                Classification = o.Classification,
+                SecrecyLevel = o.SecrecyLevel,
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await OperationService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/operationen/{Id}");
+            }
+            else
+            {
+                var operation = await OperationService.CreateAsync(_input, _user);
+                Snackbar.Add($"Operation {operation.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/operationen/{operation.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}
