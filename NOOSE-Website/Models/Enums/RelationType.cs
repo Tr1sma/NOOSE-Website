@@ -14,7 +14,11 @@ public enum RelationType
 /// <summary>Display labels.</summary>
 public static class RelationTypeDisplay
 {
-    public static string Name(RelationType type) => type switch
+    public static string Name(RelationType type) =>
+        EnumLabelText.Get(nameof(RelationType), type.ToString()) is { } label ? label : DefaultName(type);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(RelationType type) => type switch
     {
         RelationType.Family => "Familie",
         RelationType.Ally => "Verbündeter",

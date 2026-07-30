@@ -1,0 +1,73 @@
+@* Single-value name prompt for the value-list admin panel. *@
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrWhiteSpace(Text))
+        {
+            <MudText Typo="Typo.body2" Class="mb-3">@Text</MudText>
+        }
+        <MudTextField @bind-Value="_value" Label="@Label" Variant="Variant.Outlined" AutoFocus="true"
+                      Immediate="true" MaxLength="@MaxLength" OnKeyDown="KeyDown" />
+        @if (_error)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error">Bitte einen Wert angeben.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">@ConfirmText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Title { get; set; } = "Wert";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string Label { get; set; } = "Wert";
+    [Parameter] public string? InitialValue { get; set; }
+    [Parameter] public string ConfirmText { get; set; } = "Speichern";
+    [Parameter] public int MaxLength { get; set; } = 300;
+
+    private string _value = string.Empty;
+    private bool _error;
+
+    protected override void OnInitialized() => _value = InitialValue ?? string.Empty;
+
+    private void Confirm()
+    {
+        if (string.IsNullOrWhiteSpace(_value))
+        {
+            _error = true;
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(_value.Trim()));
+    }
+
+    private void KeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            Confirm();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the dialog; returns the trimmed value or null on cancel.</summary>
+    public static async Task<string?> ShowAsync(IDialogService dialog, string title, string? text = null,
+        string? initialValue = null, string label = "Wert", string confirmText = "Speichern", int maxLength = 300)
+    {
+        var parameters = new DialogParameters<ValueNameDialog>
+        {
+            { x => x.Title, title },
+            { x => x.Text, text },
+            { x => x.Label, label },
+            { x => x.InitialValue, initialValue },
+            { x => x.ConfirmText, confirmText },
+            { x => x.MaxLength, maxLength },
+        };
+        var reference = await dialog.ShowAsync<ValueNameDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: string value } ? value : null;
+    }
+}

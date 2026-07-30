@@ -156,6 +156,7 @@ builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
 builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>();
+builder.Services.AddScoped<IValueListLabelService, ValueListLabelService>();
 builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IDocumentTemplateService, DocumentTemplateService>();
@@ -315,6 +316,10 @@ using (var scope = app.Services.CreateScope())
 
     // seed the default recruiting message templates (idempotent)
     await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
+
+    // warm the static enum-label overrides so display classes show custom names
+    var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();
+    NOOSE_Website.Models.Enums.EnumLabelText.ReplaceAll(labelRows.Select(o => (o.List, o.Key, o.Label)));
 
     // demo instance only (Demo:AutoSetup): seed demo data + enable demo mode without a login
     await NOOSE_Website.Infrastructure.DemoAutoSetup.RunAsync(scope.ServiceProvider, builder.Configuration, app.Logger);

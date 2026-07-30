@@ -5,7 +5,7 @@ Full detail in `CLAUDE.md`. This file covers the rules most likely to trip up an
 ## Critical constraints
 - **EF/Identity stays on 9.x** — Pomelo.EntityFrameworkCore.MySql 9.0.0 is incompatible with EF Core 10. The `net10.0` runtime runs EF Core 9 packages (`9.0.16` line). Never upgrade Identity/EF packages to 10.x.
 - **EF tools are local** — `dotnet tool restore` before every `dotnet ef` invocation. Tool version pinned at 9.0.17 in root `dotnet-tools.json`.
-- **No tests exist** — `dotnet test` will fail; do not add test projects unless asked.
+- **Tests exist** — `dotnet test NOOSE-Website.slnx` (xunit + NSubstitute, SQLite integration helpers in `NOOSE-Website.Tests/Infrastructure/`). No bUnit: keep testable logic in the service layer.
 
 ## Commands (run from repo root)
 ```bash
@@ -32,6 +32,10 @@ dotnet ef migrations add Phase23_<Name> --project NOOSE-Website/NOOSE-Website.cs
 - Soft-delete (`ISoftDelete`) is the norm; trash queries use `IgnoreQueryFilters().Where(x => x.IsDeleted)`.
 - DB columns are German, C# members are English. FK relationships use `DeleteBehavior.Restrict` (no cascade).
 - Metadata scores (`ThreatScore`) use `ExecuteUpdateAsync` to bypass the audit interceptor.
+
+## Value lists (Wertelisten)
+- Auto-learned suggestion catalogs (`ProfileSuggestion`/table `SteckbriefVorschlaege`, 9 `SuggestionType`s) are editable under Settings → Wertelisten (`BaseDataPanel.razor`). Renames/deletes propagate to all records via `ExecuteUpdate`/`ExecuteDelete` in `ProfileSuggestionService` — bypasses audit and watchlist on purpose, and also the SaveChanges read-only barrier, so these methods call `Permission.RequireWriteAccess` explicitly. `AgentActivity.Kind` is a distinct-based list without a catalog, managed the same way.
+- Code-defined enum labels (ranks, classifications, …) are overridable in DB (`EnumLabelOverride`/table `WertelistenLabels`) via the static `EnumLabelText` store, warmed in `Program.cs` after `MigrateAsync` and refreshed by `ValueListLabelService`. Display classes expose `DefaultName` (code) and `Name` (override-aware). Enum values themselves stay code-owned — ranks drive authorization by ordinal.
 
 ## Authorization
 - Authorization is enforced in the **Services layer**, not just the UI. Write methods take `ClaimsPrincipal actor` and call `Permission.Require*` as first statement.

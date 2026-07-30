@@ -55,6 +55,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TagMapping> TagMappings => Set<TagMapping>();
     public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<EnumLabelOverride> EnumLabelOverrides => Set<EnumLabelOverride>();
 
     // ---- links and relations ----
     public DbSet<Link> Links => Set<Link>();
@@ -272,6 +273,14 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(v => v.Value).HasMaxLength(300).IsRequired();
             b.HasIndex(v => new { v.Type, v.Value }).IsUnique();
+        });
+
+        modelBuilder.Entity<EnumLabelOverride>(b =>
+        {
+            b.Property(o => o.List).HasMaxLength(50).IsRequired();
+            b.Property(o => o.Key).HasMaxLength(100).IsRequired();
+            b.Property(o => o.Label).HasMaxLength(200).IsRequired();
+            b.HasIndex(o => new { o.List, o.Key }).IsUnique();
         });
 
         modelBuilder.Entity<PersonPhoto>(b =>

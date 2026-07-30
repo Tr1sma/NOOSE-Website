@@ -5,7 +5,11 @@ namespace NOOSE_Website.Models.Enums;
 /// <summary>Display labels.</summary>
 public static class RankDisplay
 {
-    public static string Name(Rank? rank) => rank switch
+    public static string Name(Rank? rank) =>
+        rank is { } r && EnumLabelText.Get(nameof(Rank), r.ToString()) is { } label ? label : DefaultName(rank);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(Rank? rank) => rank switch
     {
         Rank.JuniorAgent => "Junior Agent",
         Rank.SpecialAgent => "Special Agent",

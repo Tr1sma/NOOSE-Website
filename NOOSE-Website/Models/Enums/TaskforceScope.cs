@@ -12,7 +12,11 @@ public enum TaskforceScope
 /// <summary>Display labels.</summary>
 public static class TaskforceScopeDisplay
 {
-    public static string Name(TaskforceScope area) => area switch
+    public static string Name(TaskforceScope area) =>
+        EnumLabelText.Get(nameof(TaskforceScope), area.ToString()) is { } label ? label : DefaultName(area);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(TaskforceScope area) => area switch
     {
         TaskforceScope.InternalAgency => "Innerbehördlich",
         TaskforceScope.CrossAgency => "Überbehördlich",

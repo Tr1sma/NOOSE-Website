@@ -11,7 +11,11 @@ public enum GroupsKind
 /// <summary>Display labels.</summary>
 public static class GroupsKindDisplay
 {
-    public static string Name(GroupsKind kind) => kind switch
+    public static string Name(GroupsKind kind) =>
+        EnumLabelText.Get(nameof(GroupsKind), kind.ToString()) is { } label ? label : DefaultName(kind);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(GroupsKind kind) => kind switch
     {
         GroupsKind.Grouping => "Gruppierung",
         GroupsKind.Personality => "Persönlichkeit",
