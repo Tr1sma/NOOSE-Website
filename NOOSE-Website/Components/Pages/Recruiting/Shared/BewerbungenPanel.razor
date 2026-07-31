@@ -11,6 +11,9 @@
 </MudText>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudText Typo="Typo.h3" Style="color: var(--mud-palette-error); font-weight: 700;">
+        @RejectionRate.ToString("P2")
+    </MudText>
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
         <div>
             <MudText Typo="Typo.overline" Class="mud-text-secondary">Ablehnungsquote</MudText>
@@ -18,10 +21,6 @@
                 @RejectedCount von @TotalCount Bewerbungen abgelehnt (inkl. Discord-Ära)
             </MudText>
         </div>
-        <MudSpacer />
-        <MudText Typo="Typo.h3" Style="color: var(--mud-palette-error); font-weight: 700;">
-            @RejectionRate.ToString("P0")
-        </MudText>
     </MudStack>
 </MudPaper>
 
