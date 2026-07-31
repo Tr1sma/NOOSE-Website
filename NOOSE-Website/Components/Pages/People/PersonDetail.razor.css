@@ -1,8 +1,0 @@
-/* Same offset as .record-rail-shell, or the card and the section box drift apart once pinned.
-   Below md the grid stacks and sticky stays off. */
-@media (min-width: 960px) {
-    .akte-steckkarte {
-        position: sticky;
-        top: calc(var(--mud-appbar-height, 60px) + 1rem);
-    }
-}

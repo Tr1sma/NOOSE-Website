@@ -573,6 +573,20 @@ div.vis-tooltip {
         overflow-y: auto;
         overscroll-behavior: contain;
     }
+
+    /* Steckkarte: same one-screenful cap as .record-rail-shell next to it. */
+    .akte-steckkarte {
+        position: sticky;
+        top: calc(var(--mud-appbar-height, 60px) + 1rem);
+        height: calc(100vh - var(--mud-appbar-height, 60px) - 2rem);
+        height: calc(100dvh - var(--mud-appbar-height, 60px) - 2rem);
+    }
+
+    .akte-steckkarte > .mud-paper {
+        height: 100%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
 }
 
 @media print {
