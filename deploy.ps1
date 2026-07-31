@@ -94,11 +94,12 @@ try {
     $isDemoTarget = $AllowDemo -or ($Service -like '*demo*') -or ($AppDir -like '*demo*') -or ($Server -like '*31.70.104.128*')
     if (-not $isDemoTarget) {
         $envFile = "/etc/$Service/$Service.env"
+        # ACHTUNG: keine doppelten Anfuehrungszeichen im Remote-Skript (siehe Hinweis bei $remote unten).
         $remoteCheck =
             "FLAG=false; " +
             "if systemctl show '$Service' -p Environment 2>/dev/null | grep -iqE 'Demo__AutoSetup=true'; then FLAG=true; fi; " +
             "if [ -f '$envFile' ] && grep -iqE '^[[:space:]]*Demo__AutoSetup[[:space:]]*=[[:space:]]*true' '$envFile'; then FLAG=true; fi; " +
-            'echo "DEMO_FLAG=$FLAG"'
+            'echo DEMO_FLAG=$FLAG'
         Write-Host "==> Prod-Schutz: pruefe Demo-Flag auf $Server ($envFile)" -ForegroundColor Cyan
         # stderr NICHT in die Pipeline ziehen: sonst verschluckt Out-String den ssh-Passwort-/Host-Key-Prompt -> sieht aus wie haengen.
         $checkOutput = (& $ssh @sshOpts $Server $remoteCheck | Out-String)
@@ -152,13 +153,20 @@ try {
 
     # 4) Auf dem Server ausrollen: Dienst stoppen, Dateien tauschen (App_Data behalten),
     #    Rechte setzen, Dienst starten, kurz warten, Health pruefen. Alles per && -> fail-fast.
+    #
+    #    ACHTUNG, NIE doppelte Anfuehrungszeichen in dieses Remote-Skript schreiben: Windows
+    #    PowerShell 5.1 verschluckt eingebettete " beim Aufbau der argv fuer native Exes, das
+    #    Skript kommt dann unquotiert auf dem Server an und bash bricht mit einem Syntaxfehler ab
+    #    (z. B. bei den Klammern einer Meldung). Nur einfache Anfuehrungszeichen oder gar keine.
+    #    Auch NICHT per Pipe an 'bash -s' schicken -- PowerShell stellt dem stdin eine UTF-8-BOM
+    #    voran und beendet mit CRLF; das \r klebt am letzten } und bash meldet 'unexpected EOF'.
     $remote = "systemctl stop $Service" +
               " && find $AppDir -mindepth 1 -maxdepth 1 ! -name App_Data -exec rm -rf {} +" +
               " && tar -xzf /tmp/noose-publish.tgz -C $AppDir" +
               " && chown -R www-data:www-data $AppDir" +
               " && systemctl start $Service" +
               " && rm -f /tmp/noose-publish.tgz" +
-              ' && { i=0; while [ $i -lt 30 ]; do curl -sf -o /dev/null http://127.0.0.1:5000/health && { echo "Health-Check: OK"; exit 0; }; i=$((i + 1)); sleep 2; done; echo "Health-Check: FEHLGESCHLAGEN (kein 200 nach 60s)"; exit 1; }'
+              ' && { i=0; while [ $i -lt 30 ]; do curl -sf -o /dev/null http://127.0.0.1:5000/health && { echo Health-Check: OK; exit 0; }; i=$((i + 1)); sleep 2; done; echo Health-Check: FEHLGESCHLAGEN - kein 200 nach 60s; exit 1; }'
     Invoke-Step "Rolle auf dem Server aus" { & $ssh @sshOpts $Server $remote }
 
     # 5) Lokales Artefakt aufraeumen
