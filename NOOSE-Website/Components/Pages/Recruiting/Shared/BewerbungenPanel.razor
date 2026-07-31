@@ -18,6 +18,10 @@
                 @RejectedCount von @TotalCount Bewerbungen abgelehnt (inkl. Discord-Ära)
             </MudText>
         </div>
+        <MudSpacer />
+        <MudText Typo="Typo.h3" Style="color: var(--mud-palette-error); font-weight: 700;">
+            @RejectionRate.ToString("P0")
+        </MudText>
     </MudStack>
 </MudPaper>
 
