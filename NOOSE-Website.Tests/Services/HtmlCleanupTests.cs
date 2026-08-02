@@ -170,12 +170,63 @@ public class HtmlCleanupTests
     }
 
     [Fact]
-    public void Clean_ImageTag_IsStrippedButSiblingTextKept()
+    public void Clean_ImageTag_IsPreservedWithSiblingText()
     {
         var result = HtmlCleanup.Clean("<img src=\"x.jpg\">Caption");
 
-        Assert.DoesNotContain("<img", result);
+        Assert.Contains("<img", result);
         Assert.Contains("Caption", result);
+    }
+
+    // ---- images ----
+
+    [Fact]
+    public void Clean_ImageWithHttpsUrl_KeepsSrc()
+    {
+        var result = HtmlCleanup.Clean("<img src=\"https://example.com/bild.png\">");
+
+        Assert.Contains("<img", result);
+        Assert.Contains("https://example.com/bild.png", result);
+    }
+
+    [Fact]
+    public void Clean_ImageWithDataUri_KeepsSrc()
+    {
+        // quill embeds images as base64 data URIs
+        const string src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+        var result = HtmlCleanup.Clean($"<img src=\"{src}\">");
+
+        Assert.Contains("<img", result);
+        Assert.Contains(src, result);
+    }
+
+    [Fact]
+    public void Clean_ImageAltAndSizeAttributes_ArePreserved()
+    {
+        var result = HtmlCleanup.Clean("<img src=\"x.jpg\" alt=\"Lagebild\" width=\"200\">");
+
+        Assert.Contains("alt", result);
+        Assert.Contains("Lagebild", result);
+        Assert.Contains("width", result);
+    }
+
+    [Fact]
+    public void Clean_ImageEventHandler_IsRemoved()
+    {
+        var result = HtmlCleanup.Clean("<img src=\"x.jpg\" onerror=\"evil()\">");
+
+        Assert.Contains("<img", result);
+        Assert.DoesNotContain("onerror", result);
+        Assert.DoesNotContain("evil", result);
+    }
+
+    [Fact]
+    public void Clean_ImageWithJavascriptScheme_SrcIsRemoved()
+    {
+        var result = HtmlCleanup.Clean("<img src=\"javascript:alert(1)\">");
+
+        Assert.DoesNotContain("javascript", result);
     }
 
     // ---- event-handler / disallowed attributes are stripped ----

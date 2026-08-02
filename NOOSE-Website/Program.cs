@@ -261,8 +261,8 @@ builder.Services.AddRazorComponents()
     })
     .AddHubOptions(options =>
     {
-        // 5 MB: the RichTextEditor streams full HTML over SignalR — do not lower
-        options.MaximumReceiveMessageSize = 5 * 1024 * 1024;
+        // 25 MB: the RichTextEditor streams full HTML incl. base64 images over SignalR — do not lower
+        options.MaximumReceiveMessageSize = 25 * 1024 * 1024;
     });
 
 var app = builder.Build();

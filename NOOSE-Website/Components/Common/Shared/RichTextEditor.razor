@@ -34,7 +34,7 @@
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=6");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=8");
             _ref = DotNetObjectReference.Create(this);
             await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight);
             _ready = true;

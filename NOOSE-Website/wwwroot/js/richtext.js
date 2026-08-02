@@ -76,6 +76,82 @@ function haengeScrollWaechterAn(element) {
     element.__nooseScrollWaechter = true;
 }
 
+// quill 1.x drops pasted image files (screenshots)
+function haengeBildEinfuegungAn(element) {
+    element.addEventListener('paste', (ereignis) => {
+        const daten = ereignis.clipboardData;
+        if (!daten || daten.getData('text/html')) {
+            return; // html pastes go through the img matcher
+        }
+        const bild = Array.from(daten.files || []).find(d => d.type.startsWith('image/'));
+        const editor = bild && element.__nooseQuill;
+        if (!editor) {
+            return;
+        }
+        ereignis.preventDefault();
+        ereignis.stopPropagation();
+        const leser = new FileReader();
+        leser.onload = () => {
+            const bereich = editor.getSelection(true);
+            editor.insertEmbed(bereich.index, 'image', leser.result, 'user');
+            editor.setSelection(bereich.index + 1, 0, 'silent');
+        };
+        leser.readAsDataURL(bild);
+    }, true); // capture runs before quill's own handler
+}
+
+// pasted images with external or blob src: inline as data uri — links rot, blob: dies with the tab
+function registriereBildMatcher(editor) {
+    editor.clipboard.addMatcher('img', (node, delta) => {
+        const quelle = (node.getAttribute('src') || '').trim();
+        if (!quelle || quelle.startsWith('data:')) {
+            return delta;
+        }
+        // matchers stay sync; replace async, original src is the fallback
+        setTimeout(() => ersetzeDurchDataUrl(editor, quelle), 1);
+        return delta;
+    });
+}
+
+// fetch + swap every matching img blot
+async function ersetzeDurchDataUrl(editor, quelle) {
+    let dataUrl;
+    try {
+        const antwort = await fetch(quelle);
+        if (!antwort.ok) {
+            return;
+        }
+        const blob = await antwort.blob();
+        if (!blob.type.startsWith('image/')) {
+            return;
+        }
+        dataUrl = await new Promise((resolve, reject) => {
+            const leser = new FileReader();
+            leser.onload = () => resolve(leser.result);
+            leser.onerror = reject;
+            leser.readAsDataURL(blob);
+        });
+    } catch (e) {
+        return; // cors etc: keep original src
+    }
+    const Delta = window.Quill.import('delta');
+    for (const img of Array.from(editor.root.querySelectorAll('img'))) {
+        if ((img.getAttribute('src') || '') !== quelle || !img.isConnected) {
+            continue;
+        }
+        const blot = window.Quill.find(img);
+        if (!blot) {
+            continue;
+        }
+        try {
+            const index = editor.getIndex(blot);
+            editor.updateContents(new Delta().retain(index).insert({ image: dataUrl }).delete(1), 'user');
+        } catch (e) {
+            /* blot already gone */
+        }
+    }
+}
+
 function ladeQuill() {
     if (window.Quill) {
         return Promise.resolve();
@@ -147,7 +223,7 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight) {
         [{ list: 'ordered' }, { list: 'bullet' }],
         ['blockquote', 'code-block'],
         [{ color: [] }, { background: [] }],
-        ['link', 'clean'],
+        ['link', 'image', 'clean'],
     ];
     const module = {};
     if (tableHandler) {
@@ -170,6 +246,8 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight) {
     entschaerfeFokus(editor.root);
     entschaerfeFokus(editor.clipboard && editor.clipboard.container);
     haengeScrollWaechterAn(element);
+    haengeBildEinfuegungAn(element);
+    registriereBildMatcher(editor);
 
     if (minHeight) {
         editor.root.style.minHeight = minHeight;
@@ -197,7 +275,8 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight) {
 function leseHtml(editor) {
     const ohneText = editor.getText().trim().length === 0;
     const ohneTabelle = editor.root.querySelector('table') === null;
-    return ohneText && ohneTabelle ? '' : editor.root.innerHTML;
+    const ohneBild = editor.root.querySelector('img') === null;
+    return ohneText && ohneTabelle && ohneBild ? '' : editor.root.innerHTML;
 }
 
 export function setHtml(element, html) {

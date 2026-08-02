@@ -29,7 +29,7 @@ else
             <MudButton Href="@BackHref">Abbrechen</MudButton>
             <AuthorizeView Policy="@Policies.WriteAccess">
                 <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
-                           Disabled="@(_saving || string.IsNullOrWhiteSpace(_input.Title) || _input.Start is null)">
+                           Disabled="_saving">
                     @(IsEdit ? "Speichern" : "Anlegen")
                 </MudButton>
             </AuthorizeView>
@@ -88,6 +88,11 @@ else
     {
         if (_input is null)
         {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_input.Title) || _input.Start is null)
+        {
+            Snackbar.Add("Titel und Beginn sind erforderlich.", Severity.Warning);
             return;
         }
         _saving = true;
