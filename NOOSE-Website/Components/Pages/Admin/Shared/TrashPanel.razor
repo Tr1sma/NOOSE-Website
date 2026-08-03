@@ -1,0 +1,122 @@
+@* Deleted records of one kind; used by /papierkorb and by the absences page. *@
+@using NOOSE_Website.Models.Common
+@inject ITrashService Trash
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Gelöschte Einträge. Die Führung kann sie wiederherstellen; sie erscheinen dann wieder in der Liste.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Der Papierkorb ist leer.</MudAlert>
+}
+else
+{
+    <MudTable Items="_rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            @if (_hasReference)
+            {
+                <MudTh><MudTableSortLabel T="TrashItem" SortBy="@(x => x.Reference)">Aktenzeichen</MudTableSortLabel></MudTh>
+            }
+            <MudTh><MudTableSortLabel T="TrashItem" SortBy="@(x => x.Title)">Bezeichnung</MudTableSortLabel></MudTh>
+            @if (_hasDetail)
+            {
+                <MudTh>Details</MudTh>
+            }
+            <MudTh>
+                <MudTableSortLabel T="TrashItem" SortBy="@(x => x.DeletedAt)" InitialDirection="SortDirection.Descending">
+                    Gelöscht am
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            @if (_hasReference)
+            {
+                <MudTd DataLabel="Aktenzeichen"><MudText Typo="Typo.body2">@(context.Reference ?? "—")</MudText></MudTd>
+            }
+            <MudTd DataLabel="Bezeichnung"><MudText Typo="Typo.body2">@context.Title</MudText></MudTd>
+            @if (_hasDetail)
+            {
+                <MudTd DataLabel="Details">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@(context.Detail ?? "—")</MudText>
+                </MudTd>
+            }
+            <MudTd DataLabel="Gelöscht am">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.DeletedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                @* LeadershipPage admits read-only supervision, for whom RestoreAsync throws *@
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="restore">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Restore"
+                               OnClick="@(() => RestoreAsync(context))">Wiederherstellen</MudButton>
+                </AuthorizeView>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Trash kind key, e.g. "personen"; matches ITrashService.Kinds.</summary>
+    [Parameter, EditorRequired] public string Kind { get; set; } = string.Empty;
+
+    private bool _load = true;
+    private string? _loadedKind;
+    private List<TrashItem> _rows = new();
+    private bool _hasReference;
+    private bool _hasDetail;
+
+    // the kind can change while the component stays alive, so react to parameters, not to init
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedKind == Kind)
+        {
+            return;
+        }
+        _loadedKind = Kind;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Trash.GetAsync(Kind);
+        }
+        catch (Exception ex)
+        {
+            _rows = new();
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        // columns that no row fills would only be empty noise
+        _hasReference = _rows.Any(r => !string.IsNullOrWhiteSpace(r.Reference));
+        _hasDetail = _rows.Any(r => !string.IsNullOrWhiteSpace(r.Detail));
+        _load = false;
+    }
+
+    private async Task RestoreAsync(TrashItem row)
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            await Trash.RestoreAsync(row.Kind, row.Id, user);
+            Snackbar.Add($"„{row.Title}\" wiederhergestellt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+}

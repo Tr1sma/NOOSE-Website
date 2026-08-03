@@ -1,0 +1,21 @@
+@* One section of a record detail page; renders nothing itself — the rail renders the active section's content. *@
+@implements IDisposable
+
+@code {
+    [CascadingParameter] private RecordSectionRail? Rail { get; set; }
+
+    /// <summary>Stable key used in the ?tab= query and in PartnerTabCatalog.</summary>
+    [Parameter, EditorRequired] public string Slug { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>Caption this section is filed under in the rail; sections sharing a caption stay together.</summary>
+    [Parameter] public string? Group { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized() => Rail?.Register(this);
+
+    public void Dispose() => Rail?.Unregister(this);
+}

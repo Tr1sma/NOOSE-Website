@@ -152,7 +152,7 @@ else
             }
 
             Snackbar.Add("Vorlage gespeichert.", Severity.Success);
-            Nav.NavigateTo("/admin/vorlagen?tab=personal-vorlagen");
+            Nav.NavigateTo("/einstellungen?tab=vorlagen-personal");
         }
         catch (Exception ex)
         {
@@ -164,5 +164,5 @@ else
         }
     }
 
-    private void Cancel() => Nav.NavigateTo("/admin/vorlagen?tab=personal-vorlagen");
+    private void Cancel() => Nav.NavigateTo("/einstellungen?tab=vorlagen-personal");
 }

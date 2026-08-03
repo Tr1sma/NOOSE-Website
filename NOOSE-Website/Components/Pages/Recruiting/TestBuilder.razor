@@ -1,4 +1,3 @@
-@page "/bewerbungs-tests"
 @page "/bewerbungs-tests/{Id}"
 @attribute [Authorize(Policy = Policies.HrbOrLeadership)]
 @inject IBewerbungTestService TestService
@@ -7,56 +6,9 @@
 
 <PageTitle>Bewerbungs-Tests · NOOSE</PageTitle>
 
-@if (Id is null)
+@if (_model is not null)
 {
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-        <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Primary" Size="Size.Large" />
-        <MudText Typo="Typo.h4">Bewerbungs-Tests</MudText>
-    </MudStack>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-        Wiederverwendbare Eignungstests. Lege Fragen (Multiple Choice, Ja/Nein, Freitext) an und weise einen Test
-        in einer Bewerbung dem Bewerber zu.
-    </MudText>
-
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-            <MudTextField @bind-Value="_newTitle" Label="Neuer Test" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:260px;" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateAsync">Test anlegen</MudButton>
-        </MudStack>
-    </MudPaper>
-
-    @if (_load)
-    {
-        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-    }
-    else if (_tests.Count == 0)
-    {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Noch keine Tests angelegt.</MudAlert>
-    }
-    else
-    {
-        <MudTable Items="_tests" Dense="true" Hover="true">
-            <HeaderContent>
-                <MudTh>Titel</MudTh><MudTh>Status</MudTh><MudTh></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Titel">@context.Title</MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
-                        @(context.IsActive ? "Aktiv" : "Inaktiv")
-                    </MudChip>
-                </MudTd>
-                <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Href="@($"/bewerbungs-tests/{context.Id}")" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteTestAsync(context.Id))" />
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
-}
-else if (_model is not null)
-{
-    <MudButton Href="/bewerbungs-tests" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Alle Tests</MudButton>
+    <MudButton Href="/bewerbungen?tab=tests" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">Alle Tests</MudButton>
 
     <MudPaper Elevation="2" Class="pa-4 mb-4">
         <MudText Typo="Typo.h6" Class="mb-2">Test bearbeiten</MudText>
@@ -154,9 +106,6 @@ else if (_model is not null)
     private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private ClaimsPrincipal _user = default!;
-    private bool _load = true;
-    private List<BewerbungTest> _tests = new();
-    private string? _newTitle;
     private TestEditModel? _model;
     private TestQuestionType _newType = TestQuestionType.MultipleChoice;
     private readonly Dictionary<string, string> _newOption = new();
@@ -171,41 +120,9 @@ else if (_model is not null)
 
     protected override async Task OnInitializedAsync() => _user = (await AuthStateTask).User;
 
-    protected override async Task OnParametersSetAsync()
-    {
-        if (Id is null)
-        {
-            _load = true;
-            _tests = await TestService.GetTestsAsync(_user);
-            _load = false;
-        }
-        else
-        {
-            await LoadModelAsync();
-        }
-    }
+    protected override Task OnParametersSetAsync() => LoadModelAsync();
 
     private async Task LoadModelAsync() => _model = await TestService.GetEditModelAsync(Id!, _user);
-
-    private async Task CreateAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_newTitle))
-        {
-            return;
-        }
-        try
-        {
-            var t = await TestService.CreateTestAsync(_newTitle, null, _user);
-            Nav.NavigateTo($"/bewerbungs-tests/{t.Id}");
-        }
-        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
-    }
-
-    private async Task DeleteTestAsync(string id)
-    {
-        try { await TestService.DeleteTestAsync(id, _user); _tests = await TestService.GetTestsAsync(_user); }
-        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
-    }
 
     private async Task SaveTestAsync()
     {

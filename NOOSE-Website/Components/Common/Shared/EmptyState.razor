@@ -1,0 +1,28 @@
+@* Shared "nothing here yet" panel for lists, tabs and panels. *@
+
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="@($"pa-6 {Class}")">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <MudIcon Icon="@Icon" Size="@IconSize" Color="Color.Default" />
+    }
+    <MudText Typo="Typo.body1">@Title</MudText>
+    @if (!string.IsNullOrWhiteSpace(Text))
+    {
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="mud-text-secondary">@Text</MudText>
+    }
+    @Actions
+</MudStack>
+
+@code {
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public Size IconSize { get; set; } = Size.Large;
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    /// <summary>Optional second line explaining what to do next.</summary>
+    [Parameter] public string? Text { get; set; }
+
+    /// <summary>Call-to-action buttons, usually the same "Neu" button as the page header.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+}

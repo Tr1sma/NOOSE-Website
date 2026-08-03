@@ -52,6 +52,11 @@ Das Skript macht alles: `dotnet publish` → mit **tar** packen → per `scp` ho
 Server Dienst stoppen, Dateien tauschen (**`App_Data` bleibt erhalten**), Rechte setzen, Dienst
 starten, Health-Check. Am Ende im Browser **Strg+F5** (Asset-Cache leeren).
 
+> **Hinweis:** Ein Deploy stoppt den Dienst hart — alle eingeloggten Nutzer sehen kurz das
+> Reconnect-Modal, `/_blazor/negotiate` liefert währenddessen **502**. Das ist erwartet und dauert
+> ~10–25 s (bei migrationsschweren Releases länger). Clientseitige `ERR_NAME_NOT_RESOLVED`- bzw.
+> `ERR_NETWORK_CHANGED`-Fehler kommen dagegen **nicht** vom Server (siehe Abschnitt 7).
+
 Optionen:
 ```powershell
 .\deploy.ps1 -SkipPublish     # vorhandenen .\publish-Ordner nutzen
@@ -338,3 +343,5 @@ jobs:
 | **Zeiten 2 h zu früh / falscher Tag** | Server läuft in UTC. In Blazor Server nutzt `.ToLocalTime()` die Server-Zeitzone. `TZ=Europe/Berlin` in `/etc/noose/noose.env` ergänzen, dann `systemctl restart noose` (Neustart nötig — `TimeZoneInfo.Local` ist pro Prozess gecacht). |
 | **502 Bad Gateway** | App läuft nicht → `systemctl status noose` + `journalctl -u noose -e`. |
 | **Nutzer nach jedem Deploy ausgeloggt** | Data-Protection-Schlüssel weg → `App_Data` darf beim Deploy **nicht** gelöscht werden (das Skript behält es). |
+| **Konsole: `ERR_NAME_NOT_RESOLVED` / `ERR_NETWORK_CHANGED`, WebSocket schließt mit `1006`, danach automatische Erholung** | Praktisch immer **clientseitig**: Der Browser konnte `noose.info` nicht auflösen bzw. hat abgebrochen, weil sich die Netzwerkschnittstelle geändert hat (WLAN-Wechsel, VPN, Adapter-Reset, Standby). Die Anfrage hat den Server nie erreicht — nginx und Kestrel können diese Codes gar nicht erzeugen. Gegenprobe Server: `systemctl status noose` (Laufzeit älter als der Vorfall = App war nie weg), `journalctl -u noose --since "<HH:MM>"` (kein Neustart) und `grep "<HH:MM>" /var/log/nginx/access.log` (keine Zeilen = kam nie an). Gegenprobe Client: `nslookup noose.info 1.1.1.1` aus einem anderen Netz (Handy-Hotspot). Bei echtem App-Ausfall käme **502**, bei totem Host `ERR_CONNECTION_REFUSED`/`ERR_CONNECTION_TIMED_OUT` — nie `ERR_NAME_NOT_RESOLVED`. Das Reconnect-Modal fängt das ab; nichts zu tun. |
+| **`ERR_CONNECTION_RESET` auf einzelne GUID-benannte Requests** (Uploads/Anhänge aus `App_Data/uploads`) | **Nur zusammen mit** dem Muster oben clientseitig (abgerissene Verbindung beim Netzwechsel). **Isoliert** — also ohne `ERR_NAME_NOT_RESOLVED` und bei stabiler WebSocket-Verbindung — serverseitig prüfen: `journalctl -u noose -e` auf Exceptions im Datei-Endpoint, `/var/log/nginx/error.log` auf `upstream prematurely closed connection`. |

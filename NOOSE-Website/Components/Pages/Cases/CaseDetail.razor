@@ -68,12 +68,10 @@ else
             }
             else
             {
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
-                     @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
+            <RecordSectionRail>
                 @if (TabOn("stammdaten"))
                 {
-                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                <RecordSection Group="Akte" Slug="stammdaten" Label="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_case.Description))
                         {
@@ -101,62 +99,62 @@ else
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
                         }
                     </MudStack>
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("inhalt"))
                 {
-                <MudTabPanel Text="Inhalt" Icon="@Icons.Material.Filled.Hub">
+                <RecordSection Group="Akte" Slug="inhalt" Label="Inhalt" Icon="@Icons.Material.Filled.Hub">
                     <CaseContentPanel CaseId="@_case.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* assigned NOOSE agents: internal only *@
                 @if (!_isPartner)
                 {
-                <MudTabPanel Text="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                <RecordSection Group="Struktur" Slug="agents" Label="Beteiligte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <CaseAgentsPanel CaseId="@_case.Id" User="_user" Changed="CaseLeadRefreshAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("einstufung"))
                 {
-                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                <RecordSection Group="Akte" Slug="einstufung" Label="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_case.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(Case)" EntityId="@_case.Id" TargetDesignation="@($"{_case.Title} ({_case.CaseNumber})")" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe: Sources child service is partner-safe *@
                 @if (TabOn("quellen"))
                 {
-                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                <RecordSection Group="Anhänge" Slug="quellen" Label="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe child tabs *@
                 @if (TabOn("wiedervorlagen"))
                 {
-                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                <RecordSection Group="Verlauf" Slug="wiedervorlagen" Label="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("kommentare"))
                 {
-                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                <RecordSection Group="Verlauf" Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("zusatzfelder"))
                 {
-                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                <RecordSection Group="Akte" Slug="zusatzfelder" Label="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe: timeline filters cross-refs for partners *@
                 @if (TabOn("historie"))
                 {
-                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Case)" EntityId="@_case.Id" User="_user" @key="_historyKey" />
-                </MudTabPanel>
+                </RecordSection>
                 }
-            </MudTabs>
+            </RecordSectionRail>
             }
         </MudItem>
     </MudGrid>
@@ -175,8 +173,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // order must match the MudTabPanels
-    private int _activeTab;
+    // every section slug on this page; the rail owns which one is active
     private static readonly string[] _tabs =
     {
         "stammdaten", "inhalt", "agents", "einstufung",
@@ -206,7 +203,6 @@ else
         _load = true;
         _case = null;
         await LoadAsync();
-        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_case is not null)
         {
             await AccessLog.LogViewAsync(nameof(Case), _case.Id);
@@ -215,7 +211,7 @@ else
 
     private async Task LoadAsync()
     {
-        // no _load=true here: remounting MudTabs would reset to the first tab
+        // no _load=true here: remounting the rail would reset to the first section
         var scope = ViewerScope.From(_user);
         _case = await CaseService.GetDetailAsync(Id, scope);
         if (_case is not null)

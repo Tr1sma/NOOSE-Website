@@ -29,8 +29,8 @@ public interface INavPreferencesService
     /// <summary>Remember the drawer open state.</summary>
     Task SetDrawerOpenAsync(string agentId, bool open, CancellationToken cancellationToken = default);
 
-    /// <summary>Remember a section's collapsed state.</summary>
-    Task SetGroupCollapsedAsync(string agentId, string section, bool collapsed, CancellationToken cancellationToken = default);
+    /// <summary>Remember the drawer area the user last looked at.</summary>
+    Task SetLastAreaAsync(string agentId, string? area, CancellationToken cancellationToken = default);
 
     /// <summary>Record a visited page/record (dedupes + caps).</summary>
     Task PushRecentAsync(string agentId, RecentItem item, CancellationToken cancellationToken = default);

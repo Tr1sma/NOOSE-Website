@@ -3,7 +3,11 @@ namespace NOOSE_Website.Models.Enums;
 /// <summary>Display labels.</summary>
 public static class LifeStatusDisplay
 {
-    public static string Name(LifeStatus status) => status switch
+    public static string Name(LifeStatus status) =>
+        EnumLabelText.Get(nameof(LifeStatus), status.ToString()) is { } label ? label : DefaultName(status);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(LifeStatus status) => status switch
     {
         LifeStatus.Alive => "Lebend",
         LifeStatus.Dead => "Tot",
@@ -22,7 +26,11 @@ public static class LifeStatusDisplay
 /// <summary>Display labels.</summary>
 public static class ClassificationDisplay
 {
-    public static string Name(Classification classification) => classification switch
+    public static string Name(Classification classification) =>
+        EnumLabelText.Get(nameof(Classification), classification.ToString()) is { } label ? label : DefaultName(classification);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(Classification classification) => classification switch
     {
         Classification.Unknown => "Unbekannt",
         Classification.ReviewCase => "Prüffall",
@@ -43,7 +51,11 @@ public static class ClassificationDisplay
 /// <summary>Display labels.</summary>
 public static class MeasureOutcomeDisplay
 {
-    public static string Name(MeasureOutcome outcome) => outcome switch
+    public static string Name(MeasureOutcome outcome) =>
+        EnumLabelText.Get(nameof(MeasureOutcome), outcome.ToString()) is { } label ? label : DefaultName(outcome);
+
+    /// <summary>Code-defined label, without DB override.</summary>
+    public static string DefaultName(MeasureOutcome outcome) => outcome switch
     {
         MeasureOutcome.RunningStill => "Läuft noch",
         MeasureOutcome.OfficiallyReleased => "Offiziell entlassen",

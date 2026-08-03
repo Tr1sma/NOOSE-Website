@@ -28,7 +28,7 @@
         <MudSpacer />
         <AuthorizeView Policy="@Policies.LeadershipPage" Context="fuehrung">
             <MudTooltip Text="Papierkorb (gelöschte Termine)">
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Href="/kalender/papierkorb" aria-label="Papierkorb" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Href="/papierkorb?tab=kalender" aria-label="Papierkorb" />
             </MudTooltip>
         </AuthorizeView>
         <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
@@ -91,18 +91,19 @@
     private HashSet<CalendarSource> _activeSources = new(_legendMy);
 
     private string SubtitleText => _mode == CalendarMode.My
-        ? "Meine Termine, mir zugewiesene Aufgaben, meine fälligen Wiedervorlagen, Besprechungen & Abmeldungen im Team."
-        : "Öffentliche Termine, Operationen, Überwachungsfenster, Personen-Doks, Fraktions-Aktivitäten & Besprechungen.";
+        ? "Meine Termine, mir zugewiesene Aufgaben, meine fälligen Wiedervorlagen, Besprechungen & meine Abmeldungen."
+        : "Öffentliche Termine, Operationen, Überwachungsfenster, Personen-Doks, Fraktions-Aktivitäten, Besprechungen & Abmeldungen der anderen Agenten.";
 
     private static readonly CalendarSource[] _legendMy =
     {
         CalendarSource.Appointment, CalendarSource.Job, CalendarSource.Followup,
-        CalendarSource.Meeting, CalendarSource.Absence, CalendarSource.TeamAbsence,
+        CalendarSource.Meeting, CalendarSource.Absence,
     };
     private static readonly CalendarSource[] _legendAuthority =
     {
         CalendarSource.Appointment, CalendarSource.Operation, CalendarSource.Observation,
         CalendarSource.PersonDoc, CalendarSource.FactionActivity, CalendarSource.Meeting,
+        CalendarSource.TeamAbsence,
     };
     private CalendarSource[] LegendSources => _mode == CalendarMode.My ? _legendMy : _legendAuthority;
 

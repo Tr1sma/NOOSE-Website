@@ -1,0 +1,142 @@
+@page "/taskforces/neu"
+@page "/taskforces/{Id}/bearbeiten"
+@inject ITaskforceService TaskforceService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Taskforce bearbeiten" : "Neue Taskforce") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Taskforce nicht gefunden oder nicht zugänglich.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Groups2)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Taskforce bearbeiten" : "Neue Taskforce anlegen")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <TaskforceForm @key="_loadedId" Input="_input" IsLeadership="_isLeadership" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Der Genehmigungs-Status wird in der Akte über das Menü „Genehmigung" geändert (nur Führung).
+        </MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Du wirst automatisch als Chefermittler (Leitung) zugeteilt. Die Taskforce startet als „Beantragt"; die Führung genehmigt sie.
+        </MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Anlegen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/taskforces/{Id}" : "/taskforces";
+
+    private MudForm _form = default!;
+    private TaskforceInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+    }
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+
+        if (!IsEdit)
+        {
+            _input = new TaskforceInput();
+            _load = false;
+            return;
+        }
+
+        var t = await TaskforceService.GetDetailAsync(Id!, _user.MayAllTaskforcesSee(), _user.GetAgentId());
+        if (t is not null)
+        {
+            _input = new TaskforceInput
+            {
+                Name = t.Name,
+                Purpose = t.Purpose,
+                Scope = t.Scope,
+                Remarks = t.Remarks,
+                IsClassified = t.IsClassified,
+            };
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await TaskforceService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/taskforces/{Id}");
+            }
+            else
+            {
+                var taskforce = await TaskforceService.CreateAsync(_input, _user);
+                Snackbar.Add($"Taskforce {taskforce.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/taskforces/{taskforce.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saves = false;
+        }
+    }
+}

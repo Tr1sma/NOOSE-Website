@@ -1,0 +1,128 @@
+@page "/besprechungen/neu"
+@page "/besprechungen/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.HighestClassificationPage)]
+@inject IMeetingService MeetingService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsEdit ? "Besprechung bearbeiten" : "Neue Besprechung") – NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">Besprechung nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudText Typo="Typo.h5">@(IsEdit ? "Besprechung bearbeiten" : "Neue Besprechung")</MudText>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="1" Style="max-width:820px;">
+        <MeetingForm @key="_loadedId" Input="_input" ShowStatus="@IsEdit" />
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
+            <MudButton Href="@BackHref">Abbrechen</MudButton>
+            <AuthorizeView Policy="@Policies.WriteAccess">
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
+                           Disabled="_saving">
+                    @(IsEdit ? "Speichern" : "Anlegen")
+                </MudButton>
+            </AuthorizeView>
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/besprechungen/{Id}" : "/besprechungen";
+
+    private MeetingInput? _input;
+    private bool _load = true;
+    private bool _saving;
+    private string? _loadedId;
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+
+        if (!IsEdit)
+        {
+            _input = new MeetingInput { Start = DateTime.Now.Date.AddDays(1).AddHours(20) };
+            _load = false;
+            return;
+        }
+
+        var meeting = await MeetingService.GetDetailAsync(Id!);
+        _input = meeting is null ? null : new MeetingInput
+        {
+            Title = meeting.Title,
+            // stored UTC, edited in local wall-clock
+            Start = MeetingTime.Local(meeting.Start),
+            End = meeting.End is { } e ? MeetingTime.Local(e) : null,
+            Location = meeting.Location,
+            Status = meeting.Status,
+        };
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_input.Title) || _input.Start is null)
+        {
+            Snackbar.Add("Titel und Beginn sind erforderlich.", Severity.Warning);
+            return;
+        }
+        _saving = true;
+        try
+        {
+            var user = (await AuthStateTask!).User;
+            if (IsEdit)
+            {
+                await MeetingService.RefreshAsync(Id!, _input, user);
+                Snackbar.Add("Besprechung gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/besprechungen/{Id}");
+            }
+            else
+            {
+                var meeting = await MeetingService.CreateAsync(_input, user);
+                Snackbar.Add($"Besprechung {meeting.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/besprechungen/{meeting.Id}");
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

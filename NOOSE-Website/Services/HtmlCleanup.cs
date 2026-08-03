@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using Ganss.Xss;
 
 namespace NOOSE_Website.Services;
@@ -23,7 +24,7 @@ public static class HtmlCleanup
         foreach (var tag in new[]
         {
             "p", "br", "span", "b", "strong", "i", "em", "u", "s",
-            "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a",
+            "h1", "h2", "h3", "ul", "ol", "li", "blockquote", "pre", "code", "a", "img",
             "table", "thead", "tbody", "tr", "td", "th", "caption", "colgroup", "col", "div", "contain",
         })
         {
@@ -33,7 +34,7 @@ public static class HtmlCleanup
         s.AllowedAttributes.Clear();
         foreach (var attr in new[]
         {
-            "href", "target", "rel", "class", "style",
+            "href", "target", "rel", "class", "style", "src", "alt",
             "colspan", "rowspan", "width", "cellpadding", "cellspacing", "contenteditable",
             "data-table-id", "data-row-id", "data-col-id", "data-rowspan", "data-colspan",
             "data-row", "data-col", "data-w", "data-full",
@@ -57,6 +58,18 @@ public static class HtmlCleanup
         s.AllowedSchemes.Add("http");
         s.AllowedSchemes.Add("https");
         s.AllowedSchemes.Add("mailto");
+        // quill embeds pasted/picked images as base64 data URIs
+        s.AllowedSchemes.Add("data");
+
+        // data: stays image-only; a data: href is a phishing vector
+        s.PostProcessNode += (_, e) =>
+        {
+            if (e.Node is IElement { NodeName: "A" } anchor
+                && anchor.GetAttribute("href")?.StartsWith("data:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                anchor.RemoveAttribute("href");
+            }
+        };
 
         return s;
     }

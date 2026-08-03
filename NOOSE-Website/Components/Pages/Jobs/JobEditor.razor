@@ -1,0 +1,276 @@
+@page "/aufgaben/neu"
+@page "/aufgaben/{Id}/bearbeiten"
+@inject IJobService JobService
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Aufgabe bearbeiten" : "Neue Aufgabe") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_noAccess)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Diese Aufgabe darf nur ihr Ersteller oder die Führung bearbeiten.
+        <MudButton Href="@BackHref" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zur Aufgabe</MudButton>
+    </MudAlert>
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Aufgabe nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.AssignmentTurnedIn)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Aufgabe bearbeiten" : "Neue Aufgabe anlegen")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <JobForm @key="_loadedId" Input="_input" ShowAssignment="@(!IsEdit)" @bind-AgentIds="_agentIds" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Zuweisungen werden in der Aufgabe unter „Beteiligte" verwaltet.
+        </MudText>
+    }
+
+    @if (!IsEdit)
+    {
+        @* Link related files already at creation time. *@
+        <MudPaper Class="pa-4 mt-4" Elevation="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudText Typo="Typo.subtitle1">Bezug / Verknüpfte Akten (optional)</MudText>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddLink" OnClick="ReferenceAddAsync">
+                    Akte verknüpfen
+                </MudButton>
+            </MudStack>
+            @if (_references.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Verknüpfe z. B. die Person, Operation oder den Vorgang, auf die sich die Aufgabe bezieht.
+                </MudText>
+            }
+            else
+            {
+                <div class="d-flex flex-wrap" style="gap:.5rem;">
+                    @foreach (var b in _references)
+                    {
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Icon="@TypeIcon(b.TargetType)"
+                                 OnClose="@(() => ReferenceRemove(b))">
+                            @TypeDisplay(b.TargetType): @(b.Display ?? b.TargetId)
+                        </MudChip>
+                    }
+                </div>
+            }
+        </MudPaper>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Anlegen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "bezugTyp")] public string? ReferenceType { get; set; }
+    [SupplyParameterFromQuery(Name = "bezugId")] public string? ReferenceId { get; set; }
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/aufgaben/{Id}" : "/aufgaben";
+
+    private MudForm _form = default!;
+    private JobInput? _input;
+    private IReadOnlyCollection<string> _agentIds = new HashSet<string>();
+    private readonly List<LinkInput> _references = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _noAccess;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync() => _user = (await AuthStateTask).User;
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+        _noAccess = false;
+
+        // per-create state, or a previous create would leak its assignees and links into the next one
+        _agentIds = new HashSet<string>();
+        _references.Clear();
+
+        if (!IsEdit)
+        {
+            _input = new JobInput();
+
+            // prefilled reference from a record's "create job" button; belongs to the create route only
+            if (!string.IsNullOrWhiteSpace(ReferenceType) && !string.IsNullOrWhiteSpace(ReferenceId))
+            {
+                var name = await JobService.ReferenceDisplayAsync(ReferenceType, ReferenceId, _user);
+                if (name is not null)
+                {
+                    _references.Add(new LinkInput { TargetType = ReferenceType, TargetId = ReferenceId, Display = name });
+                }
+            }
+            _load = false;
+            return;
+        }
+
+        var a = await JobService.GetDetailAsync(Id!, _user);
+        if (a is not null)
+        {
+            // UI mirror of the server-enforced creator/leadership gate.
+            if (!_user.IsLeadership() && a.CreatedById != _user.GetAgentId())
+            {
+                _noAccess = true;
+            }
+            else
+            {
+                _input = new JobInput
+                {
+                    Title = a.Title,
+                    Description = a.Description,
+                    Status = a.Status,
+                    Priority = a.Priority,
+                    DueDate = a.DueDate,
+                    IsRestricted = a.IsRestricted,
+                };
+            }
+        }
+        _load = false;
+    }
+
+    private async Task ReferenceAddAsync()
+    {
+        var choice = await LinkDialog.ShowAsync(DialogService, _user.IsLeadership());
+        if (choice is null)
+        {
+            return;
+        }
+        // Avoid duplicate targets.
+        if (_references.Any(b => b.TargetType == choice.TargetType && b.TargetId == choice.TargetId))
+        {
+            return;
+        }
+        _references.Add(choice);
+    }
+
+    private void ReferenceRemove(LinkInput b) => _references.Remove(b);
+
+    private async Task SaveAsync()
+    {
+        if (_input is null || _saves)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await JobService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/aufgaben/{Id}");
+            }
+            else
+            {
+                var job = await JobService.CreateAsync(_input, _agentIds.ToList(), _user);
+
+                // A failed individual link does not abort creation; errors are collected.
+                var error = new List<string>();
+                foreach (var b in _references)
+                {
+                    try
+                    {
+                        await LinkService.CreateAsync(nameof(Job), job.Id, b.TargetType, b.TargetId, b.Label, _user, LinkKind.Default);
+                    }
+                    catch (Exception ex)
+                    {
+                        error.Add($"{TypeDisplay(b.TargetType)} ({b.Display ?? b.TargetId}): {ex.Message}");
+                    }
+                }
+
+                if (error.Count > 0)
+                {
+                    Snackbar.Add($"Aufgabe {job.CaseNumber} angelegt, aber {error.Count} Verknüpfung(en) schlugen fehl: {string.Join("; ", error)}", Severity.Warning);
+                }
+                else
+                {
+                    Snackbar.Add($"Aufgabe {job.CaseNumber} angelegt.", Severity.Success);
+                }
+                Nav.NavigateTo($"/aufgaben/{job.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            // re-enable even after a successful create, as the original create page did
+            _saves = false;
+        }
+    }
+
+    private static string TypeDisplay(string type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Personengruppe",
+        nameof(Party) => "Partei",
+        nameof(Operation) => "Operation",
+        nameof(Case) => "Vorgang",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Agent) => "Personalakte",
+        nameof(PersonDoc) => "Personen-Dok",
+        nameof(Observation) => "Observation",
+        nameof(Job) => "Aufgabe",
+        _ => "Akte",
+    };
+
+    private static string TypeIcon(string type) => type switch
+    {
+        nameof(Person) => Icons.Material.Filled.Badge,
+        nameof(Faction) => Icons.Material.Filled.Groups,
+        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
+        nameof(Party) => Icons.Material.Filled.AccountBalance,
+        nameof(Operation) => Icons.Material.Filled.Radar,
+        nameof(Case) => Icons.Material.Filled.FolderSpecial,
+        nameof(Taskforce) => Icons.Material.Filled.Groups2,
+        nameof(Agent) => Icons.Material.Filled.Person,
+        nameof(PersonDoc) => Icons.Material.Filled.Description,
+        nameof(Observation) => Icons.Material.Filled.Visibility,
+        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
+        _ => Icons.Material.Filled.Hub,
+    };
+}

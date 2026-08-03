@@ -1,0 +1,155 @@
+@page "/brett/neu"
+@page "/brett/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IAnnouncementService BoardService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(IsEdit ? "Ankündigung bearbeiten" : "Neue Ankündigung") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_noAccess)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Diese Ankündigung darf nur ihr Verfasser oder die Führung bearbeiten.
+        <MudButton Href="@BackHref" Variant="Variant.Text" Color="Color.Primary" Class="ml-2">Zur Ankündigung</MudButton>
+    </MudAlert>
+}
+else if (_input is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Ankündigung nicht gefunden.</MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@BackHref" aria-label="Zurück" />
+        <MudIcon Icon="@(IsEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.Campaign)" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">@(IsEdit ? "Ankündigung bearbeiten" : "Neue Ankündigung")</MudText>
+    </MudStack>
+
+    <MudForm @ref="_form">
+        <AnnouncementForm @key="_loadedId" @ref="_contentForm" Input="_input" ShowBroadcastOptions="@(!IsEdit && _isLeadership)" IsLeadership="_isLeadership" />
+    </MudForm>
+    @if (IsEdit)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            Hinweis: Zielgruppe, Glocken-Push und Quittierung werden beim Anlegen festgelegt und sind hier nicht änderbar.
+        </MudText>
+    }
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="_saves">@(IsEdit ? "Speichern" : "Veröffentlichen")</MudButton>
+        <MudButton Variant="Variant.Text" Href="@BackHref">Abbrechen</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // RouteView only supplies the matched template's route values, so a stale Id survives bearbeiten -> neu
+    private bool IsEdit { get; set; }
+    private string BackHref => IsEdit ? $"/brett/{Id}" : "/brett";
+
+    private MudForm _form = default!;
+    private AnnouncementForm _contentForm = default!;
+    private AnnouncementInput? _input;
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+    private bool _load = true;
+    private bool _noAccess;
+    private bool _saves;
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+    }
+
+    // both routes bind the same component, so Blazor reuses the instance across neu ↔ bearbeiten
+    protected override async Task OnParametersSetAsync()
+    {
+        IsEdit = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0]
+            .EndsWith("/bearbeiten", StringComparison.OrdinalIgnoreCase);
+        var key = IsEdit ? Id ?? string.Empty : string.Empty;
+        if (_loadedId == key)
+        {
+            return;
+        }
+        _loadedId = key;
+        _load = true;
+        _input = null;
+        _noAccess = false;
+
+        if (!IsEdit)
+        {
+            _input = new AnnouncementInput();
+            _load = false;
+            return;
+        }
+
+        var detail = await BoardService.GetDetailAsync(Id!, _user);
+        if (detail is not null)
+        {
+            // mirror server-side edit gate so no unauthorized form appears
+            if (!detail.Row.MayManage)
+            {
+                _noAccess = true;
+            }
+            else
+            {
+                _input = new AnnouncementInput
+                {
+                    Title = detail.Row.Title,
+                    Content = detail.Row.Content,
+                    Important = detail.Row.Important,
+                };
+            }
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_input is null || _saves)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saves = true;
+        try
+        {
+            _input.Content = await _contentForm.GetContentHtmlAsync();
+            if (IsEdit)
+            {
+                await BoardService.RefreshAsync(Id!, _input, _user);
+                Snackbar.Add("Änderungen gespeichert.", Severity.Success);
+                Nav.NavigateTo($"/brett/{Id}");
+            }
+            else
+            {
+                var a = await BoardService.CreateAsync(_input, _user);
+                Snackbar.Add($"Ankündigung {a.CaseNumber} veröffentlicht.", Severity.Success);
+                Nav.NavigateTo($"/brett/{a.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            // re-enable even after a successful create, as the original create page did
+            _saves = false;
+        }
+    }
+}

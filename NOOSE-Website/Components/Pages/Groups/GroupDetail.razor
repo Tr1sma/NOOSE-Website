@@ -68,12 +68,10 @@ else
             }
             else
             {
-            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4"
-                     @bind-ActivePanelIndex="_activeTab"
-                     @bind-ActivePanelIndex:after="@(() => TabUrlState.WriteAsync(JS, Nav, _renderTabs, _activeTab))">
+            <RecordSectionRail>
                 @if (TabOn("stammdaten"))
                 {
-                <MudTabPanel Text="Stammdaten" Icon="@Icons.Material.Filled.Info">
+                <RecordSection Group="Akte" Slug="stammdaten" Label="Stammdaten" Icon="@Icons.Material.Filled.Info">
                     <MudStack Spacing="3">
                         @if (!string.IsNullOrWhiteSpace(_group.Targets))
                         {
@@ -94,79 +92,79 @@ else
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine weiteren Stammdaten erfasst.</MudText>
                         }
                     </MudStack>
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("mitglieder"))
                 {
-                <MudTabPanel Text="Mitglieder" Icon="@Icons.Material.Filled.Group">
+                <RecordSection Group="Struktur" Slug="mitglieder" Label="Mitglieder" Icon="@Icons.Material.Filled.Group">
                     <GroupMembersPanel GroupId="@_group.Id" User="_user" Changed="ProgressRefreshAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* assigned NOOSE agents: internal only *@
                 @if (!_isPartner)
                 {
-                <MudTabPanel Text="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
+                <RecordSection Group="Struktur" Slug="agents" Label="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <AgentsPanel GroupId="@_group.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("einstufung"))
                 {
-                <MudTabPanel Text="Einstufung" Icon="@Icons.Material.Filled.Shield">
+                <RecordSection Group="Akte" Slug="einstufung" Label="Einstufung" Icon="@Icons.Material.Filled.Shield">
                     <ClassificationPanel Current="_group.Classification" History="_classificationHistory" User="_user" OnSet="ClassificationSetAsync"
                                      EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" TargetDesignation="@($"{_group.Name} ({_group.CaseNumber})")" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("doks"))
                 {
-                <MudTabPanel Text="Doks" Icon="@Icons.Material.Filled.Description">
+                <RecordSection Group="Ermittlung" Slug="doks" Label="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDocsPanel OrgType="@nameof(PersonGroup)" OrgId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("aktivitaeten"))
                 {
-                <MudTabPanel Text="Aktivitäten" Icon="@Icons.Material.Filled.Bolt">
+                <RecordSection Group="Ermittlung" Slug="aktivitaeten" Label="Aktivitäten" Icon="@Icons.Material.Filled.Bolt">
                     <AgentActivityLinkedPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe child services *@
                 @if (TabOn("beziehungen"))
                 {
-                <MudTabPanel Text="Beziehungen" Icon="@Icons.Material.Filled.Hub">
+                <RecordSection Group="Struktur" Slug="beziehungen" Label="Beziehungen" Icon="@Icons.Material.Filled.Hub">
                     <OrgRelationsPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("quellen"))
                 {
-                <MudTabPanel Text="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+                <RecordSection Group="Anhänge" Slug="quellen" Label="Quellen" Icon="@Icons.Material.Filled.AttachFile">
                     <SourcesPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("wiedervorlagen"))
                 {
-                <MudTabPanel Text="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
+                <RecordSection Group="Verlauf" Slug="wiedervorlagen" Label="Wiedervorlagen" Icon="@Icons.Material.Filled.EventRepeat">
                     <FollowupPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("kommentare"))
                 {
-                <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
+                <RecordSection Group="Verlauf" Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
                     <CommentPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @if (TabOn("zusatzfelder"))
                 {
-                <MudTabPanel Text="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
+                <RecordSection Group="Akte" Slug="zusatzfelder" Label="Zusatzfelder" Icon="@Icons.Material.Filled.Tune">
                     <CustomFieldsPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
-                </MudTabPanel>
+                </RecordSection>
                 }
                 @* partner-safe: timeline filters cross-refs for partners *@
                 @if (TabOn("historie"))
                 {
-                <MudTabPanel Text="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+                <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" @key="_historyKey" />
-                </MudTabPanel>
+                </RecordSection>
                 }
-            </MudTabs>
+            </RecordSectionRail>
             }
         </MudItem>
     </MudGrid>
@@ -186,8 +184,7 @@ else
     private Guid _historyKey = Guid.NewGuid();
     private string? _loadedId;
 
-    // Active tab persisted in URL; order must match the MudTabPanels
-    private int _activeTab;
+    // every section slug on this page; the rail persists the active one in the URL
     private static readonly string[] _tabs =
     {
         "stammdaten", "mitglieder", "agents", "einstufung", "doks", "aktivitaeten",
@@ -217,7 +214,6 @@ else
         _load = true;
         _group = null;
         await LoadAsync();
-        _activeTab = TabUrlState.Read(Nav, _renderTabs);
         if (_group is not null)
         {
             await AccessLog.LogViewAsync(nameof(PersonGroup), _group.Id);
@@ -226,7 +222,7 @@ else
 
     private async Task LoadAsync()
     {
-        // Don't set _load on reload: it would remount MudTabs and jump to the first tab
+        // Don't set _load on reload: it would remount the rail and jump to the first section
         var scope = ViewerScope.From(_user);
         _group = await GroupService.GetDetailAsync(Id, scope);
         if (_group is not null)

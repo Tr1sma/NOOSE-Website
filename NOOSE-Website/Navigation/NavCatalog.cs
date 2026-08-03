@@ -18,58 +18,74 @@ public static class NavCatalog
     /// <summary>All internal-agent entries in default order. Keys are stable; favorites/hidden/order reference them.</summary>
     public static readonly IReadOnlyList<NavEntry> Internal = new[]
     {
-        new NavEntry("dashboard", "/dashboard", Icons.Material.Filled.SpaceDashboard, "Dashboard", NavSection.Primary, NavLinkMatch.All),
-        new NavEntry("profil", "/profil", Icons.Material.Filled.AccountCircle, "Mein Profil", NavSection.Primary),
-        new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.Primary),
-        new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Primary),
-        new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Primary, BadgeKey: "acknowledgments"),
-        new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Abmeldungen", NavSection.Primary),
+        new NavEntry("dashboard", "/dashboard", Icons.Material.Filled.SpaceDashboard, "Dashboard", NavSection.Primary, NavArea.Primary, NavLinkMatch.All,
+            Description: "Lagezentrum mit Kennzahlen und letzten Änderungen"),
+        new NavEntry("suche", "/suche", Icons.Material.Filled.Search, "Globale Suche", NavSection.Primary, NavArea.Primary,
+            Description: "Durchsucht alle Akten, Dokumente und Inhalte"),
 
-        new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten),
-        new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung", NavSection.Akten),
-        new NavEntry("doks", "/doks", Icons.Material.Filled.Description, "Personen-Doks", NavSection.Akten),
-        new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumente", NavSection.Akten),
-        new NavEntry("observationen", "/observationen", Icons.Material.Filled.Visibility, "Observationen", NavSection.Akten),
-        new NavEntry("fraktionen", "/fraktionen", Icons.Material.Filled.Groups, "Fraktionen", NavSection.Akten),
-        new NavEntry("personengruppen", "/personengruppen", Icons.Material.Filled.Diversity3, "Personengruppen", NavSection.Akten),
-        new NavEntry("parteien", "/parteien", Icons.Material.Filled.AccountBalance, "Parteien", NavSection.Akten),
-        new NavEntry("operationen", "/operationen", Icons.Material.Filled.Radar, "Operationen", NavSection.Akten),
-        new NavEntry("aktivitaeten", "/aktivitaeten", Icons.Material.Filled.Bolt, "Aktivitäten", NavSection.Akten),
-        new NavEntry("taskforces", "/taskforces", Icons.Material.Filled.Groups2, "Taskforces", NavSection.Akten),
-        new NavEntry("vorgaenge", "/vorgaenge", Icons.Material.Filled.FolderSpecial, "Vorgänge", NavSection.Akten),
-        new NavEntry("aufgaben", "/aufgaben", Icons.Material.Filled.AssignmentTurnedIn, "Aufgaben", NavSection.Akten),
-        new NavEntry("gesetze", "/gesetze", Icons.Material.Filled.Gavel, "Gesetzbuch", NavSection.Akten),
-        new NavEntry("suche", "/suche", Icons.Material.Filled.Search, "Globale Suche", NavSection.Akten),
-        new NavEntry("graph", "/graph", Icons.Material.Filled.Hub, "Beziehungsgraph", NavSection.Akten),
-        new NavEntry("organigramm", "/organigramm", Icons.Material.Filled.AccountTree, "Organigramm", NavSection.Akten),
-        new NavEntry("besprechungen", "/besprechungen", Icons.Material.Filled.Groups, "Besprechungen", NavSection.Akten),
-        new NavEntry("kalender", "/kalender", Icons.Material.Filled.CalendarMonth, "Kalender", NavSection.Akten),
-        new NavEntry("statistik", "/statistik", Icons.Material.Filled.QueryStats, "Statistik", NavSection.Akten),
+        new NavEntry("profil", "/profil", Icons.Material.Filled.AccountCircle, "Mein Profil", NavSection.MeinDienst, NavArea.MeinDienst,
+            Description: "Eigene Stammdaten, Codename und Kontaktangaben"),
+        new NavEntry("watchlist", "/watchlist", Icons.Material.Filled.Star, "Beobachtete Akten", NavSection.MeinDienst, NavArea.MeinDienst,
+            Description: "Akten, denen du folgst — mit Änderungshinweis"),
+        new NavEntry("aufgaben", "/aufgaben", Icons.Material.Filled.AssignmentTurnedIn, "Aufgaben-Board", NavSection.MeinDienst, NavArea.MeinDienst,
+            Description: "To-dos des Teams als Board — für alle Agenten sichtbar"),
+        new NavEntry("aktivitaeten", "/aktivitaeten", Icons.Material.Filled.Bolt, "Dienst-Aktivitäten", NavSection.MeinDienst, NavArea.MeinDienst,
+            Description: "Diensteinträge, die Agenten über sich selbst führen — für alle sichtbar"),
+        new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Abmeldungen", NavSection.MeinDienst, NavArea.MeinDienst,
+            Description: "Eigene Abwesenheiten melden und einsehen"),
 
-        new NavEntry("admin.freigaben", "/admin/freigaben", Icons.Material.Filled.HowToReg, "Freigaben", NavSection.VerwaltungFreigaben, BadgeKey: "shares"),
+        new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten, NavArea.Akten,
+            Description: "Zentrale Akte je Person — alles zu einer Person an einem Ort"),
+        new NavEntry("fraktionen", "/fraktionen", Icons.Material.Filled.Groups, "Fraktionen", NavSection.Akten, NavArea.Akten,
+            Description: "Akten organisierter Gruppierungen mit Mitgliedern und Rängen"),
+        new NavEntry("personengruppen", "/personengruppen", Icons.Material.Filled.Diversity3, "Personengruppen", NavSection.Akten, NavArea.Akten,
+            Description: "Lose Zusammenschlüsse ohne feste Fraktionsstruktur"),
+        new NavEntry("parteien", "/parteien", Icons.Material.Filled.AccountBalance, "Parteien", NavSection.Akten, NavArea.Akten,
+            Description: "Politische Parteien mit Mitgliedern und Ausrichtung"),
 
-        new NavEntry("bewerbungen", "/bewerbungen", Icons.Material.Filled.HowToReg, "Bewerbungen", NavSection.VerwaltungBewerbungen),
-        new NavEntry("bewerbungen.tests", "/bewerbungs-tests", Icons.Material.Filled.Quiz, "Bewerbungs-Tests", NavSection.VerwaltungBewerbungen),
-        new NavEntry("bewerbungen.vorlagen", "/bewerbungs-vorlagen", Icons.Material.Filled.MarkEmailRead, "Bewerbungs-Vorlagen", NavSection.VerwaltungBewerbungen),
+        new NavEntry("vorgaenge", "/vorgaenge", Icons.Material.Filled.FolderSpecial, "Vorgänge", NavSection.VorgaengeEinsaetze, NavArea.Akten,
+            Description: "Übergeordnete Ermittlungsakte, die mehrere Akten bündelt"),
+        new NavEntry("operationen", "/operationen", Icons.Material.Filled.Radar, "Operationen", NavSection.VorgaengeEinsaetze, NavArea.Akten,
+            Description: "Einsatzbericht zu einem konkreten Einsatz mit Ort und Zeit"),
+        new NavEntry("taskforces", "/taskforces", Icons.Material.Filled.Groups2, "Taskforces", NavSection.VorgaengeEinsaetze, NavArea.Akten,
+            Description: "Einheit aus Agenten mit Auftrag und Genehmigung"),
 
-        new NavEntry("admin.einladungen", "/admin/einladungen", Icons.Material.Filled.PersonAddAlt, "Einladungen", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.tags", "/admin/tags", Icons.Material.Filled.Label, "Tags", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.vorlagen", "/admin/vorlagen", Icons.Material.Filled.Dvr, "Vorlagen", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.custom-felder", "/admin/custom-felder", Icons.Material.Filled.Tune, "Custom-Felder", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.aktualitaet", "/admin/aktualitaet", Icons.Material.Filled.Timelapse, "Aktualität", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.bedrohungs-score", "/admin/bedrohungs-score", Icons.Material.Filled.Speed, "Bedrohungs-Score", NavSection.VerwaltungFuehrung),
-        new NavEntry("abmeldungen.uebersicht", "/abmeldungen/uebersicht", Icons.Material.Filled.EventBusy, "Abmeldungen & Anwesenheit", NavSection.VerwaltungFuehrung),
-        new NavEntry("lageberichte", "/lageberichte", Icons.Material.Filled.Assessment, "Lageberichte", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.basisdaten", "/admin/basisdaten", Icons.Material.Filled.Storage, "Basisdaten", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.protokoll", "/admin/protokoll", Icons.Material.Filled.FactCheck, "Audit-Protokoll", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.discord", "/admin/discord", Icons.Material.Filled.Notifications, "Discord-Benachrichtigungen", NavSection.VerwaltungFuehrung),
-        new NavEntry("admin.module", "/admin/module", Icons.Material.Filled.School, "Ausbildungsmodule", NavSection.VerwaltungFuehrung),
+        new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung & Überwachung", NavSection.Fahndung, NavArea.Ermittlung,
+            Description: "Gesuchte Personen, Observationen und Vernehmungen"),
 
-        new NavEntry("admin.partner-sichtbarkeit", "/admin/partner-sichtbarkeit", Icons.Material.Filled.Handshake, "Partner-Sichtbarkeit", NavSection.VerwaltungAdmin),
-        new NavEntry("admin.partner-freigabe", "/admin/partner-freigabe", Icons.Material.Filled.FolderShared, "Partner-Freigabe", NavSection.VerwaltungAdmin),
-        new NavEntry("admin.system", "/admin/system", Icons.Material.Filled.SettingsApplications, "System", NavSection.VerwaltungAdmin),
-        new NavEntry("status", "/status", Icons.Material.Filled.MonitorHeart, "System-Status", NavSection.VerwaltungAdmin),
+        new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumenten-Bibliothek", NavSection.Wissen, NavArea.Ermittlung,
+            Description: "Zentrale Ablage aller behördlichen Dokumente"),
+        new NavEntry("gesetze", "/gesetze", Icons.Material.Filled.Gavel, "Gesetzbuch", NavSection.Wissen, NavArea.Ermittlung,
+            Description: "Paragrafen und Rechtsgrundlagen zum Nachschlagen"),
+
+        new NavEntry("graph", "/graph", Icons.Material.Filled.Hub, "Beziehungsgraph", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Verknüpfungen zwischen Akten als Netzdiagramm"),
+        new NavEntry("statistik", "/statistik", Icons.Material.Filled.QueryStats, "Statistik", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Auswertungen, Kennzahlen und Lageberichte"),
+        new NavEntry("organigramm", "/organigramm", Icons.Material.Filled.AccountTree, "Organigramm", NavSection.Analyse, NavArea.Dienststelle,
+            Description: "Aufbau der Behörde nach Dienstgrad und Einheit"),
+
+        new NavEntry("brett", "/brett", Icons.Material.Filled.Campaign, "Schwarzes Brett", NavSection.Dienststelle, NavArea.Dienststelle, BadgeKey: "acknowledgments",
+            Description: "Behördliche Ankündigungen, teils quittierungspflichtig"),
+        new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Dienststelle, NavArea.Dienststelle,
+            Description: "Agenten der Behörde mit Personalakte und Dienstgrad"),
+        new NavEntry("besprechungen", "/besprechungen", Icons.Material.Filled.Groups, "Besprechungen", NavSection.Dienststelle, NavArea.Dienststelle,
+            Description: "Dienstbesprechungen mit Tagesordnung und Protokoll"),
+        new NavEntry("kalender", "/kalender", Icons.Material.Filled.CalendarMonth, "Kalender", NavSection.Dienststelle, NavArea.Dienststelle,
+            Description: "Termine der Behörde in der Monatsansicht"),
+
+        new NavEntry("admin.freigaben", "/admin/freigaben", Icons.Material.Filled.HowToReg, "Freigaben", NavSection.VerwaltungFreigaben, NavArea.Verwaltung, BadgeKey: "shares",
+            Description: "Posteingang für Anträge, Registrierungen und Freigaben"),
+
+        new NavEntry("bewerbungen", "/bewerbungen", Icons.Material.Filled.HowToReg, "Bewerbungen", NavSection.VerwaltungBewerbungen, NavArea.Verwaltung,
+            Description: "Eingang, Sperren, Anschreiben-Vorlagen und Eignungstests"),
+
+        new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
+            Description: "Dienstgrad, Status und Rechte der Agenten setzen"),
+        new NavEntry("einstellungen", "/einstellungen", Icons.Material.Filled.SettingsApplications, "Einstellungen", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
+            Description: "System, Vorlagen, Tags, Score, Partner und Protokoll an einer Stelle"),
+        new NavEntry("papierkorb", "/papierkorb", Icons.Material.Filled.Delete, "Papierkorb", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
+            Description: "Gelöschte Akten aller Typen wiederherstellen"),
     };
 
     private static readonly Dictionary<string, NavEntry> ByKeyMap =
@@ -117,7 +133,7 @@ public static class NavCatalog
         {
             if (allowedTypes is null || allowedTypes.Contains(t.TypeKey))
             {
-                list.Add(new NavEntry("partner." + t.TypeKey, "/" + t.RoutePrefix, PartnerIcon(t.TypeKey), t.DisplayName, NavSection.Partner));
+                list.Add(new NavEntry("partner." + t.TypeKey, "/" + t.RoutePrefix, PartnerIcon(t.TypeKey), t.DisplayName, NavSection.Partner, NavArea.Partner));
             }
         }
         return list;

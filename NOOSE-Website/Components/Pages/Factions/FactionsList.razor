@@ -2,23 +2,21 @@
 @inject IFactionService FactionService
 @inject IRecencyService Recency
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Fraktionen · NOOSE</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-    <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Fraktionen</MudText>
-    <MudSpacer />
-    <AuthorizeView Policy="@Policies.Leadership">
-        <MudButton Href="/fraktionen/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
-    </AuthorizeView>
-    <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
-        <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
-    </AuthorizeView>
-</MudStack>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    Organisationen (Gangs, Konzerne, …) mit Mitgliedern, Beständen, Rängen und Konflikten.
-</MudText>
+<PageHeader Icon="@Icons.Material.Filled.Groups" Title="Fraktionen"
+            Subtitle="Organisationen (Gangs, Konzerne, …) mit Mitgliedern, Beständen, Rängen und Konflikten.">
+    <Actions>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Href="/papierkorb?tab=fraktionen" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+            <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
 
 @if (_load)
 {
@@ -29,8 +27,25 @@ else
     <MudDataGrid T="FactionRow" Items="_rows" Hover="true" Filterable="false" SortMode="SortMode.Multiple"
                  QuickFilter="Filter" Elevation="2" RowClick="@(args => Open(args.Item))" Dense="true">
         <ToolBarContent>
-            <MudTextField @bind-Value="_search" Placeholder="Suchen (Name, Aktenzeichen, Art)…" Immediate="true"
+            <MudTextField Value="_search" ValueChanged="@((string v) => SearchChangedAsync(v))" Placeholder="Suchen (Name, Aktenzeichen, Art)…" Immediate="true"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" />
+            <MudSpacer />
+            <MudSelect T="Classification?" Value="_classification" ValueChanged="ClassificationSelectedAsync" Label="Einstufung" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:220px;" Margin="Margin.Dense">
+                <MudSelectItem T="Classification?" Value="@(null)">Alle</MudSelectItem>
+                @foreach (var e in ClassificationDisplay.All)
+                {
+                    <MudSelectItem T="Classification?" Value="@e">@ClassificationDisplay.Name(e)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="RecencyLevel?" Value="_recency" ValueChanged="RecencySelectedAsync" Label="Aktualität" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Style="max-width:180px;" Margin="Margin.Dense" Class="ml-2">
+                <MudSelectItem T="RecencyLevel?" Value="@(null)">Alle</MudSelectItem>
+                @foreach (var e in Enum.GetValues<RecencyLevel>())
+                {
+                    <MudSelectItem T="RecencyLevel?" Value="@e">@RecencyLevelDisplay.Name(e)</MudSelectItem>
+                }
+            </MudSelect>
         </ToolBarContent>
         <Columns>
             <PropertyColumn Property="x => x.CaseNumber" Title="Aktenzeichen" />
@@ -90,20 +105,34 @@ else
             <PropertyColumn Property="x => x.Refreshed" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
         </Columns>
         <NoRecordsContent>
-            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
-                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Default" Size="Size.Large" />
+            @if (HasFilter)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Keine Treffer"
+                            Text="Für diese Filter gibt es keine Fraktion. Setze die Filter zurück, um alle zu sehen.">
+                    <Actions>
+                        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.FilterAltOff" OnClick="ResetFiltersAsync">Filter zurücksetzen</MudButton>
+                    </Actions>
+                </EmptyState>
+            }
+            else
+            {
                 <AuthorizeView Policy="@Policies.PartnerView" Context="partnerEmpty">
                     <Authorized>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Für Ihre Behörde wurde noch keine Fraktion freigegeben.</MudText>
+                        <EmptyState Icon="@Icons.Material.Filled.Groups" Title="Noch nichts freigegeben"
+                                    Text="Für Ihre Behörde wurde noch keine Fraktion freigegeben." />
                     </Authorized>
                     <NotAuthorized>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Fraktionen erfasst – lege die erste an.</MudText>
+                        <EmptyState Icon="@Icons.Material.Filled.Groups" Title="Noch keine Fraktionen erfasst"
+                                    Text="Lege die erste Fraktion an, um Mitglieder, Bestände und Konflikte zu erfassen.">
+                            <Actions>
+                                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
+                                    <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
+                                </AuthorizeView>
+                            </Actions>
+                        </EmptyState>
                     </NotAuthorized>
                 </AuthorizeView>
-                <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
-                    <MudButton Href="/fraktionen/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Fraktion</MudButton>
-                </AuthorizeView>
-            </MudStack>
+            }
         </NoRecordsContent>
         <PagerContent>
             <MudDataGridPager T="FactionRow" />
@@ -116,10 +145,19 @@ else
 
     private bool _load = true;
     private string _search = string.Empty;
+    private Classification? _classification;
+    private RecencyLevel? _recency;
     private List<FactionRow> _rows = new();
+
+    private bool HasFilter => !string.IsNullOrWhiteSpace(_search) || _classification is not null || _recency is not null;
 
     protected override async Task OnInitializedAsync()
     {
+        // restore the view from the URL so back-navigation and shared links keep the filters
+        _search = QueryState.Read(Nav, "q") ?? string.Empty;
+        _classification = QueryState.ReadEnum<Classification>(Nav, "einstufung");
+        _recency = QueryState.ReadEnum<RecencyLevel>(Nav, "aktualitaet");
+
         var user = (await AuthStateTask).User;
         var mayClassifiedRead = user.MayClassifiedRead();
         var isPartner = user.IsPartner();
@@ -156,6 +194,14 @@ else
 
     private bool Filter(FactionRow z)
     {
+        if (_classification is { } c && z.Classification != c)
+        {
+            return false;
+        }
+        if (_recency is { } r && z.Level != r)
+        {
+            return false;
+        }
         if (string.IsNullOrWhiteSpace(_search))
         {
             return true;
@@ -165,6 +211,37 @@ else
             || z.CaseNumber.Contains(s, StringComparison.OrdinalIgnoreCase)
             || z.Kind.Contains(s, StringComparison.OrdinalIgnoreCase);
     }
+
+    private Task SearchChangedAsync(string value)
+    {
+        _search = value ?? string.Empty;
+        return PersistFiltersAsync();
+    }
+
+    private Task ClassificationSelectedAsync(Classification? value)
+    {
+        _classification = value;
+        return PersistFiltersAsync();
+    }
+
+    private Task RecencySelectedAsync(RecencyLevel? value)
+    {
+        _recency = value;
+        return PersistFiltersAsync();
+    }
+
+    private Task ResetFiltersAsync()
+    {
+        _search = string.Empty;
+        _classification = null;
+        _recency = null;
+        return PersistFiltersAsync();
+    }
+
+    private Task PersistFiltersAsync() => QueryState.WriteAsync(JS, Nav,
+        ("q", _search),
+        ("einstufung", _classification?.ToString()),
+        ("aktualitaet", _recency?.ToString()));
 
     private void Open(FactionRow z) => Nav.NavigateTo($"/fraktionen/{z.Id}");
 

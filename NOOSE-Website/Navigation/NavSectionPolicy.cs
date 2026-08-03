@@ -16,11 +16,17 @@ public static class NavSectionPolicy
         _ => Policies.InternalAgent,
     };
 
-    /// <summary>German heading for a section in the customizer.</summary>
+    /// <summary>German heading for a section in the drawer and the customizer.</summary>
     public static string Name(NavSection section) => section switch
     {
         NavSection.Primary => "Allgemein",
+        NavSection.MeinDienst => "Mein Dienst",
         NavSection.Akten => "Akten",
+        NavSection.VorgaengeEinsaetze => "Vorgänge & Einsätze",
+        NavSection.Fahndung => "Fahndung & Überwachung",
+        NavSection.Wissen => "Wissen",
+        NavSection.Analyse => "Analyse",
+        NavSection.Dienststelle => "Dienststelle",
         NavSection.VerwaltungFreigaben => "Verwaltung",
         NavSection.VerwaltungBewerbungen => "Verwaltung · Bewerbungen",
         NavSection.VerwaltungFuehrung => "Verwaltung · Führung",
@@ -29,10 +35,12 @@ public static class NavSectionPolicy
         _ => string.Empty,
     };
 
-    /// <summary>Sections shown to an internal agent, in drawer order.</summary>
+    /// <summary>Sections shown to an internal agent, in catalog order.</summary>
     public static readonly NavSection[] InternalSections =
     [
-        NavSection.Primary, NavSection.Akten,
+        NavSection.Primary,
+        NavSection.MeinDienst, NavSection.Akten, NavSection.VorgaengeEinsaetze,
+        NavSection.Fahndung, NavSection.Wissen, NavSection.Analyse, NavSection.Dienststelle,
         NavSection.VerwaltungFreigaben, NavSection.VerwaltungBewerbungen,
         NavSection.VerwaltungFuehrung, NavSection.VerwaltungAdmin,
     ];

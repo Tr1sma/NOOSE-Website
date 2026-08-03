@@ -156,6 +156,7 @@ builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
 builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>();
+builder.Services.AddScoped<IValueListLabelService, ValueListLabelService>();
 builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IDocumentTemplateService, DocumentTemplateService>();
@@ -201,6 +202,8 @@ builder.Services.AddScoped<ITaskforceChatService, TaskforceChatService>();
 builder.Services.AddScoped<IMentionService, MentionService>();
 builder.Services.AddSingleton<TaskforceChatBroadcaster>();
 builder.Services.AddScoped<IObservationService, ObservationService>();
+// fans the global recycle bin out over every record service, so restore keeps its guards
+builder.Services.AddScoped<ITrashService, TrashService>();
 builder.Services.AddScoped<IPersonnelFileService, PersonnelFileService>();
 builder.Services.AddScoped<ITrainingModuleService, TrainingModuleService>();
 builder.Services.AddScoped<IRequestService, RequestService>();
@@ -251,11 +254,15 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
+    .AddInteractiveServerComponents(options =>
+    {
+        // client retries for ~350s; outlive that so a network flap keeps unsaved input
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(10);
+    })
     .AddHubOptions(options =>
     {
-        // 5 MB: the RichTextEditor streams full HTML over SignalR — do not lower
-        options.MaximumReceiveMessageSize = 5 * 1024 * 1024;
+        // 25 MB: the RichTextEditor streams full HTML incl. base64 images over SignalR — do not lower
+        options.MaximumReceiveMessageSize = 25 * 1024 * 1024;
     });
 
 var app = builder.Build();
@@ -309,6 +316,10 @@ using (var scope = app.Services.CreateScope())
 
     // seed the default recruiting message templates (idempotent)
     await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
+
+    // warm the static enum-label overrides so display classes show custom names
+    var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();
+    NOOSE_Website.Models.Enums.EnumLabelText.ReplaceAll(labelRows.Select(o => (o.List, o.Key, o.Label)));
 
     // demo instance only (Demo:AutoSetup): seed demo data + enable demo mode without a login
     await NOOSE_Website.Infrastructure.DemoAutoSetup.RunAsync(scope.ServiceProvider, builder.Configuration, app.Logger);

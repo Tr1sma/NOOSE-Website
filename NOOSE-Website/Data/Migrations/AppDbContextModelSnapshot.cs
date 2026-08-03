@@ -1403,6 +1403,37 @@ namespace NOOSE_Website.Data.Migrations
                     b.ToTable("DokumentVorlagen");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Common.EnumLabelOverride", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("Schluessel");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Anzeigename");
+
+                    b.Property<string>("List")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("Liste");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("List", "Key")
+                        .IsUnique();
+
+                    b.ToTable("WertelistenLabels");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Common.Followup", b =>
                 {
                     b.Property<string>("Id")

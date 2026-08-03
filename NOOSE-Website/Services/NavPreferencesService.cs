@@ -96,22 +96,13 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
     public Task SetStartRouteAsync(string agentId, string? route, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.StartRoute = string.IsNullOrWhiteSpace(route) ? null : route, cancellationToken);
 
-    // drawer/group state are self-updating in the UI, so no live-refresh broadcast
+    // drawer/area state are self-updating in the UI, so no live-refresh broadcast
     public Task SetDrawerOpenAsync(string agentId, bool open, CancellationToken cancellationToken = default)
         => MutateAsync(agentId, p => p.DrawerOpen = open, cancellationToken, notify: false);
 
-    public Task SetGroupCollapsedAsync(string agentId, string section, bool collapsed, CancellationToken cancellationToken = default)
-        => MutateAsync(agentId, p =>
-        {
-            if (collapsed)
-            {
-                p.CollapsedGroups.Add(section);
-            }
-            else
-            {
-                p.CollapsedGroups.Remove(section);
-            }
-        }, cancellationToken, notify: false);
+    public Task SetLastAreaAsync(string agentId, string? area, CancellationToken cancellationToken = default)
+        => MutateAsync(agentId, p => p.LastArea = string.IsNullOrWhiteSpace(area) ? null : area,
+            cancellationToken, notify: false);
 
     // high-frequency: no broadcast (drawer does not show recents)
     public Task PushRecentAsync(string agentId, RecentItem item, CancellationToken cancellationToken = default)

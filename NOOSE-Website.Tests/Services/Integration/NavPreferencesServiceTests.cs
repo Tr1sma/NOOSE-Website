@@ -67,7 +67,8 @@ public sealed class NavPreferencesServiceTests : IDisposable
         Assert.Empty(prefs.Favorites);
         Assert.Null(prefs.StartRoute);
         Assert.True(prefs.DrawerOpen);
-        Assert.Equal(1, prefs.Version);
+        Assert.Null(prefs.LastArea);
+        Assert.Equal(2, prefs.Version);
     }
 
     [Fact]
@@ -275,30 +276,43 @@ public sealed class NavPreferencesServiceTests : IDisposable
         Assert.False(Stored("a1").DrawerOpen);
     }
 
-    // ---------------------------------------------------------------- SetGroupCollapsedAsync
+    // ---------------------------------------------------------------- SetLastAreaAsync
 
     [Fact]
-    public async Task SetGroupCollapsedAsync_AddsSection_WhenCollapsed()
+    public async Task SetLastAreaAsync_RemembersTheArea()
     {
         SeedAgent("a1");
         var svc = NewService();
 
-        await svc.SetGroupCollapsedAsync("a1", "Akten", collapsed: true);
+        await svc.SetLastAreaAsync("a1", "Ermittlung");
 
-        Assert.Contains("Akten", Stored("a1").CollapsedGroups);
+        Assert.Equal("Ermittlung", Stored("a1").LastArea);
     }
 
     [Fact]
-    public async Task SetGroupCollapsedAsync_RemovesSection_WhenExpanded()
+    public async Task SetLastAreaAsync_ClearsOnEmpty()
     {
+        var seeded = new NavPreferences { LastArea = "Akten" };
+        SeedAgent("a1", seeded);
+        var svc = NewService();
+
+        await svc.SetLastAreaAsync("a1", "  ");
+
+        Assert.Null(Stored("a1").LastArea);
+    }
+
+    [Fact]
+    public async Task SetLastAreaAsync_KeepsLegacyCollapsedGroups()
+    {
+        // the whole preferences blob is rewritten on save, so unused legacy state must survive
         var seeded = new NavPreferences();
         seeded.CollapsedGroups.Add("Akten");
         SeedAgent("a1", seeded);
         var svc = NewService();
 
-        await svc.SetGroupCollapsedAsync("a1", "Akten", collapsed: false);
+        await svc.SetLastAreaAsync("a1", "Verwaltung");
 
-        Assert.DoesNotContain("Akten", Stored("a1").CollapsedGroups);
+        Assert.Contains("Akten", Stored("a1").CollapsedGroups);
     }
 
     // ---------------------------------------------------------------- PushRecentAsync
@@ -374,9 +388,9 @@ public sealed class NavPreferencesServiceTests : IDisposable
         var fired = false;
         svc.Changed += () => fired = true;
 
-        // Drawer/group/recents mutate with notify:false.
+        // Drawer/area/recents mutate with notify:false.
         await svc.SetDrawerOpenAsync("a1", open: false);
-        await svc.SetGroupCollapsedAsync("a1", "Akten", collapsed: true);
+        await svc.SetLastAreaAsync("a1", "Akten");
         await svc.PushRecentAsync("a1", PageRecent("/a"));
 
         Assert.False(fired);

@@ -1,0 +1,391 @@
+@* Admin editor for the value lists behind the record forms: auto-learned suggestion catalogs (changes propagate to records) and code-defined lists (display-name overrides only). *@
+@inject IProfileSuggestionService SuggestionService
+@inject IValueListLabelService LabelService
+@inject IAuthorizationService Authorization
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+    Wertelisten der Akten-Formulare. Neu erfasste Werte (z. B. eine Waffe) landen automatisch in den
+    Katalogen und stehen danach allen zur Auswahl. Umbenennen und Löschen wird hier auf bestehende
+    Akten übertragen.
+</MudText>
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-6">
+    Ausserhalb dieser Seite gepflegt:
+    <MudLink Href="/fraktionen">Fraktionsliste</MudLink> ·
+    <MudLink Href="/gesetze">Gesetzbuch</MudLink>
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudText Typo="Typo.h5" Class="mb-1">Automatisch gelernte Listen</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+        Diese Kataloge füllen die Auswahl-Vorschläge in den Formularen. „Verwendungen" zeigt, in wie
+        vielen Akten der Wert aktuell steht (Papierkorb mitgezählt).
+    </MudText>
+    <MudExpansionPanels MultiExpansion="true" Elevation="2" Class="mb-8">
+        @foreach (var type in SuggestionTypeDisplay.All)
+        {
+            var entries = _catalogs[type];
+            <MudExpansionPanel>
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.h6">@SuggestionTypeDisplay.Name(type)</MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@entries.Count</MudChip>
+                        <MudSpacer />
+                        @if (_mayWrite)
+                        {
+                            @* span stops the header toggle; the directive cannot sit on MudButton itself *@
+                            <span @onclick:stopPropagation="true">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Add"
+                                           OnClick="@(() => CreateAsync(type))">Neuer Wert</MudButton>
+                            </span>
+                        }
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    @if (entries.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Werte vorhanden.</MudText>
+                    }
+                    else
+                    {
+                        @* long lists scroll internally with a sticky header *@
+                        <MudTable Items="entries" Dense="true" Hover="true" Elevation="0"
+                                  Height="@(entries.Count > 10 ? "360px" : null)" FixedHeader="@(entries.Count > 10)">
+                            <HeaderContent>
+                                <MudTh>Wert</MudTh>
+                                <MudTh Style="white-space:nowrap;">Verwendungen</MudTh>
+                                <MudTh Style="text-align:right;">Aktion</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Wert">@context.Value</MudTd>
+                                <MudTd DataLabel="Verwendungen">@context.UsageCount</MudTd>
+                                <MudTd DataLabel="Aktion" Style="text-align:right; white-space:nowrap;">
+                                    @if (_mayWrite)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                       OnClick="@(() => RenameAsync(type, context))" aria-label="Wert umbenennen" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                       OnClick="@(() => DeleteAsync(type, context))" aria-label="Wert löschen" />
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+
+        @* activity kinds: distinct list without a catalog row, values live on the activities *@
+        <MudExpansionPanel>
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.h6">Aktivitäts-Arten</MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_activityKinds.Count</MudChip>
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+                    Entsteht direkt beim Erfassen neuer Aktivitäten.
+                </MudText>
+                @if (_activityKinds.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Werte vorhanden.</MudText>
+                }
+                else
+                {
+                    <MudTable Items="_activityKinds" Dense="true" Hover="true" Elevation="0"
+                              Height="@(_activityKinds.Count > 10 ? "360px" : null)" FixedHeader="@(_activityKinds.Count > 10)">
+                        <HeaderContent>
+                            <MudTh>Wert</MudTh>
+                            <MudTh Style="white-space:nowrap;">Verwendungen</MudTh>
+                            <MudTh Style="text-align:right;">Aktion</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Wert">@context.Value</MudTd>
+                            <MudTd DataLabel="Verwendungen">@context.UsageCount</MudTd>
+                            <MudTd DataLabel="Aktion" Style="text-align:right; white-space:nowrap;">
+                                @if (_mayWrite)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                   OnClick="@(() => RenameKindAsync(context))" aria-label="Art umbenennen" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => DeleteKindAsync(context))" aria-label="Art löschen" />
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    <MudText Typo="Typo.h5" Class="mb-1">Fest hinterlegte Listen (Code)</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+        Diese Werte sind im Code verankert (Dienstgrade steuern z. B. Berechtigungen). Hier ist nur die
+        Anzeige-Bezeichnung anpassbar; neue Werte erfordern eine Code-Änderung. Angepasste Werte zeigen
+        zusätzlich ihren Standard-Namen.
+    </MudText>
+    <MudExpansionPanels MultiExpansion="true" Elevation="2">
+        @foreach (var card in CodeCards())
+        {
+            var changed = card.Rows.Count(r => r.IsOverridden);
+            <MudExpansionPanel>
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.h6">@card.Title</MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@card.Rows.Count</MudChip>
+                        @if (changed > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@changed angepasst</MudChip>
+                        }
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudTable Items="card.Rows" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Wert</MudTh>
+                            <MudTh Style="text-align:right;">Aktion</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Wert">
+                                <MudText Typo="Typo.body2">@context.Name</MudText>
+                                @if (context.IsOverridden)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Standard: @context.DefaultName</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Aktion" Style="text-align:right; white-space:nowrap;">
+                                @if (_mayWrite)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                                   OnClick="@(() => RenameLabelAsync(card.ListKey, context))" aria-label="Bezeichnung anpassen" />
+                                    @if (context.IsOverridden)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Default"
+                                                       OnClick="@(() => ResetLabelAsync(card.ListKey, context))" aria-label="Auf Standard zurücksetzen" />
+                                    }
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayWrite;
+    private ClaimsPrincipal _user = default!;
+    private readonly Dictionary<SuggestionType, List<SuggestionEntry>> _catalogs =
+        SuggestionTypeDisplay.All.ToDictionary(t => t, _ => new List<SuggestionEntry>());
+    private List<SuggestionEntry> _activityKinds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayWrite = _user.MayWrite() && (await Authorization.AuthorizeAsync(_user, Policies.Leadership)).Succeeded;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        foreach (var type in SuggestionTypeDisplay.All)
+        {
+            _catalogs[type] = (await SuggestionService.GetEntriesAsync(type)).ToList();
+        }
+        _activityKinds = (await SuggestionService.GetActivityKindsAsync()).ToList();
+        _load = false;
+    }
+
+    private async Task ReloadTypeAsync(SuggestionType type)
+        => _catalogs[type] = (await SuggestionService.GetEntriesAsync(type)).ToList();
+
+    private async Task CreateAsync(SuggestionType type)
+    {
+        var value = await ValueNameDialog.ShowAsync(DialogService,
+            $"Neuer Wert: {SuggestionTypeDisplay.Name(type)}");
+        if (value is null)
+        {
+            return;
+        }
+        try
+        {
+            await SuggestionService.CreateAsync(type, value, _user);
+            Snackbar.Add($"Wert „{value}“ angelegt.", Severity.Success);
+            await ReloadTypeAsync(type);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RenameAsync(SuggestionType type, SuggestionEntry entry)
+    {
+        var value = await ValueNameDialog.ShowAsync(DialogService, "Wert umbenennen",
+            $"„{entry.Value}“ wird auch in {entry.UsageCount} Akte(n) umbenannt.",
+            initialValue: entry.Value);
+        if (value is null || string.Equals(value, entry.Value, StringComparison.Ordinal))
+        {
+            return;
+        }
+        try
+        {
+            await SuggestionService.RenameAsync(entry.Id, value, _user);
+            Snackbar.Add($"„{entry.Value}“ wurde in „{value}“ umbenannt.", Severity.Success);
+            await ReloadTypeAsync(type);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(SuggestionType type, SuggestionEntry entry)
+    {
+        var text = entry.UsageCount > 0
+            ? $"„{entry.Value}“ wird gelöscht und aus {entry.UsageCount} Akte(n) entfernt."
+            : $"„{entry.Value}“ wird gelöscht. Der Wert wird aktuell in keiner Akte verwendet.";
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Wert löschen?", text);
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await SuggestionService.DeleteAsync(entry.Id, _user);
+            Snackbar.Add($"Wert „{entry.Value}“ gelöscht.", Severity.Success);
+            await ReloadTypeAsync(type);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RenameKindAsync(SuggestionEntry entry)
+    {
+        var value = await ValueNameDialog.ShowAsync(DialogService, "Aktivitäts-Art umbenennen",
+            $"„{entry.Value}“ wird bei {entry.UsageCount} Aktivität(en) umbenannt.",
+            initialValue: entry.Value, maxLength: 100);
+        if (value is null || string.Equals(value, entry.Value, StringComparison.Ordinal))
+        {
+            return;
+        }
+        try
+        {
+            await SuggestionService.RenameActivityKindAsync(entry.Value, value, _user);
+            Snackbar.Add($"„{entry.Value}“ wurde in „{value}“ umbenannt.", Severity.Success);
+            _activityKinds = (await SuggestionService.GetActivityKindsAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteKindAsync(SuggestionEntry entry)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Aktivitäts-Art löschen?",
+            $"Die Art „{entry.Value}“ wird bei {entry.UsageCount} Aktivität(en) entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await SuggestionService.DeleteActivityKindAsync(entry.Value, _user);
+            Snackbar.Add($"Art „{entry.Value}“ entfernt.", Severity.Success);
+            _activityKinds = (await SuggestionService.GetActivityKindsAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RenameLabelAsync(string listKey, CodeRow row)
+    {
+        var value = await ValueNameDialog.ShowAsync(DialogService, "Bezeichnung anpassen",
+            $"Code-Wert: {row.DefaultName}. Den Standard-Namen eingeben setzt die Anpassung zurück.",
+            initialValue: row.Name, label: "Anzeige-Bezeichnung", maxLength: 200);
+        if (value is null || string.Equals(value, row.Name, StringComparison.Ordinal))
+        {
+            return;
+        }
+        try
+        {
+            // entering the default name again clears the override instead of storing it
+            if (string.Equals(value, row.DefaultName, StringComparison.Ordinal))
+            {
+                await LabelService.ResetAsync(listKey, row.Key, _user);
+                Snackbar.Add("Bezeichnung auf Standard zurückgesetzt.", Severity.Success);
+            }
+            else
+            {
+                await LabelService.SetAsync(listKey, row.Key, value, _user);
+                Snackbar.Add("Bezeichnung gespeichert.", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ResetLabelAsync(string listKey, CodeRow row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Bezeichnung zurücksetzen?",
+            $"„{row.Name}“ wird wieder als „{row.DefaultName}“ angezeigt.", "Zurücksetzen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await LabelService.ResetAsync(listKey, row.Key, _user);
+            Snackbar.Add("Bezeichnung auf Standard zurückgesetzt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static IReadOnlyList<CodeCard> CodeCards() =>
+    [
+        new("Dienstgrade", nameof(Rank),
+            RankDisplay.All.Select(v => new CodeRow(v.ToString(), RankDisplay.Name(v), RankDisplay.DefaultName(v))).ToList()),
+        new("Einstufungen", nameof(Classification),
+            ClassificationDisplay.All.Select(v => new CodeRow(v.ToString(), ClassificationDisplay.Name(v), ClassificationDisplay.DefaultName(v))).ToList()),
+        new("Maßnahme-Ausgänge (Doks)", nameof(MeasureOutcome),
+            MeasureOutcomeDisplay.All.Select(v => new CodeRow(v.ToString(), MeasureOutcomeDisplay.Name(v), MeasureOutcomeDisplay.DefaultName(v))).ToList()),
+        new("Beziehungstypen (Person ↔ Person)", nameof(RelationType),
+            RelationTypeDisplay.All.Select(v => new CodeRow(v.ToString(), RelationTypeDisplay.Name(v), RelationTypeDisplay.DefaultName(v))).ToList()),
+        new("Taskforce-Geltungsbereiche", nameof(TaskforceScope),
+            TaskforceScopeDisplay.All.Select(v => new CodeRow(v.ToString(), TaskforceScopeDisplay.Name(v), TaskforceScopeDisplay.DefaultName(v))).ToList()),
+        new("Lebensstatus", nameof(LifeStatus),
+            LifeStatusDisplay.All.Select(v => new CodeRow(v.ToString(), LifeStatusDisplay.Name(v), LifeStatusDisplay.DefaultName(v))).ToList()),
+        new("Gruppen-Arten", nameof(GroupsKind),
+            GroupsKindDisplay.All.Select(v => new CodeRow(v.ToString(), GroupsKindDisplay.Name(v), GroupsKindDisplay.DefaultName(v))).ToList()),
+    ];
+
+    private record CodeRow(string Key, string Name, string DefaultName)
+    {
+        public bool IsOverridden => !string.Equals(Name, DefaultName, StringComparison.Ordinal);
+    }
+
+    private record CodeCard(string Title, string ListKey, IReadOnlyList<CodeRow> Rows);
+}

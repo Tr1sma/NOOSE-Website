@@ -32,7 +32,8 @@ html, body {
     padding: 0.7rem 1.25rem;
     position: fixed;
     width: 100%;
-    z-index: 1200;
+    /* above MudBlazor appbar/dialog/snackbar/tooltip layers */
+    z-index: 2100;
 }
 
 #blazor-error-ui .dismiss {
@@ -522,4 +523,154 @@ div.vis-tooltip {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55) !important;
     padding: 8px 10px !important;
     font-family: Inter, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Record detail section rail */
+.record-rail-shell {
+    overflow: hidden;
+}
+
+.record-rail {
+    flex: none;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.record-rail .mud-button-root {
+    justify-content: flex-start;
+    text-transform: none;
+    letter-spacing: normal;
+    border-radius: 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.record-rail-content {
+    min-width: 0;
+}
+
+@media (min-width: 960px) {
+    /* one screenful, pinned under the app bar; both columns scroll inside it.
+       No min-height: a sticky box taller than its stick window can never be
+       scrolled to its own bottom edge. */
+    .record-rail-shell {
+        position: sticky;
+        top: calc(var(--mud-appbar-height, 60px) + 1rem);
+        height: calc(100vh - var(--mud-appbar-height, 60px) - 2rem);
+        height: calc(100dvh - var(--mud-appbar-height, 60px) - 2rem);
+    }
+
+    .record-rail {
+        width: 15rem;
+        border-bottom: none;
+        border-right: 1px solid var(--mud-palette-divider);
+        overflow-y: auto;
+        /* wheel past the last entry must not scroll the page underneath */
+        overscroll-behavior: contain;
+    }
+
+    .record-rail-content {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    /* Steckkarte: same one-screenful cap as .record-rail-shell next to it. */
+    .akte-steckkarte {
+        position: sticky;
+        top: calc(var(--mud-appbar-height, 60px) + 1rem);
+        height: calc(100vh - var(--mud-appbar-height, 60px) - 2rem);
+        height: calc(100dvh - var(--mud-appbar-height, 60px) - 2rem);
+    }
+
+    .akte-steckkarte > .mud-paper {
+        height: 100%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+}
+
+@media print {
+    /* a screen-height scroll box would clip the record on paper */
+    .record-rail-shell {
+        position: static;
+        height: auto;
+        overflow: visible;
+    }
+
+    .record-rail-content {
+        overflow-y: visible;
+    }
+}
+
+/* Two-column drawer: icon rail of areas + panel with that area's entries. */
+/* .mud-drawer is a scrolling column, so the row shell needs its own overflow context. */
+.noose-drawer { overflow: hidden; }
+
+.noose-nav {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.noose-nav-rail {
+    flex: 0 0 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+    padding: .5rem 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--mud-palette-divider);
+    background-color: var(--mud-palette-background-gray);
+}
+
+.noose-nav-rail .mud-icon-button { border-radius: 8px; }
+
+.noose-nav-rail-active {
+    background-color: var(--mud-palette-primary-hover);
+    box-shadow: inset 3px 0 0 0 var(--mud-palette-primary);
+}
+
+.noose-nav-panel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-y: auto;
+}
+
+@media (max-width: 959.98px) {
+    .noose-nav-rail { flex-basis: 56px; }
+}
+
+/* Desktop: the drawer rests at rail width and the entry panel expands over the content on hover.
+   (hover: hover) excludes touch devices, which could never collapse it again. */
+@media (min-width: 960px) and (hover: hover) and (pointer: fine) {
+    /* content clears the icon rail only; overriding the rule beats the container's inline width var */
+    .mud-drawer-open-responsive-md-left .mud-main-content { margin-left: 64px; }
+
+    /* 0-3-0 to beat .mud-drawer.mud-drawer-responsive.mud-drawer-pos-left */
+    .mud-drawer.mud-drawer-responsive.noose-drawer {
+        width: 64px;
+        transition: width 225ms cubic-bezier(0, 0, 0.2, 1),
+                    box-shadow 225ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .mud-drawer.mud-drawer-responsive.noose-drawer:hover {
+        width: 300px;
+        box-shadow: var(--mud-elevation-8);
+    }
+
+    /* Keyboard focus only, and in its own rule. :focus-within would also match the link the mouse
+       just clicked, pinning the drawer open until the focus moved on. A browser without :has()
+       drops this rule alone instead of taking the :hover rule down with it. */
+    .mud-drawer.mud-drawer-responsive.noose-drawer:has(:focus-visible) {
+        width: 300px;
+        box-shadow: var(--mud-elevation-8);
+    }
+
+    /* fixed width, or flex would squeeze the entries to zero during the animation */
+    .noose-drawer .noose-nav-panel { flex: 0 0 236px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mud-drawer.mud-drawer-responsive.noose-drawer { transition: none; }
 }

@@ -8,6 +8,30 @@ retryButton.addEventListener("click", retry);
 const resumeButton = document.getElementById("components-resume-button");
 resumeButton.addEventListener("click", resume);
 
+const reloadButton = document.getElementById("components-reload-button");
+reloadButton.addEventListener("click", () => location.reload());
+
+const dismissButton = document.getElementById("components-dismiss-button");
+dismissButton.addEventListener("click", () => reconnectModal.close());
+
+const stateClasses = [
+    "components-reconnect-show",
+    "components-reconnect-retrying",
+    "components-reconnect-failed",
+    "components-reconnect-paused",
+    "components-reconnect-resume-failed"
+];
+
+// never reload silently — unsaved Protokolle would be lost
+function showRejected() {
+    document.removeEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
+    reconnectModal.classList.remove(...stateClasses);
+    reconnectModal.classList.add("components-reconnect-rejected");
+    // reopen non-modally so the page behind stays selectable
+    reconnectModal.close();
+    reconnectModal.show();
+}
+
 function handleReconnectStateChanged(event) {
     if (event.detail.state === "show") {
         reconnectModal.showModal();
@@ -16,7 +40,7 @@ function handleReconnectStateChanged(event) {
     } else if (event.detail.state === "failed") {
         document.addEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
     } else if (event.detail.state === "rejected") {
-        location.reload();
+        showRejected();
     }
 }
 
@@ -30,7 +54,7 @@ async function retry() {
             // try resume
             const resumeSuccessful = await Blazor.resumeCircuit();
             if (!resumeSuccessful) {
-                location.reload();
+                showRejected();
             } else {
                 reconnectModal.close();
             }
@@ -45,7 +69,7 @@ async function resume() {
     try {
         const successful = await Blazor.resumeCircuit();
         if (!successful) {
-            location.reload();
+            showRejected();
         }
     } catch {
         reconnectModal.classList.replace("components-reconnect-paused", "components-reconnect-resume-failed");

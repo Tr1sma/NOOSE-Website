@@ -3,14 +3,14 @@
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
-<PageTitle>Aufgaben · NOOSE</PageTitle>
+<PageTitle>Aufgaben-Board · NOOSE</PageTitle>
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
     <MudIcon Icon="@Icons.Material.Filled.AssignmentTurnedIn" Color="Color.Primary" Size="Size.Large" />
     <MudText Typo="Typo.h4">Aufgaben-Board</MudText>
     <MudSpacer />
     <AuthorizeView Policy="@Policies.Leadership">
-        <MudButton Href="/aufgaben/papierkorb" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
+        <MudButton Href="/papierkorb?tab=aufgaben" Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Delete">Papierkorb</MudButton>
     </AuthorizeView>
     <AuthorizeView Policy="@Policies.WriteAccess" Context="schreib">
         <MudButton Href="/aufgaben/neu" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Neue Aufgabe</MudButton>
