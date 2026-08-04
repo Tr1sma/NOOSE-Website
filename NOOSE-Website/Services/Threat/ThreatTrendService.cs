@@ -109,7 +109,8 @@ public class ThreatTrendService(IDbContextFactory<AppDbContext> dbFactory) : ITh
         await CollectMoversAsync(db, nameof(Faction), factionMeta, "/fraktionen/", windowStart, movers, cancellationToken);
         await CollectMoversAsync(db, nameof(Person), personMeta, "/personen/", windowStart, movers, cancellationToken);
 
-        return movers.OrderByDescending(m => m.Delta).ThenByDescending(m => m.ToScore).Take(topN).ToList();
+        // rank by magnitude of movement (rises AND drops) to match the panel's "größte Score-Bewegungen"
+        return movers.OrderByDescending(m => Math.Abs(m.Delta)).ThenByDescending(m => m.ToScore).Take(topN).ToList();
     }
 
     private async Task CollectMoversAsync(

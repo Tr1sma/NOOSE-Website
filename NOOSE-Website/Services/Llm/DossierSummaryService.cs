@@ -132,8 +132,12 @@ public sealed class DossierSummaryService(
 
     private static string? Nullify(string? html) => string.IsNullOrWhiteSpace(html) ? null : html;
 
+    // the score-recalculation timestamp advances on every daily sweep even when nothing changed;
+    // excluding it keeps a brief from being falsely marked stale after each nightly recompute
+    private static readonly Regex VolatileHashLines = new(@"(?im)^Score berechnet am:.*$\r?\n?", RegexOptions.Compiled);
+
     private static string Hash(string text)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(VolatileHashLines.Replace(text, string.Empty))));
 
     /// <summary>Split the model's "## TL;DR" / "## Zusammenfassung" markdown into (tldr, body); falls back to (null, whole).</summary>
     public static (string? Tldr, string Body) SplitSections(string? markdown)

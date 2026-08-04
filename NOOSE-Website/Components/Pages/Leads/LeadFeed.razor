@@ -118,6 +118,8 @@ else
         try
         {
             await LinkService.CreateAsync(lead.PrimaryType, lead.PrimaryId, lead.SecondaryType, lead.SecondaryId, null, _user);
+            // linked = resolved: dismiss the lead so it leaves the feed immediately (raw candidates are cached ~5 min)
+            await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
             Snackbar.Add("Verknüpfung angelegt.", Severity.Success);
             await ReloadAsync();
         }

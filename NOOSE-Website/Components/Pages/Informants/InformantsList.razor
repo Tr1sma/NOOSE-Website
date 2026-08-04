@@ -34,7 +34,7 @@ else
             <MudItem xs="12" sm="6" md="4">
                 <MudPaper Class="pa-4" Elevation="2" Style="cursor:pointer;height:100%;" @onclick="@(() => Nav.NavigateTo($"/informanten/{i.Id}"))">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudText Typo="Typo.h6">@i.Codename</MudText>
+                        <MudText Typo="Typo.h6">@(string.IsNullOrWhiteSpace(i.Codename) ? i.CaseNumber : i.Codename)</MudText>
                         <MudChip T="string" Size="Size.Small" Color="@StatusColour(i.Status)">@InformantEnumDisplay.Status(i.Status)</MudChip>
                     </MudStack>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@i.CaseNumber · @InformantEnumDisplay.Reliability(i.Reliability)</MudText>

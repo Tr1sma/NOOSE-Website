@@ -24,7 +24,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     public async Task<CounterIntelOverview> GetOverviewAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireLeadershipNoReader(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await LoadAsync(db, days, cancellationToken);
         return new CounterIntelOverview(
@@ -37,7 +37,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     public async Task<CounterIntelHeatmap> GetHeatmapAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireLeadershipNoReader(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await LoadAsync(db, days, cancellationToken);
 
@@ -49,7 +49,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
                 {
                     hours[r.LocalTimestamp.Hour]++;
                 }
-                return new HeatAgent(g.Key, g.First().AgentName ?? g.Key, hours);
+                return new HeatAgent(g.Key, NameOr(g.First().AgentName), hours);
             })
             .OrderByDescending(a => a.Hours.Sum())
             .Take(MaxHeatmapAgents)
@@ -61,7 +61,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     public async Task<AgentAccessProfile?> GetAgentProfileAsync(ClaimsPrincipal actor, string agentId, int days = 30, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireLeadershipNoReader(actor);
         if (string.IsNullOrWhiteSpace(agentId))
         {
             return null;
@@ -81,7 +81,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
             .Select(r => new RecentAccess(r.LocalTimestamp, r.EntityType, r.EntityId, Href(r.EntityType, r.EntityId)))
             .ToList();
         return new AgentAccessProfile(
-            agentId, rows[0].AgentName ?? agentId, rows.Count,
+            agentId, NameOr(rows[0].AgentName), rows.Count,
             rows.Select(r => $"{r.EntityType}:{r.EntityId}").Distinct().Count(),
             rows.Count(r => InsiderThreatRules.IsOffHours(r.LocalTimestamp)),
             byType, recent);
@@ -89,7 +89,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     public async Task<IReadOnlyList<InsiderFlag>> GetFlagsAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireLeadershipNoReader(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await LoadAsync(db, days, cancellationToken);
         return InsiderThreatRules.Evaluate(rows);
@@ -97,7 +97,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     public async Task<IReadOnlyList<AgentOption>> GetAgentsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireLeadershipNoReader(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var excluded = await OnlyReaderIdsAsync(db, cancellationToken);
         var rows = await db.AccessLogs.AsNoTracking()
@@ -132,6 +132,9 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     private static async Task<HashSet<string>> OnlyReaderIdsAsync(AppDbContext db, CancellationToken ct)
         => (await db.Users.Where(u => u.IsTeamLead && !u.IsAdmin).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+
+    // never surface a raw agent id as a name
+    private static string NameOr(string? name) => string.IsNullOrWhiteSpace(name) ? "(unbenannt)" : name;
 
     private static string? Href(string type, string id) => type switch
     {

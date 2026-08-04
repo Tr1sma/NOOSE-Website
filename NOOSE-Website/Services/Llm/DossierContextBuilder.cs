@@ -219,14 +219,18 @@ public static class DossierContextBuilder
                 r.Type,
                 r.Note,
                 AName = r.PersonA != null ? r.PersonA.Name : null,
+                ARestricted = r.PersonA != null && (r.PersonA.IsClassified || r.PersonA.IsTRUClassified || r.PersonA.IsHRBClassified),
                 BName = r.PersonB != null ? r.PersonB.Name : null,
+                BRestricted = r.PersonB != null && (r.PersonB.IsClassified || r.PersonB.IsTRUClassified || r.PersonB.IsHRBClassified),
             }).ToListAsync(ct);
             sb.AppendLine($"— Beziehungen ({relTotal}) —");
             foreach (var r in rels)
             {
                 var other = r.PersonAId == id ? r.BName : r.AName;
-                sb.Append("• ").Append(r.Type.ToString()).Append(": ")
-                    .Append(string.IsNullOrWhiteSpace(other) ? "(unbekannt)" : other);
+                var otherRestricted = r.PersonAId == id ? r.BRestricted : r.ARestricted;
+                var shown = string.IsNullOrWhiteSpace(other) ? "(unbekannt)"
+                    : otherRestricted && !p.IsRestricted ? "(Verschlusssache)" : other;
+                sb.Append("• ").Append(r.Type.ToString()).Append(": ").Append(shown);
                 if (!string.IsNullOrWhiteSpace(r.Note))
                 {
                     sb.Append(" — ").Append(r.Note.Trim());
@@ -235,7 +239,7 @@ public static class DossierContextBuilder
             }
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Person), id, includeClassificationHistory: true, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Person), id, includeClassificationHistory: true, p.IsRestricted, ct);
         return new DossierContext($"{p.Name} ({p.CaseNumber})", sb.ToString(), p.IsRestricted);
     }
 
@@ -284,8 +288,8 @@ public static class DossierContextBuilder
 
         await AppendMembersAsync(sb,
             db.FactionMembers.AsNoTracking().Where(x => x.FactionId == id)
-                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, RoleOrRank = x.Rank, IsLead = x.IsLead }),
-            "Rang", ct);
+                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, Restricted = x.Person != null && (x.Person.IsClassified || x.Person.IsTRUClassified || x.Person.IsHRBClassified), RoleOrRank = x.Rank, IsLead = x.IsLead }),
+            "Rang", f.IsRestricted, ct);
 
         await AppendAgentsAsync(sb, db,
             db.FactionAgents.AsNoTracking().Where(x => x.FactionId == id)
@@ -313,7 +317,7 @@ public static class DossierContextBuilder
             Line(sb, "Fotos", photos.ToString());
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Faction), id, includeClassificationHistory: true, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Faction), id, includeClassificationHistory: true, f.IsRestricted, ct);
         return new DossierContext($"{f.Name} ({f.CaseNumber})", sb.ToString(), f.IsRestricted);
     }
 
@@ -341,15 +345,15 @@ public static class DossierContextBuilder
 
         await AppendMembersAsync(sb,
             db.PersonGroupMembers.AsNoTracking().Where(x => x.PersonGroupId == id)
-                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, RoleOrRank = x.Role, IsLead = x.IsLead }),
-            "Rolle", ct);
+                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, Restricted = x.Person != null && (x.Person.IsClassified || x.Person.IsTRUClassified || x.Person.IsHRBClassified), RoleOrRank = x.Role, IsLead = x.IsLead }),
+            "Rolle", g.IsRestricted, ct);
 
         await AppendAgentsAsync(sb, db,
             db.PersonGroupAgents.AsNoTracking().Where(x => x.PersonGroupId == id)
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(PersonGroup), id, includeClassificationHistory: true, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(PersonGroup), id, includeClassificationHistory: true, g.IsRestricted, ct);
         return new DossierContext($"{g.Name} ({g.CaseNumber})", sb.ToString(), g.IsRestricted);
     }
 
@@ -373,15 +377,15 @@ public static class DossierContextBuilder
 
         await AppendMembersAsync(sb,
             db.PartyMembers.AsNoTracking().Where(x => x.PartyId == id)
-                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, RoleOrRank = x.Role, IsLead = x.IsLead }),
-            "Rolle", ct);
+                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, Restricted = x.Person != null && (x.Person.IsClassified || x.Person.IsTRUClassified || x.Person.IsHRBClassified), RoleOrRank = x.Role, IsLead = x.IsLead }),
+            "Rolle", p.IsRestricted, ct);
 
         await AppendAgentsAsync(sb, db,
             db.PartyAgents.AsNoTracking().Where(x => x.PartyId == id)
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(Party), id, includeClassificationHistory: true, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Party), id, includeClassificationHistory: true, p.IsRestricted, ct);
         return new DossierContext($"{p.Name} ({p.CaseNumber})", sb.ToString(), p.IsRestricted);
     }
 
@@ -413,7 +417,7 @@ public static class DossierContextBuilder
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(Operation), id, includeClassificationHistory: true, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Operation), id, includeClassificationHistory: true, o.IsRestricted, ct);
         return new DossierContext($"{o.Title} ({o.CaseNumber})", sb.ToString(), o.IsRestricted);
     }
 
@@ -443,7 +447,7 @@ public static class DossierContextBuilder
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsCaseLead }),
             "Fallführer", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(Case), id, includeClassificationHistory: true, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Case), id, includeClassificationHistory: true, c.IsRestricted, ct);
         return new DossierContext($"{c.Title} ({c.CaseNumber})", sb.ToString(), c.IsRestricted);
     }
 
@@ -492,7 +496,7 @@ public static class DossierContextBuilder
             }
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Taskforce), id, includeClassificationHistory: false, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Taskforce), id, includeClassificationHistory: false, t.IsClassified, ct);
         return new DossierContext($"{t.Name} ({t.CaseNumber})", sb.ToString(), t.IsClassified);
     }
 
@@ -526,13 +530,13 @@ public static class DossierContextBuilder
             sb.AppendLine(body);
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Document), id, includeClassificationHistory: false, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Document), id, includeClassificationHistory: false, d.IsRestricted, ct);
         return new DossierContext(d.Title, sb.ToString(), d.IsRestricted);
     }
 
     // ---- shared section renderers ----
 
-    static async Task AppendMembersAsync(StringBuilder sb, IQueryable<MemberProj> query, string roleLabel, CancellationToken ct)
+    static async Task AppendMembersAsync(StringBuilder sb, IQueryable<MemberProj> query, string roleLabel, bool rootClassified, CancellationToken ct)
     {
         var (rows, total) = await TakeAsync(query, ct);
         if (total == 0)
@@ -542,7 +546,10 @@ public static class DossierContextBuilder
         sb.AppendLine($"— Mitglieder ({total}) —");
         foreach (var m in rows)
         {
-            sb.Append("• ").Append(string.IsNullOrWhiteSpace(m.Name) ? "(unbekannt)" : m.Name);
+            // a classified member is masked unless the record itself is classified (leadership-only, egress already gated)
+            var shown = string.IsNullOrWhiteSpace(m.Name) ? "(unbekannt)"
+                : m.Restricted && !rootClassified ? "(Verschlusssache)" : m.Name;
+            sb.Append("• ").Append(shown);
             if (!string.IsNullOrWhiteSpace(m.RoleOrRank))
             {
                 sb.Append(" | ").Append(roleLabel).Append(": ").Append(m.RoleOrRank);
@@ -577,7 +584,7 @@ public static class DossierContextBuilder
     }
 
     static async Task AppendAttachmentsAsync(
-        StringBuilder sb, AppDbContext db, string type, string id, bool includeClassificationHistory, CancellationToken ct)
+        StringBuilder sb, AppDbContext db, string type, string id, bool includeClassificationHistory, bool rootClassified, CancellationToken ct)
     {
         var tags = await db.TagMappings.AsNoTracking()
             .Where(m => m.EntityType == type && m.EntityId == id)
@@ -672,7 +679,16 @@ public static class DossierContextBuilder
                 var other = l.SourceType == type && l.SourceId == id
                     ? (l.TargetType, l.TargetId)
                     : (l.SourceType, l.SourceId);
-                var display = resolved.TryGetValue(other, out var r) ? r.Display : $"{other.Item1} {other.Item2}";
+                string display;
+                if (resolved.TryGetValue(other, out var r))
+                {
+                    // mask a classified linked record unless the record itself is classified (egress already gated)
+                    display = r.Classified && !rootClassified ? "(Verschlusssache)" : r.Display;
+                }
+                else
+                {
+                    display = $"{GermanType(other.Item1)} (unbekannt)"; // never surface a raw type+GUID
+                }
                 var label = string.IsNullOrWhiteSpace(l.Label) ? "Verknüpfung" : l.Label;
                 sb.Append("• ").Append(label).Append(": ").AppendLine(display);
             }
@@ -719,6 +735,20 @@ public static class DossierContextBuilder
     static string Codename(Dictionary<string, string> map, string? agentId)
         => agentId is not null && map.TryGetValue(agentId, out var cn) ? cn : "(unbekannter Agent)";
 
+    // German display name for a record type, used when a linked record can no longer be resolved
+    static string GermanType(string type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Personengruppe",
+        nameof(Party) => "Partei",
+        nameof(Operation) => "Operation",
+        nameof(Case) => "Vorgang",
+        nameof(Taskforce) => "Taskforce",
+        nameof(Document) => "Dokument",
+        _ => "Eintrag",
+    };
+
     static async Task<(List<T> Items, int Total)> TakeAsync<T>(IQueryable<T> query, CancellationToken ct)
     {
         var total = await query.CountAsync(ct);
@@ -756,6 +786,7 @@ public static class DossierContextBuilder
     sealed class MemberProj
     {
         public string? Name { get; set; }
+        public bool Restricted { get; set; }
         public string? RoleOrRank { get; set; }
         public bool IsLead { get; set; }
     }

@@ -61,6 +61,7 @@
     private string? _agentId;
     private DateTime _from = DateTime.UtcNow.AddDays(-90);
     private DateTime _to = DateTime.UtcNow.AddDays(1);
+    private int _loadGen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -71,8 +72,13 @@
 
     private async Task LoadAsync()
     {
+        var gen = ++_loadGen;
         _load = true;
         var result = await Chronik.GetEventsAsync(new ChronikQuery(_from, _to, _typeFilter, _agentId), _user);
+        if (gen != _loadGen)
+        {
+            return; // a newer pan/zoom load superseded this one; drop the stale result
+        }
         _events = result.Events;
         _truncated = result.Truncated;
         _load = false;

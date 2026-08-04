@@ -18,7 +18,7 @@ public static class InsiderThreatRules
         var flags = new List<InsiderFlag>();
         foreach (var g in rows.GroupBy(r => r.AgentId))
         {
-            var name = g.First().AgentName ?? g.Key;
+            var name = string.IsNullOrWhiteSpace(g.First().AgentName) ? "(unbenannt)" : g.First().AgentName!;
             var href = $"/personal/{g.Key}";
 
             var offHours = g.Count(r => IsOffHours(r.LocalTimestamp));

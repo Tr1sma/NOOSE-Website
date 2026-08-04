@@ -3,7 +3,7 @@
 @using NOOSE_Website.Models.Informants
 @inject IInformantService Service
 
-<PageTitle>@(_detail?.Codename ?? "Informant") · NOOSE</PageTitle>
+<PageTitle>@Label · NOOSE</PageTitle>
 
 @if (_load)
 {
@@ -17,7 +17,7 @@ else if (_detail is null)
 else
 {
     <PageHeader Icon="@Icons.Material.Filled.VisibilityOff"
-                Title="@_detail.Codename"
+                Title="@Label"
                 Subtitle="@($"{_detail.CaseNumber} · V-Person · {InformantEnumDisplay.Status(_detail.Status)}")"
                 BackHref="/informanten">
         <Actions>
@@ -71,6 +71,11 @@ else
     private bool _load = true;
     private string _loadedId = string.Empty;
     private InformantDisplay? _detail;
+
+    // Codename is optional; fall back to the case number so a nameless informant is still identifiable.
+    private string Label => _detail is null
+        ? "Informant"
+        : string.IsNullOrWhiteSpace(_detail.Codename) ? _detail.CaseNumber : _detail.Codename;
 
     protected override async Task OnParametersSetAsync()
     {

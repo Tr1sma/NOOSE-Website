@@ -20,6 +20,8 @@ namespace NOOSE_Website.Services;
 public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : IGlobalChronikService
 {
     private const int MaxRows = 400;
+    // over-fetch before per-viewer visibility filtering so a run of classified rows does not starve the visible feed
+    private const int FetchRows = MaxRows * 4;
 
     // record-level swimlanes (no child fan-out)
     private static readonly string[] SwimlaneTypes =
@@ -46,7 +48,7 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
         {
             auditQ = auditQ.Where(a => a.AgentId == query.AgentId);
         }
-        var auditRows = await auditQ.OrderByDescending(a => a.Timestamp).Take(MaxRows + 1)
+        var auditRows = await auditQ.OrderByDescending(a => a.Timestamp).Take(FetchRows)
             .Select(a => new { a.Timestamp, a.EntityType, a.EntityId, a.Action, a.AgentName })
             .ToListAsync(cancellationToken);
 
@@ -55,11 +57,12 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
         var classRows = classTypes.Length == 0
             ? new List<ClassRow>()
             : await BuildClassQuery(db, classTypes, query)
-                .OrderByDescending(e => e.Timestamp).Take(MaxRows + 1)
+                .OrderByDescending(e => e.Timestamp).Take(FetchRows)
                 .Select(e => new ClassRow(e.Timestamp, e.EntityType, e.EntityId, e.Value, e.AgentName))
                 .ToListAsync(cancellationToken);
 
-        var capped = auditRows.Count > MaxRows || classRows.Count > MaxRows;
+        // capped is decided ONLY after visibility filtering (below) so a small visible set never shows a false "truncated" chip
+        var capped = false;
 
         var byType = new Dictionary<string, HashSet<string>>();
         void Note(string type, string id)

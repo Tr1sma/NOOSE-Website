@@ -140,9 +140,15 @@ public static class GraphAnalytics
         IReadOnlyList<string> nodes, IReadOnlyList<(string A, string B)> edges)
     {
         var adj = nodes.ToDictionary(n => n, _ => new List<string>());
+        var seen = new HashSet<(string, string)>(); // collapse parallel edges to a simple graph
         foreach (var (a, b) in edges)
         {
             if (a.Equals(b, StringComparison.Ordinal) || !adj.ContainsKey(a) || !adj.ContainsKey(b))
+            {
+                continue;
+            }
+            var key = string.CompareOrdinal(a, b) < 0 ? (a, b) : (b, a);
+            if (!seen.Add(key))
             {
                 continue;
             }

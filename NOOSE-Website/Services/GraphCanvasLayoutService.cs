@@ -59,6 +59,7 @@ public class GraphCanvasLayoutService(IDbContextFactory<AppDbContext> dbFactory)
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        Permission.RequireWriteAccess(actor);
         var agentId = actor.GetAgentId();
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         // only own layouts deletable

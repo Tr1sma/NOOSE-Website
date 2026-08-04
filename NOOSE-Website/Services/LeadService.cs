@@ -3,8 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Leads;
+using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Leads;
@@ -36,7 +40,7 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
         {
             return Array.Empty<LeadGroup>();
         }
-        var isLeadership = viewer.IsLeadership();
+        var mayVs = viewer.MayClassifiedRead();
 
         var raw = await cache.GetOrCreateAsync(CacheKey, async entry =>
         {
@@ -47,7 +51,7 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var dismissed = (await db.LeadDismissals.Select(d => d.LeadKey).ToListAsync(cancellationToken)).ToHashSet();
 
-        var visible = raw.Where(l => !dismissed.Contains(l.Key) && (!l.Classified || isLeadership));
+        var visible = raw.Where(l => !dismissed.Contains(l.Key) && (!l.Classified || mayVs));
 
         return visible
             .GroupBy(l => l.Kind)
@@ -162,7 +166,7 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
 
         var ids = qualifying.SelectMany(kv => new[] { Id(kv.Key.A), Id(kv.Key.B) }).Distinct().ToList();
         var people = await db.People.Where(p => ids.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name, p.IsClassified })
+            .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified })
             .ToDictionaryAsync(p => p.Id, p => p, ct);
 
         foreach (var kv in qualifying)
@@ -173,15 +177,17 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
             {
                 continue;
             }
+            var an = Display(a.Name, a.CaseNumber);
+            var bn = Display(b.Name, b.CaseNumber);
             leads.Add(new Lead(
                 LeadKind.LinkPrediction,
                 $"LP|{aid}|{bid}",
                 "Mögliche Verbindung",
-                $"{a.Name} & {b.Name} teilen {kv.Value} gemeinsame Kontakte, sind aber nicht verknüpft.",
+                $"{an} & {bn} teilen {kv.Value} gemeinsame Kontakte, sind aber nicht verknüpft.",
                 kv.Value,
                 a.IsClassified || b.IsClassified,
-                nameof(Person), aid, a.Name, $"/personen/{aid}",
-                nameof(Person), bid, b.Name, $"/personen/{bid}"));
+                nameof(Person), aid, an, $"/personen/{aid}",
+                nameof(Person), bid, bn, $"/personen/{bid}"));
         }
     }
 
@@ -192,6 +198,9 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
             .Where(v => !v.Automatic && v.Kind == LinkKind.Conflict && v.CreatedAt >= since)
             .Select(v => new { v.Id, v.SourceType, v.SourceId, v.TargetType, v.TargetId, v.CreatedAt })
             .ToListAsync(ct);
+        // endpoints must be types whose resolved Classified flag reflects real visibility; membership-gated
+        // types (Taskforce/Job/Appointment) resolve as non-classified and would leak into the shared cached feed
+        conflicts = conflicts.Where(c => HonestConflictType(c.SourceType) && HonestConflictType(c.TargetType)).ToList();
         if (conflicts.Count == 0)
         {
             return;
@@ -265,4 +274,11 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
         var i = nodeKey.IndexOf(':');
         return i > 0 ? nodeKey[(i + 1)..] : nodeKey;
     }
+
+    // canonical "Name (Aktenzeichen)"; falls back to the case number so the label is never empty
+    private static string Display(string? name, string caseNumber)
+        => string.IsNullOrWhiteSpace(name) ? caseNumber : $"{name} ({caseNumber})";
+
+    private static bool HonestConflictType(string type) => type is nameof(Person) or nameof(Faction)
+        or nameof(Party) or nameof(PersonGroup) or nameof(Case) or nameof(Operation);
 }

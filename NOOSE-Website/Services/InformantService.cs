@@ -33,7 +33,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         var rows = await db.Informants.Where(i => ids.Contains(i.Id))
             .Select(i => new { i.Id, i.CaseNumber, i.Codename, i.Description, i.Reliability, i.Status, i.HandlerId })
             .ToListAsync(cancellationToken);
-        var handlers = await HandlerNamesAsync(db, rows.Select(r => r.HandlerId), cancellationToken);
+        var handlers = await HandlerDisplayAsync(db, rows.Select(r => r.HandlerId), actor.MayRealNameSee(), cancellationToken);
 
         // NB: the list never carries identity fields (RealName stays null regardless of tier)
         return rows
@@ -42,7 +42,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
                 r.HandlerId, handlers.GetValueOrDefault(r.HandlerId),
                 InformantVisibility.MaySeeIdentity(actor, r.HandlerId), null, null, null,
                 InformantVisibility.MayWrite(actor, r.HandlerId)))
-            .OrderBy(d => d.Codename)
+            .OrderBy(d => string.IsNullOrWhiteSpace(d.Codename) ? d.CaseNumber : d.Codename)
             .ToList();
     }
 
@@ -56,7 +56,8 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             return null;
         }
-        var handlerName = await db.Users.Where(u => u.Id == inf.HandlerId).Select(u => u.Codename).FirstOrDefaultAsync(cancellationToken);
+        var handlerName = (await HandlerDisplayAsync(db, new[] { inf.HandlerId }, actor.MayRealNameSee(), cancellationToken))
+            .GetValueOrDefault(inf.HandlerId);
 
         var maySeeId = InformantVisibility.MaySeeIdentity(actor, inf.HandlerId);
         string? realName = null, contact = null, notes = null;
@@ -79,10 +80,6 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
     public async Task<string> CreateAsync(InformantInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLeadership(actor); // creating + assigning a handler is a leadership act
-        if (string.IsNullOrWhiteSpace(input.Codename))
-        {
-            throw new InvalidOperationException("Deckname erforderlich.");
-        }
         if (string.IsNullOrWhiteSpace(input.HandlerId))
         {
             throw new InvalidOperationException("Führungsagent erforderlich.");
@@ -175,7 +172,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .OrderByDescending(m => m.MeetingDate)
             .Select(m => new { m.Id, m.MeetingDate, m.Location, m.Content, m.CreatedById })
             .ToListAsync(cancellationToken);
-        var authors = await HandlerNamesAsync(db, meetings.Where(m => m.CreatedById != null).Select(m => m.CreatedById!), cancellationToken);
+        var authors = await HandlerDisplayAsync(db, meetings.Where(m => m.CreatedById != null).Select(m => m.CreatedById!), actor.MayRealNameSee(), cancellationToken);
         return meetings
             .Select(m => new InformantMeetingDisplay(m.Id, m.MeetingDate, m.Location, m.Content,
                 m.CreatedById is null ? null : authors.GetValueOrDefault(m.CreatedById)))
@@ -204,23 +201,31 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Users
             .Where(u => u.Status == NOOSE_Website.Models.Enums.AgentStatus.Active)
-            .Select(u => new { u.Id, u.Codename })
+            .Select(u => new { u.Id, u.Codename, u.RealName })
             .ToListAsync(cancellationToken);
         return rows
-            .Select(u => new InformantHandlerOption(u.Id, string.IsNullOrWhiteSpace(u.Codename) ? u.Id : u.Codename!))
+            .Select(u => new InformantHandlerOption(u.Id, PickName(u.Codename, u.RealName, actor.MayRealNameSee())))
             .OrderBy(o => o.Name)
             .ToList();
     }
 
-    private static async Task<Dictionary<string, string?>> HandlerNamesAsync(AppDbContext db, IEnumerable<string> ids, CancellationToken ct)
+    // Resolve agent ids to a display name: codename first; real name only for viewers allowed to see it; never a raw id.
+    private static async Task<Dictionary<string, string>> HandlerDisplayAsync(
+        AppDbContext db, IEnumerable<string> ids, bool mayRealName, CancellationToken ct)
     {
         var list = ids.Distinct().ToList();
         if (list.Count == 0)
         {
-            return new Dictionary<string, string?>();
+            return new Dictionary<string, string>();
         }
-        return await db.Users.Where(u => list.Contains(u.Id))
-            .Select(u => new { u.Id, u.Codename })
-            .ToDictionaryAsync(u => u.Id, u => (string?)u.Codename, ct);
+        var rows = await db.Users.Where(u => list.Contains(u.Id))
+            .Select(u => new { u.Id, u.Codename, u.RealName })
+            .ToListAsync(ct);
+        return rows.ToDictionary(u => u.Id, u => PickName(u.Codename, u.RealName, mayRealName));
     }
+
+    private static string PickName(string? codename, string? realName, bool mayRealName)
+        => !string.IsNullOrWhiteSpace(codename) ? codename!
+            : mayRealName && !string.IsNullOrWhiteSpace(realName) ? realName!
+            : "(unbenannt)";
 }

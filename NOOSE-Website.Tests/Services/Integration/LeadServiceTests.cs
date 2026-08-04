@@ -39,8 +39,10 @@ public sealed class LeadServiceTests
         }
         var leads = await FlatAsync(Svc(ctx), Leader());
 
+        // display is "Name (Aktenzeichen)"
         Assert.Contains(leads, l => l.Kind == LeadKind.LinkPrediction
-            && ((l.PrimaryName == "A" && l.SecondaryName == "B") || (l.PrimaryName == "B" && l.SecondaryName == "A")));
+            && ((l.PrimaryName.StartsWith("A ", StringComparison.Ordinal) && l.SecondaryName!.StartsWith("B ", StringComparison.Ordinal))
+                || (l.PrimaryName.StartsWith("B ", StringComparison.Ordinal) && l.SecondaryName!.StartsWith("A ", StringComparison.Ordinal))));
     }
 
     [Fact]

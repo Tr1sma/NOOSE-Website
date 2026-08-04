@@ -541,7 +541,7 @@ public class ThreatScoreService(
         await db.SaveChangesAsync(ct);
 
         if (last is { Score: { } prev } && result.Score is { } now
-            && now - prev >= config.AlarmDeltaThreshold && now >= config.AlarmMinScore)
+            && now > prev && now - prev >= config.AlarmDeltaThreshold && now >= config.AlarmMinScore)
         {
             await AlarmAsync(db, entityType, entityId, prev, now, ct);
         }
