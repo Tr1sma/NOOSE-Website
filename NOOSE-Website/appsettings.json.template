@@ -40,7 +40,7 @@
   "Llm": {
     "Enabled": true,
     "BaseUrl": "https://openrouter.ai/api/v1",
-    "Model": "deepseek/deepseek-v4-flash-latest",
+    "Model": "deepseek/deepseek-v4-flash",
     "ApiKey": "",
     "AllowClassifiedContent": false
   }

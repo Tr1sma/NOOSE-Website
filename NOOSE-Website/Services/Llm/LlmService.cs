@@ -46,12 +46,48 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
         using var response = await client.PostAsJsonAsync("chat/completions", payload, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"KI-Endpunkt antwortete mit {(int)response.StatusCode}.");
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var detail = ExtractError(body);
+            throw new InvalidOperationException(
+                $"KI-Endpunkt antwortete mit {(int)response.StatusCode}{(detail is null ? "" : ": " + detail)}.");
         }
 
         var doc = await response.Content.ReadFromJsonAsync<ChatResponse>(Json, cancellationToken);
         var content = doc?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
         return string.IsNullOrWhiteSpace(content) ? "(Keine Antwort erhalten.)" : content;
+    }
+
+    /// <summary>Pull a human-readable message out of an OpenAI-style error body; falls back to the raw body.</summary>
+    private static string? ExtractError(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var err))
+            {
+                if (err.ValueKind == JsonValueKind.Object && err.TryGetProperty("message", out var msg))
+                {
+                    return Trim(msg.GetString());
+                }
+                return Trim(err.ToString());
+            }
+        }
+        catch (JsonException) { /* not json — fall through */ }
+        return Trim(body);
+    }
+
+    private static string? Trim(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        text = text.Trim();
+        return text.Length > 300 ? text[..300] : text;
     }
 
     private sealed record ChatResponse(List<Choice>? Choices);
