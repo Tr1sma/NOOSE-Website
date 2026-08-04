@@ -1,0 +1,104 @@
+@* "Bester Agent der Woche": periodic top-3 Discord announcement + optional personnel entries. Leadership-managed. *@
+@inject ITopAgentAwardService Awards
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    In einstellbarem Takt werden die drei Agenten mit den meisten Gamification-Punkten des Zeitraums in den
+    Ankündigungs-Discord-Channel gepostet (mit @@NOOSE-Ping). Optional erhält jeder der drei einen positiven
+    Personalakten-Vermerk „Bester Agent der Woche KW[aktuelle KW]". Der Discord-Post nutzt denselben Webhook +
+    dieselbe Rolle wie die Kategorie <b>Ankündigung</b> (siehe Discord-Benachrichtigungen).
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Spacing="3" Style="max-width:520px;">
+        <MudSwitch T="bool" @bind-Value="_enabled" Color="Color.Primary" Label="Automatische Ankündigung aktiv" />
+
+        <MudNumericField T="int" @bind-Value="_intervalDays" Label="Intervall (Tage)" Min="1" Max="365"
+                         Variant="Variant.Outlined" HelperText="Alle wie viele Tage die Top 3 gepostet werden (7 = wöchentlich)." />
+
+        <MudSwitch T="bool" @bind-Value="_createNote" Color="Color.Primary"
+                   Label="Positiven Personalakten-Vermerk für die Top 3 anlegen" />
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync" Disabled="_saving">Speichern</MudButton>
+            <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="RunNowAsync" Disabled="_running">Jetzt senden</MudButton>
+        </MudStack>
+
+        @if (_lastRun is not null)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Zuletzt gesendet: @_lastRun.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+            </MudText>
+        }
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _saving;
+    private bool _running;
+    private bool _enabled;
+    private int _intervalDays = 7;
+    private bool _createNote = true;
+    private DateTime? _lastRun;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        var cfg = await Awards.GetConfigAsync();
+        _enabled = cfg.Enabled;
+        _intervalDays = cfg.IntervalDays;
+        _createNote = cfg.CreateNote;
+        _lastRun = cfg.LastRun;
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await Awards.SaveConfigAsync(new TopAgentConfigInput(_enabled, _intervalDays, _createNote), _user);
+            Snackbar.Add("Einstellungen gespeichert.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RunNowAsync()
+    {
+        _running = true;
+        try
+        {
+            var count = await Awards.RunNowAsync(_user);
+            _lastRun = DateTime.UtcNow;
+            Snackbar.Add(count > 0
+                ? $"Ankündigung gesendet ({count} Agenten)."
+                : "Keine Agenten mit Punkten im Zeitraum — nichts gesendet.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+}

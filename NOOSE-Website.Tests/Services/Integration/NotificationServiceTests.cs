@@ -91,7 +91,7 @@ public class NotificationServiceTests
         await discord.Received(1).PushAsync(
             NotificationType.Mention, Arg.Any<string>(),
             Arg.Is<IReadOnlyCollection<string>>(c => c.Count == 1 && c.Contains(RecipientGuid)),
-            Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class NotificationServiceTests
         Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
             Arg.Any<NotificationType>(), Arg.Any<string>(),
-            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class NotificationServiceTests
         Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
             Arg.Any<NotificationType>(), Arg.Any<string>(),
-            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class NotificationServiceTests
         Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
             Arg.Any<NotificationType>(), Arg.Any<string>(),
-            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // ---- NotifyMentionedDeltaAsync -----------------------------------------
@@ -218,7 +218,7 @@ public class NotificationServiceTests
         Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
             Arg.Any<NotificationType>(), Arg.Any<string>(),
-            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public class NotificationServiceTests
         await discord.Received(1).PushAsync(
             NotificationType.Announcement, "/brett",
             Arg.Is<IReadOnlyCollection<string>>(c => c.Count == 2),
-            Arg.Any<CancellationToken>());
+            Arg.Is<string>(h => h == "Neu"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -335,7 +335,7 @@ public class NotificationServiceTests
         Assert.Empty(db.Notifications.ToList());
         await discord.DidNotReceive().PushAsync(
             Arg.Any<NotificationType>(), Arg.Any<string>(),
-            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // ---- GetOwnAsync -------------------------------------------------------

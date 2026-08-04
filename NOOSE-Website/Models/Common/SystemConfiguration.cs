@@ -37,6 +37,16 @@ public static class SystemSettingKeys
 
     /// <summary>Row key of a category's Discord role mention: prefix + NotificationType name.</summary>
     public const string DiscordRolePrefix = "DiscordRolle.";
+
+    /// <summary>Whether role-ping Discord posts include the record header/title (Announcement, Recruiting). Default on.</summary>
+    public const string DiscordIncludeHeadline = "DiscordHeaderInhalt";
+
+    // "Bester Agent der Woche" periodic top-3 announcement
+    public const string BestAgentEnabled = "BesterAgentAktiv";
+    public const string BestAgentIntervalDays = "BesterAgentIntervallTage";
+    public const string BestAgentCreateNote = "BesterAgentVermerkAktiv";
+    /// <summary>Last time the announcement ran (round-trip UTC); worker guard, not user-edited.</summary>
+    public const string BestAgentLastRun = "BesterAgentZuletzt";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>

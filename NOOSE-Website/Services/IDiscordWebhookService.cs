@@ -7,8 +7,8 @@ namespace NOOSE_Website.Services;
 /// <summary>Posts a generic notice plus a login-gated link to a per-category Discord channel, pinging the recipients (personal categories) or a configured role (broadcast categories). Best-effort: never throws into the caller.</summary>
 public interface IDiscordWebhookService
 {
-    /// <summary>Post the category's generic notice (never the in-app title) to its channel and ping the recipients or the configured role; no-op if disabled, unroutable, or no URL configured.</summary>
-    Task PushAsync(NotificationType type, string? href, IReadOnlyCollection<string>? recipientAgentIds, CancellationToken cancellationToken = default);
+    /// <summary>Post to the category's channel and ping the recipients or the configured role; no-op if disabled, unroutable, or no URL configured. For Announcement/Recruiting the optional <paramref name="headline"/> is included when the header toggle is on, otherwise a generic notice is used.</summary>
+    Task PushAsync(NotificationType type, string? href, IReadOnlyCollection<string>? recipientAgentIds, string? headline = null, CancellationToken cancellationToken = default);
 
     /// <summary>Post a personnel-file entry as a rich "EINTRAG" embed to the PersonnelEntry channel, pinging the subject agent. Best-effort; no-op if disabled or no URL configured.</summary>
     Task PushPersonnelEntryAsync(string subjectAgentId, string subjectDisplay, string artLabel,
@@ -23,4 +23,7 @@ public interface IDiscordWebhookService
 
     /// <summary>Send a test message to a category's channel; admin-only. Returns true on 2xx.</summary>
     Task<bool> TestAsync(NotificationType type, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Post an app-authored message to a category's channel with that category's ping (role or none) and an optional login-gated link. Best-effort; returns true on 2xx.</summary>
+    Task<bool> PushCustomAsync(NotificationType type, string content, string? href = null, CancellationToken cancellationToken = default);
 }

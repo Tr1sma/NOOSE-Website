@@ -104,7 +104,7 @@ public class BewerbungService(
         {
             var recipients = await HrbRecipientIdsAsync(db, cancellationToken);
             await notifications.NotifyManyAsync(recipients, NotificationType.Recruiting,
-                $"Neue Bewerbung ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", userId, cancellationToken);
+                $"Neue Bewerbung: {bewerbung.Name} ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", userId, cancellationToken);
         }
         catch { /* best effort */ }
 

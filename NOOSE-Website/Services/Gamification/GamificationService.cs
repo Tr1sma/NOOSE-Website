@@ -16,6 +16,8 @@ public interface IGamificationService
 {
     Task<AgentStats> GetStatsAsync(string agentId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(GamificationPeriod period, int topN = 25, CancellationToken cancellationToken = default);
+    /// <summary>Leaderboard over the last <paramref name="windowDays"/> days (0 or less = all time).</summary>
+    Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(int windowDays, int topN = 25, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BadgeView>> GetBadgesAsync(string agentId, CancellationToken cancellationToken = default);
     /// <summary>Award any newly-earned badges across all agents; returns how many were granted. Idempotent.</summary>
     Task<int> SweepAsync(CancellationToken cancellationToken = default);
@@ -37,11 +39,19 @@ public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactor
         return acc.ToStats(badges);
     }
 
-    public async Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(
+    public Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(
         GamificationPeriod period, int topN = 25, CancellationToken cancellationToken = default)
+        => BuildLeaderboardAsync(Cutoff(period), topN, cancellationToken);
+
+    public Task<IReadOnlyList<LeaderboardEntry>> GetLeaderboardAsync(
+        int windowDays, int topN = 25, CancellationToken cancellationToken = default)
+        => BuildLeaderboardAsync(windowDays > 0 ? DateTime.UtcNow.AddDays(-windowDays) : null, topN, cancellationToken);
+
+    private async Task<IReadOnlyList<LeaderboardEntry>> BuildLeaderboardAsync(
+        DateTime? since, int topN, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var all = await ComputeAllAsync(db, Cutoff(period), cancellationToken);
+        var all = await ComputeAllAsync(db, since, cancellationToken);
 
         // ranking is over internal, active agents only (partners and inactive users excluded)
         var agents = await db.Users.Where(u => u.Status == AgentStatus.Active && u.PartnerAgency == null)

@@ -277,12 +277,13 @@ public class DiscordWebhookModelsTests
             [NotificationType.Recruiting] = "role-1",
         };
 
-        var config = new DiscordWebhookConfig(true, "https://example.test", webhooks, roles);
+        var config = new DiscordWebhookConfig(true, "https://example.test", webhooks, roles, IncludeHeadline: true);
 
         Assert.True(config.Enabled);
         Assert.Equal("https://example.test", config.SiteBaseUrl);
         Assert.Same(webhooks, config.Webhooks);
         Assert.Same(roles, config.Roles);
+        Assert.True(config.IncludeHeadline);
     }
 
     // ----- DiscordWebhookConfigInput defaults -----

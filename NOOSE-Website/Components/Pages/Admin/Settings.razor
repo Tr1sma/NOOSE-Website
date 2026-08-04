@@ -21,6 +21,11 @@
         <DiscordPanel />
     </RecordSection>
 
+    <RecordSection Group="Betrieb" Slug="bester-agent" Label="Bester Agent der Woche"
+                   Icon="@Icons.Material.Filled.EmojiEvents">
+        <BestAgentPanel />
+    </RecordSection>
+
     <AuthorizeView Policy="@Policies.AdminPage" Context="statusSection">
         <RecordSection Group="Betrieb" Slug="status" Label="System-Status"
                        Icon="@Icons.Material.Filled.MonitorHeart">

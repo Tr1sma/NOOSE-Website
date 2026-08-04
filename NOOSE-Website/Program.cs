@@ -217,6 +217,8 @@ builder.Services.AddScoped<IThreatTrendService, ThreatTrendService>();
 builder.Services.AddHostedService<ThreatScoreSweepWorker>();
 builder.Services.AddScoped<IGamificationService, GamificationService>();
 builder.Services.AddHostedService<GamificationSweepWorker>();
+builder.Services.AddScoped<ITopAgentAwardService, TopAgentAwardService>();
+builder.Services.AddHostedService<TopAgentAwardWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
 builder.Services.AddScoped<IFactionService, FactionService>();

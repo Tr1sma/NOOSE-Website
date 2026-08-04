@@ -24,6 +24,12 @@ else
             <MudTextField @bind-Value="_input.SiteBaseUrl" Label="Basis-URL für Links" Variant="Variant.Outlined"
                           Class="mt-2" Placeholder="@DiscordWebhookConfig.DefaultBaseUrl"
                           HelperText="Vorangestellt bei relativen Links in den Discord-Nachrichten." />
+            <MudSwitch T="bool" @bind-Value="_input.IncludeHeadline" Color="Color.Primary" Class="mt-2"
+                       Label="Header/Inhalt mitsenden (Ankündigung, Bewerbung inkl. Name)" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Aus: nur generischer Hinweis. An: Ankündigungs-Titel bzw. Bewerbername stehen direkt in der Discord-Nachricht
+                (nur diese Kategorien; Besprechungen/Lageberichte bleiben generisch).
+            </MudText>
         </MudPaper>
 
         <MudPaper Class="pa-4" Elevation="2">
@@ -98,6 +104,7 @@ else
         {
             Enabled = config.Enabled,
             SiteBaseUrl = config.SiteBaseUrl == DiscordWebhookConfig.DefaultBaseUrl ? null : config.SiteBaseUrl,
+            IncludeHeadline = config.IncludeHeadline,
         };
         foreach (var type in _types)
         {
