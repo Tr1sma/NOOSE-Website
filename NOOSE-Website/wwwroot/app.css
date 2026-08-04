@@ -514,6 +514,16 @@ html, body {
     border-radius: 2px;
 }
 
+/* Legenden-Punkt für Schlüsselfiguren: größer, goldene Füllung + Glühen wie im Graphen.
+   Rand bleibt neutral — im Graphen trägt der Rand weiter Typ/Einstufung. */
+.noose-graph-schluessel {
+    width: 16px;
+    height: 16px;
+    background: #4A3708;
+    border: 2px solid #8B98A8;
+    box-shadow: 0 0 8px rgba(255, 200, 87, 0.9);
+}
+
 /* vis-network Tooltip an das dunkle Theme angleichen. */
 div.vis-tooltip {
     background: #11161D !important;
@@ -523,6 +533,85 @@ div.vis-tooltip {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55) !important;
     padding: 8px 10px !important;
     font-family: Inter, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+/* Chronicle density band: vis-timeline ships a light-theme stylesheet, so every surface is re-stated here. */
+.chronik-band {
+    cursor: ew-resize;
+}
+
+.chronik-band .vis-panel,
+.chronik-band .vis-time-axis .vis-grid.vis-vertical,
+.chronik-band .vis-panel .vis-shadow {
+    border-color: var(--mud-palette-divider) !important;
+    box-shadow: none !important;
+}
+
+.chronik-band .vis-time-axis .vis-text {
+    color: var(--mud-palette-text-secondary) !important;
+    font-family: Inter, 'Segoe UI', Roboto, sans-serif;
+    font-size: 0.72rem;
+}
+
+.chronik-band .vis-time-axis .vis-grid.vis-minor {
+    border-color: rgba(139, 152, 168, 0.12) !important;
+}
+
+.chronik-band .vis-line-graph .vis-bar {
+    fill: var(--mud-palette-primary) !important;
+    fill-opacity: 0.55;
+    stroke: var(--mud-palette-primary) !important;
+    stroke-width: 1;
+}
+
+.chronik-band .vis-line-graph .vis-bar:hover {
+    fill-opacity: 0.9;
+}
+
+/* Chronicle feed */
+.chronik-tag {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--mud-palette-surface);
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.chronik-zeile {
+    display: grid;
+    grid-template-columns: 1.75rem 4.25rem 1fr;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    align-items: start;
+}
+
+.chronik-zeile + .chronik-zeile {
+    border-top: 1px solid rgba(139, 152, 168, 0.1);
+}
+
+.chronik-zeile:hover {
+    background: rgba(139, 152, 168, 0.06);
+}
+
+.chronik-neu {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.75rem 0;
+    color: var(--mud-palette-warning);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.chronik-neu::before,
+.chronik-neu::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--mud-palette-warning);
+    opacity: 0.4;
 }
 
 /* Record detail section rail */
@@ -589,8 +678,45 @@ div.vis-tooltip {
     }
 }
 
+@media (min-width: 960px) {
+    /* Rail pages fit exactly one screen: the container is capped to the viewport and the
+       rail (plus Steckkarte) flexes into whatever the header above leaves over. A fixed
+       shell height always overshot the screen by the header height. The sticky rules above
+       remain as fallback for browsers without :has() and for rail-free Steckkarte pages. */
+    .mud-container:has(.record-rail-shell) {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - var(--mud-appbar-height, 60px) - 3rem);
+        height: calc(100dvh - var(--mud-appbar-height, 60px) - 3rem);
+        overflow: hidden;
+    }
+
+    .mud-container:has(.record-rail-shell) > .record-rail-shell,
+    .mud-container:has(.record-rail-shell) > .mud-grid {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .mud-container:has(.record-rail-shell) .record-rail-shell,
+    .mud-container:has(.record-rail-shell) .akte-steckkarte {
+        position: static;
+        height: auto;
+    }
+
+    .mud-container:has(.record-rail-shell) .mud-grid-item > .record-rail-shell,
+    .mud-container:has(.record-rail-shell) .mud-grid-item > .akte-steckkarte {
+        height: 100%;
+    }
+}
+
 @media print {
     /* a screen-height scroll box would clip the record on paper */
+    .mud-container:has(.record-rail-shell) {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+
     .record-rail-shell {
         position: static;
         height: auto;

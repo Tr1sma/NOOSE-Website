@@ -184,6 +184,7 @@ builder.Services.AddScoped<ILinkSuggestionService, LinkSuggestionService>();
 builder.Services.AddScoped<ITimelineService, TimelineService>();
 builder.Services.AddScoped<IGlobalChronikService, GlobalChronikService>();
 builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<ICounterIntelRuleService, CounterIntelRuleService>();
 builder.Services.AddScoped<ICounterIntelService, CounterIntelService>();
 builder.Services.AddScoped<IInformantService, InformantService>();
 

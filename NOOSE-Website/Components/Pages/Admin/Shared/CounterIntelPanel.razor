@@ -26,7 +26,9 @@ else
                 @Tile("Off-Hours-Zugriffe", _overview.OffHoursAccesses, Icons.Material.Filled.NightsStay)
             </MudGrid>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4">
-                @_flags.Count Auffälligkeit(en) erkannt. Details im Reiter „Auffälligkeiten".
+                @_flags.Count Auffälligkeit(en) aus @_flags.Select(f => f.Rule).Distinct().Count() Regel(n).
+                Details im Reiter „Auffälligkeiten“, die Regeln unter
+                <MudLink Href="/einstellungen?tab=gegenaufklaerung-regeln">Gegenaufklärungs-Regeln</MudLink>.
             </MudText>
         </MudTabPanel>
 
@@ -72,25 +74,34 @@ else
         <MudTabPanel Text="Auffälligkeiten" Icon="@Icons.Material.Filled.Warning">
             @if (_flags.Count == 0)
             {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Auffälligkeiten erkannt.</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Keine Auffälligkeiten erkannt. Welche Muster gesucht werden, steht unter
+                    <MudLink Href="/einstellungen?tab=gegenaufklaerung-regeln">Gegenaufklärungs-Regeln</MudLink>.
+                </MudText>
             }
             else
             {
-                <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
-                    <thead>
-                        <tr><th>Agent</th><th>Muster</th><th>Detail</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var f in _flags)
-                        {
-                            <tr style="cursor:pointer;" @onclick="@(() => Go(f.Href))">
-                                <td><b>@f.AgentName</b></td>
-                                <td><MudChip T="string" Size="Size.Small" Color="Color.Warning">@f.Rule</MudChip></td>
-                                <td>@f.Detail</td>
-                            </tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
+                @foreach (var group in _flags.GroupBy(f => f.Rule))
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">
+                        <MudChip T="string" Size="Size.Small" Color="@Colour(group.First().Grade)"
+                                 Variant="@(group.First().Grade == CounterIntelSeverity.Critical ? Variant.Filled : Variant.Outlined)">
+                            @CounterIntelSeverityDisplay.Name(group.First().Grade)
+                        </MudChip>
+                        @group.Key
+                    </MudText>
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+                        <tbody>
+                            @foreach (var f in group)
+                            {
+                                <tr style="cursor:pointer;" @onclick="@(() => Go(f.Href))">
+                                    <td style="width:14rem;"><b>@f.AgentName</b></td>
+                                    <td>@f.Detail</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
             }
         </MudTabPanel>
     </MudTabs>
@@ -131,6 +142,13 @@ else
         _selectedAgent = agentId;
         _profile = string.IsNullOrEmpty(agentId) ? null : await CounterIntel.GetAgentProfileAsync(_user, agentId!);
     }
+
+    private static Color Colour(CounterIntelSeverity severity) => severity switch
+    {
+        CounterIntelSeverity.Info => Color.Info,
+        CounterIntelSeverity.Warning => Color.Warning,
+        _ => Color.Error,
+    };
 
     private void Go(string? href)
     {

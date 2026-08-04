@@ -63,6 +63,30 @@ public static class TimelineDisplay
         {
             return (TimelineCategory.SignOff, $"Abmeldung {Verb("eingetragen", "entfernt")}");
         }
+        if (entityType == nameof(Comment))
+        {
+            return (TimelineCategory.Comment, $"Kommentar {Verb("geschrieben", "gelöscht")}");
+        }
+        if (entityType == nameof(Source))
+        {
+            return (TimelineCategory.Source, $"Quelle {Verb("hinzugefügt", "entfernt")}");
+        }
+        if (entityType == nameof(Followup))
+        {
+            return (TimelineCategory.Followup, $"Wiedervorlage {Verb("angelegt", "gelöscht")}");
+        }
+        if (entityType == nameof(PersonRelation))
+        {
+            return (TimelineCategory.Relation, $"Beziehung {Verb("angelegt", "entfernt")}");
+        }
+        if (entityType == nameof(Link))
+        {
+            return (TimelineCategory.Link, $"Verknüpfung {Verb("angelegt", "entfernt")}");
+        }
+        if (entityType == nameof(Observation))
+        {
+            return (TimelineCategory.Observation, $"Observation {Verb("erfasst", "gelöscht")}");
+        }
 
         var kat = action switch
         {

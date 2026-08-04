@@ -23,6 +23,7 @@ using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.CounterIntel;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -129,7 +130,6 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<WatchlistEntry> Watchlists => Set<WatchlistEntry>();
     public DbSet<LeadDismissal> LeadDismissals => Set<LeadDismissal>();
     public DbSet<Informant> Informants => Set<Informant>();
-    public DbSet<InformantIdentity> InformantIdentities => Set<InformantIdentity>();
     public DbSet<InformantMeeting> InformantMeetings => Set<InformantMeeting>();
 
     // jobs/to-dos & assignments
@@ -155,6 +155,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // doc templates (admin-defined entry masks)
     public DbSet<DocTemplate> DocTemplates => Set<DocTemplate>();
+
+    // leadership-defined counter-intelligence rules
+    public DbSet<CounterIntelRule> CounterIntelRules => Set<CounterIntelRule>();
 
     // configurable custom fields per record type
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
@@ -248,6 +251,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.EntityId).HasMaxLength(64);
             b.Property(a => a.DetailJson).HasColumnType("longtext");
             b.HasIndex(a => new { a.EntityType, a.EntityId, a.Timestamp });
+            // chronicle scans a plain time window across all records
+            b.HasIndex(a => a.Timestamp);
         });
 
         modelBuilder.Entity<NOOSE_Website.Data.Entities.Gamification.AgentBadge>(b =>
@@ -285,25 +290,25 @@ public class AppDbContext : IdentityDbContext<Agent>
         modelBuilder.Entity<Informant>(b =>
         {
             b.Property(i => i.CaseNumber).HasMaxLength(32).IsRequired();
-            b.Property(i => i.Codename).HasMaxLength(128).IsRequired();
+            b.Property(i => i.RealName).HasMaxLength(256);
+            b.Property(i => i.PersonId).HasMaxLength(64);
+            b.Property(i => i.FactionId).HasMaxLength(64);
             b.Property(i => i.Description).HasColumnType("longtext");
+            b.Property(i => i.ContactInfo).HasColumnType("longtext");
+            b.Property(i => i.Notes).HasColumnType("longtext");
             b.Property(i => i.HandlerId).HasMaxLength(64);
             b.HasIndex(i => i.CaseNumber).IsUnique();
             b.HasIndex(i => i.HandlerId);
+            // at most one informant per person record (MySQL allows repeated NULLs here)
+            b.HasIndex(i => i.PersonId).IsUnique();
+            // several informants may report on the same faction
+            b.HasIndex(i => i.FactionId);
             // never cascade off the Agent table
             b.HasOne<Agent>().WithMany().HasForeignKey(i => i.HandlerId).OnDelete(DeleteBehavior.Restrict);
-            b.HasOne(i => i.Identity).WithOne()
-                .HasForeignKey<InformantIdentity>(x => x.InformantId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne<Person>().WithMany().HasForeignKey(i => i.PersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Faction>().WithMany().HasForeignKey(i => i.FactionId).OnDelete(DeleteBehavior.Restrict);
             b.HasMany(i => i.Meetings).WithOne()
                 .HasForeignKey(m => m.InformantId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<InformantIdentity>(b =>
-        {
-            b.HasKey(x => x.InformantId);
-            b.Property(x => x.RealName).HasMaxLength(256).IsRequired();
-            b.Property(x => x.ContactInfo).HasColumnType("longtext");
-            b.Property(x => x.Notes).HasColumnType("longtext");
         });
 
         modelBuilder.Entity<InformantMeeting>(b =>
@@ -454,6 +459,15 @@ public class AppDbContext : IdentityDbContext<Agent>
             // no unique: soft-delete safe
             b.HasIndex(v => v.Name);
             b.HasIndex(v => v.IsActive);
+        });
+
+        // leadership-defined counter-intelligence rules (condition set as JSON)
+        modelBuilder.Entity<CounterIntelRule>(b =>
+        {
+            b.Property(r => r.Name).HasMaxLength(150).IsRequired();
+            b.Property(r => r.Description).HasMaxLength(1000);
+            b.Property(r => r.DefinitionJson).HasColumnType("longtext");
+            b.HasIndex(r => new { r.IsActive, r.Order });
         });
 
         modelBuilder.Entity<CustomFieldDefinition>(b =>

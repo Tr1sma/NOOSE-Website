@@ -91,6 +91,13 @@
         </RecordSection>
     </AuthorizeView>
 
+    <AuthorizeView Policy="@Policies.Leadership" Context="gegenRulesSection">
+        <RecordSection Group="Nachweis" Slug="gegenaufklaerung-regeln" Label="Gegenaufklärungs-Regeln"
+                       Icon="@Icons.Material.Filled.Rule">
+            <CounterIntelRulesPanel />
+        </RecordSection>
+    </AuthorizeView>
+
     <RecordSection Group="Nachweis" Slug="protokoll" Label="Audit-Protokoll"
                    Icon="@Icons.Material.Filled.FactCheck">
         <AuditLogPanel />

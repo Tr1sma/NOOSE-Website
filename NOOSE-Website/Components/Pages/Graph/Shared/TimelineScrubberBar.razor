@@ -16,6 +16,9 @@
     private int _pos = 100;
     private bool _playing;
     private CancellationTokenSource? _cts;
+    private DateTime? _queued;
+    private bool _hasQueued;
+    private bool _pushing;
 
     private DateTime? Cutoff => _pos >= 100 || MaxDate <= MinDate
         ? null
@@ -26,7 +29,31 @@
     private async Task OnScrubAsync(int value)
     {
         _pos = Math.Clamp(value, 0, 100);
-        await OnCutoffChanged.InvokeAsync(Cutoff);
+        await PushAsync();
+    }
+
+    // Dragging fires per input event; keep one push in flight and drop what it superseded.
+    private async Task PushAsync()
+    {
+        _queued = Cutoff;
+        _hasQueued = true;
+        if (_pushing)
+        {
+            return;
+        }
+        _pushing = true;
+        try
+        {
+            while (_hasQueued)
+            {
+                _hasQueued = false;
+                await OnCutoffChanged.InvokeAsync(_queued);
+            }
+        }
+        finally
+        {
+            _pushing = false;
+        }
     }
 
     private async Task ToggleAsync()
@@ -41,41 +68,58 @@
             _pos = 0; // restart from the beginning
         }
         _playing = true;
-        _cts = new CancellationTokenSource();
-        _ = RunAsync(_cts.Token);
+        var cts = new CancellationTokenSource();
+        _cts = cts;
+        _ = RunAsync(cts);
     }
 
-    private async Task RunAsync(CancellationToken token)
+    private async Task RunAsync(CancellationTokenSource cts)
     {
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(140));
-            while (await timer.WaitForNextTickAsync(token))
+            while (await timer.WaitForNextTickAsync(cts.Token))
             {
-                _pos = Math.Min(100, _pos + 2);
+                var done = false;
                 await InvokeAsync(async () =>
                 {
-                    await OnCutoffChanged.InvokeAsync(Cutoff);
+                    _pos = Math.Min(100, _pos + 2);
+                    done = _pos >= 100;
+                    await PushAsync();
                     StateHasChanged();
                 });
-                if (_pos >= 100)
+                if (done)
                 {
-                    await StopAsync();
                     break;
                 }
             }
         }
         catch (OperationCanceledException) { /* stopped */ }
+        catch (ObjectDisposedException) { /* circuit gone */ }
+        finally
+        {
+            // only tear down if a restart has not already replaced this run
+            if (ReferenceEquals(_cts, cts))
+            {
+                _playing = false;
+                _cts = null;
+                cts.Dispose();
+                try { await InvokeAsync(StateHasChanged); }
+                catch (ObjectDisposedException) { /* ignore */ }
+            }
+        }
     }
 
     private async Task StopAsync()
     {
         _playing = false;
-        if (_cts is not null)
+        var cts = _cts;
+        _cts = null;
+        if (cts is not null)
         {
-            await _cts.CancelAsync();
-            _cts.Dispose();
-            _cts = null;
+            try { await cts.CancelAsync(); }
+            catch (ObjectDisposedException) { /* ignore */ }
+            cts.Dispose();
         }
     }
 

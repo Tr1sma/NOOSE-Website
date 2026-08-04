@@ -11,12 +11,18 @@ public interface ICounterIntelService
     Task<CounterIntelOverview> GetOverviewAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default);
     Task<CounterIntelHeatmap> GetHeatmapAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default);
     Task<AgentAccessProfile?> GetAgentProfileAsync(ClaimsPrincipal actor, string agentId, int days = 30, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<InsiderFlag>> GetFlagsAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default);
+
+    /// <summary>Findings of every active rule; each rule brings its own observation window.</summary>
+    Task<IReadOnlyList<InsiderFlag>> GetFlagsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Findings of a single, possibly unsaved rule — the editor's preview.</summary>
+    Task<IReadOnlyList<InsiderFlag>> PreviewAsync(ClaimsPrincipal actor, CounterIntelRuleView rule, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AgentOption>> GetAgentsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="ICounterIntelService" />
-public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : ICounterIntelService
+public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory, ICounterIntelRuleService rules) : ICounterIntelService
 {
     private const int MaxRows = 30000;
     private const int MaxHeatmapAgents = 30;
@@ -31,7 +37,7 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
             rows.Count,
             rows.Select(r => r.AgentId).Distinct().Count(),
             rows.Select(r => $"{r.EntityType}:{r.EntityId}").Distinct().Count(),
-            rows.Count(r => InsiderThreatRules.IsOffHours(r.LocalTimestamp)),
+            rows.Count(r => IsOffHours(r.LocalTimestamp)),
             days);
     }
 
@@ -83,33 +89,46 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
         return new AgentAccessProfile(
             agentId, NameOr(rows[0].AgentName), rows.Count,
             rows.Select(r => $"{r.EntityType}:{r.EntityId}").Distinct().Count(),
-            rows.Count(r => InsiderThreatRules.IsOffHours(r.LocalTimestamp)),
+            rows.Count(r => IsOffHours(r.LocalTimestamp)),
             byType, recent);
     }
 
-    public async Task<IReadOnlyList<InsiderFlag>> GetFlagsAsync(ClaimsPrincipal actor, int days = 30, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<InsiderFlag>> GetFlagsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadershipNoReader(actor);
+        var active = await rules.GetActiveAsync(cancellationToken);
+        if (active.Count == 0)
+        {
+            return [];
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var events = await CounterIntelEventLoader.LoadAsync(
+            db, active.Select(r => r.Definition).ToList(), cancellationToken);
+        return CounterIntelRuleEvaluator.Evaluate(events, active, DateTime.Now);
+    }
+
+    public async Task<IReadOnlyList<InsiderFlag>> PreviewAsync(
+        ClaimsPrincipal actor, CounterIntelRuleView rule, CancellationToken cancellationToken = default)
     {
         Permission.RequireLeadershipNoReader(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await LoadAsync(db, days, cancellationToken);
-        return InsiderThreatRules.Evaluate(rows);
+        var events = await CounterIntelEventLoader.LoadAsync(db, [rule.Definition], cancellationToken);
+        // preview ignores the active switch: the point is to try a rule before switching it on
+        return CounterIntelRuleEvaluator.EvaluateOne(events, rule with { IsActive = true }, DateTime.Now);
     }
 
     public async Task<IReadOnlyList<AgentOption>> GetAgentsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLeadershipNoReader(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var excluded = await OnlyReaderIdsAsync(db, cancellationToken);
-        var rows = await db.AccessLogs.AsNoTracking()
-            .Where(a => a.AgentId != null && a.AgentName != null)
-            .Select(a => new { a.AgentId, a.AgentName })
-            .Distinct().Take(500)
+        // only agents that actually accessed something; names come from the roster, never from the log
+        var actorIds = await db.AccessLogs.AsNoTracking()
+            .Where(a => a.AgentId != null)
+            .Select(a => a.AgentId!)
+            .Distinct()
             .ToListAsync(cancellationToken);
-        return rows
-            .Where(a => a.AgentId is not null && !excluded.Contains(a.AgentId!))
-            .GroupBy(a => a.AgentId!)
-            .Select(g => new AgentOption(g.Key, g.First().AgentName ?? g.Key))
-            .OrderBy(a => a.Name)
+        return (await AgentDirectory.ByIdsAsync(db, actorIds, cancellationToken))
+            .Select(a => new AgentOption(a.Id, a.Codename))
             .ToList();
     }
 
@@ -132,6 +151,9 @@ public class CounterIntelService(IDbContextFactory<AppDbContext> dbFactory) : IC
 
     private static async Task<HashSet<string>> OnlyReaderIdsAsync(AppDbContext db, CancellationToken ct)
         => (await db.Users.Where(u => u.IsTeamLead && !u.IsAdmin).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+
+    // the overview KPI keeps a fixed 22–6 window; rules define their own
+    private static bool IsOffHours(DateTime local) => CounterIntelRuleEvaluator.InHourWindow(local.Hour, 22, 6);
 
     // never surface a raw agent id as a name
     private static string NameOr(string? name) => string.IsNullOrWhiteSpace(name) ? "(unbenannt)" : name;

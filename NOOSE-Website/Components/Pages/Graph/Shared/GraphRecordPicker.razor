@@ -77,6 +77,8 @@
     [Parameter] public bool MayAllTf { get; set; }
     /// <summary>Raised on every selection change; null means cleared.</summary>
     [Parameter] public EventCallback<GraphRecordChoice?> Selected { get; set; }
+    /// <summary>Selection made elsewhere (deep link, saved view); switches the type dropdown to match.</summary>
+    [Parameter] public GraphRecordChoice? Preset { get; set; }
 
     private record TypeOption(string Value, string Display);
     private static readonly TypeOption[] _types =
@@ -98,6 +100,22 @@
     private Operation? _operation;
     private Case? _case;
     private Taskforce? _taskforce;
+
+    private string? _appliedPreset;
+
+    protected override void OnParametersSet()
+    {
+        // apply each preset once, so the user can still switch the type afterwards
+        var key = Preset is null ? null : $"{Preset.Type}:{Preset.Id}";
+        if (key is not null && key != _appliedPreset)
+        {
+            _appliedPreset = key;
+            if (_types.Any(t => t.Value == Preset!.Type))
+            {
+                _type = Preset!.Type;
+            }
+        }
+    }
 
     private async Task<IEnumerable<Person>> SearchPerson(string value, CancellationToken token)
         => await PersonService.SearchAsync(value, IsLeadership, 20, token);

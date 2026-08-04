@@ -153,9 +153,13 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
             }
         }
 
-        // qualifying pairs: >= 2 shared neighbours and not already directly linked
+        var connected = await ConnectedPersonPairsAsync(db, ct);
+
+        // qualifying pairs: >= 2 shared neighbours and no existing connection of any sort
         var qualifying = pairCount
-            .Where(kv => kv.Value >= 2 && !(adj.TryGetValue(kv.Key.A, out var an) && an.Contains(kv.Key.B)))
+            .Where(kv => kv.Value >= 2
+                && !(adj.TryGetValue(kv.Key.A, out var an) && an.Contains(kv.Key.B))
+                && !connected.Contains(kv.Key))
             .OrderByDescending(kv => kv.Value)
             .Take(40)
             .ToList();
@@ -189,6 +193,35 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
                 nameof(Person), aid, an, $"/personen/{aid}",
                 nameof(Person), bid, bn, $"/personen/{bid}"));
         }
+    }
+
+    // person pairs that already have a connection, as canonical-ordered graph node keys.
+    // GraphEdgeLoader drops automatic (colleague/clique) links, so the adjacency alone would
+    // keep proposing pairs that the person file already lists under "Beziehungen".
+    private static async Task<HashSet<(string A, string B)>> ConnectedPersonPairsAsync(AppDbContext db, CancellationToken ct)
+    {
+        var set = new HashSet<(string, string)>();
+        void Add(string a, string b)
+        {
+            var ka = $"{nameof(Person)}:{a}";
+            var kb = $"{nameof(Person)}:{b}";
+            set.Add(string.CompareOrdinal(ka, kb) < 0 ? (ka, kb) : (kb, ka));
+        }
+
+        foreach (var v in await db.Links
+            .Where(v => v.SourceType == nameof(Person) && v.TargetType == nameof(Person))
+            .Select(v => new { v.SourceId, v.TargetId })
+            .ToListAsync(ct))
+        {
+            Add(v.SourceId, v.TargetId);
+        }
+        foreach (var b in await db.PersonRelations
+            .Select(b => new { b.PersonAId, b.PersonBId })
+            .ToListAsync(ct))
+        {
+            Add(b.PersonAId, b.PersonBId);
+        }
+        return set;
     }
 
     private static async Task AddNewConflictAsync(AppDbContext db, List<Lead> leads, CancellationToken ct)

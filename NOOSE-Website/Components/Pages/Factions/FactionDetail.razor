@@ -121,6 +121,9 @@ else
                 <RecordSection Group="Struktur" Slug="agents" Label="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <FactionAgentsPanel FactionId="@_faction.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
                 </RecordSection>
+                <RecordSection Group="Ermittlung" Slug="informanten" Label="Informanten" Icon="@Icons.Material.Filled.VisibilityOff">
+                    <FactionInformantsPanel FactionId="@_faction.Id" User="_user" />
+                </RecordSection>
                 }
                 @if (TabOn("bestaende"))
                 {

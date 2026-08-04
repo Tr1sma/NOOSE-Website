@@ -20,7 +20,7 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Verknüpfungen &amp; Beziehungen aller Akten als interaktives Lagebild.</MudText>
         </div>
         <MudSpacer />
-        <MudTooltip Text="@(_freeMode ? "Freies Anordnen aktiv – Knoten lassen sich frei ziehen und schieben. Klicken zum Zurückschalten auf die lebendige Animation." : "Frei anordnen: Animation &amp; automatisches Auseinanderdrücken aus – Knoten frei ziehen und schieben")">
+        <MudTooltip Text="@(_freeMode ? "Graph angehalten – nichts bewegt sich von selbst. Knoten frei ziehen; verbundene Knoten (z. B. die Fraktion) kommen mit. Klicken zum Zurückschalten auf die lebendige Animation." : "Anhalten &amp; frei anordnen: Animation aus, Positionen bleiben stehen – Knoten ziehen nimmt verbundene Knoten mit")">
             <MudIconButton Icon="@(_freeMode ? Icons.Material.Filled.PanTool : Icons.Material.Outlined.PanTool)"
                            Color="@(_freeMode ? Color.Primary : Color.Default)"
                            OnClick="ToggleFreeModeAsync" Disabled="@(!_ready)" />
@@ -50,7 +50,12 @@
             @if (_modeFocus)
             {
                 <GraphRecordPicker Label="Fokus-Akte" IsLeadership="_isLeadership" MeId="_meId" MayAllTf="_mayAllTf"
-                                 Selected="FocusSelectedAsync" />
+                                 Selected="FocusSelectedAsync" Preset="_focusPreset" />
+                @if (_focusPreset is not null && !string.IsNullOrWhiteSpace(_focusPreset.Designation))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                             Icon="@Icons.Material.Filled.CenterFocusWeak">@_focusPreset.Designation</MudChip>
+                }
                 <MudSelect T="int" @bind-Value="_depth" @bind-Value:after="LoadAndDrawAsync" Label="Tiefe" Dense="true"
                            Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:110px;">
                     <MudSelectItem Value="1">1 Hop</MudSelectItem>
@@ -83,8 +88,17 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary">ANALYSE-WORKBENCH</MudText>
             <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Star"
                        Variant="@(_computeCentrality ? Variant.Filled : Variant.Outlined)"
-                       Color="@(_computeCentrality ? Color.Info : Color.Default)"
+                       Color="@(_computeCentrality ? Color.Warning : Color.Default)"
                        OnClick="CentralityToggleAsync" Disabled="@(!_ready)">Schlüsselfiguren</MudButton>
+            @if (_computeCentrality && _data is not null)
+            {
+                var keyCount = _data.Node.Count(n => n.IsKeyFigure);
+                <MudText Typo="Typo.caption" Style="@($"color:{KeyFigureGold};")">
+                    @(keyCount == 0
+                        ? "keine Schlüsselfigur – zu kleines oder gleichmäßig vernetztes Netz"
+                        : keyCount == 1 ? "1 Schlüsselfigur: ★ groß & gold hervorgehoben" : $"{keyCount} Schlüsselfiguren: ★ groß & gold hervorgehoben")
+                </MudText>
+            }
             <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.BubbleChart"
                        Variant="@(_communityOn ? Variant.Filled : Variant.Outlined)"
                        Color="@(_communityOn ? Color.Primary : Color.Default)"
@@ -190,6 +204,10 @@
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                 <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Error" /><MudText Typo="Typo.caption">roter Rand = staatsgefährdend</MudText>
             </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <span class="noose-graph-punkt noose-graph-schluessel"></span>
+                <MudText Typo="Typo.caption">★ groß &amp; gold = Schlüsselfigur</MudText>
+            </MudStack>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">· Doppelklick öffnet die Akte</MudText>
         </MudStack>
     </MudPaper>
@@ -281,8 +299,11 @@
     private bool _load = true;
     private bool _freeMode;
 
+    private const string KeyFigureGold = "#FFC857";
+
     private bool _modeFocus;
     private GraphRecordChoice? _focus;
+    private GraphRecordChoice? _focusPreset; // focus set by deep link or saved view, not by the picker
     private int _depth = 2;
     private IReadOnlyCollection<string> _typeFilter = new HashSet<string>();
     private string _kindChoice = "alle";
@@ -335,6 +356,7 @@
         {
             _modeFocus = true;
             _focus = new GraphRecordChoice(FocusTypeQuery!, FocusIdQuery!, string.Empty);
+            _focusPreset = _focus;
         }
     }
 
@@ -347,7 +369,7 @@
         try
         {
             // Bump ?v= when graph.js changes
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=9");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=12");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             await LoadAndDrawAsync();
@@ -456,6 +478,7 @@
     private async Task FocusSelectedAsync(GraphRecordChoice? choice)
     {
         _focus = choice;
+        _focusPreset = null; // the picker now shows the selection itself
         if (_modeFocus)
         {
             await LoadAndDrawAsync();
@@ -649,7 +672,18 @@
         try
         {
             var json = await _module.InvokeAsync<string>("holePositionen", ContainerId);
-            await LayoutService.SaveAsync(name, json, _user);
+            // a saved view is positions *plus* the workbench/filter state that produced them
+            var payload = GraphViewPayload.Wrap(json, new GraphViewState(
+                Centrality: _computeCentrality,
+                Community: _communityOn,
+                FocusMode: _modeFocus,
+                FocusType: _focus?.Type,
+                FocusId: _focus?.Id,
+                FocusName: string.IsNullOrWhiteSpace(_focus?.Designation) ? null : _focus!.Designation,
+                Depth: _depth,
+                Types: _typeFilter.Count > 0 ? _typeFilter.ToList() : null,
+                Kind: _kindChoice));
+            await LayoutService.SaveAsync(name, payload, _user);
             _layouts = await LayoutService.GetForAgentAsync(_meId ?? string.Empty);
             Snackbar.Add("Ansicht gespeichert.", Severity.Success);
         }
@@ -664,10 +698,26 @@
         {
             return;
         }
+        var (positions, view) = GraphViewPayload.Unwrap(layout.LayoutJson);
+        if (view is not null)
+        {
+            _computeCentrality = view.Centrality;
+            _communityOn = view.Community;
+            _modeFocus = view.FocusMode;
+            _depth = view.Depth;
+            _typeFilter = view.Types is { Count: > 0 } t ? new HashSet<string>(t) : new HashSet<string>();
+            _kindChoice = view.Kind;
+            _focus = view.FocusType is not null && view.FocusId is not null
+                ? new GraphRecordChoice(view.FocusType, view.FocusId, view.FocusName ?? string.Empty)
+                : null;
+            _focusPreset = _focus;
+            // filters and analytics change the node set, so re-query before placing the nodes
+            await LoadAndDrawAsync();
+        }
         try
         {
-            await _module.InvokeVoidAsync("setzePositionen", ContainerId, layout.LayoutJson);
-            _freeMode = true;
+            _freeMode = true; // loaded positions only stick with physics frozen
+            await _module.InvokeVoidAsync("setzePositionen", ContainerId, positions);
         }
         catch (JSDisconnectedException) { /* ignore */ }
     }

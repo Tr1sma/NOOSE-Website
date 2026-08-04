@@ -66,6 +66,29 @@ public record PathResult(
 /// <summary>Record selection in graph UI (focus or path endpoint).</summary>
 public record GraphRecordChoice(string Type, string Id, string Designation);
 
+/// <summary>Everything a saved graph view restores besides the node positions.</summary>
+/// <param name="Kind">Edge-kind filter as the UI stores it ("alle"/"Standard"/"Konflikt"/"Buendnis").</param>
+public record GraphViewState(
+    bool Centrality = false,
+    bool Community = false,
+    bool FocusMode = false,
+    string? FocusType = null,
+    string? FocusId = null,
+    string? FocusName = null,
+    int Depth = 2,
+    IReadOnlyList<string>? Types = null,
+    string Kind = "alle")
+{
+    private static readonly string[] Kinds = { "alle", "Standard", "Konflikt", "Buendnis" };
+
+    /// <summary>Clamps values coming from storage so a hand-edited blob cannot break the query.</summary>
+    public GraphViewState Sanitized() => this with
+    {
+        Depth = Math.Clamp(Depth, 1, 3),
+        Kind = Kinds.Contains(Kind) ? Kind : "alle",
+    };
+}
+
 /// <summary>Auto-detected link suggestion; not yet linked.</summary>
 public record LinkSuggestion(
     string TargetType,

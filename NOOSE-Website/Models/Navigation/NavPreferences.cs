@@ -27,6 +27,9 @@ public sealed class NavPreferences
     /// <summary>Recently visited pages/records, newest first, capped.</summary>
     public List<RecentItem> Recents { get; set; } = [];
 
+    /// <summary>Last time the chronicle was opened; drives its "new since your last visit" divider.</summary>
+    public DateTime? ChronikLastSeenUtc { get; set; }
+
     /// <summary>Schema version for future migrations.</summary>
     public int Version { get; set; } = 2;
 }

@@ -1,25 +1,27 @@
-@* Reusable horizontal vis-timeline strip. Presentational: takes events, raises range/click callbacks. Reuse anchor for the workbench scrubber. *@
+@* Activity density band (vis-timeline Graph2d bars). Presentational: takes buckets, raises the picked range. *@
 @using System.Text.Json
 @using NOOSE_Website.Models.Timeline
 @inject IJSRuntime JS
-@inject NavigationManager Nav
 @implements IAsyncDisposable
 
-<div id="@_containerId" style="width:100%;min-height:320px;"></div>
+<div id="@_containerId" class="chronik-band" style="width:100%;height:110px;"></div>
 @if (_loadError)
 {
-    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">Zeitstrahl konnte nicht geladen werden.</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">Übersichtsband konnte nicht geladen werden.</MudText>
 }
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<ChronikEvent> Events { get; set; } = Array.Empty<ChronikEvent>();
+    [Parameter, EditorRequired] public IReadOnlyList<ChronikDensityBucket> Buckets { get; set; } = Array.Empty<ChronikDensityBucket>();
+    [Parameter, EditorRequired] public DateTime WindowStartUtc { get; set; }
+    [Parameter, EditorRequired] public DateTime WindowEndUtc { get; set; }
     [Parameter] public EventCallback<(DateTime From, DateTime To)> OnRangeChanged { get; set; }
 
-    private readonly string _containerId = "chronik-" + Guid.NewGuid().ToString("N");
+    private readonly string _containerId = "chronik-band-" + Guid.NewGuid().ToString("N");
     private IJSObjectReference? _module;
     private DotNetObjectReference<ChronikStrip>? _ref;
     private bool _ready;
     private bool _loadError;
+    private string _lastJson = string.Empty;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -29,9 +31,10 @@
         }
         try
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/chronik.js?v=1");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/chronik.js?v=2");
             _ref = DotNetObjectReference.Create(this);
-            await _module.InvokeVoidAsync("render", _containerId, BuildJson(), _ref);
+            _lastJson = BuildJson();
+            await _module.InvokeVoidAsync("render", _containerId, _lastJson, _ref);
             _ready = true;
         }
         catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
@@ -48,21 +51,18 @@
         {
             return;
         }
+        var json = BuildJson();
+        if (json == _lastJson)
+        {
+            return; // panning inside the band must not re-push the same bars
+        }
+        _lastJson = json;
         try
         {
-            await _module.InvokeVoidAsync("setzeItems", _containerId, BuildJson());
+            await _module.InvokeVoidAsync("setItems", _containerId, json);
         }
         catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
         catch { /* best effort */ }
-    }
-
-    [JSInvokable]
-    public async Task OnItemClick(string href)
-    {
-        if (!string.IsNullOrWhiteSpace(href))
-        {
-            await InvokeAsync(() => Nav.NavigateTo(href));
-        }
     }
 
     [JSInvokable]
@@ -79,53 +79,18 @@
 
     private string BuildJson()
     {
-        var groups = Events.Select(e => e.EntityType).Distinct()
-            .Select(t => new { id = t, content = TypeLabel(t) }).ToList();
-        var items = Events.Select((e, i) => new
+        var buckets = Buckets
+            .Select(b => new { start = b.StartUtc.ToLocalTime().ToString("s"), count = b.Count })
+            .ToList();
+        var barWidth = buckets.Count == 0 ? 18 : Math.Clamp(900 / buckets.Count, 3, 26);
+        return JsonSerializer.Serialize(new
         {
-            id = i,
-            group = e.EntityType,
-            content = System.Net.WebUtility.HtmlEncode(e.Name),
-            start = e.Timestamp.ToLocalTime().ToString("s"),
-            title = System.Net.WebUtility.HtmlEncode(e.ActorName is { } a ? $"{e.Title} · {a}" : e.Title),
-            color = CatColour(e.Category),
-            href = e.Href,
-        }).ToList();
-        return JsonSerializer.Serialize(new { groups, items });
+            buckets,
+            barWidth,
+            windowStart = WindowStartUtc.ToLocalTime().ToString("s"),
+            windowEnd = WindowEndUtc.ToLocalTime().ToString("s"),
+        });
     }
-
-    private static string TypeLabel(string type) => type switch
-    {
-        nameof(NOOSE_Website.Data.Entities.People.Person) => "Person",
-        nameof(NOOSE_Website.Data.Entities.Factions.Faction) => "Fraktion",
-        nameof(NOOSE_Website.Data.Entities.Groups.PersonGroup) => "Personengruppe",
-        nameof(NOOSE_Website.Data.Entities.Parties.Party) => "Partei",
-        nameof(NOOSE_Website.Data.Entities.Operations.Operation) => "Operation",
-        nameof(NOOSE_Website.Data.Entities.Cases.Case) => "Vorgang",
-        nameof(NOOSE_Website.Data.Entities.Taskforces.Taskforce) => "Taskforce",
-        nameof(NOOSE_Website.Data.Entities.Jobs.Job) => "Aufgabe",
-        "Document" => "Dokument",
-        "Law" => "Gesetz",
-        _ => type,
-    };
-
-    private static string CatColour(TimelineCategory c) => c switch
-    {
-        TimelineCategory.Asset => "#3FB950",
-        TimelineCategory.Change => "#22D3EE",
-        TimelineCategory.Deletion => "#F85149",
-        TimelineCategory.Restoration => "#7C8CF8",
-        TimelineCategory.Classification => "#D29922",
-        TimelineCategory.Doc => "#58A6FF",
-        TimelineCategory.Observation => "#58A6FF",
-        TimelineCategory.Relation => "#A371F7",
-        TimelineCategory.Membership => "#2DD4BF",
-        TimelineCategory.Allocation => "#E6EDF3",
-        TimelineCategory.Link => "#7C8CF8",
-        TimelineCategory.Followup => "#D29922",
-        TimelineCategory.Activity => "#F0883E",
-        _ => "#8B98A8",
-    };
 
     public async ValueTask DisposeAsync()
     {
@@ -133,7 +98,7 @@
         {
             if (_module is not null)
             {
-                await _module.InvokeVoidAsync("zerstoere", _containerId);
+                await _module.InvokeVoidAsync("destroy", _containerId);
                 await _module.DisposeAsync();
             }
         }

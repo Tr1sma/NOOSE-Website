@@ -7,7 +7,8 @@ using NOOSE_Website.Models.Informants;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Confidential informant management with strict two-tier secrecy (codename vs. real identity).</summary>
+/// <summary>Confidential informant management. Informants carry a real name only (no codename) and may be linked to a
+/// person record and a faction. Record access is all-or-nothing.</summary>
 public interface IInformantService
 {
     Task<List<InformantDisplay>> GetListAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
@@ -17,6 +18,12 @@ public interface IInformantService
     Task<List<InformantMeetingDisplay>> GetMeetingsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task AddMeetingAsync(string id, InformantMeetingInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<InformantHandlerOption>> GetHandlerOptionsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Informant marker for a person record, or null when the person is not an informant.</summary>
+    Task<InformantPersonMarker?> GetPersonMarkerAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Informants linked to a faction; empty for partners.</summary>
+    Task<List<InformantFactionEntry>> GetForFactionAsync(string factionId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="IInformantService" />
@@ -31,18 +38,29 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             return new List<InformantDisplay>();
         }
         var rows = await db.Informants.Where(i => ids.Contains(i.Id))
-            .Select(i => new { i.Id, i.CaseNumber, i.Codename, i.Description, i.Reliability, i.Status, i.HandlerId })
+            .Select(i => new
+            {
+                i.Id, i.CaseNumber, i.RealName, i.PersonId, i.FactionId, i.Description,
+                i.Reliability, i.Status, i.HandlerId, i.ContactInfo, i.Notes,
+            })
             .ToListAsync(cancellationToken);
         var handlers = await HandlerDisplayAsync(db, rows.Select(r => r.HandlerId), actor.MayRealNameSee(), cancellationToken);
+        var people = await LinkedPeopleAsync(db, rows.Select(r => r.PersonId), actor, cancellationToken);
+        var factions = await LinkedFactionsAsync(db, rows.Select(r => r.FactionId), actor, cancellationToken);
 
-        // NB: the list never carries identity fields (RealName stays null regardless of tier)
         return rows
-            .Select(r => new InformantDisplay(
-                r.Id, r.CaseNumber, r.Codename, r.Description, r.Reliability, r.Status,
-                r.HandlerId, handlers.GetValueOrDefault(r.HandlerId),
-                InformantVisibility.MaySeeIdentity(actor, r.HandlerId), null, null, null,
-                InformantVisibility.MayWrite(actor, r.HandlerId)))
-            .OrderBy(d => string.IsNullOrWhiteSpace(d.Codename) ? d.CaseNumber : d.Codename)
+            .Select(r =>
+            {
+                var person = r.PersonId is null ? null : people.GetValueOrDefault(r.PersonId);
+                return new InformantDisplay(
+                    r.Id, r.CaseNumber, Label(person?.Name, r.RealName, r.CaseNumber), r.Description, r.Reliability, r.Status,
+                    r.HandlerId, handlers.GetValueOrDefault(r.HandlerId),
+                    person?.Id, person?.Name, person?.CaseNumber,
+                    r.FactionId, r.FactionId is null ? null : factions.GetValueOrDefault(r.FactionId),
+                    r.ContactInfo, r.Notes,
+                    InformantVisibility.MayWrite(actor, r.HandlerId));
+            })
+            .OrderBy(d => d.Name)
             .ToList();
     }
 
@@ -50,7 +68,11 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var inf = await db.Informants.Where(i => i.Id == id)
-            .Select(i => new { i.Id, i.CaseNumber, i.Codename, i.Description, i.Reliability, i.Status, i.HandlerId })
+            .Select(i => new
+            {
+                i.Id, i.CaseNumber, i.RealName, i.PersonId, i.FactionId, i.Description,
+                i.Reliability, i.Status, i.HandlerId, i.ContactInfo, i.Notes,
+            })
             .FirstOrDefaultAsync(cancellationToken);
         if (inf is null || !InformantVisibility.MaySeeRecord(actor, inf.HandlerId))
         {
@@ -58,22 +80,16 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
         var handlerName = (await HandlerDisplayAsync(db, new[] { inf.HandlerId }, actor.MayRealNameSee(), cancellationToken))
             .GetValueOrDefault(inf.HandlerId);
-
-        var maySeeId = InformantVisibility.MaySeeIdentity(actor, inf.HandlerId);
-        string? realName = null, contact = null, notes = null;
-        if (maySeeId)
-        {
-            // identity is only READ when authorized — never loaded into the DTO otherwise
-            var idn = await db.InformantIdentities.Where(x => x.InformantId == id)
-                .Select(x => new { x.RealName, x.ContactInfo, x.Notes }).FirstOrDefaultAsync(cancellationToken);
-            realName = idn?.RealName;
-            contact = idn?.ContactInfo;
-            notes = idn?.Notes;
-        }
+        var people = await LinkedPeopleAsync(db, new[] { inf.PersonId }, actor, cancellationToken);
+        var person = inf.PersonId is null ? null : people.GetValueOrDefault(inf.PersonId);
+        var factions = await LinkedFactionsAsync(db, new[] { inf.FactionId }, actor, cancellationToken);
 
         return new InformantDisplay(
-            inf.Id, inf.CaseNumber, inf.Codename, inf.Description, inf.Reliability, inf.Status,
-            inf.HandlerId, handlerName, maySeeId, realName, contact, notes,
+            inf.Id, inf.CaseNumber, Label(person?.Name, inf.RealName, inf.CaseNumber), inf.Description,
+            inf.Reliability, inf.Status, inf.HandlerId, handlerName,
+            person?.Id, person?.Name, person?.CaseNumber,
+            inf.FactionId, inf.FactionId is null ? null : factions.GetValueOrDefault(inf.FactionId),
+            inf.ContactInfo, inf.Notes,
             InformantVisibility.MayWrite(actor, inf.HandlerId));
     }
 
@@ -86,25 +102,25 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var (personId, realName) = await ResolveNameSourceAsync(db, input, null, null, actor, cancellationToken);
+        var factionId = await ResolveFactionAsync(db, input.FactionId, actor, cancellationToken);
+
         // case-number allocation needs an enclosing transaction (race-safety)
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
         var inf = new Informant
         {
-            Codename = input.Codename.Trim(),
+            RealName = realName,
+            PersonId = personId,
+            FactionId = factionId,
             Description = input.Description,
+            ContactInfo = input.ContactInfo,
+            Notes = input.Notes,
             Reliability = input.Reliability,
             Status = input.Status,
             HandlerId = input.HandlerId,
             CaseNumber = await caseNumbers.NextAsync(db, "VP", cancellationToken),
         };
         db.Informants.Add(inf);
-        if (!string.IsNullOrWhiteSpace(input.RealName))
-        {
-            db.InformantIdentities.Add(new InformantIdentity
-            {
-                InformantId = inf.Id, RealName = input.RealName.Trim(), ContactInfo = input.ContactInfo, Notes = input.Notes,
-            });
-        }
         await db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return inf.Id;
@@ -120,8 +136,13 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         }
         Permission.RequireInformantWrite(actor, inf.HandlerId);
 
-        inf.Codename = input.Codename.Trim();
+        var (personId, realName) = await ResolveNameSourceAsync(db, input, id, inf.PersonId, actor, cancellationToken);
+        inf.RealName = realName;
+        inf.PersonId = personId;
+        inf.FactionId = await ResolveFactionAsync(db, input.FactionId, actor, cancellationToken);
         inf.Description = input.Description;
+        inf.ContactInfo = input.ContactInfo;
+        inf.Notes = input.Notes;
         inf.Reliability = input.Reliability;
         inf.Status = input.Status;
 
@@ -130,32 +151,6 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         {
             Permission.RequireLeadership(actor);
             inf.HandlerId = input.HandlerId;
-        }
-
-        // identity is only written by those who may see it
-        if (InformantVisibility.MaySeeIdentity(actor, inf.HandlerId))
-        {
-            var idn = await db.InformantIdentities.FirstOrDefaultAsync(x => x.InformantId == id, cancellationToken);
-            if (string.IsNullOrWhiteSpace(input.RealName))
-            {
-                if (idn is not null)
-                {
-                    db.InformantIdentities.Remove(idn);
-                }
-            }
-            else if (idn is null)
-            {
-                db.InformantIdentities.Add(new InformantIdentity
-                {
-                    InformantId = id, RealName = input.RealName.Trim(), ContactInfo = input.ContactInfo, Notes = input.Notes,
-                });
-            }
-            else
-            {
-                idn.RealName = input.RealName.Trim();
-                idn.ContactInfo = input.ContactInfo;
-                idn.Notes = input.Notes;
-            }
         }
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -208,6 +203,149 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .OrderBy(o => o.Name)
             .ToList();
     }
+
+    public async Task<InformantPersonMarker?> GetPersonMarkerAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        // the marker itself is open to every internal agent; only opening the V-person file is tiered
+        if (actor.IsPartner() || string.IsNullOrWhiteSpace(personId))
+        {
+            return null;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.Informants.Where(i => i.PersonId == personId)
+            .Select(i => new { i.Id, i.CaseNumber, i.Status, i.HandlerId })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row is null
+            ? null
+            : new InformantPersonMarker(row.Id, row.CaseNumber, row.Status, InformantVisibility.MaySeeRecord(actor, row.HandlerId));
+    }
+
+    public async Task<List<InformantFactionEntry>> GetForFactionAsync(string factionId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (actor.IsPartner() || string.IsNullOrWhiteSpace(factionId))
+        {
+            return new List<InformantFactionEntry>();
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Informants.Where(i => i.FactionId == factionId)
+            .Select(i => new { i.Id, i.CaseNumber, i.RealName, i.PersonId, i.HandlerId, i.Status })
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return new List<InformantFactionEntry>();
+        }
+        var people = await LinkedPeopleAsync(db, rows.Select(r => r.PersonId), actor, cancellationToken);
+
+        return rows
+            .Select(r =>
+            {
+                var mayOpen = InformantVisibility.MaySeeRecord(actor, r.HandlerId);
+                var person = r.PersonId is null ? null : people.GetValueOrDefault(r.PersonId);
+                // without record access the roster stays anonymous — case number only
+                var name = mayOpen ? Label(person?.Name, r.RealName, r.CaseNumber) : r.CaseNumber;
+                return new InformantFactionEntry(r.Id, r.CaseNumber, name, r.Status, mayOpen);
+            })
+            .OrderBy(e => e.Name)
+            .ToList();
+    }
+
+    // Decide where the informant's name comes from: a linked person record wins, otherwise the free-text real name.
+    private static async Task<(string? PersonId, string? RealName)> ResolveNameSourceAsync(
+        AppDbContext db, InformantInput input, string? informantId, string? currentPersonId,
+        ClaimsPrincipal actor, CancellationToken ct)
+    {
+        var personId = string.IsNullOrWhiteSpace(input.PersonId) ? null : input.PersonId.Trim();
+        var realName = string.IsNullOrWhiteSpace(input.RealName) ? null : input.RealName.Trim();
+
+        if (personId is not null)
+        {
+            var mayClassified = actor.MayClassifiedRead();
+            var exists = await db.People
+                .AnyAsync(p => p.Id == personId && (mayClassified || !p.IsClassified), ct);
+            if (!exists)
+            {
+                throw new InvalidOperationException("Personenakte nicht gefunden oder nicht zugänglich.");
+            }
+            // the unique index also counts soft-deleted informants, so bypass the filter here
+            var taken = await db.Informants.IgnoreQueryFilters()
+                .AnyAsync(i => i.PersonId == personId && (informantId == null || i.Id != informantId), ct);
+            if (taken)
+            {
+                throw new InvalidOperationException(
+                    "Diese Personenakte ist bereits einem Informanten zugeordnet (ggf. im Papierkorb).");
+            }
+            return (personId, null); // the record is the single source of the name
+        }
+
+        if (realName is null && currentPersonId is not null)
+        {
+            // unlinking must not leave a nameless informant — carry the person's name over
+            realName = await db.People.Where(p => p.Id == currentPersonId).Select(p => p.Name).FirstOrDefaultAsync(ct);
+        }
+        if (string.IsNullOrWhiteSpace(realName))
+        {
+            throw new InvalidOperationException("Klarname oder verknüpfte Personenakte erforderlich.");
+        }
+        return (null, realName);
+    }
+
+    // Validate the optional faction link; unlike the person link this one is not exclusive.
+    private static async Task<string?> ResolveFactionAsync(
+        AppDbContext db, string? rawFactionId, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        var factionId = string.IsNullOrWhiteSpace(rawFactionId) ? null : rawFactionId.Trim();
+        if (factionId is null)
+        {
+            return null;
+        }
+        var mayClassified = actor.MayClassifiedRead();
+        var exists = await db.Factions.AnyAsync(f => f.Id == factionId && (mayClassified || !f.IsClassified), ct);
+        if (!exists)
+        {
+            throw new InvalidOperationException("Fraktionsakte nicht gefunden oder nicht zugänglich.");
+        }
+        return factionId;
+    }
+
+    private sealed record LinkedPerson(string Id, string Name, string CaseNumber);
+
+    // Resolve linked person ids to name + case number; classified records only for viewers allowed to read them.
+    private static async Task<Dictionary<string, LinkedPerson>> LinkedPeopleAsync(
+        AppDbContext db, IEnumerable<string?> personIds, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        var list = personIds.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!).Distinct().ToList();
+        if (list.Count == 0)
+        {
+            return new Dictionary<string, LinkedPerson>();
+        }
+        var mayClassified = actor.MayClassifiedRead();
+        var rows = await db.People.Where(p => list.Contains(p.Id) && (mayClassified || !p.IsClassified))
+            .Select(p => new LinkedPerson(p.Id, p.Name, p.CaseNumber))
+            .ToListAsync(ct);
+        return rows.ToDictionary(p => p.Id);
+    }
+
+    // Resolve linked faction ids to their names, under the same classification gate as people.
+    private static async Task<Dictionary<string, string>> LinkedFactionsAsync(
+        AppDbContext db, IEnumerable<string?> factionIds, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        var list = factionIds.Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => f!).Distinct().ToList();
+        if (list.Count == 0)
+        {
+            return new Dictionary<string, string>();
+        }
+        var mayClassified = actor.MayClassifiedRead();
+        var rows = await db.Factions.Where(f => list.Contains(f.Id) && (mayClassified || !f.IsClassified))
+            .Select(f => new { f.Id, f.Name })
+            .ToListAsync(ct);
+        return rows.ToDictionary(f => f.Id, f => f.Name);
+    }
+
+    // Display name of an informant: linked record first, then the free-text real name, never an empty label.
+    private static string Label(string? personName, string? realName, string caseNumber)
+        => !string.IsNullOrWhiteSpace(personName) ? personName!
+            : !string.IsNullOrWhiteSpace(realName) ? realName!
+            : caseNumber;
 
     // Resolve agent ids to a display name: codename first; real name only for viewers allowed to see it; never a raw id.
     private static async Task<Dictionary<string, string>> HandlerDisplayAsync(

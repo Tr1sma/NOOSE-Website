@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -29,6 +29,12 @@
     </PropertyGroup>
     <WriteLinesToFile File="$(BuildNumberFile)" Lines="$(_NextBuildNumber)" Overwrite="true" />
   </Target>
+  <ItemGroup>
+    <Content Remove="appsettings.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="appsettings.json" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- UI -->

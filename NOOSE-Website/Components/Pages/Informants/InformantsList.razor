@@ -8,7 +8,7 @@
 
 <PageHeader Icon="@Icons.Material.Filled.VisibilityOff"
             Title="Informanten"
-            Subtitle="Vertrauliche Quellen (V-Personen). Klarnamen nur für Führung und den zuständigen Führungsagenten.">
+            Subtitle="Vertrauliche Quellen (V-Personen) — kein Deckname, nur Klarname. Sichtbar für Führung und den zuständigen Führungsagenten.">
     <Actions>
         @if (_mayCreate)
         {
@@ -34,10 +34,22 @@ else
             <MudItem xs="12" sm="6" md="4">
                 <MudPaper Class="pa-4" Elevation="2" Style="cursor:pointer;height:100%;" @onclick="@(() => Nav.NavigateTo($"/informanten/{i.Id}"))">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudText Typo="Typo.h6">@(string.IsNullOrWhiteSpace(i.Codename) ? i.CaseNumber : i.Codename)</MudText>
+                        <MudText Typo="Typo.h6">@i.Name</MudText>
                         <MudChip T="string" Size="Size.Small" Color="@StatusColour(i.Status)">@InformantEnumDisplay.Status(i.Status)</MudChip>
                     </MudStack>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@i.CaseNumber · @InformantEnumDisplay.Reliability(i.Reliability)</MudText>
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap mt-2">
+                        @if (i.PersonId is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
+                                     Icon="@Icons.Material.Filled.Badge">Akte @i.PersonCaseNumber</MudChip>
+                        }
+                        @if (i.FactionId is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                     Icon="@Icons.Material.Filled.Groups">@i.FactionName</MudChip>
+                        }
+                    </MudStack>
                     @if (!string.IsNullOrWhiteSpace(i.HandlerName))
                     {
                         <MudText Typo="Typo.body2" Class="mt-2">Führung: @i.HandlerName</MudText>

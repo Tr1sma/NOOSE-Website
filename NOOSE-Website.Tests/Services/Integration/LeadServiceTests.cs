@@ -45,6 +45,53 @@ public sealed class LeadServiceTests
                 || (l.PrimaryName.StartsWith("B ", StringComparison.Ordinal) && l.SecondaryName!.StartsWith("A ", StringComparison.Ordinal))));
     }
 
+    private static bool IsPair(Lead l, string x, string y)
+        => l.Kind == LeadKind.LinkPrediction
+        && ((l.PrimaryId == x && l.SecondaryId == y) || (l.PrimaryId == y && l.SecondaryId == x));
+
+    // a & b both connect to c and d; c & d both connect to a and b -> two candidate pairs
+    private static void SeedDiamond(SqliteTestContext ctx, Action<NOOSE_Website.Data.AppDbContext>? extra = null)
+    {
+        using var db = ctx.NewContext();
+        foreach (var (id, name) in new[] { ("a", "A"), ("b", "B"), ("c", "C"), ("d", "D") })
+        {
+            db.People.Add(Seed.Person(id: id, name: name));
+        }
+        db.PersonRelations.AddRange(Rel("a", "c"), Rel("a", "d"), Rel("b", "c"), Rel("b", "d"));
+        extra?.Invoke(db);
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task GetFeed_SkipsLinkPrediction_WhenPairHasRelation()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedDiamond(ctx, db => db.PersonRelations.Add(Rel("a", "b")));
+
+        var leads = await FlatAsync(Svc(ctx), Leader());
+
+        Assert.DoesNotContain(leads, l => IsPair(l, "a", "b"));
+        Assert.Contains(leads, l => IsPair(l, "c", "d"));
+    }
+
+    [Fact]
+    public async Task GetFeed_SkipsLinkPrediction_WhenPairIsAlreadyColleagues()
+    {
+        using var ctx = new SqliteTestContext();
+        // automatic colleague link: dropped by the graph loader, but still a real connection
+        SeedDiamond(ctx, db => db.Links.Add(new Link
+        {
+            SourceType = nameof(Person), SourceId = "a",
+            TargetType = nameof(Person), TargetId = "b",
+            Label = ColleaguesSync.FactionColleague, Automatic = true, CreatedAt = DateTime.UtcNow,
+        }));
+
+        var leads = await FlatAsync(Svc(ctx), Leader());
+
+        Assert.DoesNotContain(leads, l => IsPair(l, "a", "b"));
+        Assert.Contains(leads, l => IsPair(l, "c", "d"));
+    }
+
     [Fact]
     public async Task GetFeed_FlagsRecentConflict()
     {

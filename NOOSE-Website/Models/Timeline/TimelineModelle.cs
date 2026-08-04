@@ -24,6 +24,7 @@ public enum TimelineCategory
     Agenda,
     Attendance,
     SignOff,
+    ThreatScore,
 }
 
 /// <summary>One event in the unified record timeline; Timestamp is UTC (sort key), Changes only for audit events.</summary>

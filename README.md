@@ -32,7 +32,7 @@ Alles ist auditiert (Created/Modified/Deleted), Soft-Delete-fähig und rang-/rol
 - **Dienstbesprechungen** `/besprechungen` - Tagesordnung, Protokoll-Notizen, Anwesenheitsliste, Klonen der Folgebesprechung, Erinnerungs-Worker (24 h/30 min).
 - **Abmeldungen** `/abmeldungen` - Urlaub/Krank/RP-Pause mit Sichtbarkeits-Scopes, Kenntnisnahme und Anwesenheits-Statistik mit Anomalie-Ampel.
 - **Dienst-Aktivitäten** `/aktivitaeten` - Diensteinträge der Agenten mit Vorlagen und Akten-Verknüpfung.
-- **Informanten** `/informanten` - V-Personen mit Deckname, Zuverlässigkeit, geheimer Identität (nur Führungsagent), Treffen-Protokollen.
+- **Informanten** `/informanten` - V-Personen mit Klarname (kein Deckname), Zuverlässigkeit, Kontaktdaten, Treffen-Protokollen; optional mit Personen- und Fraktionsakte verknüpft. Sichtbar für Führung, Nur-Lese-Aufsicht und den zuständigen Führungsagenten.
 - **Dokumente** `/dokumente` - Dokumenten-Bibliothek mit Rich-Text (Quill), Kategorien, Anheften, Datei-Anhängen; VS-Stufen (Leadership/TRU/HRB) und individuelle Freigabe-/Sperrlisten pro Agent.
 - **Datei-Bibliothek** - zentrale Upload-Ablage (Formulare, SOPs) mit Kategorien und Download-Endpoint.
 - **Gesetzbuch** `/gesetze` - durchsuchbare Gesetzes-Referenz, verknüpfbar mit Fällen/Doks, partner-freigebbar.
@@ -70,7 +70,7 @@ Alles ist auditiert (Created/Modified/Deleted), Soft-Delete-fähig und rang-/rol
 - **Pfad-Suche** - „Wie hängen A und B zusammen?" (kürzeste Kette).
 - **Graph-Analytik** - Betweenness-Zentralität und Community Detection.
 - **Ermittlungshinweise** `/ermittlungshinweise` - Link-Vorhersagen, neue Konflikte, veraltete Einstufungen; ignorierbar.
-- **Chronik** `/chronik` - behördenweiter, zoombarer Zeitstrahl mit Aktentyp-/Agent-Filtern.
+- **Chronik** `/chronik` - behördenweiter Ereignis-Feed nach Tagen gruppiert (Akten-, Dok-, Quellen-, Kommentar-, Mitglieds-, Beziehungs-, Wiedervorlage- und Score-Ereignisse inkl. Feld-Diffs), darüber ein zoombares Dichteband; Filter für Zeitraum, Typ, Agent, Kategorie und Freitext stehen in der URL.
 - **Organigramm** `/organigramm` - Dienstgrad-Hierarchie, TRU/HRB, Taskforce-Besetzung (Klarname nur Führung).
 - **KI-Kurzbrief** pro Akte - LLM-generierte Dossier-Zusammenfassung mit Caching und Staleness-Erkennung.
 - **KI-Assistent** `/ki-assistent` - Chat zum Formulieren/Zusammenfassen/Analysieren, mit Namens-Redaktion.

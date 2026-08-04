@@ -289,6 +289,54 @@ public sealed class AuditLogQueryServiceTests
     }
 
     [Fact]
+    public async Task GetFilterOptionsAsync_SkipsCodenamelessAccountsAndReadOnlySupervisors()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("u1", configure: a => a.Codename = "Zulu"));
+            db.Users.Add(Seed.Agent("u2", configure: a => a.Codename = "Alpha"));
+            db.Users.Add(Seed.Agent("pending", status: AgentStatus.Pending,
+                configure: a => a.Codename = string.Empty));
+            db.Users.Add(Seed.Agent("applicant", status: AgentStatus.Applicant,
+                configure: a => a.Codename = string.Empty));
+            db.Users.Add(Seed.Agent("supervisor", configure: a =>
+            {
+                a.Codename = "Aufsicht";
+                a.IsTeamLead = true;
+            }));
+            // team lead WITH admin is a full agent, not a read-only supervisor
+            db.Users.Add(Seed.Agent("chief", configure: a =>
+            {
+                a.Codename = "Chef";
+                a.IsTeamLead = true;
+                a.IsAdmin = true;
+            }));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
+
+        Assert.Equal(new[] { "Alpha", "Chef", "Zulu" }, result.Agents.Select(a => a.Codename).ToArray());
+    }
+
+    [Fact]
+    public async Task GetFilterOptionsAsync_KeepsTerminatedAgents()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("gone", status: AgentStatus.Terminated,
+                configure: a => a.Codename = "Ehemalig"));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
+
+        Assert.Equal("Ehemalig", Assert.Single(result.Agents).Codename);
+    }
+
+    [Fact]
     public async Task GetFilterOptionsAsync_Throws_WhenNotLeadership()
     {
         using var ctx = new SqliteTestContext();

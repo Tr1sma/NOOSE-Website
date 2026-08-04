@@ -88,10 +88,9 @@ public class AuditLogQueryService(IDbContextFactory<AppDbContext> dbFactory) : I
         Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var agents = await db.Users.AsNoTracking()
-            .OrderBy(u => u.Codename)
-            .Select(u => new AuditAgentOption(u.Id, u.Codename ?? string.Empty))
-            .ToListAsync(cancellationToken);
+        var agents = (await AgentDirectory.AllAsync(db, cancellationToken))
+            .Select(a => new AuditAgentOption(a.Id, a.Codename))
+            .ToList();
 
         // union of types that actually appear in either log
         var changeTypes = await db.AuditLogs.AsNoTracking().Select(x => x.EntityType).Distinct().ToListAsync(cancellationToken);

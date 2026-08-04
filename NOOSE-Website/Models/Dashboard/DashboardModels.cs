@@ -49,17 +49,3 @@ public record DashboardDistributions(
     IReadOnlyList<DistributionSegment> MeasureOutcomes,
     IReadOnlyList<DistributionSegment> FactionsByHazard,
     IReadOnlyList<DistributionSegment> OpenRequestsByKind);
-
-/// <summary>An activity-feed entry resolved from an audit row, rolled up to its parent record.</summary>
-public record DashboardChange(
-    DateTime Timestamp,
-    string? AgentName,
-    AuditAction Action,
-    DashboardRecordType RecordType,
-    string RecordId,
-    string RecordName,
-    string CaseNumber,
-    /// <summary>Child kind for child-record changes; null otherwise.</summary>
-    string? Detail,
-    /// <summary>True when the record is in the trash (no detail link).</summary>
-    bool RecordDeleted);

@@ -5,11 +5,11 @@ using NOOSE_Website.Data;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Two-tier informant visibility. Fail-closed: strangers see nothing, read-only supervision sees the codename
-/// but never the identity, only leadership (with real-name rights) or the assigned handler see the real identity.</summary>
+/// <summary>Informant visibility. Fail-closed: strangers and partners see nothing; leadership, read-only supervision and
+/// the assigned handler see the whole record. There is no second tier — record access implies full detail.</summary>
 public static class InformantVisibility
 {
-    /// <summary>May see that the informant exists (codename tier).</summary>
+    /// <summary>May see the informant record at all — and with it every field on it.</summary>
     public static bool MaySeeRecord(ClaimsPrincipal actor, string? handlerId)
     {
         if (actor.IsPartner())
@@ -22,21 +22,6 @@ public static class InformantVisibility
         }
         var me = actor.GetAgentId();
         return handlerId is not null && me is not null && me == handlerId;
-    }
-
-    /// <summary>May see the real identity (identity tier). Read-only supervision never qualifies.</summary>
-    public static bool MaySeeIdentity(ClaimsPrincipal actor, string? handlerId)
-    {
-        if (actor.IsPartner())
-        {
-            return false;
-        }
-        var me = actor.GetAgentId();
-        if (handlerId is not null && me is not null && me == handlerId)
-        {
-            return true;
-        }
-        return actor.MayRealNameSee(); // leadership && !OnlyReader
     }
 
     /// <summary>May create/edit meetings + record fields.</summary>

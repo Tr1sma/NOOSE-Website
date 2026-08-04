@@ -1,15 +1,15 @@
-// vis-timeline interop (agency-wide chronicle)
+// vis-timeline Graph2d interop: activity density band for the agency-wide chronicle
 
-let ladenPromise = null;
+let loadPromise = null;
 
-function ladeVisTimeline() {
-    if (window.vis && window.vis.Timeline) {
+function loadVisTimeline() {
+    if (window.vis && window.vis.Graph2d) {
         return Promise.resolve();
     }
-    if (ladenPromise) {
-        return ladenPromise;
+    if (loadPromise) {
+        return loadPromise;
     }
-    ladenPromise = new Promise((resolve, reject) => {
+    loadPromise = new Promise((resolve, reject) => {
         if (!document.querySelector('link[data-vistl-css]')) {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
@@ -23,58 +23,54 @@ function ladeVisTimeline() {
         script.onerror = () => reject(new Error('vis-timeline konnte nicht geladen werden.'));
         document.head.appendChild(script);
     });
-    return ladenPromise;
+    return loadPromise;
 }
 
-const instanzen = new Map(); // containerId → instance
+const instances = new Map(); // containerId → instance
 
-function baueDatensaetze(daten) {
-    const groups = new window.vis.DataSet((daten.groups || []).map(g => ({ id: g.id, content: g.content })));
-    const items = new window.vis.DataSet((daten.items || []).map(i => ({
-        id: i.id,
-        group: i.group,
-        content: i.content,
-        start: i.start,
-        title: i.title,
-        style: 'border-color:' + i.color + ';box-shadow:-3px 0 0 ' + i.color + ';',
-        _href: i.href,
+function buildItems(data) {
+    // no per-bar labels: the band shows shape, the feed's day headers carry the exact counts
+    return new window.vis.DataSet((data.buckets || []).map((b, i) => ({
+        id: i,
+        x: b.start,
+        y: b.count,
     })));
-    return { groups, items };
 }
 
-export async function render(containerId, datenJson, dotnetRef) {
-    await ladeVisTimeline();
+function buildOptions(data) {
+    return {
+        style: 'bar',
+        barChart: { width: data.barWidth || 18, align: 'center', sideBySide: false },
+        drawPoints: false,
+        shaded: false,
+        height: '110px',
+        start: data.windowStart,
+        end: data.windowEnd,
+        min: data.windowStart,
+        max: data.windowEnd,
+        zoomMin: 1000 * 60 * 60 * 6,
+        moveable: true,
+        zoomable: true,
+        showCurrentTime: false,
+        dataAxis: { visible: false },
+        legend: false,
+    };
+}
+
+export async function render(containerId, dataJson, dotnetRef) {
+    await loadVisTimeline();
     const container = document.getElementById(containerId);
     if (!container) {
         return;
     }
-    zerstoere(containerId);
+    destroy(containerId);
 
-    const daten = typeof datenJson === 'string' ? JSON.parse(datenJson) : datenJson;
-    const { groups, items } = baueDatensaetze(daten);
-    const options = {
-        stack: true,
-        orientation: 'top',
-        zoomable: true,
-        moveable: true,
-        horizontalScroll: true,
-        verticalScroll: true,
-        maxHeight: '620px',
-        tooltip: { followMouse: true, overflowMethod: 'cap' },
-    };
-    const timeline = new window.vis.Timeline(container, items, groups, options);
-
-    timeline.on('doubleClick', (props) => {
-        if (props.item != null) {
-            const it = items.get(props.item);
-            if (it && it._href) {
-                try { dotnetRef.invokeMethodAsync('OnItemClick', it._href); } catch (e) { /* ignore */ }
-            }
-        }
-    });
+    const data = typeof dataJson === 'string' ? JSON.parse(dataJson) : dataJson;
+    const items = buildItems(data);
+    const graph = new window.vis.Graph2d(container, items, buildOptions(data));
 
     let debounce = null;
-    timeline.on('rangechanged', (props) => {
+    graph.on('rangechanged', (props) => {
         if (debounce) {
             clearTimeout(debounce);
         }
@@ -83,29 +79,30 @@ export async function render(containerId, datenJson, dotnetRef) {
                 dotnetRef.invokeMethodAsync('OnRangeChangedJs',
                     new Date(props.start).toISOString(), new Date(props.end).toISOString());
             } catch (e) { /* ignore */ }
-        }, 300);
+        }, 350);
     });
 
-    instanzen.set(containerId, { timeline, items, groups, dotnetRef });
+    instances.set(containerId, { graph, items, dotnetRef });
 }
 
-export function setzeItems(containerId, datenJson) {
-    const inst = instanzen.get(containerId);
+export function setItems(containerId, dataJson) {
+    const inst = instances.get(containerId);
     if (!inst) {
         return;
     }
-    const daten = typeof datenJson === 'string' ? JSON.parse(datenJson) : datenJson;
-    const { groups, items } = baueDatensaetze(daten);
-    inst.groups.clear();
-    inst.groups.add(groups.get());
+    const data = typeof dataJson === 'string' ? JSON.parse(dataJson) : dataJson;
     inst.items.clear();
-    inst.items.add(items.get());
+    inst.items.add(buildItems(data).get());
+    // a new preset changes the outer bounds, so push them before moving the window
+    try {
+        inst.graph.setOptions(buildOptions(data));
+    } catch (e) { /* ignore */ }
 }
 
-export function zerstoere(containerId) {
-    const inst = instanzen.get(containerId);
+export function destroy(containerId) {
+    const inst = instances.get(containerId);
     if (inst) {
-        try { inst.timeline.destroy(); } catch (e) { /* ignore */ }
-        instanzen.delete(containerId);
+        try { inst.graph.destroy(); } catch (e) { /* ignore */ }
+        instances.delete(containerId);
     }
 }

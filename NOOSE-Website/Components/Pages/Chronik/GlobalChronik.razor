@@ -2,42 +2,84 @@
 @using NOOSE_Website.Models.Timeline
 @attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IGlobalChronikService Chronik
+@inject INavPreferencesService NavPreferences
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Chronik · NOOSE</PageTitle>
 
 <PageHeader Icon="@Icons.Material.Filled.Timeline"
             Title="Ermittlungs-Chronik"
-            Subtitle="Behördenweiter Zeitstrahl aller Akten-Ereignisse. Ziehen zum Verschieben, Scrollen zum Zoomen." />
+            Subtitle="Behördenweiter Verlauf aller Akten-Ereignisse." />
 
 <MudPaper Class="pa-3 mb-3" Elevation="1">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-        <MudSelect T="string" Label="Aktentyp" Value="_typeFilter" ValueChanged="OnTypeChanged"
-                   Clearable="true" Style="min-width:200px;" Dense="true">
-            <MudSelectItem T="string" Value="@((string?)null)">Alle Typen</MudSelectItem>
-            @foreach (var t in _options.Types)
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            @foreach (var preset in Presets)
             {
-                <MudSelectItem T="string" Value="@t">@TypeLabel(t)</MudSelectItem>
+                <MudChip T="string" Size="Size.Small"
+                         Variant="@(_customRange is null && _presetDays == preset.Days ? Variant.Filled : Variant.Outlined)"
+                         Color="Color.Primary" OnClick="@(() => OnPresetAsync(preset.Days))">
+                    @preset.Label
+                </MudChip>
             }
-        </MudSelect>
+            <MudDateRangePicker Label="Zeitraum" DateRange="_customRange" DateRangeChanged="OnCustomRangeAsync"
+                                Clearable="true" Dense="true" Margin="Margin.Dense" Style="min-width:230px;" />
+            <MudSpacer />
+            <MudTextField T="string" Value="_text" ValueChanged="OnTextAsync" Immediate="true"
+                          DebounceInterval="400" Placeholder="Akte, Ereignis oder Agent suchen"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Clearable="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                          Style="min-width:260px;" />
+        </MudStack>
 
-        <MudSelect T="string" Label="Agent" Value="_agentId" ValueChanged="OnAgentChanged"
-                   Clearable="true" Style="min-width:220px;" Dense="true">
-            <MudSelectItem T="string" Value="@((string?)null)">Alle Agenten</MudSelectItem>
-            @foreach (var a in _options.Agents)
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudSelect T="string" Label="Aktentyp" MultiSelection="true" SelectedValues="_types"
+                       SelectedValuesChanged="OnTypesAsync" Dense="true" Margin="Margin.Dense"
+                       Style="min-width:210px;" MultiSelectionTextFunc="@(v => TypeSummary(v))">
+                @foreach (var t in _options.Types)
+                {
+                    <MudSelectItem T="string" Value="@t">@RecordTypeDisplay.Name(t)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="string" Label="Agent" MultiSelection="true" SelectedValues="_agents"
+                       SelectedValuesChanged="OnAgentsAsync" Dense="true" Margin="Margin.Dense"
+                       Style="min-width:210px;">
+                @foreach (var a in _options.Agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudDivider Vertical="true" FlexItem="true" />
+
+            @foreach (var category in FilterCategories)
             {
-                <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+                <MudChip T="string" Size="Size.Small"
+                         Variant="@(_categories.Contains(category) ? Variant.Filled : Variant.Outlined)"
+                         Color="@TimelineCategoryDisplay.Colour(category)"
+                         Icon="@TimelineCategoryDisplay.Symbol(category)"
+                         OnClick="@(() => OnCategoryAsync(category))">
+                    @TimelineCategoryDisplay.Name(category)
+                </MudChip>
             }
-        </MudSelect>
 
-        <MudSpacer />
-        @if (_truncated)
-        {
-            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Warning">
-                Ausschnitt gedeckelt – enger zoomen
-            </MudChip>
-        }
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_events.Count Ereignisse</MudText>
+            @if (HasFilters)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.FilterAltOff"
+                           OnClick="ResetFiltersAsync">Filter zurücksetzen</MudButton>
+            }
+        </MudStack>
     </MudStack>
+</MudPaper>
+
+<MudPaper Class="pa-2 mb-3" Elevation="1">
+    <ChronikStrip Buckets="_buckets" WindowStartUtc="_windowFrom" WindowEndUtc="_windowTo"
+                  OnRangeChanged="OnRangeChangedAsync" />
+    <MudText Typo="Typo.caption" Class="mud-text-secondary px-2">
+        Ziehen zum Verschieben, Scrollen zum Zoomen — der Feed folgt dem sichtbaren Ausschnitt.
+    </MudText>
 </MudPaper>
 
 @if (_load)
@@ -45,82 +87,282 @@
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
 }
 
-<MudPaper Class="pa-2" Elevation="1">
-    <ChronikStrip Events="_events" OnRangeChanged="OnRangeChangedAsync" />
+<MudPaper Class="pa-4" Elevation="1">
+    <ChronikFeed Events="_events" LastSeenUtc="_lastSeen" />
+
+    @if (_hasMore)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="mt-4">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_loadMore"
+                       StartIcon="@Icons.Material.Filled.ExpandMore" OnClick="LoadMoreAsync">
+                @(_loadMore ? "Lädt …" : "Mehr laden")
+            </MudButton>
+        </MudStack>
+    }
 </MudPaper>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
+    private static readonly (int Days, string Label)[] Presets =
+    {
+        (1, "Heute"), (7, "7 Tage"), (30, "30 Tage"), (90, "90 Tage"),
+    };
+
+    private static readonly TimelineCategory[] FilterCategories =
+    {
+        TimelineCategory.Asset, TimelineCategory.Change, TimelineCategory.Classification,
+        TimelineCategory.Doc, TimelineCategory.Comment, TimelineCategory.Source,
+        TimelineCategory.Membership, TimelineCategory.Relation, TimelineCategory.Allocation,
+        TimelineCategory.Followup, TimelineCategory.ThreatScore,
+        TimelineCategory.Deletion, TimelineCategory.Restoration,
+    };
+
     private ClaimsPrincipal _user = default!;
-    private ChronikFilterOptions _options = new(Array.Empty<string>(), Array.Empty<ChronikAgentOption>());
-    private IReadOnlyList<ChronikEvent> _events = Array.Empty<ChronikEvent>();
-    private bool _truncated;
-    private bool _load = true;
-    private string? _typeFilter;
     private string? _agentId;
-    private DateTime _from = DateTime.UtcNow.AddDays(-90);
-    private DateTime _to = DateTime.UtcNow.AddDays(1);
+    private ChronikFilterOptions _options = new(Array.Empty<string>(), Array.Empty<ChronikAgentOption>());
+
+    private List<ChronikEvent> _events = new();
+    private IReadOnlyList<ChronikDensityBucket> _buckets = Array.Empty<ChronikDensityBucket>();
+    private DateTime? _cursor;
+    private bool _hasMore;
+    private bool _load = true;
+    private bool _loadMore;
     private int _loadGen;
+    private DateTime? _lastSeen;
+
+    private int _presetDays = 30;
+    private DateRange? _customRange;
+    private DateTime _windowFrom;
+    private DateTime _windowTo;
+    private DateTime _from;
+    private DateTime _to;
+
+    private HashSet<string> _types = new();
+    private HashSet<string> _agents = new();
+    private readonly HashSet<TimelineCategory> _categories = new();
+    private string? _text;
+
+    private bool HasFilters => _types.Count > 0 || _agents.Count > 0 || _categories.Count > 0
+        || !string.IsNullOrWhiteSpace(_text);
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _agentId = _user.GetAgentId();
         _options = await Chronik.GetFilterOptionsAsync(_user);
-        await LoadAsync();
+
+        ReadUrlState();
+        ApplyWindow();
+
+        if (!string.IsNullOrEmpty(_agentId))
+        {
+            var prefs = await NavPreferences.GetAsync(_agentId);
+            _lastSeen = prefs.ChronikLastSeenUtc;
+        }
+
+        await ReloadAsync(withDensity: true);
+
+        if (!string.IsNullOrEmpty(_agentId))
+        {
+            // stamp after the first load so the divider still reflects the previous visit
+            await NavPreferences.SetChronikLastSeenAsync(_agentId, DateTime.UtcNow);
+        }
     }
 
-    private async Task LoadAsync()
+    // ---------------------------------------------------------------- loading
+
+    private ChronikQuery BuildQuery(DateTime? before) => new(
+        _from, _to,
+        _types.Count == 0 ? null : _types.ToList(),
+        _agents.Count == 0 ? null : _agents.ToList(),
+        _categories.Count == 0 ? null : _categories.ToList(),
+        string.IsNullOrWhiteSpace(_text) ? null : _text,
+        before);
+
+    private async Task ReloadAsync(bool withDensity)
     {
         var gen = ++_loadGen;
         _load = true;
-        var result = await Chronik.GetEventsAsync(new ChronikQuery(_from, _to, _typeFilter, _agentId), _user);
+        StateHasChanged();
+
+        if (withDensity)
+        {
+            var densityQuery = BuildQuery(null) with { FromUtc = _windowFrom, ToUtc = _windowTo };
+            var buckets = await Chronik.GetDensityAsync(densityQuery, _user);
+            if (gen != _loadGen)
+            {
+                return;
+            }
+            _buckets = buckets;
+        }
+
+        var result = await Chronik.GetEventsAsync(BuildQuery(null), _user);
         if (gen != _loadGen)
         {
-            return; // a newer pan/zoom load superseded this one; drop the stale result
+            return; // a newer filter/pan load superseded this one
         }
-        _events = result.Events;
-        _truncated = result.Truncated;
+        _events = result.Events.ToList();
+        _cursor = result.NextCursorUtc;
+        _hasMore = result.HasMore;
         _load = false;
+        StateHasChanged();
     }
 
-    private async Task OnTypeChanged(string? value)
+    private async Task LoadMoreAsync()
     {
-        _typeFilter = value;
-        await LoadAsync();
+        if (_cursor is not { } cursor || _loadMore)
+        {
+            return;
+        }
+        var gen = _loadGen;
+        _loadMore = true;
+        StateHasChanged();
+
+        var result = await Chronik.GetEventsAsync(BuildQuery(cursor), _user);
+        if (gen != _loadGen)
+        {
+            return;
+        }
+        _events.AddRange(result.Events);
+        _cursor = result.NextCursorUtc;
+        _hasMore = result.HasMore;
+        _loadMore = false;
+        StateHasChanged();
     }
 
-    private async Task OnAgentChanged(string? value)
+    // ---------------------------------------------------------------- filters
+
+    private async Task OnPresetAsync(int days)
     {
-        _agentId = value;
-        await LoadAsync();
+        _presetDays = days;
+        _customRange = null;
+        ApplyWindow();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
     }
 
-    // pan/zoom pushes a new window → reload that slice (guard against tiny jitter reloads)
+    private async Task OnCustomRangeAsync(DateRange? range)
+    {
+        _customRange = range?.Start is null || range.End is null ? null : range;
+        ApplyWindow();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnTypesAsync(IEnumerable<string> values)
+    {
+        _types = values.ToHashSet();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnAgentsAsync(IEnumerable<string> values)
+    {
+        _agents = values.ToHashSet();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnCategoryAsync(TimelineCategory category)
+    {
+        if (!_categories.Remove(category))
+        {
+            _categories.Add(category);
+        }
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: false);
+    }
+
+    private async Task OnTextAsync(string? value)
+    {
+        _text = value;
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: false);
+    }
+
+    private async Task ResetFiltersAsync()
+    {
+        _types.Clear();
+        _agents.Clear();
+        _categories.Clear();
+        _text = null;
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    // pan/zoom inside the band picks a sub-range of the current window
     private async Task OnRangeChangedAsync((DateTime From, DateTime To) range)
     {
         if (Math.Abs((range.From - _from).TotalSeconds) < 2 && Math.Abs((range.To - _to).TotalSeconds) < 2)
         {
             return;
         }
-        _from = range.From;
-        _to = range.To;
-        await LoadAsync();
-        StateHasChanged();
+        _from = range.From < _windowFrom ? _windowFrom : range.From;
+        _to = range.To > _windowTo ? _windowTo : range.To;
+        await ReloadAsync(withDensity: false);
     }
 
-    private static string TypeLabel(string type) => type switch
+    // ---------------------------------------------------------------- window + url
+
+    private void ApplyWindow()
     {
-        "Person" => "Person",
-        "Faction" => "Fraktion",
-        "PersonGroup" => "Personengruppe",
-        "Party" => "Partei",
-        "Operation" => "Operation",
-        "Case" => "Vorgang",
-        "Taskforce" => "Taskforce",
-        "Job" => "Aufgabe",
-        "Document" => "Dokument",
-        "Law" => "Gesetz",
-        _ => type,
-    };
+        if (_customRange is { Start: { } start, End: { } end })
+        {
+            _windowFrom = DateTime.SpecifyKind(start.Date, DateTimeKind.Local).ToUniversalTime();
+            _windowTo = DateTime.SpecifyKind(end.Date.AddDays(1), DateTimeKind.Local).ToUniversalTime();
+        }
+        else
+        {
+            _windowTo = DateTime.UtcNow.AddMinutes(1);
+            var firstDay = DateTime.Now.Date.AddDays(-(_presetDays - 1));
+            _windowFrom = DateTime.SpecifyKind(firstDay, DateTimeKind.Local).ToUniversalTime();
+        }
+        _from = _windowFrom;
+        _to = _windowTo;
+    }
+
+    private void ReadUrlState()
+    {
+        if (int.TryParse(QueryState.Read(Nav, "zeit"), out var days) && Presets.Any(p => p.Days == days))
+        {
+            _presetDays = days;
+        }
+        if (DateTime.TryParse(QueryState.Read(Nav, "von"), out var from)
+            && DateTime.TryParse(QueryState.Read(Nav, "bis"), out var to))
+        {
+            _customRange = new DateRange(from.Date, to.Date);
+        }
+        _types = SplitCsv(QueryState.Read(Nav, "typ")).Where(_options.Types.Contains).ToHashSet();
+        _agents = SplitCsv(QueryState.Read(Nav, "agent")).Where(a => _options.Agents.Any(o => o.Id == a)).ToHashSet();
+        foreach (var raw in SplitCsv(QueryState.Read(Nav, "kat")))
+        {
+            if (Enum.TryParse<TimelineCategory>(raw, ignoreCase: true, out var category))
+            {
+                _categories.Add(category);
+            }
+        }
+        _text = QueryState.Read(Nav, "q");
+    }
+
+    private Task WriteUrlStateAsync() => QueryState.WriteAsync(JS, Nav,
+        ("zeit", _customRange is null ? _presetDays.ToString() : null),
+        ("von", _customRange?.Start?.ToString("yyyy-MM-dd")),
+        ("bis", _customRange?.End?.ToString("yyyy-MM-dd")),
+        ("typ", _types.Count == 0 ? null : string.Join(',', _types)),
+        ("agent", _agents.Count == 0 ? null : string.Join(',', _agents)),
+        ("kat", _categories.Count == 0 ? null : string.Join(',', _categories)),
+        ("q", _text));
+
+    private static IEnumerable<string> SplitCsv(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static string TypeSummary(IReadOnlyList<string>? selected)
+        => selected is not { Count: > 0 }
+            ? "Alle Typen"
+            : selected.Count <= 2
+                ? string.Join(", ", selected.Select(RecordTypeDisplay.Name))
+                : $"{selected.Count} Typen";
 }

@@ -56,8 +56,8 @@
         _due = (DueAt ?? DateTime.UtcNow.AddDays(1)).ToLocalTime().Date;
         _note = Note ?? string.Empty;
 
-        var all = await AgentService.GetAllAsync();
-        _all = all.Where(a => a.Status == AgentStatus.Active).ToList();
+        // TeamLeads are never selectable
+        _all = await AgentService.GetSelectableAsync();
         if (!string.IsNullOrEmpty(ResponsibleAgentId))
         {
             _agent = _all.FirstOrDefault(a => a.Id == ResponsibleAgentId);

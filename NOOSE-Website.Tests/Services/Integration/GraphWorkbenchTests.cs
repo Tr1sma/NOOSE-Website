@@ -138,4 +138,87 @@ public sealed class GraphWorkbenchTests
         await svc.DeleteAsync(saved.Id, Agent("owner"));
         Assert.Empty(await svc.GetForAgentAsync("owner"));
     }
+
+    // ==================== GraphViewPayload (positions + workbench state) ====================
+
+    private const string Positions = "{\"Person:1\":{\"x\":10,\"y\":-20}}";
+
+    [Fact]
+    public void Wrap_Unwrap_RoundTripsPositionsAndView()
+    {
+        var view = new GraphViewState(
+            Centrality: true, Community: true, FocusMode: true,
+            FocusType: "Faction", FocusId: "f1", FocusName: "Ballas",
+            Depth: 3, Types: new[] { "Person", "Faction" }, Kind: "Konflikt");
+
+        var (positions, back) = GraphViewPayload.Unwrap(GraphViewPayload.Wrap(Positions, view));
+
+        Assert.NotNull(back);
+        Assert.True(back!.Centrality);
+        Assert.True(back.Community);
+        Assert.True(back.FocusMode);
+        Assert.Equal("Faction", back.FocusType);
+        Assert.Equal("f1", back.FocusId);
+        Assert.Equal("Ballas", back.FocusName);
+        Assert.Equal(3, back.Depth);
+        Assert.Equal(new[] { "Person", "Faction" }, back.Types);
+        Assert.Equal("Konflikt", back.Kind);
+        Assert.Contains("\"Person:1\"", positions);
+        Assert.Contains("\"x\":10", positions.Replace(" ", string.Empty));
+    }
+
+    [Fact]
+    public void Unwrap_LegacyFlatPositionMap_KeepsPositionsAndHasNoView()
+    {
+        var (positions, view) = GraphViewPayload.Unwrap(Positions);
+
+        Assert.Null(view);
+        Assert.Equal(Positions, positions);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("nicht mal JSON")]
+    [InlineData("[1,2,3]")]
+    public void Unwrap_Garbage_YieldsEmptyPositionsAndNoView(string? stored)
+    {
+        var (positions, view) = GraphViewPayload.Unwrap(stored);
+
+        Assert.Null(view);
+        Assert.Equal("{}", positions);
+    }
+
+    [Fact]
+    public void Wrap_BrokenPositions_StillStoresTheView()
+    {
+        var (positions, view) = GraphViewPayload.Unwrap(
+            GraphViewPayload.Wrap("kaputt", new GraphViewState(Centrality: true)));
+
+        Assert.Equal("{}", positions);
+        Assert.True(view?.Centrality);
+    }
+
+    [Fact]
+    public void Unwrap_ClampsDepthAndUnknownKind()
+    {
+        var stored = GraphViewPayload.Wrap(Positions, new GraphViewState(Depth: 9, Kind: "Quatsch"));
+
+        var (_, view) = GraphViewPayload.Unwrap(stored);
+
+        Assert.Equal(3, view!.Depth);
+        Assert.Equal("alle", view.Kind);
+    }
+
+    [Fact]
+    public void Unwrap_ViewWithoutTypes_YieldsNullTypes()
+    {
+        var stored = GraphViewPayload.Wrap(Positions, new GraphViewState(Community: true));
+
+        var (_, view) = GraphViewPayload.Unwrap(stored);
+
+        Assert.Null(view!.Types);
+        Assert.True(view.Community);
+        Assert.False(view.Centrality);
+    }
 }

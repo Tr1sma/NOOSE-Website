@@ -118,6 +118,10 @@ public class NavPreferencesService(IDbContextFactory<AppDbContext> dbFactory, IM
             }
         }, cancellationToken, notify: false);
 
+    // page-local marker: no broadcast, the drawer does not show it
+    public Task SetChronikLastSeenAsync(string agentId, DateTime seenUtc, CancellationToken cancellationToken = default)
+        => MutateAsync(agentId, p => p.ChronikLastSeenUtc = seenUtc, cancellationToken, notify: false);
+
     // read-modify-write of the JSON column; ExecuteUpdate bypasses the read-only barrier (pure UI prefs)
     private async Task MutateAsync(string agentId, Action<NavPreferences> mutate, CancellationToken cancellationToken, bool notify = true)
     {

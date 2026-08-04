@@ -36,17 +36,31 @@ else
                     <MudList T="string" Dense="false">
                         @foreach (var lead in group.Leads)
                         {
+                            var segments = Segments(lead);
                             <MudListItem T="string">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
                                     <div>
-                                        <MudText Typo="Typo.body1"><b>@lead.Detail</b></MudText>
+                                        <MudText Typo="Typo.body1">
+                                            @foreach (var seg in segments)
+                                            {
+                                                @if (seg.Href is not null)
+                                                {
+                                                    <MudLink Href="@seg.Href" Typo="Typo.body1" Underline="Underline.Hover"><b>@seg.Text</b></MudLink>
+                                                }
+                                                else
+                                                {
+                                                    @seg.Text
+                                                }
+                                            }
+                                        </MudText>
                                     </div>
                                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                        @if (!string.IsNullOrWhiteSpace(lead.PrimaryHref))
+                                        @* fallback button only when the name isn't already a link inside the sentence *@
+                                        @if (!string.IsNullOrWhiteSpace(lead.PrimaryHref) && !segments.Any(s => s.Href == lead.PrimaryHref))
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Text" Href="@lead.PrimaryHref">@lead.PrimaryName</MudButton>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(lead.SecondaryHref))
+                                        @if (!string.IsNullOrWhiteSpace(lead.SecondaryHref) && !segments.Any(s => s.Href == lead.SecondaryHref))
                                         {
                                             <MudButton Size="Size.Small" Variant="Variant.Text" Href="@lead.SecondaryHref">@lead.SecondaryName</MudButton>
                                         }
@@ -103,7 +117,7 @@ else
             await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
             await ReloadAsync();
         }
-        catch (UnauthorizedAccessException ex)
+        catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
@@ -118,18 +132,63 @@ else
         try
         {
             await LinkService.CreateAsync(lead.PrimaryType, lead.PrimaryId, lead.SecondaryType, lead.SecondaryId, null, _user);
-            // linked = resolved: dismiss the lead so it leaves the feed immediately (raw candidates are cached ~5 min)
-            await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
-            Snackbar.Add("Verknüpfung angelegt.", Severity.Success);
-            await ReloadAsync();
         }
-        catch (UnauthorizedAccessException ex)
+        catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+            return;
         }
-        catch (Exception)
+        try
         {
-            Snackbar.Add("Verknüpfung konnte nicht angelegt werden.", Severity.Error);
+            // linked = resolved: dismiss the lead so it leaves the feed immediately (raw candidates are cached ~5 min)
+            await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
         }
+        catch { /* best effort */ }
+        Snackbar.Add("Verknüpfung angelegt.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private readonly record struct DetailSegment(string Text, string? Href);
+
+    // turns the record names the sentence already contains into links
+    private static List<DetailSegment> Segments(Lead lead)
+    {
+        var marks = new List<(int Start, int Length, string Href)>();
+        void Mark(string? name, string? href)
+        {
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(href))
+            {
+                return;
+            }
+            var at = lead.Detail.IndexOf(name, StringComparison.Ordinal);
+            if (at >= 0)
+            {
+                marks.Add((at, name.Length, href));
+            }
+        }
+        Mark(lead.PrimaryName, lead.PrimaryHref);
+        Mark(lead.SecondaryName, lead.SecondaryHref);
+        marks.Sort((x, y) => x.Start.CompareTo(y.Start));
+
+        var segments = new List<DetailSegment>();
+        var pos = 0;
+        foreach (var m in marks)
+        {
+            if (m.Start < pos)
+            {
+                continue; // overlaps an earlier name
+            }
+            if (m.Start > pos)
+            {
+                segments.Add(new DetailSegment(lead.Detail[pos..m.Start], null));
+            }
+            segments.Add(new DetailSegment(lead.Detail.Substring(m.Start, m.Length), m.Href));
+            pos = m.Start + m.Length;
+        }
+        if (pos < lead.Detail.Length)
+        {
+            segments.Add(new DetailSegment(lead.Detail[pos..], null));
+        }
+        return segments;
     }
 }

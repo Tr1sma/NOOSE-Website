@@ -1,6 +1,7 @@
 @page "/informanten/{Id}"
 @using NOOSE_Website.Models.Enums
 @using NOOSE_Website.Models.Informants
+@using NOOSE_Website.Components.Pages.Informants.Shared
 @inject IInformantService Service
 
 <PageTitle>@Label · NOOSE</PageTitle>
@@ -36,26 +37,38 @@ else
                     <tr><td style="width:12rem;">Status</td><td>@InformantEnumDisplay.Status(_detail.Status)</td></tr>
                     <tr><td>Zuverlässigkeit</td><td>@InformantEnumDisplay.Reliability(_detail.Reliability)</td></tr>
                     <tr><td>Führungsagent</td><td>@(_detail.HandlerName ?? "—")</td></tr>
+                    <tr>
+                        <td>Personenakte</td>
+                        <td>
+                            @if (_detail.PersonId is not null)
+                            {
+                                <MudLink Href="@($"/personen/{_detail.PersonId}")">@_detail.PersonName (@_detail.PersonCaseNumber)</MudLink>
+                            }
+                            else
+                            {
+                                <text>— nicht verknüpft</text>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Fraktion</td>
+                        <td>
+                            @if (_detail.FactionId is not null)
+                            {
+                                <MudLink Href="@($"/fraktionen/{_detail.FactionId}")">@_detail.FactionName</MudLink>
+                            }
+                            else
+                            {
+                                <text>— nicht verknüpft</text>
+                            }
+                        </td>
+                    </tr>
                     <tr><td>Beschreibung</td><td>@(_detail.Description ?? "—")</td></tr>
+                    <tr><td>Kontakt</td><td>@(_detail.ContactInfo ?? "—")</td></tr>
+                    <tr><td>Notizen</td><td>@(_detail.Notes ?? "—")</td></tr>
                 </tbody>
             </MudSimpleTable>
         </RecordSection>
-
-        @if (_detail.MaySeeIdentity)
-        {
-            <RecordSection Slug="identitaet" Label="Identität" Icon="@Icons.Material.Filled.Lock">
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
-                    Klarname — streng vertraulich, nur für Führung und Führungsagent.
-                </MudAlert>
-                <MudSimpleTable Dense="true" Elevation="0">
-                    <tbody>
-                        <tr><td style="width:12rem;">Klarname</td><td><b>@_detail.RealName</b></td></tr>
-                        <tr><td>Kontakt</td><td>@(_detail.ContactInfo ?? "—")</td></tr>
-                        <tr><td>Notizen</td><td>@(_detail.Notes ?? "—")</td></tr>
-                    </tbody>
-                </MudSimpleTable>
-            </RecordSection>
-        }
 
         <RecordSection Slug="treffen" Label="Treffen" Icon="@Icons.Material.Filled.Forum">
             <InformantMeetingPanel InformantId="@Id" MayWrite="_detail.MayEdit" User="_user" />
@@ -72,10 +85,7 @@ else
     private string _loadedId = string.Empty;
     private InformantDisplay? _detail;
 
-    // Codename is optional; fall back to the case number so a nameless informant is still identifiable.
-    private string Label => _detail is null
-        ? "Informant"
-        : string.IsNullOrWhiteSpace(_detail.Codename) ? _detail.CaseNumber : _detail.Codename;
+    private string Label => _detail?.Name ?? "Informant";
 
     protected override async Task OnParametersSetAsync()
     {

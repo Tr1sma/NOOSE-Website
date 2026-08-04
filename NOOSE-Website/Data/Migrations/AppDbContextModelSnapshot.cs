@@ -2401,9 +2401,77 @@ namespace NOOSE_Website.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Timestamp");
+
                     b.HasIndex("EntityType", "EntityId", "Timestamp");
 
                     b.ToTable("BedrohungsScoreVerlauf");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.CounterIntel.CounterIntelRule", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<string>("DefinitionJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("Beschreibung");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstAktiv");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int")
+                        .HasColumnName("Reihenfolge");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("int")
+                        .HasColumnName("Schweregrad");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "Order");
+
+                    b.ToTable("GegenaufklaerungsRegeln");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Factions.Faction", b =>
@@ -3086,11 +3154,9 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(32)")
                         .HasColumnName("Aktenzeichen");
 
-                    b.Property<string>("Codename")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("varchar(128)")
-                        .HasColumnName("Deckname");
+                    b.Property<string>("ContactInfo")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Kontakt");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
@@ -3112,6 +3178,11 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("Beschreibung");
 
+                    b.Property<string>("FactionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("FraktionId");
+
                     b.Property<string>("HandlerId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -3129,6 +3200,20 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("GeaendertVonId");
 
+                    b.Property<string>("Notes")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Notizen");
+
+                    b.Property<string>("PersonId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("PersonId");
+
+                    b.Property<string>("RealName")
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)")
+                        .HasColumnName("Klarname");
+
                     b.Property<int>("Reliability")
                         .HasColumnType("int")
                         .HasColumnName("Zuverlaessigkeit");
@@ -3142,33 +3227,14 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("CaseNumber")
                         .IsUnique();
 
+                    b.HasIndex("FactionId");
+
                     b.HasIndex("HandlerId");
 
+                    b.HasIndex("PersonId")
+                        .IsUnique();
+
                     b.ToTable("Informanten");
-                });
-
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.InformantIdentity", b =>
-                {
-                    b.Property<string>("InformantId")
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("ContactInfo")
-                        .HasColumnType("longtext")
-                        .HasColumnName("Kontakt");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("longtext")
-                        .HasColumnName("Notizen");
-
-                    b.Property<string>("RealName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("varchar(256)")
-                        .HasColumnName("Klarname");
-
-                    b.HasKey("InformantId");
-
-                    b.ToTable("InformantIdentitaeten");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.InformantMeeting", b =>
@@ -6660,20 +6726,21 @@ namespace NOOSE_Website.Data.Migrations
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.Informant", b =>
                 {
+                    b.HasOne("NOOSE_Website.Data.Entities.Factions.Faction", null)
+                        .WithMany()
+                        .HasForeignKey("FactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
                         .WithMany()
                         .HasForeignKey("HandlerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
 
-            modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.InformantIdentity", b =>
-                {
-                    b.HasOne("NOOSE_Website.Data.Entities.Informants.Informant", null)
-                        .WithOne("Identity")
-                        .HasForeignKey("NOOSE_Website.Data.Entities.Informants.InformantIdentity", "InformantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.HasOne("NOOSE_Website.Data.Entities.People.Person", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.InformantMeeting", b =>
@@ -7173,8 +7240,6 @@ namespace NOOSE_Website.Data.Migrations
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Informants.Informant", b =>
                 {
-                    b.Navigation("Identity");
-
                     b.Navigation("Meetings");
                 });
 
