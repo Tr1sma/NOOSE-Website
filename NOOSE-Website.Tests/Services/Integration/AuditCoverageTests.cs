@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
@@ -21,6 +23,57 @@ public sealed class AuditCoverageTests
         return await db.AuditLogs
             .Where(a => a.EntityType == entityType && a.EntityId == entityId)
             .ToListAsync();
+    }
+
+    /// <summary>Stub acting agent for interceptor-backed tests.</summary>
+    private sealed class FixedUser : ICurrentUserService
+    {
+        public Task<CurrentUserInfo> GetAsync() => Task.FromResult(Get());
+
+        public CurrentUserInfo Get() => new("lead", "Falcon", false, false, false);
+    }
+
+    // The shared SqliteTestContext deliberately omits the interceptors, so wire one up here:
+    // this is the only place that pins down which property names the audit log actually records.
+    private static DbContextOptions<AppDbContext> WithAuditInterceptor(SqliteTestContext ctx)
+        => new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(ctx.Connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(new FixedUser()))
+            .Options;
+
+    [Fact]
+    public async Task Interceptor_DocumentEdit_HidesBodyAndMeta_AndLabelsTheRest()
+    {
+        using var ctx = new SqliteTestContext();
+        var options = WithAuditInterceptor(ctx);
+
+        using (var db = new AppDbContext(options))
+        {
+            db.Documents.Add(new Document { Id = "doc1", Title = "Sicherheitsüberprüfung", ContentHtml = "<p>alt</p>" });
+            db.SaveChanges();
+        }
+        using (var db = new AppDbContext(options))
+        {
+            var doc = await db.Documents.FirstAsync(d => d.Id == "doc1");
+            doc.ContentHtml = "<p>neu</p>";
+            doc.IsHRBClassified = true;
+            db.SaveChanges();
+        }
+
+        var row = (await AuditRowsAsync(ctx, nameof(Document), "doc1"))
+            .Single(a => a.Action == AuditAction.Modified);
+        var changes = AuditDisplay.Parse(row.ChangesJson);
+
+        // the body is recorded in the audit row but never rendered as a before/after pair
+        Assert.Contains("ContentHtml", row.ChangesJson);
+        Assert.DoesNotContain(changes, c => c.Alt.Contains("<p>") || c.New.Contains("<p>"));
+        // audit meta must not surface as user-facing field changes
+        Assert.DoesNotContain(changes, c => c.Field is "ModifiedAt" or "ModifiedById");
+
+        var flag = Assert.Single(changes);
+        Assert.Equal("VS-Stufe HRB", flag.Field);
+        Assert.Equal("Nein", flag.Alt);
+        Assert.Equal("Ja", flag.New);
     }
 
     [Fact]

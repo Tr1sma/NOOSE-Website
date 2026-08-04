@@ -331,6 +331,55 @@ public class AuditDisplayTests
         Assert.Equal("d", desc.New);
     }
 
+    // ---- CLR field names (what the interceptor actually stamps) -------------
+
+    [Theory]
+    [InlineData("IsHRBClassified", "VS-Stufe HRB")]
+    [InlineData("IsTRUClassified", "VS-Stufe TRU")]
+    [InlineData("IsClassified", "Verschlusssache")]
+    [InlineData("CaseNumber", "Aktenzeichen")]
+    [InlineData("Title", "Titel")]
+    [InlineData("Description", "Beschreibung")]
+    public void Parse_ClrFieldName_GetsGermanLabel(string field, string expected)
+    {
+        var change = Single($$"""{"{{field}}":["a","b"]}""");
+
+        Assert.Equal(expected, change.Field);
+    }
+
+    [Fact]
+    public void Parse_ClrEnumField_IsNamed()
+    {
+        var change = Single("""{"Classification":[0,2]}""");
+
+        Assert.Equal("Einstufung", change.Field);
+        Assert.NotEqual("2", change.New);
+    }
+
+    // ---- value clipping -----------------------------------------------------
+
+    [Fact]
+    public void Parse_WithMaxValueLength_ClipsLongValues()
+    {
+        var longText = new string('x', 300);
+
+        var change = AuditDisplay.Parse($$"""{"Description":["{{longText}}","b"]}""", maxValueLength: 20).Single();
+
+        Assert.Equal(21, change.Alt.Length); // 20 chars plus the ellipsis
+        Assert.EndsWith("…", change.Alt);
+        Assert.Equal("b", change.New);
+    }
+
+    [Fact]
+    public void Parse_WithoutMaxValueLength_KeepsFullValue()
+    {
+        var longText = new string('x', 300);
+
+        var change = Single($$"""{"Description":["{{longText}}","b"]}""");
+
+        Assert.Equal(300, change.Alt.Length);
+    }
+
     // ---- FieldChange record shape ------------------------------------------
 
     [Fact]

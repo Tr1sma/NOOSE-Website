@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="file:///C:/Users/Trist/.nuget/packages/mudblazor/9.5.0/staticwebassets/MudBlazor.min.css">
+<link rel="stylesheet" href="file:///C:/Users/Trist/source/repos/NOOSE-Website/NOOSE-Website/wwwroot/app.css">
+<style>
+  :root {
+    --mud-appbar-height: 60px;
+    --mud-default-borderradius: 8px;
+    --mud-zindex-appbar: 1300;
+    --mud-drawer-width-left: 0px;
+    --mud-palette-appbar-background: #11161D;
+    --mud-palette-appbar-text: #E6EDF3;
+    --mud-palette-background: #0E1116;
+    --mud-palette-surface: #161B22;
+    --mud-palette-divider: #222B36;
+    --mud-palette-text-primary: #E6EDF3;
+    --mud-palette-text-secondary: #9BA8B8;
+    --mud-palette-primary: #22D3EE;
+    --mud-elevation-2: 0 2px 6px rgba(0,0,0,.45);
+  }
+  html, body { height: 100%; margin: 0; background: #0E1116; color: #E6EDF3; font-family: sans-serif; }
+  .fakebar { height: 38px; background: #1A222B; border-radius: 6px; margin-bottom: 16px; }
+  .fakehdr { height: 42px; background: #1A222B; border-radius: 6px; }
+  .fakesub { height: 18px; width: 40%; background: #161B22; border-radius: 6px; }
+  .fakebtns { height: 36px; background: #1A222B; border-radius: 6px; }
+  .faketags { height: 40px; background: #161B22; border-radius: 6px; }
+  .fakebtn { height: 36px; display: flex; align-items: center; padding: 0 16px; color: #9BA8B8; }
+  .fakebtn.active { background: #22D3EE; color: #06222A; }
+  .fakegroup { padding: 12px 16px 4px; font-size: 11px; color: #5A6677; letter-spacing: .08em; }
+  .tall { background: repeating-linear-gradient(180deg,#1A222B 0 46px,#141A21 46px 48px); border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="mud-layout">
+  <header class="mud-appbar" style="position:fixed;top:0;left:0;right:0;height:60px;"></header>
+  <main class="mud-main-content">
+    <div class="mud-container mud-container-maxwidth-xl px-4 py-6">
+      <div class="fakebar"></div>
+      <div class="fakehdr mb-1"></div>
+      <div class="fakesub mb-6"></div>
+      <div class="fakebtns mb-4"></div>
+      <div class="mud-paper mud-elevation-2 pa-2 mb-4"><div class="faketags"></div></div>
+      <div class="mud-grid mud-grid-spacing-xs-3">
+        <div class="mud-grid-item mud-grid-item-xs-12 mud-grid-item-md-4 mud-grid-item-lg-3">
+          <div class="akte-steckkarte">
+            <div class="mud-paper mud-elevation-2 pa-4">
+              <div class="tall" style="height:1300px;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="mud-grid-item mud-grid-item-xs-12 mud-grid-item-md-8 mud-grid-item-lg-9">
+          <div class="mud-paper mud-elevation-2 d-flex flex-column flex-md-row record-rail-shell">
+            <nav class="record-rail">
+              <div class="fakegroup">ERMITTLUNG</div>
+              <div class="fakebtn active">Übersicht</div>
+              <div class="fakebtn">Kontakte</div>
+              <div class="fakebtn">Fahrzeuge</div>
+              <div class="fakebtn">Zugehörigkeit</div>
+              <div class="fakegroup">VERLAUF</div>
+              <div class="fakebtn">Kommentare</div>
+              <div class="fakebtn">Zeitstrahl</div>
+              <div class="fakebtn">Beobachtungen</div>
+              <div class="fakegroup">AKTE</div>
+              <div class="fakebtn">Dokumente</div>
+              <div class="fakebtn">Bilder</div>
+              <div class="fakebtn">Zusatzfelder</div>
+              <div class="fakegroup">ANALYSE</div>
+              <div class="fakebtn">KI-Kurzbrief</div>
+            </nav>
+            <div class="flex-grow-1 pa-4 record-rail-content">
+              <div class="tall" style="height:2000px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mud-container mud-container-maxwidth-xl px-4 pb-4">
+      <hr style="border-color:#222B36;">
+      <div style="text-align:center;color:#5A6677;font-size:12px;">Impressum · Datenschutz · Nutzungsbedingungen</div>
+    </div>
+  </main>
+</div>
+<pre id="diag" style="position:fixed;top:70px;right:8px;z-index:9999;background:#000;color:#0f0;font-size:12px;padding:8px;border:1px solid #0f0;"></pre>
+<script>
+window.addEventListener('load', () => {
+  const q = s => document.querySelector(s);
+  const c = q('.mud-main-content > .mud-container');
+  const g = q('.mud-grid');
+  const it = q('.mud-grid-item-lg-9');
+  const sh = q('.record-rail-shell');
+  const co = q('.record-rail-content');
+  const sk = q('.akte-steckkarte');
+  const cs = getComputedStyle(c);
+  const line = [];
+  line.push('has: ' + CSS.supports('selector(:has(div))'));
+  line.push('container disp=' + cs.display + ' h=' + cs.height + ' ov=' + cs.overflow);
+  line.push('container rect: ' + Math.round(c.getBoundingClientRect().height));
+  line.push('grid rect h=' + Math.round(g.getBoundingClientRect().height) + ' flex=' + getComputedStyle(g).flex + ' minH=' + getComputedStyle(g).minHeight);
+  line.push('item rect h=' + Math.round(it.getBoundingClientRect().height));
+  line.push('shell pos=' + getComputedStyle(sh).position + ' h=' + getComputedStyle(sh).height + ' rect=' + Math.round(sh.getBoundingClientRect().height));
+  line.push('content clientH=' + co.clientHeight + ' scrollH=' + co.scrollHeight + ' ovY=' + getComputedStyle(co).overflowY);
+  line.push('steck rect h=' + Math.round(sk.getBoundingClientRect().height));
+  line.push('doc scrollH=' + document.documentElement.scrollHeight + ' win=' + innerHeight);
+  q('#diag').textContent = line.join('\n');
+});
+</script>
+</body>
+</html>
