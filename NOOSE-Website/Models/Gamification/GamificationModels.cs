@@ -10,10 +10,10 @@ public sealed record AgentStats(
     public int Points => Records * 3 + Docs * 2 + Links + Classifications * 2 + Observations + SolvedCases * 5;
 }
 
-/// <summary>One ranked row on the leaderboard.</summary>
+/// <summary>One ranked row on the leaderboard (all five scored dimensions are surfaced so Points reconcile with the columns).</summary>
 public sealed record LeaderboardEntry(
     int Position, string AgentId, string Codename, int Points,
-    int Records, int Docs, int Links, int SolvedCases);
+    int Records, int Docs, int Links, int Classifications, int Observations, int SolvedCases);
 
 /// <summary>An earned badge resolved against the catalog for display.</summary>
 public sealed record BadgeView(string Key, string Label, string Icon, string Description, DateTime AwardedAt);

@@ -1001,9 +1001,13 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             var merged = (existing?.Hit ?? Enumerable.Empty<SearchHit>()).Concat(extra).ToList();
             if (existing is not null)
             {
-                groups.Remove(existing);
+                // replace in place so a supplemented category keeps its ranked position (remove+append sank it to the tail)
+                groups[groups.IndexOf(existing)] = existing with { Hit = merged };
             }
-            groups.Add(new SearchResultGroup(type, SideIndexLabels[type], merged));
+            else
+            {
+                groups.Add(new SearchResultGroup(type, SideIndexLabels[type], merged));
+            }
         }
     }
 

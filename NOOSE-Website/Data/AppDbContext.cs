@@ -577,7 +577,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(z => z.EntityType).HasMaxLength(128);
             b.Property(z => z.EntityId).HasMaxLength(64);
             b.Property(z => z.SourceId).HasMaxLength(64);
-            b.Property(z => z.Key).HasMaxLength(32);
+            b.Property(z => z.Key).HasMaxLength(NOOSE_Website.Services.SearchTokenizer.MaxPhoneticLength);
             b.HasIndex(z => z.Key);
             b.HasIndex(z => z.SourceId);
         });
@@ -587,7 +587,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(z => z.EntityType).HasMaxLength(128);
             b.Property(z => z.EntityId).HasMaxLength(64);
             b.Property(z => z.SourceId).HasMaxLength(64);
-            b.Property(z => z.Stem).HasMaxLength(64);
+            b.Property(z => z.Stem).HasMaxLength(NOOSE_Website.Services.SearchTokenizer.MaxStemLength);
             b.HasIndex(z => z.Stem);
             b.HasIndex(z => z.SourceId);
         });

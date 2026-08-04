@@ -18,7 +18,7 @@ public sealed class TopAgentAwardServiceTests
     private static ClaimsPrincipal Junior() => ClaimsPrincipalBuilder.Agent("low").WithRank(Rank.JuniorAgent).Build();
 
     private static List<LeaderboardEntry> Top(params string[] ids)
-        => ids.Select((id, i) => new LeaderboardEntry(i + 1, id, $"CN-{id}", 100 - i, 5, 2, 1, 1)).ToList();
+        => ids.Select((id, i) => new LeaderboardEntry(i + 1, id, $"CN-{id}", 100 - i, 5, 2, 1, 1, 1, 1)).ToList();
 
     private static void SeedConfig(SqliteTestContext ctx, bool enabled, int interval, bool note, DateTime? lastRun = null)
     {

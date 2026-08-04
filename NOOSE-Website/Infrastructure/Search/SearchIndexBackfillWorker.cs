@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Search;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Infrastructure.Search;
@@ -27,10 +29,17 @@ public sealed class SearchIndexBackfillWorker(IServiceScopeFactory scopeFactory,
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
             await using var db = await factory.CreateDbContextAsync(stoppingToken);
 
-            if (await db.SearchStemTokens.AnyAsync(stoppingToken))
+            // guard on a completion marker, not table emptiness: a mid-backfill crash or a concurrent live edit in the
+            // startup window would otherwise leave a non-empty table that permanently skips the rest of the corpus
+            if (await db.SystemSettings.AnyAsync(s => s.Key == SystemSettingKeys.SearchIndexBackfillDone, stoppingToken))
             {
-                return; // already populated — never re-scan on later starts
+                return; // already completed — never re-scan on later starts
             }
+
+            // wipe any partial rows (from a prior aborted run or interceptor writes during the delay) and rebuild
+            // from scratch so the pass is idempotent; the records themselves are re-indexed below
+            await db.SearchPhoneticKeys.ExecuteDeleteAsync(stoppingToken);
+            await db.SearchStemTokens.ExecuteDeleteAsync(stoppingToken);
 
             var total = 0;
             total += await IndexAllAsync(db, db.People, stoppingToken);
@@ -42,6 +51,10 @@ public sealed class SearchIndexBackfillWorker(IServiceScopeFactory scopeFactory,
             total += await IndexAllAsync(db, db.Taskforces, stoppingToken);
             total += await IndexAllAsync(db, db.Cases, stoppingToken);
             total += await IndexAllAsync(db, db.Jobs, stoppingToken);
+
+            // mark done only after every type is indexed, so an abort before here re-runs the whole pass next start
+            db.SystemSettings.Add(new SystemSetting { Key = SystemSettingKeys.SearchIndexBackfillDone, Value = "true" });
+            await db.SaveChangesAsync(stoppingToken);
 
             if (total > 0)
             {

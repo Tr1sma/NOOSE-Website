@@ -13,12 +13,12 @@ public sealed class GamificationServiceTests
 {
     private static GamificationService Svc(SqliteTestContext ctx) => new(ctx.Factory);
 
-    private static AuditLog CaseStatusChange(string agentId, string changesJson, string entityType = "Case")
+    private static AuditLog CaseStatusChange(string agentId, string changesJson, string entityType = "Case", string? entityId = null)
         => new()
         {
             Timestamp = DateTime.UtcNow,
             EntityType = entityType,
-            EntityId = Guid.NewGuid().ToString(),
+            EntityId = entityId ?? Guid.NewGuid().ToString(),
             Action = AuditAction.Modified,
             AgentId = agentId,
             AgentName = agentId,
@@ -52,21 +52,28 @@ public sealed class GamificationServiceTests
     }
 
     [Fact]
-    public async Task GetStats_CountsSolvedCases_OnlyCompletedTransitions()
+    public async Task GetStats_CountsSolvedCases_DistinctExistingCompletedOnly()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
         {
-            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}"));           // -> Completed (3): counts
-            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[0,1]}"));           // -> InProcessing: no
-            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Titel\":[\"a\",\"b\"]}"));    // no Status field: no
-            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}", entityType: "Person")); // wrong type: no
+            db.Cases.Add(Seed.Case(id: "cSolved"));
+            db.Cases.Add(Seed.Case(id: "cReopened"));
+            db.Cases.Add(Seed.Case(id: "cDeleted", configure: c => c.IsDeleted = true));
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}", entityId: "cSolved"));         // -> Completed: counts
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}", entityId: "cReopened"));       // completed
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[3,1]}", entityId: "cReopened"));       // reopened: ignored
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}", entityId: "cReopened"));       // re-completed: same case, dedup
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}", entityId: "cDeleted"));        // completed but soft-deleted: excluded
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[0,1]}", entityId: "cSolved"));         // -> InProcessing: no
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Titel\":[\"a\",\"b\"]}", entityId: "cSolved"));  // no Status field: no
+            db.AuditLogs.Add(CaseStatusChange("a1", "{\"Status\":[1,3]}", entityType: "Person", entityId: "cSolved")); // wrong type: no
             db.SaveChanges();
         }
 
         var stats = await Svc(ctx).GetStatsAsync("a1");
 
-        Assert.Equal(1, stats.SolvedCases);
+        Assert.Equal(2, stats.SolvedCases); // cSolved + cReopened counted once each; re-completion deduped, deleted excluded
     }
 
     [Fact]
@@ -173,5 +180,28 @@ public sealed class GamificationServiceTests
 
         Assert.Equal(1, week[0].Records);
         Assert.Equal(2, all[0].Records);
+    }
+
+    [Fact]
+    public async Task GetLeaderboard_SurfacesClassificationAndObservationColumns()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1"));
+            db.Observations.Add(new Observation { PersonId = "p1", ObservingAgentId = "a1", Start = DateTime.UtcNow, CreatedById = "a1" });
+            db.ClassificationHistory.Add(new ClassificationHistory
+            {
+                EntityType = nameof(Person), EntityId = "p1", Value = Classification.SuspicionCase, AgentId = "a1", Timestamp = DateTime.UtcNow,
+            });
+            db.SaveChanges();
+        }
+
+        var rows = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        var a1 = Assert.Single(rows);
+        Assert.Equal(1, a1.Classifications);
+        Assert.Equal(1, a1.Observations);
+        Assert.Equal(3, a1.Points); // Classifications*2 + Observations*1, so the score reconciles with the shown columns
     }
 }

@@ -42,6 +42,8 @@ else
                 <MudTh Style="text-align:right;">Akten</MudTh>
                 <MudTh Style="text-align:right;">Doks</MudTh>
                 <MudTh Style="text-align:right;">Verkn.</MudTh>
+                <MudTh Style="text-align:right;">Einstuf.</MudTh>
+                <MudTh Style="text-align:right;">Beob.</MudTh>
                 <MudTh Style="text-align:right;">Gelöst</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -51,6 +53,8 @@ else
                 <MudTd DataLabel="Akten" Style="text-align:right;">@context.Records</MudTd>
                 <MudTd DataLabel="Doks" Style="text-align:right;">@context.Docs</MudTd>
                 <MudTd DataLabel="Verkn." Style="text-align:right;">@context.Links</MudTd>
+                <MudTd DataLabel="Einstuf." Style="text-align:right;">@context.Classifications</MudTd>
+                <MudTd DataLabel="Beob." Style="text-align:right;">@context.Observations</MudTd>
                 <MudTd DataLabel="Gelöst" Style="text-align:right;">@context.SolvedCases</MudTd>
             </RowTemplate>
         </MudTable>

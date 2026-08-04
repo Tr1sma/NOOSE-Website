@@ -70,4 +70,15 @@ public sealed class SearchTokenizerTests
         Assert.Empty(SearchTokenizer.PhoneticKeys(null, "", "   "));
         Assert.Empty(SearchTokenizer.Stems(null, ""));
     }
+
+    [Fact]
+    public void Tokenizer_OverlongToken_TruncatedToColumnSize()
+    {
+        // an unbroken 100-char run must not overflow the varchar side-index columns (would abort SaveChanges on MySQL)
+        var giant = new string('a', 100);
+        var stems = SearchTokenizer.Stems(giant);
+        Assert.All(stems, s => Assert.True(s.Length <= SearchTokenizer.MaxStemLength));
+        Assert.Contains(stems, s => s.Length == SearchTokenizer.MaxStemLength); // truncation actually happened
+        Assert.All(SearchTokenizer.PhoneticKeys(giant), k => Assert.True(k.Length <= SearchTokenizer.MaxPhoneticLength));
+    }
 }

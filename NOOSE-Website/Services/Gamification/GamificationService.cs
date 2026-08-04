@@ -33,8 +33,7 @@ public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactor
             return AgentStats.Empty;
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var all = await ComputeAllAsync(db, null, cancellationToken);
-        var acc = all.GetValueOrDefault(agentId) ?? new StatAcc();
+        var acc = await ComputeForAgentAsync(db, agentId, cancellationToken);
         var badges = await db.AgentBadges.CountAsync(b => b.AgentId == agentId, cancellationToken);
         return acc.ToStats(badges);
     }
@@ -66,7 +65,8 @@ public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactor
             .Take(topN)
             .Select((x, i) => new LeaderboardEntry(
                 i + 1, x.Id, string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannt)" : x.Codename,
-                x.Stats.Points, x.Acc.Records, x.Acc.Docs, x.Acc.Links, x.Acc.SolvedCases))
+                x.Stats.Points, x.Acc.Records, x.Acc.Docs, x.Acc.Links,
+                x.Acc.Classifications, x.Acc.Observations, x.Acc.SolvedCases))
             .ToList();
     }
 
@@ -176,19 +176,73 @@ public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactor
             Get(r.Id).Observations += r.Count;
         }
 
-        // solved cases: audited status transitions to Completed
+        // solved cases: DISTINCT cases an agent ever transitioned to Completed (a case re-completed after reopening
+        // counts once), and only cases that still exist — soft-deleted cases drop out just like the Records count
+        var solved = new HashSet<(string Agent, string Case)>();
         foreach (var a in await db.AuditLogs
             .Where(x => x.AgentId != null && x.EntityType == nameof(Case) && x.Action == AuditAction.Modified
                 && x.ChangesJson != null && x.ChangesJson.Contains("Status") && (since == null || x.Timestamp >= since))
-            .Select(x => new { x.AgentId, x.ChangesJson })
+            .Select(x => new { x.AgentId, x.EntityId, x.ChangesJson })
             .ToListAsync(ct))
         {
             if (IsCompletedTransition(a.ChangesJson))
             {
-                Get(a.AgentId!).SolvedCases++;
+                solved.Add((a.AgentId!, a.EntityId));
             }
         }
+        foreach (var (agent, _) in await LiveSolvedAsync(db, solved, ct))
+        {
+            Get(agent).SolvedCases++;
+        }
 
+        return acc;
+    }
+
+    // keep only (agent, case) pairs whose case still exists (the global soft-delete filter drops deleted ones)
+    private static async Task<List<(string Agent, string Case)>> LiveSolvedAsync(
+        AppDbContext db, HashSet<(string Agent, string Case)> solved, CancellationToken ct)
+    {
+        if (solved.Count == 0)
+        {
+            return new List<(string, string)>();
+        }
+        var caseIds = solved.Select(s => s.Case).Distinct().ToList();
+        var live = (await db.Cases.Where(c => caseIds.Contains(c.Id)).Select(c => c.Id).ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+        return solved.Where(s => live.Contains(s.Case)).ToList();
+    }
+
+    // single-agent stats without materialising every agent (profile views are hot; avoid the org-wide grouped scans)
+    private static async Task<StatAcc> ComputeForAgentAsync(AppDbContext db, string agentId, CancellationToken ct)
+    {
+        var acc = new StatAcc();
+        Task<int> Created<T>(IQueryable<T> set) where T : class, IAuditable
+            => set.CountAsync(x => x.CreatedById == agentId, ct);
+
+        acc.Records += await Created(db.People);
+        acc.Records += await Created(db.Factions);
+        acc.Records += await Created(db.PersonGroups);
+        acc.Records += await Created(db.Parties);
+        acc.Records += await Created(db.Operations);
+        acc.Records += await Created(db.Cases);
+        acc.Docs = await Created(db.PersonDocs);
+        acc.Links = await Created(db.Links);
+        acc.Classifications = await db.ClassificationHistory.CountAsync(h => h.AgentId == agentId, ct);
+        acc.Observations = await db.Observations.CountAsync(o => o.ObservingAgentId == agentId, ct);
+
+        var solved = new HashSet<(string Agent, string Case)>();
+        foreach (var a in await db.AuditLogs
+            .Where(x => x.AgentId == agentId && x.EntityType == nameof(Case) && x.Action == AuditAction.Modified
+                && x.ChangesJson != null && x.ChangesJson.Contains("Status"))
+            .Select(x => new { x.EntityId, x.ChangesJson })
+            .ToListAsync(ct))
+        {
+            if (IsCompletedTransition(a.ChangesJson))
+            {
+                solved.Add((agentId, a.EntityId));
+            }
+        }
+        acc.SolvedCases = (await LiveSolvedAsync(db, solved, ct)).Count;
         return acc;
     }
 

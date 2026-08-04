@@ -37,7 +37,12 @@ public sealed class TopAgentAwardService(
 {
     private const int DefaultIntervalDays = 7;
     private const int TopN = 3;
+    // a fixed 24h poll can reach the boundary tick a hair under N days; a half-day slack keeps the cadence from drifting to N+1
+    private const double IntervalToleranceDays = 0.5;
     private static readonly string[] Medals = { "🥇", "🥈", "🥉" };
+
+    /// <summary>Outcome of an award run: whether the announcement went out (or Discord is intentionally off) and how many agents were named.</summary>
+    private readonly record struct AwardResult(bool Announced, int Count);
 
     public async Task<TopAgentConfig> GetConfigAsync(CancellationToken cancellationToken = default)
     {
@@ -63,35 +68,49 @@ public sealed class TopAgentAwardService(
         {
             return false;
         }
-        if (config.LastRun is { } last && (nowUtc - last).TotalDays < config.IntervalDays)
+        if (config.LastRun is { } last && (nowUtc - last).TotalDays < config.IntervalDays - IntervalToleranceDays)
         {
             return false; // interval not yet elapsed
         }
-        var count = await AwardAsync(config, actor: null, cancellationToken);
-        await StampLastRunAsync(nowUtc, cancellationToken); // advance the cadence even when there were no eligible agents
-        return count > 0;
+        var result = await AwardAsync(config, actor: null, cancellationToken);
+        // advance the cadence only when the announcement actually went out (or Discord is off); a failed
+        // post leaves LastRun stale so the next daily tick retries instead of silently losing the interval
+        if (result.Announced)
+        {
+            await StampLastRunAsync(nowUtc, cancellationToken);
+        }
+        return result.Count > 0;
     }
 
     public async Task<int> RunNowAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLeadership(actor);
         var config = await GetConfigAsync(cancellationToken);
-        var count = await AwardAsync(config, actor, cancellationToken);
-        await StampLastRunAsync(DateTime.UtcNow, cancellationToken);
-        return count;
+        var result = await AwardAsync(config, actor, cancellationToken);
+        if (result.Announced)
+        {
+            await StampLastRunAsync(DateTime.UtcNow, cancellationToken);
+        }
+        return result.Count;
     }
 
-    private async Task<int> AwardAsync(TopAgentConfig config, ClaimsPrincipal? actor, CancellationToken cancellationToken)
+    private async Task<AwardResult> AwardAsync(TopAgentConfig config, ClaimsPrincipal? actor, CancellationToken cancellationToken)
     {
         var top = await gamification.GetLeaderboardAsync(config.IntervalDays, TopN, cancellationToken);
         if (top.Count == 0)
         {
-            return 0;
+            return new AwardResult(Announced: true, Count: 0); // nothing to announce this interval; advance the cadence
         }
 
         var localNow = DateTime.Now;
         var kw = ISOWeek.GetWeekOfYear(localNow);
         var isoYear = ISOWeek.GetYear(localNow);
+
+        // file the (idempotent) personnel notes before the post so a post retry never re-files them
+        if (config.CreateNote)
+        {
+            await FileNotesAsync(top, kw, isoYear, actor?.GetCodename() ?? "System", cancellationToken);
+        }
 
         var sb = new StringBuilder();
         sb.Append("🏆 **Beste Agenten der Woche (KW ").Append(kw).Append(")**");
@@ -101,13 +120,19 @@ public sealed class TopAgentAwardService(
             sb.Append('\n').Append(medal).Append(' ').Append(top[i].Codename)
                 .Append(" — ").Append(top[i].Points).Append(" Punkte");
         }
-        await discord.PushCustomAsync(NotificationType.Announcement, sb.ToString(), "/bestenliste", cancellationToken);
+        var posted = await discord.PushCustomAsync(NotificationType.Announcement, sb.ToString(), "/bestenliste", cancellationToken);
+        // treat "sent" and "Discord intentionally off" as done; only a configured-but-failed post holds the cadence back to retry
+        var announced = posted || !await DiscordAnnouncementLiveAsync(cancellationToken);
+        return new AwardResult(announced, top.Count);
+    }
 
-        if (config.CreateNote)
-        {
-            await FileNotesAsync(top, kw, isoYear, actor?.GetCodename() ?? "System", cancellationToken);
-        }
-        return top.Count;
+    // is the announcement channel actually reachable (enabled + a webhook URL) — distinguishes "off" from "send failed"
+    private async Task<bool> DiscordAnnouncementLiveAsync(CancellationToken cancellationToken)
+    {
+        var cfg = await discord.GetConfigAsync(cancellationToken);
+        return cfg.Enabled
+            && cfg.Webhooks.TryGetValue(NotificationType.Announcement, out var url)
+            && !string.IsNullOrWhiteSpace(url);
     }
 
     private async Task FileNotesAsync(

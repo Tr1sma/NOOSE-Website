@@ -47,6 +47,9 @@ public static class SystemSettingKeys
     public const string BestAgentCreateNote = "BesterAgentVermerkAktiv";
     /// <summary>Last time the announcement ran (round-trip UTC); worker guard, not user-edited.</summary>
     public const string BestAgentLastRun = "BesterAgentZuletzt";
+
+    /// <summary>Set once the one-shot search side-index backfill has fully completed; guards against re-scanning. Not user-edited.</summary>
+    public const string SearchIndexBackfillDone = "SuchIndexBackfillFertig";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>
