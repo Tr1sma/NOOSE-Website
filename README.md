@@ -2,7 +2,7 @@
 
 **Zentrale Akten- und Intelligence-Datenbank der NOOSE (National Office of Security Enforcement)** — einer fiktiven Sicherheitsbehörde auf einem FiveM-/GTA-RP-Server.
 
-Live: **https://noose.info**
+Live Demo: **https://demo.noose.info** (nicht alle Features sind in der Demo verfügbar!)
 
 ---
 
