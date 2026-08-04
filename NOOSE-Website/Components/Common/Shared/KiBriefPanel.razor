@@ -1,0 +1,148 @@
+@using System.Security.Claims
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Services
+@inject IDossierSummaryService Dossier
+@inject ISnackbar Snackbar
+
+@if (!_loaded)
+{
+    <div class="d-flex justify-center pa-6">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
+    </div>
+}
+else if (_view is null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.AutoAwesome" Text="Kein Zugriff auf diese Akte." />
+}
+else if (!_view.Exists)
+{
+    @if (!_view.Configured)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.AutoAwesome"
+                    Text="Der KI-Assistent ist nicht konfiguriert. Ein Admin muss Endpoint, Modell und Schlüssel hinterlegen." />
+    }
+    else
+    {
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0" Style="gap:12px;">
+            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" Align="Align.Center">
+                Für diese Akte wurde noch kein KI-Kurzbrief erstellt.
+            </MudText>
+            @if (_canGenerate)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AutoAwesome"
+                           OnClick="() => GenerateAsync(false)" Disabled="_busy">Kurzbrief erstellen</MudButton>
+            }
+        </MudPaper>
+    }
+}
+else
+{
+    <MudStack Spacing="3">
+        @if (_busy)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+
+        @if (_view.IsStale)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="d-flex align-center"
+                      Icon="@Icons.Material.Filled.Update">
+                <div class="d-flex align-center justify-space-between" style="width:100%;gap:12px;">
+                    <span>Die Akte wurde seit dem letzten Kurzbrief geändert.</span>
+                    @if (_canGenerate)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning"
+                                   OnClick="() => GenerateAsync(true)" Disabled="_busy">Neu generieren</MudButton>
+                    }
+                </div>
+            </MudAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_view.TldrHtml))
+        {
+            <MudPaper Elevation="0" Class="pa-4" Style="background:rgba(34,211,238,0.08);border-left:3px solid var(--mud-palette-primary);border-radius:8px;">
+                <MudText Typo="Typo.overline" Color="Color.Primary">TL;DR</MudText>
+                <div class="ki-brief-body">@((MarkupString)_view.TldrHtml!)</div>
+            </MudPaper>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_view.SummaryHtml))
+        {
+            <div class="ki-brief-body">@((MarkupString)_view.SummaryHtml!)</div>
+        }
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                KI-generiert, ungeprüft · @(_view.Model ?? "?")
+                @if (_view.GeneratedAt is { } g)
+                {
+                    <text> · erstellt @g.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</text>
+                }
+            </MudText>
+            @if (_canGenerate && !_view.IsStale)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="() => GenerateAsync(true)" Disabled="_busy">Neu generieren</MudButton>
+            }
+        </MudStack>
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+
+    private DossierSummaryView? _view;
+    private bool _loaded;
+    private bool _busy;
+    private string? _loadedKey;
+
+    private bool _canGenerate =>
+        _view?.Configured == true && User is { } u && !u.IsPartner() && !u.IsDemo() && !u.IsOnlyReader();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = EntityType + "|" + EntityId;
+        if (key == _loadedKey || string.IsNullOrEmpty(EntityId) || User is null)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _loaded = false;
+        try
+        {
+            _view = await Dossier.GetAsync(EntityType, EntityId, User);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loaded = true;
+        }
+    }
+
+    private async Task GenerateAsync(bool force)
+    {
+        if (_busy || User is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            _view = await Dossier.GenerateAsync(EntityType, EntityId, User, force);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

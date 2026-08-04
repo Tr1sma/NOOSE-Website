@@ -202,6 +202,7 @@ builder.Services.AddHttpClient("llm", (sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 builder.Services.AddScoped<ILlmService, LlmService>();
+builder.Services.AddScoped<IDossierSummaryService, DossierSummaryService>();
 builder.Services.AddScoped<IOrgChartService, OrgChartService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();

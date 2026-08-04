@@ -17,8 +17,7 @@
   <!-- Auto build counter: bumps BuildNumber.txt on every real build (not IDE design-time evaluation).
        Must run before GetAssemblyVersion, since that target (a GenerateAssemblyInfo dependency) is what
        actually reads $(Version) into AssemblyVersion/FileVersion/InformationalVersion. -->
-  <Target Name="IncrementBuildNumber" BeforeTargets="GetAssemblyVersion"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' == 'true'">
+  <Target Name="IncrementBuildNumber" BeforeTargets="GetAssemblyVersion" Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' == 'true'">
     <ReadLinesFromFile File="$(BuildNumberFile)" Condition="Exists('$(BuildNumberFile)')">
       <Output TaskParameter="Lines" ItemName="_CurrentBuildNumberLines" />
     </ReadLinesFromFile>
@@ -34,6 +33,7 @@
   <ItemGroup>
     <!-- UI -->
     <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageReference Include="Markdig" Version="1.3.2" />
     <PackageReference Include="MudBlazor" Version="9.5.0" />
 
     <!-- Datenbank: MySQL 8.0 / MariaDB via Pomelo (EF Core 9, laeuft auf .NET 10) -->

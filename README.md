@@ -16,35 +16,126 @@ Alles ist auditiert (Created/Modified/Deleted), Soft-Delete-fähig und rang-/rol
 
 ## Features
 
-**Übergreifend**
-- **Globale Suche / Command-Palette (Strg+K):** indexierte Suche über Personen, Fraktionen, Gruppen, Parteien, Operationen, Vorgänge, Gesetze, Dokumente, Quellen, Kommentare; Fuzzy- und Deep-Scan-Modus; gespeicherte Suchprofile.
-- **Bidirektionale Verknüpfung:** generische Link-Engine — Person↔Person, Person↔Dok, Dok↔Vorgang, Gesetz↔Akte.
-- **Beziehungsgraph (vis-network):** interaktives Node-Link-Diagramm; Fokus-Modus mit Tiefensteuerung; Pfadsuche zwischen Akten; PNG-Export; Vollbild.
-- **Kalender (FullCalendar):** Dual-Modus (persönlich & behördenweit); filterbare Event-Quellen (Termine, Aufgaben, Beobachtungen, Operationen, Fraktions-Aktivitäten); Event↔Akte-Verlinkung.
-- **Rich-Text (Quill):** in Dok-Erstellung, Beobachtungs-Notizen und Dok-Quellen.
-- **Druckansichten:** für Personen, Fraktionen, Gruppen, Parteien, Vorgänge, Operationen, Aufgaben, Taskforces, Dokumente, Ankündigungen, Statistik.
-- **Papierkorb (Soft-Delete):** alle Akten-Typen, führungs-zugänglich, mit Wiederherstellung.
-- **Beobachtete Akten (Watchlist):** Akten per Stern folgen → Änderungs-Benachrichtigungen.
-- **Aktualitäts-Ampel:** farbcodierte Frische-Badges in allen Listen (Warn-/Stale-Schwellen je Akten-Typ).
-- **Einstufung & Zugriff:** Inline-Schloss-Icons, rollenbasierte Sichtbarkeit (Führung, TRU, HRB).
-
 **Akten & Bereiche**
-- **Personen** `/personen` — Kern-Akten: Profil, Aliase, Lebensstatus, Bedrohungs-Score, Verbindungen, Beobachtungen, Doks, Fotogalerie, Verlauf, Merge (Führung).
-- **Fraktionen** `/fraktionen` — Mitglieder, Ränge, Konflikte/Allianzen, Galerie, Aktivitäts-Timeline, Bedrohungs-Score, Einstufung.
-- **Parteien** `/parteien` — politische Organisationen mit Führung/Mitgliedern, Einstufung, zugeordneten Agenten.
-- **Personengruppen** `/personengruppen` — lose Sammlungen, Kategorie-Filter, Einstufung.
-- **Operationen** `/operationen` — Einsätze/Berichte: Zeitraum, Ergebnis, beteiligte Agenten, Status.
-- **Taskforces** `/taskforces` — Einsatzgruppen: Leitungsrollen (Chefermittler, CID-Lead, TRU-Lead), Mitglieder, Geltungsbereich, Genehmigungsstatus.
-- **Vorgänge** `/vorgaenge` — Ermittlungs-Dossiers: bündeln Personen, Operationen, Beobachtungen, Doks; Status/Einstufung; Verlauf.
-- **Dokumente** `/dokumente` — Dok-Bibliothek + Datei-Uploads; angepinnte Doks (Führung); VS-Stufen (Leadership/TRU/HRB); als Quelle verlinkbar.
-- **Gesetzbuch** `/gesetze` — durchsuchbare Gesetzes-Referenz (Paragraph, Titel, Strafmaß), verlinkbar.
-- **Aufgaben** `/aufgaben` — Kanban-Board mit Drag-and-Drop (Offen/In Arbeit/Erledigt/Abgebrochen), Priorität, Überfällig-Flags.
-- **Schwarzes Brett** `/brett` — Ankündigungen, gezielte Broadcasts, Glocken-Push, Lesebestätigungen.
-- **Statistik** `/statistik` — Metrik-Karten, Verteilungs-Charts, 12-Monats-Zeitreihen, Top-10-Bedrohungs-Rankings, CSV-/PDF-Export.
-- **Organigramm** `/organigramm` — Hierarchie nach Rang; TRU-/HRB-Quergruppen; Taskforce-Struktur.
-- **Personal** `/personal` — Personalakten: Dienstgrad-Verlauf, Belobigungen, Disziplinar, Beförderungen.
-- **Recruiting / Bewerbungen** `/bewerbungen`, `/portal` — HRB-Workflow, Bewerber-Portal, Test-Builder, Messaging.
-- **Mein Profil** `/profil`, **Admin** `/admin/basisdaten`, **Öffentlich** `/`, `/karriere`.
+- **Personen** `/personen` — Kern-Akten: Steckbrief (Aliase, Telefone, Fahrzeuge/Kennzeichen, Orte, Waffen), Lebensstatus, Aktenzeichen (`NOOSE-P-2026-0001`), Fotogalerie, Zugehörigkeiten mit Historie.
+- **Personen-Doks** — Verhöre/Maßnahmen mit Ausgang (freigelassen/injiziert/erschossen); „Erschossen" → Lebensstatus Tot mit 20-Min-Respawn-Logik.
+- **Duplikat-Erkennung** beim Anlegen (Name/Telefon) und **Merge** zweier Personenakten inkl. aller Verknüpfungen (Führung).
+- **Observationen** — Überwachungseinträge mit Zeit/Ort an Personen und Organisationen.
+- **Fraktionen** `/fraktionen` — Mitglieder (Bulk-Pflege, Leitungs-Flags), Ränge, Waffenbestand, Inventar, Drogenrouten, Konflikte/Allianzen, Erkennungsfarbe, Galerie.
+- **Personengruppen** `/personengruppen` — lose Sammlungen/PoI mit Mitgliedern und Erfassungsfortschritt „x/y Mitglieder mit Akte".
+- **Parteien** `/parteien` — politische Organisationen mit Leitung, Mitgliedern, Ausrichtung.
+- **Vorgänge** `/vorgaenge` — Fallakten, die Personen, Doks, Operationen und Observationen bündeln; eigener Status, Fallbearbeiter/Leitung.
+- **Operationen** `/operationen` — Einsatzberichte: Zeitraum, Ort, Beteiligte, Ergebnis, Status.
+- **Taskforces** `/taskforces` — Leitungsrollen (Chefermittler, CID-Lead, TRU-Lead), Geltungsbereich, Genehmigungs-Workflow, **Live-Taskforce-Chat**.
+- **Aufgaben** `/aufgaben` — Kanban-Board mit Drag-and-Drop, Prioritäten, Fälligkeit, „Nur meine"-Filter, gestuften Fälligkeits-Erinnerungen.
+- **Termine & Kalender** `/kalender` — Termin-Akten mit Sichtbarkeitsstufen und Teilnehmern; FullCalendar-Ansicht (Monat/Woche/Liste, „Mein"/„Behörden"-Modus), aggregiert Termine, Operationen, Observationen, Fristen.
+- **Dienstbesprechungen** `/besprechungen` — Tagesordnung, Protokoll-Notizen, Anwesenheitsliste, Klonen der Folgebesprechung, Erinnerungs-Worker (24 h/30 min).
+- **Abmeldungen** `/abmeldungen` — Urlaub/Krank/RP-Pause mit Sichtbarkeits-Scopes, Kenntnisnahme und Anwesenheits-Statistik mit Anomalie-Ampel.
+- **Dienst-Aktivitäten** `/aktivitaeten` — Diensteinträge der Agenten mit Vorlagen und Akten-Verknüpfung.
+- **Informanten** `/informanten` — V-Personen mit Deckname, Zuverlässigkeit, geheimer Identität (nur Führungsagent), Treffen-Protokollen.
+- **Dokumente** `/dokumente` — Dokumenten-Bibliothek mit Rich-Text (Quill), Kategorien, Anheften, Datei-Anhängen; VS-Stufen (Leadership/TRU/HRB) und individuelle Freigabe-/Sperrlisten pro Agent.
+- **Datei-Bibliothek** — zentrale Upload-Ablage (Formulare, SOPs) mit Kategorien und Download-Endpoint.
+- **Gesetzbuch** `/gesetze` — durchsuchbare Gesetzes-Referenz, verknüpfbar mit Fällen/Doks, partner-freigebbar.
+- **Schwarzes Brett** `/brett` — Ankündigungen und gezielte Broadcasts (alle/Taskforce/TRU/Rang/HRB), Glocken-Push, Pflicht-Quittierung mit Zähler.
+- **Fahndung** `/fahndung` — automatische Fahndungsliste ab konfigurierbarer Gefahrenstufe plus manuelle Ausschreibungen; Filter „Nur Flüchtige"; Sektionen Observationen und Vernehmungen.
+
+**Querschnitt pro Akte (generisch an jeder Akte)**
+- **Bidirektionale Verknüpfungen** zwischen allen Akten (Standard/Konflikt/Bündnis), in beide Richtungen klickbar.
+- **Person↔Person-Beziehungen** (Familie/Verbündeter/Feind/…) plus automatische „Kollegen"-Links bei gemeinsamer Mitgliedschaft.
+- **Quellen/Anhänge** — Upload, Link, intern, Freitext, Dokument; pinnbar.
+- **Kommentare** mit **@-Erwähnungen** (Akten + Agenten, verlinkt, mit Benachrichtigung inkl. Edit-Delta).
+- **Tags** mit Picker, Verwaltung und Nutzungsstatistik.
+- **Custom-Felder** — admin-definierte Zusatzfelder je Aktentyp (6 Feldtypen).
+- **Wiedervorlagen** mit Fälligkeit, Erledigen/Wiederöffnen und Hintergrund-Erinnerung an Zuständige + Follower.
+- **Zeitstrahl** pro Akte — Audit- und Fach-Ereignisse chronologisch, mit Kategorie-Filtern.
+- **Änderungs-Historie** — vollständiger Alt→Neu-Diff aus dem Audit-Log.
+- **Aktualitäts-Ampel** — Frische-Badges mit Warn-/Stale-Schwellen je Aktentyp.
+- **Einstufung mit Verlauf** — Prüffall → Verdachtsfall → Gesichert staatsgefährdend; höchste Stufe nur ab Senior Special Agent, sonst per Antrag.
+- **Verschlusssachen** — Sichtbarkeit nur Führung/zugewiesene Agenten; greift in Suche, Listen, Graph und Zeitstrahl.
+- **Verknüpfungs-Vorschläge** — Hinweise über Signale (gleiche Telefonnummer/Fraktion/Tag), 1-Klick-Verknüpfen.
+- **Druckansicht/PDF-Export** für nahezu alle Aktenarten.
+- **Papierkorb (Soft-Delete)** — 13 Akten-Typen, Wiederherstellung durch Führung.
+
+**Suche & Navigation**
+- **Globale Volltextsuche** `/suche` über alle Aktenarten inkl. Doks, Quellen und Kommentare.
+- **Smart-Suche** (tippfehlertolerant) und **Deep-Scan** (alle Nebenfelder inkl. Steckbrief).
+- **Gespeicherte Suchen** als wiederaufrufbare Chips; Tag-/Kategorie-Filter.
+- **Befehlspalette (Strg+K)** und Schnellsuche in der Topbar.
+- **Quick-Add** — Schnellerfassung beliebiger Akten per Plus-Button.
+- **Personalisierbare Navigation** — Favoriten, Reihenfolge, Ausblenden, individuelle Startseite, „Zuletzt besucht".
+- **Legacy-Redirects** — entfernte Routen leiten auf die Hub-Seiten um.
+
+**Analyse & Visualisierung**
+- **Beziehungsgraph** `/graph` (vis-network) — Fokus-/Gesamtmodus, Tiefe 1–3, Typ-/Art-Filter, Vollbild, PNG-Export, gespeicherte Layouts pro Agent.
+- **Pfad-Suche** — „Wie hängen A und B zusammen?" (kürzeste Kette).
+- **Graph-Analytik** — Betweenness-Zentralität und Community Detection.
+- **Ermittlungshinweise** `/ermittlungshinweise` — Link-Vorhersagen, neue Konflikte, veraltete Einstufungen; ignorierbar.
+- **Chronik** `/chronik` — behördenweiter, zoombarer Zeitstrahl mit Aktentyp-/Agent-Filtern.
+- **Organigramm** `/organigramm` — Dienstgrad-Hierarchie, TRU/HRB, Taskforce-Besetzung (Klarname nur Führung).
+- **KI-Kurzbrief** pro Akte — LLM-generierte Dossier-Zusammenfassung mit Caching und Staleness-Erkennung.
+- **KI-Assistent** `/ki-assistent` — Chat zum Formulieren/Zusammenfassen/Analysieren, mit Namens-Redaktion.
+
+**Bedrohungs-Score (automatisch, admin-konfigurierbar)**
+- **Fraktions-Score** — S1 Aktivitäts-Heat, S2 Organisation & Reichweite, S3 Konflikt & Bündnis, S4 Netzwerk-Zentralität.
+- **Personen-Score** — P1 Maßnahmen, P2 Bewaffnung & Flucht, P3 Observation, P4 soziale Gefahr, P5 Netzwerk.
+- Halbwertszeit-Decay, Sättigungskurven, Teilscore-Treiber, Konfidenz-Wert, Triage-Hinweise.
+- **Täglicher Sweep-Worker** rechnet alle Scores neu; Score-Historie mit Sparklines, Trends, Top-Movern.
+- **Threat-Spike-Alarm** an die Führung bei Score-Sprüngen.
+- Alle Gewichte/Caps admin-editierbar inkl. Vorschau-Verteilung.
+
+**Dashboard & Statistik**
+- **Dashboard** `/dashboard` — Kennzahlen-Kacheln, Verteilungs-Charts, Top-Gefährdungen, veraltete Akten, fällige Wiedervorlagen, Aktivitäts-Feed.
+- **Statistik** `/statistik` — Verteilungen (Donuts), 12-Monats-Zeitreihen, Top-Listen; VS-gefiltert.
+- **CSV-Export** (Excel-tauglich, UTF-8-BOM) und Druck/PDF der Statistik.
+- **Bedrohungs-Trend**-Auswertung mit Verlaufskurven.
+- **Automatischer Lagebericht** — monatlicher Snapshot, Archiv `/lageberichte`, Führungs-Benachrichtigung, täglicher Worker.
+
+**Benachrichtigungen & Live-Updates**
+- **In-App-Glocke** mit 16 Benachrichtigungstypen und Ungelesen-Zähler.
+- **Live-Push** via SignalR-Broadcaster (Glocke, Taskforce-Chat, Bewerbungen, Freigaben, Quittierungen, Watchlist).
+- **Discord-Outgoing-Webhooks** pro Benachrichtigungskategorie, konfigurierbar, mit Test-Funktion.
+- **Hintergrund-Worker** — Wiedervorlagen (5 min), Aufgaben-Erinnerung (15 min, gestuft), Besprechungs-Erinnerung (5 min), Threat-Sweep (täglich), Lagebericht (täglich).
+
+**Personal & Recruiting**
+- **Personalakten** `/personal` — Dienstgrad-Verlauf, 7 Vermerk-Arten (Lob/Disziplinar/…), Beförderungsanträge, Ausbildungsmodule.
+- **Beförderungs-Workflow** — Vorschlag ab Führung, Entscheidung ab Deputy Director.
+- **Agenten-Verwaltung** `/admin/agenten` — Rang, Status, Flags (Admin/TRU/HRB/TeamLead), Sperren, Kündigung, Namensänderungs-Workflow.
+- **Einladungs-Links** — Token mit Ablaufdatum, einlösbar/widerrufbar (Invite-only-Onboarding).
+- **Bewerber-Portal** `/portal` (ohne Login) — Bewerbung einreichen, Eignungstest ablegen, Status einsehen.
+- **Bewerbungs-Pipeline** `/bewerbungen` — Eingereicht → Sicherheitsprüfung → Test → Gespräch → Angenommen/Abgelehnt.
+- **Test-Builder** — MC/Ja-Nein/Freitext mit Auto-Bewertung (Fuzzy-Matching) und manueller Nachkorrektur.
+- **Anschreiben-Vorlagen** mit Tokens (Absendername immer geschwärzt), interne Threads, Nachrichten an Bewerber.
+- **Bewerbungssperren**/Blacklist mit Verkürzen/Aufheben; Übernahme als Agent inkl. Personen-Verknüpfung.
+
+**Anträge & Freigaben**
+- **Zentraler Posteingang** `/admin/freigaben` mit Live-Updates.
+- Account-Freigaben, Hochstufungs-Anträge, Taskforce-Genehmigungen, Beförderungen, Stammdatenänderungen, Partner-Freigaben.
+- Einheitlicher Genehmigen/Ablehnen-Workflow mit Begründung und Verlauf.
+
+**Partner-Zugriff (DoJ/LSPD/LSMD)**
+- Partner-Accounts mit Behörde + Rang, strikt read-only, eigene eingeschränkte Navigation.
+- **Akten-Freigaben** an Behörde oder Einzelperson, inkl. Kind-Datensätzen; typ-weite Massenfreigaben.
+- **Sichtbarkeits-Policies** pro Behörde/Rang — welche Akten-Typen und Detail-Tabs sichtbar sind.
+
+**System & Administration**
+- **Audit-Log** — jede Änderung mit Wer/Wann/Alt→Neu, unveränderlich, filterbar.
+- **Zugriffsprotokoll** — wer hat welche Akte wann angesehen.
+- **Gegenaufklärungs-Cockpit** — Zugriffs-Heatmap, Agenten-Profile, Insider-Flags (z. B. Off-Hours-Zugriffe).
+- **Wartungsmodus + Ankündigungsbanner** (Info/Warnung/Fehler).
+- **Theming** — Dark-Mode „Anthrazit + Cyan"; Akzentfarben und Logo zur Laufzeit änderbar.
+- **Wertelisten** — 9 auto-lernende Vorschlagskataloge mit Umbenennen/Löschen und Massenpropagation; Enum-Anzeigenamen per DB überschreibbar.
+- **Vorlagen-Systeme** — Dok-, Dokument-, Aktivitäts-, Personal-Vorlagen mit `{{Platzhalter}}`-Ersetzung beim Anwenden.
+- **Einstellungen-Hub** `/einstellungen` — 17 Sektionen (System, Vorlagen, Custom-Felder, Tags, Ampel, Score, Audit, Wertelisten …).
+- **Geschützte Uploads** außerhalb `wwwroot`, autorisierte Download-Endpoints, Content-Type-Whitelists, Pfad-Traversal-Schutz.
+- **Health-Check** `/health`, automatische DB-Migration beim Start, Prod-/Lokal-Umschaltung per Connection-Probe.
+
+**Auth & Demo**
+- **Discord-OAuth** als einziger Login (Rate-Limit), Account-Lifecycle Ausstehend → Freigabe → Aktiv.
+- **6 Dienstgrade** + Flags (Admin/TRU/HRB/TeamLead) → 17 Policies; Berechtigungen serverseitig im Service-Layer erzwungen.
+- **OnlyReader** (TeamLead ohne Admin) — liest alles, schreibt nichts, sieht nie Klarnamen.
+- **Kill-Switch** — Sperrung/Rangänderung beendet Sessions in ≤30 s (Security-Stamp-Rotation).
+- **Demo-Instanz** (demo.noose.info) — read-only, anonym browsbar als Demo-Agent, idempotenter Demo-Daten-Seed.
+- **Deploy/Backup-Skripte** — `deploy.ps1` (tar → scp → Service-Swap → Health-Check, mit Demo-Schutz) und `backup-db.ps1` (mysqldump + Download, Retention).
 
 ---
 

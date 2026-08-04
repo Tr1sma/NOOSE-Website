@@ -196,6 +196,12 @@ else
                     <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
                 </RecordSection>
                 }
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="KI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
+                    <KiBriefPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
+                </RecordSection>
+                }
             </RecordSectionRail>
             }
         </MudItem>

@@ -168,6 +168,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<ThreatScoreHistory> ThreatScoreHistory => Set<ThreatScoreHistory>();
     public DbSet<Followup> Followups => Set<Followup>();
 
+    // cached AI dossier summaries (one current row per record)
+    public DbSet<DossierSummary> DossierSummaries => Set<DossierSummary>();
+
     // archived monthly situation reports
     public DbSet<SituationReport> SituationReports => Set<SituationReport>();
 
@@ -242,6 +245,17 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.EntityId).HasMaxLength(64);
             b.Property(a => a.DetailJson).HasColumnType("longtext");
             b.HasIndex(a => new { a.EntityType, a.EntityId, a.Timestamp });
+        });
+
+        modelBuilder.Entity<DossierSummary>(b =>
+        {
+            b.Property(a => a.EntityType).HasMaxLength(128);
+            b.Property(a => a.EntityId).HasMaxLength(64);
+            b.Property(a => a.ContentHash).HasMaxLength(64);
+            b.Property(a => a.Model).HasMaxLength(128);
+            b.Property(a => a.TldrHtml).HasColumnType("longtext");
+            b.Property(a => a.SummaryHtml).HasColumnType("longtext");
+            b.HasIndex(a => new { a.EntityType, a.EntityId }).IsUnique();
         });
 
         modelBuilder.Entity<GraphCanvasLayout>(b =>

@@ -205,6 +205,13 @@ else
                     <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
                 </RecordSection>
                 }
+                @* KI-Kurzbrief: internal only *@
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="KI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
+                    <KiBriefPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
+                </RecordSection>
+                }
             </RecordSectionRail>
             }
         </MudItem>
