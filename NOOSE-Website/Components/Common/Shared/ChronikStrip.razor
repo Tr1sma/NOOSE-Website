@@ -1,0 +1,144 @@
+@* Reusable horizontal vis-timeline strip. Presentational: takes events, raises range/click callbacks. Reuse anchor for the workbench scrubber. *@
+@using System.Text.Json
+@using NOOSE_Website.Models.Timeline
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<div id="@_containerId" style="width:100%;min-height:320px;"></div>
+@if (_loadError)
+{
+    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">Zeitstrahl konnte nicht geladen werden.</MudText>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ChronikEvent> Events { get; set; } = Array.Empty<ChronikEvent>();
+    [Parameter] public EventCallback<(DateTime From, DateTime To)> OnRangeChanged { get; set; }
+
+    private readonly string _containerId = "chronik-" + Guid.NewGuid().ToString("N");
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<ChronikStrip>? _ref;
+    private bool _ready;
+    private bool _loadError;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/chronik.js?v=1");
+            _ref = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("render", _containerId, BuildJson(), _ref);
+            _ready = true;
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch
+        {
+            _loadError = true;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_ready || _module is null)
+        {
+            return;
+        }
+        try
+        {
+            await _module.InvokeVoidAsync("setzeItems", _containerId, BuildJson());
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+
+    [JSInvokable]
+    public async Task OnItemClick(string href)
+    {
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            await InvokeAsync(() => Nav.NavigateTo(href));
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnRangeChangedJs(string fromIso, string toIso)
+    {
+        if (!OnRangeChanged.HasDelegate
+            || !DateTime.TryParse(fromIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var from)
+            || !DateTime.TryParse(toIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var to))
+        {
+            return;
+        }
+        await InvokeAsync(() => OnRangeChanged.InvokeAsync((from, to)));
+    }
+
+    private string BuildJson()
+    {
+        var groups = Events.Select(e => e.EntityType).Distinct()
+            .Select(t => new { id = t, content = TypeLabel(t) }).ToList();
+        var items = Events.Select((e, i) => new
+        {
+            id = i,
+            group = e.EntityType,
+            content = System.Net.WebUtility.HtmlEncode(e.Name),
+            start = e.Timestamp.ToLocalTime().ToString("s"),
+            title = System.Net.WebUtility.HtmlEncode(e.ActorName is { } a ? $"{e.Title} · {a}" : e.Title),
+            color = CatColour(e.Category),
+            href = e.Href,
+        }).ToList();
+        return JsonSerializer.Serialize(new { groups, items });
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        nameof(NOOSE_Website.Data.Entities.People.Person) => "Person",
+        nameof(NOOSE_Website.Data.Entities.Factions.Faction) => "Fraktion",
+        nameof(NOOSE_Website.Data.Entities.Groups.PersonGroup) => "Personengruppe",
+        nameof(NOOSE_Website.Data.Entities.Parties.Party) => "Partei",
+        nameof(NOOSE_Website.Data.Entities.Operations.Operation) => "Operation",
+        nameof(NOOSE_Website.Data.Entities.Cases.Case) => "Vorgang",
+        nameof(NOOSE_Website.Data.Entities.Taskforces.Taskforce) => "Taskforce",
+        nameof(NOOSE_Website.Data.Entities.Jobs.Job) => "Aufgabe",
+        "Document" => "Dokument",
+        "Law" => "Gesetz",
+        _ => type,
+    };
+
+    private static string CatColour(TimelineCategory c) => c switch
+    {
+        TimelineCategory.Asset => "#3FB950",
+        TimelineCategory.Change => "#22D3EE",
+        TimelineCategory.Deletion => "#F85149",
+        TimelineCategory.Restoration => "#7C8CF8",
+        TimelineCategory.Classification => "#D29922",
+        TimelineCategory.Doc => "#58A6FF",
+        TimelineCategory.Observation => "#58A6FF",
+        TimelineCategory.Relation => "#A371F7",
+        TimelineCategory.Membership => "#2DD4BF",
+        TimelineCategory.Allocation => "#E6EDF3",
+        TimelineCategory.Link => "#7C8CF8",
+        TimelineCategory.Followup => "#D29922",
+        TimelineCategory.Activity => "#F0883E",
+        _ => "#8B98A8",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("zerstoere", _containerId);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+        _ref?.Dispose();
+    }
+}

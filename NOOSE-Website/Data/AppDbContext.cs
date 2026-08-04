@@ -18,6 +18,8 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Data.Entities.Leads;
+using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Meetings;
@@ -62,6 +64,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<PersonRelation> PersonRelations => Set<PersonRelation>();
 
     public DbSet<SavedSearch> SavedSearch => Set<SavedSearch>();
+    public DbSet<GraphCanvasLayout> GraphCanvasLayouts => Set<GraphCanvasLayout>();
 
     // factions
     public DbSet<Faction> Factions => Set<Faction>();
@@ -122,6 +125,10 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // watchlist (followed records)
     public DbSet<WatchlistEntry> Watchlists => Set<WatchlistEntry>();
+    public DbSet<LeadDismissal> LeadDismissals => Set<LeadDismissal>();
+    public DbSet<Informant> Informants => Set<Informant>();
+    public DbSet<InformantIdentity> InformantIdentities => Set<InformantIdentity>();
+    public DbSet<InformantMeeting> InformantMeetings => Set<InformantMeeting>();
 
     // jobs/to-dos & assignments
     public DbSet<Job> Jobs => Set<Job>();
@@ -158,6 +165,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- recency + followups ----
     public DbSet<RecencyThreshold> RecencyThresholds => Set<RecencyThreshold>();
     public DbSet<ThreatScoreConfig> ThreatScoreConfigs => Set<ThreatScoreConfig>();
+    public DbSet<ThreatScoreHistory> ThreatScoreHistory => Set<ThreatScoreHistory>();
     public DbSet<Followup> Followups => Set<Followup>();
 
     // archived monthly situation reports
@@ -212,6 +220,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.AgentName).HasMaxLength(128);
             b.HasIndex(a => new { a.EntityType, a.EntityId });
             b.HasIndex(a => a.Timestamp);
+            // window scans: Leads / Chronik / Gamification
+            b.HasIndex(a => new { a.EntityType, a.Timestamp });
         });
 
         modelBuilder.Entity<AccessLog>(b =>
@@ -221,6 +231,62 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.AgentId).HasMaxLength(64);
             b.Property(a => a.AgentName).HasMaxLength(128);
             b.HasIndex(a => new { a.EntityType, a.EntityId });
+            // counter-intelligence cockpit: window + per-agent scans
+            b.HasIndex(a => a.Timestamp);
+            b.HasIndex(a => new { a.AgentId, a.Timestamp });
+        });
+
+        modelBuilder.Entity<ThreatScoreHistory>(b =>
+        {
+            b.Property(a => a.EntityType).HasMaxLength(128);
+            b.Property(a => a.EntityId).HasMaxLength(64);
+            b.Property(a => a.DetailJson).HasColumnType("longtext");
+            b.HasIndex(a => new { a.EntityType, a.EntityId, a.Timestamp });
+        });
+
+        modelBuilder.Entity<GraphCanvasLayout>(b =>
+        {
+            b.Property(a => a.AgentId).HasMaxLength(64);
+            b.Property(a => a.Name).HasMaxLength(160);
+            b.Property(a => a.LayoutJson).HasColumnType("longtext");
+            b.HasIndex(a => a.AgentId);
+        });
+
+        modelBuilder.Entity<LeadDismissal>(b =>
+        {
+            b.Property(a => a.LeadKey).HasMaxLength(256);
+            b.HasIndex(a => a.LeadKey);
+        });
+
+        modelBuilder.Entity<Informant>(b =>
+        {
+            b.Property(i => i.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(i => i.Codename).HasMaxLength(128).IsRequired();
+            b.Property(i => i.Description).HasColumnType("longtext");
+            b.Property(i => i.HandlerId).HasMaxLength(64);
+            b.HasIndex(i => i.CaseNumber).IsUnique();
+            b.HasIndex(i => i.HandlerId);
+            // never cascade off the Agent table
+            b.HasOne<Agent>().WithMany().HasForeignKey(i => i.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(i => i.Identity).WithOne()
+                .HasForeignKey<InformantIdentity>(x => x.InformantId).OnDelete(DeleteBehavior.Cascade);
+            b.HasMany(i => i.Meetings).WithOne()
+                .HasForeignKey(m => m.InformantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InformantIdentity>(b =>
+        {
+            b.HasKey(x => x.InformantId);
+            b.Property(x => x.RealName).HasMaxLength(256).IsRequired();
+            b.Property(x => x.ContactInfo).HasColumnType("longtext");
+            b.Property(x => x.Notes).HasColumnType("longtext");
+        });
+
+        modelBuilder.Entity<InformantMeeting>(b =>
+        {
+            b.Property(m => m.Location).HasMaxLength(256);
+            b.Property(m => m.Content).HasColumnType("longtext");
+            b.HasIndex(m => m.InformantId);
         });
 
         modelBuilder.Entity<Person>(b =>

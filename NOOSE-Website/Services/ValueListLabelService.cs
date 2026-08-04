@@ -31,6 +31,9 @@ public class ValueListLabelService(IDbContextFactory<AppDbContext> dbFactory) : 
         {
             row.Label = label;
         }
+        // EnumLabelOverride is not IAuditable → record the label change explicitly
+        db.AuditLogs.Add(ManualAudit.Row(nameof(EnumLabelOverride), $"{list}:{key}", AuditAction.Modified, actor,
+            ManualAudit.Change("Bezeichnung", null, label)));
         await db.SaveChangesAsync(cancellationToken);
         await ReloadAsync(cancellationToken);
     }
@@ -45,6 +48,9 @@ public class ValueListLabelService(IDbContextFactory<AppDbContext> dbFactory) : 
         await db.EnumLabelOverrides
             .Where(o => o.List == list && o.Key == key)
             .ExecuteDeleteAsync(cancellationToken);
+        // audit manually: ExecuteDelete bypassed the interceptor
+        db.AuditLogs.Add(ManualAudit.Row(nameof(EnumLabelOverride), $"{list}:{key}", AuditAction.Deleted, actor));
+        await db.SaveChangesAsync(cancellationToken);
         await ReloadAsync(cancellationToken);
     }
 

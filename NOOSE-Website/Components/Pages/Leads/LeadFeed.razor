@@ -1,0 +1,133 @@
+@page "/ermittlungshinweise"
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Leads
+@inject ILeadService LeadService
+@inject ILinkService LinkService
+@inject ISnackbar Snackbar
+
+<PageTitle>Ermittlungshinweise · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Lightbulb"
+            Title="Ermittlungshinweise"
+            Subtitle="Algorithmisch erzeugte Hinweise – mögliche Verbindungen, neue Konflikte, veraltete Einstufungen." />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_groups.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Lightbulb" Text="Aktuell keine offenen Hinweise." />
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true">
+        @foreach (var group in _groups)
+        {
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@LeadKindDisplay.Icon(group.Kind)" Color="Color.Primary" />
+                        <MudText>@LeadKindDisplay.Name(group.Kind)</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@group.Leads.Count</MudChip>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudList T="string" Dense="false">
+                        @foreach (var lead in group.Leads)
+                        {
+                            <MudListItem T="string">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+                                    <div>
+                                        <MudText Typo="Typo.body1"><b>@lead.Detail</b></MudText>
+                                    </div>
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                        @if (!string.IsNullOrWhiteSpace(lead.PrimaryHref))
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" Href="@lead.PrimaryHref">@lead.PrimaryName</MudButton>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(lead.SecondaryHref))
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" Href="@lead.SecondaryHref">@lead.SecondaryName</MudButton>
+                                        }
+                                        @if (lead.Kind == LeadKind.LinkPrediction && _mayWrite && lead.SecondaryId is not null)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                       StartIcon="@Icons.Material.Filled.AddLink"
+                                                       OnClick="@(() => LinkAsync(lead))">Verknüpfen</MudButton>
+                                        }
+                                        @if (_mayWrite)
+                                        {
+                                            <MudTooltip Text="Hinweis ignorieren">
+                                                <MudIconButton Icon="@Icons.Material.Filled.NotInterested" Size="Size.Small"
+                                                               OnClick="@(() => IgnoreAsync(lead))" />
+                                            </MudTooltip>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayWrite;
+    private bool _load = true;
+    private IReadOnlyList<LeadGroup> _groups = Array.Empty<LeadGroup>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayWrite = _user.MayWrite();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        _groups = await LeadService.GetFeedAsync(_user);
+        _load = false;
+    }
+
+    private async Task IgnoreAsync(Lead lead)
+    {
+        try
+        {
+            await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
+            await ReloadAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LinkAsync(Lead lead)
+    {
+        if (lead.SecondaryType is null || lead.SecondaryId is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(lead.PrimaryType, lead.PrimaryId, lead.SecondaryType, lead.SecondaryId, null, _user);
+            Snackbar.Add("Verknüpfung angelegt.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Verknüpfung konnte nicht angelegt werden.", Severity.Error);
+        }
+    }
+}

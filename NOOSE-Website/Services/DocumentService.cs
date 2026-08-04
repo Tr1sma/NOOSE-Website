@@ -183,6 +183,11 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
         {
             throw new InvalidOperationException("Dokument nicht gefunden.");
         }
+
+        // audit manually: the ExecuteUpdate above bypassed the interceptor
+        db.AuditLogs.Add(ManualAudit.Row(nameof(Document), id, AuditAction.Modified, actor,
+            ManualAudit.Change("Angepinnt", null, pinned)));
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

@@ -21,7 +21,12 @@ public record GraphNode(
     int ClassificationLevel,
     bool IsClassified,
     string? PhotoUrl,
-    int Degree);
+    int Degree,
+    DateTime? CreatedAt = null,
+    int? ThreatScore = null,
+    double Betweenness = 0,
+    int CommunityId = 0,
+    bool IsKeyFigure = false);
 
 /// <summary>Undirected graph edge between two nodes.</summary>
 public record GraphEdge(
@@ -48,7 +53,9 @@ public record GraphQuery(
     string? FocusId = null,
     int Depth = 1,
     IReadOnlyCollection<string>? TypeFilter = null,
-    LinkKind? KindFilter = null);
+    LinkKind? KindFilter = null,
+    bool ComputeCentrality = false,
+    bool ComputeCommunities = false);
 
 /// <summary>Path search result between two records.</summary>
 public record PathResult(

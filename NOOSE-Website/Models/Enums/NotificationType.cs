@@ -49,6 +49,9 @@ public enum NotificationType
 
     /// <summary>New personnel-file entry.</summary>
     PersonnelEntry = 14,
+
+    /// <summary>Threat score rose sharply.</summary>
+    ThreatSpike = 15,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -71,6 +74,7 @@ public static class NotificationTypeDisplay
         NotificationType.MeetingReminder => "Besprechung beginnt bald",
         NotificationType.AbsenceFiled => "Abmeldung",
         NotificationType.PersonnelEntry => "Personalakte-Eintrag",
+        NotificationType.ThreatSpike => "Bedrohungs-Score gestiegen",
         _ => "Benachrichtigung",
     };
 
@@ -92,6 +96,7 @@ public static class NotificationTypeDisplay
         NotificationType.MeetingReminder => Icons.Material.Filled.NotificationsActive,
         NotificationType.AbsenceFiled => Icons.Material.Filled.EventBusy,
         NotificationType.PersonnelEntry => Icons.Material.Filled.Description,
+        NotificationType.ThreatSpike => Icons.Material.Filled.TrendingUp,
         _ => Icons.Material.Filled.Notifications,
     };
 }

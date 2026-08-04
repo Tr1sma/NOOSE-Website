@@ -137,6 +137,8 @@ else
                     }
                     <HazardPanel Score="_person.ThreatScore" Confidence="_person.ThreatConfidence"
                                       DetailJson="@_person.ThreatDetailJson" />
+                    <MudDivider Class="my-4" />
+                    <RecordThreatTrend EntityType="@nameof(Person)" EntityId="@_person.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("fotos"))

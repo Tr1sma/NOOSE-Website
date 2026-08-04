@@ -147,5 +147,10 @@ public class RecencyService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCa
         {
             throw new InvalidOperationException("Akte nicht gefunden.");
         }
+
+        // audit manually: the record update above bypassed the interceptor
+        db.AuditLogs.Add(ManualAudit.Row(recordsType, id, AuditAction.Modified, actor,
+            ManualAudit.Change("Aktualitäts-Ausnahme", null, disabled)));
+        await db.SaveChangesAsync(cancellationToken);
     }
 }

@@ -157,6 +157,8 @@ else
                 <RecordSection Group="Akte" Slug="gefaehrdung" Label="Gefährdung" Icon="@Icons.Material.Filled.Warning">
                     <HazardPanel Score="_faction.ThreatScore" Confidence="_faction.ThreatConfidence"
                                       DetailJson="@_faction.ThreatDetailJson" />
+                    <MudDivider Class="my-4" />
+                    <RecordThreatTrend EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("doks"))

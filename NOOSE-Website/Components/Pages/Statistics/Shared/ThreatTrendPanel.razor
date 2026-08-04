@@ -1,0 +1,81 @@
+@* Threat-score trend overview: animated faction race + biggest 30-day movers. All numbers VS-filtered per caller. *@
+@using NOOSE_Website.Models.Threat
+@inject IThreatTrendService Trend
+@inject NavigationManager Nav
+
+<MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+    Wie sich die Bedrohungslage über die Zeit entwickelt – aus deiner Sicht (Verschlusssachen werden gefiltert).
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudText Typo="Typo.h6" Class="mb-2">Gefährlichste Fraktionen im Zeitverlauf</MudText>
+    <MudPaper Class="pa-4 mb-6" Elevation="2">
+        <BarChartRace Frames="_frames" />
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Class="mb-2">Größte Score-Bewegungen (30 Tage)</MudText>
+    <MudPaper Class="pa-4" Elevation="2">
+        @if (_movers.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine nennenswerten Score-Bewegungen.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+                <thead>
+                    <tr>
+                        <th>Akte</th>
+                        <th style="width:8rem;text-align:right;">Verlauf</th>
+                        <th style="width:5rem;text-align:right;">Delta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _movers)
+                    {
+                        <tr style="cursor:pointer;" @onclick="@(() => Nav.NavigateTo(m.Href))">
+                            <td>
+                                <MudText Typo="Typo.body2"><b>@(m.Classified ? "🔒 " : "")@m.Name</b></MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@TypeLabel(m.EntityType)</MudText>
+                            </td>
+                            <td style="text-align:right;">@m.FromScore → @m.ToScore</td>
+                            <td style="text-align:right;">
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(m.Delta >= 0 ? Color.Error : Color.Success)">
+                                    @(m.Delta > 0 ? "+" : "")@m.Delta
+                                </MudChip>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private IReadOnlyList<ThreatRaceFrame> _frames = Array.Empty<ThreatRaceFrame>();
+    private IReadOnlyList<ThreatMover> _movers = Array.Empty<ThreatMover>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _frames = await Trend.GetFactionRaceAsync(user);
+        _movers = await Trend.GetTopMoversAsync(user);
+        _load = false;
+    }
+
+    private static string TypeLabel(string entityType) => entityType switch
+    {
+        nameof(NOOSE_Website.Data.Entities.Factions.Faction) => "Fraktion",
+        nameof(NOOSE_Website.Data.Entities.People.Person) => "Person",
+        _ => entityType,
+    };
+}

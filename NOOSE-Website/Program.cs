@@ -175,8 +175,33 @@ builder.Services.AddScoped<ICustomFieldValueService, CustomFieldValueService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IRelationService, RelationService>();
 builder.Services.AddScoped<IGraphService, GraphService>();
+builder.Services.AddScoped<IGraphCanvasLayoutService, GraphCanvasLayoutService>();
 builder.Services.AddScoped<ILinkSuggestionService, LinkSuggestionService>();
 builder.Services.AddScoped<ITimelineService, TimelineService>();
+builder.Services.AddScoped<IGlobalChronikService, GlobalChronikService>();
+builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<ICounterIntelService, CounterIntelService>();
+builder.Services.AddScoped<IInformantService, InformantService>();
+
+// AI assistant (OpenAI-compatible / OpenRouter). Key comes from user-secrets / env, never the repo.
+builder.Services.Configure<NOOSE_Website.Models.Llm.LlmOptions>(
+    builder.Configuration.GetSection(NOOSE_Website.Models.Llm.LlmOptions.SectionName));
+builder.Services.AddHttpClient("llm", (sp, client) =>
+{
+    var o = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<NOOSE_Website.Models.Llm.LlmOptions>>().Value;
+    if (!string.IsNullOrWhiteSpace(o.BaseUrl))
+    {
+        client.BaseAddress = new Uri(o.BaseUrl.TrimEnd('/') + "/");
+    }
+    if (!string.IsNullOrWhiteSpace(o.ApiKey))
+    {
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.ApiKey);
+    }
+    client.DefaultRequestHeaders.TryAddWithoutValidation("HTTP-Referer", "https://noose.info");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("X-Title", "NOOSE Intelligence");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IOrgChartService, OrgChartService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
@@ -186,6 +211,7 @@ builder.Services.AddScoped<IMeetingService, MeetingService>();
 builder.Services.AddHostedService<MeetingReminderWorker>();
 builder.Services.AddScoped<IThreatScoreConfigService, ThreatScoreConfigService>();
 builder.Services.AddScoped<IThreatScoreService, ThreatScoreService>();
+builder.Services.AddScoped<IThreatTrendService, ThreatTrendService>();
 builder.Services.AddHostedService<ThreatScoreSweepWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();

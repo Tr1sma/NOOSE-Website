@@ -81,18 +81,24 @@ function baueTooltip(k) {
     return div;
 }
 
+// community palette (workbench cluster colouring)
+const CLUSTER_FARBE = ['#22D3EE', '#F0883E', '#3FB950', '#A371F7', '#D29922', '#58A6FF', '#F85149', '#2DD4BF', '#7C8CF8', '#C9A227'];
+
 function mapKnoten(k) {
+    const schluessel = !!k.isKeyFigure;
     const node = {
         id: k.id,
-        label: k.designation,
+        label: (schluessel ? '★ ' : '') + k.designation,
         title: baueTooltip(k),
         color: knotenfarbe(k),
         value: 1 + (k.degree || 0),
-        borderWidth: k.classificationLevel >= 3 ? 3 : 2,
-        borderWidthSelected: 4,
+        borderWidth: schluessel ? 4 : (k.classificationLevel >= 3 ? 3 : 2),
+        borderWidthSelected: 5,
         shadow: k.classificationLevel >= 3
             ? { enabled: true, color: 'rgba(248,81,73,0.55)', size: 18, x: 0, y: 0 }
-            : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
+            : schluessel
+                ? { enabled: true, color: 'rgba(34,211,238,0.55)', size: 16, x: 0, y: 0 }
+                : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
     };
     if (k.photoUrl) {
         node.shape = 'circularImage';
@@ -176,12 +182,14 @@ export async function render(containerId, datenJson, dotnetRef) {
     });
     network.on('selectNode', (params) => {
         if (params.nodes && params.nodes.length > 0) {
-            network.focus(params.nodes[0], { scale: 1.15, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            const id = params.nodes[0];
+            network.focus(id, { scale: 1.15, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            try { dotnetRef.invokeMethodAsync('OnNodeSelect', id); } catch (e) { /* ignore */ }
         }
     });
 
     // save defaults
-    instanzen.set(containerId, { network, nodes, edges, dotnetRef, physikStandard: opts.physics, frei: false });
+    instanzen.set(containerId, { network, nodes, edges, dotnetRef, physikStandard: opts.physics, frei: false, rohKnoten: daten.node || [] });
 }
 
 // free mode physics
@@ -273,6 +281,102 @@ export function alsBildExportieren(containerId) {
         a.download = 'noose-beziehungsgraph.png';
         a.click();
     } catch (e) { /* ignore */ }
+}
+
+// colour nodes by detected community, or restore base colours
+export function faerbeNachCommunity(containerId, an) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    const roh = new Map((inst.rohKnoten || []).map((k) => [k.id, k]));
+    inst.nodes.forEach((n) => {
+        const k = roh.get(n.id);
+        if (!k) {
+            return;
+        }
+        if (an) {
+            const farbe = CLUSTER_FARBE[(k.communityId || 0) % CLUSTER_FARBE.length];
+            inst.nodes.update({ id: n.id, color: { background: '#161B22', border: farbe, highlight: { background: '#1F2630', border: '#22D3EE' }, hover: { background: '#1F2630', border: farbe } } });
+        } else {
+            inst.nodes.update({ id: n.id, color: knotenfarbe(k) });
+        }
+    });
+}
+
+// hide nodes created after the cutoff (network-growth scrubber); null shows all
+export function setzeZeitfenster(containerId, grenzeIso) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    const grenze = grenzeIso ? new Date(grenzeIso).getTime() : null;
+    const roh = new Map((inst.rohKnoten || []).map((k) => [k.id, k]));
+    inst.nodes.forEach((n) => {
+        const k = roh.get(n.id);
+        const erstellt = k && k.createdAt ? new Date(k.createdAt).getTime() : null;
+        const versteckt = grenze != null && erstellt != null && erstellt > grenze;
+        inst.nodes.update({ id: n.id, hidden: versteckt });
+    });
+}
+
+// edge-drawing mode: user drags between two nodes → OnEdgeDrawn(from,to); we never add it visually
+export function starteVerknuepfungsModus(containerId) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    inst.network.setOptions({
+        manipulation: {
+            enabled: false,
+            addEdge: (data, callback) => {
+                if (data.from !== data.to) {
+                    try { inst.dotnetRef.invokeMethodAsync('OnEdgeDrawn', data.from, data.to); } catch (e) { /* ignore */ }
+                }
+                callback(null); // C# persists + reloads
+            },
+        },
+    });
+    try { inst.network.addEdgeMode(); } catch (e) { /* ignore */ }
+}
+
+export function beendeVerknuepfungsModus(containerId) {
+    const inst = instanzen.get(containerId);
+    if (inst) {
+        try { inst.network.disableEditMode(); } catch (e) { /* ignore */ }
+    }
+}
+
+export function holePositionen(containerId) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return '{}';
+    }
+    try {
+        inst.network.storePositions();
+        return JSON.stringify(inst.network.getPositions());
+    } catch (e) {
+        return '{}';
+    }
+}
+
+export function setzePositionen(containerId, json) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    let pos;
+    try { pos = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+    // freeze physics so the loaded layout sticks
+    inst.frei = true;
+    inst.network.setOptions({ physics: false });
+    Object.keys(pos || {}).forEach((id) => {
+        const p = pos[id];
+        if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+            try { inst.network.moveNode(id, p.x, p.y); } catch (e) { /* ignore */ }
+        }
+    });
+    try { inst.network.fit({ animation: { duration: 400 } }); } catch (e) { /* ignore */ }
 }
 
 export function zerstoere(containerId) {

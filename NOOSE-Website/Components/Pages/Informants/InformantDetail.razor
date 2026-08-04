@@ -1,0 +1,87 @@
+@page "/informanten/{Id}"
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Informants
+@inject IInformantService Service
+
+<PageTitle>@(_detail?.Codename ?? "Informant") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_detail is null)
+{
+    <PageHeader Icon="@Icons.Material.Filled.VisibilityOff" Title="Informant" BackHref="/informanten" />
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Nicht gefunden oder kein Zugriff.</MudAlert>
+}
+else
+{
+    <PageHeader Icon="@Icons.Material.Filled.VisibilityOff"
+                Title="@_detail.Codename"
+                Subtitle="@($"{_detail.CaseNumber} · V-Person · {InformantEnumDisplay.Status(_detail.Status)}")"
+                BackHref="/informanten">
+        <Actions>
+            @if (_detail.MayEdit)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
+                           Href="@($"/informanten/{Id}/bearbeiten")">Bearbeiten</MudButton>
+            }
+        </Actions>
+    </PageHeader>
+
+    <RecordSectionRail>
+        <RecordSection Slug="uebersicht" Label="Übersicht" Icon="@Icons.Material.Filled.Info">
+            <MudSimpleTable Dense="true" Elevation="0">
+                <tbody>
+                    <tr><td style="width:12rem;">Status</td><td>@InformantEnumDisplay.Status(_detail.Status)</td></tr>
+                    <tr><td>Zuverlässigkeit</td><td>@InformantEnumDisplay.Reliability(_detail.Reliability)</td></tr>
+                    <tr><td>Führungsagent</td><td>@(_detail.HandlerName ?? "—")</td></tr>
+                    <tr><td>Beschreibung</td><td>@(_detail.Description ?? "—")</td></tr>
+                </tbody>
+            </MudSimpleTable>
+        </RecordSection>
+
+        @if (_detail.MaySeeIdentity)
+        {
+            <RecordSection Slug="identitaet" Label="Identität" Icon="@Icons.Material.Filled.Lock">
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                    Klarname — streng vertraulich, nur für Führung und Führungsagent.
+                </MudAlert>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td style="width:12rem;">Klarname</td><td><b>@_detail.RealName</b></td></tr>
+                        <tr><td>Kontakt</td><td>@(_detail.ContactInfo ?? "—")</td></tr>
+                        <tr><td>Notizen</td><td>@(_detail.Notes ?? "—")</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </RecordSection>
+        }
+
+        <RecordSection Slug="treffen" Label="Treffen" Icon="@Icons.Material.Filled.Forum">
+            <InformantMeetingPanel InformantId="@Id" MayWrite="_detail.MayEdit" User="_user" />
+        </RecordSection>
+    </RecordSectionRail>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private string _loadedId = string.Empty;
+    private InformantDisplay? _detail;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == _loadedId)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _user = (await AuthStateTask).User;
+        _detail = await Service.GetDetailAsync(Id, _user);
+        _load = false;
+    }
+}

@@ -4,6 +4,7 @@ using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -286,6 +287,10 @@ public class PersonMergeService(IDbContextFactory<AppDbContext> dbFactory) : IPe
             Text = $"Akte „{source.Name}“ ({source.CaseNumber}) wurde in diese Akte überführt (Duplikat-Zusammenführung).",
             AuthorName = actor.GetCodename(),
         });
+
+        // explicit merge trail on the target (the FK re-pointing above bypassed the interceptor)
+        db.AuditLogs.Add(ManualAudit.Row(nameof(Person), targetId, AuditAction.Modified, actor,
+            ManualAudit.Change("Zusammengeführt aus", null, $"{source.Name} ({source.CaseNumber})")));
 
         // ---- send source record to the trash (interceptor soft-deletes) ----
         db.People.Remove(source);

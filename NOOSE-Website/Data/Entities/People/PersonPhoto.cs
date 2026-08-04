@@ -1,9 +1,10 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using NOOSE_Website.Models.Abstractions;
 namespace NOOSE_Website.Data.Entities.People;
 
 /// <summary>Metadata for a person-gallery photo; the file lives outside wwwroot. FileNameSaved is server-assigned to prevent path traversal.</summary>
 [Table("PersonFotos")]
-public class PersonPhoto
+public class PersonPhoto : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string PersonId { get; set; } = string.Empty;
@@ -18,6 +19,16 @@ public class PersonPhoto
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
     public string? CreatedById { get; set; }
+    [Column("GeaendertAm")]
+    public DateTime? ModifiedAt { get; set; }
+    [Column("GeaendertVonId")]
+    public string? ModifiedById { get; set; }
+    [Column("IstGeloescht")]
+    public bool IsDeleted { get; set; }
+    [Column("GeloeschtAm")]
+    public DateTime? DeletedAt { get; set; }
+    [Column("GeloeschtVonId")]
+    public string? DeletedById { get; set; }
     [Column("FokuspunktX")]
     public int FocalPointX { get; set; } = 50;
     [Column("FokuspunktY")]

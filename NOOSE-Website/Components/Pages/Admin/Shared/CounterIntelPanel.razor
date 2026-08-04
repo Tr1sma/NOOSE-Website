@@ -1,0 +1,152 @@
+@* Counter-intelligence cockpit: who accessed what, when — with insider-threat flags. Leadership-only (service-guarded). *@
+@using NOOSE_Website.Models.CounterIntel
+@inject ICounterIntelService CounterIntel
+@inject NavigationManager Nav
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Auswertung des Zugriffsprotokolls der letzten 30 Tage – wer welche Akten wann geöffnet hat. Nur-Lese-Aufsicht und System-Zugriffe sind ausgeblendet.
+</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTabs Rounded="true" Border="false" ApplyEffectsToContainer="true" PanelClass="pt-4">
+        <MudTabPanel Text="Übersicht" Icon="@Icons.Material.Filled.Dashboard">
+            <MudGrid>
+                @Tile("Zugriffe", _overview!.TotalAccesses, Icons.Material.Filled.Visibility)
+                @Tile("Aktive Agenten", _overview.DistinctAgents, Icons.Material.Filled.People)
+                @Tile("Geöffnete Akten", _overview.DistinctRecords, Icons.Material.Filled.FolderOpen)
+                @Tile("Off-Hours-Zugriffe", _overview.OffHoursAccesses, Icons.Material.Filled.NightsStay)
+            </MudGrid>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4">
+                @_flags.Count Auffälligkeit(en) erkannt. Details im Reiter „Auffälligkeiten".
+            </MudText>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Heatmap" Icon="@Icons.Material.Filled.GridOn">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Zugriffe nach Uhrzeit (Agent × Stunde)</MudText>
+            <AccessHeatmap Data="_heatmap!" />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Agenten-Profil" Icon="@Icons.Material.Filled.PersonSearch">
+            <MudSelect T="string" Label="Agent" Value="_selectedAgent" ValueChanged="OnAgentChanged"
+                       Dense="true" Style="min-width:260px;" Class="mb-3">
+                @foreach (var a in _agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+                }
+            </MudSelect>
+            @if (_profile is { } p)
+            {
+                <MudGrid>
+                    @Tile("Zugriffe", p.Total, Icons.Material.Filled.Visibility)
+                    @Tile("Verschiedene Akten", p.DistinctRecords, Icons.Material.Filled.FolderOpen)
+                    @Tile("Off-Hours", p.OffHours, Icons.Material.Filled.NightsStay)
+                </MudGrid>
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Letzte Zugriffe</MudText>
+                <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                    <tbody>
+                        @foreach (var r in p.Recent)
+                        {
+                            <tr style="@(r.Href is null ? "" : "cursor:pointer;")" @onclick="@(() => Go(r.Href))">
+                                <td style="width:11rem;">@r.WhenLocal.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@r.EntityType</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else if (_selectedAgent is not null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Zugriffe dieses Agenten im Zeitraum.</MudText>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Auffälligkeiten" Icon="@Icons.Material.Filled.Warning">
+            @if (_flags.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Auffälligkeiten erkannt.</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+                    <thead>
+                        <tr><th>Agent</th><th>Muster</th><th>Detail</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var f in _flags)
+                        {
+                            <tr style="cursor:pointer;" @onclick="@(() => Go(f.Href))">
+                                <td><b>@f.AgentName</b></td>
+                                <td><MudChip T="string" Size="Size.Small" Color="Color.Warning">@f.Rule</MudChip></td>
+                                <td>@f.Detail</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private string? _error;
+    private CounterIntelOverview? _overview;
+    private CounterIntelHeatmap? _heatmap;
+    private IReadOnlyList<InsiderFlag> _flags = Array.Empty<InsiderFlag>();
+    private IReadOnlyList<AgentOption> _agents = Array.Empty<AgentOption>();
+    private string? _selectedAgent;
+    private AgentAccessProfile? _profile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        try
+        {
+            _overview = await CounterIntel.GetOverviewAsync(_user);
+            _heatmap = await CounterIntel.GetHeatmapAsync(_user);
+            _flags = await CounterIntel.GetFlagsAsync(_user);
+            _agents = await CounterIntel.GetAgentsAsync(_user);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+        _load = false;
+    }
+
+    private async Task OnAgentChanged(string? agentId)
+    {
+        _selectedAgent = agentId;
+        _profile = string.IsNullOrEmpty(agentId) ? null : await CounterIntel.GetAgentProfileAsync(_user, agentId!);
+    }
+
+    private void Go(string? href)
+    {
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+
+    private RenderFragment Tile(string label, int value, string icon) =>@<MudItem xs="6" sm="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@icon" Color="Color.Primary" />
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">@label</MudText>
+            </MudStack>
+            <MudText Typo="Typo.h4" Class="mt-2">@value</MudText>
+        </MudPaper>
+    </MudItem>;
+}

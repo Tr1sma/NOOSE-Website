@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Models.Threat;
@@ -12,7 +13,8 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IThreatScoreService" />
-public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreConfigService configService)
+public class ThreatScoreService(
+    IDbContextFactory<AppDbContext> dbFactory, IThreatScoreConfigService configService, INotificationService notifications)
     : IThreatScoreService
 {
     public static readonly JsonSerializerOptions JsonOptions = new()
@@ -77,7 +79,8 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         double rawS4 = e.DefaultEdgesDegree;
         double s4 = Saturate(rawS4, k.CapS4, k.S4Denominator);
 
-        double content = s1 + s2 + s3 + s4; // Caps 55+22+15+8 = 100 (Default)
+        // clamp: a config whose caps don't sum to 100 must not push content past the 0–100 panel scale
+        double content = Math.Clamp(s1 + s2 + s3 + s4, 0, 100);
         int @base = ThreatScoreConstants.Base(e.Classification);
         int score = BandScore(content, @base);
 
@@ -141,7 +144,8 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         // ---- P5: network centrality ----
         double p5 = Saturate(e.DefaultEdgesDegree, k.CapP5, k.P5Denominator);
 
-        double content = p1 + p2 + p3 + p4 + p5; // Caps 40+22+18+12+8 = 100 (Default)
+        // clamp: a config whose caps don't sum to 100 must not push content past the 0–100 panel scale
+        double content = Math.Clamp(p1 + p2 + p3 + p4 + p5, 0, 100);
         int @base = ThreatScoreConstants.Base(e.Classification);
         int score = BandScore(content, @base);
 
@@ -457,7 +461,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             triage);
     }
 
-    private static async Task CalculateFactionAsync(AppDbContext db, string factionId, ThreatScoreConfiguration config, CancellationToken ct)
+    private async Task CalculateFactionAsync(AppDbContext db, string factionId, ThreatScoreConfiguration config, CancellationToken ct)
     {
         // Load faction scalars.
         var f = await db.Factions
@@ -483,9 +487,10 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
 
         var result = Calculate(input, DateTime.UtcNow, config);
         await PersistFactionAsync(db, factionId, result, ct);
+        await AppendHistoryAndAlarmAsync(db, nameof(Faction), factionId, result, config, ct);
     }
 
-    private static async Task CalculatePersonAsync(AppDbContext db, string personId, ThreatScoreConfiguration config, CancellationToken ct)
+    private async Task CalculatePersonAsync(AppDbContext db, string personId, ThreatScoreConfiguration config, CancellationToken ct)
     {
         var p = await db.People
             .Where(x => x.Id == personId)
@@ -505,6 +510,75 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         var input = await LoadPersonInputAsync(db, personId, p.Classification, p.LifeStatus, p.DeadUntil, p.Captured, ct);
         var result = CalculatePerson(input, DateTime.UtcNow, config);
         await PersistPersonAsync(db, personId, result, ct);
+        await AppendHistoryAndAlarmAsync(db, nameof(Person), personId, result, config, ct);
+    }
+
+    // append a snapshot only when score/confidence changed; alert leadership on a significant rise
+    private async Task AppendHistoryAndAlarmAsync(AppDbContext db, string entityType, string entityId,
+        ThreatScoreResult result, ThreatScoreConfiguration config, CancellationToken ct)
+    {
+        var last = await db.ThreatScoreHistory
+            .Where(h => h.EntityType == entityType && h.EntityId == entityId)
+            .OrderByDescending(h => h.Timestamp)
+            .Select(h => new { h.Score, h.Confidence })
+            .FirstOrDefaultAsync(ct);
+
+        if (last is not null && last.Score == result.Score && last.Confidence == result.Confidence)
+        {
+            return; // dedupe against the many event-driven recomputes
+        }
+
+        db.ThreatScoreHistory.Add(new ThreatScoreHistory
+        {
+            EntityType = entityType,
+            EntityId = entityId,
+            Score = result.Score,
+            Confidence = result.Confidence,
+            DetailJson = JsonSerializer.Serialize(result.Detail, JsonOptions),
+            Timestamp = result.Detail.CalculatedAtUtc,
+        });
+        // history is not IAuditable → audit interceptor ignores it
+        await db.SaveChangesAsync(ct);
+
+        if (last is { Score: { } prev } && result.Score is { } now
+            && now - prev >= config.AlarmDeltaThreshold && now >= config.AlarmMinScore)
+        {
+            await AlarmAsync(db, entityType, entityId, prev, now, ct);
+        }
+    }
+
+    private async Task AlarmAsync(AppDbContext db, string entityType, string entityId, int prev, int now, CancellationToken ct)
+    {
+        string? name;
+        string href;
+        if (entityType == nameof(Faction))
+        {
+            name = await db.Factions.Where(f => f.Id == entityId).Select(f => f.Name).FirstOrDefaultAsync(ct);
+            href = $"/fraktionen/{entityId}";
+        }
+        else if (entityType == nameof(Person))
+        {
+            name = await db.People.Where(p => p.Id == entityId).Select(p => p.Name).FirstOrDefaultAsync(ct);
+            href = $"/personen/{entityId}";
+        }
+        else
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        // leadership sees classified records, so no per-record visibility gate needed here
+        var leadershipIds = await db.Users
+            .Where(u => u.Status == AgentStatus.Active
+                && (u.IsAdmin || (u.Rank != null && u.Rank >= Rank.SupervisorySpecialAgent)))
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+
+        await notifications.NotifyManyAsync(leadershipIds, NotificationType.ThreatSpike,
+            $"Bedrohungs-Score gestiegen: {name} ({prev} → {now})", href, null, ct);
     }
 
     private static async Task<ThreatScoreInput> LoadInputAsync(AppDbContext db, string factionId,

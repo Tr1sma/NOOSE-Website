@@ -74,6 +74,12 @@ public sealed class ThreatScoreConfiguration
     public double CapP5 { get; set; } = 8.0;
     public double P5Denominator { get; set; } = 4.0;
 
+    // ---- Trend alarm ----
+    /// <summary>Minimum score rise between two snapshots that alerts leadership.</summary>
+    public double AlarmDeltaThreshold { get; set; } = 15.0;
+    /// <summary>Only alert once the new score reaches at least this value.</summary>
+    public int AlarmMinScore { get; set; } = 50;
+
     /// <summary>Default instance.</summary>
     public static ThreatScoreConfiguration Default() => new();
 

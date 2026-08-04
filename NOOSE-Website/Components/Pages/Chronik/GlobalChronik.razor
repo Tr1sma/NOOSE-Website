@@ -1,0 +1,120 @@
+@page "/chronik"
+@using NOOSE_Website.Models.Timeline
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IGlobalChronikService Chronik
+
+<PageTitle>Chronik · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Timeline"
+            Title="Ermittlungs-Chronik"
+            Subtitle="Behördenweiter Zeitstrahl aller Akten-Ereignisse. Ziehen zum Verschieben, Scrollen zum Zoomen." />
+
+<MudPaper Class="pa-3 mb-3" Elevation="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+        <MudSelect T="string" Label="Aktentyp" Value="_typeFilter" ValueChanged="OnTypeChanged"
+                   Clearable="true" Style="min-width:200px;" Dense="true">
+            <MudSelectItem T="string" Value="@((string?)null)">Alle Typen</MudSelectItem>
+            @foreach (var t in _options.Types)
+            {
+                <MudSelectItem T="string" Value="@t">@TypeLabel(t)</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="string" Label="Agent" Value="_agentId" ValueChanged="OnAgentChanged"
+                   Clearable="true" Style="min-width:220px;" Dense="true">
+            <MudSelectItem T="string" Value="@((string?)null)">Alle Agenten</MudSelectItem>
+            @foreach (var a in _options.Agents)
+            {
+                <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSpacer />
+        @if (_truncated)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Warning">
+                Ausschnitt gedeckelt – enger zoomen
+            </MudChip>
+        }
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_events.Count Ereignisse</MudText>
+    </MudStack>
+</MudPaper>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudPaper Class="pa-2" Elevation="1">
+    <ChronikStrip Events="_events" OnRangeChanged="OnRangeChangedAsync" />
+</MudPaper>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private ChronikFilterOptions _options = new(Array.Empty<string>(), Array.Empty<ChronikAgentOption>());
+    private IReadOnlyList<ChronikEvent> _events = Array.Empty<ChronikEvent>();
+    private bool _truncated;
+    private bool _load = true;
+    private string? _typeFilter;
+    private string? _agentId;
+    private DateTime _from = DateTime.UtcNow.AddDays(-90);
+    private DateTime _to = DateTime.UtcNow.AddDays(1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _options = await Chronik.GetFilterOptionsAsync(_user);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        var result = await Chronik.GetEventsAsync(new ChronikQuery(_from, _to, _typeFilter, _agentId), _user);
+        _events = result.Events;
+        _truncated = result.Truncated;
+        _load = false;
+    }
+
+    private async Task OnTypeChanged(string? value)
+    {
+        _typeFilter = value;
+        await LoadAsync();
+    }
+
+    private async Task OnAgentChanged(string? value)
+    {
+        _agentId = value;
+        await LoadAsync();
+    }
+
+    // pan/zoom pushes a new window → reload that slice (guard against tiny jitter reloads)
+    private async Task OnRangeChangedAsync((DateTime From, DateTime To) range)
+    {
+        if (Math.Abs((range.From - _from).TotalSeconds) < 2 && Math.Abs((range.To - _to).TotalSeconds) < 2)
+        {
+            return;
+        }
+        _from = range.From;
+        _to = range.To;
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "Person" => "Person",
+        "Faction" => "Fraktion",
+        "PersonGroup" => "Personengruppe",
+        "Party" => "Partei",
+        "Operation" => "Operation",
+        "Case" => "Vorgang",
+        "Taskforce" => "Taskforce",
+        "Job" => "Aufgabe",
+        "Document" => "Dokument",
+        "Law" => "Gesetz",
+        _ => type,
+    };
+}

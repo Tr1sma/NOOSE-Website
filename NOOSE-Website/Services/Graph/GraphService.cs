@@ -25,8 +25,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
     private const int MaxPathDepth = 12;
     private const int MaxVisited = 8000;
 
-    private readonly record struct RawEdge(string Source, string Target, string? Label, LinkKind Kind, bool Automatic);
-
     public async Task<GraphData> GetGraphAsync(GraphQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
         // partners: no graph access
@@ -38,7 +36,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         var isLeadership = viewer.IsLeadership();
         var meId = viewer.GetAgentId();
 
-        var rawEdges = await LoadRawEdgesAsync(db, query.KindFilter, cancellationToken);
+        var rawEdges = await GraphEdgeLoader.LoadRawEdgesAsync(db, query.KindFilter, cancellationToken);
 
         var keys = new HashSet<string>();
         foreach (var k in rawEdges)
@@ -108,6 +106,25 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             .Select(k => new GraphEdge(k.Source, k.Target, k.Label, k.Kind, k.Automatic))
             .ToList();
 
+        // opt-in analytics on the final rendered graph (never persisted)
+        if (query.ComputeCommunities || query.ComputeCentrality)
+        {
+            var ids = nodeList.Select(n => n.Id).ToList();
+            var pairs = edgesList.Select(e => (e.Source, e.Target)).ToList();
+            var comm = query.ComputeCommunities ? GraphAnalytics.Communities(ids, pairs) : null;
+            var bet = query.ComputeCentrality ? GraphAnalytics.Betweenness(ids, pairs) : null;
+            nodeList = nodeList.Select(n =>
+            {
+                var b = bet is null ? n.Betweenness : bet.GetValueOrDefault(n.Id, 0);
+                return n with
+                {
+                    CommunityId = comm is null ? n.CommunityId : comm.GetValueOrDefault(n.Id, 0),
+                    Betweenness = b,
+                    IsKeyFigure = bet is null ? n.IsKeyFigure : GraphAnalytics.IsKey(b),
+                };
+            }).ToList();
+        }
+
         return new GraphData(nodeList, edgesList, truncated);
     }
 
@@ -125,7 +142,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         var sourceKey = $"{sourceType}:{sourceId}";
         var targetKey = $"{targetType}:{targetId}";
 
-        var rawEdges = await LoadRawEdgesAsync(db, null, cancellationToken);
+        var rawEdges = await GraphEdgeLoader.LoadRawEdgesAsync(db, null, cancellationToken);
         var keys = new HashSet<string> { sourceKey, targetKey };
         foreach (var k in rawEdges)
         {
@@ -220,75 +237,6 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
             edgesPath.Select(k => new GraphEdge(k.Source, k.Target, k.Label, k.Kind, k.Automatic)).ToList());
     }
 
-    // ---- Load edges ----
-
-    private static async Task<List<RawEdge>> LoadRawEdgesAsync(AppDbContext db, LinkKind? kindFilter, CancellationToken cancellationToken)
-    {
-        // Skip clique edges.
-        var vq = db.Links.Where(v => !v.Automatic);
-        if (kindFilter is not null)
-        {
-            vq = vq.Where(v => v.Kind == kindFilter.Value);
-        }
-        var link = await vq
-            .Select(v => new { v.SourceType, v.SourceId, v.TargetType, v.TargetId, v.Label, v.Kind, v.Automatic })
-            .ToListAsync(cancellationToken);
-
-        var edges = new List<RawEdge>(link.Count);
-        foreach (var v in link)
-        {
-            edges.Add(new RawEdge($"{v.SourceType}:{v.SourceId}", $"{v.TargetType}:{v.TargetId}", v.Label, v.Kind, v.Automatic));
-        }
-
-        var bez = await db.PersonRelations
-            .Select(b => new { b.PersonAId, b.PersonBId, b.Type })
-            .ToListAsync(cancellationToken);
-        foreach (var b in bez)
-        {
-            var kind = b.Type switch
-            {
-                RelationType.Enemy => LinkKind.Conflict,
-                RelationType.Ally => LinkKind.Alliance,
-                _ => LinkKind.Default,
-            };
-            if (kindFilter is not null && kind != kindFilter.Value)
-            {
-                continue;
-            }
-            edges.Add(new RawEdge(
-                $"{nameof(Person)}:{b.PersonAId}",
-                $"{nameof(Person)}:{b.PersonBId}",
-                RelationTypeDisplay.Name(b.Type),
-                kind,
-                false));
-        }
-
-        // Star topology: memberships.
-        if (kindFilter is null || kindFilter == LinkKind.Default)
-        {
-            foreach (var m in await db.FactionMembers
-                .Select(m => new { m.PersonId, OrgId = m.FactionId, m.IsLead }).ToListAsync(cancellationToken))
-            {
-                edges.Add(new RawEdge($"{nameof(Person)}:{m.PersonId}", $"{nameof(Faction)}:{m.OrgId}",
-                    m.IsLead ? "Leitung" : null, LinkKind.Default, true));
-            }
-            foreach (var m in await db.PersonGroupMembers
-                .Select(m => new { m.PersonId, OrgId = m.PersonGroupId, m.IsLead }).ToListAsync(cancellationToken))
-            {
-                edges.Add(new RawEdge($"{nameof(Person)}:{m.PersonId}", $"{nameof(PersonGroup)}:{m.OrgId}",
-                    m.IsLead ? "Leitung" : null, LinkKind.Default, true));
-            }
-            foreach (var m in await db.PartyMembers
-                .Select(m => new { m.PersonId, OrgId = m.PartyId, m.IsLead }).ToListAsync(cancellationToken))
-            {
-                edges.Add(new RawEdge($"{nameof(Person)}:{m.PersonId}", $"{nameof(Party)}:{m.OrgId}",
-                    m.IsLead ? "Leitung" : null, LinkKind.Default, true));
-            }
-        }
-
-        return edges;
-    }
-
     // ---- Resolve nodes ----
 
     private static async Task<Dictionary<string, GraphNode>> ResolveNodeAsync(
@@ -323,7 +271,7 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (personIds.Count > 0)
         {
             var rows = await db.People.Where(p => personIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification })
+                .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified, p.Classification, p.CreatedAt, p.ThreatScore })
                 .ToListAsync(cancellationToken);
             foreach (var x in rows)
             {
@@ -331,7 +279,8 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
                 {
                     continue;
                 }
-                result[$"{nameof(Person)}:{x.Id}"] = Mk(nameof(Person), x.Id, x.Name, x.CaseNumber, $"/personen/{x.Id}", (int)x.Classification, x.IsClassified);
+                result[$"{nameof(Person)}:{x.Id}"] = Mk(nameof(Person), x.Id, x.Name, x.CaseNumber, $"/personen/{x.Id}", (int)x.Classification, x.IsClassified)
+                    with { CreatedAt = x.CreatedAt, ThreatScore = x.ThreatScore };
             }
 
             var visiblePers = rows.Where(r => isLeadership || !r.IsClassified).Select(r => r.Id).ToList();
@@ -357,13 +306,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         if (factionIds.Count > 0)
         {
             foreach (var x in await db.Factions.Where(f => factionIds.Contains(f.Id))
-                .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified, f.Classification }).ToListAsync(cancellationToken))
+                .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified, f.Classification, f.CreatedAt, f.ThreatScore }).ToListAsync(cancellationToken))
             {
                 if (x.IsClassified && !isLeadership)
                 {
                     continue;
                 }
-                result[$"{nameof(Faction)}:{x.Id}"] = Mk(nameof(Faction), x.Id, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}", (int)x.Classification, x.IsClassified);
+                result[$"{nameof(Faction)}:{x.Id}"] = Mk(nameof(Faction), x.Id, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}", (int)x.Classification, x.IsClassified)
+                    with { CreatedAt = x.CreatedAt, ThreatScore = x.ThreatScore };
             }
         }
 

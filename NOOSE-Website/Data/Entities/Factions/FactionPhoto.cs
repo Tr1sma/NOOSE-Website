@@ -1,9 +1,10 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using NOOSE_Website.Models.Abstractions;
 namespace NOOSE_Website.Data.Entities.Factions;
 
 /// <summary>Metadata for a faction gallery photo; the file lives outside wwwroot. FileNameSaved is server-assigned to prevent path traversal. At most one photo per faction is the title image (enforced transactionally).</summary>
 [Table("FraktionFotos")]
-public class FactionPhoto
+public class FactionPhoto : IAuditable, ISoftDelete
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
     [Column("FraktionId")]
@@ -24,4 +25,14 @@ public class FactionPhoto
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]
     public string? CreatedById { get; set; }
+    [Column("GeaendertAm")]
+    public DateTime? ModifiedAt { get; set; }
+    [Column("GeaendertVonId")]
+    public string? ModifiedById { get; set; }
+    [Column("IstGeloescht")]
+    public bool IsDeleted { get; set; }
+    [Column("GeloeschtAm")]
+    public DateTime? DeletedAt { get; set; }
+    [Column("GeloeschtVonId")]
+    public string? DeletedById { get; set; }
 }

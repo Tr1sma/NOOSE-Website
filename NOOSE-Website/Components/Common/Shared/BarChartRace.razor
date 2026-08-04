@@ -1,0 +1,101 @@
+@* Animated threat-score bar-chart race (server-side PeriodicTimer + CSS width transitions, no JS module). *@
+@using NOOSE_Website.Models.Threat
+@implements IAsyncDisposable
+
+@if (Frames.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Verlaufsdaten für ein Rennen.</MudText>
+}
+else
+{
+    <div class="d-flex align-center gap-2 mb-3" style="gap:8px;">
+        <MudIconButton Icon="@(_playing ? Icons.Material.Filled.Pause : Icons.Material.Filled.PlayArrow)"
+                       Color="Color.Primary" OnClick="ToggleAsync" Size="Size.Small" />
+        <MudText Typo="Typo.h6" Style="min-width:9rem;">@Frame.Month.ToString("MMMM yyyy", _de)</MudText>
+        <MudSlider T="int" Min="0" Max="@(Frames.Count - 1)" Step="1" Value="_index"
+                   ValueChanged="OnScrub" Class="flex-grow-1" />
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+        @if (Frame.Entries.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">In diesem Monat keine bewerteten Fraktionen.</MudText>
+        }
+        @foreach (var e in Frame.Entries)
+        {
+            var pct = Math.Clamp(e.Score, 0, 100);
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:10rem;flex:none;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@e.Name">
+                    <MudText Typo="Typo.body2">@(e.Classified ? "🔒 " : "")@e.Name</MudText>
+                </div>
+                <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;height:20px;">
+                    <div style="@($"width:{pct}%;height:100%;background:{Colour(e.Score)};transition:width .8s ease;")"></div>
+                </div>
+                <div style="width:2.5rem;flex:none;text-align:right;"><b>@e.Score</b></div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ThreatRaceFrame> Frames { get; set; } = Array.Empty<ThreatRaceFrame>();
+    [Parameter] public int IntervalMs { get; set; } = 1200;
+
+    private static readonly System.Globalization.CultureInfo _de = new("de-DE");
+    private int _index;
+    private bool _playing;
+    private CancellationTokenSource? _cts;
+
+    private ThreatRaceFrame Frame => Frames.Count == 0
+        ? new ThreatRaceFrame(DateTime.MinValue, Array.Empty<ThreatRaceEntry>())
+        : Frames[Math.Clamp(_index, 0, Frames.Count - 1)];
+
+    private static string Colour(int score) => score switch
+    {
+        >= 80 => "#F85149",
+        >= 60 => "#D29922",
+        >= 40 => "#22D3EE",
+        >= 20 => "#3FB950",
+        _ => "#9BA8B8",
+    };
+
+    private void OnScrub(int value) => _index = Math.Clamp(value, 0, Math.Max(0, Frames.Count - 1));
+
+    private async Task ToggleAsync()
+    {
+        if (_playing)
+        {
+            await StopAsync();
+            return;
+        }
+        _playing = true;
+        _cts = new CancellationTokenSource();
+        _ = RunAsync(_cts.Token);
+    }
+
+    private async Task RunAsync(CancellationToken token)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(300, IntervalMs)));
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                _index = _index + 1 >= Frames.Count ? 0 : _index + 1;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { /* stopped */ }
+    }
+
+    private async Task StopAsync()
+    {
+        _playing = false;
+        if (_cts is not null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+            _cts = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await StopAsync();
+}

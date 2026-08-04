@@ -1,0 +1,44 @@
+@* Per-record threat-score line over time. Wraps MudChart; hint instead of empty geometry. *@
+@using NOOSE_Website.Models.Threat
+
+<div class="d-flex flex-column" style="width:100%;min-width:0;">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">@Title</MudText>
+    @if (_empty)
+    {
+        <div class="d-flex align-center justify-center" style="@($"min-height:{Height};")">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch kein Score-Verlauf erfasst.</MudText>
+        </div>
+    }
+    else
+    {
+        <MudChart ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_labels"
+                  ChartOptions="@_options" Width="100%" Height="@Height" />
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Score-Verlauf";
+    [Parameter, EditorRequired] public IReadOnlyList<ThreatScorePoint> Points { get; set; } = Array.Empty<ThreatScorePoint>();
+    [Parameter] public string Height { get; set; } = "260px";
+
+    private bool _empty = true;
+    private List<ChartSeries<double>> _series = new();
+    private string[] _labels = Array.Empty<string>();
+    private ChartOptions _options = new();
+
+    protected override void OnParametersSet()
+    {
+        var scored = Points.Where(p => p.Score.HasValue).ToList();
+        _empty = scored.Count < 2;
+        if (_empty)
+        {
+            return;
+        }
+        _labels = scored.Select(p => p.Timestamp.ToLocalTime().ToString("dd.MM.")).ToArray();
+        _series = new List<ChartSeries<double>>
+        {
+            new() { Name = "Score", Data = scored.Select(p => (double)p.Score!.Value).ToArray() },
+        };
+        _options = new ChartOptions { ChartPalette = new[] { "#22D3EE" }, ShowLegend = false };
+    }
+}

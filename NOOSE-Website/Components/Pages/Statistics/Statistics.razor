@@ -12,6 +12,10 @@
         <StatisticsPanel />
     </RecordSection>
 
+    <RecordSection Slug="trend" Label="Bedrohungs-Trend" Icon="@Icons.Material.Filled.TrendingUp">
+        <ThreatTrendPanel />
+    </RecordSection>
+
     <AuthorizeView Policy="@Policies.LeadershipPage" Context="reportsSection">
         <RecordSection Slug="lageberichte" Label="Lageberichte" Icon="@Icons.Material.Filled.Assessment">
             <SituationReportsPanel />

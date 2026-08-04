@@ -27,6 +27,30 @@ public static class Permission
         }
     }
 
+    /// <summary>Require leadership or the assigned informant handler; denies read-only supervisors and partners.</summary>
+    public static void RequireInformantWrite(ClaimsPrincipal actor, string? handlerId)
+    {
+        if (actor.IsOnlyReader() || actor.IsPartner())
+        {
+            throw new UnauthorizedAccessException("Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        var me = actor.GetAgentId();
+        if (actor.IsLeadership() || (handlerId is not null && me is not null && me == handlerId))
+        {
+            return;
+        }
+        throw new UnauthorizedAccessException("Nur die Führung oder der zuständige Führungsagent darf diesen Informanten bearbeiten.");
+    }
+
+    /// <summary>Require the actor may use the external AI assistant (never partners or demo sessions).</summary>
+    public static void RequireLlmUse(ClaimsPrincipal actor)
+    {
+        if (actor.IsPartner() || actor.IsDemo())
+        {
+            throw new UnauthorizedAccessException("Der KI-Assistent steht in dieser Rolle nicht zur Verfügung.");
+        }
+    }
+
     /// <summary>Require admin.</summary>
     public static void RequireAdmin(ClaimsPrincipal actor)
     {

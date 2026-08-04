@@ -1,0 +1,83 @@
+@* Time scrubber for network-growth playback: emits a UTC cutoff (null = show all). *@
+@implements IAsyncDisposable
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+    <MudIconButton Icon="@(_playing ? Icons.Material.Filled.Pause : Icons.Material.Filled.PlayArrow)"
+                   Color="Color.Primary" Size="Size.Small" OnClick="ToggleAsync" />
+    <MudText Typo="Typo.body2" Style="min-width:9rem;">@Label</MudText>
+    <MudSlider T="int" Min="0" Max="100" Step="1" Value="_pos" ValueChanged="OnScrubAsync" Class="flex-grow-1" />
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public DateTime MinDate { get; set; }
+    [Parameter, EditorRequired] public DateTime MaxDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> OnCutoffChanged { get; set; }
+
+    private int _pos = 100;
+    private bool _playing;
+    private CancellationTokenSource? _cts;
+
+    private DateTime? Cutoff => _pos >= 100 || MaxDate <= MinDate
+        ? null
+        : MinDate.AddTicks((long)((MaxDate - MinDate).Ticks * (_pos / 100.0)));
+
+    private string Label => Cutoff is { } c ? $"bis {c.ToLocalTime():dd.MM.yyyy}" : "Alle Zeiträume";
+
+    private async Task OnScrubAsync(int value)
+    {
+        _pos = Math.Clamp(value, 0, 100);
+        await OnCutoffChanged.InvokeAsync(Cutoff);
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (_playing)
+        {
+            await StopAsync();
+            return;
+        }
+        if (_pos >= 100)
+        {
+            _pos = 0; // restart from the beginning
+        }
+        _playing = true;
+        _cts = new CancellationTokenSource();
+        _ = RunAsync(_cts.Token);
+    }
+
+    private async Task RunAsync(CancellationToken token)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(140));
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                _pos = Math.Min(100, _pos + 2);
+                await InvokeAsync(async () =>
+                {
+                    await OnCutoffChanged.InvokeAsync(Cutoff);
+                    StateHasChanged();
+                });
+                if (_pos >= 100)
+                {
+                    await StopAsync();
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* stopped */ }
+    }
+
+    private async Task StopAsync()
+    {
+        _playing = false;
+        if (_cts is not null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+            _cts = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await StopAsync();
+}

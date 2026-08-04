@@ -79,6 +79,13 @@
         </RecordSection>
     </AuthorizeView>
 
+    <AuthorizeView Policy="@Policies.Leadership" Context="gegenSection">
+        <RecordSection Group="Nachweis" Slug="gegenaufklaerung" Label="Gegenaufklärung"
+                       Icon="@Icons.Material.Filled.Shield">
+            <CounterIntelPanel />
+        </RecordSection>
+    </AuthorizeView>
+
     <RecordSection Group="Nachweis" Slug="protokoll" Label="Audit-Protokoll"
                    Icon="@Icons.Material.Filled.FactCheck">
         <AuditLogPanel />

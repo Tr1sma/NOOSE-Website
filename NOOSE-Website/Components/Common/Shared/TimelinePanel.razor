@@ -127,6 +127,9 @@ else
         TimelineCategory.Source => "Quelle",
         TimelineCategory.Followup => "Wiedervorlage",
         TimelineCategory.Activity => "Aktivität",
+        TimelineCategory.Agenda => "Tagesordnung",
+        TimelineCategory.Attendance => "Anwesenheit",
+        TimelineCategory.SignOff => "Abmeldung",
         _ => k.ToString(),
     };
 
@@ -145,6 +148,9 @@ else
         TimelineCategory.Link => Color.Primary,
         TimelineCategory.Followup => Color.Warning,
         TimelineCategory.Activity => Color.Tertiary,
+        TimelineCategory.Agenda => Color.Primary,
+        TimelineCategory.Attendance => Color.Secondary,
+        TimelineCategory.SignOff => Color.Warning,
         _ => Color.Default,
     };
 
@@ -166,6 +172,9 @@ else
         TimelineCategory.Source => Icons.Material.Filled.AttachFile,
         TimelineCategory.Followup => Icons.Material.Filled.Schedule,
         TimelineCategory.Activity => Icons.Material.Filled.LocalFireDepartment,
+        TimelineCategory.Agenda => Icons.Material.Filled.FormatListNumbered,
+        TimelineCategory.Attendance => Icons.Material.Filled.HowToReg,
+        TimelineCategory.SignOff => Icons.Material.Filled.EventBusy,
         _ => Icons.Material.Filled.Circle,
     };
 }

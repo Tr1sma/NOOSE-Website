@@ -1,0 +1,95 @@
+@page "/ki-assistent"
+@inject ILlmService Llm
+@inject ISnackbar Snackbar
+
+<PageTitle>KI-Assistent · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.SmartToy"
+            Title="KI-Assistent"
+            Subtitle="Hilft beim Formulieren, Zusammenfassen und Analysieren von Texten, die du eingibst. Antworten sind KI-generiert und ungeprüft." />
+
+@if (!Llm.IsConfigured)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SmartToy"
+                Text="Der KI-Assistent ist nicht konfiguriert. Ein Admin muss Endpoint, Modell und Schlüssel in den Secrets hinterlegen." />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-3" Elevation="1" Style="min-height:40vh;max-height:60vh;overflow-y:auto;">
+        @if (_messages.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Stelle eine Frage oder füge einen Text ein (z. B. ein Gesprächsprotokoll) und bitte um Zusammenfassung.
+            </MudText>
+        }
+        @foreach (var m in _messages)
+        {
+            <MudStack Row="true" Justify="@(m.FromUser ? Justify.FlexEnd : Justify.FlexStart)" Class="my-2">
+                <MudPaper Class="pa-3" Elevation="0"
+                          Style="@($"max-width:80%;background:{(m.FromUser ? "rgba(34,211,238,0.10)" : "rgba(255,255,255,0.05)")};border-radius:10px;")">
+                    @if (!m.FromUser)
+                    {
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">KI · ungeprüft</MudText>
+                    }
+                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                </MudPaper>
+            </MudStack>
+        }
+        @if (_busy)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+        }
+    </MudPaper>
+
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+        <MudTextField @bind-Value="_input" Label="Nachricht" Lines="3" Immediate="true"
+                      Variant="Variant.Outlined" Class="flex-grow-1" Disabled="_busy" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                   OnClick="SendAsync" Disabled="@(_busy || string.IsNullOrWhiteSpace(_input))">Senden</MudButton>
+    </MudStack>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+        Modell: @Llm.Model · Gib keine Verschlusssachen oder Klarnamen ein.
+    </MudText>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const string SystemPrompt =
+        "Du bist der KI-Assistent des NOOSE (National Office of Security Enforcement), einer fiktiven " +
+        "Geheimdienst-Behörde auf einem GTA-Rollenspiel-Server. Hilf beim Formulieren, Zusammenfassen und " +
+        "Analysieren von Texten, die der Agent dir gibt. Erfinde keine Fakten über reale Akten. " +
+        "Antworte auf Deutsch, sachlich und knapp.";
+
+    private readonly List<ChatMsg> _messages = new();
+    private string? _input;
+    private bool _busy;
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_input) || _busy)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        var question = _input!.Trim();
+        _messages.Add(new ChatMsg(true, question));
+        _input = string.Empty;
+        _busy = true;
+        try
+        {
+            var answer = await Llm.ChatAsync(SystemPrompt, PromptRedactor.Clip(question), user);
+            _messages.Add(new ChatMsg(false, answer));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed record ChatMsg(bool FromUser, string Text);
+}

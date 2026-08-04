@@ -30,8 +30,9 @@ public sealed class ThreatScoreServiceTests
         return c;
     }
 
-    private static ThreatScoreService NewService(SqliteTestContext ctx, IThreatScoreConfigService? config = null)
-        => new(ctx.Factory, config ?? Config());
+    private static ThreatScoreService NewService(SqliteTestContext ctx, IThreatScoreConfigService? config = null,
+        INotificationService? notifications = null)
+        => new(ctx.Factory, config ?? Config(), notifications ?? Substitute.For<INotificationService>());
 
     // ==================== Calculate (pure static) ====================
 

@@ -39,10 +39,17 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
         try
         {
             // Missing fields use defaults.
-            return JsonSerializer.Deserialize<ThreatScoreConfiguration>(json, ThreatScoreService.JsonOptions)
-                   ?? ThreatScoreConfiguration.Default();
+            var config = JsonSerializer.Deserialize<ThreatScoreConfiguration>(json, ThreatScoreService.JsonOptions)
+                         ?? ThreatScoreConfiguration.Default();
+            // a stored config that violates the invariants (e.g. caps not summing to 100) would skew scores → fall back
+            Validate(config);
+            return config;
         }
         catch (JsonException)
+        {
+            return ThreatScoreConfiguration.Default();
+        }
+        catch (InvalidOperationException)
         {
             return ThreatScoreConfiguration.Default();
         }
@@ -104,6 +111,8 @@ public class ThreatScoreConfigService(IDbContextFactory<AppDbContext> dbFactory,
 
         if (k.ConfidenceFreshDays <= 0) throw new InvalidOperationException("Konfidenz-Frische (Tage) muss größer als 0 sein.");
         if (k.TriageThreshold is < 0 or > 100) throw new InvalidOperationException("Triage-Schwelle muss zwischen 0 und 100 liegen.");
+        NotNegative(k.AlarmDeltaThreshold, "Alarm-Delta-Schwelle");
+        if (k.AlarmMinScore is < 0 or > 100) throw new InvalidOperationException("Alarm-Mindest-Score muss zwischen 0 und 100 liegen.");
         if (k.RanksMaxPoints < 0) throw new InvalidOperationException("Ränge-Max-Punkte darf nicht negativ sein.");
 
         // Severity tiers: monotone.
