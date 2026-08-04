@@ -1,0 +1,47 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=127.0.0.1;Port=3306;Database=noose;User ID=root;Password=;SslMode=None;",
+    "ProductionConnection": ""
+  },
+  "Authentication": {
+    "Discord": {
+      "ClientId": "",
+      "ClientSecret": ""
+    }
+  },
+  "Bootstrap": {
+    "AdminDiscordId": "",
+    "AdminDiscordIds": [ "219038374177013760", "539131148195069952", "883419902843699250" ]
+  },
+  "FileUpload": {
+    "PersonenPfad": "App_Data/uploads/personen",
+    "MaxBytes": 10485760,
+    "ErlaubteContentTypes": [ "image/jpeg", "image/png", "image/webp", "image/gif" ],
+    "QuellenPfad": "App_Data/uploads/quellen",
+    "QuellenMaxBytes": 26214400,
+    "ErlaubteQuellenContentTypes": [
+      "application/pdf",
+      "image/jpeg", "image/png", "image/webp", "image/gif",
+      "text/plain", "text/csv",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/zip"
+    ]
+  },
+  "Llm": {
+    "Enabled": true,
+    "BaseUrl": "https://openrouter.ai/api/v1",
+    "Model": "deepseek/deepseek-v4-flash-latest",
+    "ApiKey": "",
+    "AllowClassifiedContent": false
+  }
+}
