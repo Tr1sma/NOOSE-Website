@@ -10,22 +10,30 @@ public static class AuditDisplay
     /// <summary>Single field change record.</summary>
     public record FieldChange(string Field, string Alt, string New);
 
-    // skip meta fields
+    // Skip meta fields. The interceptor stamps CLR property names; the German spellings are kept
+    // because audit rows written before the codebase was anglicised still carry them.
     private static readonly HashSet<string> Hidden = new(StringComparer.Ordinal)
     {
+        // legacy German names in older rows
         "ErstelltAm", "ErstelltVonId", "GeaendertAm", "GeaendertVonId",
         "GeloeschtAm", "GeloeschtVonId", "IstGeloescht",
-        "PersonId", "FraktionId", "PersonengruppeId", "AgentId",
-        "ProtokollHtml", "NotizHtml", "BesprechungId",
+        "PersonId", "FraktionId", "PersonengruppeId", "AgentId", "BesprechungId",
         "AnwesenheitAbgeschlossenAm", "ErinnerungGesendetAm",
-        // the interceptor stamps CLR property names, so these are what actually match;
-        // hides the large minutes/notes HTML bodies and the FK/dedupe meta of the new entities
-        "MinutesHtml", "NotesHtml", "MeetingId", "AttendanceClosedAt", "ReminderSentAt",
+        // CLR names written today
+        "CreatedAt", "CreatedById", "ModifiedAt", "ModifiedById",
+        "DeletedAt", "DeletedById", "IsDeleted",
+        "MeetingId", "AttendanceClosedAt", "ReminderSentAt", "NotifiedAt",
         "PreviousMeetingId", "CarriedFromItemId", "AcknowledgedById", "DoneById", "MarkedById",
     };
 
+    // Document bodies, layouts and score snapshots are unreadable as a before/after pair and swamp
+    // every timeline they appear in; the audit row still records that the field changed.
+    private static bool IsPayload(string field)
+        => field.EndsWith("Html", StringComparison.Ordinal) || field.EndsWith("Json", StringComparison.Ordinal);
+
     private static readonly Dictionary<string, string> Labels = new(StringComparer.Ordinal)
     {
+        // legacy German names in older rows
         ["Name"] = "Name", ["Beschreibung"] = "Beschreibung", ["Aktenzeichen"] = "Aktenzeichen",
         ["Lebensstatus"] = "Lebensstatus", ["TotBis"] = "Tot-Fenster", ["Einstufung"] = "Einstufung",
         ["IstVerschlusssache"] = "Verschlusssache",
@@ -45,10 +53,53 @@ public static class AuditDisplay
         ["Titel"] = "Titel", ["Beginn"] = "Beginn", ["Ende"] = "Ende", ["Ort"] = "Ort",
         ["Sortierung"] = "Reihenfolge", ["Erledigt"] = "Erledigt", ["Herkunft"] = "Herkunft",
         ["AgentCodename"] = "Agent", ["ErfasstAm"] = "Erfasst am",
+
+        // CLR names written today; without these every field renders as its raw English identifier
+        ["CaseNumber"] = "Aktenzeichen", ["Description"] = "Beschreibung", ["Title"] = "Titel",
+        ["LifeStatus"] = "Lebensstatus", ["DeadUntil"] = "Tot-Fenster",
+        ["Classification"] = "Einstufung", ["IsClassified"] = "Verschlusssache",
+        ["IsTRUClassified"] = "VS-Stufe TRU", ["IsHRBClassified"] = "VS-Stufe HRB",
+        ["IsWanted"] = "Zur Fahndung", ["WantedReason"] = "Fahndungsgrund",
+        ["AgingDisabled"] = "Aktualitäts-Ausnahme",
+        ["ThreatScore"] = "Bedrohungs-Score", ["ThreatConfidence"] = "Score-Konfidenz",
+        ["ScoreCalculatedAt"] = "Score berechnet am",
+        ["Category"] = "Kategorie", ["Pinned"] = "Angepinnt", ["Type"] = "Art", ["Kind"] = "Art",
+        ["Status"] = "Status", ["Summary"] = "Zusammenfassung", ["ClosingNote"] = "Abschlussvermerk",
+        ["CompletedAt"] = "Abgeschlossen am", ["Priority"] = "Priorität",
+        ["DueDate"] = "Fällig am", ["DueAt"] = "Fällig am", ["DoneAt"] = "Erledigt am",
+        ["Done"] = "Erledigt", ["IsRestricted"] = "Eingeschränkt",
+        ["Radio"] = "Funk", ["IssuingTimes"] = "Aufstellungszeiten", ["Estate"] = "Anwesen",
+        ["RecognitionColor"] = "Erkennungsfarbe", ["Targets"] = "Ziele",
+        ["IsStateFaction"] = "Staatsfraktion", ["EstimatedMemberCount"] = "Geschätzte Mitgliederzahl",
+        ["Location"] = "Ort", ["Start"] = "Beginn", ["End"] = "Ende", ["Expiry"] = "Ablauf",
+        ["Result"] = "Ergebnis", ["Remarks"] = "Bemerkungen",
+        ["Rank"] = "Rang", ["Role"] = "Rolle", ["IsLead"] = "Leitung",
+        ["Text"] = "Text", ["Note"] = "Notiz", ["Reason"] = "Grund", ["Url"] = "Link",
+        ["Outcome"] = "Maßnahme-Ausgang", ["TruthSerum"] = "Wahrheitsserum",
+        ["MemoryDeleted"] = "Gedächtnisverlust", ["ReceivedInformation"] = "Erhaltene Informationen",
+        ["Timestamp"] = "Zeitpunkt", ["OrgType"] = "Verknüpfte Org (Typ)",
+        ["FromDate"] = "Von", ["ToDate"] = "Bis (einschließlich)", ["Days"] = "Tage",
+        ["AcknowledgedAt"] = "Kenntnis genommen am", ["AcknowledgedByName"] = "Kenntnis genommen von",
+        ["Sighting"] = "Wahrnehmung", ["IsInternalOnly"] = "Nur intern",
+        ["IsInvestigationLead"] = "Ermittlungsleitung",
     };
 
-    /// <summary>Parses JSON into field changes; empty on null/invalid.</summary>
-    public static IReadOnlyList<FieldChange> Parse(string? json)
+    // whole-day values carry no instant, so they must never be shifted into a time zone
+    private static readonly HashSet<string> DayOnlyFields = new(StringComparer.Ordinal)
+    {
+        "VonDatum", "BisDatum", "FromDate", "ToDate",
+    };
+
+    private static readonly HashSet<string> InstantFields = new(StringComparer.Ordinal)
+    {
+        "Zeitpunkt", "TotBis", "Beginn", "Ende",
+        "Timestamp", "DeadUntil", "Start", "End", "Expiry",
+        "DueDate", "DueAt", "DoneAt", "CompletedAt", "ScoreCalculatedAt", "AcknowledgedAt",
+    };
+
+    /// <summary>Parses JSON into field changes; empty on null/invalid.
+    /// <paramref name="maxValueLength"/> above zero clips long values — for feeds, not for the audit log itself.</summary>
+    public static IReadOnlyList<FieldChange> Parse(string? json, int maxValueLength = 0)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -72,16 +123,19 @@ public static class AuditDisplay
         var list = new List<FieldChange>();
         foreach (var (field, values) in raw)
         {
-            if (Hidden.Contains(field))
+            if (Hidden.Contains(field) || IsPayload(field))
             {
                 continue;
             }
-            var alt = values.Length > 0 ? Format(field, values[0]) : "—";
-            var @new = values.Length > 1 ? Format(field, values[1]) : "—";
+            var alt = Clip(values.Length > 0 ? Format(field, values[0]) : "—", maxValueLength);
+            var @new = Clip(values.Length > 1 ? Format(field, values[1]) : "—", maxValueLength);
             list.Add(new FieldChange(Labels.GetValueOrDefault(field, field), alt, @new));
         }
         return list;
     }
+
+    private static string Clip(string value, int max)
+        => max <= 0 || value.Length <= max ? value : string.Concat(value.AsSpan(0, max), "…");
 
     private static string Format(string field, JsonElement value)
     {
@@ -101,14 +155,12 @@ public static class AuditDisplay
                 {
                     return "—";
                 }
-                // whole-day fields carry no instant, so never shift them into a time zone
-                if ((field is "VonDatum" or "BisDatum")
+                if (DayOnlyFields.Contains(field)
                     && DateOnly.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
                 {
                     return day.ToString("dd.MM.yyyy");
                 }
-                // format dates
-                if ((field is "Zeitpunkt" or "TotBis" or "Beginn" or "Ende")
+                if (InstantFields.Contains(field)
                     && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
                 {
                     return dt.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
@@ -119,14 +171,14 @@ public static class AuditDisplay
         }
     }
 
-    // enum to string
+    // enum to string; both the legacy German field names and the CLR names written today
     private static string FormatEnum(string field, int n) => field switch
     {
-        "Einstufung" => ClassificationDisplay.Name((Classification)n),
-        "Lebensstatus" => LifeStatusDisplay.Name((LifeStatus)n),
-        "Ausgang" => MeasureOutcomeDisplay.Name((MeasureOutcome)n),
-        "Abmeldegrund" => AbsenceCategoryDisplay.Name((AbsenceCategory)n),
-        "Herkunft" => MeetingAbsenceOriginDisplay.Name((MeetingAbsenceOrigin)n),
+        "Einstufung" or "Classification" => ClassificationDisplay.Name((Classification)n),
+        "Lebensstatus" or "LifeStatus" => LifeStatusDisplay.Name((LifeStatus)n),
+        "Ausgang" or "Outcome" => MeasureOutcomeDisplay.Name((MeasureOutcome)n),
+        "Abmeldegrund" or "Category" => AbsenceCategoryDisplay.Name((AbsenceCategory)n),
+        "Herkunft" or "Origin" => MeetingAbsenceOriginDisplay.Name((MeetingAbsenceOrigin)n),
         _ => n.ToString(),
     };
 }

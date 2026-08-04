@@ -311,7 +311,8 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
             }
             var (category, title) = TimelineDisplay.MapAudit(p.Row.EntityType, p.Row.Action);
             var detail = details.TryGetValue((p.Row.EntityType, p.Row.EntityId), out var d) ? Render(d, records) : null;
-            var changes = AuditDisplay.Parse(p.Row.ChangesJson);
+            // the feed reads at a glance; the full before/after stays in the audit log view
+            var changes = AuditDisplay.Parse(p.Row.ChangesJson, maxValueLength: 90);
             events.Add(new ChronikEvent(p.Row.Timestamp, category, p.ParentType, p.ParentId, record.Name, title,
                 detail, p.Row.AgentName, Href(p.ParentType, p.ParentId), record.Deleted,
                 changes.Count == 0 ? null : changes));
