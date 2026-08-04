@@ -537,6 +537,13 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 groups[i] = groups[i] with { Hit = SearchRelevance.Rank(s!, groups[i].Hit) };
             }
         }
+
+        // phonetic/stem side-index recall (deck-free, catches Maier↔Meyer); appended AFTER ranking so these
+        // weakest matches sit last, and resolved against the live VS-/visibility-filtered tables
+        if (criteria.Fuzzy && hasText)
+        {
+            await AppendSideIndexAsync(db, groups, s!, isLeadership, meId, Active, cancellationToken);
+        }
         return groups;
     }
 
@@ -917,6 +924,111 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
     }
+
+    private static readonly IReadOnlyDictionary<string, string> SideIndexLabels = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [nameof(Person)] = "Personen",
+        [nameof(Faction)] = "Fraktionen",
+        [nameof(PersonGroup)] = "Personengruppen",
+        [nameof(Party)] = "Parteien",
+        [nameof(Operation)] = "Operationen",
+        [nameof(Taskforce)] = "Taskforces",
+        [nameof(Case)] = "Vorgänge",
+        [nameof(Job)] = "Aufgaben",
+    };
+
+    /// <summary>Deck-free recall from the persisted phonetic/stem side-index (catches Maier↔Meyer that Levenshtein
+    /// misses). Resolves each candidate id against the live, VS-/visibility-filtered table, then appends to the group.</summary>
+    private async Task AppendSideIndexAsync(AppDbContext db, List<SearchResultGroup> groups, string text,
+        bool isLeadership, string? meId, Func<string, bool> active, CancellationToken ct)
+    {
+        var phon = SearchTokenizer.PhoneticKeys(text);
+        var stems = SearchTokenizer.Stems(text);
+        if (phon.Count == 0 && stems.Count == 0)
+        {
+            return;
+        }
+        var types = SideIndexLabels.Keys.Where(active).ToHashSet(StringComparer.Ordinal);
+        if (types.Count == 0)
+        {
+            return;
+        }
+
+        var byType = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        void Note(string t, string id)
+        {
+            if (!byType.TryGetValue(t, out var set))
+            {
+                set = new HashSet<string>(StringComparer.Ordinal);
+                byType[t] = set;
+            }
+            set.Add(id);
+        }
+        if (phon.Count > 0)
+        {
+            foreach (var r in await db.SearchPhoneticKeys.Where(k => types.Contains(k.EntityType) && phon.Contains(k.Key))
+                .Select(k => new { k.EntityType, k.EntityId }).Distinct().ToListAsync(ct))
+            {
+                Note(r.EntityType, r.EntityId);
+            }
+        }
+        if (stems.Count > 0)
+        {
+            foreach (var r in await db.SearchStemTokens.Where(k => types.Contains(k.EntityType) && stems.Contains(k.Stem))
+                .Select(k => new { k.EntityType, k.EntityId }).Distinct().ToListAsync(ct))
+            {
+                Note(r.EntityType, r.EntityId);
+            }
+        }
+
+        foreach (var (type, ids) in byType)
+        {
+            var existing = groups.FirstOrDefault(g => g.Category == type);
+            var have = existing is null
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : existing.Hit.Select(h => h.TargetId).ToHashSet(StringComparer.Ordinal);
+            var need = ids.Where(id => !have.Contains(id)).ToList();
+            var slots = MaxPerCategory - (existing?.Hit.Count ?? 0);
+            if (need.Count == 0 || slots <= 0)
+            {
+                continue;
+            }
+            var extra = await LoadSideHitsAsync(db, type, need, isLeadership, meId, slots, ct);
+            if (extra.Count == 0)
+            {
+                continue;
+            }
+            var merged = (existing?.Hit ?? Enumerable.Empty<SearchHit>()).Concat(extra).ToList();
+            if (existing is not null)
+            {
+                groups.Remove(existing);
+            }
+            groups.Add(new SearchResultGroup(type, SideIndexLabels[type], merged));
+        }
+    }
+
+    // resolve side-index candidate ids to hits against the live table with the same visibility filter as the main pipeline
+    private static async Task<List<SearchHit>> LoadSideHitsAsync(AppDbContext db, string type, List<string> ids,
+        bool isLeadership, string? meId, int take, CancellationToken ct) => type switch
+    {
+        nameof(Person) => await db.People.Where(p => (isLeadership || !p.IsClassified) && ids.Contains(p.Id))
+            .Take(take).Select(p => new SearchHit(nameof(Person), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(ct),
+        nameof(Faction) => await db.Factions.Where(f => (isLeadership || !f.IsClassified) && ids.Contains(f.Id))
+            .Take(take).Select(f => new SearchHit(nameof(Faction), f.Id, f.Name, f.Kind ?? string.Empty, f.CaseNumber)).ToListAsync(ct),
+        nameof(PersonGroup) => await db.PersonGroups.Where(g => (isLeadership || !g.IsClassified) && ids.Contains(g.Id))
+            .Take(take).Select(g => new SearchHit(nameof(PersonGroup), g.Id, g.Name, g.Description ?? string.Empty, g.CaseNumber)).ToListAsync(ct),
+        nameof(Party) => await db.Parties.Where(p => (isLeadership || !p.IsClassified) && ids.Contains(p.Id))
+            .Take(take).Select(p => new SearchHit(nameof(Party), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(ct),
+        nameof(Operation) => await db.Operations.Where(o => (isLeadership || !o.IsClassified) && ids.Contains(o.Id))
+            .Take(take).Select(o => new SearchHit(nameof(Operation), o.Id, o.Title, o.Type ?? string.Empty, o.CaseNumber)).ToListAsync(ct),
+        nameof(Case) => await db.Cases.Where(c => (isLeadership || !c.IsClassified) && ids.Contains(c.Id))
+            .Take(take).Select(c => new SearchHit(nameof(Case), c.Id, c.Title, c.Type ?? string.Empty, c.CaseNumber)).ToListAsync(ct),
+        nameof(Taskforce) => await db.Taskforces.OnlyVisible(db, isLeadership, meId).Where(t => ids.Contains(t.Id))
+            .Take(take).Select(t => new SearchHit(nameof(Taskforce), t.Id, t.Name, t.Purpose ?? string.Empty, t.CaseNumber)).ToListAsync(ct),
+        nameof(Job) => await db.Jobs.OnlyVisible(db, isLeadership, meId).Where(j => ids.Contains(j.Id))
+            .Take(take).Select(j => new SearchHit(nameof(Job), j.Id, j.Title, j.Description ?? string.Empty, j.CaseNumber)).ToListAsync(ct),
+        _ => new List<SearchHit>(),
+    };
 
     /// <summary>Candidate for the in-memory fuzzy pass: display data plus the words to compare.</summary>
     private sealed record FuzzyCandidate(string Id, string Display, string CaseNumber, string Snippet, IReadOnlyList<string> Tokens);

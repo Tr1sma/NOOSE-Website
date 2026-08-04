@@ -22,6 +22,7 @@ using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
 using NOOSE_Website.Infrastructure.Threat;
 using NOOSE_Website.Infrastructure.Gamification;
+using NOOSE_Website.Infrastructure.Search;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Shares;
@@ -74,6 +75,7 @@ builder.Services.AddSingleton<ICurrentUserService, CurrentUserService>();
 builder.Services.AddSingleton<ReadOnlyBarrierInterceptor>();
 builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
 builder.Services.AddSingleton<WatchlistChangeInterceptor>();
+builder.Services.AddSingleton<SearchIndexInterceptor>();
 
 // Singleton factory so created contexts don't hang off the circuit scope (avoids ObjectDisposedException on dialog/nav refresh)
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
@@ -81,7 +83,8 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
            .AddInterceptors(
                sp.GetRequiredService<ReadOnlyBarrierInterceptor>(),
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
-               sp.GetRequiredService<WatchlistChangeInterceptor>())
+               sp.GetRequiredService<WatchlistChangeInterceptor>(),
+               sp.GetRequiredService<SearchIndexInterceptor>()) // last: rebuilds the search side-index from final state
            .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
 
 builder.Services.AddHealthChecks()
@@ -220,6 +223,7 @@ builder.Services.AddHostedService<GamificationSweepWorker>();
 builder.Services.AddScoped<ITopAgentAwardService, TopAgentAwardService>();
 builder.Services.AddHostedService<TopAgentAwardWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddHostedService<SearchIndexBackfillWorker>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
 builder.Services.AddScoped<IFactionService, FactionService>();
 builder.Services.AddScoped<IPersonGroupService, PersonGroupService>();

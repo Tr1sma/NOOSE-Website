@@ -56,6 +56,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Source> Sources => Set<Source>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TagMapping> TagMappings => Set<TagMapping>();
+    public DbSet<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey> SearchPhoneticKeys => Set<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey>();
+    public DbSet<NOOSE_Website.Data.Entities.Search.SearchStemToken> SearchStemTokens => Set<NOOSE_Website.Data.Entities.Search.SearchStemToken>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<EnumLabelOverride> EnumLabelOverrides => Set<EnumLabelOverride>();
 
@@ -568,6 +570,26 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(k => k.EntityId).HasMaxLength(64);
             b.Property(k => k.AuthorName).HasMaxLength(128);
             b.HasIndex(k => new { k.EntityType, k.EntityId });
+        });
+
+        modelBuilder.Entity<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey>(b =>
+        {
+            b.Property(z => z.EntityType).HasMaxLength(128);
+            b.Property(z => z.EntityId).HasMaxLength(64);
+            b.Property(z => z.SourceId).HasMaxLength(64);
+            b.Property(z => z.Key).HasMaxLength(32);
+            b.HasIndex(z => z.Key);
+            b.HasIndex(z => z.SourceId);
+        });
+
+        modelBuilder.Entity<NOOSE_Website.Data.Entities.Search.SearchStemToken>(b =>
+        {
+            b.Property(z => z.EntityType).HasMaxLength(128);
+            b.Property(z => z.EntityId).HasMaxLength(64);
+            b.Property(z => z.SourceId).HasMaxLength(64);
+            b.Property(z => z.Stem).HasMaxLength(64);
+            b.HasIndex(z => z.Stem);
+            b.HasIndex(z => z.SourceId);
         });
 
         modelBuilder.Entity<Link>(b =>
