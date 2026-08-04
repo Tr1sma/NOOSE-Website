@@ -1,0 +1,42 @@
+@using NOOSE_Website.Models.Gamification
+@inject IGamificationService Gamification
+
+@if (_load)
+{
+    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+}
+else if (_badges.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Auszeichnungen.</MudText>
+}
+else
+{
+    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+        @foreach (var b in _badges)
+        {
+            <MudTooltip Text="@($"{b.Description} — verliehen am {b.AwardedAt:dd.MM.yyyy}")">
+                <MudChip T="string" Icon="@b.Icon" Color="Color.Primary" Variant="Variant.Outlined">@b.Label</MudChip>
+            </MudTooltip>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string AgentId { get; set; } = default!;
+
+    private bool _load = true;
+    private string _loadedId = string.Empty;
+    private IReadOnlyList<BadgeView> _badges = Array.Empty<BadgeView>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AgentId == _loadedId)
+        {
+            return;
+        }
+        _loadedId = AgentId;
+        _load = true;
+        _badges = await Gamification.GetBadgesAsync(AgentId);
+        _load = false;
+    }
+}

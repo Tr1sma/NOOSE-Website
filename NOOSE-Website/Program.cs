@@ -21,6 +21,7 @@ using NOOSE_Website.Infrastructure.Announcements;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
 using NOOSE_Website.Infrastructure.Threat;
+using NOOSE_Website.Infrastructure.Gamification;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Shares;
@@ -214,6 +215,8 @@ builder.Services.AddScoped<IThreatScoreConfigService, ThreatScoreConfigService>(
 builder.Services.AddScoped<IThreatScoreService, ThreatScoreService>();
 builder.Services.AddScoped<IThreatTrendService, ThreatTrendService>();
 builder.Services.AddHostedService<ThreatScoreSweepWorker>();
+builder.Services.AddScoped<IGamificationService, GamificationService>();
+builder.Services.AddHostedService<GamificationSweepWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
 builder.Services.AddScoped<IFactionService, FactionService>();

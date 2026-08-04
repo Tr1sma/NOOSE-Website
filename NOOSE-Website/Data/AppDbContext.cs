@@ -166,6 +166,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<RecencyThreshold> RecencyThresholds => Set<RecencyThreshold>();
     public DbSet<ThreatScoreConfig> ThreatScoreConfigs => Set<ThreatScoreConfig>();
     public DbSet<ThreatScoreHistory> ThreatScoreHistory => Set<ThreatScoreHistory>();
+    public DbSet<NOOSE_Website.Data.Entities.Gamification.AgentBadge> AgentBadges => Set<NOOSE_Website.Data.Entities.Gamification.AgentBadge>();
     public DbSet<Followup> Followups => Set<Followup>();
 
     // cached AI dossier summaries (one current row per record)
@@ -245,6 +246,13 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.EntityId).HasMaxLength(64);
             b.Property(a => a.DetailJson).HasColumnType("longtext");
             b.HasIndex(a => new { a.EntityType, a.EntityId, a.Timestamp });
+        });
+
+        modelBuilder.Entity<NOOSE_Website.Data.Entities.Gamification.AgentBadge>(b =>
+        {
+            b.Property(a => a.BadgeKey).HasMaxLength(64);
+            b.HasIndex(a => new { a.AgentId, a.BadgeKey }).IsUnique();
+            b.HasOne<Agent>().WithMany().HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DossierSummary>(b =>

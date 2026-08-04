@@ -77,6 +77,8 @@ public static class NavCatalog
             Description: "Behördliche Ankündigungen, teils quittierungspflichtig"),
         new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Dienststelle, NavArea.Dienststelle,
             Description: "Agenten der Behörde mit Personalakte und Dienstgrad"),
+        new NavEntry("bestenliste", "/bestenliste", Icons.Material.Filled.EmojiEvents, "Bestenliste", NavSection.Dienststelle, NavArea.Dienststelle,
+            Description: "Team-Ranking nach dokumentierter Ermittlungsarbeit"),
         new NavEntry("besprechungen", "/besprechungen", Icons.Material.Filled.Groups, "Besprechungen", NavSection.Dienststelle, NavArea.Dienststelle,
             Description: "Dienstbesprechungen mit Tagesordnung und Protokoll"),
         new NavEntry("kalender", "/kalender", Icons.Material.Filled.CalendarMonth, "Kalender", NavSection.Dienststelle, NavArea.Dienststelle,

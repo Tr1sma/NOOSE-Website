@@ -85,6 +85,9 @@ else
                 <MudTabPanel Text="Module" Icon="@Icons.Material.Filled.School">
                     <ModulesPanel AgentId="@_agent.Id" />
                 </MudTabPanel>
+                <MudTabPanel Text="Auszeichnungen" Icon="@Icons.Material.Filled.EmojiEvents">
+                    <AgentBadgesPanel AgentId="@_agent.Id" />
+                </MudTabPanel>
                 @if (_isLeadership)
                 {
                     <MudTabPanel Text="Kommentare" Icon="@Icons.Material.Filled.Comment">
@@ -120,8 +123,8 @@ else
         _mayRealName = _user.MayRealNameSee();
         _mayWrite = _user.MayWrite();
         _tabs = _isLeadership
-            ? new[] { "verlauf", "vermerke", "befoerderungen", "module", "kommentare" }
-            : new[] { "verlauf", "vermerke", "befoerderungen", "module" };
+            ? new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen", "kommentare" }
+            : new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen" };
     }
 
     // Component is reused across /personal/{A}→{B}; react to AgentId change since OnInitialized won't rerun

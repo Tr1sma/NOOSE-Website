@@ -4,6 +4,8 @@
 @inject IRequestService RequestService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IGamificationService Gamification
+@using NOOSE_Website.Models.Gamification
 
 <PageTitle>Mein Profil · NOOSE</PageTitle>
 
@@ -94,6 +96,23 @@ else
         </MudForm>
     </MudPaper>
 
+    @if (!_isPartner)
+    {
+        <MudPaper Class="pa-6 mt-6" Elevation="2" Style="max-width:640px;">
+            <MudText Typo="Typo.h6" Class="mb-3">Meine Leistung</MudText>
+            <MudStack Row="true" Class="flex-wrap mb-4" Spacing="3">
+                <StatTile Icon="@Icons.Material.Filled.FolderOpen" Label="Akten" Value="@_stats.Records.ToString()" />
+                <StatTile Icon="@Icons.Material.Filled.Description" Label="Doks" Value="@_stats.Docs.ToString()" />
+                <StatTile Icon="@Icons.Material.Filled.Hub" Label="Verknüpfungen" Value="@_stats.Links.ToString()" />
+                <StatTile Icon="@Icons.Material.Filled.Shield" Label="Einstufungen" Value="@_stats.Classifications.ToString()" />
+                <StatTile Icon="@Icons.Material.Filled.Visibility" Label="Observationen" Value="@_stats.Observations.ToString()" />
+                <StatTile Icon="@Icons.Material.Filled.TaskAlt" Label="Gelöste Vorgänge" Value="@_stats.SolvedCases.ToString()" />
+            </MudStack>
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Auszeichnungen</MudText>
+            <AgentBadgesPanel AgentId="@_agent.Id" />
+        </MudPaper>
+    }
+
     @if (_myRequests.Count > 0)
     {
         <MudPaper Class="pa-6 mt-6" Elevation="2" Style="max-width:640px;">
@@ -132,6 +151,7 @@ else
     private ClaimsPrincipal _user = default!;
     private Agent? _agent;
     private List<Request> _myRequests = new();
+    private AgentStats _stats = AgentStats.Empty;
 
     private MudForm _form = default!;
     private string _codename = string.Empty;
@@ -154,6 +174,10 @@ else
         if (!string.IsNullOrWhiteSpace(id))
         {
             _myRequests = await RequestService.GetMyAsync(id);
+            if (!_isPartner)
+            {
+                _stats = await Gamification.GetStatsAsync(id);
+            }
         }
         _load = false;
     }
