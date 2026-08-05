@@ -20,7 +20,7 @@ public static class Permission
     /// <summary>Require leadership or admin, but NOT read-only supervisors (OnlyReader).</summary>
     public static void RequireLeadershipNoReader(ClaimsPrincipal actor)
     {
-        if (!actor.IsLeadership() || actor.IsOnlyReader())
+        if (!actor.MayCounterIntel())
         {
             throw new UnauthorizedAccessException(
                 "Diese Auswertung ist der Führung vorbehalten und für die Nur-Lese-Aufsicht gesperrt.");

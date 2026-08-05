@@ -1,22 +1,27 @@
 @* Renders a statistics report as print-friendly tables. *@
+@* Every member is treated as nullable: archived snapshots predate later members, and System.Text.Json *@
+@* hands a missing constructor parameter null rather than an empty list. *@
 @using NOOSE_Website.Models.Dashboard
 @using NOOSE_Website.Models.Statistics
 
 @if (Report is { } r)
 {
-    <section>
-        <h2>Kennzahlen</h2>
-        <table class="druck-felder">
-            <tbody>
-                <tr><th>Personen-Akten</th><td>@r.Metrics.People</td></tr>
-                <tr><th>Organisationen (Fraktionen, Gruppen, Parteien)</th><td>@r.Metrics.FactionsAndGroups</td></tr>
-                <tr><th>Operationen</th><td>@r.Metrics.Operations</td></tr>
-                <tr><th>Offene Vorgänge</th><td>@r.Metrics.OpenCases</td></tr>
-                <tr><th>Offene Anträge</th><td>@r.Metrics.OpenRequests</td></tr>
-                <tr><th>Veraltete Akten</th><td>@r.Metrics.StaleRecords</td></tr>
-            </tbody>
-        </table>
-    </section>
+    @if (r.Metrics is { } metrics)
+    {
+        <section>
+            <h2>Kennzahlen</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Personen-Akten</th><td>@metrics.People</td></tr>
+                    <tr><th>Organisationen (Fraktionen, Gruppen, Parteien)</th><td>@metrics.FactionsAndGroups</td></tr>
+                    <tr><th>Operationen</th><td>@metrics.Operations</td></tr>
+                    <tr><th>Offene Vorgänge</th><td>@metrics.OpenCases</td></tr>
+                    <tr><th>Offene Anträge</th><td>@metrics.OpenRequests</td></tr>
+                    <tr><th>Veraltete Akten</th><td>@metrics.StaleRecords</td></tr>
+                </tbody>
+            </table>
+        </section>
+    }
 
     @DistributionTable("Personen nach Einstufung", r.PeopleByClassification)
     @DistributionTable("Personen nach Gefährdung", r.PeopleByHazard)
@@ -25,20 +30,23 @@
     @DistributionTable("Maßnahme-Ausgänge", r.MeasureOutcomes)
     @DistributionTable("Vorgänge nach Status", r.CasesByStatus)
 
-    <section>
-        <h2>Verlauf der letzten 12 Monate</h2>
-        <table class="druck-tabelle">
-            <thead>
-                <tr><th>Monat</th><th>Maßnahmen</th><th>Neuzugänge</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var m in r.TimeSeries)
-                {
-                    <tr><td>@m.Label</td><td>@m.Measures</td><td>@m.NewEntries</td></tr>
-                }
-            </tbody>
-        </table>
-    </section>
+    @if (r.TimeSeries is { Count: > 0 } months)
+    {
+        <section>
+            <h2>Verlauf der letzten 12 Monate</h2>
+            <table class="druck-tabelle">
+                <thead>
+                    <tr><th>Monat</th><th>Maßnahmen</th><th>Neuzugänge</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in months)
+                    {
+                        <tr><td>@m.Label</td><td>@m.Measures</td><td>@m.NewEntries</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
 
     @TopTable("Gefährlichste Personen", r.TopPeople)
     @TopTable("Gefährlichste Fraktionen", r.TopFactions)
@@ -47,14 +55,14 @@
 @code {
     [Parameter, EditorRequired] public StatisticsReport? Report { get; set; }
 
-    private RenderFragment DistributionTable(string title, IReadOnlyList<DistributionSegment> segments) =>@<section>
+    private RenderFragment DistributionTable(string title, IReadOnlyList<DistributionSegment>? segments) =>@<section>
         <h2>@title</h2>
         <table class="druck-tabelle">
             <thead>
                 <tr><th>Kategorie</th><th>Anzahl</th></tr>
             </thead>
             <tbody>
-                @foreach (var s in segments)
+                @foreach (var s in segments ?? [])
                 {
                     <tr><td>@s.Designation</td><td>@s.Count</td></tr>
                 }
@@ -62,7 +70,8 @@
         </table>
     </section>;
 
-    private RenderFragment TopTable(string title, IReadOnlyList<StatisticsTopEntry> entries) =>@<section>
+    private RenderFragment TopTable(string title, IReadOnlyList<StatisticsTopEntry>? rows) =>@<section>
+        @{ var entries = rows ?? []; }
         <h2>@title</h2>
         @if (entries.Count == 0)
         {

@@ -1,75 +1,115 @@
-@* Threat-score trend overview: animated faction race + biggest 30-day movers. All numbers VS-filtered per caller. *@
+@* Threat picture: how scores are spread, how the spread moved, what drives the top records. *@
+@* All numbers are classification-filtered per caller. *@
+@using NOOSE_Website.Models.Statistics
 @using NOOSE_Website.Models.Threat
+@using NOOSE_Website.Theme
 @inject IThreatTrendService Trend
+@inject IThreatStatisticsService Stats
 @inject NavigationManager Nav
 
-<MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
-    Wie sich die Bedrohungslage über die Zeit entwickelt – aus deiner Sicht (Verschlusssachen werden gefiltert).
-</MudText>
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <HistogramChart Title="Score-Verteilung" Subtitle="Wie viele Akten in welcher Punktespanne liegen"
+                                Buckets="@_buckets" SeriesName="Akten"
+                                XAxisTitle="Bedrohungs-Score" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CorrelationScatter Title="Score gegen Konfidenz"
+                                    Subtitle="Punkte oben links sind hohe Scores auf dünner Datenlage"
+                                    Clouds="@_clouds" XAxisTitle="Konfidenz (%)" YAxisTitle="Score"
+                                    Height="320px" Stale="@_stale" />
+            </MudItem>
 
-@if (_load)
-{
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-}
-else
-{
-    <MudText Typo="Typo.h6" Class="mb-2">Gefährlichste Fraktionen im Zeitverlauf</MudText>
-    <MudPaper Class="pa-4 mb-6" Elevation="2">
-        <BarChartRace Frames="_frames" />
-    </MudPaper>
+            <MudItem xs="12" Class="d-flex">
+                <MatrixHeatmap Title="Gefährdungsstufen im Zeitverlauf (Fraktionen)"
+                               Subtitle="Verschiebt sich die Verteilung nach oben oder nach unten?"
+                               Matrix="@_bands" Unit="Fraktionen" Height="300px" Stale="@_stale" />
+            </MudItem>
 
-    <MudText Typo="Typo.h6" Class="mb-2">Größte Score-Bewegungen (30 Tage)</MudText>
-    <MudPaper Class="pa-4" Elevation="2">
-        @if (_movers.Count == 0)
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine nennenswerten Score-Bewegungen.</MudText>
-        }
-        else
-        {
-            <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
-                <thead>
-                    <tr>
-                        <th>Akte</th>
-                        <th style="width:8rem;text-align:right;">Verlauf</th>
-                        <th style="width:5rem;text-align:right;">Delta</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var m in _movers)
-                    {
-                        <tr style="cursor:pointer;" @onclick="@(() => Nav.NavigateTo(m.Href))">
-                            <td>
-                                <MudText Typo="Typo.body2"><b>@(m.Classified ? "🔒 " : "")@m.Name</b></MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@TypeLabel(m.EntityType)</MudText>
-                            </td>
-                            <td style="text-align:right;">@m.FromScore → @m.ToScore</td>
-                            <td style="text-align:right;">
-                                <MudChip T="string" Size="Size.Small"
-                                         Color="@(m.Delta >= 0 ? Color.Error : Color.Success)">
-                                    @(m.Delta > 0 ? "+" : "")@m.Delta
-                                </MudChip>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </MudSimpleTable>
-        }
-    </MudPaper>
-}
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ComponentRadar Title="Score-Treiber der Top-Fraktionen"
+                                Subtitle="Punkte je Teil-Score (S1–S4)"
+                                Grid="@_factionProfiles" AxisMax="55" Height="340px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ComponentRadar Title="Score-Treiber der Top-Personen"
+                                Subtitle="Punkte je Teil-Score (P1–P5)"
+                                Grid="@_personProfiles" AxisMax="40" Height="340px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <DumbbellChart Title="Größte Score-Bewegungen (30 Tage)"
+                               Subtitle="Grau ist der alte Stand, farbig der neue"
+                               Moves="@_moves" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ChartFrame Title="Gefährlichste Fraktionen im Zeitverlauf"
+                            Subtitle="Monat für Monat, absteigend nach Score"
+                            Height="300px" IsEmpty="@(_frames.Count == 0)">
+                    <BarChartRace Frames="@_frames" />
+                </ChartFrame>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
 
-    private bool _load = true;
-    private IReadOnlyList<ThreatRaceFrame> _frames = Array.Empty<ThreatRaceFrame>();
-    private IReadOnlyList<ThreatMover> _movers = Array.Empty<ThreatMover>();
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
 
-    protected override async Task OnInitializedAsync()
+    private IReadOnlyList<ThreatRaceFrame> _frames = [];
+    private IReadOnlyList<ChartMove> _moves = [];
+    private IReadOnlyList<ChartBucket> _buckets = [];
+    private IReadOnlyList<(string Name, IReadOnlyList<ChartPoint> Points)> _clouds = [];
+    private ChartMatrix _bands = ChartMatrix.Empty;
+    private ChartGrid _factionProfiles = ChartGrid.Empty;
+    private ChartGrid _personProfiles = ChartGrid.Empty;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
         var user = (await AuthStateTask).User;
         _frames = await Trend.GetFactionRaceAsync(user);
-        _movers = await Trend.GetTopMoversAsync(user);
-        _load = false;
+
+        var movers = await Trend.GetTopMoversAsync(user);
+        _moves = movers
+            .Select(m => new ChartMove(
+                (m.Classified ? "🔒 " : string.Empty) + m.Name,
+                TypeLabel(m.EntityType), m.FromScore, m.ToScore, m.Href))
+            .ToList();
+
+        var histogram = await Stats.GetScoreHistogramAsync(Scope);
+        _buckets = histogram.Labels
+            .Select((label, i) => new ChartBucket(label, i * 10, i * 10 + 10,
+                (int)histogram.Series.Sum(s => i < s.Values.Count ? s.Values[i] : 0)))
+            .ToList();
+
+        _clouds = await Stats.GetScoreVsConfidenceAsync(Scope);
+        _bands = await Stats.GetBandOverTimeAsync(Scope, nameof(NOOSE_Website.Data.Entities.Factions.Faction));
+        _factionProfiles = await Stats.GetComponentProfilesAsync(Scope,
+            nameof(NOOSE_Website.Data.Entities.Factions.Faction));
+        _personProfiles = await Stats.GetComponentProfilesAsync(Scope,
+            nameof(NOOSE_Website.Data.Entities.People.Person));
+
+        _first = false;
+        _stale = false;
     }
 
     private static string TypeLabel(string entityType) => entityType switch

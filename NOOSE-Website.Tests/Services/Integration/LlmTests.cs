@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Security.Claims;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
@@ -15,7 +16,7 @@ public sealed class LlmTests
     private static ClaimsPrincipal Agent() => ClaimsPrincipalBuilder.Agent("a").WithRank(Rank.SpecialAgent).Build();
 
     private static LlmService Service(LlmOptions options)
-        => new(Substitute.For<IHttpClientFactory>(), Options.Create(options));
+        => new(Substitute.For<IHttpClientFactory>(), Options.Create(options), NullLogger<LlmService>.Instance);
 
     // ---- PromptRedactor ----
 

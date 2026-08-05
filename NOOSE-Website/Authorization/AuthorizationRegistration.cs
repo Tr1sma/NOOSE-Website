@@ -52,6 +52,9 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.AdminPage, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsAdmin() || ctx.User.IsOnlyReader()))
+            .AddPolicy(Policies.CounterIntel, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.MayCounterIntel()))
             .AddPolicy(Policies.HighestClassification, p => p
                 .RequireAuthenticatedUser()
                 .AddRequirements(new RankRequirement(Rank.SeniorSpecialAgent)))

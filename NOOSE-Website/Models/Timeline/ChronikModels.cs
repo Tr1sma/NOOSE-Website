@@ -33,8 +33,45 @@ public sealed record ChronikResult(
     DateTime? NextCursorUtc,
     bool HasMore);
 
-/// <summary>One bar of the density band: bucket start (UTC) and raw event count.</summary>
-public sealed record ChronikDensityBucket(DateTime StartUtc, int Count);
+/// <summary>Bucket width of the overview band; derived from the window, never chosen by the caller.</summary>
+public enum ChronikBucketUnit
+{
+    Hour,
+    Day,
+    Week,
+    Month,
+}
+
+/// <summary>One stacked segment of a band bucket; Slot indexes the band's category groups.</summary>
+public readonly record struct ChronikDensitySegment(int Slot, int Count);
+
+/// <summary>One bar of the density band: local bucket start, total and its per-group split.</summary>
+/// <remarks>Local, not UTC, so the band and the feed's day headers cannot drift apart.</remarks>
+public sealed record ChronikDensityBucket(
+    DateTime StartLocal,
+    int Total,
+    IReadOnlyList<ChronikDensitySegment> Segments);
+
+/// <summary>Band buckets plus the headline numbers the KPI row shows.</summary>
+public sealed record ChronikDensity(
+    IReadOnlyList<ChronikDensityBucket> Buckets,
+    ChronikBucketUnit Unit,
+    int Total,
+    int DistinctAgents,
+    int DistinctRecords,
+    int WindowDays,
+    bool Capped)
+{
+    /// <summary>Events per day across the whole window, not just the days that carry events.</summary>
+    public int AveragePerDay => WindowDays <= 0 ? 0 : (int)Math.Round((double)Total / WindowDays);
+
+    /// <summary>Highest bucket total; the band's y-axis domain.</summary>
+    public int Peak => Buckets.Count == 0 ? 0 : Buckets.Max(b => b.Total);
+
+    /// <summary>Nothing to plot.</summary>
+    public static ChronikDensity Empty { get; } =
+        new(Array.Empty<ChronikDensityBucket>(), ChronikBucketUnit.Day, 0, 0, 0, 1, false);
+}
 
 /// <summary>An agent selectable in the chronicle filter.</summary>
 public sealed record ChronikAgentOption(string Id, string Name);

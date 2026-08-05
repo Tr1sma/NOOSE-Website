@@ -220,6 +220,8 @@ public class FactionService(
 
         // Detect renames before replacing the old ranks, so the denormalized rank name on members can follow.
         var renames = RankRenamesDetect(faction.Ranks, input.Ranks);
+        // Snapshot the stocks before they are replaced: only a real stock change refreshes the freshness light.
+        var stockBefore = StockSnapshot(faction);
 
         // Replace the structured lists wholesale; members are untouched (own endpoints).
         db.FactionRanks.RemoveRange(faction.Ranks);
@@ -245,6 +247,10 @@ public class FactionService(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        if (!StockSnapshot(faction).SequenceEqual(stockBefore, StringComparer.Ordinal))
+        {
+            await FactionRecency.StampAsync(db, id, FactionRecencyFacet.Stock, cancellationToken);
+        }
         // Master data affects the score.
         await threat.NewCalculateAsync(id, cancellationToken);
         await MentionNotify.DeltaAsync(notifications, oldMentions, MentionScope(faction), "einer Fraktionsakte",
@@ -369,6 +375,7 @@ public class FactionService(
         await db.SaveChangesAsync(cancellationToken);
         await FactionColleaguesSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        await FactionRecency.StampAsync(db, factionId, FactionRecencyFacet.Members, cancellationToken);
         // Member count/lead affect the faction score; the new member brings its measure heat.
         await threat.NewCalculateAsync(factionId, cancellationToken);
         // Membership/lead role affect the person score.
@@ -487,6 +494,7 @@ public class FactionService(
 
         if (changed)
         {
+            await FactionRecency.StampAsync(db, factionId, FactionRecencyFacet.Members, cancellationToken);
             // One faction recompute reflects the final membership; per-person scores for everyone touched.
             await threat.NewCalculateAsync(factionId, cancellationToken);
             foreach (var pid in affected)
@@ -511,6 +519,7 @@ public class FactionService(
         member.Rank = rank.TrimToNull();
         member.IsLead = isLead;
         await db.SaveChangesAsync(cancellationToken);
+        await FactionRecency.StampAsync(db, member.FactionId, FactionRecencyFacet.Members, cancellationToken);
         // Lead flag affects both the faction and the person score.
         await threat.NewCalculateAsync(member.FactionId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(member.PersonId, cancellationToken);
@@ -538,6 +547,7 @@ public class FactionService(
         await db.SaveChangesAsync(cancellationToken);
         await FactionColleaguesSyncAsync(db, personId, cancellationToken);
         await tx.CommitAsync(cancellationToken);
+        await FactionRecency.StampAsync(db, factionId, FactionRecencyFacet.Members, cancellationToken);
         // Departure affects faction size/lead; the member's heat stays stable.
         await threat.NewCalculateAsync(factionId, cancellationToken);
         // Departure changes the person's memberships/lead roles.
@@ -814,6 +824,14 @@ public class FactionService(
         }
         return renames;
     }
+
+    /// <summary>Order-independent snapshot of the three stock lists, so an unrelated master-data edit does not refresh the stock stamp.</summary>
+    private static List<string> StockSnapshot(Faction faction)
+        => faction.WeaponStock.Select(w => $"W|{w.Designation}|{w.Quantity}")
+            .Concat(faction.Inventory.Select(l => $"L|{l.Designation}|{l.Quantity}"))
+            .Concat(faction.DrugRoutes.Select(d => $"D|{d.Designation}|{d.Note}"))
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
 
     private static void ChildrenMap(Faction faction, FactionInput input)
     {

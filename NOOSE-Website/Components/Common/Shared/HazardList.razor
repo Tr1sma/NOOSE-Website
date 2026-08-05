@@ -1,5 +1,6 @@
 @* Ranked hazard list used for both factions and people on the dashboard. *@
 @using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Theme
 @inject NavigationManager Nav
 
 @if (Items.Count == 0)
@@ -33,15 +34,8 @@ else
     [Parameter] public IReadOnlyList<DashboardFactionHazard> Items { get; set; } = [];
     [Parameter] public string EmptyText { get; set; } = "Noch keine Einträge.";
 
-    // index matches HazardLevel order
-    private static readonly string[] Colours = { "#9BA8B8", "#3FB950", "#22D3EE", "#D29922", "#F85149" };
-
     private static string Dot(HazardLevel level)
-    {
-        var i = (int)level;
-        var colour = i >= 0 && i < Colours.Length ? Colours[i] : Colours[0];
-        return $"display:inline-block;width:12px;height:12px;border-radius:50%;background:{colour};flex:none;";
-    }
+        => $"display:inline-block;width:12px;height:12px;border-radius:50%;background:{ChartPalette.ForHazard(level)};flex:none;";
 
     private void Open(string? href)
     {

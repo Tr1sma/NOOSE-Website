@@ -326,6 +326,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(p => p.CaseNumber).IsUnique();
             b.HasIndex(p => p.Name);
             b.HasIndex(p => p.IsClassified);
+            // growth and capture series scan a date window over the whole table
+            b.HasIndex(p => p.CreatedAt);
 
             b.HasMany(p => p.Aliases).WithOne(a => a.Person!)
                 .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.Cascade);
@@ -395,6 +397,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(e => e.AgentName).HasMaxLength(128);
             b.Property(e => e.RequestId).HasMaxLength(64);
             b.HasIndex(e => new { e.EntityType, e.EntityId });
+            // the classification-flow sankey windows on the timestamp per type
+            b.HasIndex(e => new { e.EntityType, e.Timestamp });
         });
 
         modelBuilder.Entity<PersonDoc>(b =>
@@ -404,6 +408,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(d => d.OrgId).HasMaxLength(64);
             b.HasIndex(d => d.PersonId);
             b.HasIndex(d => new { d.OrgType, d.OrgId });
+            // measure trends and the outcome series window on the RP timestamp
+            b.HasIndex(d => d.Timestamp);
         });
 
         modelBuilder.Entity<Observation>(b =>
@@ -855,6 +861,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(v => v.Title);
             b.HasIndex(v => v.Status);
             b.HasIndex(v => v.IsClassified);
+            // cycle time and the open-vs-closed flow window on the completion date
+            b.HasIndex(v => v.CompletedAt);
 
             b.HasMany(v => v.Agents).WithOne(a => a.Case!)
                 .HasForeignKey(a => a.CaseId).OnDelete(DeleteBehavior.Cascade);

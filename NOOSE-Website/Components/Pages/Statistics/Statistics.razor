@@ -1,24 +1,94 @@
 @page "/statistik"
+@using NOOSE_Website.Models.Statistics
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Statistik &amp; Auswertungen · NOOSE</PageTitle>
 
 <PageHeader Icon="@Icons.Material.Filled.QueryStats"
             Title="Statistik &amp; Auswertungen"
-            Subtitle="Aggregierte Zahlen über den Aktenbestand und die monatlichen Lageberichte." />
+            Subtitle="Aggregierte Auswertungen über den Aktenbestand – aus deiner Sicht (Verschlusssachen werden gefiltert)." />
+
+@* one filter row for the whole page, so every section shows the same slice *@
+<StatisticsFilterBar Range="@_range" RangeChanged="@OnRangeChanged"
+                     IncludeClassified="@_includeClassified" IncludeClassifiedChanged="@OnClassifiedChanged"
+                     MayToggleClassified="@_mayReadClassified" />
 
 @* the report archive holds unfiltered aggregates, so it stays leadership-only *@
-<RecordSectionRail>
-    <RecordSection Slug="auswertung" Label="Auswertungen" Icon="@Icons.Material.Filled.QueryStats">
-        <StatisticsPanel />
-    </RecordSection>
-
-    <RecordSection Slug="trend" Label="Bedrohungs-Trend" Icon="@Icons.Material.Filled.TrendingUp">
-        <ThreatTrendPanel />
-    </RecordSection>
-
-    <AuthorizeView Policy="@Policies.LeadershipPage" Context="reportsSection">
-        <RecordSection Slug="lageberichte" Label="Lageberichte" Icon="@Icons.Material.Filled.Assessment">
-            <SituationReportsPanel />
+<CascadingValue Value="@_scope">
+    <RecordSectionRail>
+        <RecordSection Slug="ueberblick" Label="Überblick" Icon="@Icons.Material.Filled.Dashboard">
+            <OverviewPanel />
         </RecordSection>
-    </AuthorizeView>
-</RecordSectionRail>
+
+        <RecordSection Slug="bestand" Label="Bestand" Icon="@Icons.Material.Filled.Inventory2">
+            <InventoryPanel />
+        </RecordSection>
+
+        <RecordSection Slug="aktivitaet" Label="Aktivität" Icon="@Icons.Material.Filled.Schedule">
+            <ActivityPanel />
+        </RecordSection>
+
+        <RecordSection Slug="bedrohung" Label="Bedrohungslage" Icon="@Icons.Material.Filled.TrendingUp">
+            <ThreatTrendPanel />
+        </RecordSection>
+
+        <RecordSection Slug="netzwerk" Label="Netzwerk" Icon="@Icons.Material.Filled.Hub">
+            <NetworkPanel />
+        </RecordSection>
+
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="workforceSection">
+            <RecordSection Slug="dienststelle" Label="Dienststelle" Icon="@Icons.Material.Filled.Groups2">
+                <WorkforcePanel />
+            </RecordSection>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="reportsSection">
+            <RecordSection Slug="lageberichte" Label="Lageberichte" Icon="@Icons.Material.Filled.Assessment">
+                <SituationReportsPanel />
+            </RecordSection>
+        </AuthorizeView>
+    </RecordSectionRail>
+</CascadingValue>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private StatisticsRange _range = StatisticsRange.Months12;
+    private bool _includeClassified = true;
+    private bool _mayReadClassified;
+    private StatisticsScope _scope = new(false, StatisticsRange.Months12);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _mayReadClassified = user.MayClassifiedRead();
+
+        _range = StatisticsRangeDisplay.Parse(QueryState.Read(Nav, "range"));
+        // the switch defaults to on; only an explicit vs=0 hides classified records
+        _includeClassified = QueryState.Read(Nav, "vs") != "0";
+        Rebuild();
+    }
+
+    private async Task OnRangeChanged(StatisticsRange range)
+    {
+        _range = range;
+        Rebuild();
+        await WriteUrlAsync();
+    }
+
+    private async Task OnClassifiedChanged(bool include)
+    {
+        _includeClassified = include;
+        Rebuild();
+        await WriteUrlAsync();
+    }
+
+    /// <summary>Scope is what the viewer may see AND what the filter bar asks for.</summary>
+    private void Rebuild() => _scope = new StatisticsScope(_mayReadClassified && _includeClassified, _range);
+
+    private async Task WriteUrlAsync()
+        => await QueryState.WriteAsync(JS, Nav,
+            ("range", StatisticsRangeDisplay.Token(_range)),
+            ("vs", _includeClassified ? null : "0"));
+}

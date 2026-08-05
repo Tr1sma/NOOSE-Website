@@ -64,7 +64,20 @@ else
                     {
                         <tr><th>Beschreibung</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_faction.Description" Plain="true" /></td></tr>
                     }
-                    <tr><th>Zuletzt aktualisiert</th><td>@((_faction.ModifiedAt ?? _faction.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</td></tr>
+                    @* freshness follows the oldest of the four updatable sections *@
+                    @foreach (var stamp in FactionRecency.Facets(_faction))
+                    {
+                        <tr>
+                            <th>@FactionRecencyFacetDisplay.Name(stamp.Facet) aktualisiert</th>
+                            <td>
+                                @stamp.RefreshedUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                @if (stamp.IsOldest)
+                                {
+                                    <text> (ältester Stand)</text>
+                                }
+                            </td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         </section>

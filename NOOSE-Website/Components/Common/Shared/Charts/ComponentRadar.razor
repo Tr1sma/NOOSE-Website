@@ -1,0 +1,62 @@
+@* Profile comparison over fixed axes: the S1-S4 / P1-P5 score components of a few records. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@Grid.IsEmpty"
+            Bare="@Bare" Stale="@Stale" EmptyText="Noch keine bewerteten Akten">
+    <MudChart T="double" ChartType="ChartType.Radar" ChartSeries="@_series" ChartLabels="@_labels"
+              ChartOptions="@_options" CanHideSeries="@(_series.Count > 1)"
+              LegendPosition="Position.Bottom" Width="100%" Height="@Height" />
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Labels are the component axes, series are the records being compared.</summary>
+    [Parameter, EditorRequired] public ChartGrid Grid { get; set; } = ChartGrid.Empty;
+
+    [Parameter] public string Height { get; set; } = "340px";
+
+    /// <summary>Upper bound of the shared axis, so the shapes stay comparable between records.</summary>
+    [Parameter] public double AxisMax { get; set; } = 100;
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private RadarChartOptions _options = new();
+
+    protected override void OnParametersSet()
+    {
+        _labels = Grid.Labels.ToArray();
+        // overlapping fills stay readable only for a handful of records
+        _series = Grid.Series
+            .Take(ChartPalette.AllPairsSeriesCap)
+            .Select(s => new ChartSeries<double> { Name = s.Name, Data = s.Values.ToArray(), Visible = true })
+            .ToList();
+
+        _options = new RadarChartOptions
+        {
+            ChartPalette = ChartPalette.Series(_series.Count),
+            ShowLegend = _series.Count > 1,
+            ShowToolTips = true,
+            AxisSuggestedMax = AxisMax,
+            GridLevels = 4,
+            ShowGridLines = true,
+            GridLineColor = ChartPalette.Gridline,
+            GridLineWidth = 1,
+            AxisLineColor = ChartPalette.Gridline,
+            AxisLineWidth = 1,
+            ShowAxisLabels = true,
+            ShowAxisValues = false,
+            ShowDataMarkers = true,
+            DataPointRadius = 4,
+            StrokeWidth = 2,
+            FillOpacity = 0.12,
+        };
+    }
+}

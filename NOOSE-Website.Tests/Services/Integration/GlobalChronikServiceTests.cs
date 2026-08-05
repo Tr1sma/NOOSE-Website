@@ -551,7 +551,7 @@ public sealed class GlobalChronikServiceTests
     // ===================== density =====================
 
     [Fact]
-    public async Task GetDensityAsync_BucketsPerDay_AndCountsEveryAuditRow()
+    public async Task GetDensityAsync_CountsEveryAuditRow_AndGroupsByLocalDay()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -564,11 +564,132 @@ public sealed class GlobalChronikServiceTests
         }
         var svc = new GlobalChronikService(ctx.Factory);
 
-        var buckets = await svc.GetDensityAsync(Window(), Leader());
+        var density = await svc.GetDensityAsync(Window(), Leader());
 
-        Assert.Equal(2, buckets.Count);
-        Assert.Equal(3, buckets.Sum(b => b.Count));
-        Assert.True(buckets[0].StartUtc < buckets[1].StartUtc);
+        Assert.Equal(3, density.Total);
+        Assert.Equal(ChronikBucketUnit.Day, density.Unit);
+        Assert.Equal(1, density.DistinctRecords);
+        Assert.Equal(1, density.DistinctAgents);
+        // the two rows an hour apart share a local day, the third sits on its own
+        Assert.Equal(2, density.Buckets.Max(b => b.Total));
+        Assert.Equal(2, density.Buckets.Count(b => b.Total > 0));
+        Assert.False(density.Capped);
+    }
+
+    [Fact]
+    public async Task GetDensityAsync_FillsQuietBucketsWithZero()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            Audit(db, nameof(Person), "p1", AuditAction.Modified, at: Now);
+            db.SaveChanges();
+        }
+        var svc = new GlobalChronikService(ctx.Factory);
+
+        var density = await svc.GetDensityAsync(Window(), Leader());
+
+        // a 31-day window is a contiguous run of daily buckets, not just the days that carry events
+        Assert.True(density.Buckets.Count > 25);
+        Assert.Contains(density.Buckets, b => b.Total == 0);
+        for (var i = 1; i < density.Buckets.Count; i++)
+        {
+            Assert.Equal(
+                density.Buckets[i - 1].StartLocal.AddDays(1),
+                density.Buckets[i].StartLocal);
+        }
+    }
+
+    [Fact]
+    public async Task GetDensityAsync_SplitsBucketsIntoBandGroups()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            Audit(db, nameof(Person), "p1", AuditAction.Modified, at: Now);
+            Audit(db, nameof(Person), "p1", AuditAction.Created, at: Now);
+            db.SaveChanges();
+        }
+        var svc = new GlobalChronikService(ctx.Factory);
+
+        var density = await svc.GetDensityAsync(Window(), Leader());
+        var bucket = Assert.Single(density.Buckets.Where(b => b.Total > 0));
+
+        // Modified maps to Change (Bearbeitung), Created to Asset (Inhalte)
+        Assert.Equal(2, bucket.Segments.Count);
+        Assert.Contains(bucket.Segments, s => s.Slot == ActivityBandDisplay.Slot(TimelineCategory.Change));
+        Assert.Contains(bucket.Segments, s => s.Slot == ActivityBandDisplay.Slot(TimelineCategory.Asset));
+        Assert.Equal(bucket.Total, bucket.Segments.Sum(s => s.Count));
+    }
+
+    [Fact]
+    public async Task GetDensityAsync_SkipsRecordsTheViewerMayNotSee()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person(id: "s1", name: "Geheim", configure: p => p.IsClassified = true));
+            Audit(db, nameof(Person), "s1", AuditAction.Modified, at: Now);
+            db.SaveChanges();
+        }
+        var svc = new GlobalChronikService(ctx.Factory);
+
+        // the band used to count raw audit rows, so a bar could exceed the feed below it
+        Assert.Equal(1, (await svc.GetDensityAsync(Window(), Leader())).Total);
+        Assert.Equal(0, (await svc.GetDensityAsync(Window(), Junior())).Total);
+    }
+
+    [Fact]
+    public async Task GetDensityAsync_HonoursTheCategoryFilter()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person(id: "p1", name: "Max"));
+            Audit(db, nameof(Person), "p1", AuditAction.Modified, at: Now);
+            db.ClassificationHistory.Add(new ClassificationHistory
+            {
+                EntityType = nameof(Person), EntityId = "p1", Value = Classification.SuspicionCase,
+                Timestamp = Now, AgentId = "a1", AgentName = "a1",
+            });
+            db.SaveChanges();
+        }
+        var svc = new GlobalChronikService(ctx.Factory);
+
+        Assert.Equal(2, (await svc.GetDensityAsync(Window(), Leader())).Total);
+
+        var onlyClassification = Window() with { Categories = new[] { TimelineCategory.Classification } };
+        Assert.Equal(1, (await svc.GetDensityAsync(onlyClassification, Leader())).Total);
+    }
+
+    [Theory]
+    [InlineData(1, ChronikBucketUnit.Hour)]
+    [InlineData(30, ChronikBucketUnit.Day)]
+    [InlineData(120, ChronikBucketUnit.Week)]
+    [InlineData(500, ChronikBucketUnit.Month)]
+    public async Task GetDensityAsync_DerivesTheBucketUnitFromTheWindow(int days, ChronikBucketUnit expected)
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = new GlobalChronikService(ctx.Factory);
+
+        var density = await svc.GetDensityAsync(new ChronikQuery(Now.AddDays(-days), Now), Leader());
+
+        Assert.Equal(expected, density.Unit);
+    }
+
+    [Fact]
+    public async Task GetDensityAsync_SurvivesAReversedWindow()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = new GlobalChronikService(ctx.Factory);
+
+        // ?von=/?bis= are not order-checked, so the service must not divide by a negative day count
+        var density = await svc.GetDensityAsync(new ChronikQuery(Now, Now.AddDays(-10)), Leader());
+
+        Assert.True(density.WindowDays >= 1);
+        Assert.True(density.AveragePerDay >= 0);
     }
 
     [Fact]
@@ -583,7 +704,7 @@ public sealed class GlobalChronikServiceTests
         }
         var svc = new GlobalChronikService(ctx.Factory);
 
-        Assert.Empty(await svc.GetDensityAsync(Window(), Partner()));
+        Assert.Empty((await svc.GetDensityAsync(Window(), Partner())).Buckets);
     }
 
     private static void Score(NOOSE_Website.Data.AppDbContext db, string factionId, int score, DateTime at)

@@ -1,0 +1,106 @@
+@* Magnitude across categories: grouped bars for comparing populations, stacked for part-to-whole. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@Grid.IsEmpty"
+            Bare="@Bare" Stale="@Stale">
+    @if (Stacked)
+    {
+        <MudChart T="double" ChartType="ChartType.StackedBar" ChartSeries="@_series" ChartLabels="@_labels"
+                  ChartOptions="@_stackedOptions" SelectedIndex="@SelectedIndex"
+                  SelectedIndexChanged="@OnSelectedIndexChanged" CanHideSeries="@(_series.Count > 1)"
+                  LegendPosition="Position.Bottom" Width="100%" Height="@Height" />
+    }
+    else
+    {
+        <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_series" ChartLabels="@_labels"
+                  ChartOptions="@_barOptions" SelectedIndex="@SelectedIndex"
+                  SelectedIndexChanged="@OnSelectedIndexChanged" CanHideSeries="@(_series.Count > 1)"
+                  LegendPosition="Position.Bottom" Width="100%" Height="@Height" />
+    }
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public ChartGrid Grid { get; set; } = ChartGrid.Empty;
+
+    /// <summary>Hex per series; defaults to the categorical slots, or an ordinal ramp when Ordinal is set.</summary>
+    [Parameter] public string[]? Colours { get; set; }
+
+    /// <summary>Colour the bars as an ordered scale instead of by series identity (bands, funnel stages, tiers).</summary>
+    /// <remarks>Only meaningful for a single series — the ramp then encodes the category order.</remarks>
+    [Parameter] public bool Ordinal { get; set; }
+
+    /// <summary>Stack the series instead of grouping them side by side.</summary>
+    [Parameter] public bool Stacked { get; set; }
+
+    [Parameter] public string Height { get; set; } = "300px";
+
+    [Parameter] public string? XAxisTitle { get; set; }
+
+    [Parameter] public string? YAxisTitle { get; set; }
+
+    /// <summary>Degrees to turn the category labels by when they would collide.</summary>
+    [Parameter] public int LabelRotation { get; set; }
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    [Parameter] public int SelectedIndex { get; set; } = -1;
+
+    /// <summary>Raised with the clicked category index, for drill-down.</summary>
+    [Parameter] public EventCallback<int> OnSelect { get; set; }
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private BarChartOptions _barOptions = new();
+    private StackedBarChartOptions _stackedOptions = new();
+
+    protected override void OnParametersSet()
+    {
+        _labels = Grid.Labels.ToArray();
+        _series = Grid.Series
+            .Select(s => new ChartSeries<double> { Name = s.Name, Data = s.Values.ToArray(), Visible = true })
+            .ToList();
+
+        var palette = Colours
+            ?? (Ordinal ? ChartPalette.Ordinal(Math.Max(_labels.Length, 1)) : ChartPalette.Series(_series.Count));
+
+        _barOptions = new BarChartOptions
+        {
+            ChartPalette = palette,
+            ShowLegend = _series.Count > 1,
+            ShowToolTips = true,
+            XAxisTitle = XAxisTitle,
+            YAxisTitle = YAxisTitle,
+            XAxisLabelRotation = LabelRotation,
+            YAxisLines = true,
+            XAxisLines = false,
+        };
+        _stackedOptions = new StackedBarChartOptions
+        {
+            ChartPalette = palette,
+            ShowLegend = _series.Count > 1,
+            ShowToolTips = true,
+            XAxisTitle = XAxisTitle,
+            YAxisTitle = YAxisTitle,
+            XAxisLabelRotation = LabelRotation,
+            YAxisLines = true,
+            XAxisLines = false,
+            ShowZeroValues = false,
+        };
+    }
+
+    private async Task OnSelectedIndexChanged(int index)
+    {
+        SelectedIndex = index;
+        if (OnSelect.HasDelegate && index >= 0)
+        {
+            await OnSelect.InvokeAsync(index);
+        }
+    }
+}

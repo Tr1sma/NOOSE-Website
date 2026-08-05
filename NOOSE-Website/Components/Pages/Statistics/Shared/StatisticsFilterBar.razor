@@ -1,0 +1,54 @@
+@* The one filter row. It sits above the rail and scopes every chart below it, so the numbers always agree. *@
+@using NOOSE_Website.Models.Statistics
+
+<MudPaper Class="pa-3 mb-4" Elevation="0" Style="background:var(--mud-palette-background-grey);">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Zeitraum</MudText>
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default">
+            @foreach (var option in StatisticsRangeDisplay.All)
+            {
+                <MudButton Variant="@(option == Range ? Variant.Filled : Variant.Outlined)"
+                           Color="@(option == Range ? Color.Primary : Color.Default)"
+                           OnClick="@(() => SetRange(option))">
+                    @StatisticsRangeDisplay.Name(option)
+                </MudButton>
+            }
+        </MudButtonGroup>
+
+        @if (MayToggleClassified)
+        {
+            <MudSpacer />
+            <MudSwitch T="bool" Value="@IncludeClassified" ValueChanged="@SetClassified"
+                       Color="Color.Primary" Label="Verschlusssachen einbeziehen" />
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public StatisticsRange Range { get; set; } = StatisticsRange.Months12;
+
+    [Parameter] public EventCallback<StatisticsRange> RangeChanged { get; set; }
+
+    [Parameter] public bool IncludeClassified { get; set; } = true;
+
+    [Parameter] public EventCallback<bool> IncludeClassifiedChanged { get; set; }
+
+    /// <summary>Only a viewer who may read classified records gets the switch at all.</summary>
+    [Parameter] public bool MayToggleClassified { get; set; }
+
+    private async Task SetRange(StatisticsRange range)
+    {
+        if (range == Range)
+        {
+            return;
+        }
+        Range = range;
+        await RangeChanged.InvokeAsync(range);
+    }
+
+    private async Task SetClassified(bool value)
+    {
+        IncludeClassified = value;
+        await IncludeClassifiedChanged.InvokeAsync(value);
+    }
+}

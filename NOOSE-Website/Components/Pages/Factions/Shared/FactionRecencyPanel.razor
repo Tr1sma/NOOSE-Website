@@ -1,0 +1,71 @@
+@* Faction freshness: the four sections that count as an update, each with its own stamp; the oldest drives the light. *@
+@inject IRecencyService Recency
+
+<MudStack Spacing="1">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <RecencyIndicator Level="_level" ReferenceDateUtc="_reference"
+                          ReferenceName="@FactionRecencyFacetDisplay.Name(_oldest)" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Ältester Stand: @FactionRecencyFacetDisplay.Name(_oldest) · @_reference.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+        </MudText>
+    </MudStack>
+
+    <MudPaper Class="pa-2" Elevation="0" Style="background:var(--mud-palette-background-grey);">
+        <MudStack Spacing="0">
+            @foreach (var stamp in _stamps)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small"
+                             Color="@RecencyLevelDisplay.Colour(_levels[stamp.Facet])" />
+                    <MudLink Href="@($"/fraktionen/{Faction.Id}?tab={FactionRecencyFacetDisplay.Slug(stamp.Facet)}")"
+                             Typo="Typo.caption" Color="Color.Default">
+                        @FactionRecencyFacetDisplay.Name(stamp.Facet)
+                    </MudLink>
+                    @if (stamp.IsOldest)
+                    {
+                        <MudTooltip Text="Dieser Abschnitt bestimmt die Ampel der Akte.">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Class="my-0">Ampel</MudChip>
+                        </MudTooltip>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Age(stamp.RefreshedUtc)</MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Faction Faction { get; set; } = default!;
+
+    /// <summary>Record never goes stale (state faction or exempt record): every facet shows green.</summary>
+    [Parameter] public bool ForcedFresh { get; set; }
+
+    private DateTime _reference;
+    private FactionRecencyFacet _oldest;
+    private RecencyLevel _level;
+    private IReadOnlyList<FactionRecency.Stamp> _stamps = Array.Empty<FactionRecency.Stamp>();
+    private Dictionary<FactionRecencyFacet, RecencyLevel> _levels = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _stamps = FactionRecency.Facets(Faction);
+        _reference = FactionRecency.Reference(Faction);
+        _oldest = FactionRecency.Oldest(Faction);
+
+        // one settings read for all five lights
+        var settings = await Recency.GetSettingsAsync(nameof(Faction));
+        var now = DateTime.UtcNow;
+        var forced = ForcedFresh || settings.AgingDisabled;
+        _levels = _stamps.ToDictionary(s => s.Facet, s => forced
+            ? RecencyLevel.Fresh
+            : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, s.RefreshedUtc, now));
+        _level = forced ? RecencyLevel.Fresh : _levels[_oldest];
+    }
+
+    private static string Age(DateTime utc)
+    {
+        var days = (int)Math.Floor((DateTime.UtcNow - utc).TotalDays);
+        return days <= 0 ? "heute" : days == 1 ? "vor 1 Tag" : $"vor {days} Tagen";
+    }
+}

@@ -62,8 +62,9 @@ public static class NavCatalog
 
         new NavEntry("graph", "/graph", Icons.Material.Filled.Hub, "Beziehungsgraph", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Verknüpfungen zwischen Akten als Netzdiagramm"),
-        new NavEntry("chronik", "/chronik", Icons.Material.Filled.Timeline, "Chronik", NavSection.Analyse, NavArea.Ermittlung,
-            Description: "Behördenweiter Zeitstrahl aller Akten-Ereignisse"),
+        // key stays "chronik": stored favorites reference it, and LegacyRoutes aliases onto it
+        new NavEntry("chronik", "/nachweis", Icons.Material.Filled.FactCheck, "Nachweis & Gegenaufklärung", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Chronik, Änderungs- und Zugriffsprotokoll, Gegenaufklärung"),
         new NavEntry("hinweise", "/ermittlungshinweise", Icons.Material.Filled.Lightbulb, "Ermittlungshinweise", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Algorithmische Hinweise: mögliche Verbindungen, Konflikte, veraltete Einstufungen"),
         new NavEntry("ki", "/ki-assistent", Icons.Material.Filled.SmartToy, "KI-Assistent", NavSection.Analyse, NavArea.Ermittlung,

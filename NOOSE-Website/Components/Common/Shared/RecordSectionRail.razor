@@ -8,6 +8,13 @@
     @ChildContent
 </CascadingValue>
 
+@if (HideRailWhenSingle && _sections.Count <= 1)
+{
+    @* a 15rem rail holding one button is just a stripe; give the section the full width instead *@
+    @Active?.ChildContent
+}
+else
+{
 <MudPaper Elevation="2" Class="d-flex flex-column flex-md-row record-rail-shell">
     <nav class="record-rail" aria-label="Abschnitte">
         @foreach (var group in Grouped())
@@ -35,9 +42,13 @@
         @Active?.ChildContent
     </div>
 </MudPaper>
+}
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Render the lone remaining section without the rail; for pages whose others are gated away.</summary>
+    [Parameter] public bool HideRailWhenSingle { get; set; }
 
     private readonly List<RecordSection> _sections = [];
     private string? _activeSlug;

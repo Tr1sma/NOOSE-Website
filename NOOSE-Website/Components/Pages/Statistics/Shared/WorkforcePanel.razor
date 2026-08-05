@@ -1,0 +1,92 @@
+@* Personnel picture for leadership. Codename only, never the real name. *@
+@using NOOSE_Website.Models.Statistics
+@inject IWorkforceStatisticsService Workforce
+
+<div class="dashboard-seite">
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+        Nur für die Führung sichtbar. Agenten erscheinen ausschließlich unter ihrem Codenamen.
+    </MudAlert>
+
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Dienstgrad-Pyramide" Subtitle="Kopfzahl je Rang, höchster Rang oben"
+                                  Grid="@_ranks" Ordinal="true"
+                                  YAxisTitle="Agenten" LabelRotation="30" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Beförderungen im Zeitverlauf"
+                                  Subtitle="Aufstiege gegen Rückstufungen"
+                                  Grid="@_promotions" YAxisTitle="Vorgänge"
+                                  Height="300px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <MatrixHeatmap Title="Arbeitslast je Agent"
+                               Subtitle="Erfasste Bearbeitungen – zeigt Über- und Unterlast"
+                               Matrix="@_workload" Unit="Bearbeitungen" Height="340px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <MatrixHeatmap Title="Unentschuldigte Fehlzeiten"
+                               Subtitle="Nur abgeschlossene Besprechungen"
+                               Matrix="@_missed" Unit="Fehlzeiten" ShowValues="true"
+                               Height="300px" Stale="@_stale"
+                               EmptyText="Keine unentschuldigten Fehlzeiten – gut so" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Bewerbungs-Funnel" Subtitle="Bewerbungen je Stufe"
+                                  Grid="@_recruiting" Ordinal="true" LabelRotation="30"
+                                  YAxisTitle="Bewerbungen" Height="300px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <CalendarHeatmap Title="Abmeldungen im Zeitraum"
+                                 Subtitle="Agenten-Tage pro Kalendertag"
+                                 Days="@_absences" Unit="Abmeldungen" Height="200px" Stale="@_stale" />
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+
+    private ChartGrid _ranks = ChartGrid.Empty;
+    private ChartGrid _promotions = ChartGrid.Empty;
+    private ChartGrid _recruiting = ChartGrid.Empty;
+    private ChartMatrix _workload = ChartMatrix.Empty;
+    private ChartMatrix _missed = ChartMatrix.Empty;
+    private IReadOnlyList<ChartDay> _absences = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
+        var user = (await AuthStateTask).User;
+        _ranks = await Workforce.GetRankPyramidAsync(user, Scope);
+        _promotions = await Workforce.GetPromotionTrendAsync(user, Scope);
+        _workload = await Workforce.GetWorkloadAsync(user, Scope);
+        _missed = await Workforce.GetMissedMeetingsAsync(user, Scope);
+        _absences = await Workforce.GetAbsenceCalendarAsync(user, Scope);
+        _recruiting = await Workforce.GetRecruitingFunnelAsync(user, Scope);
+
+        _first = false;
+        _stale = false;
+    }
+}

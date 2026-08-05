@@ -887,6 +887,8 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("CaseNumber")
                         .IsUnique();
 
+                    b.HasIndex("CompletedAt");
+
                     b.HasIndex("IsClassified");
 
                     b.HasIndex("Status");
@@ -2479,6 +2481,10 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("varchar(255)");
 
+                    b.Property<DateTime?>("ActivitiesRefreshedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("AktivitaetenAktualisiertAm");
+
                     b.Property<bool>("AgingDisabled")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("VeralterungDeaktiviert");
@@ -2517,6 +2523,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)")
                         .HasColumnName("Beschreibung");
+
+                    b.Property<DateTime?>("DocsRefreshedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("DoksAktualisiertAm");
 
                     b.Property<string>("Estate")
                         .HasMaxLength(500)
@@ -2557,6 +2567,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(100)")
                         .HasColumnName("Art");
 
+                    b.Property<DateTime?>("MembersRefreshedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("MitgliederAktualisiertAm");
+
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("GeaendertAm");
@@ -2583,6 +2597,10 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<DateTime?>("ScoreCalculatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("ScoreBerechnetAm");
+
+                    b.Property<DateTime?>("StockRefreshedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("BestaendeAktualisiertAm");
 
                     b.Property<string>("Targets")
                         .HasMaxLength(2000)
@@ -4250,6 +4268,8 @@ namespace NOOSE_Website.Data.Migrations
 
                     b.HasIndex("EntityType", "EntityId");
 
+                    b.HasIndex("EntityType", "Timestamp");
+
                     b.ToTable("EinstufungVerlauf");
                 });
 
@@ -4527,6 +4547,8 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("CaseNumber")
                         .IsUnique();
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("IsClassified");
 
                     b.HasIndex("Name");
@@ -4634,6 +4656,8 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PersonId");
+
+                    b.HasIndex("Timestamp");
 
                     b.HasIndex("OrgType", "OrgId");
 

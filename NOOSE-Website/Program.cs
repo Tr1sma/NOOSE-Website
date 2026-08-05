@@ -204,7 +204,8 @@ builder.Services.AddHttpClient("llm", (sp, client) =>
     }
     client.DefaultRequestHeaders.TryAddWithoutValidation("HTTP-Referer", "https://noose.info");
     client.DefaultRequestHeaders.TryAddWithoutValidation("X-Title", "NOOSE Intelligence");
-    client.Timeout = TimeSpan.FromSeconds(60);
+    // Ceiling over all attempts; the per-attempt budget lives in LlmService.
+    client.Timeout = TimeSpan.FromSeconds(Math.Max(5, o.TotalTimeoutSeconds));
 });
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<IDossierSummaryService, DossierSummaryService>();
@@ -246,6 +247,12 @@ builder.Services.AddScoped<ITrainingModuleService, TrainingModuleService>();
 builder.Services.AddScoped<IRequestService, RequestService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
+builder.Services.AddScoped<IInventoryStatisticsService, InventoryStatisticsService>();
+builder.Services.AddScoped<IThreatStatisticsService, ThreatStatisticsService>();
+builder.Services.AddScoped<IActivityStatisticsService, ActivityStatisticsService>();
+builder.Services.AddScoped<IThroughputStatisticsService, ThroughputStatisticsService>();
+builder.Services.AddScoped<INetworkStatisticsService, NetworkStatisticsService>();
+builder.Services.AddScoped<IWorkforceStatisticsService, WorkforceStatisticsService>();
 builder.Services.AddScoped<ISituationReportService, SituationReportService>();
 builder.Services.AddHostedService<SituationReportWorker>();
 builder.Services.AddHttpClient("discord", client => client.Timeout = TimeSpan.FromSeconds(5));

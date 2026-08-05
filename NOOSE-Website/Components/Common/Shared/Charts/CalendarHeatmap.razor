@@ -1,0 +1,60 @@
+@* Per-day magnitude across a whole year: shows seasonal patterns, quiet stretches and spikes at once. *@
+@using System.Globalization
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@(Days.Count == 0)"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <EChartsCanvas Kind="calendar" Payload="@_payload" Height="@Height" />
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartDay> Days { get; set; } = [];
+
+    /// <summary>Unit for the tooltip, e.g. "Bearbeitungen".</summary>
+    [Parameter] public string? Unit { get; set; }
+
+    [Parameter] public string Height { get; set; } = "220px";
+
+    [Parameter] public string EmptyText { get; set; } = "Noch keine Aktivität im Zeitraum";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private object _payload = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Days.Count == 0)
+        {
+            _payload = new { days = Array.Empty<object>(), range = Array.Empty<string>() };
+            return;
+        }
+
+        var first = Days.Min(d => d.Day);
+        var last = Days.Max(d => d.Day);
+        _payload = new
+        {
+            // ISO dates only - ECharts parses them itself and de-DE formats would break it
+            days = Days.Select(d => new
+            {
+                day = d.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                count = d.Count,
+            }).ToList(),
+            range = new[]
+            {
+                first.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                last.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            },
+            ramp = ChartPalette.Sequential,
+            unit = Unit,
+            months = new[] { "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez" },
+            weekdays = new[] { "So", "Mo", "Di", "Mi", "Do", "Fr", "Sa" },
+        };
+    }
+}

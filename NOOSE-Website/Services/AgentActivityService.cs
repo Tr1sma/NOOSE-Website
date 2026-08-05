@@ -7,6 +7,7 @@ using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Models.Activities;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -139,7 +140,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
 
         db.AgentActivities.Add(activity);
         await db.SaveChangesAsync(cancellationToken);
-        await RecomputeFactionsAsync(FactionLinkIds(activity.Links), cancellationToken);
+        await FactionsTouchedAsync(db, FactionLinkIds(activity.Links), cancellationToken);
         return activity;
     }
 
@@ -188,7 +189,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await RecomputeFactionsAsync(beforeFactions.Concat(FactionLinkIds(activity.Links)), cancellationToken);
+        await FactionsTouchedAsync(db, beforeFactions.Concat(FactionLinkIds(activity.Links)), cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -200,7 +201,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
         var factionIds = FactionLinkIds(activity.Links).ToList();
         db.AgentActivities.Remove(activity);
         await db.SaveChangesAsync(cancellationToken);
-        await RecomputeFactionsAsync(factionIds, cancellationToken);
+        await FactionsTouchedAsync(db, factionIds, cancellationToken);
     }
 
     public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -215,7 +216,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
         activity.DeletedAt = null;
         activity.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
-        await RecomputeFactionsAsync(FactionLinkIds(activity.Links), cancellationToken);
+        await FactionsTouchedAsync(db, FactionLinkIds(activity.Links), cancellationToken);
     }
 
     /// <summary>Throws unless the actor is leadership or the activity's creator.</summary>
@@ -323,10 +324,12 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
     private static IEnumerable<string> FactionLinkIds(IEnumerable<AgentActivityLink> links)
         => links.Where(l => l.TargetType == nameof(Faction) && !string.IsNullOrEmpty(l.TargetId)).Select(l => l.TargetId);
 
-    // an activity is core of a faction's S1 heat, so linking/unlinking recomputes its score
-    private async Task RecomputeFactionsAsync(IEnumerable<string> factionIds, CancellationToken cancellationToken)
+    // an activity is core of a faction's S1 heat and one of its four freshness facets, so linking/unlinking touches both
+    private async Task FactionsTouchedAsync(AppDbContext db, IEnumerable<string> factionIds, CancellationToken cancellationToken)
     {
-        foreach (var factionId in factionIds.Distinct())
+        var ids = factionIds.Distinct().ToList();
+        await FactionRecency.StampAsync(db, ids, FactionRecencyFacet.Activities, cancellationToken);
+        foreach (var factionId in ids)
         {
             await threat.NewCalculateAsync(factionId, cancellationToken);
         }

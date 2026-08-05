@@ -39,6 +39,9 @@ public static class Policies
     /// <summary>Admin page access: admin OR read-only supervision (opens read-only).</summary>
     public const string AdminPage = "AdminSeite";
 
+    /// <summary>Counter-intelligence cockpit: leadership but never read-only supervision.</summary>
+    public const string CounterIntel = "Gegenaufklaerung";
+
     /// <summary>Set "secured state-threatening" directly: rank ≥ Senior Special Agent or admin.</summary>
     public const string HighestClassification = "HoechsteEinstufung";
 

@@ -1,0 +1,42 @@
+@* Directed flow between states: how records move from one classification to the next. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@(Flows.Count == 0)"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <EChartsCanvas Kind="sankey" Payload="@_payload" Height="@Height" />
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartFlow> Flows { get; set; } = [];
+
+    [Parameter] public string Height { get; set; } = "300px";
+
+    [Parameter] public string EmptyText { get; set; } = "Keine Einstufungs-Wechsel im Zeitraum";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private object _payload = new();
+
+    protected override void OnParametersSet()
+    {
+        // nodes must be declared before they can be linked, and each name must be unique
+        var nodes = Flows.Select(f => f.From)
+            .Concat(Flows.Select(f => f.To))
+            .Distinct()
+            .ToList();
+
+        _payload = new
+        {
+            nodes,
+            links = Flows.Select(f => new { source = f.From, target = f.To, value = f.Weight }).ToList(),
+            palette = ChartPalette.Categorical,
+        };
+    }
+}

@@ -27,6 +27,12 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
     private const int ScoreJumpThreshold = 10;
     // shown when a referenced record is classified or of a type the chronicle does not render
     private const string HiddenRecord = "nicht sichtbare Akte";
+    // rows the band aggregates at most; beyond it the caption says the band is clipped
+    private const int DensityCap = 20_000;
+    // runaway guard; the unit thresholds keep every real window far below it
+    private const int MaxBuckets = 200;
+    // widest custom range the band honours
+    private const int MaxWindowDays = 1100;
 
     /// <summary>Record types the chronicle anchors its events on.</summary>
     public static readonly string[] RecordTypes =
@@ -77,42 +83,109 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
             hasMore);
     }
 
-    public async Task<IReadOnlyList<ChronikDensityBucket>> GetDensityAsync(ChronikQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
+    public async Task<ChronikDensity> GetDensityAsync(ChronikQuery query, ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
         var scope = ViewerScope.From(viewer);
         if (scope.IsPartner)
         {
-            return Array.Empty<ChronikDensityBucket>();
+            return ChronikDensity.Empty;
         }
 
         var filter = SliceFilter.From(query);
         if (filter.RecordTypes.Length == 0)
         {
-            return Array.Empty<ChronikDensityBucket>();
+            return ChronikDensity.Empty;
         }
+
+        var (fromUtc, toUtc) = ClampWindow(query.FromUtc, query.ToUtc);
+        var unit = UnitFor(fromUtc, toUtc);
+        var windowDays = Math.Max(1, (int)Math.Ceiling((toUtc - fromUtc).TotalDays));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // grouped in SQL and in UTC; the band is an overview, the feed does the exact local-day grouping
-        var days = await AuditSlice(db, filter, query.FromUtc, query.ToUtc)
-            .GroupBy(a => new { a.Timestamp.Year, a.Timestamp.Month, a.Timestamp.Day })
-            .Select(g => new { g.Key.Year, g.Key.Month, g.Key.Day, Count = g.Count() })
-            .ToListAsync(cancellationToken);
+        // ---- 1) audit spine, newest first so the cap drops the oldest rows ----
+        var auditRows = filter.WantsAudit
+            ? await AuditSlice(db, filter, fromUtc, toUtc).AsNoTracking()
+                .OrderByDescending(a => a.Timestamp).ThenByDescending(a => a.Id).Take(DensityCap + 1)
+                .Select(a => new DensityRow(a.Timestamp, a.EntityType, a.EntityId, a.Action, a.AgentId))
+                .ToListAsync(cancellationToken)
+            : new List<DensityRow>();
 
-        var buckets = days
-            .Select(d => (Start: new DateTime(d.Year, d.Month, d.Day, 0, 0, 0, DateTimeKind.Utc), d.Count))
-            .OrderBy(b => b.Start);
-
-        if ((query.ToUtc - query.FromUtc).TotalDays <= 90)
+        var capped = auditRows.Count > DensityCap;
+        if (capped)
         {
-            return buckets.Select(b => new ChronikDensityBucket(b.Start, b.Count)).ToList();
+            auditRows.RemoveRange(DensityCap, auditRows.Count - DensityCap);
         }
 
-        return buckets
-            .GroupBy(b => b.Start.AddDays(-(int)b.Start.DayOfWeek))
-            .Select(g => new ChronikDensityBucket(g.Key, g.Sum(b => b.Count)))
-            .OrderBy(b => b.StartUtc)
-            .ToList();
+        // ---- 2) child rows back to their owning record, exactly as the feed resolves them ----
+        var childRefs = auditRows.Where(r => ChronikParentResolver.IsChild(r.EntityType))
+            .Select(r => (r.EntityType, r.EntityId)).Distinct().ToList();
+        var parents = await ChronikParentResolver.ResolveAsync(db, childRefs, cancellationToken);
+
+        var hits = new List<DensityHit>(auditRows.Count);
+        foreach (var row in auditRows)
+        {
+            string parentType, parentId;
+            if (ChronikParentResolver.IsChild(row.EntityType))
+            {
+                if (!parents.TryGetValue((row.EntityType, row.EntityId), out var parent))
+                {
+                    continue; // owner gone, or an auto link the feed drops too
+                }
+                (parentType, parentId) = (parent.Type, parent.Id);
+            }
+            else
+            {
+                (parentType, parentId) = (row.EntityType, row.EntityId);
+            }
+            if (!filter.RecordTypes.Contains(parentType))
+            {
+                continue;
+            }
+            var (category, _) = TimelineDisplay.MapAudit(row.EntityType, row.Action);
+            if (!Wanted(query, category))
+            {
+                continue;
+            }
+            hits.Add(new DensityHit(row.Timestamp, parentType, parentId, category, row.AgentId));
+        }
+
+        // ---- 3) classification history ----
+        if (filter.WantsClassification && filter.ClassificationTypes.Length > 0
+            && Wanted(query, TimelineCategory.Classification))
+        {
+            foreach (var e in await ClassificationSlice(db, filter, fromUtc, toUtc).AsNoTracking()
+                .Select(e => new { e.Timestamp, e.EntityType, e.EntityId, e.AgentId })
+                .ToListAsync(cancellationToken))
+            {
+                hits.Add(new DensityHit(e.Timestamp, e.EntityType, e.EntityId, TimelineCategory.Classification, e.AgentId));
+            }
+        }
+
+        // ---- 4) threat-score jumps ----
+        if (Wanted(query, TimelineCategory.ThreatScore))
+        {
+            foreach (var s in await ScoreJumpsAsync(db, filter, fromUtc, toUtc, cancellationToken))
+            {
+                hits.Add(new DensityHit(s.Timestamp, s.EntityType, s.EntityId, TimelineCategory.ThreatScore, null));
+            }
+        }
+
+        // ---- 5) one visibility pass; bounded by the record count, not the row count ----
+        var byType = new Dictionary<string, HashSet<string>>();
+        foreach (var hit in hits)
+        {
+            if (!byType.TryGetValue(hit.EntityType, out var set))
+            {
+                set = new HashSet<string>();
+                byType[hit.EntityType] = set;
+            }
+            set.Add(hit.EntityId);
+        }
+        var visible = await ResolveVisibleAsync(db, scope, byType, cancellationToken);
+        hits.RemoveAll(h => !visible.ContainsKey((h.EntityType, h.EntityId)));
+
+        return Bucketize(hits, fromUtc, toUtc, unit, windowDays, capped);
     }
 
     public async Task<ChronikFilterOptions> GetFilterOptionsAsync(ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
@@ -221,6 +294,12 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
     private sealed record ClassRow(DateTime Timestamp, string EntityType, string EntityId, Classification Value, string? Justification, string? AgentName);
 
     private sealed record ScoreRow(DateTime Timestamp, string EntityType, string EntityId, int Previous, int Current);
+
+    private sealed record DensityRow(
+        DateTime Timestamp, string EntityType, string EntityId, AuditAction Action, string? AgentId);
+
+    private sealed record DensityHit(
+        DateTime Timestamp, string EntityType, string EntityId, TimelineCategory Category, string? AgentId);
 
     private async Task<List<ChronikEvent>> LoadSliceAsync(
         AppDbContext db, ViewerScope scope, ChronikQuery query, SliceFilter filter,
@@ -541,6 +620,106 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
 
         return result;
     }
+
+    // ---------------------------------------------------------------- band buckets
+
+    // the band honours the category chips; free text needs names it never loads
+    private static bool Wanted(ChronikQuery query, TimelineCategory category)
+        => query.Categories is not { Count: > 0 } categories || categories.Contains(category);
+
+    // a custom range may be reversed or arbitrarily wide; both would wreck the axis and the average
+    private static (DateTime FromUtc, DateTime ToUtc) ClampWindow(DateTime fromUtc, DateTime toUtc)
+    {
+        if (toUtc <= fromUtc)
+        {
+            return (toUtc.AddDays(-1), toUtc);
+        }
+        var widest = toUtc.AddDays(-MaxWindowDays);
+        return (fromUtc < widest ? widest : fromUtc, toUtc);
+    }
+
+    // derived from the window, never chosen: keeps the bar count readable at every preset
+    private static ChronikBucketUnit UnitFor(DateTime fromUtc, DateTime toUtc)
+        => (toUtc - fromUtc).TotalDays switch
+        {
+            <= 2 => ChronikBucketUnit.Hour,
+            <= 92 => ChronikBucketUnit.Day,
+            <= 400 => ChronikBucketUnit.Week,
+            _ => ChronikBucketUnit.Month,
+        };
+
+    private static ChronikDensity Bucketize(
+        List<DensityHit> hits, DateTime fromUtc, DateTime toUtc,
+        ChronikBucketUnit unit, int windowDays, bool capped)
+    {
+        var counts = new Dictionary<DateTime, int[]>();
+        foreach (var hit in hits)
+        {
+            var start = BucketStartLocal(hit.Timestamp, unit);
+            if (!counts.TryGetValue(start, out var slots))
+            {
+                slots = new int[ActivityBandDisplay.Slots];
+                counts[start] = slots;
+            }
+            slots[ActivityBandDisplay.Slot(hit.Category)]++;
+        }
+
+        // gap-fill, so a quiet stretch reads as zero instead of "not loaded"
+        var buckets = new List<ChronikDensityBucket>();
+        var cursor = BucketStartLocal(fromUtc, unit);
+        var last = BucketStartLocal(toUtc.AddTicks(-1), unit);
+        while (cursor <= last && buckets.Count < MaxBuckets)
+        {
+            var segments = new List<ChronikDensitySegment>();
+            var total = 0;
+            if (counts.TryGetValue(cursor, out var slots))
+            {
+                for (var slot = 0; slot < slots.Length; slot++)
+                {
+                    if (slots[slot] > 0)
+                    {
+                        segments.Add(new ChronikDensitySegment(slot, slots[slot]));
+                        total += slots[slot];
+                    }
+                }
+            }
+            buckets.Add(new ChronikDensityBucket(cursor, total, segments));
+            cursor = Advance(cursor, unit);
+        }
+
+        // the headline counts what the bars show, so the KPI tile can never contradict the plot
+        return new ChronikDensity(
+            buckets,
+            unit,
+            buckets.Sum(b => b.Total),
+            hits.Where(h => h.AgentId is not null).Select(h => h.AgentId!).Distinct().Count(),
+            hits.Select(h => (h.EntityType, h.EntityId)).Distinct().Count(),
+            windowDays,
+            capped);
+    }
+
+    /// <summary>Local start of the bucket a UTC instant falls into.</summary>
+    private static DateTime BucketStartLocal(DateTime utc, ChronikBucketUnit unit)
+    {
+        var local = DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+        var midnight = new DateTime(local.Year, local.Month, local.Day, 0, 0, 0, DateTimeKind.Local);
+        return unit switch
+        {
+            ChronikBucketUnit.Hour => midnight.AddHours(local.Hour),
+            ChronikBucketUnit.Day => midnight,
+            // Monday-based, matching the German week
+            ChronikBucketUnit.Week => midnight.AddDays(-(((int)local.DayOfWeek + 6) % 7)),
+            _ => new DateTime(local.Year, local.Month, 1, 0, 0, 0, DateTimeKind.Local),
+        };
+    }
+
+    private static DateTime Advance(DateTime start, ChronikBucketUnit unit) => unit switch
+    {
+        ChronikBucketUnit.Hour => start.AddHours(1),
+        ChronikBucketUnit.Day => start.AddDays(1),
+        ChronikBucketUnit.Week => start.AddDays(7),
+        _ => start.AddMonths(1),
+    };
 
     // ---------------------------------------------------------------- helpers
 

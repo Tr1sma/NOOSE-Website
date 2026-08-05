@@ -10,6 +10,12 @@ public record StatisticsTopEntry(string Name, string CaseNumber, string Href, in
 public record StatisticsMonth(int Year, int Month, string Label, int Measures, int NewEntries);
 
 /// <summary>Aggregated statistics; classification-filtered per caller, deterministic segment order for stable colours.</summary>
+/// <remarks>
+/// DO NOT add members. This record is a persisted wire format: SituationReportService serialises it into
+/// SituationReport.SnapshotJson and archived rows carry no version marker. A new constructor parameter is
+/// bound as null (not an empty list) when an older snapshot is read, which does not throw and so slips
+/// past the JsonException handler. New aggregations belong in ChartModels.cs behind their own service.
+/// </remarks>
 public record StatisticsReport(
     DashboardMetrics Metrics,
     IReadOnlyList<DistributionSegment> PeopleByClassification,

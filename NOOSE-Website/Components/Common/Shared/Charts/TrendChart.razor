@@ -1,0 +1,103 @@
+@* Change over time on a real date axis. Single series renders as an area wash, several as lines. *@
+@using MudBlazor.Charts
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@_empty"
+            Bare="@Bare" Stale="@Stale">
+    <MudChart T="double" ChartType="ChartType.Timeseries" ChartSeries="@_series"
+              ChartOptions="@_options" CanHideSeries="@(_series.Count > 1)"
+              LegendPosition="Position.Bottom" Width="100%" Height="@Height" />
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Bucket start dates, one per value in each series.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<DateTime> Dates { get; set; } = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartSeriesData> Series { get; set; } = [];
+
+    [Parameter] public string[]? Colours { get; set; }
+
+    [Parameter] public string Height { get; set; } = "320px";
+
+    [Parameter] public string? YAxisTitle { get; set; }
+
+    /// <summary>Stack the series as filled areas (part-to-whole over time) instead of drawing lines.</summary>
+    [Parameter] public bool Area { get; set; }
+
+    /// <summary>Bucket width, so the date axis is labelled at a sensible spacing.</summary>
+    [Parameter] public StatisticsGranularity Granularity { get; set; } = StatisticsGranularity.Month;
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private List<ChartSeries<double>> _series = [];
+    private TimeSeriesChartOptions _options = new();
+    private bool _empty = true;
+
+    protected override void OnParametersSet()
+    {
+        _empty = Dates.Count == 0 || Series.Count == 0
+            || Series.All(s => s.Values.All(v => v == 0));
+
+        _series = Series
+            .Select(s => new ChartSeries<double>
+            {
+                Name = s.Name,
+                Data = Dates
+                    .Select((d, i) => new TimeValue<double>(d, i < s.Values.Count ? s.Values[i] : 0))
+                    .ToArray(),
+                Visible = true,
+            })
+            .ToList();
+
+        var palette = Colours ?? ChartPalette.Series(Math.Max(_series.Count, 1));
+        _options = new TimeSeriesChartOptions
+        {
+            ChartPalette = palette,
+            ShowLegend = _series.Count > 1,
+            ShowToolTips = true,
+            ShowDataMarkers = Dates.Count <= 24,
+            LineStrokeWidth = 2,
+            YAxisTitle = YAxisTitle,
+            YAxisLines = true,
+            XAxisLines = false,
+            YAxisRequireZeroPoint = true,
+            TimeLabelFormat = LabelFormat(),
+            TooltipTimeLabelFormat = TooltipFormat(),
+            TimeLabelSpacing = Spacing(),
+        };
+
+        // a single series reads better as a wash than as a lone stroke; stacked areas need it per series
+        if (Area)
+        {
+            _options.LineDisplayType = LineDisplayType.Area;
+        }
+    }
+
+    private string LabelFormat() => Granularity switch
+    {
+        StatisticsGranularity.Day => "dd.MM.",
+        StatisticsGranularity.Week => "dd.MM.",
+        _ => "MMM yy",
+    };
+
+    private string TooltipFormat() => Granularity switch
+    {
+        StatisticsGranularity.Day => "dd.MM.yyyy",
+        StatisticsGranularity.Week => "'KW' dd.MM.yyyy",
+        _ => "MMMM yyyy",
+    };
+
+    private TimeSpan Spacing() => Granularity switch
+    {
+        StatisticsGranularity.Day => TimeSpan.FromDays(Math.Max(1, Dates.Count / 10)),
+        StatisticsGranularity.Week => TimeSpan.FromDays(14),
+        _ => TimeSpan.FromDays(Dates.Count > 14 ? 61 : 31),
+    };
+}

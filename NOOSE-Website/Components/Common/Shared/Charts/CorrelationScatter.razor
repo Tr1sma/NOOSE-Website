@@ -1,0 +1,68 @@
+@* Two measures against each other. Capped at the all-pairs-safe series count. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@_empty"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <MudChart T="double" ChartType="ChartType.ScatterPlot" ChartSeries="@_series"
+              ChartOptions="@_options" CanHideSeries="@(_series.Count > 1)"
+              LegendPosition="Position.Bottom" Width="100%" Height="@Height" />
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Point clouds keyed by series name; only the first three are drawn.</summary>
+    /// <remarks>
+    /// Any two marks can sit side by side in a scatter, so identity has to survive the harder all-pairs
+    /// colour check — which only the leading slots do. Fold the rest into one "Sonstige" series.
+    /// </remarks>
+    [Parameter, EditorRequired] public IReadOnlyList<(string Name, IReadOnlyList<ChartPoint> Points)> Clouds { get; set; } = [];
+
+    [Parameter] public string Height { get; set; } = "340px";
+
+    [Parameter] public string? XAxisTitle { get; set; }
+
+    [Parameter] public string? YAxisTitle { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Noch keine bewerteten Akten";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private List<ChartSeries<double>> _series = [];
+    private ScatterPlotChartOptions _options = new();
+    private bool _empty = true;
+
+    protected override void OnParametersSet()
+    {
+        var clouds = Clouds.Take(ChartPalette.AllPairsSeriesCap).ToList();
+        _empty = clouds.Count == 0 || clouds.All(c => c.Points.Count == 0);
+
+        _series = clouds
+            .Select(c => new ChartSeries<double>
+            {
+                Name = c.Name,
+                Data = new ChartData<double>(c.Points.Select(p => (p.X, p.Y)).ToList()),
+                Visible = true,
+            })
+            .ToList();
+
+        _options = new ScatterPlotChartOptions
+        {
+            ChartPalette = ChartPalette.Series(_series.Count),
+            ShowLegend = _series.Count > 1,
+            ShowToolTips = true,
+            ShowDataLabels = false,
+            // the painted dot is a pinpoint; a generous radius is what makes hover usable
+            PointRadius = 5,
+            XAxisTitle = XAxisTitle,
+            YAxisTitle = YAxisTitle,
+            YAxisLines = true,
+            XAxisLines = true,
+        };
+    }
+}

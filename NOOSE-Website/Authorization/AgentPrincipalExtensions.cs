@@ -106,6 +106,9 @@ public static class AgentPrincipalExtensions
     /// <summary>May see the otherwise-hidden real name = leadership/admin but never read-only supervision. Sole source of the real-name rule.</summary>
     public static bool MayRealNameSee(this ClaimsPrincipal user) => user.IsLeadership() && !user.IsOnlyReader();
 
+    /// <summary>May use the counter-intelligence cockpit = leadership but never read-only supervision (it would audit itself). Sole source of this rule.</summary>
+    public static bool MayCounterIntel(this ClaimsPrincipal user) => user.IsLeadership() && !user.IsOnlyReader();
+
     /// <summary>May set "secured state-threatening" directly = rank ≥ Senior Special Agent or admin.</summary>
     public static bool MayHighestClassification(this ClaimsPrincipal user)
         => user.IsAdmin() || user.GetRank() is >= Rank.SeniorSpecialAgent;

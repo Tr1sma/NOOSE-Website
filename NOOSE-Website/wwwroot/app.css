@@ -535,55 +535,298 @@ div.vis-tooltip {
     font-family: Inter, 'Segoe UI', Roboto, sans-serif !important;
 }
 
-/* Chronicle density band: vis-timeline ships a light-theme stylesheet, so every surface is re-stated here. */
-.chronik-band {
-    cursor: ew-resize;
+/* ---- Activity band: stacked CSS bars, no chart library and no JS ---- */
+.noose-band-kopf {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.78rem;
 }
 
-.chronik-band .vis-panel,
-.chronik-band .vis-time-axis .vis-grid.vis-vertical,
-.chronik-band .vis-panel .vis-shadow {
-    border-color: var(--mud-palette-divider) !important;
-    box-shadow: none !important;
+.noose-band-kennzahl {
+    color: var(--mud-palette-text-primary);
+    font-variant-numeric: tabular-nums;
 }
 
-.chronik-band .vis-time-axis .vis-text {
-    color: var(--mud-palette-text-secondary) !important;
-    font-family: Inter, 'Segoe UI', Roboto, sans-serif;
+.noose-band-plot {
+    display: flex;
+    gap: 0.5rem;
+    transition: opacity 0.2s;
+}
+
+/* the band cannot honour a free-text filter, so it says so by fading instead of lying */
+.noose-band-blass {
+    opacity: 0.45;
+}
+
+.noose-band-achse {
+    flex: none;
+    width: 3rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    /* pull the end labels onto their gridlines instead of between them */
+    margin: -0.45rem 0;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.noose-band-flaeche {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.noose-band-linie {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(139, 152, 168, 0.1);
+    pointer-events: none;
+}
+
+.noose-band-spalten {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 100%;
+}
+
+.noose-band-spalte {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border-radius: 2px 2px 0 0;
+    cursor: pointer;
+}
+
+.noose-band-spalte > span:not(.noose-band-tip) {
+    display: block;
+    width: 100%;
+    /* a one-event segment must stay visible instead of rounding to nothing */
+    min-height: 1.5px;
+}
+
+.noose-band-spalte > span:first-child {
+    border-radius: 2px 2px 0 0;
+}
+
+/* zero buckets are gap-filled; without a stub the band looks unfilled */
+.noose-band-null {
+    height: 2px;
+    background: #222b36;
+}
+
+.noose-band-spalte:hover {
+    background: rgba(139, 152, 168, 0.1);
+}
+
+.noose-band-spalte:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+}
+
+.noose-band-gewaehlt {
+    background: rgba(34, 211, 238, 0.14);
+    box-shadow: inset 0 -2px 0 0 var(--mud-palette-primary);
+}
+
+.noose-band-tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    min-width: 11rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 8px;
+    /* lighter than the surface it floats over; the vis-network tooltip is darker on purpose */
+    background: #1b222b;
+    border: 1px solid #2b3744;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    color: var(--mud-palette-text-primary);
     font-size: 0.72rem;
+    line-height: 1.5;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
-.chronik-band .vis-time-axis .vis-grid.vis-minor {
-    border-color: rgba(139, 152, 168, 0.12) !important;
+.noose-band-spalte:hover > .noose-band-tip,
+.noose-band-spalte:focus-visible > .noose-band-tip {
+    display: flex;
+    flex-direction: column;
 }
 
-.chronik-band .vis-line-graph .vis-bar {
-    fill: var(--mud-palette-primary) !important;
-    fill-opacity: 0.55;
-    stroke: var(--mud-palette-primary) !important;
-    stroke-width: 1;
+.noose-band-tip.noose-band-anker-links {
+    left: 0;
+    transform: none;
 }
 
-.chronik-band .vis-line-graph .vis-bar:hover {
-    fill-opacity: 0.9;
+.noose-band-tip.noose-band-anker-rechts {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+.noose-band-tip-zeile {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.noose-band-tip-zeile i {
+    display: inline-block;
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.noose-band-leer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-bottom: 1px dashed rgba(139, 152, 168, 0.35);
+}
+
+.noose-band-leer-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+}
+
+.noose-band-fuss {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+}
+
+.noose-band-luecke {
+    flex: none;
+    width: 3rem;
+}
+
+.noose-band-ticks {
+    position: relative;
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 1rem;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* the inline left comes from the bucket index, so only the shift may be overridden here */
+.noose-band-ticks > span {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.noose-band-ticks > span.noose-band-anker-links {
+    transform: none;
+}
+
+.noose-band-ticks > span.noose-band-anker-rechts {
+    transform: translateX(-100%);
+}
+
+/* the legend doubles as the category filter, so there is one control row instead of two */
+.noose-band-legende {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.noose-band-legende button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font: inherit;
+    font-size: 0.74rem;
+    cursor: pointer;
+}
+
+.noose-band-legende button:hover {
+    background: rgba(139, 152, 168, 0.08);
+}
+
+.noose-band-legende button:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.noose-band-legende .noose-band-legende-aktiv {
+    border-color: var(--mud-palette-primary);
+    background: rgba(34, 211, 238, 0.1);
+    color: var(--mud-palette-text-primary);
+}
+
+.noose-band-legende i {
+    display: inline-block;
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
 }
 
 /* Chronicle feed */
 .chronik-tag {
     position: sticky;
-    top: 0;
+    /* sticks inside the rail pane, whose pa-4 the negative offset cancels */
+    top: -1rem;
     z-index: 2;
     background: var(--mud-palette-surface);
-    padding: 0.35rem 0;
+    padding: 1rem 0 0.35rem;
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
 .chronik-zeile {
     display: grid;
-    grid-template-columns: 1.75rem 4.25rem 1fr;
+    /* icon | time | content | actor: the actor on its own column saves a line per event */
+    grid-template-columns: 1.75rem 3.25rem minmax(0, 1fr) auto;
     gap: 0.5rem;
     padding: 0.4rem 0;
     align-items: start;
+}
+
+.chronik-akteur {
+    justify-self: end;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .chronik-zeile {
+        grid-template-columns: 1.75rem 3.25rem minmax(0, 1fr);
+    }
+
+    .chronik-akteur {
+        grid-column: 3;
+        justify-self: start;
+    }
 }
 
 .chronik-zeile + .chronik-zeile {

@@ -1,5 +1,7 @@
 @page "/einstellungen"
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
+@using NOOSE_Website.Navigation
+@inject NavigationManager Nav
 
 <PageTitle>Einstellungen · NOOSE</PageTitle>
 
@@ -84,26 +86,20 @@
         </RecordSection>
     </AuthorizeView>
 
-    <AuthorizeView Policy="@Policies.Leadership" Context="gegenSection">
-        <RecordSection Group="Nachweis" Slug="gegenaufklaerung" Label="Gegenaufklärung"
-                       Icon="@Icons.Material.Filled.Shield">
-            <CounterIntelPanel />
-        </RecordSection>
-    </AuthorizeView>
-
-    <AuthorizeView Policy="@Policies.Leadership" Context="gegenRulesSection">
-        <RecordSection Group="Nachweis" Slug="gegenaufklaerung-regeln" Label="Gegenaufklärungs-Regeln"
-                       Icon="@Icons.Material.Filled.Rule">
-            <CounterIntelRulesPanel />
-        </RecordSection>
-    </AuthorizeView>
-
-    <RecordSection Group="Nachweis" Slug="protokoll" Label="Audit-Protokoll"
-                   Icon="@Icons.Material.Filled.FactCheck">
-        <AuditLogPanel />
-    </RecordSection>
+    @* Protokoll and Gegenaufklärung moved to /nachweis; only the value lists stay here. *@
     <RecordSection Group="Nachweis" Slug="basisdaten" Label="Wertelisten"
                    Icon="@Icons.Material.Filled.Storage">
         <BaseDataPanel />
     </RecordSection>
 </RecordSectionRail>
+
+@code {
+    // three sections left for /nachweis; forward old deep links instead of silently falling back
+    protected override void OnInitialized()
+    {
+        if (LegacyRoutes.MovedSettingsTab(QueryState.Read(Nav, "tab")) is { } target)
+        {
+            Nav.NavigateTo(target, replace: true);
+        }
+    }
+}

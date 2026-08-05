@@ -1,0 +1,132 @@
+@* One agent's access profile: volume, breadth and the last records they opened. Leadership only (service-guarded). *@
+@using NOOSE_Website.Models.CounterIntel
+@inject ICounterIntelService CounterIntel
+@inject NavigationManager Nav
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Zugriffsverhalten eines einzelnen Agenten im Zeitfenster der Gegenaufklärung.
+</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudSelect T="string" Label="Agent" Value="_selected" ValueChanged="OnAgentChangedAsync"
+               Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+               Style="min-width:260px;" Class="mb-4">
+        @foreach (var a in _agents)
+        {
+            <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (_profile is { } p)
+    {
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="4">
+                <StatTile Icon="@Icons.Material.Filled.Visibility" Colour="Color.Primary" Label="Zugriffe"
+                          Value="@(p.Total.ToString("N0"))" Hint="Lesezugriffe dieses Agenten im Zeitfenster" />
+            </MudItem>
+            <MudItem xs="4">
+                <StatTile Icon="@Icons.Material.Filled.FolderOpen" Colour="Color.Tertiary" Label="Verschiedene Akten"
+                          Value="@(p.DistinctRecords.ToString("N0"))" Hint="Wie breit der Agent gestreut hat" />
+            </MudItem>
+            <MudItem xs="4">
+                <StatTile Icon="@Icons.Material.Filled.NightsStay" Colour="Color.Warning" Label="Off-Hours"
+                          Value="@(p.OffHours.ToString("N0"))" Hint="Zugriffe außerhalb der üblichen Dienstzeiten" />
+            </MudItem>
+        </MudGrid>
+
+        @if (p.ByType.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Nach Aktentyp</MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-4">
+                @foreach (var t in p.ByType.OrderByDescending(t => t.Count))
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                        @AuditEntityDisplay.Label(t.EntityType) · @t.Count
+                    </MudChip>
+                }
+            </MudStack>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Letzte Zugriffe</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+            <tbody>
+                @foreach (var r in p.Recent)
+                {
+                    <tr style="@(r.Href is null ? "" : "cursor:pointer;")" @onclick="@(() => Go(r.Href))">
+                        <td style="width:11rem;">@r.WhenLocal.ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>@AuditEntityDisplay.Label(r.EntityType)</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    else if (_selected is not null)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                    Title="Keine Zugriffe dieses Agenten im Zeitraum"
+                    Text="Anderen Agenten wählen oder das Lagebild prüfen." />
+    }
+    else
+    {
+        <EmptyState Icon="@Icons.Material.Filled.PersonSearch"
+                    Title="Agent auswählen"
+                    Text="Wähle oben einen Agenten, um sein Zugriffsprofil zu sehen." />
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = new();
+    private bool _load = true;
+    private string? _error;
+    private IReadOnlyList<AgentOption> _agents = Array.Empty<AgentOption>();
+    private string? _selected;
+    private AgentAccessProfile? _profile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        try
+        {
+            _agents = await CounterIntel.GetAgentsAsync(_user);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+        _load = false;
+    }
+
+    private async Task OnAgentChangedAsync(string? agentId)
+    {
+        _selected = agentId;
+        try
+        {
+            _profile = string.IsNullOrEmpty(agentId)
+                ? null
+                : await CounterIntel.GetAgentProfileAsync(_user, agentId!);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void Go(string? href)
+    {
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+}

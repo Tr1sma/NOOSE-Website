@@ -66,7 +66,11 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         // A type with aging disabled contributes nothing; exempt records drop out per type.
         var staleRecords =
               (settings[nameof(Person)].AgingDisabled ? 0 : await db.People.CountAsync(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < sP, cancellationToken))
-            + (settings[nameof(Faction)].AgingDisabled ? 0 : await db.Factions.CountAsync(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled && (f.ModifiedAt ?? f.CreatedAt) < sF, cancellationToken))
+            // factions age by their four facet stamps, so the cutoff test goes through the shared filter
+            + (settings[nameof(Faction)].AgingDisabled ? 0 : await db.Factions
+                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled)
+                .Where(FactionRecency.ReferenceBefore(sF))
+                .CountAsync(cancellationToken))
             + (settings[nameof(PersonGroup)].AgingDisabled ? 0 : await db.PersonGroups.CountAsync(g => (isLeadership || !g.IsClassified) && !g.AgingDisabled && (g.ModifiedAt ?? g.CreatedAt) < sG, cancellationToken))
             + (settings[nameof(Party)].AgingDisabled ? 0 : await db.Parties.CountAsync(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < sPt, cancellationToken))
             + (settings[nameof(Operation)].AgingDisabled ? 0 : await db.Operations.CountAsync(o => (isLeadership || !o.IsClassified) && !o.AgingDisabled && (o.ModifiedAt ?? o.CreatedAt) < sO, cancellationToken))
@@ -106,11 +110,25 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         if (!setF.AgingDisabled)
         {
             var cutF = now.AddDays(-setF.WarningDays);
-            foreach (var x in await db.Factions
-                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled && (f.ModifiedAt ?? f.CreatedAt) < cutF)
-                .OrderBy(f => f.ModifiedAt ?? f.CreatedAt)
-                .Select(f => new { f.Id, f.Name, f.CaseNumber, Reference = f.ModifiedAt ?? f.CreatedAt })
-                .Take(max).ToListAsync(cancellationToken))
+            // The oldest of four facet stamps has no SQL minimum, so cap in memory after the cutoff filter.
+            var factionRows = await db.Factions
+                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled)
+                .Where(FactionRecency.ReferenceBefore(cutF))
+                .Select(f => new
+                {
+                    f.Id, f.Name, f.CaseNumber, f.CreatedAt,
+                    f.MembersRefreshedAt, f.StockRefreshedAt, f.ActivitiesRefreshedAt, f.DocsRefreshedAt,
+                })
+                .ToListAsync(cancellationToken);
+            foreach (var x in factionRows
+                .Select(f => new
+                {
+                    f.Id, f.Name, f.CaseNumber,
+                    Reference = FactionRecency.Reference(f.CreatedAt, f.MembersRefreshedAt, f.StockRefreshedAt,
+                        f.ActivitiesRefreshedAt, f.DocsRefreshedAt),
+                })
+                .OrderBy(f => f.Reference)
+                .Take(max))
             {
                 result.Add(new DashboardStaleRecord(DashboardRecordType.Faction, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}",
                     RecencyAssessment.Level(setF.WarningDays, setF.StaleDays, x.Reference, now), x.Reference));

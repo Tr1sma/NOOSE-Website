@@ -1,0 +1,101 @@
+@* Print counterparts for the core new aggregates. *@
+@* Deliberately separate from StatisticsReportTables: that component renders the frozen situation-report *@
+@* snapshot, so anything new there would come out blank for every archived month. *@
+@using NOOSE_Website.Models.Statistics
+
+@if (Classification is { } classification && !classification.IsEmpty)
+{
+    @GridTable("Personen nach Einstufung", classification, "Einstufung")
+}
+
+@if (Hazard is { } hazard && !hazard.IsEmpty)
+{
+    @GridTable("Gefährdung nach Aktenart", hazard, "Stufe")
+}
+
+@if (CaseFunnel is { } funnel && !funnel.IsEmpty)
+{
+    @GridTable("Vorgänge nach Status", funnel, "Status")
+}
+
+@if (CycleTime is { Count: > 0 } cycle && cycle.Any(b => b.Count > 0))
+{
+    <section>
+        <h2>Zeit bis Abschluss (Vorgänge)</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr><th>Dauer</th><th>Vorgänge</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var bucket in cycle)
+                {
+                    <tr><td>@bucket.Label</td><td>@bucket.Count</td></tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@if (Recency is { Count: > 0 } recency)
+{
+    <section>
+        <h2>Aktualität je Aktenart</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr><th>Aktenart</th><th>Im Fenster</th><th>Gesamt</th><th>Anteil</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in recency)
+                {
+                    <tr>
+                        <td>@row.Label</td>
+                        <td>@row.Value</td>
+                        <td>@row.Total</td>
+                        <td>@((row.Share * 100).ToString("0"))&nbsp;%</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    [Parameter] public ChartGrid? Classification { get; set; }
+
+    [Parameter] public ChartGrid? Hazard { get; set; }
+
+    [Parameter] public ChartGrid? CaseFunnel { get; set; }
+
+    [Parameter] public IReadOnlyList<ChartBucket>? CycleTime { get; set; }
+
+    [Parameter] public IReadOnlyList<ChartRatio>? Recency { get; set; }
+
+    /// <summary>A labelled grid as a table: one column per series, one row per label.</summary>
+    private RenderFragment GridTable(string title, ChartGrid grid, string firstColumn) =>@<section>
+        <h2>@title</h2>
+        <table class="druck-tabelle">
+            <thead>
+                <tr>
+                    <th>@firstColumn</th>
+                    @foreach (var series in grid.Series)
+                    {
+                        <th>@series.Name</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (var i = 0; i < grid.Labels.Count; i++)
+                {
+                    var row = i;
+                    <tr>
+                        <td>@grid.Labels[row]</td>
+                        @foreach (var series in grid.Series)
+                        {
+                            <td>@(row < series.Values.Count ? series.Values[row].ToString("0") : "0")</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>;
+}

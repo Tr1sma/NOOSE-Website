@@ -1,0 +1,211 @@
+@* Activity density band: stacked CSS bars, no SVG and no JS. Picking a bar narrows the feed to it. *@
+@* Hover is pure CSS: on Blazor Server a mouseenter handler per bar would cost a round trip per bar. *@
+@using System.Globalization
+@using NOOSE_Website.Models.Timeline
+
+<div class="noose-band">
+    <div class="noose-band-kopf">
+        <span class="mud-text-secondary">@AxisTitle</span>
+        @if (!string.IsNullOrWhiteSpace(Headline))
+        {
+            <span class="noose-band-kennzahl">@Headline</span>
+        }
+    </div>
+
+    <div class="noose-band-plot @(Stale ? "noose-band-blass" : null)" style="@PlotStyle">
+        <div class="noose-band-achse">
+            <span>@Peak.ToString("N0")</span>
+            <span>@Mid.ToString("N0")</span>
+            <span>0</span>
+        </div>
+        <div class="noose-band-flaeche">
+            <span class="noose-band-linie" style="top:0;"></span>
+            <span class="noose-band-linie" style="top:50%;"></span>
+
+            @if (Buckets.Count == 0 || Peak == 0)
+            {
+                <span class="noose-band-leer"></span>
+                <span class="noose-band-leer-text mud-text-secondary">Keine Ereignisse im gewählten Zeitraum</span>
+            }
+            else
+            {
+                <div class="noose-band-spalten">
+                    @for (var i = 0; i < Buckets.Count; i++)
+                    {
+                        var bucket = Buckets[i];
+                        var edge = EdgeClass(Centre(i), 15);
+                        <div class="noose-band-spalte @(IsPicked(bucket) ? "noose-band-gewaehlt" : null)"
+                             role="button" tabindex="0" aria-label="@Spoken(bucket)"
+                             @onclick="@(() => PickAsync(bucket))"
+                             @onkeydown="@(e => KeyAsync(e, bucket))">
+                            @if (bucket.Total == 0)
+                            {
+                                @* a visible stub, otherwise a gap-filled band looks like an unfilled one *@
+                                <span class="noose-band-null"></span>
+                            }
+                            else
+                            {
+                                @* highest slot first: the column grows upwards, so slot 0 sits on the baseline *@
+                                @foreach (var segment in bucket.Segments.OrderByDescending(s => s.Slot))
+                                {
+                                    <span style="@SegmentStyle(segment)"></span>
+                                }
+                            }
+                            <span class="noose-band-tip @edge">
+                                <b>@Caption(bucket)</b>
+                                <span>@bucket.Total.ToString("N0") @(bucket.Total == 1 ? "Ereignis" : "Ereignisse")</span>
+                                @foreach (var segment in bucket.Segments.OrderByDescending(s => s.Count).Take(3))
+                                {
+                                    <span class="noose-band-tip-zeile">
+                                        <i style="@SwatchStyle(segment.Slot)"></i>
+                                        @ActivityBandDisplay.Label(segment.Slot) · @segment.Count.ToString("N0")
+                                    </span>
+                                }
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="noose-band-fuss">
+        <span class="noose-band-luecke"></span>
+        <span class="noose-band-ticks">
+            @foreach (var tick in Ticks())
+            {
+                <span class="@tick.Edge" style="@tick.Style">@tick.Label</span>
+            }
+        </span>
+    </div>
+</div>
+
+@code {
+    /// <summary>Buckets oldest first; already gap-filled by the service.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ChronikDensityBucket> Buckets { get; set; } = Array.Empty<ChronikDensityBucket>();
+
+    /// <summary>Bucket width; drives the axis title, the ticks and the tooltip caption.</summary>
+    [Parameter] public ChronikBucketUnit Unit { get; set; } = ChronikBucketUnit.Day;
+
+    /// <summary>Right-hand headline, e.g. "1.020 Ereignisse · ø 34/Tag".</summary>
+    [Parameter] public string? Headline { get; set; }
+
+    /// <summary>Raised with the picked bucket start, or null when the pick is cleared.</summary>
+    [Parameter] public EventCallback<DateTime?> OnBucketPicked { get; set; }
+
+    /// <summary>Bucket the feed is currently narrowed to; drawn highlighted.</summary>
+    [Parameter] public DateTime? PickedLocal { get; set; }
+
+    /// <summary>Dim the plot when it cannot honour the active filter.</summary>
+    [Parameter] public bool Stale { get; set; }
+
+    [Parameter] public int Height { get; set; } = 120;
+
+    private const int MaxTicks = 6;
+
+    private int Peak => Buckets.Count == 0 ? 0 : Buckets.Max(b => b.Total);
+
+    private int Mid => (int)Math.Round(Peak / 2.0);
+
+    // Height is an int, so no culture trap here; percentages below go through InvariantCulture
+    private string PlotStyle => $"height:{Height}px;";
+
+    private string AxisTitle => Unit switch
+    {
+        ChronikBucketUnit.Hour => "Ereignisse pro Stunde",
+        ChronikBucketUnit.Week => "Ereignisse pro Woche",
+        ChronikBucketUnit.Month => "Ereignisse pro Monat",
+        _ => "Ereignisse pro Tag",
+    };
+
+    // de-DE would render "12,5%", which is not valid CSS
+    private string SegmentStyle(ChronikDensitySegment segment)
+    {
+        var share = Peak == 0 ? 0 : (double)segment.Count / Peak * 100.0;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"height:{share:0.###}%;background:{ActivityBandDisplay.Hex(segment.Slot)};");
+    }
+
+    private static string SwatchStyle(int slot) => $"background:{ActivityBandDisplay.Hex(slot)};";
+
+    private bool IsPicked(ChronikDensityBucket bucket) => PickedLocal == bucket.StartLocal;
+
+    private Task PickAsync(ChronikDensityBucket bucket)
+        => OnBucketPicked.HasDelegate
+            ? OnBucketPicked.InvokeAsync(IsPicked(bucket) ? null : bucket.StartLocal)
+            : Task.CompletedTask;
+
+    private async Task KeyAsync(KeyboardEventArgs e, ChronikDensityBucket bucket)
+    {
+        if (e.Key is "Enter" or " ")
+        {
+            await PickAsync(bucket);
+        }
+    }
+
+    private double Centre(int index) => Buckets.Count == 0 ? 0 : (index + 0.5) / Buckets.Count * 100.0;
+
+    // pinned to the plot edges so a card or label at the first/last bar is not cut off
+    private static string EdgeClass(double centre, double margin)
+        => centre < margin ? "noose-band-anker-links"
+            : centre > 100 - margin ? "noose-band-anker-rechts"
+            : string.Empty;
+
+    private sealed record Tick(string Style, string Label, string Edge);
+
+    private IEnumerable<Tick> Ticks()
+    {
+        if (Buckets.Count == 0)
+        {
+            yield break;
+        }
+        var step = Math.Max(1, (int)Math.Ceiling((double)Buckets.Count / MaxTicks));
+        for (var i = 0; i < Buckets.Count; i += step)
+        {
+            var centre = Centre(i);
+            yield return new Tick(
+                string.Create(CultureInfo.InvariantCulture, $"left:{centre:0.###}%;"),
+                TickLabel(Buckets[i].StartLocal),
+                EdgeClass(centre, 8));
+        }
+    }
+
+    private string TickLabel(DateTime start) => Unit switch
+    {
+        ChronikBucketUnit.Hour => start.ToString("HH") + " Uhr",
+        ChronikBucketUnit.Month => start.ToString("MMM yy"),
+        _ => start.Date == DateTime.Now.Date ? "heute" : start.ToString("dd.MM."),
+    };
+
+    private string Caption(ChronikDensityBucket bucket)
+    {
+        var start = bucket.StartLocal;
+        return Unit switch
+        {
+            ChronikBucketUnit.Hour => $"{start:ddd, dd.MM.} {start:HH:mm}–{start.AddHours(1):HH:mm}",
+            ChronikBucketUnit.Week => $"KW {Week(start)} · {start:dd.MM.}–{start.AddDays(6):dd.MM.yyyy}",
+            ChronikBucketUnit.Month => start.ToString("MMMM yyyy"),
+            _ => DayCaption(start),
+        };
+    }
+
+    private static string DayCaption(DateTime start)
+    {
+        var today = DateTime.Now.Date;
+        if (start.Date == today)
+        {
+            return $"Heute, {start:dd.MM.yyyy}";
+        }
+        if (start.Date == today.AddDays(-1))
+        {
+            return $"Gestern, {start:dd.MM.yyyy}";
+        }
+        return start.ToString("dddd, dd.MM.yyyy");
+    }
+
+    private static int Week(DateTime local)
+        => ISOWeek.GetWeekOfYear(DateTime.SpecifyKind(local, DateTimeKind.Unspecified));
+
+    private string Spoken(ChronikDensityBucket bucket)
+        => $"{Caption(bucket)}: {bucket.Total} Ereignisse. Auswählen, um den Verlauf auf diesen Zeitraum einzugrenzen.";
+}

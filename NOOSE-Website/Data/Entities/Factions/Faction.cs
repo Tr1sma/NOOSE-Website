@@ -96,6 +96,22 @@ public class Faction : IAuditable, ISoftDelete
     [Column("VeralterungDeaktiviert")]
     public bool AgingDisabled { get; set; }
 
+    /// <summary>Members last refreshed (UTC); null = never since creation. Only the four facet stamps drive the freshness light, not ModifiedAt (see <see cref="Services.FactionRecency"/>).</summary>
+    [Column("MitgliederAktualisiertAm")]
+    public DateTime? MembersRefreshedAt { get; set; }
+
+    /// <summary>Stocks (weapons/inventory/drug routes) last refreshed (UTC); null = never since creation.</summary>
+    [Column("BestaendeAktualisiertAm")]
+    public DateTime? StockRefreshedAt { get; set; }
+
+    /// <summary>Linked activities last refreshed (UTC); null = never since creation.</summary>
+    [Column("AktivitaetenAktualisiertAm")]
+    public DateTime? ActivitiesRefreshedAt { get; set; }
+
+    /// <summary>Linked person docs last refreshed (UTC); null = never since creation.</summary>
+    [Column("DoksAktualisiertAm")]
+    public DateTime? DocsRefreshedAt { get; set; }
+
     /// <summary>Estimated total size (= y in the x/y capture progress); optional.</summary>
     [Column("GeschaetzteMitgliederzahl")]
     public int? EstimatedMemberCount { get; set; }

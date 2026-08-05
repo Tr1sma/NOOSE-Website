@@ -1,0 +1,93 @@
+@* Counter-intelligence situation picture: access volume plus the hour-of-day pattern. Leadership only (service-guarded). *@
+@using NOOSE_Website.Models.CounterIntel
+@inject ICounterIntelService CounterIntel
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Auswertung des Zugriffsprotokolls der letzten @(_overview?.WindowDays ?? 30) Tage – wer welche Akten wann geöffnet hat.
+    Nur-Lese-Aufsicht und System-Zugriffe sind ausgeblendet.
+</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    var overview = _overview!;
+
+    <MudGrid Spacing="2" Class="mb-4">
+        <MudItem xs="6" sm="3">
+            <StatTile Icon="@Icons.Material.Filled.Visibility" Colour="Color.Primary" Label="Zugriffe"
+                      Value="@(overview.TotalAccesses.ToString("N0"))"
+                      Hint="Protokollierte Lesezugriffe im Zeitfenster" />
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <StatTile Icon="@Icons.Material.Filled.People" Colour="Color.Info" Label="Aktive Agenten"
+                      Value="@(overview.DistinctAgents.ToString("N0"))"
+                      Hint="Agenten mit mindestens einem Zugriff im Zeitfenster" />
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <StatTile Icon="@Icons.Material.Filled.FolderOpen" Colour="Color.Tertiary" Label="Geöffnete Akten"
+                      Value="@(overview.DistinctRecords.ToString("N0"))"
+                      Hint="Verschiedene Akten, die im Zeitfenster geöffnet wurden" />
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <StatTile Icon="@Icons.Material.Filled.NightsStay" Colour="Color.Warning" Label="Off-Hours"
+                      Value="@(overview.OffHoursAccesses.ToString("N0"))"
+                      Hint="Zugriffe außerhalb der üblichen Dienstzeiten" />
+        </MudItem>
+    </MudGrid>
+
+    @if (_flags.Count == 0)
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            Keine Auffälligkeiten erkannt. Welche Muster gesucht werden, steht unter
+            <MudLink Href="/nachweis?tab=regeln">Regeln</MudLink>.
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="@Worst" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            @_flags.Count Auffälligkeit(en) aus @_flags.Select(f => f.Rule).Distinct().Count() Regel(n) –
+            Details im Abschnitt <MudLink Href="/nachweis?tab=auffaelligkeiten">Auffälligkeiten</MudLink>,
+            die Muster unter <MudLink Href="/nachweis?tab=regeln">Regeln</MudLink>.
+        </MudAlert>
+    }
+
+    <MudText Typo="Typo.subtitle2" Class="mb-2">Zugriffe nach Uhrzeit (Agent × Stunde)</MudText>
+    <AccessHeatmap Data="_heatmap!" />
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _error;
+    private CounterIntelOverview? _overview;
+    private CounterIntelHeatmap? _heatmap;
+    private IReadOnlyList<InsiderFlag> _flags = Array.Empty<InsiderFlag>();
+
+    private Severity Worst => _flags.Any(f => f.Grade == CounterIntelSeverity.Critical)
+        ? Severity.Error
+        : _flags.Any(f => f.Grade == CounterIntelSeverity.Warning) ? Severity.Warning : Severity.Info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            _overview = await CounterIntel.GetOverviewAsync(user);
+            _heatmap = await CounterIntel.GetHeatmapAsync(user);
+            _flags = await CounterIntel.GetFlagsAsync(user);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+        _load = false;
+    }
+}

@@ -1,0 +1,121 @@
+@* When work happens and how fast it moves. The audit-log charts are leadership-only, because that is *@
+@* the gate the audit log carries everywhere else; the record-derived charts are open to every agent. *@
+@using NOOSE_Website.Models.Statistics
+@inject IActivityStatisticsService Activity
+@inject IThroughputStatisticsService Throughput
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" Class="d-flex">
+                <TrendChart Title="Neuzugänge und Maßnahmen" Subtitle="Erfassung gegen tatsächliche Maßnahmen"
+                            Dates="@_dates" Series="@_capture.Series" Granularity="@Scope.Granularity"
+                            YAxisTitle="Anzahl" Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            @if (_mayReadAudit)
+            {
+                <MudItem xs="12" Class="d-flex">
+                    <MatrixHeatmap Title="Aktivität nach Wochentag und Stunde"
+                                   Subtitle="Wann im Dienst tatsächlich gearbeitet wird (Ortszeit)"
+                                   Matrix="@_weekHour" Unit="Bearbeitungen" Height="260px" Stale="@_stale" />
+                </MudItem>
+                <MudItem xs="12" Class="d-flex">
+                    <CalendarHeatmap Title="Tagesaktivität im Zeitraum"
+                                     Subtitle="Jeder Kasten ist ein Tag – Lücken und Spitzen auf einen Blick"
+                                     Days="@_daily" Unit="Bearbeitungen" Height="200px" Stale="@_stale" />
+                </MudItem>
+            }
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <HistogramChart Title="Zeit bis Abschluss (Vorgänge)"
+                                Subtitle="Wie lange ein Vorgang von der Eröffnung bis zum Abschluss braucht"
+                                Buckets="@_cycle" SeriesName="Vorgänge"
+                                XAxisTitle="Dauer" YAxisTitle="Vorgänge" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <TrendChart Title="Eröffnet gegen abgeschlossen" Subtitle="Wächst der Rückstand oder schrumpft er?"
+                            Dates="@_dates" Series="@_flow.Series" Granularity="@Scope.Granularity"
+                            YAxisTitle="Vorgänge" Height="300px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ChartFrame Title="Wiedervorlagen" Subtitle="Pünktlichkeit und Rückstand"
+                            Height="200px" IsEmpty="@(_followups.Count == 0)" Stale="@_stale"
+                            EmptyText="Keine Wiedervorlagen im Zeitraum">
+                    <RatioMeter Rows="@_followups" />
+                </ChartFrame>
+            </MudItem>
+
+            @if (_mayReadAudit)
+            {
+                <MudItem xs="12" md="6" Class="d-flex">
+                    <CategoryBarChart Title="Bearbeitungen je Aktenart"
+                                      Subtitle="Wohin die Arbeit fließt"
+                                      Grid="@_byType" Stacked="true"
+                                      YAxisTitle="Bearbeitungen" Height="300px" Stale="@_stale" />
+                </MudItem>
+                <MudItem xs="12" Class="d-flex">
+                    <MatrixHeatmap Title="Erfassungslücken"
+                                   Subtitle="Kalte Zeilen sind Aktenarten, die vernachlässigt werden"
+                                   Matrix="@_gaps" Unit="Bearbeitungen" Height="280px" Stale="@_stale" />
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+    private bool _mayReadAudit;
+
+    private List<DateTime> _dates = [];
+    private ChartGrid _capture = ChartGrid.Empty;
+    private ChartGrid _flow = ChartGrid.Empty;
+    private ChartGrid _byType = ChartGrid.Empty;
+    private ChartMatrix _weekHour = ChartMatrix.Empty;
+    private ChartMatrix _gaps = ChartMatrix.Empty;
+    private IReadOnlyList<ChartBucket> _cycle = [];
+    private IReadOnlyList<ChartRatio> _followups = [];
+    private IReadOnlyList<ChartDay> _daily = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
+        var user = (await AuthStateTask).User;
+        _mayReadAudit = user.IsLeadership();
+
+        _dates = StatisticsBuckets.Starts(Scope, DateTime.UtcNow);
+        _capture = await Throughput.GetCaptureVersusMeasuresAsync(Scope);
+        _flow = await Throughput.GetOpenedVersusClosedAsync(Scope);
+        _cycle = await Throughput.GetCaseCycleTimeAsync(Scope);
+        _followups = await Throughput.GetFollowupPunctualityAsync(Scope);
+
+        if (_mayReadAudit)
+        {
+            _weekHour = await Activity.GetWeekdayHourAsync(user, Scope);
+            _daily = await Activity.GetDailyDensityAsync(user, Scope);
+            _byType = await Activity.GetByRecordTypeAsync(user, Scope);
+            _gaps = await Activity.GetCaptureGapsAsync(user, Scope);
+        }
+
+        _first = false;
+        _stale = false;
+    }
+}

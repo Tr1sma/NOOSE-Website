@@ -1,0 +1,75 @@
+@* What is connected to what: the link matrix, conflict/alliance development, and where records move. *@
+@using NOOSE_Website.Models.Statistics
+@inject INetworkStatisticsService Network
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="7" Class="d-flex">
+                <MatrixHeatmap Title="Verknüpfungen nach Aktenart"
+                               Subtitle="Welche Aktenarten tatsächlich miteinander verbunden sind"
+                               Matrix="@_crossTab" Unit="Verknüpfungen" ShowValues="true"
+                               Height="320px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="5" Class="d-flex">
+                <CategoryBarChart Title="Beziehungsarten" Subtitle="Person zu Person"
+                                  Grid="@_relations" LabelRotation="30"
+                                  YAxisTitle="Beziehungen" Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <CategoryBarChart Title="Neue Verknüpfungen nach Art"
+                                  Subtitle="Wachsen Konflikte oder Bündnisse schneller?"
+                                  Grid="@_kinds" YAxisTitle="Verknüpfungen"
+                                  Height="300px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="7" Class="d-flex">
+                <HazardTreemap Title="Fraktionen nach Größe" Subtitle="Fläche ist Mitgliederzahl, Farbe die Gefährdung"
+                               Tiles="@_tiles" Unit="Mitglieder" Height="340px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="5" Class="d-flex">
+                <FlowSankey Title="Einstufungs-Wechsel" Subtitle="Wie Akten zwischen den Stufen wandern"
+                            Flows="@_flows" Height="340px" Stale="@_stale" />
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+
+    private ChartMatrix _crossTab = ChartMatrix.Empty;
+    private ChartGrid _kinds = ChartGrid.Empty;
+    private ChartGrid _relations = ChartGrid.Empty;
+    private IReadOnlyList<ChartTile> _tiles = [];
+    private IReadOnlyList<ChartFlow> _flows = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
+        _crossTab = await Network.GetTypeCrossTabAsync(Scope);
+        _kinds = await Network.GetLinkKindTrendAsync(Scope);
+        _relations = await Network.GetRelationTypesAsync(Scope);
+        _tiles = await Network.GetFactionTilesAsync(Scope);
+        _flows = await Network.GetClassificationFlowsAsync(Scope);
+
+        _first = false;
+        _stale = false;
+    }
+}

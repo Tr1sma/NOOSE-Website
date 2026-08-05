@@ -70,7 +70,7 @@ Alles ist auditiert (Created/Modified/Deleted), Soft-Delete-fähig und rang-/rol
 - **Pfad-Suche** - „Wie hängen A und B zusammen?" (kürzeste Kette).
 - **Graph-Analytik** - Betweenness-Zentralität und Community Detection.
 - **Ermittlungshinweise** `/ermittlungshinweise` - Link-Vorhersagen, neue Konflikte, veraltete Einstufungen; ignorierbar.
-- **Chronik** `/chronik` - behördenweiter Ereignis-Feed nach Tagen gruppiert (Akten-, Dok-, Quellen-, Kommentar-, Mitglieds-, Beziehungs-, Wiedervorlage- und Score-Ereignisse inkl. Feld-Diffs), darüber ein zoombares Dichteband; Filter für Zeitraum, Typ, Agent, Kategorie und Freitext stehen in der URL.
+- **Nachweis & Gegenaufklärung** `/nachweis` - alle Agenten-Überwachung auf einer Sammelseite: **Chronik** (behördenweiter Ereignis-Feed nach Tagen gruppiert inkl. Feld-Diffs, darüber KPI-Kacheln und ein gestapeltes Aktivitätsband mit Achse, Tooltip und Klick-zum-Tagesfilter; Filter stehen in der URL), **Änderungs-** und **Zugriffsprotokoll** (Führung und Nur-Lese-Aufsicht) sowie **Gegenaufklärung** mit Lagebild, Agenten-Profil, Auffälligkeiten und Regeln (Führung ohne Nur-Lese-Aufsicht).
 - **Organigramm** `/organigramm` - Dienstgrad-Hierarchie, TRU/HRB, Taskforce-Besetzung (Klarname nur Führung).
 - **KI-Kurzbrief** pro Akte - LLM-generierte Dossier-Zusammenfassung mit Caching und Staleness-Erkennung.
 - **KI-Assistent** `/ki-assistent` - Chat zum Formulieren/Zusammenfassen/Analysieren, mit Namens-Redaktion.

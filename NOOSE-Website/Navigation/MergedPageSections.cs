@@ -10,7 +10,14 @@ public static class MergedPageSections
         "vorlagen-dok", "vorlagen-dokument", "vorlagen-aktivitaet", "vorlagen-personal",
         "module", "einladungen",
         "partner",
-        "protokoll", "basisdaten",
+        "basisdaten",
+    ];
+
+    public static readonly string[] Monitoring =
+    [
+        "chronik",
+        "aenderungen", "zugriffe",
+        "lagebild", "agenten-profil", "auffaelligkeiten", "regeln",
     ];
 
     public static readonly string[] Trash =
@@ -26,7 +33,10 @@ public static class MergedPageSections
 
     public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests"];
 
-    public static readonly string[] Statistics = ["auswertung", "lageberichte"];
+    public static readonly string[] Statistics =
+    [
+        "ueberblick", "bestand", "aktivitaet", "bedrohung", "netzwerk", "dienststelle", "lageberichte",
+    ];
 
     /// <summary>Section slugs of a merged page, keyed by its route.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> ByRoute =
@@ -38,5 +48,6 @@ public static class MergedPageSections
             ["/abmeldungen"] = Absences,
             ["/bewerbungen"] = Recruiting,
             ["/statistik"] = Statistics,
+            ["/nachweis"] = Monitoring,
         };
 }

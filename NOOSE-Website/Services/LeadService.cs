@@ -285,9 +285,21 @@ public class LeadService(IDbContextFactory<AppDbContext> dbFactory, IMemoryCache
                 nameof(Person), p.Id, p.Name, $"/personen/{p.Id}"));
         }
 
-        var factions = await db.Factions.Where(f => f.Classification >= Classification.SuspicionCase)
-            .Select(f => new { f.Id, f.Name, f.IsClassified, f.Classification, Touched = f.ModifiedAt ?? f.CreatedAt })
-            .ToListAsync(ct);
+        // a faction counts as touched only through its four facets, matching the freshness light
+        var factions = (await db.Factions.Where(f => f.Classification >= Classification.SuspicionCase)
+                .Select(f => new
+                {
+                    f.Id, f.Name, f.IsClassified, f.Classification, f.CreatedAt,
+                    f.MembersRefreshedAt, f.StockRefreshedAt, f.ActivitiesRefreshedAt, f.DocsRefreshedAt,
+                })
+                .ToListAsync(ct))
+            .Select(f => new
+            {
+                f.Id, f.Name, f.IsClassified, f.Classification,
+                Touched = FactionRecency.Reference(f.CreatedAt, f.MembersRefreshedAt, f.StockRefreshedAt,
+                    f.ActivitiesRefreshedAt, f.DocsRefreshedAt),
+            })
+            .ToList();
         foreach (var f in factions.Where(f => f.Touched < staleBefore))
         {
             var days = (int)Math.Max(1, (now - f.Touched).TotalDays);
