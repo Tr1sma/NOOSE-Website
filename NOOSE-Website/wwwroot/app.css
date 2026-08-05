@@ -695,6 +695,14 @@ div.vis-tooltip {
     .mud-container:has(.record-rail-shell) > .mud-grid {
         flex: 1 1 auto;
         min-height: 0;
+        /* air between the shell's bottom edge and the legal footer */
+        margin-bottom: 1.5rem;
+    }
+
+    /* flex stretch only ever grows grid rows/items, it never shrinks them below their
+       content height — so pin the two record columns to the (now definite) grid height */
+    .mud-container:has(.record-rail-shell) > .mud-grid > .mud-grid-item {
+        height: 100%;
     }
 
     .mud-container:has(.record-rail-shell) .record-rail-shell,
@@ -706,6 +714,11 @@ div.vis-tooltip {
     .mud-container:has(.record-rail-shell) .mud-grid-item > .record-rail-shell,
     .mud-container:has(.record-rail-shell) .mud-grid-item > .akte-steckkarte {
         height: 100%;
+    }
+
+    .mud-container:has(.record-rail-shell) .record-rail-shell,
+    .mud-container:has(.record-rail-shell) .akte-steckkarte > .mud-paper {
+        border-radius: 12px;
     }
 }
 
