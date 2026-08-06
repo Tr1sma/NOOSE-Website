@@ -23,6 +23,7 @@ else
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personengruppen" aria-label="Zurück" />
+        <CompromisedBadge EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" />
         <MudSpacer />
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
@@ -118,6 +119,12 @@ else
                 {
                 <RecordSection Group="Ermittlung" Slug="doks" Label="Doks" Icon="@Icons.Material.Filled.Description">
                     <OrgDocsPanel OrgType="@nameof(PersonGroup)" OrgId="@_group.Id" User="_user" />
+                </RecordSection>
+                }
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel PerpetratorType="@nameof(PersonGroup)" PerpetratorId="@_group.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("aktivitaeten"))

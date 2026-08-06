@@ -52,6 +52,9 @@ public enum NotificationType
 
     /// <summary>Threat score rose sharply.</summary>
     ThreatSpike = 15,
+
+    /// <summary>An agent abduction was filed.</summary>
+    AbductionFiled = 16,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -75,6 +78,7 @@ public static class NotificationTypeDisplay
         NotificationType.AbsenceFiled => "Abmeldung",
         NotificationType.PersonnelEntry => "Personalakte-Eintrag",
         NotificationType.ThreatSpike => "Bedrohungs-Score gestiegen",
+        NotificationType.AbductionFiled => "Agenten-Entführung",
         _ => "Benachrichtigung",
     };
 
@@ -97,6 +101,7 @@ public static class NotificationTypeDisplay
         NotificationType.AbsenceFiled => Icons.Material.Filled.EventBusy,
         NotificationType.PersonnelEntry => Icons.Material.Filled.Description,
         NotificationType.ThreatSpike => Icons.Material.Filled.TrendingUp,
+        NotificationType.AbductionFiled => Icons.Material.Filled.PersonOff,
         _ => Icons.Material.Filled.Notifications,
     };
 }

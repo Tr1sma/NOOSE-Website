@@ -1,0 +1,83 @@
+@* Abduction statistics: how many, how they ended, what leaked, and who did it. *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+@inject IAbductionStatisticsService Stats
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <StatTile Icon="@Icons.Material.Filled.PersonOff" Colour="Color.Error"
+                          Label="Entführungen" Value="@_data.Total.ToString()" Href="/entfuehrungen" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <StatTile Icon="@Icons.Material.Filled.Warning" Colour="Color.Warning"
+                          Label="Mit Informationsabfluss" Value="@LeakRate()"
+                          Hint="@($"{_data.WithLeak} von {_data.Total}")" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <StatTile Icon="@Icons.Material.Filled.GppBad" Colour="Color.Error"
+                          Label="Aktive kompromittierte Akten" Value="@_data.ActiveCompromised.ToString()" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <CategoryBarChart Title="Entführungen im Zeitverlauf"
+                                  Subtitle="Mit und ohne Informationsabfluss"
+                                  Grid="@_data.OverTime" Stacked="true"
+                                  YAxisTitle="Entführungen" Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Häufigste Täter"
+                                  Subtitle="Fraktionen, Personengruppen und Einzeltäter nach Anzahl"
+                                  Grid="@_data.TopPerpetrators"
+                                  YAxisTitle="Entführungen" Height="320px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Ausgänge"
+                                  Subtitle="Wie die Entführungen endeten"
+                                  Grid="@_data.Outcomes"
+                                  YAxisTitle="Entführungen" Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <DistributionChart Title="Schweregrad des Abflusses" Segments="@_data.Severity"
+                                   Colours="@_severityColours" Height="300px" />
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+    private AbductionStatistics _data = AbductionStatistics.Empty;
+
+    private static readonly string[] _severityColours =
+        [ChartPalette.Hazard[1], ChartPalette.Hazard[2], ChartPalette.Hazard[3], ChartPalette.Hazard[4]];
+
+    private string LeakRate()
+        => _data.Total == 0 ? "—" : $"{Math.Round(100.0 * _data.WithLeak / _data.Total)} %";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+        _data = await Stats.GetAsync(Scope);
+        _first = false;
+        _stale = false;
+    }
+}

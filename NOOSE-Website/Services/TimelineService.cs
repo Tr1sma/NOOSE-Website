@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -330,6 +331,10 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             case nameof(Operation):
                 ids.UnionWith(await db.OperationAgents.IgnoreQueryFilters().Where(a => a.OperationId == id).Select(a => a.Id).ToListAsync(ct));
                 types.Add(nameof(OperationAgent));
+                break;
+            case nameof(AgentAbduction):
+                ids.UnionWith(await db.AbductionCompromises.Where(c => c.AbductionId == id).Select(c => c.Id).ToListAsync(ct));
+                types.Add(nameof(AbductionCompromise));
                 break;
             case nameof(Case):
                 ids.UnionWith(await db.CaseAgents.IgnoreQueryFilters().Where(a => a.CaseId == id).Select(a => a.Id).ToListAsync(ct));

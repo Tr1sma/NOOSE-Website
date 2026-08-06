@@ -1,3 +1,4 @@
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Announcements;
 using NOOSE_Website.Data.Entities.Appointments;
@@ -56,6 +57,11 @@ public static class TrashProjection
                  $"{x.Days} Tage",
                  AbsenceCategoryDisplay.Name(x.Category)),
             x.DeletedAt);
+
+    // abductions identify by Aktenzeichen; the victim codename is the detail
+    public static TrashItem Abduction(AgentAbduction x)
+        => new("entfuehrungen", x.Id, x.CaseNumber, x.VictimAgent?.Codename ?? x.VictimAgentId,
+            AbductionOutcomeDisplay.Name(x.Outcome), x.DeletedAt);
 
     private static string Moment(DateTime value) => value.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 

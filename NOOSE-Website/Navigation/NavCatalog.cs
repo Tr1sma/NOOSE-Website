@@ -54,6 +54,8 @@ public static class NavCatalog
             Description: "Gesuchte Personen, Observationen und Vernehmungen"),
         new NavEntry("informanten", "/informanten", Icons.Material.Filled.VisibilityOff, "Informanten", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Vertrauliche Quellen (V-Personen) — Zeilen-Sichtbarkeit je Führungsagent"),
+        new NavEntry("entfuehrungen", "/entfuehrungen", Icons.Material.Filled.PersonOff, "Entführungen", NavSection.Fahndung, NavArea.Ermittlung,
+            Description: "Entführungen von NOOSE-Agenten: Täter, Informationsabfluss und kompromittierte Akten"),
 
         new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumenten-Bibliothek", NavSection.Wissen, NavArea.Ermittlung,
             Description: "Zentrale Ablage aller behördlichen Dokumente"),

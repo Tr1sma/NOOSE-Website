@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -289,6 +290,28 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
+            }
+        }
+
+        // ---- agent abductions (internal, no VS) ----
+        // abductions carry no tags, so a tag-scoped search must exclude them entirely
+        if (Active(nameof(AgentAbduction)) && !hasTags)
+        {
+            var q = db.AgentAbductions.AsQueryable();
+            if (hasText)
+            {
+                q = q.Where(a => a.CaseNumber.Contains(s!)
+                    || (a.Location != null && a.Location.Contains(s!))
+                    || (a.Notes != null && a.Notes.Contains(s!)));
+            }
+            var hit = await q.OrderByDescending(a => a.Timestamp).Take(MaxPerCategory)
+                .Select(a => new SearchHit(nameof(AgentAbduction), a.Id,
+                    db.Users.Where(u => u.Id == a.VictimAgentId).Select(u => u.Codename).FirstOrDefault() ?? "Entführung",
+                    a.Location ?? string.Empty, a.CaseNumber))
+                .ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(AgentAbduction), "Entführungen", hit));
             }
         }
 

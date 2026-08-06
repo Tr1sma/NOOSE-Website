@@ -1,0 +1,21 @@
+@page "/entfuehrungen"
+
+<PageTitle>Entführungen · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.PersonOff"
+            Title="Entführungen"
+            Subtitle="Entführungen von NOOSE-Agenten: Täter, Informationsabfluss und dadurch kompromittierte Akten." />
+
+<RecordSectionRail>
+    <RecordSection Slug="uebersicht" Label="Übersicht" Icon="@Icons.Material.Filled.FormatListBulleted">
+        <AbductionListPanel />
+    </RecordSection>
+    <RecordSection Slug="kompromittiert" Label="Kompromittierte Akten" Icon="@Icons.Material.Filled.GppBad">
+        <CompromisedRecordsPanel />
+    </RecordSection>
+    <AuthorizeView Policy="@Policies.LeadershipPage" Context="trash">
+        <RecordSection Slug="papierkorb" Label="Papierkorb" Icon="@Icons.Material.Filled.Delete">
+            <TrashPanel Kind="entfuehrungen" />
+        </RecordSection>
+    </AuthorizeView>
+</RecordSectionRail>

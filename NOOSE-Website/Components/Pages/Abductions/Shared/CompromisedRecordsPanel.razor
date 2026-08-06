@@ -1,0 +1,118 @@
+@* Cross-cutting view of every record compromised by an abduction, with the re-classify action. *@
+@inject IAbductionService AbductionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Kompromittierte Akten</MudText>
+        <MudSpacer />
+        <MudSwitch T="bool" @bind-Value="_showCleared" Color="Color.Primary" Label="Auch bereinigte anzeigen"
+                   @bind-Value:after="LoadAsync" />
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.Verified" Title="Keine kompromittierten Akten"
+                    Text="Über eine Entführung als kompromittiert markierte Akten erscheinen hier — mit einem Klick wieder als normal einstufbar." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Betroffene Akte</th>
+                    <th>Typ</th>
+                    <th>Quelle</th>
+                    <th>Status</th>
+                    <th>Notiz</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr>
+                        <td>
+                            @if (r.TargetRoute is { } route)
+                            {
+                                <MudLink Href="@route">@r.TargetDisplay</MudLink>
+                            }
+                            else
+                            {
+                                @r.TargetDisplay
+                            }
+                        </td>
+                        <td>@TypeLabel(r.TargetType)</td>
+                        <td><MudLink Href="@($"/entfuehrungen/{r.AbductionId}")">@r.AbductionCaseNumber</MudLink></td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@CompromiseStatusDisplay.ChipColor(r.Status)">
+                                @CompromiseStatusDisplay.Name(r.Status)
+                            </MudChip>
+                        </td>
+                        <td><MudText Typo="Typo.caption">@r.Note</MudText></td>
+                        <td>
+                            <AuthorizeView Policy="@Policies.WriteAccess">
+                                @if (r.Status == CompromiseStatus.Compromised)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
+                                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                                               OnClick="@(() => SetStatusAsync(r, CompromiseStatus.Cleared))">Wieder normal</MudButton>
+                                }
+                                else
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                               StartIcon="@Icons.Material.Filled.GppBad"
+                                               OnClick="@(() => SetStatusAsync(r, CompromiseStatus.Compromised))">Erneut markieren</MudButton>
+                                }
+                            </AuthorizeView>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _showCleared;
+    private List<CompromisedRecord> _rows = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _rows = await AbductionService.GetCompromisedRecordsAsync(activeOnly: !_showCleared);
+        _load = false;
+    }
+
+    private async Task SetStatusAsync(CompromisedRecord r, CompromiseStatus status)
+    {
+        var user = (await AuthStateTask).User;
+        await AbductionService.SetCompromiseStatusAsync(r.CompromiseId, status, user);
+        Snackbar.Add(status == CompromiseStatus.Cleared
+            ? "Akte wieder als normal eingestuft." : "Akte erneut als kompromittiert markiert.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        nameof(Person) => "Person",
+        nameof(Agent) => "Agent",
+        nameof(Faction) => "Fraktion",
+        nameof(PersonGroup) => "Personengruppe",
+        nameof(Operation) => "Operation",
+        nameof(Document) => "Dokument",
+        nameof(Case) => "Vorgang",
+        nameof(Taskforce) => "Taskforce",
+        _ => type,
+    };
+}

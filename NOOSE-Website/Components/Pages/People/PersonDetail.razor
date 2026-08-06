@@ -24,6 +24,7 @@ else
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
+        <CompromisedBadge EntityType="@nameof(Person)" EntityId="@_person.Id" />
         <MudSpacer />
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
@@ -113,6 +114,12 @@ else
                 {
                 <RecordSection Group="Ermittlung" Slug="ueberwachung" Label="Überwachung" Icon="@Icons.Material.Filled.Visibility">
                     <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                </RecordSection>
+                }
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel PerpetratorType="@nameof(Person)" PerpetratorId="@_person.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("einstufung"))

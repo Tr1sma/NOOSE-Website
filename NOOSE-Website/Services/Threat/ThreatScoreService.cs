@@ -71,8 +71,9 @@ public class ThreatScoreService(
         double infraPkt = Saturate(infraRaw, k.CapInfra, k.InfraDenominator);
         double s2 = Math.Min(k.CapS2, sizePkt + structurePkt + weaponsPkt + infraPkt);
 
-        // ---- S3: conflict/alliance ----
-        double rawS3 = k.ConflictWeight * e.ConflictCount + k.AllianceWeight * e.AllianceCount;
+        // ---- S3: conflict/alliance/hostility ----
+        double rawS3 = k.ConflictWeight * e.ConflictCount + k.AllianceWeight * e.AllianceCount
+                     + k.AbductionWeight * e.AbductionHostility;
         double s3 = Saturate(rawS3, k.CapS3, k.S3Denominator);
 
         // ---- S4: network centrality ----
@@ -138,7 +139,8 @@ public class ThreatScoreService(
 
         // ---- P4: social risk ----
         double rawP4 = k.EnemyWeight * e.EnemyCount + k.AllyWeight * e.AllyCount
-                     + k.GpWeight * e.BusinessPartnerCount + k.LeadWeight * e.LeadershipRolesCount;
+                     + k.GpWeight * e.BusinessPartnerCount + k.LeadWeight * e.LeadershipRolesCount
+                     + k.PersonAbductionWeight * e.AbductionHostility;
         double p4 = Saturate(rawP4, k.CapP4, k.P4Denominator);
 
         // ---- P5: network centrality ----
@@ -271,6 +273,7 @@ public class ThreatScoreService(
         var t = new List<string>();
         if (e.ConflictCount > 0) { t.Add($"{e.ConflictCount} aktive(r) Konflikt(e)"); }
         if (e.AllianceCount > 0) { t.Add($"{e.AllianceCount} Bündnis(se)"); }
+        if (e.AbductionCount > 0) { t.Add($"{e.AbductionCount} Agenten-Entführung(en)"); }
         if (t.Count == 0) { t.Add("keine Konflikte/Bündnisse"); }
         return t;
     }
@@ -316,6 +319,7 @@ public class ThreatScoreService(
         if (e.AllyCount > 0) { t.Add($"{e.AllyCount} Verbündete(r)"); }
         if (e.BusinessPartnerCount > 0) { t.Add($"{e.BusinessPartnerCount} Geschäftspartner"); }
         if (e.LeadershipRolesCount > 0) { t.Add($"{e.LeadershipRolesCount} Leitungsrolle(n)"); }
+        if (e.AbductionCount > 0) { t.Add($"{e.AbductionCount} Agenten-Entführung(en)"); }
         if (t.Count == 0) { t.Add("keine relevanten Beziehungen/Leitung"); }
         return t;
     }
@@ -674,6 +678,8 @@ public class ThreatScoreService(
             .FirstOrDefaultAsync(ct);
         latest = Later(latest, lastClassification);
 
+        var abduction = await LoadAbductionSignalAsync(db, nameof(Faction), factionId, ct);
+
         return new ThreatScoreInput
         {
             IsStateFaction = false,
@@ -690,6 +696,8 @@ public class ThreatScoreService(
             DocsPerMember = docsPerMember,
             ConflictCount = kinds.Count(a => a == LinkKind.Conflict),
             AllianceCount = kinds.Count(a => a == LinkKind.Alliance),
+            AbductionCount = abduction.Count,
+            AbductionHostility = abduction.Hostility,
             DefaultEdgesDegree = defaultEdgesDegree,
             LatestCaptureUtc = latest,
         };
@@ -748,6 +756,8 @@ public class ThreatScoreService(
             latest = Later(latest, o.ModifiedAt ?? o.CreatedAt);
         }
 
+        var abduction = await LoadAbductionSignalAsync(db, nameof(Person), personId, ct);
+
         return new PersonThreatScoreInput
         {
             Classification = classification,
@@ -760,6 +770,8 @@ public class ThreatScoreService(
             AllyCount = relationTypes.Count(t => t == RelationType.Ally),
             BusinessPartnerCount = relationTypes.Count(t => t == RelationType.BusinessPartner),
             LeadershipRolesCount = leadFr + leadGr + leadPa,
+            AbductionCount = abduction.Count,
+            AbductionHostility = abduction.Hostility,
             DefaultEdgesDegree = defaultEdgesDegree,
             MembershipsCount = memberFr + memberGr + memberPa,
             DataRichness = aliases + vehicles + phones + locations,
@@ -797,6 +809,22 @@ public class ThreatScoreService(
         .Select(s => s.Trim())
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .Count();
+
+    /// <summary>Abductions committed by a perpetrator: count for the driver, weighted hostility for the score (leak severity / truth serum / killing raise it).</summary>
+    private static async Task<(int Count, double Hostility)> LoadAbductionSignalAsync(
+        AppDbContext db, string perpetratorType, string perpetratorId, CancellationToken ct)
+    {
+        var rows = await db.AgentAbductions
+            .Where(a => a.PerpetratorType == perpetratorType && a.PerpetratorId == perpetratorId)
+            .Select(a => new { a.InformationLeaked, a.LeakSeverity, a.TruthSerum, a.Outcome })
+            .ToListAsync(ct);
+        double hostility = rows.Sum(a =>
+            1.0
+            + 0.5 * (a.InformationLeaked ? (int)a.LeakSeverity : 0)
+            + (a.TruthSerum ? 0.5 : 0.0)
+            + (a.Outcome == AbductionOutcome.Killed ? 1.0 : 0.0));
+        return (rows.Count, hostility);
+    }
 
     private static DateTime? Later(DateTime? a, DateTime? b) => (a, b) switch
     {

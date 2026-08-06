@@ -1,3 +1,4 @@
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -86,6 +87,14 @@ public static class TimelineDisplay
         if (entityType == nameof(Observation))
         {
             return (TimelineCategory.Observation, $"Observation {Verb("erfasst", "gelöscht")}");
+        }
+        if (entityType == nameof(AbductionCompromise))
+        {
+            return (TimelineCategory.Link, $"Kompromittierung {Verb("markiert", "aufgehoben")}");
+        }
+        if (entityType == nameof(AgentAbduction))
+        {
+            return (TimelineCategory.Change, $"Entführung {Verb("dokumentiert", "gelöscht")}");
         }
 
         var kat = action switch

@@ -24,6 +24,7 @@ using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.CounterIntel;
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -110,6 +111,10 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- observations ----
     public DbSet<Observation> Observations => Set<Observation>();
+
+    // ---- agent abductions + compromised records ----
+    public DbSet<AgentAbduction> AgentAbductions => Set<AgentAbduction>();
+    public DbSet<AbductionCompromise> AbductionCompromises => Set<AbductionCompromise>();
 
     // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
@@ -824,6 +829,35 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(a => new { a.OperationId, a.AgentId }).IsUnique();
             b.HasIndex(a => a.AgentId);
+        });
+
+        modelBuilder.Entity<AgentAbduction>(b =>
+        {
+            b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.PerpetratorType).HasMaxLength(128);
+            b.Property(x => x.PerpetratorId).HasMaxLength(64);
+            b.Property(x => x.Location).HasMaxLength(300);
+            b.Property(x => x.Notes).HasColumnType("longtext");
+            b.HasIndex(x => x.CaseNumber).IsUnique();
+            b.HasIndex(x => x.VictimAgentId);
+            b.HasIndex(x => new { x.PerpetratorType, x.PerpetratorId });
+            b.HasIndex(x => x.Timestamp);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(x => x.VictimAgent).WithMany()
+                .HasForeignKey(x => x.VictimAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(x => x.Compromises).WithOne(c => c.Abduction!)
+                .HasForeignKey(c => c.AbductionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AbductionCompromise>(b =>
+        {
+            b.Property(c => c.TargetType).HasMaxLength(128);
+            b.Property(c => c.TargetId).HasMaxLength(64);
+            b.Property(c => c.Note).HasMaxLength(1000);
+            // badge lookup: is this record currently compromised?
+            b.HasIndex(c => new { c.TargetType, c.TargetId, c.Status });
+            // one entry per (abduction, target); blocks concurrent duplicate inserts
+            b.HasIndex(c => new { c.AbductionId, c.TargetType, c.TargetId }).IsUnique();
         });
 
         modelBuilder.Entity<AgentActivity>(b =>

@@ -35,6 +35,11 @@ public sealed class ThreatScoreInput
     public int ConflictCount { get; init; }
     public int AllianceCount { get; init; }
 
+    /// <summary>Agent abductions committed by the faction (S3 driver count).</summary>
+    public int AbductionCount { get; init; }
+    /// <summary>Weighted abduction hostility feeding S3 (severity/serum/killed weighted).</summary>
+    public double AbductionHostility { get; init; }
+
     /// <summary>Degree of manual default links incident to the faction (S4); disjoint from conflict/alliance.</summary>
     public int DefaultEdgesDegree { get; init; }
 
@@ -65,6 +70,11 @@ public sealed class PersonThreatScoreInput
     public int BusinessPartnerCount { get; init; }
     /// <summary>Active memberships holding a leadership role (faction/group/party).</summary>
     public int LeadershipRolesCount { get; init; }
+
+    /// <summary>Agent abductions committed by the person (P4 driver count).</summary>
+    public int AbductionCount { get; init; }
+    /// <summary>Weighted abduction hostility feeding P4 (severity/serum/killed weighted).</summary>
+    public double AbductionHostility { get; init; }
 
     /// <summary>Degree of manual default links incident to the person (P5).</summary>
     public int DefaultEdgesDegree { get; init; }

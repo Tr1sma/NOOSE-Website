@@ -1,0 +1,191 @@
+@page "/entfuehrungen/{Id}"
+@inject IAbductionService AbductionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_display?.Abduction.CaseNumber ?? "Entführung") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_display is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Entführung nicht gefunden.</MudAlert>
+}
+else
+{
+    var a = _display.Abduction;
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/entfuehrungen" aria-label="Zurück" />
+        <MudText Typo="Typo.h5">Entführung @a.CaseNumber</MudText>
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Href="@($"/entfuehrungen/{a.Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="edit">
+            <MudButton Href="@($"/entfuehrungen/{a.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete"
+                       OnClick="DeleteAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Entführter Agent</MudText>
+                <MudText Typo="Typo.body1"><MudLink Href="@($"/personal/{a.VictimAgentId}")">@_display.VictimCodename</MudLink></MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Täter</MudText>
+                <MudText Typo="Typo.body1">
+                    @if (_display.PerpetratorRoute is { } route)
+                    {
+                        <MudLink Href="@route">@(_display.PerpetratorName ?? "—")</MudLink>
+                    }
+                    else
+                    {
+                        @(_display.PerpetratorName ?? "—")
+                    }
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Ausgang</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@AbductionOutcomeDisplay.ChipColor(a.Outcome)">
+                    @AbductionOutcomeDisplay.Name(a.Outcome)
+                </MudChip>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Zeitpunkt</MudText>
+                <MudText Typo="Typo.body1">@a.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+            </MudItem>
+            @if (a.ReleasedAt is { } rel)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Freigelassen</MudText>
+                    <MudText Typo="Typo.body1">@rel.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                </MudItem>
+            }
+            @if (!string.IsNullOrWhiteSpace(a.Location))
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Ort</MudText>
+                    <MudText Typo="Typo.body1">@a.Location</MudText>
+                </MudItem>
+            }
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Wahrheitsserum</MudText>
+                <MudText Typo="Typo.body1">@(a.TruthSerum ? "Ja" : "Nein")</MudText>
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-3" />
+
+        @if (a.InformationLeaked)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudText Typo="Typo.subtitle2">Informationsabfluss</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@LeakSeverityDisplay.ChipColor(a.LeakSeverity)">
+                    @LeakSeverityDisplay.Name(a.LeakSeverity)
+                </MudChip>
+            </MudStack>
+            @if (a.LeakCategories != LeakCategory.None)
+            {
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-2">
+                    @foreach (var cat in LeakCategoryDisplay.Flags(a.LeakCategories))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                            @LeakCategoryDisplay.Name(cat)
+                        </MudChip>
+                    }
+                </MudStack>
+            }
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Success" Dense="true" Variant="Variant.Outlined">
+                Kein Informationsabfluss dokumentiert.
+            </MudAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(a.Notes))
+        {
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Notizen</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-line;"><MentionDisplay Text="@a.Notes" /></MudText>
+        }
+    </MudPaper>
+
+    <RecordSectionRail>
+        <RecordSection Slug="kompromittiert" Label="Kompromittierte Akten" Icon="@Icons.Material.Filled.GppBad">
+            <CompromiseManagerPanel AbductionId="@a.Id" OnChanged="ReloadAsync" />
+        </RecordSection>
+        <RecordSection Slug="quellen" Label="Quellen" Icon="@Icons.Material.Filled.AttachFile">
+            <SourcesPanel EntityType="@nameof(AgentAbduction)" EntityId="@a.Id" User="_user" />
+        </RecordSection>
+        <RecordSection Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
+            <CommentPanel EntityType="@nameof(AgentAbduction)" EntityId="@a.Id" User="_user" />
+        </RecordSection>
+        <RecordSection Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+            <TimelinePanel EntityType="@nameof(AgentAbduction)" EntityId="@a.Id" User="_user" @key="_historyKey" />
+        </RecordSection>
+    </RecordSectionRail>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private AbductionDisplay? _display;
+    private ClaimsPrincipal _user = default!;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync() => _user = (await AuthStateTask).User;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _display = await AbductionService.GetDisplayAsync(Id);
+        _load = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+        _historyKey = Guid.NewGuid();
+        StateHasChanged();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_display is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Entführung löschen?",
+            "Der Datensatz wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        await AbductionService.DeleteAsync(_display.Abduction.Id, _user);
+        Snackbar.Add("Entführung in den Papierkorb verschoben.", Severity.Success);
+        Nav.NavigateTo("/entfuehrungen");
+    }
+}

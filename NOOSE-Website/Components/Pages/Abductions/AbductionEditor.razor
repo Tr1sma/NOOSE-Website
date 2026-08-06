@@ -1,0 +1,300 @@
+@page "/entfuehrungen/neu"
+@page "/entfuehrungen/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.WriteAccess)]
+@inject IAbductionService AbductionService
+@inject IAgentManagementService Agents
+@inject IFactionService FactionService
+@inject IPersonGroupService GroupService
+@inject IPersonService PersonService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsEdit ? "Entführung bearbeiten" : "Entführung dokumentieren") · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.PersonOff"
+            Title="@(IsEdit ? "Entführung bearbeiten" : "Entführung dokumentieren")"
+            Subtitle="Wer hat den Agenten entführt, und welche Informationen sind abgeflossen?"
+            BackHref="@(IsEdit ? $"/entfuehrungen/{Id}" : "/entfuehrungen")" />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudForm @ref="_form">
+            <MudStack Spacing="4">
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="string" Label="Entführter Agent" @bind-Value="_input.VictimAgentId" Required="true"
+                                   RequiredError="Bitte den Agenten wählen" Variant="Variant.Outlined"
+                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge">
+                            @foreach (var a in _agents)
+                            {
+                                <MudSelectItem Value="a.Id">@a.Codename</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="AbductionOutcome" Label="Ausgang" @bind-Value="_input.Outcome" Variant="Variant.Outlined">
+                            @foreach (var o in AbductionOutcomeDisplay.All)
+                            {
+                                <MudSelectItem Value="o">@AbductionOutcomeDisplay.Name(o)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Täter</MudText>
+                <MudRadioGroup T="string" Value="_perpType" ValueChanged="PerpTypeChanged">
+                    <MudRadio T="string" Value="@nameof(Faction)" Color="Color.Primary" Dense="true">Fraktion</MudRadio>
+                    <MudRadio T="string" Value="@nameof(PersonGroup)" Color="Color.Primary" Dense="true">Personengruppe</MudRadio>
+                    <MudRadio T="string" Value="@nameof(Person)" Color="Color.Primary" Dense="true">Einzelperson</MudRadio>
+                </MudRadioGroup>
+                <MudAutocomplete T="AffiliationDialog.RecordHit" Label="Täter-Akte (verknüpft)" @bind-Value="_perp"
+                                 SearchFunc="@SearchPerpetrator" ToStringFunc="@(a => a?.Name ?? string.Empty)"
+                                 Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                 ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true"
+                                 HelperText="Bestehende Fraktion, Personengruppe oder Person verknüpfen (Pflicht).">
+                    <ItemTemplate Context="a">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.body2">@a.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CaseNumber</MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+
+                <MudDivider />
+                <MudGrid>
+                    <MudItem xs="7" md="4">
+                        <MudDatePicker Label="Datum der Entführung" @bind-Date="_date" Required="true"
+                                       RequiredError="Datum ist erforderlich" DateFormat="dd.MM.yyyy" />
+                    </MudItem>
+                    <MudItem xs="5" md="2">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_time" />
+                    </MudItem>
+                    <MudItem xs="7" md="4">
+                        <MudDatePicker Label="Freigelassen am (optional)" @bind-Date="_releasedDate" DateFormat="dd.MM.yyyy" Clearable="true" />
+                    </MudItem>
+                    <MudItem xs="5" md="2">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_releasedTime" />
+                    </MudItem>
+                </MudGrid>
+                <MudTextField @bind-Value="_input.Location" Label="Ort (optional)" Variant="Variant.Outlined" />
+                <MudSwitch T="bool" @bind-Value="_input.TruthSerum" Color="Color.Primary" Label="Wahrheitsserum verabreicht" />
+
+                <MudDivider />
+                <MudSwitch T="bool" @bind-Value="_input.InformationLeaked" Color="Color.Warning" Label="Informationen sind abgeflossen" />
+                @if (_input.InformationLeaked)
+                {
+                    <MudSelect T="LeakSeverity" Label="Schweregrad des Abflusses" @bind-Value="_input.LeakSeverity" Variant="Variant.Outlined">
+                        @foreach (var sev in LeakSeverityDisplay.All)
+                        {
+                            <MudSelectItem Value="sev">@LeakSeverityDisplay.Name(sev)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Betroffene Kategorien</MudText>
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                            @foreach (var cat in LeakCategoryDisplay.All)
+                            {
+                                <MudCheckBox T="bool" Dense="true" Color="Color.Primary"
+                                             Value="@_input.LeakCategories.HasFlag(cat)"
+                                             ValueChanged="@(on => ToggleCategory(cat, on))"
+                                             Label="@LeakCategoryDisplay.Name(cat)" />
+                            }
+                        </MudStack>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Kompromittierte Akten</MudText>
+                        <AbductionCompromiseField Items="_input.Compromises" />
+                    </div>
+                }
+
+                <MentionInput Text="@(_input.Notes ?? string.Empty)" TextChanged="@(v => _input.Notes = v)"
+                              Label="Notizen (optional)" Lines="2" HelperText="@MentionInput.Hint" />
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Href="@(IsEdit ? $"/entfuehrungen/{Id}" : "/entfuehrungen")">Abbrechen</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="_saving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @(IsEdit ? "Änderungen speichern" : "Entführung dokumentieren")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudForm>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool IsEdit => !string.IsNullOrEmpty(Id);
+
+    private MudForm _form = default!;
+    private AbductionInput _input = new();
+    private List<Agent> _agents = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+
+    private string _perpType = nameof(Faction);
+    private AffiliationDialog.RecordHit? _perp;
+
+    private DateTime? _date = DateTime.Now;
+    private TimeSpan? _time = DateTime.Now.TimeOfDay;
+    private DateTime? _releasedDate;
+    private TimeSpan? _releasedTime;
+
+    private bool _load = true;
+    private bool _saving;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = Id ?? "neu";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _load = true;
+
+        // one instance is reused across /neu and /{id}/bearbeiten → reset all transient state
+        _input = new AbductionInput();
+        _perp = null;
+        _perpType = nameof(Faction);
+        _date = DateTime.Now;
+        _time = DateTime.Now.TimeOfDay;
+        _releasedDate = null;
+        _releasedTime = null;
+
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        _agents = await Agents.GetSelectableAsync();
+
+        if (IsEdit)
+        {
+            var display = await AbductionService.GetDisplayAsync(Id!);
+            if (display is not null)
+            {
+                var a = display.Abduction;
+                _input.VictimAgentId = a.VictimAgentId;
+                _input.PerpetratorType = a.PerpetratorType;
+                _input.PerpetratorId = a.PerpetratorId;
+                _input.Timestamp = a.Timestamp;
+                _input.ReleasedAt = a.ReleasedAt;
+                _input.Location = a.Location;
+                _input.TruthSerum = a.TruthSerum;
+                _input.InformationLeaked = a.InformationLeaked;
+                _input.LeakCategories = a.LeakCategories;
+                _input.LeakSeverity = a.LeakSeverity;
+                _input.Notes = a.Notes;
+                _input.Outcome = a.Outcome;
+
+                foreach (var c in await AbductionService.GetCompromisesForAbductionAsync(Id!))
+                {
+                    _input.Compromises.Add(new CompromiseTargetInput
+                    {
+                        TargetType = c.TargetType,
+                        TargetId = c.TargetId,
+                        Display = c.TargetDisplay,
+                        Cleared = c.Status == CompromiseStatus.Cleared,
+                    });
+                }
+
+                _perpType = a.PerpetratorType;
+                if (!string.IsNullOrWhiteSpace(display.PerpetratorName))
+                {
+                    _perp = new AffiliationDialog.RecordHit(a.PerpetratorId, display.PerpetratorName!, string.Empty);
+                }
+                var local = a.Timestamp.ToLocalTime();
+                _date = local.Date;
+                _time = local.TimeOfDay;
+                if (a.ReleasedAt is { } rel)
+                {
+                    var rl = rel.ToLocalTime();
+                    _releasedDate = rl.Date;
+                    _releasedTime = rl.TimeOfDay;
+                }
+            }
+        }
+        _load = false;
+    }
+
+    private void PerpTypeChanged(string type)
+    {
+        // switching type discards the prior selection
+        _perpType = type;
+        _perp = null;
+    }
+
+    private async Task<IEnumerable<AffiliationDialog.RecordHit>> SearchPerpetrator(string value, CancellationToken token)
+    {
+        if (_perpType == nameof(Faction))
+        {
+            var hits = await FactionService.SearchAsync(value, _isLeadership, 20, token);
+            return hits.Select(f => new AffiliationDialog.RecordHit(f.Id, f.Name, f.CaseNumber));
+        }
+        if (_perpType == nameof(PersonGroup))
+        {
+            var hits = await GroupService.SearchAsync(value, _isLeadership, 20, token);
+            return hits.Select(g => new AffiliationDialog.RecordHit(g.Id, g.Name, g.CaseNumber));
+        }
+        var people = await PersonService.SearchAsync(value, _isLeadership, 20, token);
+        return people.Select(p => new AffiliationDialog.RecordHit(p.Id, p.Name, p.CaseNumber));
+    }
+
+    private void ToggleCategory(LeakCategory cat, bool on)
+        => _input.LeakCategories = on ? _input.LeakCategories | cat : _input.LeakCategories & ~cat;
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        if (_perp is null)
+        {
+            Snackbar.Add("Bitte einen Täter (Fraktion, Personengruppe oder Person) verknüpfen.", Severity.Warning);
+            return;
+        }
+
+        _input.PerpetratorType = _perpType;
+        _input.PerpetratorId = _perp.Id;
+        // local input → UTC (Blazor Server treats "Local" as the server timezone)
+        var date = (_date ?? DateTime.Now).Date;
+        _input.Timestamp = DateTime.SpecifyKind(date + (_time ?? TimeSpan.Zero), DateTimeKind.Local).ToUniversalTime();
+        _input.ReleasedAt = _releasedDate is { } rd
+            ? DateTime.SpecifyKind(rd.Date + (_releasedTime ?? TimeSpan.Zero), DateTimeKind.Local).ToUniversalTime()
+            : null;
+
+        _saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await AbductionService.UpdateAsync(Id!, _input, _user);
+                Snackbar.Add("Entführung aktualisiert.", Severity.Success);
+                Nav.NavigateTo($"/entfuehrungen/{Id}");
+            }
+            else
+            {
+                var created = await AbductionService.CreateAsync(_input, _user);
+                Snackbar.Add($"Entführung {created.CaseNumber} dokumentiert.", Severity.Success);
+                Nav.NavigateTo($"/entfuehrungen/{created.Id}");
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

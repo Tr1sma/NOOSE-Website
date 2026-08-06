@@ -62,6 +62,10 @@ else
         </MudAlert>
     }
 
+    <div class="mb-3">
+        <CompromisedBadge EntityType="@nameof(Agent)" EntityId="@_agent.Id" />
+    </div>
+
     <MudGrid>
         <MudItem xs="12" md="4" lg="3">
             <div class="akte-steckkarte">
@@ -87,6 +91,9 @@ else
                 </MudTabPanel>
                 <MudTabPanel Text="Auszeichnungen" Icon="@Icons.Material.Filled.EmojiEvents">
                     <AgentBadgesPanel AgentId="@_agent.Id" />
+                </MudTabPanel>
+                <MudTabPanel Text="Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel VictimAgentId="@_agent.Id" />
                 </MudTabPanel>
                 @if (_isLeadership)
                 {
@@ -123,8 +130,8 @@ else
         _mayRealName = _user.MayRealNameSee();
         _mayWrite = _user.MayWrite();
         _tabs = _isLeadership
-            ? new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen", "kommentare" }
-            : new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen" };
+            ? new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen", "entfuehrungen", "kommentare" }
+            : new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen", "entfuehrungen" };
     }
 
     // Component is reused across /personal/{A}→{B}; react to AgentId change since OnInitialized won't rerun

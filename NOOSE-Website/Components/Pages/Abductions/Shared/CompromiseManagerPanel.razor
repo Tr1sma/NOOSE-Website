@@ -1,0 +1,169 @@
+@* Manages the records compromised by one abduction: add via record search, re-classify, remove. *@
+@inject IAbductionService AbductionService
+@inject ISearchService SearchService
+@inject IAgentManagementService Agents
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.subtitle1">Kompromittierte Akten</MudText>
+
+    <AuthorizeView Policy="@Policies.WriteAccess">
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudAutocomplete T="QuickHit" Label="Akte suchen & verknüpfen" Value="_pick" ValueChanged="OnPick"
+                                 SearchFunc="Search" ToStringFunc="@(h => h is null ? string.Empty : $"{h.Name} ({h.CaseNumber})")"
+                                 ResetValueOnEmptyText="true" Clearable="true" MinCharacters="1" Immediate="true"
+                                 CoerceText="false" CoerceValue="false" Variant="Variant.Outlined"
+                                 HelperText="Person, Agent, Operation, Dokument … die durch den Leak betroffen ist.">
+                    <ItemTemplate Context="h">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.body2">@h.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@h.CaseNumber</MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_note" Label="Was war betroffen? (optional)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudButton OnClick="AddAsync" Disabled="@(_pick is null)" Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AddLink" FullWidth="true">Markieren</MudButton>
+            </MudItem>
+        </MudGrid>
+    </AuthorizeView>
+
+    @if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.PlaylistAddCheck" Title="Keine Akte als kompromittiert markiert"
+                    Text="Verknüpfe die Akten, die durch den Informationsabfluss betroffen sind." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead>
+                <tr><th>Betroffene Akte</th><th>Typ</th><th>Status</th><th>Notiz</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr>
+                        <td>
+                            @if (r.TargetRoute is { } route)
+                            {
+                                <MudLink Href="@route">@r.TargetDisplay</MudLink>
+                            }
+                            else
+                            {
+                                @r.TargetDisplay
+                            }
+                        </td>
+                        <td>@r.TargetType</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@CompromiseStatusDisplay.ChipColor(r.Status)">
+                                @CompromiseStatusDisplay.Name(r.Status)
+                            </MudChip>
+                        </td>
+                        <td><MudText Typo="Typo.caption">@r.Note</MudText></td>
+                        <td>
+                            <AuthorizeView Policy="@Policies.WriteAccess">
+                                <MudStack Row="true" Spacing="1">
+                                    @if (r.Status == CompromiseStatus.Compromised)
+                                    {
+                                        <MudTooltip Text="Wieder als normal einstufen">
+                                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                                                           OnClick="@(() => SetStatusAsync(r, CompromiseStatus.Cleared))" />
+                                        </MudTooltip>
+                                    }
+                                    else
+                                    {
+                                        <MudTooltip Text="Erneut als kompromittiert markieren">
+                                            <MudIconButton Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Error"
+                                                           OnClick="@(() => SetStatusAsync(r, CompromiseStatus.Compromised))" />
+                                        </MudTooltip>
+                                    }
+                                    <MudTooltip Text="Verknüpfung entfernen">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Default"
+                                                       OnClick="@(() => RemoveAsync(r))" />
+                                    </MudTooltip>
+                                </MudStack>
+                            </AuthorizeView>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string AbductionId { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private List<CompromisedRecord> _rows = new();
+    private List<Agent> _agents = new();
+    private QuickHit? _pick;
+    private string? _note;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // agents are absent from the command-palette quick search, so match them here for compromised Personalakten
+        _agents = await Agents.GetSelectableAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _rows = await AbductionService.GetCompromisesForAbductionAsync(AbductionId);
+
+    private async Task<IEnumerable<QuickHit>> Search(string value, CancellationToken token)
+    {
+        var term = value ?? string.Empty;
+        var user = (await AuthStateTask).User;
+        var records = await SearchService.QuickSearchAsync(term, ViewerScope.From(user), 10, token);
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            return records;
+        }
+        var agentHits = _agents
+            .Where(a => (a.Codename ?? string.Empty).Contains(term, StringComparison.OrdinalIgnoreCase)
+                     || (a.BadgeNumber ?? string.Empty).Contains(term, StringComparison.OrdinalIgnoreCase))
+            .Take(5)
+            .Select(a => new QuickHit(nameof(Agent), a.Id, a.Codename, a.BadgeNumber ?? string.Empty));
+        // agents first: linking a compromised colleague file is the common case
+        return agentHits.Concat(records);
+    }
+
+    private void OnPick(QuickHit? hit) => _pick = hit;
+
+    private async Task AddAsync()
+    {
+        if (_pick is null)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        await AbductionService.AddCompromiseAsync(AbductionId, _pick.Category, _pick.TargetId, _note, user);
+        _pick = null;
+        _note = null;
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+        Snackbar.Add("Akte als kompromittiert markiert.", Severity.Success);
+    }
+
+    private async Task SetStatusAsync(CompromisedRecord r, CompromiseStatus status)
+    {
+        var user = (await AuthStateTask).User;
+        await AbductionService.SetCompromiseStatusAsync(r.CompromiseId, status, user);
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAsync(CompromisedRecord r)
+    {
+        var user = (await AuthStateTask).User;
+        await AbductionService.RemoveCompromiseAsync(r.CompromiseId, user);
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+        Snackbar.Add("Verknüpfung entfernt.", Severity.Success);
+    }
+}

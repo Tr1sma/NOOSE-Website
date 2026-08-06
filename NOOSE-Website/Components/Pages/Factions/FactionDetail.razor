@@ -23,6 +23,7 @@ else
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
+        <CompromisedBadge EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
         <MudSpacer />
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
@@ -123,6 +124,9 @@ else
                 </RecordSection>
                 <RecordSection Group="Ermittlung" Slug="informanten" Label="Informanten" Icon="@Icons.Material.Filled.VisibilityOff">
                     <FactionInformantsPanel FactionId="@_faction.Id" User="_user" />
+                </RecordSection>
+                <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel PerpetratorType="@nameof(Faction)" PerpetratorId="@_faction.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("bestaende"))
