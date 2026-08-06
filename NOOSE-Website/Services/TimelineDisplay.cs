@@ -1,4 +1,5 @@
 using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -95,6 +96,14 @@ public static class TimelineDisplay
         if (entityType == nameof(AgentAbduction))
         {
             return (TimelineCategory.Change, $"Entführung {Verb("dokumentiert", "gelöscht")}");
+        }
+        if (entityType == nameof(EvidenceItem))
+        {
+            return (TimelineCategory.Change, $"Asservat-Item {Verb("angelegt", "gelöscht")}");
+        }
+        if (entityType == nameof(EvidenceEntry))
+        {
+            return (TimelineCategory.Change, $"Asservat-Eintrag {Verb("gebucht", "gelöscht")}");
         }
 
         var kat = action switch

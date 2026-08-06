@@ -121,6 +121,9 @@ else
                 <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
                     <AbductionsPanel PerpetratorType="@nameof(Person)" PerpetratorId="@_person.Id" />
                 </RecordSection>
+                <RecordSection Group="Akte" Slug="asservate" Label="Asservate" Icon="@Icons.Material.Filled.Inventory2">
+                    <EvidenceOwnerPanel OwnerType="@nameof(Person)" OwnerId="@_person.Id" />
+                </RecordSection>
                 }
                 @if (TabOn("einstufung"))
                 {

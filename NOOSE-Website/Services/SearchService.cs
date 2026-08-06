@@ -11,6 +11,7 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -312,6 +313,40 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(AgentAbduction), "Entführungen", hit));
+            }
+        }
+
+        // ---- evidence items (internal, no VS, no tags) ----
+        if (Active(nameof(EvidenceItem)) && !hasTags)
+        {
+            var q = db.EvidenceItems.AsQueryable();
+            if (hasText)
+            {
+                q = q.Where(i => i.Name.Contains(s!) || (i.Description != null && i.Description.Contains(s!)));
+            }
+            var hit = await q.OrderBy(i => i.Name).Take(MaxPerCategory)
+                .Select(i => new SearchHit(nameof(EvidenceItem), i.Id, i.Name, i.Description ?? string.Empty, string.Empty))
+                .ToListAsync(cancellationToken);
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(EvidenceItem), "Asservate", hit));
+            }
+        }
+
+        // ---- evidence entries (internal, no VS, no tags) ----
+        if (Active(nameof(EvidenceEntry)) && !hasTags)
+        {
+            var q = db.EvidenceEntries.AsQueryable();
+            if (hasText)
+            {
+                q = q.Where(e => e.CaseNumber.Contains(s!) || (e.Notes != null && e.Notes.Contains(s!)));
+            }
+            var rows = await q.OrderByDescending(e => e.Timestamp).Take(MaxPerCategory).ToListAsync(cancellationToken);
+            var hit = rows.Select(e => new SearchHit(nameof(EvidenceEntry), e.Id,
+                EvidenceEntryTypeDisplay.Name(e.Type), e.Notes ?? string.Empty, e.CaseNumber)).ToList();
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(EvidenceEntry), "Asservat-Einträge", hit));
             }
         }
 

@@ -1,0 +1,88 @@
+@* Ledger of all deposits/withdrawals. *@
+@inject IEvidenceService Evidence
+@inject NavigationManager Nav
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Ein- & Auslagerungen</MudText>
+        <MudSpacer />
+        <MudSelect T="EvidenceEntryType?" Value="_type" ValueChanged="OnTypeChanged" Clearable="true" Dense="true"
+                   Placeholder="Alle Arten" Style="max-width:220px" Variant="Variant.Outlined">
+            @foreach (var t in EvidenceEntryTypeDisplay.All)
+            {
+                <MudSelectItem T="EvidenceEntryType?" Value="@t">@EvidenceEntryTypeDisplay.Name(t)</MudSelectItem>
+            }
+        </MudSelect>
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Href="/asservatenkammer/eintrag/neu" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neuer Eintrag</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.ReceiptLong" Title="Keine Einträge"
+                    Text="Noch keine Ein- oder Auslagerungen erfasst." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Aktenzeichen</th>
+                    <th>Art</th>
+                    <th>Gegenstände</th>
+                    <th>Besitzer</th>
+                    <th>Bearbeiter</th>
+                    <th>Datum</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/asservatenkammer/eintrag/{r.Entry.Id}"))">
+                        <td>@r.Entry.CaseNumber</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@EvidenceEntryTypeDisplay.ChipColor(r.Entry.Type)"
+                                     Icon="@EvidenceEntryTypeDisplay.Icon(r.Entry.Type)">
+                                @EvidenceEntryTypeDisplay.Name(r.Entry.Type)
+                            </MudChip>
+                        </td>
+                        <td>@ItemsSummary(r)</td>
+                        <td>@r.OwnerDisplay</td>
+                        <td>@r.HandlerCodename</td>
+                        <td>@r.Entry.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    private bool _load = true;
+    private EvidenceEntryType? _type;
+    private List<EvidenceEntryDisplay> _rows = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task OnTypeChanged(EvidenceEntryType? type)
+    {
+        _type = type;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        _rows = await Evidence.GetEntriesAsync(_type);
+        _load = false;
+    }
+
+    private static string ItemsSummary(EvidenceEntryDisplay r)
+        => r.Lines.Count == 0 ? "—" : string.Join(", ", r.Lines.Select(l => $"{l.Quantity}× {l.ItemName}"));
+}

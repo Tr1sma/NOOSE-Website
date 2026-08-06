@@ -25,6 +25,7 @@ using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.CounterIntel;
 using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -115,6 +116,11 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- agent abductions + compromised records ----
     public DbSet<AgentAbduction> AgentAbductions => Set<AgentAbduction>();
     public DbSet<AbductionCompromise> AbductionCompromises => Set<AbductionCompromise>();
+
+    // ---- evidence room (Asservatenkammer) ----
+    public DbSet<EvidenceItem> EvidenceItems => Set<EvidenceItem>();
+    public DbSet<EvidenceEntry> EvidenceEntries => Set<EvidenceEntry>();
+    public DbSet<EvidenceEntryLine> EvidenceEntryLines => Set<EvidenceEntryLine>();
 
     // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
@@ -858,6 +864,44 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(c => new { c.TargetType, c.TargetId, c.Status });
             // one entry per (abduction, target); blocks concurrent duplicate inserts
             b.HasIndex(c => new { c.AbductionId, c.TargetType, c.TargetId }).IsUnique();
+        });
+
+        modelBuilder.Entity<EvidenceItem>(b =>
+        {
+            b.Property(i => i.Name).HasMaxLength(200).IsRequired();
+            b.Property(i => i.Description).HasColumnType("longtext");
+            b.Property(i => i.ImageFileName).HasMaxLength(200);
+            b.Property(i => i.ImageContentType).HasMaxLength(100);
+            b.HasIndex(i => i.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<EvidenceEntry>(b =>
+        {
+            b.Property(e => e.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(e => e.OwnerType).HasMaxLength(128);
+            b.Property(e => e.OwnerId).HasMaxLength(64);
+            b.Property(e => e.HandlerAgentId).HasMaxLength(255);
+            b.Property(e => e.Notes).HasColumnType("longtext");
+            b.HasIndex(e => e.CaseNumber).IsUnique();
+            b.HasIndex(e => new { e.OwnerType, e.OwnerId });
+            b.HasIndex(e => e.Type);
+            b.HasIndex(e => e.Timestamp);
+            b.HasIndex(e => e.HandlerAgentId);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(e => e.HandlerAgent).WithMany()
+                .HasForeignKey(e => e.HandlerAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(e => e.Lines).WithOne(l => l.Entry!)
+                .HasForeignKey(l => l.EntryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EvidenceEntryLine>(b =>
+        {
+            b.Property(l => l.Quantity);
+            b.HasIndex(l => l.EntryId);
+            b.HasIndex(l => l.ItemId);
+            // Restrict: an item stays as long as any position references it
+            b.HasOne(l => l.Item).WithMany()
+                .HasForeignKey(l => l.ItemId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AgentActivity>(b =>

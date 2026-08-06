@@ -3,6 +3,7 @@ using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Announcements;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Jobs;
@@ -62,6 +63,14 @@ public static class TrashProjection
     public static TrashItem Abduction(AgentAbduction x)
         => new("entfuehrungen", x.Id, x.CaseNumber, x.VictimAgent?.Codename ?? x.VictimAgentId,
             AbductionOutcomeDisplay.Name(x.Outcome), x.DeletedAt);
+
+    // evidence items carry no Aktenzeichen; the name identifies the row
+    public static TrashItem EvidenceItem(EvidenceItem x)
+        => new("asservate-items", x.Id, null, x.Name, x.Description, x.DeletedAt);
+
+    public static TrashItem EvidenceEntry(EvidenceEntry x)
+        => new("asservate-eintraege", x.Id, x.CaseNumber, EvidenceEntryTypeDisplay.Name(x.Type),
+            Moment(x.Timestamp), x.DeletedAt);
 
     private static string Moment(DateTime value) => value.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 

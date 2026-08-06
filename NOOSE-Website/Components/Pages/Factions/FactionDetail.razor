@@ -128,6 +128,9 @@ else
                 <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
                     <AbductionsPanel PerpetratorType="@nameof(Faction)" PerpetratorId="@_faction.Id" />
                 </RecordSection>
+                <RecordSection Group="Ermittlung" Slug="asservate-mitglieder" Label="Asservate (Mitglieder)" Icon="@Icons.Material.Filled.Inventory">
+                    <EvidenceOwnerPanel FactionId="@_faction.Id" />
+                </RecordSection>
                 }
                 @if (TabOn("bestaende"))
                 {

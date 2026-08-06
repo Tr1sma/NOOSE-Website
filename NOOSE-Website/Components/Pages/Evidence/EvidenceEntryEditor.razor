@@ -1,0 +1,387 @@
+@page "/asservatenkammer/eintrag/neu"
+@page "/asservatenkammer/eintrag/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.Leadership)]
+@inject IEvidenceService Evidence
+@inject IEvidenceImageStorageService Storage
+@inject IAgentManagementService Agents
+@inject IPersonService PersonService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsEdit ? "Eintrag bearbeiten" : "Neuer Eintrag") · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.ReceiptLong"
+            Title="@(IsEdit ? "Eintrag bearbeiten" : "Neuer Eintrag")"
+            Subtitle="Ein- oder Auslagerung mit Gegenständen, Besitzer und Bearbeiter."
+            BackHref="@(IsEdit ? $"/asservatenkammer/eintrag/{Id}" : "/asservatenkammer")" />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudForm @ref="_form">
+            <MudStack Spacing="4">
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Art</MudText>
+                    <MudRadioGroup T="EvidenceEntryType" @bind-Value="_input.Type">
+                        @foreach (var t in EvidenceEntryTypeDisplay.All)
+                        {
+                            <MudRadio T="EvidenceEntryType" Value="@t" Color="Color.Primary" Dense="true">
+                                @EvidenceEntryTypeDisplay.Name(t)
+                            </MudRadio>
+                        }
+                    </MudRadioGroup>
+                </div>
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Besitzer</MudText>
+                <MudRadioGroup T="string" Value="_ownerKind" ValueChanged="OwnerKindChanged">
+                    <MudRadio T="string" Value="@Noose" Color="Color.Primary" Dense="true">NOOSE</MudRadio>
+                    <MudRadio T="string" Value="@nameof(Agent)" Color="Color.Primary" Dense="true">Agent</MudRadio>
+                    <MudRadio T="string" Value="@nameof(Person)" Color="Color.Primary" Dense="true">Personenakte</MudRadio>
+                </MudRadioGroup>
+                @if (_ownerKind != Noose)
+                {
+                    <MudAutocomplete T="AffiliationDialog.RecordHit" Label="@(_ownerKind == nameof(Agent) ? "Agent wählen" : "Person wählen")"
+                                     @bind-Value="_owner" SearchFunc="@SearchOwner" ToStringFunc="@(o => o?.Name ?? string.Empty)"
+                                     Variant="Variant.Outlined" Clearable="true" CoerceText="false" CoerceValue="false"
+                                     ResetValueOnEmptyText="true" MinCharacters="0" Immediate="true">
+                        <ItemTemplate Context="o">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2">@o.Name</MudText>
+                                @if (!string.IsNullOrWhiteSpace(o.CaseNumber))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@o.CaseNumber</MudText>
+                                }
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                }
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Gegenstände</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Unbekannte Bezeichnungen werden beim Speichern automatisch als neues Item angelegt.
+                </MudText>
+                @foreach (var line in _input.Lines)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudAutocomplete T="string" @bind-Value="line.ItemName" SearchFunc="@SearchItemNames"
+                                         Placeholder="Gegenstand" Variant="Variant.Outlined" Dense="true"
+                                         CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                                         MinCharacters="0" Immediate="true" Class="flex-grow-1" />
+                        <MudNumericField T="int" @bind-Value="line.Quantity" Min="1" Label="Menge" Variant="Variant.Outlined"
+                                         Dense="true" Style="max-width:120px" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => RemoveLine(line))" aria-label="Position entfernen" />
+                    </MudStack>
+                    @if (Overdraw(line))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">
+                            Bestand von „@line.ItemName" ist @OnHandFor(line.ItemName) — Herausnahme von @line.Quantity übersteigt den Bestand.
+                        </MudText>
+                    }
+                    @if (IsNewItem(line))
+                    {
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="ml-2">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Neues Item „@line.ItemName.Trim()" — Bild (optional):</MudText>
+                            @if (_lineImages.TryGetValue(line, out var f))
+                            {
+                                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info"
+                                         OnClose="@(() => _lineImages.Remove(line))">@f.Name</MudChip>
+                            }
+                            else
+                            {
+                                <MudFileUpload T="IBrowserFile" FilesChanged="@(file => OnLineImageChanged(line, file))" Accept="image/*">
+                                    <CustomContent>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Image"
+                                                   OnClick="@context.OpenFilePickerAsync">Bild wählen</MudButton>
+                                    </CustomContent>
+                                    <SelectedTemplate />
+                                </MudFileUpload>
+                            }
+                        </MudStack>
+                    }
+                }
+                <div>
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Size="Size.Small"
+                               OnClick="AddLine">Position hinzufügen</MudButton>
+                </div>
+
+                <MudDivider />
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="string" Label="Bearbeiter" @bind-Value="_input.HandlerAgentId" Variant="Variant.Outlined"
+                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge">
+                            @foreach (var a in _agents)
+                            {
+                                <MudSelectItem Value="a.Id">@a.Codename</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="7" md="4">
+                        <MudDatePicker Label="Datum" @bind-Date="_date" Required="true"
+                                       RequiredError="Datum ist erforderlich" DateFormat="dd.MM.yyyy" />
+                    </MudItem>
+                    <MudItem xs="5" md="2">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_time" />
+                    </MudItem>
+                </MudGrid>
+
+                <MentionInput Text="@(_input.Notes ?? string.Empty)" TextChanged="@(v => _input.Notes = v)"
+                              Label="Zusatznotiz (optional)" Lines="2" HelperText="@MentionInput.Hint" />
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Href="@(IsEdit ? $"/asservatenkammer/eintrag/{Id}" : "/asservatenkammer")">Abbrechen</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="_saving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @(IsEdit ? "Änderungen speichern" : "Eintrag anlegen")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudForm>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool IsEdit => !string.IsNullOrEmpty(Id);
+    private const string Noose = EvidenceService.NooseOwner;
+
+    private MudForm _form = default!;
+    private EvidenceEntryInput _input = new();
+    private List<Agent> _agents = new();
+    private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
+
+    private string _ownerKind = Noose;
+    private AffiliationDialog.RecordHit? _owner;
+
+    private List<string> _itemNames = new();
+    private Dictionary<string, int> _onHandByName = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _existingNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<EvidenceLineInput, IBrowserFile> _lineImages = new();
+
+    private DateTime? _date = DateTime.Now;
+    private TimeSpan? _time = DateTime.Now.TimeOfDay;
+
+    private bool _load = true;
+    private bool _saving;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = Id ?? "neu";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _load = true;
+
+        _input = new EvidenceEntryInput();
+        _owner = null;
+        _ownerKind = Noose;
+        _lineImages.Clear();
+        _date = DateTime.Now;
+        _time = DateTime.Now.TimeOfDay;
+
+        _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
+        _agents = await Agents.GetSelectableAsync();
+        _input.HandlerAgentId = _user.GetAgentId() ?? _agents.FirstOrDefault()?.Id ?? string.Empty;
+
+        var items = await Evidence.GetItemsAsync();
+        _itemNames = items.Select(i => i.Item.Name).OrderBy(n => n).ToList();
+        _onHandByName = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var i in items)
+        {
+            _onHandByName[i.Item.Name] = i.OnHand;
+        }
+        _existingNames = items.Select(i => i.Item.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (IsEdit)
+        {
+            var display = await Evidence.GetEntryDisplayAsync(Id!);
+            if (display is not null)
+            {
+                var e = display.Entry;
+                _input.Type = e.Type;
+                _input.Notes = e.Notes;
+                _input.HandlerAgentId = e.HandlerAgentId;
+                _ownerKind = e.OwnerType;
+                if (e.OwnerType != Noose && !string.IsNullOrEmpty(e.OwnerId))
+                {
+                    _owner = new AffiliationDialog.RecordHit(e.OwnerId, display.OwnerDisplay, string.Empty);
+                }
+                foreach (var l in display.Lines)
+                {
+                    _input.Lines.Add(new EvidenceLineInput { ItemId = l.ItemId, ItemName = l.ItemName, Quantity = l.Quantity });
+                    // the overdraw hint must not count this entry's own effect (server enforces the same)
+                    var effect = e.Type == EvidenceEntryType.Deposit ? l.Quantity : -l.Quantity;
+                    _onHandByName[l.ItemName] = _onHandByName.GetValueOrDefault(l.ItemName) - effect;
+                }
+                var local = e.Timestamp.ToLocalTime();
+                _date = local.Date;
+                _time = local.TimeOfDay;
+            }
+        }
+
+        if (_input.Lines.Count == 0)
+        {
+            _input.Lines.Add(new EvidenceLineInput());
+        }
+        _load = false;
+    }
+
+    private void OwnerKindChanged(string kind)
+    {
+        _ownerKind = kind;
+        _owner = null;
+    }
+
+    private void AddLine() => _input.Lines.Add(new EvidenceLineInput());
+
+    private void RemoveLine(EvidenceLineInput line)
+    {
+        _lineImages.Remove(line);
+        _input.Lines.Remove(line);
+        if (_input.Lines.Count == 0)
+        {
+            _input.Lines.Add(new EvidenceLineInput());
+        }
+    }
+
+    private bool IsNewItem(EvidenceLineInput line)
+        => !string.IsNullOrWhiteSpace(line.ItemName) && !_existingNames.Contains(line.ItemName.Trim());
+
+    private void OnLineImageChanged(EvidenceLineInput line, IBrowserFile file)
+    {
+        if (!Storage.IsAllowedType(file.ContentType))
+        {
+            Snackbar.Add("Dateityp nicht erlaubt (nur Bilder).", Severity.Warning);
+            return;
+        }
+        if (file.Size > Storage.MaxBytes)
+        {
+            Snackbar.Add($"Bild zu groß (max. {Storage.MaxBytes / (1024 * 1024)} MB).", Severity.Warning);
+            return;
+        }
+        _lineImages[line] = file;
+    }
+
+    /// <summary>After save, attach picked images to the items that were newly auto-created by this entry.</summary>
+    private async Task ApplyNewItemImagesAsync()
+    {
+        foreach (var (line, file) in _lineImages)
+        {
+            var name = line.ItemName?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || _existingNames.Contains(name))
+            {
+                continue;
+            }
+            var item = await Evidence.GetItemByNameAsync(name);
+            if (item is null || !string.IsNullOrEmpty(item.ImageFileName))
+            {
+                continue;
+            }
+            try
+            {
+                await using var stream = file.OpenReadStream(Storage.MaxBytes);
+                await Evidence.SetItemImageAsync(item.Id, stream, file.ContentType, _user);
+            }
+            catch { /* best effort */ }
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchItemNames(string value, CancellationToken token)
+    {
+        await Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return _itemNames.Take(20);
+        }
+        return _itemNames.Where(n => n.Contains(value, StringComparison.OrdinalIgnoreCase)).Take(20);
+    }
+
+    private async Task<IEnumerable<AffiliationDialog.RecordHit>> SearchOwner(string value, CancellationToken token)
+    {
+        if (_ownerKind == nameof(Person))
+        {
+            var people = await PersonService.SearchAsync(value, _isLeadership, 20, token);
+            return people.Select(p => new AffiliationDialog.RecordHit(p.Id, p.Name, p.CaseNumber));
+        }
+        await Task.CompletedTask;
+        var q = string.IsNullOrWhiteSpace(value)
+            ? _agents
+            : _agents.Where(a => (a.Codename ?? string.Empty).Contains(value, StringComparison.OrdinalIgnoreCase));
+        return q.Select(a => new AffiliationDialog.RecordHit(a.Id, a.Codename ?? "(unbenannt)", string.Empty));
+    }
+
+    private int OnHandFor(string? name)
+        => !string.IsNullOrWhiteSpace(name) && _onHandByName.TryGetValue(name.Trim(), out var v) ? v : 0;
+
+    private bool Overdraw(EvidenceLineInput line)
+        => _input.Type == EvidenceEntryType.Withdrawal
+           && !string.IsNullOrWhiteSpace(line.ItemName)
+           && line.Quantity > OnHandFor(line.ItemName);
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _input.OwnerType = _ownerKind;
+        if (_ownerKind == Noose)
+        {
+            _input.OwnerId = null;
+        }
+        else
+        {
+            if (_owner is null)
+            {
+                Snackbar.Add("Bitte einen Besitzer (Agent oder Person) auswählen.", Severity.Warning);
+                return;
+            }
+            _input.OwnerId = _owner.Id;
+        }
+
+        var date = (_date ?? DateTime.Now).Date;
+        _input.Timestamp = DateTime.SpecifyKind(date + (_time ?? TimeSpan.Zero), DateTimeKind.Local).ToUniversalTime();
+
+        _saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await Evidence.UpdateEntryAsync(Id!, _input, _user);
+                await ApplyNewItemImagesAsync();
+                Snackbar.Add("Eintrag aktualisiert.", Severity.Success);
+                Nav.NavigateTo($"/asservatenkammer/eintrag/{Id}");
+            }
+            else
+            {
+                var created = await Evidence.CreateEntryAsync(_input, _user);
+                await ApplyNewItemImagesAsync();
+                Snackbar.Add($"Eintrag {created.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/asservatenkammer/eintrag/{created.Id}");
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

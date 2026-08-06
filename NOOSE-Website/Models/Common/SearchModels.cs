@@ -11,6 +11,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Recruiting;
 
 namespace NOOSE_Website.Models.Common;
@@ -61,6 +62,8 @@ public static class SearchNavigation
         nameof(Law) => $"/gesetze/{targetId}",
         nameof(Agent) => $"/personal/{targetId}",
         nameof(AgentAbduction) => $"/entfuehrungen/{targetId}",
+        nameof(EvidenceItem) => $"/asservatenkammer/item/{targetId}",
+        nameof(EvidenceEntry) => $"/asservatenkammer/eintrag/{targetId}",
         nameof(Bewerbung) => $"/bewerbungen/{targetId}",
         _ => $"/personen/{targetId}",
     };

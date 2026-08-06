@@ -1,0 +1,199 @@
+@page "/asservatenkammer/item/neu"
+@page "/asservatenkammer/item/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.Leadership)]
+@inject IEvidenceService Evidence
+@inject IEvidenceImageStorageService Storage
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsEdit ? "Item bearbeiten" : "Neues Item") · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Inventory2"
+            Title="@(IsEdit ? "Item bearbeiten" : "Neues Item")"
+            Subtitle="Ein Gegenstand im Asservaten-Katalog, mit optionalem Bild."
+            BackHref="@(IsEdit ? $"/asservatenkammer/item/{Id}" : "/asservatenkammer")" />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudForm @ref="_form">
+            <MudStack Spacing="4">
+                <MudTextField @bind-Value="_input.Name" Label="Bezeichnung" Required="true"
+                              RequiredError="Bezeichnung ist erforderlich" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_input.Description" Label="Beschreibung (optional)" Lines="2"
+                              Variant="Variant.Outlined" />
+
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Bild</MudText>
+                    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                        @if (_file is not null)
+                        {
+                            <MudChip T="string" Icon="@Icons.Material.Filled.Image" Color="Color.Info">@_file.Name</MudChip>
+                        }
+                        else if (IsEdit && _hasImage)
+                        {
+                            <MudImage Src="@($"/dateien/asservate/{Id}?v={_imageVersion}")" Height="120" Width="160"
+                                      ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Kein Bild</MudText>
+                        }
+                        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept="image/*">
+                            <CustomContent>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Upload" OnClick="@context.OpenFilePickerAsync">
+                                    Bild wählen
+                                </MudButton>
+                            </CustomContent>
+                            <SelectedTemplate />
+                        </MudFileUpload>
+                        @if (IsEdit && _hasImage && _file is null)
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                                       OnClick="RemoveImageAsync">Bild entfernen</MudButton>
+                        }
+                    </MudStack>
+                </div>
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Href="@(IsEdit ? $"/asservatenkammer/item/{Id}" : "/asservatenkammer")">Abbrechen</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="_saving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @(IsEdit ? "Änderungen speichern" : "Item anlegen")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudForm>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool IsEdit => !string.IsNullOrEmpty(Id);
+
+    private MudForm _form = default!;
+    private EvidenceItemInput _input = new();
+    private IBrowserFile? _file;
+    private bool _hasImage;
+    private int _imageVersion = 1;
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _saving;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = Id ?? "neu";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _load = true;
+        _input = new EvidenceItemInput();
+        _file = null;
+        _hasImage = false;
+        _user = (await AuthStateTask).User;
+
+        if (IsEdit)
+        {
+            var item = await Evidence.GetItemAsync(Id!);
+            if (item is not null)
+            {
+                _input.Name = item.Name;
+                _input.Description = item.Description;
+                _hasImage = !string.IsNullOrEmpty(item.ImageFileName);
+            }
+        }
+        _load = false;
+    }
+
+    private void OnFileChanged(IBrowserFile file)
+    {
+        if (!Storage.IsAllowedType(file.ContentType))
+        {
+            Snackbar.Add("Dateityp nicht erlaubt (nur Bilder).", Severity.Warning);
+            return;
+        }
+        if (file.Size > Storage.MaxBytes)
+        {
+            Snackbar.Add($"Bild zu groß (max. {Storage.MaxBytes / (1024 * 1024)} MB).", Severity.Warning);
+            return;
+        }
+        _file = file;
+    }
+
+    private async Task RemoveImageAsync()
+    {
+        if (!IsEdit)
+        {
+            return;
+        }
+        try
+        {
+            await Evidence.RemoveItemImageAsync(Id!, _user);
+            _hasImage = false;
+            _imageVersion++;
+            Snackbar.Add("Bild entfernt.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await Evidence.UpdateItemAsync(Id!, _input, _user);
+                if (_file is not null)
+                {
+                    await using var stream = _file.OpenReadStream(Storage.MaxBytes);
+                    await Evidence.SetItemImageAsync(Id!, stream, _file.ContentType, _user);
+                }
+                Snackbar.Add("Item aktualisiert.", Severity.Success);
+                Nav.NavigateTo($"/asservatenkammer/item/{Id}");
+            }
+            else
+            {
+                EvidenceItem created;
+                if (_file is not null)
+                {
+                    await using var stream = _file.OpenReadStream(Storage.MaxBytes);
+                    created = await Evidence.CreateItemAsync(_input, stream, _file.ContentType, _user);
+                }
+                else
+                {
+                    created = await Evidence.CreateItemAsync(_input, null, null, _user);
+                }
+                Snackbar.Add("Item angelegt.", Severity.Success);
+                Nav.NavigateTo($"/asservatenkammer/item/{created.Id}");
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

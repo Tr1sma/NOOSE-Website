@@ -19,7 +19,8 @@ public sealed class TrashService(
     IMeetingService meetings,
     IAgentActivityService activities,
     IAbsenceService absences,
-    IAbductionService abductions) : ITrashService
+    IAbductionService abductions,
+    IEvidenceService evidence) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -64,6 +65,10 @@ public sealed class TrashService(
             absences.GetTrashAsync, TrashProjection.Absence, absences.RestoreAsync),
         Source(new TrashKind("entfuehrungen", "Entführungen", Icons.Material.Filled.PersonOff, "/entfuehrungen"),
             abductions.GetTrashAsync, TrashProjection.Abduction, abductions.RestoreAsync),
+        Source(new TrashKind("asservate-items", "Asservate (Items)", Icons.Material.Filled.Inventory2, "/asservatenkammer"),
+            evidence.GetItemTrashAsync, TrashProjection.EvidenceItem, evidence.RestoreItemAsync),
+        Source(new TrashKind("asservate-eintraege", "Asservate (Einträge)", Icons.Material.Filled.ReceiptLong, "/asservatenkammer"),
+            evidence.GetEntryTrashAsync, TrashProjection.EvidenceEntry, evidence.RestoreEntryAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

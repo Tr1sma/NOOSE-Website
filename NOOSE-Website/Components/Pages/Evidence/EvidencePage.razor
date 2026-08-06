@@ -1,0 +1,30 @@
+@page "/asservatenkammer"
+
+<PageTitle>Asservatenkammer · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Inventory2"
+            Title="Asservatenkammer"
+            Subtitle="Ein- und Auslagerung von Gegenständen mit Bestand, Bild und Besitzer." />
+
+<RecordSectionRail>
+    <RecordSection Slug="bestand" Label="Bestand" Icon="@Icons.Material.Filled.Inventory2">
+        <EvidenceItemsPanel />
+    </RecordSection>
+    <RecordSection Slug="eintraege" Label="Einträge" Icon="@Icons.Material.Filled.ReceiptLong">
+        <EvidenceEntriesPanel />
+    </RecordSection>
+    <AuthorizeView Policy="@Policies.LeadershipPage" Context="trash">
+        <RecordSection Slug="papierkorb" Label="Papierkorb" Icon="@Icons.Material.Filled.Delete">
+            <MudStack Spacing="6">
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Gelöschte Items</MudText>
+                    <TrashPanel Kind="asservate-items" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Gelöschte Einträge</MudText>
+                    <TrashPanel Kind="asservate-eintraege" />
+                </div>
+            </MudStack>
+        </RecordSection>
+    </AuthorizeView>
+</RecordSectionRail>

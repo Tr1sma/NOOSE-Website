@@ -42,6 +42,8 @@ public static class NavCatalog
             Description: "Lose Zusammenschlüsse ohne feste Fraktionsstruktur"),
         new NavEntry("parteien", "/parteien", Icons.Material.Filled.AccountBalance, "Parteien", NavSection.Akten, NavArea.Akten,
             Description: "Politische Parteien mit Mitgliedern und Ausrichtung"),
+        new NavEntry("asservatenkammer", "/asservatenkammer", Icons.Material.Filled.Inventory2, "Asservatenkammer", NavSection.Akten, NavArea.Akten,
+            Description: "Ein- und Auslagerung von Gegenständen mit Bestand, Bild und Besitzer"),
 
         new NavEntry("vorgaenge", "/vorgaenge", Icons.Material.Filled.FolderSpecial, "Vorgänge", NavSection.VorgaengeEinsaetze, NavArea.Akten,
             Description: "Übergeordnete Ermittlungsakte, die mehrere Akten bündelt"),
