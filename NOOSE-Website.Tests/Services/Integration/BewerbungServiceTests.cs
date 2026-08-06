@@ -335,6 +335,54 @@ public sealed class BewerbungServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AssignSelfAsync("b1", Junior("me")));
     }
 
+    private static (BewerbungService Svc, IApplicationCaseService ApplicationCases) BuildWithProvisioning(SqliteTestContext ctx)
+    {
+        var caseNo = Substitute.For<ICaseNumberService>();
+        caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(CaseNo);
+        var applicationCases = Substitute.For<IApplicationCaseService>();
+        var svc = new BewerbungService(ctx.Factory, caseNo, Substitute.For<ISourcesStorageService>(),
+            new BewerbungBroadcaster(), Substitute.For<IBewerbungssperreService>(),
+            Substitute.For<INotificationService>(), applicationCases, Substitute.For<ILogger<BewerbungService>>());
+        return (svc, applicationCases);
+    }
+
+    [Fact]
+    public async Task AssignSelfAsync_Hrb_InvokesAutoProvisioning()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1"));
+            db.SaveChanges();
+        }
+        var (svc, applicationCases) = BuildWithProvisioning(ctx);
+        var hrb = Hrb("hrb", "Falcon");
+
+        await svc.AssignSelfAsync("b1", hrb);
+
+        await applicationCases.Received(1).EnsureSecurityCheckCaseAsync("b1", hrb, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AssignSelfAsync_ProvisioningThrows_AssignmentStillSucceeds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1"));
+            db.SaveChanges();
+        }
+        var (svc, applicationCases) = BuildWithProvisioning(ctx);
+        applicationCases
+            .When(x => x.EnsureSecurityCheckCaseAsync(Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>()))
+            .Do(_ => throw new InvalidOperationException("boom"));
+
+        await svc.AssignSelfAsync("b1", Hrb("hrb", "Falcon"));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("hrb", check.Bewerbungen.Single(b => b.Id == "b1").AssignedAgentId);
+    }
+
     // ---------- SetStatusAsync ----------
 
     [Fact]

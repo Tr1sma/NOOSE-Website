@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -347,6 +348,24 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(EvidenceEntry), "Asservat-Einträge", hit));
+            }
+        }
+
+        // ---- cash bookings (leadership only, no tags) ----
+        if (isLeadership && Active(nameof(KassenBuchung)) && !hasTags)
+        {
+            var q = db.KassenBuchungen.AsQueryable();
+            if (hasText)
+            {
+                q = q.Where(k => k.CaseNumber.Contains(s!) || (k.Reason != null && k.Reason.Contains(s!)));
+            }
+            var rows = await q.OrderByDescending(k => k.Timestamp).Take(MaxPerCategory).ToListAsync(cancellationToken);
+            var hit = rows.Select(k => new SearchHit(nameof(KassenBuchung), k.Id,
+                $"{KassenKontoDisplay.Name(k.Account)} · {KassenBuchungArtDisplay.Name(k.Kind)}",
+                k.Reason ?? string.Empty, k.CaseNumber)).ToList();
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(KassenBuchung), "Kassenbuchungen", hit));
             }
         }
 

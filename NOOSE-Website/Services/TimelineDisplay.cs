@@ -1,5 +1,6 @@
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
@@ -104,6 +105,10 @@ public static class TimelineDisplay
         if (entityType == nameof(EvidenceEntry))
         {
             return (TimelineCategory.Change, $"Asservat-Eintrag {Verb("gebucht", "gelöscht")}");
+        }
+        if (entityType == nameof(KassenBuchung))
+        {
+            return (TimelineCategory.Change, $"Kassenbuchung {Verb("gebucht", "storniert")}");
         }
 
         var kat = action switch

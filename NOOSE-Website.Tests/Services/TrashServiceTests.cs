@@ -28,7 +28,8 @@ public class TrashServiceTests
         Substitute.For<IAgentActivityService>(),
         Substitute.For<IAbsenceService>(),
         Substitute.For<IAbductionService>(),
-        Substitute.For<IEvidenceService>());
+        Substitute.For<IEvidenceService>(),
+        Substitute.For<IKassenService>());
 
     [Fact]
     public void Kind_keys_are_unique()

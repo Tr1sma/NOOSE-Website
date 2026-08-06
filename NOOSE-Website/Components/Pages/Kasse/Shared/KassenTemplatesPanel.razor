@@ -1,0 +1,211 @@
+@* Manage recurring-booking templates (leadership). *@
+@inject IKassenTemplateService Templates
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Buchungs-Vorlagen</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@(() => StartEdit(null))">Neue Vorlage</MudButton>
+    </MudStack>
+
+    @if (_editing is not null)
+    {
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudForm @ref="_form">
+                <MudStack Spacing="3">
+                    <MudTextField T="string" @bind-Value="_editing.Name" Label="Name" Variant="Variant.Outlined"
+                                  Required="true" RequiredError="Name ist erforderlich" MaxLength="200" />
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="KassenKonto" @bind-Value="_editing.Account" Label="Kasse" Variant="Variant.Outlined">
+                                @foreach (var k in KassenKontoDisplay.All)
+                                {
+                                    <MudSelectItem T="KassenKonto" Value="@k">@KassenKontoDisplay.Name(k)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="KassenBuchungArt" @bind-Value="_editing.Kind" Label="Art" Variant="Variant.Outlined">
+                                <MudSelectItem T="KassenBuchungArt" Value="KassenBuchungArt.Einzahlung">Einzahlung</MudSelectItem>
+                                <MudSelectItem T="KassenBuchungArt" Value="KassenBuchungArt.Auszahlung">Auszahlung</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                    <MudNumericField T="decimal" @bind-Value="_editing.Amount" Min="0" Label="Betrag ($)" Variant="Variant.Outlined"
+                                     Adornment="Adornment.End" AdornmentText="$" HideSpinButtons="true" />
+                    <MudTextField T="string" @bind-Value="_editing.Reason" Label="Verwendungszweck (Grund)" Variant="Variant.Outlined" MaxLength="500" />
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudNumericField T="int" @bind-Value="_editing.Sorting" Min="0" Label="Sortierung" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="6" Class="d-flex align-center">
+                            <MudSwitch T="bool" @bind-Value="_editing.IsActive" Color="Color.Primary" Label="Aktiv" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton OnClick="CancelEdit">Abbrechen</MudButton>
+                        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="_saving"
+                                   StartIcon="@Icons.Material.Filled.Save">Speichern</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudForm>
+        </MudPaper>
+    }
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.Bookmarks" Title="Keine Vorlagen"
+                    Text="Lege wiederkehrende Buchungen als Vorlage an, um sie mit zwei Klicks zu buchen." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Kasse</th>
+                    <th>Art</th>
+                    <th style="text-align:right">Betrag</th>
+                    <th>Grund</th>
+                    <th>Aktiv</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var v in _rows)
+                {
+                    <tr>
+                        <td>@v.Name</td>
+                        <td>@KassenKontoDisplay.Name(v.Account)</td>
+                        <td>@KassenBuchungArtDisplay.Name(v.Kind)</td>
+                        <td style="text-align:right">@Money.Format(v.Amount)</td>
+                        <td>@(string.IsNullOrWhiteSpace(v.Reason) ? "—" : v.Reason)</td>
+                        <td>@(v.IsActive ? "Ja" : "Nein")</td>
+                        <td style="text-align:right; white-space:nowrap">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="@(() => StartEdit(v))" aria-label="Bearbeiten" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(v))" aria-label="Löschen" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _load = true;
+    private bool _saving;
+    private List<KassenBuchungVorlage> _rows = new();
+    private ClaimsPrincipal _user = default!;
+
+    private MudForm _form = default!;
+    private KassenVorlageInput? _editing;
+    private string? _editingId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        _rows = await Templates.GetAllAsync();
+        _load = false;
+    }
+
+    private void StartEdit(KassenBuchungVorlage? v)
+    {
+        _editingId = v?.Id;
+        _editing = v is null
+            ? new KassenVorlageInput()
+            : new KassenVorlageInput
+            {
+                Name = v.Name,
+                Account = v.Account,
+                Kind = v.Kind,
+                Amount = v.Amount,
+                Reason = v.Reason,
+                IsActive = v.IsActive,
+                Sorting = v.Sorting,
+            };
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        _saving = true;
+        try
+        {
+            if (_editingId is null)
+            {
+                await Templates.CreateAsync(_editing, _user);
+                Snackbar.Add("Vorlage angelegt.", Severity.Success);
+            }
+            else
+            {
+                await Templates.RefreshAsync(_editingId, _editing, _user);
+                Snackbar.Add("Vorlage aktualisiert.", Severity.Success);
+            }
+            CancelEdit();
+            await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(KassenBuchungVorlage v)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Vorlage löschen?",
+            $"Die Vorlage {v.Name} wird entfernt.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Templates.DeleteAsync(v.Id, _user);
+            Snackbar.Add("Vorlage gelöscht.", Severity.Success);
+            await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

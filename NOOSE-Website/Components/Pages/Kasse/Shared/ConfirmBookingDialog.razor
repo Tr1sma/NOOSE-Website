@@ -1,0 +1,97 @@
+@* Two-click booking: a template pre-fills this dialog, one confirm books it. *@
+@inject IKassenService Kasse
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudChip T="string" Size="Size.Small" Color="@KassenKontoDisplay.Colour(Template.Account)"
+                         Icon="@KassenKontoDisplay.Icon(Template.Account)">@KassenKontoDisplay.Name(Template.Account)</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="@KassenBuchungArtDisplay.ChipColor(Template.Kind)"
+                         Icon="@KassenBuchungArtDisplay.Icon(Template.Kind)">@KassenBuchungArtDisplay.Name(Template.Kind)</MudChip>
+            </MudStack>
+
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Betrag</MudText>
+                <MudText Typo="Typo.h5" Color="@KassenBuchungArtDisplay.ChipColor(Template.Kind)">
+                    @KassenBuchungArtDisplay.Sign(Template.Kind) @Money.Format(Template.Amount)
+                </MudText>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Template.Reason))
+            {
+                <div>
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Grund</MudText>
+                    <MudText Typo="Typo.body1">@Template.Reason</MudText>
+                </div>
+            }
+
+            <MudAlert Severity="@(_wouldUnderflow ? Severity.Error : Severity.Info)" Variant="Variant.Outlined" Dense="true">
+                Aktueller Stand: <b>@Money.Format(CurrentBalance)</b> · Nachher: <b>@Money.Format(Projected)</b>
+                @if (_wouldUnderflow)
+                {
+                    <span> — die Buchung würde die Kasse ins Minus bringen.</span>
+                }
+            </MudAlert>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ConfirmAsync"
+                   Disabled="@(_saving || _wouldUnderflow)" StartIcon="@Icons.Material.Filled.Check">Buchen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public KassenBuchungVorlage Template { get; set; } = default!;
+    [Parameter] public decimal CurrentBalance { get; set; }
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private bool _saving;
+
+    private decimal Projected => Template.Kind == KassenBuchungArt.Auszahlung
+        ? CurrentBalance - Template.Amount
+        : CurrentBalance + Template.Amount;
+
+    private bool _wouldUnderflow => Projected < 0;
+
+    private async Task ConfirmAsync()
+    {
+        _saving = true;
+        try
+        {
+            var input = new KassenBuchungInput
+            {
+                Account = Template.Account,
+                Kind = Template.Kind,
+                Amount = Template.Amount,
+                Reason = Template.Reason,
+            };
+            var created = await Kasse.BookAsync(input, User);
+            Snackbar.Add($"Buchung {created.CaseNumber} angelegt.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saving = false;
+        }
+    }
+
+    /// <summary>Shows the confirm dialog for a template; returns true when a booking was made.</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialog, KassenBuchungVorlage template, decimal currentBalance, ClaimsPrincipal user)
+    {
+        var parameters = new DialogParameters<ConfirmBookingDialog>
+        {
+            { x => x.Template, template },
+            { x => x.CurrentBalance, currentBalance },
+            { x => x.User, user },
+        };
+        var reference = await dialog.ShowAsync<ConfirmBookingDialog>($"Vorlage {template.Name} buchen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

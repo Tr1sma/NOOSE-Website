@@ -41,6 +41,12 @@
             <NetworkPanel />
         </RecordSection>
 
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="kasseSection">
+            <RecordSection Slug="kasse" Label="Kasse" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+                <KasseStatisticsPanel />
+            </RecordSection>
+        </AuthorizeView>
+
         <AuthorizeView Policy="@Policies.LeadershipPage" Context="workforceSection">
             <RecordSection Slug="dienststelle" Label="Dienststelle" Icon="@Icons.Material.Filled.Groups2">
                 <WorkforcePanel />

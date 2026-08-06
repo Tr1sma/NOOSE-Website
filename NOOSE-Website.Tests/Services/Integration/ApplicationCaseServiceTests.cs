@@ -114,6 +114,34 @@ public sealed class ApplicationCaseServiceTests
     }
 
     [Fact]
+    public async Task Discards_duplicate_case_when_claim_is_lost()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedBewerbung(ctx);
+        var c = EnabledCollaborators();
+        // simulate a concurrent assignment winning between the fast-path read and the atomic claim:
+        // a rival stamps LinkedCaseId first, and this call still persisted its own (now-duplicate) case
+        c.Cases.CreateAsync(Arg.Any<CaseInput>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                using var db = ctx.NewContext();
+                db.Bewerbungen.Single(x => x.Id == "b1").LinkedCaseId = "winner";
+                db.Cases.Add(new Case { Id = "case1", CaseNumber = "NOOSE-V-2026-0002", Title = ((CaseInput)ci[0]).Title });
+                db.SaveChanges();
+                return new Case { Id = "case1", Title = ((CaseInput)ci[0]).Title };
+            });
+
+        await Build(ctx, c).EnsureSecurityCheckCaseAsync("b1", Hrb());
+
+        await c.Documents.DidNotReceive().CreateAsync(Arg.Any<DocumentInput>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await c.Sources.DidNotReceive().CreateAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SourceInput>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+
+        using var check = ctx.NewContext();
+        Assert.Equal("winner", check.Bewerbungen.Single(x => x.Id == "b1").LinkedCaseId);
+        Assert.True(check.Cases.IgnoreQueryFilters().Single(v => v.Id == "case1").IsDeleted);
+    }
+
+    [Fact]
     public async Task NoOp_when_disabled()
     {
         using var ctx = new SqliteTestContext();

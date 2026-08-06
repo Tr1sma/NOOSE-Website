@@ -162,6 +162,8 @@ builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
 builder.Services.AddScoped<IAbductionService, AbductionService>();
 builder.Services.AddScoped<IEvidenceService, EvidenceService>();
+builder.Services.AddScoped<IKassenService, KassenService>();
+builder.Services.AddScoped<IKassenTemplateService, KassenTemplateService>();
 builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>();
 builder.Services.AddScoped<IValueListLabelService, ValueListLabelService>();
 builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
@@ -257,6 +259,7 @@ builder.Services.AddScoped<IThroughputStatisticsService, ThroughputStatisticsSer
 builder.Services.AddScoped<INetworkStatisticsService, NetworkStatisticsService>();
 builder.Services.AddScoped<IWorkforceStatisticsService, WorkforceStatisticsService>();
 builder.Services.AddScoped<IAbductionStatisticsService, AbductionStatisticsService>();
+builder.Services.AddScoped<IKasseStatisticsService, KasseStatisticsService>();
 builder.Services.AddScoped<ISituationReportService, SituationReportService>();
 builder.Services.AddHostedService<SituationReportWorker>();
 builder.Services.AddHttpClient("discord", client => client.Timeout = TimeSpan.FromSeconds(5));

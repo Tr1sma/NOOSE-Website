@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Meetings;
@@ -71,6 +72,11 @@ public static class TrashProjection
     public static TrashItem EvidenceEntry(EvidenceEntry x)
         => new("asservate-eintraege", x.Id, x.CaseNumber, EvidenceEntryTypeDisplay.Name(x.Type),
             Moment(x.Timestamp), x.DeletedAt);
+
+    public static TrashItem KassenBuchung(KassenBuchung x)
+        => new("kasse-buchungen", x.Id, x.CaseNumber,
+            $"{KassenKontoDisplay.Name(x.Account)} · {KassenBuchungArtDisplay.Name(x.Kind)}",
+            Join(Money.Format(x.Amount), Moment(x.Timestamp)), x.DeletedAt);
 
     private static string Moment(DateTime value) => value.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 

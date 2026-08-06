@@ -38,15 +38,15 @@ public class ApplicationCaseService(
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var bewerbung = await db.Bewerbungen.FirstOrDefaultAsync(b => b.Id == bewerbungId, cancellationToken);
+        var bewerbung = await db.Bewerbungen.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == bewerbungId, cancellationToken);
         if (bewerbung is null || bewerbung.LinkedCaseId is not null)
         {
-            return; // idempotent: already provisioned
+            return; // fast path: missing or already provisioned
         }
 
         var name = bewerbung.Name;
 
-        // 1) case first, then commit the link so a re-assignment never duplicates the Vorgang
         var @case = await cases.CreateAsync(new CaseInput
         {
             Title = $"Bewerbungsverfahren | {name}",
@@ -54,8 +54,23 @@ public class ApplicationCaseService(
             Classification = Classification.Unknown,
             SecrecyLevel = DocumentClassification.None,
         }, actor, cancellationToken);
-        bewerbung.LinkedCaseId = @case.Id;
-        await db.SaveChangesAsync(cancellationToken);
+
+        // claim the application atomically: a concurrent assignment (or double-click) that already
+        // linked its own case updates 0 rows here, so it discards this duplicate and exactly one wins
+        var claimed = await db.Bewerbungen
+            .Where(b => b.Id == bewerbungId && b.LinkedCaseId == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.LinkedCaseId, @case.Id), cancellationToken);
+        if (claimed == 0)
+        {
+            // lost the race: soft-delete this duplicate directly (CaseService.DeleteAsync is
+            // leadership-gated, but a plain HRB writer created it here and MayWrite is enforced above)
+            await db.Cases.Where(v => v.Id == @case.Id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(v => v.IsDeleted, true)
+                    .SetProperty(v => v.DeletedAt, DateTime.UtcNow)
+                    .SetProperty(v => v.DeletedById, actor.GetAgentId()), cancellationToken);
+            return;
+        }
 
         // 2) document from the configured template (built-in body as fallback if it was deleted)
         var template = await templates.GetAsync(config.TemplateId, cancellationToken);

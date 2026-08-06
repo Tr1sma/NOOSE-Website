@@ -1,0 +1,88 @@
+@* Ledger of one cash account, newest first, with the running balance per row. *@
+@inject IKassenService Kasse
+@inject NavigationManager Nav
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Buchungen · @KassenKontoDisplay.Name(Account)</MudText>
+        <MudSpacer />
+        <AuthorizeView Policy="@Policies.Leadership">
+            <MudButton Href="@($"/kasse/buchung/neu?konto={(int)Account}")" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neue Buchung</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.ReceiptLong" Title="Keine Buchungen"
+                    Text="In dieser Kasse wurde noch nichts gebucht." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Aktenzeichen</th>
+                    <th>Art</th>
+                    <th style="text-align:right">Betrag</th>
+                    <th>Grund</th>
+                    <th>Gebucht von</th>
+                    <th>Zeitpunkt</th>
+                    <th style="text-align:right">Stand nachher</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/kasse/buchung/{r.Buchung.Id}"))">
+                        <td>@r.Buchung.CaseNumber</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@KassenBuchungArtDisplay.ChipColor(r.Buchung.Kind)"
+                                     Icon="@KassenBuchungArtDisplay.Icon(r.Buchung.Kind)">
+                                @KassenBuchungArtDisplay.Name(r.Buchung.Kind)
+                            </MudChip>
+                        </td>
+                        <td style="text-align:right">
+                            <MudText Typo="Typo.body2" Color="@DeltaColour(r.Delta)">@Money.Signed(r.Delta)</MudText>
+                        </td>
+                        <td>@(string.IsNullOrWhiteSpace(r.Buchung.Reason) ? "—" : r.Buchung.Reason)</td>
+                        <td>@r.BookedByCodename</td>
+                        <td>@r.Buchung.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td style="text-align:right">@Money.Format(r.BalanceAfter)</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public KassenKonto Account { get; set; }
+
+    /// <summary>Bumped by the page after a booking elsewhere forces a reload.</summary>
+    [Parameter] public int Refresh { get; set; }
+
+    private bool _load = true;
+    private string? _loadedKey;
+    private IReadOnlyList<KassenBuchungDisplay> _rows = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Account}:{Refresh}";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _load = true;
+        _rows = await Kasse.GetLedgerAsync(Account);
+        _load = false;
+    }
+
+    private static Color DeltaColour(decimal delta)
+        => delta > 0 ? Color.Success : delta < 0 ? Color.Warning : Color.Default;
+}

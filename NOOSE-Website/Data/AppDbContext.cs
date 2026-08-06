@@ -26,6 +26,7 @@ using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.CounterIntel;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -121,6 +122,10 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<EvidenceItem> EvidenceItems => Set<EvidenceItem>();
     public DbSet<EvidenceEntry> EvidenceEntries => Set<EvidenceEntry>();
     public DbSet<EvidenceEntryLine> EvidenceEntryLines => Set<EvidenceEntryLine>();
+
+    // ---- Fraktions-Kasse (NOOSE treasury) ----
+    public DbSet<KassenBuchung> KassenBuchungen => Set<KassenBuchung>();
+    public DbSet<KassenBuchungVorlage> KassenVorlagen => Set<KassenBuchungVorlage>();
 
     // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
@@ -902,6 +907,29 @@ public class AppDbContext : IdentityDbContext<Agent>
             // Restrict: an item stays as long as any position references it
             b.HasOne(l => l.Item).WithMany()
                 .HasForeignKey(l => l.ItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KassenBuchung>(b =>
+        {
+            b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.Reason).HasMaxLength(500);
+            b.Property(x => x.BookedById).HasMaxLength(255);
+            b.HasIndex(x => x.CaseNumber).IsUnique();
+            b.HasIndex(x => x.Account);
+            b.HasIndex(x => x.Timestamp);
+            b.HasIndex(x => x.BookedById);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(x => x.BookedBy).WithMany()
+                .HasForeignKey(x => x.BookedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KassenBuchungVorlage>(b =>
+        {
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.Reason).HasMaxLength(500);
+            b.HasIndex(x => x.Name).IsUnique();
         });
 
         modelBuilder.Entity<AgentActivity>(b =>

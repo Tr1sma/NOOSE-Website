@@ -1,0 +1,222 @@
+@page "/kasse/buchung/neu"
+@page "/kasse/buchung/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.Leadership)]
+@inject IKassenService Kasse
+@inject IAgentManagementService Agents
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsEdit ? "Buchung bearbeiten" : "Neue Buchung") · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.ReceiptLong"
+            Title="@(IsEdit ? "Buchung bearbeiten" : "Neue Buchung")"
+            Subtitle="Ein- oder Auszahlung bzw. Korrektur einer NOOSE-Kasse."
+            BackHref="@(IsEdit ? $"/kasse/buchung/{Id}" : "/kasse")" />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudForm @ref="_form">
+            <MudStack Spacing="4">
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Kasse</MudText>
+                    <MudRadioGroup T="KassenKonto" @bind-Value="_input.Account">
+                        @foreach (var k in KassenKontoDisplay.All)
+                        {
+                            <MudRadio T="KassenKonto" Value="@k" Color="Color.Primary" Dense="true">
+                                @KassenKontoDisplay.Name(k)
+                            </MudRadio>
+                        }
+                    </MudRadioGroup>
+                </div>
+
+                <div>
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Art</MudText>
+                    <MudRadioGroup T="KassenBuchungArt" @bind-Value="_input.Kind">
+                        @foreach (var a in KassenBuchungArtDisplay.All)
+                        {
+                            <MudRadio T="KassenBuchungArt" Value="@a" Color="Color.Primary" Dense="true">
+                                @KassenBuchungArtDisplay.Name(a)
+                            </MudRadio>
+                        }
+                    </MudRadioGroup>
+                    @if (_input.Kind == KassenBuchungArt.Korrektur)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            „Stand setzen" korrigiert den Kontostand direkt auf den eingegebenen Betrag (Abgleich mit Ingame).
+                        </MudText>
+                    }
+                </div>
+
+                <MudNumericField T="decimal" @bind-Value="_input.Amount" Min="0" Variant="Variant.Outlined"
+                                 Label="@(_input.Kind == KassenBuchungArt.Korrektur ? "Neuer Stand ($)" : "Betrag ($)")"
+                                 Adornment="Adornment.End" AdornmentText="$" HideSpinButtons="true" />
+
+                <MudTextField T="string" @bind-Value="_input.Reason" Label="Verwendungszweck (Grund)" Variant="Variant.Outlined"
+                              MaxLength="500" Placeholder="z. B. NOOSE-Ankündigung, Beschlagnahme TV" />
+
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="string" Label="Gebucht von" @bind-Value="_input.BookedById" Variant="Variant.Outlined"
+                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge">
+                            @foreach (var a in _agents)
+                            {
+                                <MudSelectItem Value="a.Id">@a.Codename</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="7" md="4">
+                        <MudDatePicker Label="Datum" @bind-Date="_date" Required="true"
+                                       RequiredError="Datum ist erforderlich" DateFormat="dd.MM.yyyy" />
+                    </MudItem>
+                    <MudItem xs="5" md="2">
+                        <MudTimePicker Label="Uhrzeit" @bind-Time="_time" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudAlert Severity="@(_wouldUnderflow ? Severity.Error : Severity.Info)" Variant="Variant.Outlined" Dense="true">
+                    Aktueller Stand: <b>@Money.Format(BaseBalance)</b> · Voraussichtlich nachher: <b>@Money.Format(Projected)</b>
+                    @if (_wouldUnderflow)
+                    {
+                        <span> — die Buchung würde die Kasse ins Minus bringen.</span>
+                    }
+                </MudAlert>
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Href="@(IsEdit ? $"/kasse/buchung/{Id}" : "/kasse")">Abbrechen</MudButton>
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(_saving || _wouldUnderflow)"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @(IsEdit ? "Änderungen speichern" : "Buchung anlegen")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudForm>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool IsEdit => !string.IsNullOrEmpty(Id);
+
+    private MudForm _form = default!;
+    private KassenBuchungInput _input = new();
+    private List<Agent> _agents = new();
+    private ClaimsPrincipal _user = default!;
+
+    // per-account balance with THIS booking excluded, so the preview is correct while editing
+    private readonly Dictionary<KassenKonto, decimal> _baseBalances = new();
+
+    private DateTime? _date = DateTime.Now;
+    private TimeSpan? _time = DateTime.Now.TimeOfDay;
+
+    private bool _load = true;
+    private bool _saving;
+    private string? _loadedKey;
+
+    private decimal BaseBalance => _baseBalances.GetValueOrDefault(_input.Account);
+
+    private decimal Projected => _input.Kind switch
+    {
+        KassenBuchungArt.Einzahlung => BaseBalance + _input.Amount,
+        KassenBuchungArt.Auszahlung => BaseBalance - _input.Amount,
+        KassenBuchungArt.Korrektur => _input.Amount,
+        _ => BaseBalance,
+    };
+
+    private bool _wouldUnderflow => Projected < 0;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = Id ?? "neu";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _load = true;
+
+        _input = new KassenBuchungInput();
+        _date = DateTime.Now;
+        _time = DateTime.Now.TimeOfDay;
+
+        _user = (await AuthStateTask).User;
+        _agents = await Agents.GetSelectableAsync();
+        _input.BookedById = _user.GetAgentId() ?? _agents.FirstOrDefault()?.Id;
+
+        // preselect the account when opened from a specific ledger (?konto=0/1)
+        if (!IsEdit && int.TryParse(QueryState.Read(Nav, "konto"), out var konto)
+            && Enum.IsDefined(typeof(KassenKonto), konto))
+        {
+            _input.Account = (KassenKonto)konto;
+        }
+
+        var summaries = await Kasse.GetSummariesAsync();
+        foreach (var s in summaries)
+        {
+            _baseBalances[s.Account] = s.Balance;
+        }
+
+        if (IsEdit)
+        {
+            var display = await Kasse.GetDisplayAsync(Id!);
+            if (display is not null)
+            {
+                var b = display.Buchung;
+                _input.Account = b.Account;
+                _input.Kind = b.Kind;
+                _input.Amount = b.Amount;
+                _input.Reason = b.Reason;
+                _input.BookedById = b.BookedById;
+                var local = b.Timestamp.ToLocalTime();
+                _date = local.Date;
+                _time = local.TimeOfDay;
+                // strip this booking's own effect from its account's base
+                _baseBalances[b.Account] = _baseBalances.GetValueOrDefault(b.Account) - display.Delta;
+            }
+        }
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        var date = (_date ?? DateTime.Now).Date;
+        _input.Timestamp = DateTime.SpecifyKind(date + (_time ?? TimeSpan.Zero), DateTimeKind.Local).ToUniversalTime();
+
+        _saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await Kasse.UpdateAsync(Id!, _input, _user);
+                Snackbar.Add("Buchung aktualisiert.", Severity.Success);
+                Nav.NavigateTo($"/kasse/buchung/{Id}");
+            }
+            else
+            {
+                var created = await Kasse.BookAsync(_input, _user);
+                Snackbar.Add($"Buchung {created.CaseNumber} angelegt.", Severity.Success);
+                Nav.NavigateTo($"/kasse/buchung/{created.Id}");
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

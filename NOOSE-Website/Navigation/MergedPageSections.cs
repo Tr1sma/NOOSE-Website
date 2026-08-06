@@ -25,7 +25,7 @@ public static class MergedPageSections
         "personen", "fraktionen", "personengruppen", "parteien",
         "vorgaenge", "operationen", "taskforces", "aufgaben",
         "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen", "entfuehrungen",
-        "asservate-items", "asservate-eintraege",
+        "asservate-items", "asservate-eintraege", "kasse-buchungen",
     ];
 
     public static readonly string[] Wanted = ["fahndung", "observationen", "doks"];
@@ -36,7 +36,7 @@ public static class MergedPageSections
 
     public static readonly string[] Statistics =
     [
-        "ueberblick", "bestand", "aktivitaet", "bedrohung", "entfuehrungen", "netzwerk", "dienststelle", "lageberichte",
+        "ueberblick", "bestand", "aktivitaet", "bedrohung", "entfuehrungen", "netzwerk", "kasse", "dienststelle", "lageberichte",
     ];
 
     /// <summary>Section slugs of a merged page, keyed by its route.</summary>
