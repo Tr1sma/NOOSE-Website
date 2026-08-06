@@ -5,6 +5,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
@@ -357,6 +358,11 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 ids.UnionWith(await db.MeetingAttendances.Where(x => x.MeetingId == id).Select(x => x.Id).ToListAsync(ct));
                 ids.UnionWith(await db.MeetingSignOffs.Where(x => x.MeetingId == id).Select(x => x.Id).ToListAsync(ct));
                 types.AddRange([nameof(MeetingAgendaItem), nameof(MeetingAttendance), nameof(MeetingSignOff)]);
+                break;
+            case nameof(FinancingRequest):
+                // lines are not soft-deletable, so no filter to ignore; quantity cuts show as line changes
+                ids.UnionWith(await db.FinancingRequestLines.Where(l => l.RequestId == id).Select(l => l.Id).ToListAsync(ct));
+                types.Add(nameof(FinancingRequestLine));
                 break;
         }
 

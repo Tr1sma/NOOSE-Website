@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
@@ -366,6 +367,24 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(KassenBuchung), "Kassenbuchungen", hit));
+            }
+        }
+
+        // ---- funding requests (own ones, or all for leadership/supervision; no tags) ----
+        if (Active(nameof(FinancingRequest)) && !hasTags)
+        {
+            var q = db.FinancingRequests.OnlyVisible(isLeadership, meId);
+            if (hasText)
+            {
+                q = q.Where(f => f.CaseNumber.Contains(s!) || f.Justification.Contains(s!));
+            }
+            var rows = await q.OrderByDescending(f => f.CreatedAt).Take(MaxPerCategory).ToListAsync(cancellationToken);
+            var hit = rows.Select(f => new SearchHit(nameof(FinancingRequest), f.Id,
+                $"Finanzierung · {FinancingStatusDisplay.Name(f.Status)}",
+                f.Justification, f.CaseNumber)).ToList();
+            if (hit.Count > 0)
+            {
+                groups.Add(new SearchResultGroup(nameof(FinancingRequest), "Finanzierungsanträge", hit));
             }
         }
 

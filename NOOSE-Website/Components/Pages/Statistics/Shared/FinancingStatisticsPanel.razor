@@ -1,0 +1,78 @@
+@* Funding statistics: volume over time, budget utilisation per rank, and what gets requested most. *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Services
+@using NOOSE_Website.Theme
+@inject IFinancingStatisticsService Stats
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.Check" Colour="Color.Success"
+                          Label="Genehmigt (Zeitraum)" Value="@Money.Format(_data.ApprovedSubsidy)" Href="/finanzierungen" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.Payments" Colour="Color.Primary"
+                          Label="Ausgezahlt (Zeitraum)" Value="@Money.Format(_data.PaidSubsidy)" Href="/kasse" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.HourglassEmpty" Colour="Color.Info"
+                          Label="Offene Anträge" Value="@_data.OpenCount.ToString()" Href="/finanzierungen?tab=alle" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                @* hint must use the same denominator as the rate: decided, not all requests *@
+                <StatTile Icon="@Icons.Material.Filled.Close" Colour="Color.Warning"
+                          Label="Ablehnungsquote" Value="@_data.RejectionRate.ToString("P0")"
+                          Hint="@($"{_data.RejectedCount} von {_data.RequestCount - _data.OpenCount} entschiedenen")" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <CategoryBarChart Title="Finanzierungsvolumen im Zeitverlauf"
+                                  Subtitle="Genehmigte und ausgezahlte Zuschüsse"
+                                  Grid="@_data.VolumeOverTime"
+                                  YAxisTitle="Dollar" Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Budget-Ausschöpfung je Dienstgrad"
+                                  Subtitle="Grundbudget gegen Verbrauch im laufenden Monat"
+                                  Grid="@_data.UtilisationByRank"
+                                  YAxisTitle="Dollar" Height="320px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <DistributionChart Title="Häufigste Positionen" Segments="@_data.TopItems"
+                                   Colours="@_itemColours" Height="320px" />
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+    private FinancingStatistics _data = FinancingStatistics.Empty;
+
+    private static readonly string[] _itemColours = ChartPalette.Categorical;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+        _data = await Stats.GetAsync(Scope);
+        _first = false;
+        _stale = false;
+    }
+}

@@ -86,13 +86,20 @@ public class KassenService(
 
     public async Task<KassenBuchung> BookAsync(KassenBuchungInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // case-number allocation needs an enclosing transaction so counter + record commit together
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        var booking = await BookAsync(db, input, actor, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return booking;
+    }
+
+    public async Task<KassenBuchung> BookAsync(AppDbContext db, KassenBuchungInput input, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
         RequireManage(actor);
         Validate(input);
-
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureNonNegativeAsync(db, input, null, cancellationToken);
-        // case-number allocation needs the caller's transaction so counter + record commit together
-        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
         var booking = new KassenBuchung
         {
@@ -106,7 +113,6 @@ public class KassenService(
         };
         db.KassenBuchungen.Add(booking);
         await db.SaveChangesAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
         return booking;
     }
 

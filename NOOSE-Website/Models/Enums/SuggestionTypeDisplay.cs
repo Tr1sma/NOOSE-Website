@@ -14,6 +14,7 @@ public static class SuggestionTypeDisplay
         SuggestionType.OperationType => "Einsatzarten",
         SuggestionType.CaseType => "Vorgangsarten",
         SuggestionType.DrugRoute => "Drogenrouten",
+        SuggestionType.FinancingCategory => "Finanzierungs-Kategorien",
         _ => "—",
     };
 
@@ -29,5 +30,6 @@ public static class SuggestionTypeDisplay
         SuggestionType.PartyRole,
         SuggestionType.OperationType,
         SuggestionType.CaseType,
+        SuggestionType.FinancingCategory,
     };
 }

@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Notifications;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
@@ -78,6 +79,11 @@ public static class WatchlistRecordRollup
             case MeetingAttendance:
             case MeetingSignOff:
             case Absence:
+            // funding is deliberately not watchable: followers of a personnel file must not be
+            // pushed another agent's budget details
+            case FinancingRequest:
+            case FinancingRequestLine:
+            case FinancingItem:
                 return Array.Empty<(string, string)>();
 
             default:

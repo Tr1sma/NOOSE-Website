@@ -9,6 +9,7 @@ public static class MergedPageSections
         "custom-felder", "tags", "aktualitaet", "bedrohungs-score",
         "vorlagen-dok", "vorlagen-dokument", "vorlagen-aktivitaet", "vorlagen-personal",
         "module", "einladungen",
+        "finanzierung",
         "partner",
         "basisdaten",
     ];
@@ -25,7 +26,7 @@ public static class MergedPageSections
         "personen", "fraktionen", "personengruppen", "parteien",
         "vorgaenge", "operationen", "taskforces", "aufgaben",
         "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen", "entfuehrungen",
-        "asservate-items", "asservate-eintraege", "kasse-buchungen",
+        "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
     ];
 
     public static readonly string[] Wanted = ["fahndung", "observationen", "doks"];
@@ -36,7 +37,12 @@ public static class MergedPageSections
 
     public static readonly string[] Statistics =
     [
-        "ueberblick", "bestand", "aktivitaet", "bedrohung", "entfuehrungen", "netzwerk", "kasse", "dienststelle", "lageberichte",
+        "ueberblick", "bestand", "aktivitaet", "bedrohung", "entfuehrungen", "netzwerk", "kasse", "finanzierung", "dienststelle", "lageberichte",
+    ];
+
+    public static readonly string[] Financing =
+    [
+        "meine", "alle", "katalog", "budgets", "statistik", "papierkorb",
     ];
 
     /// <summary>Section slugs of a merged page, keyed by its route.</summary>
@@ -50,5 +56,6 @@ public static class MergedPageSections
             ["/bewerbungen"] = Recruiting,
             ["/statistik"] = Statistics,
             ["/nachweis"] = Monitoring,
+            ["/finanzierungen"] = Financing,
         };
 }

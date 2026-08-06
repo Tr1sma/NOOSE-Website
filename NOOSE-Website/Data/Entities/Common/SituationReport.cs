@@ -20,6 +20,10 @@ public class SituationReport : IAuditable, ISoftDelete
 
     public string SnapshotJson { get; set; } = string.Empty;
 
+    /// <summary>Funding figures of the month; separate column because SnapshotJson is a frozen wire format that must not gain members.</summary>
+    [Column("FinanzierungJson")]
+    public string? FinancingJson { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

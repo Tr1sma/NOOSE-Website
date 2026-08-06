@@ -1,0 +1,269 @@
+@* The catalog of financeable positions: everyone reads it, leadership maintains it. *@
+@inject IFinancingCatalogService Catalog
+@inject IProfileSuggestionService Suggestions
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Katalog</MudText>
+        <MudSpacer />
+        @if (_mayManage)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => StartEdit(null))">Neue Position</MudButton>
+        }
+    </MudStack>
+
+    @if (_editing is not null)
+    {
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudForm @ref="_form">
+                <MudStack Spacing="3">
+                    <MudTextField T="string" @bind-Value="_editing.Name" Label="Bezeichnung" Variant="Variant.Outlined"
+                                  Required="true" RequiredError="Bezeichnung ist erforderlich" MaxLength="200" />
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudAutocomplete T="string" @bind-Value="_editing.Category" Label="Kategorie"
+                                             Variant="Variant.Outlined" SearchFunc="SearchCategoriesAsync"
+                                             CoerceValue="true" Clearable="true" MaxLength="300"
+                                             HelperText="Freie Eingabe legt eine neue Kategorie an" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudSelect T="Rank" @bind-Value="_editing.MinimumRank" Label="Mindest-Dienstgrad" Variant="Variant.Outlined">
+                                @foreach (var rank in RankDisplay.All)
+                                {
+                                    <MudSelectItem T="Rank" Value="@rank">@RankDisplay.Name(rank)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                    <MudTextField T="string" @bind-Value="_editing.Description" Label="Beschreibung / Hinweis"
+                                  Variant="Variant.Outlined" MaxLength="1000" Lines="2" />
+                    <MudGrid>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField T="decimal" @bind-Value="_editing.UnitPrice" Min="0" Label="Einzelpreis ($)"
+                                             Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="$"
+                                             HideSpinButtons="true" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField T="int" @bind-Value="_editing.SubsidyPercent" Min="1" Max="100"
+                                             Label="Zuschuss-Anteil (%)" Variant="Variant.Outlined"
+                                             Adornment="Adornment.End" AdornmentText="%" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudNumericField T="int" @bind-Value="_editing.MaxQuantity" Min="1"
+                                             Label="Max. Menge pro Antrag" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Bei voller Menge zahlt NOOSE <b>@Money.Format(PreviewSubsidy)</b>,
+                        der Agent trägt <b>@Money.Format(PreviewOwnShare)</b>.
+                    </MudAlert>
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudNumericField T="int" @bind-Value="_editing.Sorting" Min="0" Label="Sortierung" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="6" Class="d-flex align-center">
+                            <MudSwitch T="bool" @bind-Value="_editing.IsActive" Color="Color.Primary" Label="Aktiv" />
+                        </MudItem>
+                    </MudGrid>
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton OnClick="CancelEdit">Abbrechen</MudButton>
+                        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="_saving"
+                                   StartIcon="@Icons.Material.Filled.Save">Speichern</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudForm>
+        </MudPaper>
+    }
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.Inventory" Title="Kein Katalog"
+                    Text="Ohne hinterlegte Positionen kann niemand eine Finanzierung beantragen." />
+    }
+    else
+    {
+        @foreach (var group in _rows.GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Ohne Kategorie" : i.Category!))
+        {
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mt-2">@group.Key</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Bezeichnung</th>
+                        <th style="text-align:right">Einzelpreis</th>
+                        <th style="text-align:right">Zuschuss</th>
+                        <th style="text-align:right">Max.</th>
+                        <th>Ab Dienstgrad</th>
+                        <th>Aktiv</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in group)
+                    {
+                        <tr>
+                            <td>
+                                @item.Name
+                                @if (!string.IsNullOrWhiteSpace(item.Description))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@item.Description</MudText>
+                                }
+                            </td>
+                            <td style="text-align:right">@Money.Format(item.UnitPrice)</td>
+                            <td style="text-align:right">@item.SubsidyPercent %</td>
+                            <td style="text-align:right">@item.MaxQuantity</td>
+                            <td>@RankDisplay.Name(item.MinimumRank)</td>
+                            <td>@(item.IsActive ? "Ja" : "Nein")</td>
+                            <td style="text-align:right; white-space:nowrap">
+                                @if (_mayManage)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="@(() => StartEdit(item))" aria-label="Bearbeiten" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                                   OnClick="@(() => DeleteAsync(item))" aria-label="Löschen" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Raised after any catalog change, so the request editor can reload its choices.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _load = true;
+    private bool _saving;
+    // the page is open to every agent, so the gate must carry BOTH conditions the service enforces
+    private bool _mayManage;
+    private ClaimsPrincipal _user = default!;
+    private List<FinancingItem> _rows = new();
+    private IReadOnlyList<string> _categories = [];
+
+    private MudForm _form = default!;
+    private FinancingItemInput? _editing;
+    private string? _editingId;
+
+    private decimal PreviewSubsidy => _editing is null
+        ? 0m
+        : FinancingMath.Subsidy(_editing.UnitPrice, Math.Max(1, _editing.MaxQuantity), _editing.SubsidyPercent);
+
+    private decimal PreviewOwnShare => _editing is null
+        ? 0m
+        : FinancingMath.OwnShare(_editing.UnitPrice, Math.Max(1, _editing.MaxQuantity), _editing.SubsidyPercent);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayManage = _user.IsLeadership() && _user.MayWrite();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        _rows = await Catalog.GetAllAsync();
+        _categories = await Suggestions.GetAsync(SuggestionType.FinancingCategory);
+        _load = false;
+    }
+
+    private Task<IEnumerable<string>> SearchCategoriesAsync(string value, CancellationToken token)
+        => Task.FromResult(string.IsNullOrWhiteSpace(value)
+            ? _categories.AsEnumerable()
+            : _categories.Where(c => c.Contains(value, StringComparison.OrdinalIgnoreCase)));
+
+    private void StartEdit(FinancingItem? item)
+    {
+        _editingId = item?.Id;
+        _editing = item is null
+            ? new FinancingItemInput()
+            : new FinancingItemInput
+            {
+                Name = item.Name,
+                Category = item.Category,
+                Description = item.Description,
+                UnitPrice = item.UnitPrice,
+                SubsidyPercent = item.SubsidyPercent,
+                MinimumRank = item.MinimumRank,
+                MaxQuantity = item.MaxQuantity,
+                IsActive = item.IsActive,
+                Sorting = item.Sorting,
+            };
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        _saving = true;
+        try
+        {
+            if (_editingId is null)
+            {
+                await Catalog.CreateAsync(_editing, _user);
+                Snackbar.Add("Position angelegt.", Severity.Success);
+            }
+            else
+            {
+                await Catalog.UpdateAsync(_editingId, _editing, _user);
+                Snackbar.Add("Position aktualisiert.", Severity.Success);
+            }
+            CancelEdit();
+            await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(FinancingItem item)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Position löschen?",
+            $"„{item.Name}“ kann danach nicht mehr beantragt werden. Bereits gestellte Anträge behalten ihre Angaben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Catalog.DeleteAsync(item.Id, _user);
+            Snackbar.Add("Position gelöscht.", Severity.Success);
+            await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

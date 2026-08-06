@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Jobs;
@@ -77,6 +78,10 @@ public static class TrashProjection
         => new("kasse-buchungen", x.Id, x.CaseNumber,
             $"{KassenKontoDisplay.Name(x.Account)} · {KassenBuchungArtDisplay.Name(x.Kind)}",
             Join(Money.Format(x.Amount), Moment(x.Timestamp)), x.DeletedAt);
+
+    public static TrashItem FinancingRequest(FinancingRequest x)
+        => new("finanzierungen", x.Id, x.CaseNumber, FinancingStatusDisplay.Name(x.Status),
+            Join(Money.Format(x.ApprovedSubsidy ?? x.RequestedSubsidy), $"{x.Lines.Count} Positionen"), x.DeletedAt);
 
     private static string Moment(DateTime value) => value.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 

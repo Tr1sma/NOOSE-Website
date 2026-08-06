@@ -109,6 +109,8 @@
     [Inject] private IAnnouncementService BoardService { get; set; } = default!;
     [Inject] private SharesBroadcaster SharesBroadcaster { get; set; } = default!;
     [Inject] private AcknowledgmentBroadcaster AcknowledgmentBroadcaster { get; set; } = default!;
+    [Inject] private FinancingBroadcaster FinancingBroadcaster { get; set; } = default!;
+    [Inject] private IFinancingService FinancingService { get; set; } = default!;
     [Inject] private IPartnerVisibilityPolicyService PartnerPolicy { get; set; } = default!;
     [Inject] private Microsoft.Extensions.Logging.ILogger<NavMenu> Logger { get; set; } = default!;
 
@@ -117,6 +119,7 @@
     private NavPreferences _prefs = new();
     private int _openShares;
     private int _openAcknowledgments;
+    private int _openFinancing;
     private IReadOnlySet<string>? _allowedPartnerTypes;
     private IReadOnlyList<NavEntry> _partnerEntries = [];
     private string? _filter;
@@ -193,6 +196,10 @@
         @if (entry.BadgeKey == "shares" && _openShares > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="ml-2">@_openShares</MudChip>
+        }
+        @if (entry.BadgeKey == "financing" && _openFinancing > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled" Class="ml-2">@_openFinancing</MudChip>
         }
     </MudNavLink>;
 
@@ -329,8 +336,10 @@
 
         SharesBroadcaster.Modified += OnSharesModified;
         AcknowledgmentBroadcaster.Modified += OnAcknowledgmentModified;
+        FinancingBroadcaster.Modified += OnFinancingModified;
         await LoadSharesAsync();
         await LoadAcknowledgmentsAsync();
+        await LoadFinancingAsync();
     }
 
     // partners get one runtime area; internal agents get the areas holding at least one permitted entry
@@ -428,10 +437,36 @@
         }
     }
 
+    // decorative badge: the entry is visible to every agent, but only deciders get a count
+    private async Task LoadFinancingAsync()
+    {
+        if (_user is null || !_user.IsLeadership())
+        {
+            _openFinancing = 0;
+            return;
+        }
+        try
+        {
+            _openFinancing = await FinancingService.GetOpenCountAsync();
+        }
+        catch (Exception ex)
+        {
+            /* best effort */
+            Logger.LogWarning(ex, "Finanzierungs-Badge konnte nicht geladen werden.");
+        }
+    }
+
     private void OnSharesModified()
         => _ = InvokeAsync(async () =>
         {
             await LoadSharesAsync();
+            StateHasChanged();
+        });
+
+    private void OnFinancingModified()
+        => _ = InvokeAsync(async () =>
+        {
+            await LoadFinancingAsync();
             StateHasChanged();
         });
 
@@ -455,5 +490,6 @@
         Nav.LocationChanged -= OnLocationChanged;
         SharesBroadcaster.Modified -= OnSharesModified;
         AcknowledgmentBroadcaster.Modified -= OnAcknowledgmentModified;
+        FinancingBroadcaster.Modified -= OnFinancingModified;
     }
 }

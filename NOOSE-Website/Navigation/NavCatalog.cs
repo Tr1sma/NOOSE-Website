@@ -33,6 +33,8 @@ public static class NavCatalog
             Description: "Diensteinträge, die Agenten über sich selbst führen — für alle sichtbar"),
         new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Abmeldungen", NavSection.MeinDienst, NavArea.MeinDienst,
             Description: "Eigene Abwesenheiten melden und einsehen"),
+        new NavEntry("finanzierungen", "/finanzierungen", Icons.Material.Filled.RequestQuote, "Finanzierungen", NavSection.MeinDienst, NavArea.MeinDienst, BadgeKey: "financing",
+            Description: "Finanzierungsanträge stellen und das eigene Monatsbudget einsehen"),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten, NavArea.Akten,
             Description: "Zentrale Akte je Person — alles zu einer Person an einem Ort"),

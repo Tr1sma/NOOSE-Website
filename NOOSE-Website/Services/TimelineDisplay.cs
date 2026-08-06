@@ -1,5 +1,6 @@
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
@@ -109,6 +110,14 @@ public static class TimelineDisplay
         if (entityType == nameof(KassenBuchung))
         {
             return (TimelineCategory.Change, $"Kassenbuchung {Verb("gebucht", "storniert")}");
+        }
+        if (entityType == nameof(FinancingRequest))
+        {
+            return (TimelineCategory.Change, $"Finanzierungsantrag {Verb("gestellt", "gelöscht")}");
+        }
+        if (entityType == nameof(FinancingRequestLine))
+        {
+            return (TimelineCategory.Change, $"Antragsposition {Verb("aufgenommen", "entfernt")}");
         }
 
         var kat = action switch

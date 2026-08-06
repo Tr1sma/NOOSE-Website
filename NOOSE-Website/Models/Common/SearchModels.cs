@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Recruiting;
 
@@ -67,6 +68,7 @@ public static class SearchNavigation
         nameof(EvidenceEntry) => $"/asservatenkammer/eintrag/{targetId}",
         nameof(KassenBuchung) => $"/kasse/buchung/{targetId}",
         nameof(Bewerbung) => $"/bewerbungen/{targetId}",
+        nameof(FinancingRequest) => $"/finanzierungen/{targetId}",
         _ => $"/personen/{targetId}",
     };
 

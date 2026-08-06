@@ -47,6 +47,12 @@
             </RecordSection>
         </AuthorizeView>
 
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="finanzierungSection">
+            <RecordSection Slug="finanzierung" Label="Finanzierungen" Icon="@Icons.Material.Filled.RequestQuote">
+                <FinancingStatisticsPanel />
+            </RecordSection>
+        </AuthorizeView>
+
         <AuthorizeView Policy="@Policies.LeadershipPage" Context="workforceSection">
             <RecordSection Slug="dienststelle" Label="Dienststelle" Icon="@Icons.Material.Filled.Groups2">
                 <WorkforcePanel />

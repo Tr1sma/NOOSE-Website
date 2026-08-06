@@ -1,0 +1,62 @@
+@* Sets or clears an agent's individual monthly funding budget. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2">
+                @Status.Codename · @RankDisplay.Name(Status.Rank) · Rang-Standard gilt, solange kein eigener Wert gesetzt ist.
+            </MudText>
+            <MudSwitch T="bool" @bind-Value="_useOverride" Color="Color.Primary" Label="Individuelles Budget verwenden" />
+            @if (_useOverride)
+            {
+                <MudNumericField T="decimal" @bind-Value="_amount" Min="0" Label="Monatsbudget ($)"
+                                 Variant="Variant.Outlined" Adornment="Adornment.End" AdornmentText="$"
+                                 HideSpinButtons="true" />
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Der Agent erhält wieder das Budget seines Dienstgrades.
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="Confirm">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public FinancingBudgetStatus Status { get; set; } = FinancingBudgetStatus.Empty;
+
+    /// <summary>Null amount means "back to the rank default".</summary>
+    public record Choice(decimal? Amount);
+
+    private bool _useOverride;
+    private decimal _amount;
+
+    protected override void OnInitialized()
+    {
+        _useOverride = Status.IsOverride;
+        _amount = Status.BaseBudget;
+    }
+
+    private void Confirm()
+        => MudDialog.Close(DialogResult.Ok(new Choice(_useOverride ? _amount : null)));
+
+    /// <summary>Asks for the individual budget; returns null when cancelled.</summary>
+    public static async Task<Choice?> ShowAsync(IDialogService dialog, FinancingBudgetStatus status)
+    {
+        var parameters = new DialogParameters<FinancingBudgetOverrideDialog>
+        {
+            { x => x.Status, status },
+        };
+        var reference = await dialog.ShowAsync<FinancingBudgetOverrideDialog>($"Budget von {status.Codename}", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Choice choice } ? choice : null;
+    }
+}

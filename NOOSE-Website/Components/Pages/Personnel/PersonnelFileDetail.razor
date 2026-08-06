@@ -86,6 +86,9 @@ else
                 <MudTabPanel Text="Beförderungen" Icon="@Icons.Material.Filled.MilitaryTech">
                     <PromotionPanel Agent="_agent" Changed="TargetDecisionAsync" />
                 </MudTabPanel>
+                <MudTabPanel Text="Finanzierung" Icon="@Icons.Material.Filled.RequestQuote">
+                    <FinancingAgentPanel Agent="_agent" @key="_reloadKey" />
+                </MudTabPanel>
                 <MudTabPanel Text="Module" Icon="@Icons.Material.Filled.School">
                     <ModulesPanel AgentId="@_agent.Id" />
                 </MudTabPanel>
@@ -130,8 +133,8 @@ else
         _mayRealName = _user.MayRealNameSee();
         _mayWrite = _user.MayWrite();
         _tabs = _isLeadership
-            ? new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen", "entfuehrungen", "kommentare" }
-            : new[] { "verlauf", "vermerke", "befoerderungen", "module", "auszeichnungen", "entfuehrungen" };
+            ? new[] { "verlauf", "vermerke", "befoerderungen", "finanzierung", "module", "auszeichnungen", "entfuehrungen", "kommentare" }
+            : new[] { "verlauf", "vermerke", "befoerderungen", "finanzierung", "module", "auszeichnungen", "entfuehrungen" };
     }
 
     // Component is reused across /personal/{A}→{B}; react to AgentId change since OnInitialized won't rerun

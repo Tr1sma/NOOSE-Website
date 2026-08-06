@@ -27,6 +27,7 @@ using NOOSE_Website.Data.Entities.CounterIntel;
 using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Kasse;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -126,6 +127,12 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- Fraktions-Kasse (NOOSE treasury) ----
     public DbSet<KassenBuchung> KassenBuchungen => Set<KassenBuchung>();
     public DbSet<KassenBuchungVorlage> KassenVorlagen => Set<KassenBuchungVorlage>();
+
+    // ---- funding requests (catalog, basket, monthly budget) ----
+    public DbSet<FinancingItem> FinancingItems => Set<FinancingItem>();
+    public DbSet<FinancingRequest> FinancingRequests => Set<FinancingRequest>();
+    public DbSet<FinancingRequestLine> FinancingRequestLines => Set<FinancingRequestLine>();
+    public DbSet<FinancingBudgetPeriod> FinancingBudgetPeriods => Set<FinancingBudgetPeriod>();
 
     // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
@@ -234,6 +241,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.TerminationReason).HasMaxLength(2000);
             // longtext for JSON
             b.Property(a => a.NavPreferencesJson).HasColumnType("longtext");
+            b.Property(a => a.FinancingBudgetOverride).HasPrecision(18, 2);
             b.HasIndex(a => a.DiscordId).IsUnique();
         });
 
@@ -574,6 +582,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(l => l.Title).HasMaxLength(200).IsRequired();
             b.Property(l => l.SnapshotJson).HasColumnType("longtext");
+            b.Property(l => l.FinancingJson).HasColumnType("longtext");
             b.HasIndex(l => new { l.Year, l.Month });
         });
 
@@ -930,6 +939,74 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(x => x.Amount).HasPrecision(18, 2);
             b.Property(x => x.Reason).HasMaxLength(500);
             b.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<FinancingItem>(b =>
+        {
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            // 300 matches ProfileSuggestion.Value, so a category survives the suggestion catalog
+            b.Property(x => x.Category).HasMaxLength(300);
+            b.Property(x => x.Description).HasMaxLength(1000);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            // not unique in the DB: a soft-deleted position would block reuse of its name forever,
+            // and request lines reference it with Restrict, so it can never be hard-deleted.
+            // The service enforces uniqueness across the live rows instead.
+            b.HasIndex(x => x.Name);
+            b.HasIndex(x => x.Category);
+            b.HasIndex(x => x.IsActive);
+        });
+
+        modelBuilder.Entity<FinancingRequest>(b =>
+        {
+            b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Justification).HasMaxLength(2000).IsRequired();
+            b.Property(x => x.RequestedGross).HasPrecision(18, 2);
+            b.Property(x => x.RequestedSubsidy).HasPrecision(18, 2);
+            b.Property(x => x.ApprovedSubsidy).HasPrecision(18, 2);
+            b.Property(x => x.OverrunAmount).HasPrecision(18, 2);
+            b.Property(x => x.OverrunReason).HasMaxLength(500);
+            b.Property(x => x.DeciderName).HasMaxLength(128);
+            b.Property(x => x.DecisionNote).HasMaxLength(2000);
+            b.Property(x => x.PaidByName).HasMaxLength(128);
+            b.Property(x => x.KassenBuchungId).HasMaxLength(255);
+            b.HasIndex(x => x.CaseNumber).IsUnique();
+            b.HasIndex(x => new { x.AgentId, x.Status });
+            b.HasIndex(x => x.Status);
+            b.HasIndex(x => new { x.BudgetYear, x.BudgetMonth });
+            // unique so the same request can never be booked twice (MySQL allows many NULLs)
+            b.HasIndex(x => x.KassenBuchungId).IsUnique();
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FinancingRequestLine>(b =>
+        {
+            b.Property(x => x.RequestId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.ItemName).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Category).HasMaxLength(300);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            b.HasIndex(x => x.RequestId);
+            b.HasIndex(x => x.ItemId);
+            b.HasOne(x => x.Request).WithMany(r => r.Lines)
+                .HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict: a catalog position stays as long as any line references it
+            b.HasOne(x => x.Item).WithMany()
+                .HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FinancingBudgetPeriod>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.BaseBudget).HasPrecision(18, 2);
+            b.Property(x => x.CarryIn).HasPrecision(18, 2);
+            b.Property(x => x.Consumed).HasPrecision(18, 2);
+            b.Property(x => x.CarryOut).HasPrecision(18, 2);
+            // carries the race safety of the period close
+            b.HasIndex(x => new { x.AgentId, x.Year, x.Month }).IsUnique();
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AgentActivity>(b =>

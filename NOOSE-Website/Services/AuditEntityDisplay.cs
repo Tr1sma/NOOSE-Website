@@ -28,6 +28,11 @@ public static class AuditEntityDisplay
         "MeetingAttendance" => "Anwesenheit",
         "MeetingSignOff" => "Abmeldung (Besprechung)",
         "Absence" => "Abmeldung",
+        "KassenBuchung" => "Kassenbuchung",
+        "FinancingRequest" => "Finanzierungsantrag",
+        "FinancingRequestLine" => "Finanzierungsposition (Antrag)",
+        "FinancingItem" => "Finanzierungs-Katalogposition",
+        "FinancingBudgetConfig" => "Finanzierungs-Budgets",
         _ => type,
     };
 
@@ -50,6 +55,11 @@ public static class AuditEntityDisplay
         "Meeting" => $"/besprechungen/{id}",
         // absences have no detail page; the audit viewer is admin-only, so point at the overview
         "Absence" => "/abmeldungen/uebersicht",
+        "KassenBuchung" => $"/kasse/buchung/{id}",
+        "FinancingRequest" => $"/finanzierungen/{id}",
+        // catalog positions and config have no own page; point at the section that edits them
+        "FinancingItem" => "/finanzierungen?tab=katalog",
+        "FinancingBudgetConfig" => "/einstellungen?tab=finanzierung",
         _ => null,
     };
 }

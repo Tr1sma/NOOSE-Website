@@ -560,6 +560,11 @@ namespace NOOSE_Website.Data.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<decimal?>("FinancingBudgetOverride")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("Finanzierungsbudget");
+
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstAdmin");
@@ -2263,6 +2268,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("GeloeschtVonId");
 
+                    b.Property<string>("FinancingJson")
+                        .HasColumnType("longtext")
+                        .HasColumnName("FinanzierungJson");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstGeloescht");
@@ -3275,6 +3284,350 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("FactionId");
 
                     b.ToTable("FraktionWaffenbestaende");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingBudgetPeriod", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<decimal>("BaseBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("Grundbudget");
+
+                    b.Property<decimal>("CarryIn")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("UebertragEin");
+
+                    b.Property<decimal>("CarryOut")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("UebertragAus");
+
+                    b.Property<int>("CarryPercent")
+                        .HasColumnType("int")
+                        .HasColumnName("Uebertragsprozent");
+
+                    b.Property<DateTime>("ClosedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("AbgeschlossenAm");
+
+                    b.Property<decimal>("Consumed")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("Verbraucht");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("int")
+                        .HasColumnName("Monat");
+
+                    b.Property<int?>("RankAtClose")
+                        .HasColumnType("int")
+                        .HasColumnName("DienstgradBeiAbschluss");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int")
+                        .HasColumnName("Jahr");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Year", "Month")
+                        .IsUnique();
+
+                    b.ToTable("Finanzierungsbudgetperioden");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingItem", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("Kategorie");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)")
+                        .HasColumnName("Beschreibung");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstAktiv");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<int>("MaxQuantity")
+                        .HasColumnType("int")
+                        .HasColumnName("MaxMenge");
+
+                    b.Property<int>("MinimumRank")
+                        .HasColumnType("int")
+                        .HasColumnName("MindestDienstgrad");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<int>("Sorting")
+                        .HasColumnType("int")
+                        .HasColumnName("Sortierung");
+
+                    b.Property<int>("SubsidyPercent")
+                        .HasColumnType("int")
+                        .HasColumnName("Zuschussanteil");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("Einzelpreis");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Finanzierungspositionen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingRequest", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<decimal?>("ApprovedSubsidy")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("GenehmigterZuschuss");
+
+                    b.Property<int?>("BudgetMonth")
+                        .HasColumnType("int")
+                        .HasColumnName("BudgetMonat");
+
+                    b.Property<int?>("BudgetYear")
+                        .HasColumnType("int")
+                        .HasColumnName("BudgetJahr");
+
+                    b.Property<string>("CaseNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("Aktenzeichen");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("EntschiedenAm");
+
+                    b.Property<string>("DeciderName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("EntscheiderName");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("Entscheidungsnotiz");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)")
+                        .HasColumnName("Begruendung");
+
+                    b.Property<string>("KassenBuchungId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<decimal?>("OverrunAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("Ueberschreitungsbetrag");
+
+                    b.Property<string>("OverrunReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("UeberschreitungsBegruendung");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("AusgezahltAm");
+
+                    b.Property<string>("PaidByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("AusgezahltVonName");
+
+                    b.Property<decimal>("RequestedGross")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("BeantragteSumme");
+
+                    b.Property<decimal>("RequestedSubsidy")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("BeantragterZuschuss");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseNumber")
+                        .IsUnique();
+
+                    b.HasIndex("KassenBuchungId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("AgentId", "Status");
+
+                    b.HasIndex("BudgetYear", "BudgetMonth");
+
+                    b.ToTable("Finanzierungsantraege");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingRequestLine", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("ApprovedQuantity")
+                        .HasColumnType("int")
+                        .HasColumnName("GenehmigteMenge");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("Kategorie");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<string>("ItemId")
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("PositionId");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Bezeichnung");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int")
+                        .HasColumnName("Menge");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("AntragId");
+
+                    b.Property<int>("Sorting")
+                        .HasColumnType("int")
+                        .HasColumnName("Sortierung");
+
+                    b.Property<int>("SubsidyPercent")
+                        .HasColumnType("int")
+                        .HasColumnName("Zuschussanteil");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("Einzelpreis");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("Finanzierungsantragspositionen");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Gamification.AgentBadge", b =>
@@ -7273,6 +7626,46 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Faction");
                 });
 
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingBudgetPeriod", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingRequest", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingRequestLine", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Financing.FinancingItem", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("NOOSE_Website.Data.Entities.Financing.FinancingRequest", "Request")
+                        .WithMany("Lines")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Gamification.AgentBadge", b =>
                 {
                     b.HasOne("NOOSE_Website.Data.Entities.Agent", null)
@@ -7850,6 +8243,11 @@ namespace NOOSE_Website.Data.Migrations
                     b.Navigation("Ranks");
 
                     b.Navigation("WeaponStock");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Financing.FinancingRequest", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Groups.PersonGroup", b =>

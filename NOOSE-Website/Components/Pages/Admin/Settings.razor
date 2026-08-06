@@ -79,6 +79,11 @@
         <InvitesPanel />
     </RecordSection>
 
+    <RecordSection Group="Finanzierung" Slug="finanzierung" Label="Budget-Regeln"
+                   Icon="@Icons.Material.Filled.RequestQuote">
+        <FinancingRulesPanel />
+    </RecordSection>
+
     <AuthorizeView Policy="@Policies.AdminPage" Context="partnerSection">
         <RecordSection Group="Partnerbehörden" Slug="partner" Label="Sichtbarkeit &amp; Freigaben"
                        Icon="@Icons.Material.Filled.Handshake">

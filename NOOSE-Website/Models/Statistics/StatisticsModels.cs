@@ -32,4 +32,6 @@ public record StatisticsReport(
 public record SituationReportHead(string Id, int Year, int Month, string Title, DateTime GeneratedAt, string? GeneratedBy);
 
 /// <summary>An archived situation report for the detail view: header plus the frozen report snapshot.</summary>
-public record SituationReportDisplay(string Id, string Title, DateTime GeneratedAt, string? GeneratedBy, StatisticsReport Report);
+/// <remarks><paramref name="Financing"/> is null for reports archived before funding requests existed.</remarks>
+public record SituationReportDisplay(string Id, string Title, DateTime GeneratedAt, string? GeneratedBy,
+    StatisticsReport Report, FinancingReport? Financing = null);

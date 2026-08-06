@@ -1,0 +1,198 @@
+@page "/finanzierungen/neu"
+@inject IFinancingCatalogService Catalog
+@inject IFinancingBudgetService Budgets
+@inject IFinancingService Financing
+@inject FinancingBroadcaster Broadcaster
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Neuer Finanzierungsantrag · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.RequestQuote"
+            Title="Neuer Finanzierungsantrag"
+            Subtitle="Positionen aus dem Katalog wählen, Menge festlegen, begründen."
+            BackHref="/finanzierungen" />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_isTeamLead)
+{
+    <EmptyState Icon="@Icons.Material.Filled.VisibilityOff" Title="Nicht für die Team-Leitung"
+                Text="Die Team-Leitung ist Nur-Lese-Aufsicht und stellt keine Finanzierungsanträge." />
+}
+else if (_items.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Inventory" Title="Nichts verfügbar"
+                Text="Für deinen Dienstgrad ist derzeit keine Position hinterlegt. Wende dich an die Führung." />
+}
+else
+{
+    <MudStack Spacing="3">
+        <FinancingBudgetTiles Status="_budget" />
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudForm @ref="_form">
+                <MudStack Spacing="3">
+                    @foreach (var group in _items.GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Ohne Kategorie" : i.Category!))
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@group.Key</MudText>
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <thead>
+                                <tr>
+                                    <th>Position</th>
+                                    <th style="text-align:right">Einzelpreis</th>
+                                    <th style="text-align:right">Zuschuss</th>
+                                    <th style="text-align:right">Menge</th>
+                                    <th style="text-align:right">NOOSE zahlt</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in group)
+                                {
+                                    var itemId = item.Id;
+                                    <tr>
+                                        <td>
+                                            @item.Name
+                                            @if (!string.IsNullOrWhiteSpace(item.Description))
+                                            {
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@item.Description</MudText>
+                                            }
+                                        </td>
+                                        <td style="text-align:right">@Money.Format(item.UnitPrice)</td>
+                                        <td style="text-align:right">@item.SubsidyPercent %</td>
+                                        <td style="text-align:right; width:120px">
+                                            <MudNumericField T="int" Value="@Quantity(itemId)" Min="0" Max="@item.MaxQuantity"
+                                                             ValueChanged="@(v => SetQuantity(itemId, v))"
+                                                             Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                        </td>
+                                        <td style="text-align:right">
+                                            @Money.Format(FinancingMath.Subsidy(item.UnitPrice, Quantity(itemId), item.SubsidyPercent))
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
+                    <MentionInput @bind-Text="_justification" Label="Begründung" Lines="3" MaxLength="2000"
+                                  Required="true" RequiredError="Eine Begründung ist erforderlich"
+                                  HelperText="@JustificationHint" />
+                </MudStack>
+            </MudForm>
+        </MudPaper>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">Warenwert</MudText>
+                    <MudText Typo="Typo.body2">@Money.Format(TotalGross)</MudText>
+                </MudStack>
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">Dein Eigenanteil</MudText>
+                    <MudText Typo="Typo.body2">@Money.Format(TotalGross - TotalSubsidy)</MudText>
+                </MudStack>
+                <MudDivider Class="my-1" />
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle1"><b>NOOSE-Zuschuss</b></MudText>
+                    <MudText Typo="Typo.subtitle1"><b>@Money.Format(TotalSubsidy)</b></MudText>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        @if (TotalSubsidy > _budget.Remaining)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                Der Zuschuss übersteigt dein Restbudget um <b>@Money.Format(TotalSubsidy - _budget.Remaining)</b>.
+                Du kannst den Antrag stellen — die Führung muss die Überschreitung dann begründen.
+            </MudAlert>
+        }
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+            <MudButton Href="/finanzierungen">Abbrechen</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Send"
+                       Disabled="@(_saving || TotalSubsidy <= 0 || string.IsNullOrWhiteSpace(_justification))"
+                       OnClick="SaveAsync">Antrag stellen</MudButton>
+        </MudStack>
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // held in C# because a literal "@" in a component attribute is parsed as a code block
+    private const string JustificationHint = "Wofür brauchst du das? Mit @ kannst du Akten und Agenten erwähnen.";
+
+    private bool _load = true;
+    private bool _saving;
+    private bool _isTeamLead;
+    private ClaimsPrincipal _user = default!;
+    private MudForm _form = default!;
+    private List<FinancingItem> _items = new();
+    private readonly Dictionary<string, int> _cart = new();
+    private FinancingBudgetStatus _budget = FinancingBudgetStatus.Empty;
+    private string _justification = string.Empty;
+
+    private decimal TotalGross => _items
+        .Sum(i => FinancingMath.Gross(i.UnitPrice, Quantity(i.Id)));
+
+    private decimal TotalSubsidy => _items
+        .Sum(i => FinancingMath.Subsidy(i.UnitPrice, Quantity(i.Id), i.SubsidyPercent));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // the service rejects it too; this only avoids offering a form that can never be submitted
+        _isTeamLead = _user.IsTeamLead();
+        if (!_isTeamLead)
+        {
+            _items = await Catalog.GetActiveForRankAsync(_user.GetRank());
+            var agentId = _user.GetAgentId();
+            if (!string.IsNullOrEmpty(agentId))
+            {
+                _budget = await Budgets.GetStatusAsync(agentId);
+            }
+        }
+        _load = false;
+    }
+
+    private int Quantity(string itemId) => _cart.GetValueOrDefault(itemId);
+
+    private void SetQuantity(string itemId, int value)
+    {
+        if (value <= 0)
+        {
+            _cart.Remove(itemId);
+            return;
+        }
+        _cart[itemId] = value;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        _saving = true;
+        try
+        {
+            var input = new FinancingRequestInput
+            {
+                Justification = _justification,
+                Lines = _cart.Select(entry => new FinancingRequestLineInput { ItemId = entry.Key, Quantity = entry.Value }).ToList(),
+            };
+            var created = await Financing.CreateAsync(input, _user);
+            Broadcaster.Report();
+            Snackbar.Add($"Antrag {created.CaseNumber} eingereicht.", Severity.Success);
+            Nav.NavigateTo($"/finanzierungen/{created.Id}");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _saving = false;
+        }
+    }
+}

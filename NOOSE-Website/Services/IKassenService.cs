@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Kasse;
@@ -24,6 +25,9 @@ public interface IKassenService
     Task<KassenBuchungDisplay?> GetDisplayAsync(string id, CancellationToken cancellationToken = default);
 
     Task<KassenBuchung> BookAsync(KassenBuchungInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Books into the caller's context and open transaction, so the booking and the record that caused it commit together.</summary>
+    Task<KassenBuchung> BookAsync(AppDbContext db, KassenBuchungInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task UpdateAsync(string id, KassenBuchungInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

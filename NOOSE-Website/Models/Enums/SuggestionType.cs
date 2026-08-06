@@ -12,4 +12,5 @@ public enum SuggestionType
     OperationType = 6,
     CaseType = 7,
     DrugRoute = 8,
+    FinancingCategory = 9,
 }

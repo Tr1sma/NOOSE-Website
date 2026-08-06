@@ -1,0 +1,88 @@
+@* Renders the funding figures of an archived situation report as print-friendly tables. *@
+@* Every member is treated as nullable: archived snapshots predate later members, and System.Text.Json *@
+@* hands a missing constructor parameter null rather than an empty list. *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Services
+
+@if (Report is not null)
+{
+    <h2>Finanzierungen</h2>
+
+    <table class="druck-felder">
+        <tbody>
+            <tr>
+                <th>Genehmigter Zuschuss</th>
+                <td>@Money.Format(Report.ApprovedSubsidy)</td>
+            </tr>
+            <tr>
+                <th>Davon ausgezahlt</th>
+                <td>@Money.Format(Report.PaidSubsidy)</td>
+            </tr>
+            <tr>
+                <th>Anträge im Monat</th>
+                <td>@Report.RequestCount</td>
+            </tr>
+            <tr>
+                <th>Angenommen / abgelehnt</th>
+                <td>@Report.ApprovedCount / @Report.RejectedCount</td>
+            </tr>
+        </tbody>
+    </table>
+
+    @if (Report.ByRank is { Count: > 0 } ranks)
+    {
+        <h3>Budget-Ausschöpfung je Dienstgrad</h3>
+        <table class="druck-tabelle">
+            <thead>
+                <tr>
+                    <th>Dienstgrad</th>
+                    <th>Grundbudget</th>
+                    <th>Verbraucht</th>
+                    <th>Quote</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rank in ranks)
+                {
+                    <tr>
+                        <td>@rank.Rank</td>
+                        <td>@Money.Format(rank.Budget)</td>
+                        <td>@Money.Format(rank.Consumed)</td>
+                        <td>@Quote(rank)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (Report.TopItems is { Count: > 0 } items)
+    {
+        <h3>Häufigste Positionen</h3>
+        <table class="druck-tabelle">
+            <thead>
+                <tr>
+                    <th>Position</th>
+                    <th>Anzahl</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in items)
+                {
+                    <tr>
+                        <td>@item.Designation</td>
+                        <td>@item.Count</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    /// <summary>Null for reports archived before funding requests existed.</summary>
+    [Parameter] public FinancingReport? Report { get; set; }
+
+    private static string Quote(FinancingRankUtilisation rank)
+        => rank.Budget <= 0 ? "—" : ((double)(rank.Consumed / rank.Budget)).ToString("P0");
+}

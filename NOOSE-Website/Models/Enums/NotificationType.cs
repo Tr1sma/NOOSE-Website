@@ -55,6 +55,9 @@ public enum NotificationType
 
     /// <summary>An agent abduction was filed.</summary>
     AbductionFiled = 16,
+
+    /// <summary>Funding request filed or decided.</summary>
+    Financing = 17,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -79,6 +82,7 @@ public static class NotificationTypeDisplay
         NotificationType.PersonnelEntry => "Personalakte-Eintrag",
         NotificationType.ThreatSpike => "Bedrohungs-Score gestiegen",
         NotificationType.AbductionFiled => "Agenten-Entführung",
+        NotificationType.Financing => "Finanzierung",
         _ => "Benachrichtigung",
     };
 
@@ -102,6 +106,7 @@ public static class NotificationTypeDisplay
         NotificationType.PersonnelEntry => Icons.Material.Filled.Description,
         NotificationType.ThreatSpike => Icons.Material.Filled.TrendingUp,
         NotificationType.AbductionFiled => Icons.Material.Filled.PersonOff,
+        NotificationType.Financing => Icons.Material.Filled.RequestQuote,
         _ => Icons.Material.Filled.Notifications,
     };
 }
