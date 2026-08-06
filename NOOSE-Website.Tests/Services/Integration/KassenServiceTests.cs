@@ -188,4 +188,41 @@ public sealed class KassenServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 10, T0), OnlyReader()));
     }
+
+    [Fact]
+    public async Task Backdated_Booking_DrivingLedgerNegativeMidway_IsRejected()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 1000, T0), Leader());
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Auszahlung, 900, T0.AddMinutes(2)), Leader());
+
+        // a correction backdated between them resets the total to 50, so the later 900 withdrawal underflows
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Korrektur, 50, T0.AddMinutes(1)), Leader()));
+    }
+
+    [Fact]
+    public async Task Backdated_Booking_ThatStaysNonNegative_IsAllowed()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 100, T0), Leader());
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Korrektur, 50, T0.AddMinutes(2)), Leader());
+
+        // 80 withdrawal backdated before the correction: 100 -> 20 -> (Korrektur) 50, never negative
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Auszahlung, 80, T0.AddMinutes(1)), Leader());
+        Assert.Equal(50m, await svc.GetBalanceAsync(KassenKonto.Schwarzgeld));
+    }
+
+    [Fact]
+    public async Task GetBalanceExcluding_LeavesOutTheGivenBooking()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var a = await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 100, T0), Leader());
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 40, T0.AddMinutes(1)), Leader());
+
+        Assert.Equal(40m, await svc.GetBalanceExcludingAsync(KassenKonto.Schwarzgeld, a.Id));
+    }
 }

@@ -7,8 +7,10 @@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
         <MudText Typo="Typo.h6">Buchungs-Vorlagen</MudText>
         <MudSpacer />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="@(() => StartEdit(null))">Neue Vorlage</MudButton>
+        <AuthorizeView Policy="@Policies.WriteAccess" Context="add">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => StartEdit(null))">Neue Vorlage</MudButton>
+        </AuthorizeView>
     </MudStack>
 
     @if (_editing is not null)
@@ -89,10 +91,12 @@
                         <td>@(string.IsNullOrWhiteSpace(v.Reason) ? "—" : v.Reason)</td>
                         <td>@(v.IsActive ? "Ja" : "Nein")</td>
                         <td style="text-align:right; white-space:nowrap">
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                           OnClick="@(() => StartEdit(v))" aria-label="Bearbeiten" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
-                                           OnClick="@(() => DeleteAsync(v))" aria-label="Löschen" />
+                            <AuthorizeView Policy="@Policies.WriteAccess" Context="rowActions">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               OnClick="@(() => StartEdit(v))" aria-label="Bearbeiten" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                               OnClick="@(() => DeleteAsync(v))" aria-label="Löschen" />
+                            </AuthorizeView>
                         </td>
                     </tr>
                 }

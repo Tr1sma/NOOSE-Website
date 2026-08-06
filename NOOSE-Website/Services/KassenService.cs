@@ -23,6 +23,12 @@ public class KassenService(
         return await ComputeBalanceAsync(db, account, null, cancellationToken);
     }
 
+    public async Task<decimal> GetBalanceExcludingAsync(KassenKonto account, string excludeId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await ComputeBalanceAsync(db, account, excludeId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<KassenKontoSummary>> GetSummariesAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -202,20 +208,28 @@ public class KassenService(
         return Fold(rows.Select(r => (r.Kind, r.Amount)));
     }
 
-    /// <summary>Blocks a withdrawal/correction that would drive the account below zero; deposits never reduce the balance.</summary>
+    /// <summary>Splices the candidate booking into the account's ledger at its chronological position and rejects it if the running balance would go below zero at ANY point (a correction resets the total, so checking only the end is not enough).</summary>
     private static async Task EnsureNonNegativeAsync(AppDbContext db, KassenBuchungInput input, string? excludeId, CancellationToken cancellationToken)
     {
-        if (input.Kind == KassenBuchungArt.Einzahlung)
+        var rows = await db.KassenBuchungen.AsNoTracking()
+            .Where(b => b.Account == input.Account && (excludeId == null || b.Id != excludeId))
+            .Select(b => new { b.Timestamp, b.CreatedAt, b.Id, b.Kind, b.Amount })
+            .ToListAsync(cancellationToken);
+
+        var seq = rows.Select(r => (r.Timestamp, r.CreatedAt, r.Id, r.Kind, r.Amount)).ToList();
+        // splice the candidate at its Timestamp; same-instant ties sort it last
+        seq.Add((input.Timestamp, DateTime.UtcNow, "￿", input.Kind, input.Amount));
+
+        decimal running = 0m;
+        foreach (var r in seq.OrderBy(x => x.Timestamp).ThenBy(x => x.CreatedAt).ThenBy(x => x.Id, StringComparer.Ordinal))
         {
-            return;
-        }
-        var current = await ComputeBalanceAsync(db, input.Account, excludeId, cancellationToken);
-        var resulting = Apply(current, input.Kind, input.Amount);
-        if (resulting < 0)
-        {
-            throw new InvalidOperationException(
-                $"Die Buchung würde die Kasse „{KassenKontoDisplay.Name(input.Account)}“ ins Minus bringen " +
-                $"(aktuell {Money.Format(current)}, Ergebnis {Money.Format(resulting)}).");
+            running = Apply(running, r.Kind, r.Amount);
+            if (running < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Die Buchung würde die Kasse {KassenKontoDisplay.Name(input.Account)} ins Minus bringen " +
+                    "(der Kontostand darf zu keinem Zeitpunkt negativ sein).");
+            }
         }
     }
 

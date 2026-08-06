@@ -176,8 +176,8 @@ else
                 var local = b.Timestamp.ToLocalTime();
                 _date = local.Date;
                 _time = local.TimeOfDay;
-                // strip this booking's own effect from its account's base
-                _baseBalances[b.Account] = _baseBalances.GetValueOrDefault(b.Account) - display.Delta;
+                // true balance excluding this booking (subtracting its delta is wrong past a later correction)
+                _baseBalances[b.Account] = await Kasse.GetBalanceExcludingAsync(b.Account, Id!);
             }
         }
         _load = false;

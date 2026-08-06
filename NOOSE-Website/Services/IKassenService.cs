@@ -11,6 +11,9 @@ public interface IKassenService
     /// <summary>Current balance of one account (chronological fold over live bookings).</summary>
     Task<decimal> GetBalanceAsync(KassenKonto account, CancellationToken cancellationToken = default);
 
+    /// <summary>Current balance of one account with one booking left out (for edit-time previews/guards).</summary>
+    Task<decimal> GetBalanceExcludingAsync(KassenKonto account, string excludeId, CancellationToken cancellationToken = default);
+
     /// <summary>State of both accounts for the overview cards.</summary>
     Task<IReadOnlyList<KassenKontoSummary>> GetSummariesAsync(CancellationToken cancellationToken = default);
 

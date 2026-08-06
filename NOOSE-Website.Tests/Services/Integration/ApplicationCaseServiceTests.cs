@@ -127,6 +127,7 @@ public sealed class ApplicationCaseServiceTests
                 using var db = ctx.NewContext();
                 db.Bewerbungen.Single(x => x.Id == "b1").LinkedCaseId = "winner";
                 db.Cases.Add(new Case { Id = "case1", CaseNumber = "NOOSE-V-2026-0002", Title = ((CaseInput)ci[0]).Title });
+                db.CaseAgents.Add(new CaseAgent { CaseId = "case1", AgentId = "hrb", IsCaseLead = true });
                 db.SaveChanges();
                 return new Case { Id = "case1", Title = ((CaseInput)ci[0]).Title };
             });
@@ -139,6 +140,8 @@ public sealed class ApplicationCaseServiceTests
         using var check = ctx.NewContext();
         Assert.Equal("winner", check.Bewerbungen.Single(x => x.Id == "b1").LinkedCaseId);
         Assert.True(check.Cases.IgnoreQueryFilters().Single(v => v.Id == "case1").IsDeleted);
+        Assert.Empty(check.CaseAgents.Where(a => a.CaseId == "case1"));
+        Assert.Contains(check.AuditLogs, l => l.EntityType == nameof(Case) && l.EntityId == "case1" && l.Action == AuditAction.Deleted);
     }
 
     [Fact]

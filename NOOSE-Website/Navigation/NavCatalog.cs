@@ -42,7 +42,7 @@ public static class NavCatalog
             Description: "Lose Zusammenschlüsse ohne feste Fraktionsstruktur"),
         new NavEntry("parteien", "/parteien", Icons.Material.Filled.AccountBalance, "Parteien", NavSection.Akten, NavArea.Akten,
             Description: "Politische Parteien mit Mitgliedern und Ausrichtung"),
-        new NavEntry("asservatenkammer", "/asservatenkammer", Icons.Material.Filled.Inventory2, "Asservatenkammer", NavSection.Akten, NavArea.Akten,
+        new NavEntry("asservatenkammer", "/asservatenkammer", Icons.Material.Filled.Inventory2, "Asservatenkammer", NavSection.Akten, NavArea.Dienststelle,
             Description: "Ein- und Auslagerung von Gegenständen mit Bestand, Bild und Besitzer"),
 
         new NavEntry("vorgaenge", "/vorgaenge", Icons.Material.Filled.FolderSpecial, "Vorgänge", NavSection.VorgaengeEinsaetze, NavArea.Akten,
@@ -97,7 +97,7 @@ public static class NavCatalog
 
         new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "Dienstgrad, Status und Rechte der Agenten setzen"),
-        new NavEntry("kasse", "/kasse", Icons.Material.Filled.AccountBalanceWallet, "Kasse", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
+        new NavEntry("kasse", "/kasse", Icons.Material.Filled.AccountBalanceWallet, "Kasse", NavSection.VerwaltungFuehrung, NavArea.Dienststelle,
             Description: "NOOSE-Kasse: Schwarz- und Grüngeld buchen, Vorlagen und Statistik"),
         new NavEntry("einstellungen", "/einstellungen", Icons.Material.Filled.SettingsApplications, "Einstellungen", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "System, Vorlagen, Tags, Score, Partner und Protokoll an einer Stelle"),

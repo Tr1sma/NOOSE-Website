@@ -35,7 +35,7 @@ public class KassenTemplateService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task<KassenBuchungVorlage> CreateAsync(KassenVorlageInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        RequireManage(actor);
         var name = Validate(input);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -53,7 +53,7 @@ public class KassenTemplateService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task RefreshAsync(string id, KassenVorlageInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        RequireManage(actor);
         var name = Validate(input);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -71,16 +71,22 @@ public class KassenTemplateService(IDbContextFactory<AppDbContext> dbFactory) : 
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        RequireManage(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var template = await db.KassenVorlagen.FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
-        if (template is null)
+        // Hard delete on purpose: a soft-deleted ghost keeps its unique Name and would block reuse; templates are simple presets.
+        var affected = await db.KassenVorlagen.Where(v => v.Id == id).ExecuteDeleteAsync(cancellationToken);
+        if (affected > 0)
         {
-            return;
+            // ExecuteDelete bypasses the audit interceptor
+            db.AuditLogs.Add(ManualAudit.Row(nameof(KassenBuchungVorlage), id, AuditAction.Deleted, actor));
+            await db.SaveChangesAsync(cancellationToken);
         }
-        // Interceptor rewrites Remove to soft-delete.
-        db.KassenVorlagen.Remove(template);
-        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void RequireManage(ClaimsPrincipal actor)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
     }
 
     /// <summary>Validates name and amount, rejecting corrections (a preset target balance makes no sense); returns the trimmed name.</summary>

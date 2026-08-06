@@ -62,13 +62,16 @@ public class ApplicationCaseService(
             .ExecuteUpdateAsync(s => s.SetProperty(b => b.LinkedCaseId, @case.Id), cancellationToken);
         if (claimed == 0)
         {
-            // lost the race: soft-delete this duplicate directly (CaseService.DeleteAsync is
-            // leadership-gated, but a plain HRB writer created it here and MayWrite is enforced above)
+            // lost the race: soft-delete this duplicate case + its auto-added lead row, and log the discard
+            // (CaseService.DeleteAsync is leadership-gated, but a plain HRB writer created it here; MayWrite enforced above)
             await db.Cases.Where(v => v.Id == @case.Id)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(v => v.IsDeleted, true)
                     .SetProperty(v => v.DeletedAt, DateTime.UtcNow)
                     .SetProperty(v => v.DeletedById, actor.GetAgentId()), cancellationToken);
+            await db.CaseAgents.Where(a => a.CaseId == @case.Id).ExecuteDeleteAsync(cancellationToken);
+            db.AuditLogs.Add(ManualAudit.Row(nameof(Case), @case.Id, AuditAction.Deleted, actor));
+            await db.SaveChangesAsync(cancellationToken);
             return;
         }
 
