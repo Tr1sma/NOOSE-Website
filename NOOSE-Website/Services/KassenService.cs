@@ -52,6 +52,14 @@ public class KassenService(
             .OrderBy(b => b.Timestamp).ThenBy(b => b.CreatedAt).ThenBy(b => b.Id)
             .ToListAsync(cancellationToken);
 
+        // Only a paid funding request points at a booking, so the whole set is small — cheaper than an
+        // IN clause over every booking id, and a paid request can never be soft-deleted away from here.
+        var financing = await db.FinancingRequests.AsNoTracking()
+            .Where(r => r.KassenBuchungId != null)
+            .Select(r => new { BookingId = r.KassenBuchungId!, r.Id, r.CaseNumber })
+            .ToListAsync(cancellationToken);
+        var byBooking = financing.ToDictionary(f => f.BookingId);
+
         var list = new List<KassenBuchungDisplay>(rows.Count);
         decimal running = 0m;
         foreach (var b in rows)
@@ -59,7 +67,8 @@ public class KassenService(
             var before = running;
             running = Apply(running, b.Kind, b.Amount);
             var codename = b.BookedBy?.Codename ?? "(unbekannt)";
-            list.Add(new KassenBuchungDisplay(b, codename, running - before, running));
+            byBooking.TryGetValue(b.Id, out var link);
+            list.Add(new KassenBuchungDisplay(b, codename, running - before, running, link?.Id, link?.CaseNumber));
         }
         list.Reverse(); // newest first for display
         return list;

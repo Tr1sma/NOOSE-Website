@@ -481,6 +481,42 @@ public sealed class FinancingServiceTests
     }
 
     [Fact]
+    public async Task Pay_MakesTheLedgerRowPointBackAtTheRequest()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, Item("a", 1_000m));
+        var h = Build(ctx);
+        await FundAsync(h.Kasse, 5_000m);
+        var created = await h.Svc.CreateAsync(Cart("Grund", ("a", 1)), Owner());
+        await h.Svc.DecideAsync(created.Id, approved: true, new FinancingDecisionInput(), Leader());
+        await h.Svc.PayAsync(created.Id, Leader());
+
+        var ledger = await h.Kasse.GetLedgerAsync(KassenKonto.Gruengeld);
+        var payout = ledger.Single(r => r.Buchung.Kind == KassenBuchungArt.Auszahlung);
+        Assert.Equal(created.Id, payout.FinancingRequestId);
+        Assert.Equal(created.CaseNumber, payout.FinancingCaseNumber);
+        // the deposit that funded the account came from nowhere near a request
+        Assert.Null(ledger.Single(r => r.Buchung.Kind == KassenBuchungArt.Einzahlung).FinancingRequestId);
+    }
+
+    [Fact]
+    public async Task CancelPayment_DropsTheLedgerBackReference()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAsync(ctx, Item("a", 1_000m));
+        var h = Build(ctx);
+        await FundAsync(h.Kasse, 5_000m);
+        var created = await h.Svc.CreateAsync(Cart("Grund", ("a", 1)), Owner());
+        await h.Svc.DecideAsync(created.Id, approved: true, new FinancingDecisionInput(), Leader());
+        await h.Svc.PayAsync(created.Id, Leader());
+
+        await h.Svc.CancelPaymentAsync(created.Id, Leader());
+
+        var ledger = await h.Kasse.GetLedgerAsync(KassenKonto.Gruengeld);
+        Assert.DoesNotContain(ledger, r => r.FinancingRequestId is not null);
+    }
+
+    [Fact]
     public async Task Pay_InsufficientBalance_Throws_AndChangesNothing()
     {
         using var ctx = new SqliteTestContext();

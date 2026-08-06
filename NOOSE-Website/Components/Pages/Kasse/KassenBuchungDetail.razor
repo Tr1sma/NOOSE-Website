@@ -69,6 +69,19 @@ else
             <MudText Typo="Typo.overline" Class="mud-text-secondary">Grund</MudText>
             <MudText Typo="Typo.body1">@b.Reason</MudText>
         }
+
+        @if (_display.FinancingRequestId is { } financingId)
+        {
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Finanzierungsantrag</MudText>
+            <MudLink Href="@($"/finanzierungen/{financingId}")" Typo="Typo.body1" Class="d-block">
+                @(_display.FinancingCaseNumber ?? "Antrag öffnen")
+            </MudLink>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Diese Auszahlung hat der Antrag gebucht. Rückgängig bitte dort über „Auszahlung stornieren“,
+                sonst laufen Antrag und Kassenstand auseinander.
+            </MudText>
+        }
     </MudPaper>
 
     <RecordSectionRail>

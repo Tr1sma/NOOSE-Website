@@ -65,7 +65,19 @@
                         <td style="text-align:right">
                             <MudText Typo="Typo.body2" Color="@DeltaColour(r.Delta)">@Money.Signed(r.Delta)</MudText>
                         </td>
-                        <td>@(string.IsNullOrWhiteSpace(r.Buchung.Reason) ? "—" : r.Buchung.Reason)</td>
+                        <td>
+                            @if (r.FinancingRequestId is { } financingId)
+                            {
+                                @* stopPropagation so the link wins over the row's navigation to the booking *@
+                                <MudLink Href="@($"/finanzierungen/{financingId}")" Typo="Typo.body2" @onclick:stopPropagation="true">
+                                    @(r.Buchung.Reason ?? r.FinancingCaseNumber)
+                                </MudLink>
+                            }
+                            else
+                            {
+                                @(string.IsNullOrWhiteSpace(r.Buchung.Reason) ? "—" : r.Buchung.Reason)
+                            }
+                        </td>
                         <td>@r.BookedByCodename</td>
                         <td>@r.Buchung.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
                         <td style="text-align:right">@Money.Format(r.BalanceAfter)</td>
