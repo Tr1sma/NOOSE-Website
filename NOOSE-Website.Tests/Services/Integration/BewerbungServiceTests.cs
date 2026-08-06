@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Recruiting;
@@ -29,7 +30,9 @@ public sealed class BewerbungServiceTests
         var broadcaster = new BewerbungBroadcaster();
         var reported = new List<string>();
         broadcaster.Modified += id => reported.Add(id);
-        var svc = new BewerbungService(ctx.Factory, caseNo, storage, broadcaster, sperren, notifications);
+        var applicationCases = Substitute.For<IApplicationCaseService>();
+        var logger = Substitute.For<ILogger<BewerbungService>>();
+        var svc = new BewerbungService(ctx.Factory, caseNo, storage, broadcaster, sperren, notifications, applicationCases, logger);
         return (svc, storage, sperren, notifications, broadcaster, reported);
     }
 

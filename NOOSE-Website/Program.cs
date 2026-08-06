@@ -285,6 +285,8 @@ builder.Services.AddScoped<IPartnerShareService, PartnerShareService>();
 // ---- recruiting (applications, invites, tests) ----
 builder.Services.AddScoped<IAgentInviteService, AgentInviteService>();
 builder.Services.AddScoped<IBewerbungService, BewerbungService>();
+builder.Services.AddScoped<IApplicationCaseService, ApplicationCaseService>();
+builder.Services.AddScoped<IRecruitingAutomationService, RecruitingAutomationService>();
 builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
@@ -365,6 +367,9 @@ using (var scope = app.Services.CreateScope())
 
     // seed the default recruiting message templates (idempotent)
     await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
+
+    // seed the auto-provisioned Sicherheitsüberprüfung case-document template (idempotent)
+    await NOOSE_Website.Infrastructure.ApplicationTemplateSeeder.SeedAsync(db);
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

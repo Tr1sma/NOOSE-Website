@@ -32,7 +32,7 @@ public static class MergedPageSections
 
     public static readonly string[] Absences = ["meine", "uebersicht", "papierkorb"];
 
-    public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests"];
+    public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests", "automatik"];
 
     public static readonly string[] Statistics =
     [

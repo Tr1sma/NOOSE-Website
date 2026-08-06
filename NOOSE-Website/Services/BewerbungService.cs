@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
@@ -19,7 +20,9 @@ public class BewerbungService(
     ISourcesStorageService storage,
     BewerbungBroadcaster broadcaster,
     IBewerbungssperreService sperren,
-    INotificationService notifications) : IBewerbungService
+    INotificationService notifications,
+    IApplicationCaseService applicationCases,
+    ILogger<BewerbungService> logger) : IBewerbungService
 {
     public async Task<Bewerbung?> GetOwnAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
     {
@@ -148,6 +151,10 @@ public class BewerbungService(
         bewerbung.AssignedAgentName = actor.GetCodename();
         await db.SaveChangesAsync(cancellationToken);
         broadcaster.Report(id);
+
+        // auto-create the Bewerbungsverfahren case + Sicherheitsüberprüfung document; the assignment stands regardless
+        try { await applicationCases.EnsureSecurityCheckCaseAsync(id, actor, cancellationToken); }
+        catch (Exception ex) { logger.LogError(ex, "Auto case/document provisioning for application {Id} failed.", id); }
     }
 
     public async Task SetStatusAsync(string id, BewerbungStatus target, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

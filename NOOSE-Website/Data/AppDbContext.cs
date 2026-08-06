@@ -1309,6 +1309,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.AttachmentContentType).HasMaxLength(100);
             b.Property(v => v.AssignedAgentName).HasMaxLength(128);
             b.Property(v => v.LinkedPersonId).HasMaxLength(64);
+            b.Property(v => v.LinkedCaseId).HasMaxLength(64);
             b.Property(v => v.DecisionNote).HasColumnType("longtext");
             b.Property(v => v.DecidedByName).HasMaxLength(128);
             b.HasIndex(v => v.CaseNumber).IsUnique();
@@ -1320,6 +1321,8 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(v => v.AssignedAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne<Person>().WithMany()
                 .HasForeignKey(v => v.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Case>().WithMany()
+                .HasForeignKey(v => v.LinkedCaseId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Bewerbungssperre>(b =>
