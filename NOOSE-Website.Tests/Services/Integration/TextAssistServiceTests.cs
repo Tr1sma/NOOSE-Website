@@ -13,10 +13,11 @@ public sealed class TextAssistServiceTests
     private static ClaimsPrincipal Agent()
         => ClaimsPrincipalBuilder.Agent("a").WithRank(Rank.SpecialAgent).Build();
 
-    private static NooseiAnswer Answer(string text)
-        => new(text, LlmUsage.Empty, new LlmQuotaCharge(90, 0.0009m, LlmQuotaStatus.Empty, null, true), 1, [], false);
+    private static NooseiAnswer Answer(string text, bool truncated = false)
+        => new(text, LlmUsage.Empty, new LlmQuotaCharge(90, 0.0009m, LlmQuotaStatus.Empty, null, true), 1, [], false,
+            truncated);
 
-    private static TextAssistService Build(string answer, Action<NooseiCall>? inspect = null)
+    private static TextAssistService Build(string answer, Action<NooseiCall>? inspect = null, bool truncated = false)
     {
         var gateway = Substitute.For<INooseiGateway>();
         gateway.IsConfigured.Returns(true);
@@ -24,7 +25,7 @@ public sealed class TextAssistServiceTests
             .Returns(call =>
             {
                 inspect?.Invoke(call.Arg<NooseiCall>());
-                return Answer(answer);
+                return Answer(answer, truncated);
             });
 
         var settings = Substitute.For<INooseiSettingsService>();
@@ -65,6 +66,58 @@ public sealed class TextAssistServiceTests
         Assert.DoesNotContain("<b>", payload);
         Assert.DoesNotContain("base64", payload);
         Assert.Contains("[1]", payload);
+    }
+
+    [Fact]
+    public async Task Correct_NumbersOnlyTheBlocksItSends()
+    {
+        // Quill leaves an empty <p> behind on every extra Enter; a numbered-but-empty line in the prompt
+        // made the model answer with more blocks than the answer check expected
+        NooseiCall? seen = null;
+        var svc = Build("[1] Erster Satz.\n[2] Zweiter Satz.", call => seen = call);
+
+        var result = await svc.CorrectAsync(
+            "<p>erster satz</p><p><br></p><p>zweiter satz</p>", TextAssistContext.Document, Agent());
+
+        var payload = string.Join("\n", seen!.Messages.Select(m => m.Content));
+        Assert.Contains("[2]", payload);
+        Assert.DoesNotContain("[3]", payload);
+        Assert.Contains("Erster Satz.", result.Html);
+        Assert.Contains("Zweiter Satz.", result.Html);
+    }
+
+    [Fact]
+    public async Task Correct_KeepsTheEmptyParagraphInPlace()
+    {
+        var svc = Build("[1] Eins.\n[2] Zwei.");
+
+        var result = await svc.CorrectAsync(
+            "<p>eins</p><p><br></p><p>zwei</p>", TextAssistContext.Document, Agent());
+
+        Assert.Contains("<p><br></p>", result.Html);
+    }
+
+    [Fact]
+    public async Task Correct_ToleratesAMarkdownDecoratedMarker()
+    {
+        var svc = Build("**[1]** Der Verdächtige wurde festgenommen.");
+
+        var result = await svc.CorrectAsync(
+            "<p>Der Verdächtige wurde festgenomen.</p>", TextAssistContext.Document, Agent());
+
+        Assert.Contains("festgenommen", result.Html);
+    }
+
+    [Fact]
+    public async Task Correct_ReportsATruncatedAnswerAsSuch()
+    {
+        var svc = Build("[1] Der Verdächtige wurde festge", truncated: true);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.CorrectAsync("<p>Der Verdächtige wurde festgenomen.</p><p>Zweiter Satz.</p>",
+                TextAssistContext.Document, Agent()));
+
+        Assert.Contains("abgeschnitten", ex.Message);
     }
 
     [Fact]
