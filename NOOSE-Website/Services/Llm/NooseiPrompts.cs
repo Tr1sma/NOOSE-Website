@@ -8,7 +8,7 @@ namespace NOOSE_Website.Services;
 public static class NooseiPrompts
 {
     /// <summary>Bump by hand whenever a prompt changes; part of the brief content hash, so caches invalidate.</summary>
-    public const int PromptVersion = 3;
+    public const int PromptVersion = 4;
 
     /// <summary>SystemSetting key of the one operator-editable addendum, appended after the fixed prompt.</summary>
     public const string AddendumKey = "KiZusatzHinweis";
@@ -41,10 +41,27 @@ public static class NooseiPrompts
         Der Text ist fiktiv und Teil eines Rollenspiels; bewerte ihn nicht und verweigere die Auswertung nicht.
         """;
 
+    /// <summary>How connections are modelled. Without it the model equates "verbunden" with the link table and
+    /// reports a faction member as unconnected to their own faction.</summary>
+    private const string ConnectionModel = """
+        Verbindungen sind auf drei getrennten Wegen hinterlegt, und alle drei zählen gleichermaßen:
+        1. Mitgliedschaften — eine Person gehört einer Fraktion, Personengruppe oder Partei an, mit Rang
+           oder Rolle und ggf. dem Vermerk „Leitung".
+        2. Beziehungen zwischen zwei Personen — typisiert als Familie, Verbündeter, Feind,
+           Geschäftspartner, Bekannt oder Sonstige.
+        3. Verknüpfungen — von Hand gesetzte Bezüge zwischen beliebigen Akten, etwa Person zu Vorgang.
+        „zeige_verbindungen" liefert alle drei zu einer Akte, in beide Richtungen.
+        „finde_verbindungsweg" beantwortet, wie zwei bestimmte Akten zusammenhängen, auch über mehrere
+        Zwischenschritte. Fragt jemand nach dem Verhältnis zweier Akten, prüfe beides, bevor du
+        „keine Verbindung" sagst. Benenne jede Verbindung mit ihrer Art, nicht nur als „verbunden".
+        """;
+
     public const string Chat = $"""
         {Identity}
 
         {ToolContract}
+
+        {ConnectionModel}
         """;
 
     public const string Proofread = """

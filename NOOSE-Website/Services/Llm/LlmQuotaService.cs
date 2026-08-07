@@ -16,16 +16,16 @@ namespace NOOSE_Website.Services;
 public interface ILlmQuotaService
 {
     /// <summary>Quota of one agent for the running ISO week; closes any elapsed weeks first.</summary>
-    Task<LlmQuotaStatus> GetStatusAsync(string agentId, CancellationToken cancellationToken = default);
+    Task<LlmQuotaStatus> GetStatusAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Quota of every selectable agent, for the overview.</summary>
-    Task<IReadOnlyList<LlmQuotaStatus>> GetAllStatusAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LlmQuotaStatus>> GetAllStatusAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Closed weeks of one agent, newest first — the audit trail of the carry chain.</summary>
-    Task<List<LlmQuotaPeriod>> GetPeriodsAsync(string agentId, int max = 12, CancellationToken cancellationToken = default);
+    Task<List<LlmQuotaPeriod>> GetPeriodsAsync(string agentId, ClaimsPrincipal actor, int max = 12, CancellationToken cancellationToken = default);
 
     /// <summary>Manual corrections of one agent, newest first.</summary>
-    Task<List<LlmQuotaAdjustment>> GetAdjustmentsAsync(string agentId, int max = 20, CancellationToken cancellationToken = default);
+    Task<List<LlmQuotaAdjustment>> GetAdjustmentsAsync(string agentId, ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Pre-flight: throws when the actor may not use NOOSEI or has nothing left this week.</summary>
     Task<LlmQuotaStatus> EnsureAvailableAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
@@ -48,7 +48,14 @@ public class LlmQuotaService(
     IDbContextFactory<AppDbContext> dbFactory,
     ILlmQuotaConfigService configService) : ILlmQuotaService
 {
-    public async Task<LlmQuotaStatus> GetStatusAsync(string agentId, CancellationToken cancellationToken = default)
+    public async Task<LlmQuotaStatus> GetStatusAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireQuotaRead(actor, agentId);
+        return await StatusAsync(agentId, cancellationToken);
+    }
+
+    /// <summary>Unguarded status, for the pre-flight and the charge — both already know whose quota it is.</summary>
+    private async Task<LlmQuotaStatus> StatusAsync(string agentId, CancellationToken cancellationToken)
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -57,8 +64,9 @@ public class LlmQuotaService(
         return await BuildStatusAsync(db, agent, config, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<LlmQuotaStatus>> GetAllStatusAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<LlmQuotaStatus>> GetAllStatusAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        Permission.RequireQuotaRead(actor);
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agents = await db.Users.AsNoTracking().OnlySelectable()
@@ -73,8 +81,9 @@ public class LlmQuotaService(
         return list;
     }
 
-    public async Task<List<LlmQuotaPeriod>> GetPeriodsAsync(string agentId, int max = 12, CancellationToken cancellationToken = default)
+    public async Task<List<LlmQuotaPeriod>> GetPeriodsAsync(string agentId, ClaimsPrincipal actor, int max = 12, CancellationToken cancellationToken = default)
     {
+        Permission.RequireQuotaRead(actor, agentId);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.LlmQuotaPeriods.AsNoTracking()
             .Where(p => p.AgentId == agentId)
@@ -83,8 +92,9 @@ public class LlmQuotaService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<LlmQuotaAdjustment>> GetAdjustmentsAsync(string agentId, int max = 20, CancellationToken cancellationToken = default)
+    public async Task<List<LlmQuotaAdjustment>> GetAdjustmentsAsync(string agentId, ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default)
     {
+        Permission.RequireQuotaRead(actor, agentId);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.LlmQuotaAdjustments.AsNoTracking()
             .Where(a => a.AgentId == agentId)
@@ -102,7 +112,7 @@ public class LlmQuotaService(
             throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
         }
 
-        var status = await GetStatusAsync(agentId, cancellationToken);
+        var status = await StatusAsync(agentId, cancellationToken);
         if (status.IsBlocked)
         {
             var reset = status.NextResetLocal is { } at ? at.ToString("dd.MM.yyyy HH:mm") : "dem nächsten Wochenwechsel";
@@ -170,7 +180,7 @@ public class LlmQuotaService(
             catch (DbUpdateException) { /* best effort */ }
         }
 
-        var status = await GetStatusAsync(input.AgentId, cancellationToken);
+        var status = await StatusAsync(input.AgentId, cancellationToken);
         return new LlmQuotaCharge(quotaTokens, input.Usage.CostUsd, status, row.AnomalyKind, persisted);
     }
 

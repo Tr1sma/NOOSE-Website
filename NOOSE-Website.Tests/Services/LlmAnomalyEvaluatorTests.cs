@@ -57,8 +57,7 @@ public class LlmAnomalyEvaluatorTests
     {
         var rows = new[] { Row(300, 20_000), Row(290, 12_000) };
 
-        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status(consumed: 32_000)], new Dictionary<string, double>(),
-            new Dictionary<Rank, double>(), Thresholds(), Now);
+        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status(consumed: 32_000)], new Dictionary<string, double>(), Thresholds(), Now);
 
         var flag = Assert.Single(flags, f => f.Kind == LlmAnomalyKind.BurnRate);
         Assert.Contains("64 %", flag.Detail.Replace(' ', ' '));
@@ -70,8 +69,7 @@ public class LlmAnomalyEvaluatorTests
         // same 32.000 tokens, but four days apart instead of ten minutes
         var rows = new[] { Row(5_000, 20_000), Row(200, 12_000) };
 
-        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status(consumed: 32_000)], new Dictionary<string, double>(),
-            new Dictionary<Rank, double>(), Thresholds(), Now);
+        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status(consumed: 32_000)], new Dictionary<string, double>(), Thresholds(), Now);
 
         Assert.DoesNotContain(flags, f => f.Kind == LlmAnomalyKind.BurnRate);
     }
@@ -82,9 +80,9 @@ public class LlmAnomalyEvaluatorTests
         var rows = new[] { Row(60, 32_000) };
 
         var big = LlmAnomalyEvaluator.Evaluate(rows, [Status(available: 200_000, consumed: 32_000)],
-            new Dictionary<string, double>(), new Dictionary<Rank, double>(), Thresholds(), Now);
+            new Dictionary<string, double>(), Thresholds(), Now);
         var small = LlmAnomalyEvaluator.Evaluate(rows, [Status(available: 40_000, consumed: 32_000)],
-            new Dictionary<string, double>(), new Dictionary<Rank, double>(), Thresholds(), Now);
+            new Dictionary<string, double>(), Thresholds(), Now);
 
         Assert.DoesNotContain(big, f => f.Kind == LlmAnomalyKind.BurnRate);
         Assert.Contains(small, f => f.Kind == LlmAnomalyKind.BurnRate);
@@ -108,10 +106,8 @@ public class LlmAnomalyEvaluatorTests
         var repeated = Enumerable.Range(0, 10)
             .Select(i => Row(i, 100, i < 5 ? "Immer dasselbe" : questions[i])).ToList();
 
-        var noFlag = LlmAnomalyEvaluator.Evaluate(distinct, [Status()], new Dictionary<string, double>(),
-            new Dictionary<Rank, double>(), Thresholds(), Now);
-        var flagged = LlmAnomalyEvaluator.Evaluate(repeated, [Status()], new Dictionary<string, double>(),
-            new Dictionary<Rank, double>(), Thresholds(), Now);
+        var noFlag = LlmAnomalyEvaluator.Evaluate(distinct, [Status()], new Dictionary<string, double>(), Thresholds(), Now);
+        var flagged = LlmAnomalyEvaluator.Evaluate(repeated, [Status()], new Dictionary<string, double>(), Thresholds(), Now);
 
         Assert.DoesNotContain(noFlag, f => f.Kind == LlmAnomalyKind.Burst);
         Assert.Contains(flagged, f => f.Kind == LlmAnomalyKind.Burst);
@@ -132,8 +128,7 @@ public class LlmAnomalyEvaluatorTests
             new("a1", "Falke", Now.AddSeconds(-10), 100, "fp8", "Und weiter"),
         };
 
-        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status()], new Dictionary<string, double>(),
-            new Dictionary<Rank, double>(), Thresholds(), Now);
+        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status()], new Dictionary<string, double>(), Thresholds(), Now);
 
         Assert.Contains(flags, f => f.Kind == LlmAnomalyKind.Burst);
     }
@@ -143,8 +138,7 @@ public class LlmAnomalyEvaluatorTests
     {
         var rows = Enumerable.Range(0, 10).Select(i => Row(i, 100, "Immer dasselbe")).ToList();
 
-        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status()], new Dictionary<string, double>(),
-            new Dictionary<Rank, double>(), Thresholds(t => t.BurstEnabled = false), Now);
+        var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status()], new Dictionary<string, double>(), Thresholds(t => t.BurstEnabled = false), Now);
 
         Assert.DoesNotContain(flags, f => f.Kind == LlmAnomalyKind.Burst);
     }
@@ -155,7 +149,7 @@ public class LlmAnomalyEvaluatorTests
     public void Outlier_FlagsAgainstTheOwnTrailingAverage()
     {
         var flags = LlmAnomalyEvaluator.Evaluate([Row(60, 30_000)], [Status(consumed: 30_000)],
-            new Dictionary<string, double> { ["a1"] = 5_000 }, new Dictionary<Rank, double>(), Thresholds(), Now);
+            new Dictionary<string, double> { ["a1"] = 5_000 }, Thresholds(), Now);
 
         var flag = Assert.Single(flags, f => f.Kind == LlmAnomalyKind.Outlier);
         Assert.Contains("sonst im Schnitt", flag.Detail);
@@ -165,7 +159,7 @@ public class LlmAnomalyEvaluatorTests
     public void Outlier_IgnoresAnAgentStillNearTheirOwnAverage()
     {
         var flags = LlmAnomalyEvaluator.Evaluate([Row(60, 6_000)], [Status(consumed: 6_000)],
-            new Dictionary<string, double> { ["a1"] = 5_000 }, new Dictionary<Rank, double>(), Thresholds(), Now);
+            new Dictionary<string, double> { ["a1"] = 5_000 }, Thresholds(), Now);
 
         Assert.DoesNotContain(flags, f => f.Kind == LlmAnomalyKind.Outlier);
     }
@@ -179,22 +173,41 @@ public class LlmAnomalyEvaluatorTests
             Status("a2", consumed: 5_000),
             Status("a3", consumed: 5_000),
         };
-        var rankMean = new Dictionary<Rank, double> { [Rank.SpecialAgent] = 5_000 };
 
         var withPeers = LlmAnomalyEvaluator.Evaluate([Row(60, 30_000)], statuses,
-            new Dictionary<string, double>(), rankMean, Thresholds(), Now);
+            new Dictionary<string, double>(), Thresholds(), Now);
         var alone = LlmAnomalyEvaluator.Evaluate([Row(60, 30_000)], [statuses[0]],
-            new Dictionary<string, double>(), rankMean, Thresholds(), Now);
+            new Dictionary<string, double>(), Thresholds(), Now);
 
         Assert.Contains(withPeers, f => f.Kind == LlmAnomalyKind.Outlier);
         Assert.DoesNotContain(alone, f => f.Kind == LlmAnomalyKind.Outlier);
     }
 
     [Fact]
+    public void Outlier_LeavesTheJudgedAgentOutOfTheirOwnRankBaseline()
+    {
+        // 30.000 against two peers at 5.000 is six times the baseline and must trip. Counting the agent in
+        // lifts the mean to 13.333 — the heavy user in a small rank would then hide behind their own volume.
+        var statuses = new[]
+        {
+            Status("a1", consumed: 30_000),
+            Status("a2", consumed: 5_000),
+            Status("a3", consumed: 5_000),
+        };
+
+        var flags = LlmAnomalyEvaluator.Evaluate([Row(60, 30_000)], statuses,
+            new Dictionary<string, double>(), Thresholds(), Now);
+
+        var flag = Assert.Single(flags, f => f.Kind == LlmAnomalyKind.Outlier);
+        Assert.Equal("a1", flag.AgentId);
+        Assert.Contains("Rang-Schnitt 5.000", flag.Detail);
+    }
+
+    [Fact]
     public void Outlier_IsSilentWhenDisabled()
     {
         var flags = LlmAnomalyEvaluator.Evaluate([Row(60, 30_000)], [Status(consumed: 30_000)],
-            new Dictionary<string, double> { ["a1"] = 100 }, new Dictionary<Rank, double>(),
+            new Dictionary<string, double> { ["a1"] = 100 },
             Thresholds(t => t.OutlierEnabled = false), Now);
 
         Assert.DoesNotContain(flags, f => f.Kind == LlmAnomalyKind.Outlier);
@@ -208,7 +221,7 @@ public class LlmAnomalyEvaluatorTests
         var rows = Enumerable.Range(0, 12).Select(i => Row(i, 5_000, "Immer dasselbe")).ToList();
 
         var flags = LlmAnomalyEvaluator.Evaluate(rows, [Status(consumed: 60_000)],
-            new Dictionary<string, double> { ["a1"] = 1_000 }, new Dictionary<Rank, double>(), Thresholds(), Now);
+            new Dictionary<string, double> { ["a1"] = 1_000 }, Thresholds(), Now);
 
         Assert.Equal(flags.OrderByDescending(f => f.Grade).Select(f => f.Grade), flags.Select(f => f.Grade));
         Assert.Equal(flags.Count, flags.Select(f => (f.AgentId, f.Kind)).Distinct().Count());
@@ -218,7 +231,7 @@ public class LlmAnomalyEvaluatorTests
     public void Evaluate_IgnoresAnAgentWithoutRequests()
     {
         var flags = LlmAnomalyEvaluator.Evaluate([], [Status(consumed: 99_000)],
-            new Dictionary<string, double> { ["a1"] = 1 }, new Dictionary<Rank, double>(), Thresholds(), Now);
+            new Dictionary<string, double> { ["a1"] = 1 }, Thresholds(), Now);
 
         Assert.Empty(flags);
     }

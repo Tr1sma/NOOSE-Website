@@ -94,7 +94,7 @@ public sealed class LlmQuotaServiceTests
         using var ctx = new SqliteTestContext();
         await SeedAgentAsync(ctx, Rank.SeniorSpecialAgent);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(50_000L, status.BaseWeekly);
         Assert.Equal(25, status.CarryPercent);
@@ -107,7 +107,7 @@ public sealed class LlmQuotaServiceTests
         using var ctx = new SqliteTestContext();
         await SeedAgentAsync(ctx, rank: null);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(0L, status.BaseWeekly);
         Assert.True(status.IsBlocked);
@@ -119,7 +119,7 @@ public sealed class LlmQuotaServiceTests
         using var ctx = new SqliteTestContext();
         await SeedAgentAsync(ctx, Rank.JuniorAgent, over: 123_000);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(123_000L, status.BaseWeekly);
         Assert.True(status.IsOverride);
@@ -138,7 +138,7 @@ public sealed class LlmQuotaServiceTests
         await ChargeAsync(ctx, year, week, 1_000);
         await ChargeAsync(ctx, lastYear, lastWeek, 9_000);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(5_000L, status.Consumed);
     }
@@ -153,10 +153,10 @@ public sealed class LlmQuotaServiceTests
         var svc = Build(ctx);
 
         await svc.TopUpAsync(AgentId, 4_000, "Ausgleich", Owner());
-        Assert.Equal(6_000L, (await svc.GetStatusAsync(AgentId)).Consumed);
+        Assert.Equal(6_000L, (await svc.GetStatusAsync(AgentId, Leader())).Consumed);
 
         await svc.TopUpAsync(AgentId, -1_000, "Abzug", Owner());
-        Assert.Equal(7_000L, (await svc.GetStatusAsync(AgentId)).Consumed);
+        Assert.Equal(7_000L, (await svc.GetStatusAsync(AgentId, Leader())).Consumed);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class LlmQuotaServiceTests
         var (year, week) = Now();
         await ChargeAsync(ctx, year, week, 25_000);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(-5_000L, status.Remaining);
         Assert.True(status.IsBlocked);
@@ -183,7 +183,7 @@ public sealed class LlmQuotaServiceTests
         var (lastYear, lastWeek) = LastWeek();
         await ClosePeriodAsync(ctx, lastYear, lastWeek, carryOut: 7_500, baseWeekly: 50_000, percent: 25);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(7_500L, status.CarryIn);
         Assert.Equal(57_500L, status.Available);
@@ -198,7 +198,7 @@ public sealed class LlmQuotaServiceTests
         await ClosePeriodAsync(ctx, lastYear, lastWeek, carryOut: 40_000);
 
         // the rank now allows only 25 % of 20.000 = 5.000, and the frozen 40.000 must not survive that
-        var status = await Build(ctx, Config(Rank.SpecialAgent, 20_000, 25)).GetStatusAsync(AgentId);
+        var status = await Build(ctx, Config(Rank.SpecialAgent, 20_000, 25)).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(5_000L, status.CarryIn);
     }
@@ -209,7 +209,7 @@ public sealed class LlmQuotaServiceTests
         using var ctx = new SqliteTestContext();
         await SeedAgentAsync(ctx, Rank.Director);
 
-        var status = await Build(ctx).GetStatusAsync(AgentId);
+        var status = await Build(ctx).GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(0L, status.CarryIn);
         await using var db = ctx.NewContext();
@@ -225,8 +225,8 @@ public sealed class LlmQuotaServiceTests
         await ChargeAsync(ctx, lastYear, lastWeek, 30_000);
         var svc = Build(ctx);
 
-        var first = await svc.GetStatusAsync(AgentId);
-        var second = await svc.GetStatusAsync(AgentId);
+        var first = await svc.GetStatusAsync(AgentId, Leader());
+        var second = await svc.GetStatusAsync(AgentId, Leader());
 
         // rest 20.000 of 50.000 at 25 % → 5.000
         Assert.Equal(5_000L, first.CarryIn);
@@ -244,9 +244,9 @@ public sealed class LlmQuotaServiceTests
         await SeedAgentAsync(ctx, Rank.SeniorSpecialAgent);
         var (lastYear, lastWeek) = LastWeek();
         await ChargeAsync(ctx, lastYear, lastWeek, 10_000);
-        await Build(ctx).GetStatusAsync(AgentId);
+        await Build(ctx).GetStatusAsync(AgentId, Leader());
 
-        await Build(ctx, Config(Rank.SeniorSpecialAgent, 1_000, 100)).GetStatusAsync(AgentId);
+        await Build(ctx, Config(Rank.SeniorSpecialAgent, 1_000, 100)).GetStatusAsync(AgentId, Leader());
 
         await using var db = ctx.NewContext();
         var period = Assert.Single(await db.LlmQuotaPeriods.ToListAsync());
@@ -476,7 +476,7 @@ public sealed class LlmQuotaServiceTests
         var svc = Build(ctx);
 
         await svc.ResetAsync(AgentId, "Testlauf", Owner());
-        var status = await svc.GetStatusAsync(AgentId);
+        var status = await svc.GetStatusAsync(AgentId, Leader());
 
         Assert.Equal(0L, status.Consumed);
         Assert.Equal(7_500L, status.CarryIn);
@@ -510,8 +510,37 @@ public sealed class LlmQuotaServiceTests
             await db.SaveChangesAsync();
         }
 
-        var all = await Build(ctx).GetAllStatusAsync();
+        var all = await Build(ctx).GetAllStatusAsync(Leader());
 
         Assert.Equal(["A-Plain", "B-Admin"], all.Select(s => s.Codename ?? string.Empty).ToArray());
+    }
+
+    // ---- who may read a quota ----
+
+    [Fact]
+    public async Task Status_IsReadableByTheAgentThemselves()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx);
+        var self = ClaimsPrincipalBuilder.Agent(AgentId).WithRank(Rank.JuniorAgent).Build();
+
+        var status = await Build(ctx).GetStatusAsync(AgentId, self);
+
+        Assert.Equal(AgentId, status.AgentId);
+    }
+
+    [Fact]
+    public async Task Status_IsRefusedToAnotherAgentWithoutTheClassifiedScope()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx);
+        var other = ClaimsPrincipalBuilder.Agent("someone-else").WithRank(Rank.SeniorSpecialAgent).Build();
+        var svc = Build(ctx);
+
+        // the panels guard this too, but the numbers must not be one SignalR call away from anyone
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetStatusAsync(AgentId, other));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetPeriodsAsync(AgentId, other));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetAdjustmentsAsync(AgentId, other));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.GetAllStatusAsync(other));
     }
 }

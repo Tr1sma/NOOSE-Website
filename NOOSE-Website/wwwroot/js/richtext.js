@@ -246,17 +246,26 @@ function htmlAusBereich(editor, index, laenge) {
 }
 
 // Base64 screenshots are the real size driver and the server never sends images to the model,
-// so they are swapped for indices before marshalling and restored on apply.
+// so they are swapped for indices before marshalling and restored on apply. The index lives in a data
+// attribute, not in src: src is a URI attribute, and the server sanitizer drops every scheme it does not
+// know — which deleted the picture from the corrected document instead of preserving it.
 function bilderAuslagern(zustand, html) {
     zustand.bilder = [];
-    return html.replace(/<img\b[^>]*\bsrc="([^"]*)"[^>]*>/gi, (treffer, quelle) => {
-        zustand.bilder.push(quelle);
-        return treffer.replace(quelle, 'noosei-bild:' + (zustand.bilder.length - 1));
+    return html.replace(/<img\b[^>]*>/gi, (treffer) => {
+        const quelle = /\ssrc\s*=\s*"([^"]*)"/i.exec(treffer);
+        if (!quelle) {
+            return treffer;
+        }
+        zustand.bilder.push(quelle[1]);
+        return treffer.replace(quelle[0], ' data-noosei-bild="' + (zustand.bilder.length - 1) + '"');
     });
 }
 
 function bilderZurueck(zustand, html) {
-    return html.replace(/noosei-bild:(\d+)/g, (treffer, nummer) => zustand.bilder[Number(nummer)] ?? treffer);
+    return html.replace(/\s*data-noosei-bild="(\d+)"/gi, (treffer, nummer) => {
+        const quelle = zustand.bilder[Number(nummer)];
+        return quelle ? ' src="' + quelle + '"' : '';
+    });
 }
 
 function setzeKiBeschaeftigt(element, beschaeftigt) {

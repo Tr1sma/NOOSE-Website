@@ -228,6 +228,7 @@ builder.Services.AddScoped<IDossierSummaryService, DossierSummaryService>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.SearchRecordsTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadRecordTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ListRelatedTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.FindPathTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadTimelineTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.RecentChangesTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ResolveMentionTool>();

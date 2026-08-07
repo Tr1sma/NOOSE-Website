@@ -42,7 +42,6 @@ public static class LlmAnomalyEvaluator
         IReadOnlyList<LlmUsageRow> rows,
         IReadOnlyList<LlmQuotaStatus> statuses,
         IReadOnlyDictionary<string, double> ownTrailingMean,
-        IReadOnlyDictionary<Rank, double> rankMean,
         LlmAnomalyThresholds thresholds,
         DateTime nowLocal)
     {
@@ -64,7 +63,7 @@ public static class LlmAnomalyEvaluator
             {
                 flags.Add(burst);
             }
-            if (Outlier(status, ownTrailingMean, rankMean, statuses, thresholds) is { } outlier)
+            if (Outlier(status, ownTrailingMean, statuses, thresholds) is { } outlier)
             {
                 flags.Add(outlier);
             }
@@ -203,7 +202,6 @@ public static class LlmAnomalyEvaluator
     private static LlmAnomalyFlag? Outlier(
         LlmQuotaStatus status,
         IReadOnlyDictionary<string, double> ownTrailingMean,
-        IReadOnlyDictionary<Rank, double> rankMean,
         IReadOnlyList<LlmQuotaStatus> statuses,
         LlmAnomalyThresholds t)
     {
@@ -224,10 +222,15 @@ public static class LlmAnomalyEvaluator
         {
             return null;
         }
-        // the agent is excluded from their own rank baseline: otherwise a single heavy user in a small rank
-        // drags the average up and can never be flagged
+        // leave-one-out, computed here rather than handed in: a mean that includes the judged agent lets a
+        // single heavy user in a small rank drag up the very baseline they are measured against
         var peers = statuses.Where(s => s.Rank == rank && s.AgentId != status.AgentId).ToList();
-        if (peers.Count < 2 || !rankMean.TryGetValue(rank, out var mean) || mean <= 0)
+        if (peers.Count < 2)
+        {
+            return null;
+        }
+        var mean = peers.Average(s => (double)s.Consumed);
+        if (mean <= 0)
         {
             return null;
         }

@@ -124,13 +124,18 @@ public sealed class DossierSummaryService(
     // ---- structured-output ladder ----
 
     /// <summary>Asks for the brief, widening the request until the endpoint can serve the shape. Null = every rung failed.</summary>
+    /// <remarks>
+    /// Every rung is a paid call, so the ladder is climbed as narrowly as possible: a rung that only widens the
+    /// provider pool answers a capability failure, never a malformed answer — a provider that accepted the schema
+    /// and then wrote nonsense will do it again on the next provider, and the agent pays twice for nothing.
+    /// </remarks>
     private async Task<DossierBrief?> RequestBriefAsync(
         string entityType, string entityId, string title, string userPrompt, ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         var rungs = Rungs().ToList();
         for (var i = 0; i < rungs.Count; i++)
         {
-            var (prompt, format, requireCapable) = rungs[i];
+            var (prompt, format, requireCapable, _) = rungs[i];
             try
             {
                 var answer = await noosei.AskAsync(
@@ -150,6 +155,11 @@ public sealed class DossierSummaryService(
                 {
                     return brief;
                 }
+                // the shape was served, the content was not: skip every rung that only rerolls the provider
+                while (i + 1 < rungs.Count && rungs[i + 1].WidensProvidersOnly)
+                {
+                    i++;
+                }
             }
             // the endpoint cannot serve this rung at all — try the next, but never past the last one
             catch (LlmCapabilityException) when (i < rungs.Count - 1)
@@ -159,28 +169,30 @@ public sealed class DossierSummaryService(
         return null;
     }
 
-    private IEnumerable<(string Prompt, LlmResponseFormat Format, bool RequireCapable)> Rungs()
+    private IEnumerable<(string Prompt, LlmResponseFormat Format, bool RequireCapable, bool WidensProvidersOnly)> Rungs()
     {
         var strict = LlmResponseFormat.ForSchema(NooseiSchemas.KurzbriefName, NooseiSchemas.Kurzbrief);
         var jsonMode = NooseiPrompts.WithSchema(NooseiPrompts.Brief, NooseiSchemas.KurzbriefText);
 
         if (_o.StructuredOutput == StructuredOutputMode.PromptOnly)
         {
-            yield return (jsonMode, LlmResponseFormat.JsonObject, false);
+            yield return (jsonMode, LlmResponseFormat.JsonObject, false, false);
             yield break;
         }
 
         // rung 0: enforced schema, only capable providers
-        yield return (NooseiPrompts.Brief, strict, _o.RequireCapableProviders && _o.StructuredOutput == StructuredOutputMode.Strict);
+        yield return (NooseiPrompts.Brief, strict,
+            _o.RequireCapableProviders && _o.StructuredOutput == StructuredOutputMode.Strict, false);
 
-        // rung 1: same schema, wider provider pool — many honour a schema without advertising it
+        // rung 1: same schema, wider provider pool — many honour a schema without advertising it.
+        // Only worth paying for after a capability rejection, hence the flag.
         if (_o.RequireCapableProviders && _o.StructuredOutput == StructuredOutputMode.Strict)
         {
-            yield return (NooseiPrompts.Brief, strict, false);
+            yield return (NooseiPrompts.Brief, strict, false, true);
         }
 
         // rung 2: plain JSON mode with the schema pasted into the prompt
-        yield return (jsonMode, LlmResponseFormat.JsonObject, false);
+        yield return (jsonMode, LlmResponseFormat.JsonObject, false, false);
     }
 
     /// <summary>Parses the answer, repairing the two things models get wrong: code fences and surrounding chatter.</summary>

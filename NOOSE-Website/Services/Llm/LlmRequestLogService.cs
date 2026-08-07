@@ -21,7 +21,7 @@ public interface ILlmRequestLogService
     Task<IReadOnlyList<LlmRequestRow>> GetOwnAsync(ClaimsPrincipal actor, int max = 20, CancellationToken cancellationToken = default);
 
     /// <summary>Closed weeks plus the running one, oldest first, for the trend chart.</summary>
-    Task<IReadOnlyList<LlmWeekPoint>> GetWeeklyTrendAsync(string agentId, int weeks = 12, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LlmWeekPoint>> GetWeeklyTrendAsync(string agentId, ClaimsPrincipal actor, int weeks = 12, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="ILlmRequestLogService" />
@@ -146,9 +146,9 @@ public sealed class LlmRequestLogService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<LlmWeekPoint>> GetWeeklyTrendAsync(string agentId, int weeks = 12, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<LlmWeekPoint>> GetWeeklyTrendAsync(string agentId, ClaimsPrincipal actor, int weeks = 12, CancellationToken cancellationToken = default)
     {
-        var periods = await quota.GetPeriodsAsync(agentId, Math.Clamp(weeks, 1, 52), cancellationToken);
+        var periods = await quota.GetPeriodsAsync(agentId, actor, Math.Clamp(weeks, 1, 52), cancellationToken);
         var points = periods
             .Select(p => new LlmWeekPoint(p.Year, p.Week, IsoWeekPeriod.Start(p.Year, p.Week),
                 p.Consumed, p.BaseWeekly + p.CarryIn))
@@ -156,7 +156,7 @@ public sealed class LlmRequestLogService(
             .ToList();
 
         // the running week is not closed yet, so it comes from the live status instead of the ledger
-        var status = await quota.GetStatusAsync(agentId, cancellationToken);
+        var status = await quota.GetStatusAsync(agentId, actor, cancellationToken);
         if (status.Year > 0 && !points.Any(p => p.Year == status.Year && p.Week == status.Week))
         {
             points.Add(new LlmWeekPoint(status.Year, status.Week,

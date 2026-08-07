@@ -71,6 +71,21 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the actor may read NOOSEI quotas: their own always, anyone else's (or the whole roster,
+    /// with no id) only with the classified-read scope. Read-only supervision keeps the bare numbers here; the
+    /// behaviour analysis on top of them stays behind <see cref="RequireLeadershipNoReader"/>.</summary>
+    public static void RequireQuotaRead(ClaimsPrincipal actor, string? agentId = null)
+    {
+        if (agentId is not null && string.Equals(actor.GetAgentId(), agentId, StringComparison.Ordinal))
+        {
+            return;
+        }
+        if (!actor.MayClassifiedRead())
+        {
+            throw new UnauthorizedAccessException("Kein Zugriff auf dieses NOOSEI-Kontingent.");
+        }
+    }
+
     /// <summary>Require the configured AI owner; everyone else may read the quotas but never change them.</summary>
     public static void RequireAiOwner(ClaimsPrincipal actor)
     {

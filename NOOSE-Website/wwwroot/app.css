@@ -172,6 +172,36 @@ html, body {
     border-color: var(--mud-palette-lines-default) !important;
 }
 
+/* ---- NOOSEI-Chatantwort: Dokument-Typografie, aber auf Blasengröße gestutzt ---- */
+.noosei-antwort {
+    font-size: .875rem;
+}
+
+.noosei-antwort > :first-child {
+    margin-top: 0;
+}
+
+.noosei-antwort > :last-child {
+    margin-bottom: 0;
+}
+
+.noosei-antwort h1,
+.noosei-antwort h2,
+.noosei-antwort h3 {
+    margin: .75rem 0 .35rem;
+    font-size: 1rem;
+}
+
+.noosei-antwort p,
+.noosei-antwort ul,
+.noosei-antwort ol {
+    margin: .35rem 0;
+}
+
+.noosei-antwort table {
+    font-size: .8125rem;
+}
+
 /* ---- NOOSEI-Werkzeuge in der Quill-Toolbar ---- */
 .noose-rte-ki-laeuft .ql-toolbar button.ql-noosei-korrigieren,
 .noose-rte-ki-laeuft .ql-toolbar button.ql-noosei-schreiben {

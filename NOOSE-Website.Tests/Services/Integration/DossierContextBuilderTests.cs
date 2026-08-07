@@ -172,6 +172,81 @@ public sealed class DossierContextBuilderTests
         Assert.DoesNotContain("Operation Nachtfalke", text);
     }
 
+    // ---- a person's own affiliations ----
+
+    /// <summary>One person in an open and in a classified faction.</summary>
+    private static void SeedPersonWithAffiliations(SqliteTestContext ctx)
+    {
+        using var db = ctx.NewContext();
+        db.People.Add(Seed.Person(id: "p1", name: "Max Mustermann"));
+        db.Factions.Add(Seed.Faction(id: "f-open", name: "Ballas"));
+        db.Factions.Add(Seed.Faction(id: "f-secret", name: "Geheimbund", configure: f => f.IsClassified = true));
+        db.FactionMembers.Add(new FactionMember { FactionId = "f-open", PersonId = "p1", Rank = "Enforcer", IsLead = true });
+        db.FactionMembers.Add(new FactionMember { FactionId = "f-secret", PersonId = "p1", Rank = "Kurier" });
+        db.SaveChanges();
+    }
+
+    private static async Task<string> BuildPersonAsync(SqliteTestContext ctx, ViewerScope? scope)
+    {
+        await using var db = ctx.NewContext();
+        var context = await DossierContextBuilder.BuildAsync(db, nameof(Person), "p1", scope);
+        Assert.NotNull(context);
+        return context!.Value.Text;
+    }
+
+    [Fact]
+    public async Task PersonDossier_NamesTheOrganisationsThePersonBelongsTo()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPersonWithAffiliations(ctx);
+
+        var text = await BuildPersonAsync(ctx, Scope());
+
+        // the roster was readable from the faction only; the person's file never named their own faction
+        Assert.Contains("Zugehörigkeiten", text);
+        Assert.Contains("Ballas", text);
+        Assert.Contains("Enforcer", text);
+        Assert.Contains("Leitung", text);
+    }
+
+    [Fact]
+    public async Task PersonDossier_MasksAClassifiedOrganisation()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPersonWithAffiliations(ctx);
+
+        var masked = await BuildPersonAsync(ctx, Scope());
+        var full = await BuildPersonAsync(ctx, Scope(classifiedRead: true));
+
+        Assert.DoesNotContain("Geheimbund", masked);
+        Assert.Contains("(Verschlusssache)", masked);
+        Assert.Contains("Geheimbund", full);
+    }
+
+    // ---- the model reads German, so the context must be German ----
+
+    [Fact]
+    public async Task PersonDossier_NamesClassificationAndRelationsInGerman()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person(id: "p1", name: "Max Mustermann",
+                configure: p => p.Classification = Classification.SuspicionCase));
+            db.People.Add(Seed.Person(id: "p2", name: "Erik Gegner"));
+            db.PersonRelations.Add(new PersonRelation { PersonAId = "p1", PersonBId = "p2", Type = RelationType.Enemy });
+            db.SaveChanges();
+        }
+
+        var text = await BuildPersonAsync(ctx, Scope());
+
+        // the brief prompt tells the model to copy names verbatim, so a raw enum identifier ends up in the answer
+        Assert.Contains("Verdachtsfall", text);
+        Assert.Contains("Feind", text);
+        Assert.DoesNotContain("SuspicionCase", text);
+        Assert.DoesNotContain("Enemy", text);
+    }
+
     // ---- mention tokens never leave the building ----
 
     [Fact]

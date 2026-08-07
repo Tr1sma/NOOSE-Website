@@ -11,7 +11,16 @@ using NOOSE_Website.Services.Llm.Tools;
 namespace NOOSE_Website.Services;
 
 /// <summary>One entry of a conversation as the chat page renders it.</summary>
-public sealed record NooseiChatMessage(string Id, bool FromUser, string Text, DateTime CreatedAt, bool IsError, long? QuotaTokens);
+/// <param name="Text">Raw text as stored — the model answers in Markdown.</param>
+/// <param name="Html">Sanitized HTML of <paramref name="Text"/>; null for the agent's own turns, which are
+/// shown verbatim rather than interpreted as Markdown.</param>
+public sealed record NooseiChatMessage(
+    string Id, bool FromUser, string Text, string? Html, DateTime CreatedAt, bool IsError, long? QuotaTokens)
+{
+    /// <summary>The agent's own message on its way into the list, before it comes back from storage.</summary>
+    public static NooseiChatMessage FromAgent(string text)
+        => new(Guid.NewGuid().ToString(), true, text, null, DateTime.UtcNow, false, null);
+}
 
 /// <summary>A conversation in the owner's sidebar.</summary>
 public sealed record NooseiConversationRow(string Id, string Title, DateTime LastMessageAt, int MessageCount);
@@ -311,7 +320,13 @@ public sealed class NooseiChatService(
     }
 
     private static NooseiChatMessage Render(NooseiMessage row)
-        => new(row.Id, row.Role == "user", row.Content ?? string.Empty, row.CreatedAt, row.IsError, row.QuotaTokens);
+    {
+        var fromUser = row.Role == "user";
+        var text = row.Content ?? string.Empty;
+        // the model answers in Markdown; MarkdownRenderer drops raw HTML and sanitizes what it produces
+        var html = fromUser || string.IsNullOrWhiteSpace(text) ? null : MarkdownRenderer.ToSafeHtml(text);
+        return new NooseiChatMessage(row.Id, fromUser, text, html, row.CreatedAt, row.IsError, row.QuotaTokens);
+    }
 
     private static string OwnerId(ClaimsPrincipal actor)
         => actor.GetAgentId() ?? throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");

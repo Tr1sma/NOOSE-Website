@@ -27,7 +27,13 @@ public sealed record HtmlDiffResult(
 public static partial class HtmlDiff
 {
     /// <summary>Above this edit distance the greedy trace is abandoned and the whole middle is shown as one change.</summary>
-    private const int MaxEditDistance = 5_000;
+    /// <remarks>
+    /// Also the memory ceiling: the trace keeps one row of <c>2·cap+1</c> ints per step, so the cap squares.
+    /// At 5.000 a wholesale rewrite allocated ~200 MB on the circuit before giving up; at 1.000 the worst case
+    /// is ~8 MB. A proofreading pass on a 12.000-character document needs a distance in the low hundreds, so
+    /// nothing that is actually a correction reaches this — only a rewrite does, and that degrades visibly.
+    /// </remarks>
+    private const int MaxEditDistance = 1_000;
 
     [GeneratedRegex(@"\s+|[^\s\w]+|[\w']+", RegexOptions.Compiled)]
     private static partial Regex TokenRegex();

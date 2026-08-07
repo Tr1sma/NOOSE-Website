@@ -56,7 +56,8 @@ public sealed partial class TextAssistService(INooseiGateway noosei, INooseiSett
             throw new InvalidOperationException("NOOSEI ist nicht konfiguriert.");
         }
 
-        var clean = HtmlCleanup.Clean(html);
+        // keeps the editor's image placeholder alive; the plain Clean() drops it and the picture with it
+        var clean = HtmlCleanup.CleanAiPayload(html);
         var document = TextBlocks.Parse(clean);
         // the very same list the prompt is built from — a second, filtered one would shift the numbering
         var blocks = document.Blocks;

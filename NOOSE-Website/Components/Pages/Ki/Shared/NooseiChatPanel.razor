@@ -1,6 +1,8 @@
 @using System.Security.Claims
+@using NOOSE_Website.Authorization
 @using NOOSE_Website.Models.Llm
 @inject INooseiChatService Chat
+@inject ILlmQuotaService Quota
 @inject ISnackbar Snackbar
 
 @if (!Chat.IsConfigured)
@@ -85,7 +87,15 @@ else
                             {
                                 <MudText Typo="Typo.overline" Class="mud-text-secondary">NOOSEI · ungeprüft</MudText>
                             }
-                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                            @if (m.Html is { } html)
+                            {
+                                <div class="dokument-html noosei-antwort">@((MarkupString)html)</div>
+                            }
+                            else
+                            {
+                                @* the agent's own wording stays verbatim; only NOOSEI answers in Markdown *@
+                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                            }
                         </MudPaper>
                     </MudStack>
                 }
@@ -141,7 +151,26 @@ else
         {
             return;
         }
+        await ReloadQuotaAsync();
         await ReloadConversationsAsync();
+    }
+
+    /// <summary>Without this the counter and the block only appear after the first answer — which is exactly
+    /// the request an agent with an exhausted quota is not allowed to send.</summary>
+    private async Task ReloadQuotaAsync()
+    {
+        if (_user?.GetAgentId() is not { Length: > 0 } agentId)
+        {
+            return;
+        }
+        try
+        {
+            _quota = await Quota.GetStatusAsync(agentId, _user);
+        }
+        catch (Exception)
+        {
+            /* the chat stays usable without the counter */
+        }
     }
 
     private async Task ReloadConversationsAsync()
@@ -187,7 +216,7 @@ else
             return;
         }
         var question = _input!.Trim();
-        _messages.Add(new NooseiChatMessage(Guid.NewGuid().ToString(), true, question, DateTime.UtcNow, false, null));
+        _messages.Add(NooseiChatMessage.FromAgent(question));
         _input = string.Empty;
         _busy = true;
         _progress = "NOOSEI arbeitet …";

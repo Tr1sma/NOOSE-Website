@@ -5,6 +5,7 @@ using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Graph;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Llm.Tools;
 using NOOSE_Website.Tests.Infrastructure;
@@ -175,6 +176,160 @@ public sealed class NooseiToolTests
             Args($$"""{"typ":"Person","id":"{{SecretPerson}}"}"""), NooseiToolContext.From(Junior()));
 
         Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task ListRelated_ShowsTheFactionsAPersonBelongsTo()
+    {
+        using var ctx = new SqliteTestContext();
+        Seed(ctx);
+        using (var db = ctx.NewContext())
+        {
+            db.FactionMembers.Add(new FactionMember
+            {
+                FactionId = FactionId, PersonId = OpenPerson, Rank = "Enforcer", IsLead = true,
+            });
+            db.SaveChanges();
+        }
+        var tool = new ListRelatedTool(ctx.Factory);
+
+        // a membership is not a link row: reading only the link table made this connection invisible
+        var result = await tool.InvokeAsync(
+            Args($$"""{"typ":"Person","id":"{{OpenPerson}}"}"""), NooseiToolContext.From(Junior()));
+
+        Assert.False(result.IsError);
+        Assert.Contains("Zugehörigkeiten", result.Text);
+        Assert.Contains("Ballas", result.Text);
+        Assert.Contains("Enforcer", result.Text);
+        Assert.Contains("Leitung", result.Text);
+    }
+
+    [Fact]
+    public async Task ListRelated_ShowsAFactionsMembers()
+    {
+        using var ctx = new SqliteTestContext();
+        Seed(ctx);
+        using (var db = ctx.NewContext())
+        {
+            db.FactionMembers.Add(new FactionMember { FactionId = FactionId, PersonId = OpenPerson, Rank = "Soldat" });
+            db.FactionMembers.Add(new FactionMember { FactionId = FactionId, PersonId = SecretPerson });
+            db.SaveChanges();
+        }
+        var tool = new ListRelatedTool(ctx.Factory);
+
+        var junior = await tool.InvokeAsync(
+            Args($$"""{"typ":"Fraktion","id":"{{FactionId}}"}"""), NooseiToolContext.From(Junior()));
+        var leader = await tool.InvokeAsync(
+            Args($$"""{"typ":"Fraktion","id":"{{FactionId}}"}"""), NooseiToolContext.From(Leader()));
+
+        Assert.Contains("Mitglieder", junior.Text);
+        Assert.Contains("Otto Offen", junior.Text);
+        Assert.DoesNotContain("Gerd Geheim", junior.Text);
+        Assert.Contains("(Verschlusssache)", junior.Text);
+        Assert.Contains("Gerd Geheim", leader.Text);
+    }
+
+    [Fact]
+    public async Task ListRelated_NamesTheKindOfAPersonToPersonRelation()
+    {
+        using var ctx = new SqliteTestContext();
+        Seed(ctx);
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(NOOSE_Website.Tests.Infrastructure.Seed.Person(id: "p-foe", name: "Rudi Rivale"));
+            db.PersonRelations.Add(new PersonRelation
+            {
+                PersonAId = OpenPerson, PersonBId = "p-foe", Type = RelationType.Enemy,
+            });
+            db.SaveChanges();
+        }
+        var tool = new ListRelatedTool(ctx.Factory);
+
+        var result = await tool.InvokeAsync(
+            Args($$"""{"typ":"Person","id":"{{OpenPerson}}"}"""), NooseiToolContext.From(Junior()));
+
+        Assert.Contains("Beziehungen", result.Text);
+        Assert.Contains("Feind", result.Text);
+        Assert.Contains("Rudi Rivale", result.Text);
+    }
+
+    // ---- finde_verbindungsweg ----
+
+    private static GraphNode Node(string type, string id, string name, string caseNumber)
+        => new($"{type}:{id}", type, name, caseNumber, null, 0, false, null, 0);
+
+    [Fact]
+    public async Task FindPath_RendersTheChainWithTheKindOfEveryStep()
+    {
+        var graph = Substitute.For<IGraphService>();
+        graph.FindPathAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new PathResult(true,
+                [
+                    Node(nameof(Person), "p1", "Max Mustermann", "NOOSE-P-2026-0001"),
+                    Node(nameof(Faction), "f1", "Ballas", "NOOSE-F-2026-0001"),
+                    Node(nameof(Faction), "f2", "Vagos", "NOOSE-F-2026-0002"),
+                ],
+                [
+                    new GraphEdge("Person:p1", "Faction:f1", "Leitung", LinkKind.Default, true),
+                    new GraphEdge("Faction:f1", "Faction:f2", null, LinkKind.Conflict, false),
+                ]));
+        var tool = new FindPathTool(graph);
+
+        var result = await tool.InvokeAsync(
+            Args("""{"von_typ":"Person","von_id":"p1","nach_typ":"Fraktion","nach_id":"f2"}"""),
+            NooseiToolContext.From(Junior()));
+
+        Assert.False(result.IsError);
+        Assert.Contains("2 Schritte", result.Text);
+        Assert.Contains("Max Mustermann", result.Text);
+        Assert.Contains("Leitung", result.Text);
+        Assert.Contains("Konflikt", result.Text);
+        Assert.Contains("Vagos", result.Text);
+        // the ids come back bare, so a follow-up tool call can use them
+        Assert.Contains("id=f2", result.Text);
+        Assert.Equal(3, result.Refs!.Count);
+    }
+
+    [Fact]
+    public async Task FindPath_SaysNothingAboutExistence_WhenNoPathIsVisible()
+    {
+        var graph = Substitute.For<IGraphService>();
+        graph.FindPathAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new PathResult(false, [], []));
+        var tool = new FindPathTool(graph);
+
+        var result = await tool.InvokeAsync(
+            Args("""{"von_typ":"Person","von_id":"p1","nach_typ":"Fraktion","nach_id":"f2"}"""),
+            NooseiToolContext.From(Junior()));
+
+        // an invisible endpoint lands here too, so the wording must not confirm or deny either record
+        Assert.Contains("Kein sichtbarer Verbindungsweg", result.Text);
+        Assert.DoesNotContain("existiert", result.Text);
+    }
+
+    [Fact]
+    public async Task FindPath_PassesTheAskingAgentThrough()
+    {
+        var graph = Substitute.For<IGraphService>();
+        ClaimsPrincipal? seen = null;
+        graph.FindPathAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                seen = call.ArgAt<ClaimsPrincipal>(4);
+                return Task.FromResult(new PathResult(false, [], []));
+            });
+        var tool = new FindPathTool(graph);
+        var junior = Junior();
+
+        await tool.InvokeAsync(
+            Args("""{"von_typ":"Person","von_id":"p1","nach_typ":"Fraktion","nach_id":"f2"}"""),
+            NooseiToolContext.From(junior));
+
+        // the graph filters on the live principal; a stored scope would answer at yesterday's rights
+        Assert.Same(junior, seen);
     }
 
     // ---- suche_akten ----

@@ -98,9 +98,9 @@ else
         }
         try
         {
-            _status = await Quota.GetStatusAsync(agentId);
+            _status = await Quota.GetStatusAsync(agentId, _user);
             _recent = await Log.GetOwnAsync(_user);
-            _trend = await Log.GetWeeklyTrendAsync(agentId);
+            _trend = await Log.GetWeeklyTrendAsync(agentId, _user);
             if (_trend.Count > 1)
             {
                 _labels = _trend.Select(p => IsoWeekPeriod.Label(p.Year, p.Week)).ToArray();

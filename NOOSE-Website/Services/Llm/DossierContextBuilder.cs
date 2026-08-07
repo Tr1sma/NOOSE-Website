@@ -55,9 +55,9 @@ public static class DossierContextBuilder
         sb.AppendLine("Personenakte");
         Line(sb, "Aktenzeichen", p.CaseNumber);
         Line(sb, "Name", p.Name);
-        Line(sb, "Lebensstatus", p.EffectiveLifeStatus.ToString());
+        Line(sb, "Lebensstatus", LifeStatusDisplay.Name(p.EffectiveLifeStatus));
         Line(sb, "Tot bis", Fmt(p.DeadUntil));
-        Line(sb, "Einstufung", p.Classification.ToString());
+        Line(sb, "Einstufung", ClassificationDisplay.Name(p.Classification));
         Line(sb, "Verschlusssache", p.IsRestricted ? $"Ja ({p.SecrecyLevel})" : "Nein");
         if (p.IsWanted)
         {
@@ -156,7 +156,7 @@ public static class DossierContextBuilder
             sb.AppendLine($"— Doks ({docsTotal}) —");
             foreach (var d in docs)
             {
-                sb.Append("• ").Append(Fmt(d.Timestamp)).Append(" | Ausgang: ").Append(d.Outcome.ToString());
+                sb.Append("• ").Append(Fmt(d.Timestamp)).Append(" | Ausgang: ").Append(MeasureOutcomeDisplay.Name(d.Outcome));
                 if (!string.IsNullOrWhiteSpace(d.Reason))
                 {
                     sb.Append(" | Grund: ").Append(Free(d.Reason));
@@ -241,7 +241,7 @@ public static class DossierContextBuilder
                     : DossierScope.LevelOf(r.AClassified, r.ATru, r.AHrb);
                 var shown = string.IsNullOrWhiteSpace(other) ? "(unbekannt)"
                     : view.CanSee(level) ? other : "(Verschlusssache)";
-                sb.Append("• ").Append(r.Type.ToString()).Append(": ").Append(shown);
+                sb.Append("• ").Append(RelationTypeDisplay.Name(r.Type)).Append(": ").Append(shown);
                 if (Free(r.Note) is { Length: > 0 } note)
                 {
                     sb.Append(" — ").Append(note);
@@ -249,6 +249,8 @@ public static class DossierContextBuilder
                 sb.AppendLine();
             }
         }
+
+        await AppendAffiliationsAsync(sb, db, id, view, ct);
 
         await AppendAttachmentsAsync(sb, db, nameof(Person), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{p.Name} ({p.CaseNumber})", sb.ToString(), p.IsRestricted);
@@ -268,7 +270,7 @@ public static class DossierContextBuilder
         Line(sb, "Aktenzeichen", f.CaseNumber);
         Line(sb, "Name", f.Name);
         Line(sb, "Art", f.Kind);
-        Line(sb, "Einstufung", f.Classification.ToString());
+        Line(sb, "Einstufung", ClassificationDisplay.Name(f.Classification));
         Line(sb, "Verschlusssache", f.IsRestricted ? $"Ja ({f.SecrecyLevel})" : "Nein");
         Line(sb, "Staatsfraktion", f.IsStateFaction);
         if (f.ThreatScore.HasValue)
@@ -354,8 +356,8 @@ public static class DossierContextBuilder
         sb.AppendLine("Personengruppen-Akte");
         Line(sb, "Aktenzeichen", g.CaseNumber);
         Line(sb, "Name", g.Name);
-        Line(sb, "Art", g.Kind.ToString());
-        Line(sb, "Einstufung", g.Classification.ToString());
+        Line(sb, "Art", GroupsKindDisplay.Name(g.Kind));
+        Line(sb, "Einstufung", ClassificationDisplay.Name(g.Classification));
         Line(sb, "Verschlusssache", g.IsRestricted ? $"Ja ({g.SecrecyLevel})" : "Nein");
         if (g.EstimatedMemberCount.HasValue)
         {
@@ -441,8 +443,8 @@ public static class DossierContextBuilder
         Line(sb, "Aktenzeichen", o.CaseNumber);
         Line(sb, "Titel", o.Title);
         Line(sb, "Typ", o.Type);
-        Line(sb, "Status", o.Status.ToString());
-        Line(sb, "Einstufung", o.Classification.ToString());
+        Line(sb, "Status", OperationStatusDisplay.Name(o.Status));
+        Line(sb, "Einstufung", ClassificationDisplay.Name(o.Classification));
         Line(sb, "Verschlusssache", o.IsRestricted ? $"Ja ({o.SecrecyLevel})" : "Nein");
         Line(sb, "Ort", o.Location);
         Line(sb, "Beginn", Fmt(o.Start));
@@ -474,8 +476,8 @@ public static class DossierContextBuilder
         Line(sb, "Aktenzeichen", c.CaseNumber);
         Line(sb, "Titel", c.Title);
         Line(sb, "Typ", c.Type);
-        Line(sb, "Status", c.Status.ToString());
-        Line(sb, "Einstufung", c.Classification.ToString());
+        Line(sb, "Status", CaseStatusDisplay.Name(c.Status));
+        Line(sb, "Einstufung", ClassificationDisplay.Name(c.Classification));
         Line(sb, "Verschlusssache", c.IsRestricted ? $"Ja ({c.SecrecyLevel})" : "Nein");
         Line(sb, "Beschreibung", c.Description);
         Line(sb, "Zusammenfassung", c.Summary);
@@ -506,8 +508,8 @@ public static class DossierContextBuilder
         Line(sb, "Aktenzeichen", t.CaseNumber);
         Line(sb, "Name", t.Name);
         Line(sb, "Zweck", t.Purpose);
-        Line(sb, "Geltungsbereich", t.Scope.ToString());
-        Line(sb, "Status", t.Status.ToString());
+        Line(sb, "Geltungsbereich", TaskforceScopeDisplay.Name(t.Scope));
+        Line(sb, "Status", TaskforceStatusDisplay.Name(t.Status));
         Line(sb, "Verschlusssache", t.IsClassified);
         Line(sb, "Bemerkungen", t.Remarks);
 
@@ -521,7 +523,7 @@ public static class DossierContextBuilder
             sb.AppendLine($"— Agenten ({agentsTotal}) —");
             foreach (var a in agents)
             {
-                sb.Append("• ").Append(Codename(codenames, a.AgentId)).Append(" | Rolle: ").AppendLine(a.Role.ToString());
+                sb.Append("• ").Append(Codename(codenames, a.AgentId)).Append(" | Rolle: ").AppendLine(TaskforceRoleDisplay.Name(a.Role));
             }
         }
 
@@ -560,7 +562,7 @@ public static class DossierContextBuilder
         sb.AppendLine("Dokument");
         Line(sb, "Titel", d.Title);
         Line(sb, "Kategorie", d.Category);
-        Line(sb, "VS-Stufe", d.Classification.ToString());
+        Line(sb, "VS-Stufe", DocumentClassificationDisplay.Label(d.Classification));
         Line(sb, "Angepinnt", d.Pinned);
         if (!string.IsNullOrEmpty(d.OwnerTaskforceId))
         {
@@ -603,6 +605,90 @@ public static class DossierContextBuilder
                 sb.Append(" | ").Append(roleLabel).Append(": ").Append(m.RoleOrRank);
             }
             if (m.IsLead)
+            {
+                sb.Append(" | Leitung");
+            }
+            sb.AppendLine();
+        }
+    }
+
+    /// <summary>The organisations a person belongs to, from the person's side.</summary>
+    /// <remarks>
+    /// Only the organisation dossiers carried their roster, so a person's file never named the faction the
+    /// analysis usually turns on — the strongest fact about a person was readable in one direction only.
+    /// </remarks>
+    static async Task AppendAffiliationsAsync(StringBuilder sb, AppDbContext db, string personId, ViewerScope view, CancellationToken ct)
+    {
+        var rows = new List<AffiliationProj>();
+        rows.AddRange(await db.FactionMembers.AsNoTracking().Where(m => m.PersonId == personId)
+            .Select(m => new AffiliationProj
+            {
+                Kind = "Fraktion",
+                Name = m.Faction != null ? m.Faction.Name : null,
+                CaseNumber = m.Faction != null ? m.Faction.CaseNumber : null,
+                Classified = m.Faction != null && m.Faction.IsClassified,
+                Tru = m.Faction != null && m.Faction.IsTRUClassified,
+                Hrb = m.Faction != null && m.Faction.IsHRBClassified,
+                RoleLabel = "Rang",
+                RoleOrRank = m.Rank,
+                IsLead = m.IsLead,
+            }).Take(25).ToListAsync(ct));
+        rows.AddRange(await db.PersonGroupMembers.AsNoTracking().Where(m => m.PersonId == personId)
+            .Select(m => new AffiliationProj
+            {
+                Kind = "Personengruppe",
+                Name = m.PersonGroup != null ? m.PersonGroup.Name : null,
+                CaseNumber = m.PersonGroup != null ? m.PersonGroup.CaseNumber : null,
+                Classified = m.PersonGroup != null && m.PersonGroup.IsClassified,
+                Tru = m.PersonGroup != null && m.PersonGroup.IsTRUClassified,
+                Hrb = m.PersonGroup != null && m.PersonGroup.IsHRBClassified,
+                RoleLabel = "Rolle",
+                RoleOrRank = m.Role,
+                IsLead = m.IsLead,
+            }).Take(25).ToListAsync(ct));
+        rows.AddRange(await db.PartyMembers.AsNoTracking().Where(m => m.PersonId == personId)
+            .Select(m => new AffiliationProj
+            {
+                Kind = "Partei",
+                Name = m.Party != null ? m.Party.Name : null,
+                CaseNumber = m.Party != null ? m.Party.CaseNumber : null,
+                Classified = m.Party != null && m.Party.IsClassified,
+                Tru = m.Party != null && m.Party.IsTRUClassified,
+                Hrb = m.Party != null && m.Party.IsHRBClassified,
+                RoleLabel = "Rolle",
+                RoleOrRank = m.Role,
+                IsLead = m.IsLead,
+            }).Take(25).ToListAsync(ct));
+
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        sb.AppendLine($"— Zugehörigkeiten ({rows.Count}) —");
+        foreach (var a in rows)
+        {
+            sb.Append("• ").Append(a.Kind).Append(": ");
+            if (string.IsNullOrWhiteSpace(a.Name))
+            {
+                sb.AppendLine("(unbekannt)");
+                continue;
+            }
+            // masked against the organisation's own level, exactly like a member roster in the other direction
+            if (!view.CanSee(DossierScope.LevelOf(a.Classified, a.Tru, a.Hrb)))
+            {
+                sb.AppendLine("(Verschlusssache)");
+                continue;
+            }
+            sb.Append(a.Name);
+            if (!string.IsNullOrWhiteSpace(a.CaseNumber))
+            {
+                sb.Append(" (").Append(a.CaseNumber).Append(')');
+            }
+            if (!string.IsNullOrWhiteSpace(a.RoleOrRank))
+            {
+                sb.Append(" | ").Append(a.RoleLabel).Append(": ").Append(a.RoleOrRank);
+            }
+            if (a.IsLead)
             {
                 sb.Append(" | Leitung");
             }
@@ -655,7 +741,7 @@ public static class DossierContextBuilder
             {
                 var extra = !string.IsNullOrWhiteSpace(s.Description) ? s.Description
                     : !string.IsNullOrWhiteSpace(s.Url) ? s.Url : null;
-                sb.Append("• ").Append(s.Type.ToString()).Append(": ")
+                sb.Append("• ").Append(SourceTypeDisplay.Name(s.Type)).Append(": ")
                     .Append(string.IsNullOrWhiteSpace(s.Title) ? "(ohne Titel)" : Free(s.Title));
                 if (Free(extra) is { Length: > 0 } detail)
                 {
@@ -757,7 +843,7 @@ public static class DossierContextBuilder
                 sb.AppendLine($"— Einstufungsverlauf ({history.Count}) —");
                 foreach (var h in history)
                 {
-                    sb.Append("• ").Append(Fmt(h.Timestamp)).Append(": ").Append(h.Value.ToString());
+                    sb.Append("• ").Append(Fmt(h.Timestamp)).Append(": ").Append(ClassificationDisplay.Name(h.Value));
                     if (Free(h.Justification) is { Length: > 0 } why)
                     {
                         sb.Append(" — ").Append(why);
@@ -845,6 +931,20 @@ public static class DossierContextBuilder
         public bool Classified { get; set; }
         public bool Tru { get; set; }
         public bool Hrb { get; set; }
+        public string? RoleOrRank { get; set; }
+        public bool IsLead { get; set; }
+    }
+
+    /// <summary>Projection shape for one organisation a person belongs to.</summary>
+    sealed class AffiliationProj
+    {
+        public string Kind { get; set; } = string.Empty;
+        public string? Name { get; set; }
+        public string? CaseNumber { get; set; }
+        public bool Classified { get; set; }
+        public bool Tru { get; set; }
+        public bool Hrb { get; set; }
+        public string RoleLabel { get; set; } = "Rolle";
         public string? RoleOrRank { get; set; }
         public bool IsLead { get; set; }
     }

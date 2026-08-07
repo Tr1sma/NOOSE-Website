@@ -69,6 +69,22 @@ public sealed class TextAssistServiceTests
     }
 
     [Fact]
+    public async Task Correct_KeepsTheEditorsImagePlaceholder()
+    {
+        // The editor swaps every base64 image for this marker before marshalling and swaps it back on apply.
+        // Sanitizing it away deleted the picture from the corrected document without anyone noticing:
+        // both guards compare the stripped text against itself, and the diff only looks at words.
+        var svc = Build("[1] Der Verdächtige wurde festgenommen.");
+
+        var result = await svc.CorrectAsync(
+            "<p>Der Verdächtige wurde <b>festgenomen</b>.</p><p><img data-noosei-bild=\"0\"></p>",
+            TextAssistContext.Document, Agent());
+
+        Assert.Contains("data-noosei-bild=\"0\"", result.Html);
+        Assert.Contains("festgenommen", result.Html);
+    }
+
+    [Fact]
     public async Task Correct_NumbersOnlyTheBlocksItSends()
     {
         // Quill leaves an empty <p> behind on every extra Enter; a numbered-but-empty line in the prompt

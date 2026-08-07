@@ -118,7 +118,7 @@
         _busy = true;
         try
         {
-            _rows = await Quota.GetAllStatusAsync();
+            _rows = await Quota.GetAllStatusAsync(_user);
             _periodLabel = _rows.FirstOrDefault()?.PeriodLabel ?? IsoWeekPeriod.Label(IsoWeekPeriod.Current().Year, IsoWeekPeriod.Current().Week);
             _nextReset = _rows.FirstOrDefault()?.NextResetLocal;
             try

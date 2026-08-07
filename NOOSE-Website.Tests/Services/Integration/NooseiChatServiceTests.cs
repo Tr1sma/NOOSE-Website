@@ -67,6 +67,66 @@ public sealed class NooseiChatServiceTests
     }
 
     [Fact]
+    public async Task Ask_RendersTheAnswersMarkdownToHtml()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, _ => Answer("**Ballas** führt:\n\n- Max Mustermann\n- Erika Muster"));
+
+        var turn = await svc.AskAsync(null, "Wer führt die Ballas?", Actor());
+
+        Assert.Contains("<strong>Ballas</strong>", turn.Answer.Html);
+        Assert.Contains("<li>", turn.Answer.Html);
+        // the raw Markdown stays available, and the DB keeps it too
+        Assert.Contains("**Ballas**", turn.Answer.Text);
+    }
+
+    [Fact]
+    public async Task Messages_ComeBackRenderedFromStorage()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, _ => Answer("## Lage\n\nAlles *ruhig*."));
+
+        var turn = await svc.AskAsync(null, "Wie ist die Lage?", Actor());
+        var messages = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+
+        var answer = Assert.Single(messages, m => !m.FromUser);
+        Assert.Contains("<h2", answer.Html);
+        Assert.Contains("<em>ruhig</em>", answer.Html);
+    }
+
+    [Fact]
+    public async Task OwnTurns_StayVerbatim_AndAreNeverTreatedAsMarkdown()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx);
+
+        var turn = await svc.AskAsync(null, "Was bedeutet **das** hier?", Actor());
+        var messages = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+
+        var question = Assert.Single(messages, m => m.FromUser);
+        Assert.Null(question.Html);
+        Assert.Equal("Was bedeutet **das** hier?", question.Text);
+    }
+
+    [Fact]
+    public async Task RenderedAnswer_NeutralisesRawHtmlFromTheModel()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, _ => Answer("Text <script>alert(1)</script> und <img src=x onerror=alert(1)>"));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+
+        // the renderer escapes rather than deletes: the markup shows as text and can never execute
+        Assert.DoesNotContain("<script", turn.Answer.Html);
+        Assert.DoesNotContain("<img", turn.Answer.Html);
+        Assert.Contains("&lt;script&gt;", turn.Answer.Html);
+    }
+
+    [Fact]
     public async Task Ask_TitlesTheConversationFromTheFirstQuestion()
     {
         using var ctx = new SqliteTestContext();

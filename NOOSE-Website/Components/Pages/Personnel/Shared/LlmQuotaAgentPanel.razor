@@ -118,9 +118,9 @@ else
 
         try
         {
-            _status = await Quota.GetStatusAsync(Agent.Id);
-            _periods = await Quota.GetPeriodsAsync(Agent.Id);
-            _adjustments = await Quota.GetAdjustmentsAsync(Agent.Id);
+            _status = await Quota.GetStatusAsync(Agent.Id, user);
+            _periods = await Quota.GetPeriodsAsync(Agent.Id, user);
+            _adjustments = await Quota.GetAdjustmentsAsync(Agent.Id, user);
         }
         catch (Exception ex)
         {

@@ -31,7 +31,7 @@ public static class NooseiSchemas
             },
             "verbindungen": {
               "type": "array",
-              "description": "Wichtige Verbindungen zu anderen Akten, nur solche, die im Kontext stehen.",
+              "description": "Wichtige Verbindungen zu anderen Akten, nur solche, die im Kontext stehen. Dazu zählen Zugehörigkeiten (Fraktion, Personengruppe, Partei — mit Rang bzw. Rolle und Leitung), Beziehungen zwischen Personen und gesetzte Verknüpfungen.",
               "items": {
                 "type": "object",
                 "additionalProperties": false,

@@ -6,6 +6,9 @@ namespace NOOSE_Website.Services;
 /// <summary>Server-side HTML sanitizer for WYSIWYG content.</summary>
 public static class HtmlCleanup
 {
+    /// <summary>Marker the editor leaves behind where an image was, while NOOSEI works on the text.</summary>
+    public const string AiImagePlaceholderAttribute = "data-noosei-bild";
+
     /// <summary>Sanitizes HTML; never returns null.</summary>
     public static string Clean(string? html)
     {
@@ -26,7 +29,22 @@ public static class HtmlCleanup
         return Generate(allowDiffMarks: true).Sanitize(html);
     }
 
-    private static HtmlSanitizer Generate(bool allowDiffMarks = false)
+    /// <summary>Sanitizes editor HTML on its way to NOOSEI, keeping the image placeholder.</summary>
+    /// <remarks>
+    /// The editor swaps every base64 image for <c>data-noosei-bild="n"</c> before marshalling and puts the
+    /// picture back on apply. A placeholder in <c>src</c> cannot work: it is a URI attribute, and any scheme
+    /// outside the list below is dropped here — which silently deleted the image from the corrected document.
+    /// </remarks>
+    public static string CleanAiPayload(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return string.Empty;
+        }
+        return Generate(allowImagePlaceholder: true).Sanitize(html);
+    }
+
+    private static HtmlSanitizer Generate(bool allowDiffMarks = false, bool allowImagePlaceholder = false)
     {
         var s = new HtmlSanitizer();
 
@@ -56,6 +74,10 @@ public static class HtmlCleanup
         })
         {
             s.AllowedAttributes.Add(attr);
+        }
+        if (allowImagePlaceholder)
+        {
+            s.AllowedAttributes.Add(AiImagePlaceholderAttribute);
         }
 
         s.AllowedCssProperties.Clear();

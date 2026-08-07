@@ -32,7 +32,7 @@ public sealed class LlmAnomalyService(
         }
 
         var config = await configService.GetAsync(cancellationToken);
-        var statuses = await quota.GetAllStatusAsync(cancellationToken);
+        var statuses = await quota.GetAllStatusAsync(actor, cancellationToken);
         var (year, week) = IsoWeekPeriod.Current();
         var weekStartUtc = IsoWeekPeriod.Start(year, week).ToUniversalTime();
 
@@ -51,9 +51,9 @@ public sealed class LlmAnomalyService(
 
         var trailing = await TrailingMeansAsync(db, config.Anomalies.OutlierTrailingWeeks,
             config.Anomalies.OutlierMinWeeks, year, week, cancellationToken);
-        var rankMean = RankMeans(statuses);
 
-        var flags = LlmAnomalyEvaluator.Evaluate(usage, statuses, trailing, rankMean, config.Anomalies, DateTime.Now);
+        // the rank baseline is derived inside the evaluator, per agent and without them in it
+        var flags = LlmAnomalyEvaluator.Evaluate(usage, statuses, trailing, config.Anomalies, DateTime.Now);
         cache.Set(CacheKey, flags, CacheDuration);
         return flags;
     }
@@ -78,10 +78,4 @@ public sealed class LlmAnomalyService(
             .Where(g => g.Count() >= Math.Max(1, minWeeks))
             .ToDictionary(g => g.Key, g => g.Average(p => (double)p.Consumed));
     }
-
-    private static Dictionary<Rank, double> RankMeans(IReadOnlyList<Models.Llm.LlmQuotaStatus> statuses)
-        => statuses
-            .Where(s => s.Rank is not null)
-            .GroupBy(s => s.Rank!.Value)
-            .ToDictionary(g => g.Key, g => g.Average(s => (double)s.Consumed));
 }
