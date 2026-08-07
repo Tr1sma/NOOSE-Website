@@ -50,13 +50,16 @@ public static partial class TextBlocks
 
     private const string NestedSelector = "p, h1, h2, h3, li, blockquote, td, th, caption, pre";
 
-    [GeneratedRegex(@"^\s*\[(\d+)\]\s?", RegexOptions.Compiled)]
+    /// <summary>Models like to dress the marker up: "- [1]", "**[1]**", "[1]:". The number is what counts.</summary>
+    [GeneratedRegex(@"^\s*(?:[-*_]{1,2}\s*)?\[(\d+)\](?:[-*_:.]{1,2})?\s?", RegexOptions.Compiled)]
     private static partial Regex PrefixRegex();
 
     [GeneratedRegex(@"^```[a-zA-Z]*\s*$|^\s*```\s*$", RegexOptions.Compiled | RegexOptions.Multiline)]
     private static partial Regex FenceRegex();
 
-    /// <summary>Parses HTML into numbered blocks. Empty blocks stay in the list so re-application indices line up.</summary>
+    /// <summary>Parses HTML into numbered blocks. Blocks without text are skipped entirely — an empty
+    /// paragraph is nothing to correct, and a numbered blank line in the prompt only invites the model to
+    /// answer with a block count the answer check then rejects.</summary>
     public static TextBlockDocument Parse(string? html)
     {
         var parser = new HtmlParser();
@@ -76,7 +79,12 @@ public static partial class TextBlocks
             {
                 continue;
             }
-            blocks.Add(new TextBlock(++number, Normalise(element.TextContent), element));
+            var text = Normalise(element.TextContent);
+            if (text.Length == 0)
+            {
+                continue;
+            }
+            blocks.Add(new TextBlock(++number, text, element));
         }
 
         // a document with no block elements at all (bare text) is still correctable as one block

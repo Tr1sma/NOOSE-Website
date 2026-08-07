@@ -28,13 +28,16 @@ public sealed record NooseiCall(
     IProgress<string>? Progress = null);
 
 /// <summary>What one request produced, plus what it cost the agent's weekly quota.</summary>
+/// <remarks><paramref name="Truncated" /> means the token cap cut the answer off; callers that parse a fixed
+/// answer shape can say so instead of blaming the model for a broken reply.</remarks>
 public sealed record NooseiAnswer(
     string? Text,
     LlmUsage Usage,
     LlmQuotaCharge Charge,
     int Rounds,
     IReadOnlyList<LlmMessage> Transcript,
-    bool Degraded);
+    bool Degraded,
+    bool Truncated = false);
 
 /// <summary>The only way to reach the model. Enforces use permission, the weekly quota and the request log,
 /// so a new feature cannot get free tokens by calling the transport directly.</summary>
@@ -117,7 +120,8 @@ public class NooseiGateway(
 
             watch.Stop();
             var charge = await ChargeAsync(agentId, call, total, last, refs, rounds, watch, success: true, error: null);
-            return new NooseiAnswer(last?.Text, total, charge, rounds, messages, degraded);
+            return new NooseiAnswer(last?.Text, total, charge, rounds, messages, degraded,
+                string.Equals(last?.FinishReason, "length", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception ex)
         {

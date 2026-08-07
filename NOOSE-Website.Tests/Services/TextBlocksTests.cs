@@ -42,6 +42,15 @@ public class TextBlocksTests
     }
 
     [Fact]
+    public void Parse_SkipsEmptyBlocks()
+    {
+        var doc = TextBlocks.Parse("<p>Eins</p><p><br></p><p>   </p><p>Zwei</p>");
+
+        Assert.Equal([1, 2], doc.Blocks.Select(b => b.Number).ToArray());
+        Assert.Equal(["Eins", "Zwei"], doc.Blocks.Select(b => b.Text).ToArray());
+    }
+
+    [Fact]
     public void ToPrompt_NumbersTheLines()
     {
         var prompt = TextBlocks.Parse("<p>Eins</p><p>Zwei</p>").ToPrompt();
@@ -70,6 +79,20 @@ public class TextBlocksTests
         Assert.Equal("Erster Satz.", result![1]);
         // trailing chatter is folded into the last block rather than becoming a phantom one
         Assert.Equal(2, result.Count);
+    }
+
+    [Theory]
+    [InlineData("**[1]** Erster Satz.\n**[2]** Zweiter Satz.")]   // markdown around the marker
+    [InlineData("[1]: Erster Satz.\n[2]: Zweiter Satz.")]         // colon after the marker
+    [InlineData("[1]Erster Satz.\n[2]Zweiter Satz.")]             // no space at all
+    [InlineData("- [1] Erster Satz.\n- [2] Zweiter Satz.")]       // answered as a bullet list
+    public void ParseAnswer_ToleratesADecoratedMarker(string answer)
+    {
+        var result = TextBlocks.ParseAnswer(answer, 2);
+
+        Assert.NotNull(result);
+        Assert.Equal("Erster Satz.", result![1]);
+        Assert.Equal("Zweiter Satz.", result[2]);
     }
 
     [Theory]

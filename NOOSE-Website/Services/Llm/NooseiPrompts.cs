@@ -8,7 +8,7 @@ namespace NOOSE_Website.Services;
 public static class NooseiPrompts
 {
     /// <summary>Bump by hand whenever a prompt changes; part of the brief content hash, so caches invalidate.</summary>
-    public const int PromptVersion = 2;
+    public const int PromptVersion = 3;
 
     /// <summary>SystemSetting key of the one operator-editable addendum, appended after the fixed prompt.</summary>
     public const string AddendumKey = "KiZusatzHinweis";
@@ -65,7 +65,16 @@ public static class NooseiPrompts
 
         Antwortformat, ohne Ausnahme:
         Gib jeden Abschnitt in genau einer Zeile aus, in derselben Reihenfolge, mit demselben Präfix [n].
+        Deine Antwort hat genau so viele Zeilen wie die Eingabe Abschnitte hat — keine mehr, keine weniger.
         Keine Einleitung, keine Erklärung, keine Markdown-Formatierung, keine Leerzeilen, kein HTML.
+
+        Beispiel einer Eingabe:
+        [1] der verdächtige wurde gestern in vinewood festgenomen
+        [2] Er schwieg
+
+        Zugehörige Antwort:
+        [1] Der Verdächtige wurde gestern in Vinewood festgenommen.
+        [2] Er schwieg.
         """;
 
     public const string Compose = """

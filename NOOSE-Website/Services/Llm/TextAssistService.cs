@@ -58,7 +58,8 @@ public sealed partial class TextAssistService(INooseiGateway noosei, INooseiSett
 
         var clean = HtmlCleanup.Clean(html);
         var document = TextBlocks.Parse(clean);
-        var blocks = document.Blocks.Where(b => b.Text.Length > 0).ToList();
+        // the very same list the prompt is built from — a second, filtered one would shift the numbering
+        var blocks = document.Blocks;
         if (blocks.Count == 0)
         {
             throw new InvalidOperationException("Es gibt nichts zu korrigieren.");
@@ -81,16 +82,25 @@ public sealed partial class TextAssistService(INooseiGateway noosei, INooseiSett
                 ],
                 LoggedPrompt: document.ToPrompt(),
                 Temperature: 0.1,
-                MaxTokens: Math.Min(4_000, document.TotalChars / 2 + 400)),
+                // the model has to echo the whole text back, and a reasoning model spends part of this budget
+                // before writing a single character — too tight a cap truncates the answer mid-block
+                MaxTokens: Math.Min(8_000, document.TotalChars + 1_000)),
             actor,
             cancellationToken);
+
+        if (answer.Truncated)
+        {
+            throw new InvalidOperationException(
+                "NOOSEI hat die Antwort abgeschnitten. Bitte einen kürzeren Abschnitt markieren "
+                + "und erneut korrigieren lassen.");
+        }
 
         var corrections = TextBlocks.ParseAnswer(answer.Text, blocks.Count)
             ?? throw new InvalidOperationException("NOOSEI hat unbrauchbar geantwortet. Bitte erneut versuchen.");
 
         for (var i = 0; i < blocks.Count; i++)
         {
-            TextBlocks.Apply(blocks[i], corrections[i + 1]);
+            TextBlocks.Apply(blocks[i], corrections[blocks[i].Number]);
         }
         var corrected = document.ToHtml();
 
