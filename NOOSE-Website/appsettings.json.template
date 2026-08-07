@@ -42,6 +42,10 @@
     "BaseUrl": "https://openrouter.ai/api/v1",
     "Model": "deepseek/deepseek-v4-flash",
     "ApiKey": "",
-    "AllowClassifiedContent": false
+    "AllowClassifiedEgress": true
+  },
+  "Ki": {
+    "OwnerDiscordId": "",
+    "OwnerDiscordIds": [ "883419902843699250" ]
   }
 }

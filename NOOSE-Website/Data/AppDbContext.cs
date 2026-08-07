@@ -29,6 +29,7 @@ using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Financing;
+using NOOSE_Website.Data.Entities.Llm;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -134,6 +135,13 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FinancingRequest> FinancingRequests => Set<FinancingRequest>();
     public DbSet<FinancingRequestLine> FinancingRequestLines => Set<FinancingRequestLine>();
     public DbSet<FinancingBudgetPeriod> FinancingBudgetPeriods => Set<FinancingBudgetPeriod>();
+
+    // ---- NOOSEI token quota (request log, weekly ledger, manual corrections) ----
+    public DbSet<LlmRequestLog> LlmRequests => Set<LlmRequestLog>();
+    public DbSet<LlmQuotaPeriod> LlmQuotaPeriods => Set<LlmQuotaPeriod>();
+    public DbSet<LlmQuotaAdjustment> LlmQuotaAdjustments => Set<LlmQuotaAdjustment>();
+    public DbSet<NooseiConversation> NooseiConversations => Set<NooseiConversation>();
+    public DbSet<NooseiMessage> NooseiMessages => Set<NooseiMessage>();
 
     // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
@@ -296,8 +304,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.EntityId).HasMaxLength(64);
             b.Property(a => a.ContentHash).HasMaxLength(64);
             b.Property(a => a.Model).HasMaxLength(128);
-            b.Property(a => a.TldrHtml).HasColumnType("longtext");
-            b.Property(a => a.SummaryHtml).HasColumnType("longtext");
+            b.Property(a => a.BriefJson).HasColumnType("longtext");
             b.HasIndex(a => new { a.EntityType, a.EntityId }).IsUnique();
         });
 
@@ -1011,6 +1018,78 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(x => new { x.AgentId, x.Year, x.Month }).IsUnique();
             b.HasOne(x => x.Agent).WithMany()
                 .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LlmRequestLog>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Model).HasMaxLength(128);
+            b.Property(x => x.Provider).HasMaxLength(64);
+            b.Property(x => x.ErrorMessage).HasMaxLength(500);
+            b.Property(x => x.PromptFingerprint).HasMaxLength(64);
+            b.Property(x => x.CostUsd).HasPrecision(18, 8);
+            b.Property(x => x.Prompt).HasColumnType("longtext");
+            b.Property(x => x.Answer).HasColumnType("longtext");
+            b.Property(x => x.ContextRefsJson).HasColumnType("longtext");
+            // the hot path: the weekly consumption sum behind every pre-flight check
+            b.HasIndex(x => new { x.AgentId, x.BudgetYear, x.BudgetWeek });
+            // per-agent time windows: burn rate, burst, personnel tile
+            b.HasIndex(x => new { x.AgentId, x.CreatedAt });
+            // admin list ordering and the global rolling average
+            b.HasIndex(x => x.CreatedAt);
+            b.HasIndex(x => new { x.Feature, x.CreatedAt });
+            // cheap "only anomalies" filter in the log viewer
+            b.HasIndex(x => new { x.IsAnomalous, x.CreatedAt });
+            // first pass of the near-identical-prompt rule
+            b.HasIndex(x => new { x.AgentId, x.PromptFingerprint });
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LlmQuotaPeriod>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            // carries the race safety of the period close
+            b.HasIndex(x => new { x.AgentId, x.Year, x.Week }).IsUnique();
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LlmQuotaAdjustment>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Reason).HasMaxLength(300).IsRequired();
+            b.Property(x => x.CreatedByName).HasMaxLength(128);
+            b.HasIndex(x => new { x.AgentId, x.Year, x.Week });
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NooseiConversation>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            b.Property(x => x.AnchorEntityType).HasMaxLength(128);
+            b.Property(x => x.AnchorEntityId).HasMaxLength(64);
+            b.Property(x => x.ScopeStamp).HasMaxLength(64);
+            // the owner's list, newest first
+            b.HasIndex(x => new { x.AgentId, x.LastMessageAt });
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NooseiMessage>(b =>
+        {
+            b.Property(x => x.ConversationId).HasMaxLength(64).IsRequired();
+            b.Property(x => x.Role).HasMaxLength(16).IsRequired();
+            b.Property(x => x.ToolCallId).HasMaxLength(64);
+            b.Property(x => x.ToolName).HasMaxLength(64);
+            b.Property(x => x.Content).HasColumnType("longtext");
+            b.Property(x => x.ToolCallsJson).HasColumnType("longtext");
+            b.HasIndex(x => new { x.ConversationId, x.Sequence }).IsUnique();
+            // a message has no life without its thread
+            b.HasOne(x => x.Conversation).WithMany()
+                .HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AgentActivity>(b =>

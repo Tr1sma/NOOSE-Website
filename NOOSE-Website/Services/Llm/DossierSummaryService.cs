@@ -1,55 +1,45 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>What the KI-Kurzbrief panel renders: the cached summary plus whether the source changed since.</summary>
+/// <summary>What the NOOSEI brief panel renders: the cached brief plus whether the source changed since.</summary>
 public sealed record DossierSummaryView(
     bool Configured,
     bool Exists,
-    string? TldrHtml,
-    string? SummaryHtml,
-    string? Model,
+    DossierBrief? Brief,
     DateTime? GeneratedAt,
     bool IsStale);
 
-/// <summary>Cached AI dossier summaries per record. The LLM is called only when the source content changed or a
-/// regenerate is forced — an unchanged content hash reuses the stored summary.</summary>
+/// <summary>Cached structured NOOSEI briefs per record. The model is called only when the source content changed
+/// or a regenerate is forced — an unchanged content hash reuses the stored brief.</summary>
 public interface IDossierSummaryService
 {
     bool IsConfigured { get; }
 
-    /// <summary>Cached summary for a record; never calls the LLM. Null when the viewer may not see the record.</summary>
+    /// <summary>Cached brief for a record; never calls the model. Null when the viewer may not see the record.</summary>
     Task<DossierSummaryView?> GetAsync(string entityType, string entityId, ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 
-    /// <summary>Generate the summary, reusing the cache when the content hash is unchanged (unless force=true).</summary>
+    /// <summary>Generate the brief, reusing the cache when the content hash is unchanged (unless force=true).</summary>
     Task<DossierSummaryView> GenerateAsync(string entityType, string entityId, ClaimsPrincipal actor, bool force, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="IDossierSummaryService" />
 public sealed class DossierSummaryService(
     IDbContextFactory<AppDbContext> dbFactory,
-    ILlmService llm,
+    INooseiGateway noosei,
     IOptions<LlmOptions> options) : IDossierSummaryService
 {
     private readonly LlmOptions _o = options.Value;
-
-    private const string SystemPrompt =
-        "Du bist Auswerter des NOOSE (National Office of Security Enforcement), einer fiktiven Geheimdienst-Behörde " +
-        "auf einem GTA-Rollenspiel-Server. Erstelle einen sachlichen Akten-Kurzbrief AUSSCHLIESSLICH aus den unten " +
-        "gelieferten Fakten. Erfinde nichts, spekuliere nicht, füge kein Wissen von außerhalb hinzu. Wenn etwas " +
-        "unbekannt ist, lass es weg. Antworte auf Deutsch, in Markdown, mit GENAU dieser Struktur:\n\n" +
-        "## TL;DR\nZwei bis drei Sätze mit der Kernaussage der Akte.\n\n" +
-        "## Zusammenfassung\nAusführliche, gegliederte Zusammenfassung mit Zwischenüberschriften und Aufzählungen: " +
-        "wer/was, Einstufung und Gefährdung, wichtige Verbindungen, Verlauf/Ereignisse, offene Punkte.";
 
     public bool IsConfigured => _o.IsConfigured;
 
@@ -66,11 +56,12 @@ public sealed class DossierSummaryService(
             .FirstOrDefaultAsync(x => x.EntityType == entityType && x.EntityId == entityId, cancellationToken);
         if (row is null)
         {
-            return new DossierSummaryView(IsConfigured, false, null, null, null, null, false);
+            return new DossierSummaryView(IsConfigured, false, null, null, false);
         }
 
-        // Staleness: rebuild the context hash (DB reads only, no LLM call) and compare.
-        var context = await DossierContextBuilder.BuildAsync(db, entityType, entityId, cancellationToken);
+        // Staleness: rebuild the context hash (DB reads only, no model call) and compare.
+        // Null scope on purpose: the cached brief is generated at minimum privilege, so the hash must be too.
+        var context = await DossierContextBuilder.BuildAsync(db, entityType, entityId, null, cancellationToken);
         var stale = context is null || Hash(PromptRedactor.Clip(context.Value.Text)) != row.ContentHash;
         return View(row, stale);
     }
@@ -81,7 +72,7 @@ public sealed class DossierSummaryService(
         Permission.RequireWriteAccess(actor);
         if (!_o.IsConfigured)
         {
-            throw new InvalidOperationException("Der KI-Assistent ist nicht konfiguriert.");
+            throw new InvalidOperationException("NOOSEI ist nicht konfiguriert.");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -91,10 +82,11 @@ public sealed class DossierSummaryService(
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht sichtbar.");
         }
 
-        var context = await DossierContextBuilder.BuildAsync(db, entityType, entityId, cancellationToken)
+        // one cached row per record, so it is assembled at the record's own audience, never at the actor's
+        var context = await DossierContextBuilder.BuildAsync(db, entityType, entityId, null, cancellationToken)
             ?? throw new InvalidOperationException("Akte nicht gefunden.");
 
-        // Last gate before egress: classified content never leaves unless explicitly allowed.
+        // Last gate before egress: the deployment-wide kill switch.
         PromptRedactor.GuardClassified(context.IsClassified, _o);
 
         var userPrompt = PromptRedactor.Clip(context.Text);
@@ -103,14 +95,15 @@ public sealed class DossierSummaryService(
         var existing = await db.DossierSummaries
             .FirstOrDefaultAsync(x => x.EntityType == entityType && x.EntityId == entityId, cancellationToken);
 
-        // Unchanged source and no force → reuse, no LLM call.
-        if (!force && existing is not null && existing.ContentHash == hash)
+        // Unchanged source and no force → reuse, no model call.
+        if (!force && existing is not null && existing.ContentHash == hash && existing.BriefJson is not null)
         {
             return View(existing, stale: false);
         }
 
-        var answer = await llm.ChatAsync(SystemPrompt, userPrompt, actor, cancellationToken);
-        var (tldr, body) = SplitSections(answer);
+        var brief = await RequestBriefAsync(entityType, entityId, context.Title, userPrompt, actor, cancellationToken)
+            ?? throw new InvalidOperationException(
+                "NOOSEI konnte keinen strukturierten Kurzbrief erzeugen. Bitte später erneut versuchen.");
 
         if (existing is null)
         {
@@ -118,48 +111,190 @@ public sealed class DossierSummaryService(
             db.DossierSummaries.Add(existing);
         }
         existing.ContentHash = hash;
-        existing.TldrHtml = Nullify(MarkdownRenderer.ToSafeHtml(tldr));
-        existing.SummaryHtml = Nullify(MarkdownRenderer.ToSafeHtml(body));
-        existing.Model = llm.Model;
+        existing.BriefJson = JsonSerializer.Serialize(brief, DossierBrief.Json);
+        existing.SchemaVersion = NooseiSchemas.KurzbriefVersion;
+        existing.PromptVersion = NooseiPrompts.PromptVersion;
+        existing.Model = _o.Model;
         existing.GeneratedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
         return View(existing, stale: false);
     }
 
-    private DossierSummaryView View(DossierSummary r, bool stale)
-        => new(IsConfigured, true, r.TldrHtml, r.SummaryHtml, r.Model, r.GeneratedAt, stale);
+    // ---- structured-output ladder ----
 
-    private static string? Nullify(string? html) => string.IsNullOrWhiteSpace(html) ? null : html;
+    /// <summary>Asks for the brief, widening the request until the endpoint can serve the shape. Null = every rung failed.</summary>
+    private async Task<DossierBrief?> RequestBriefAsync(
+        string entityType, string entityId, string title, string userPrompt, ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        var rungs = Rungs().ToList();
+        for (var i = 0; i < rungs.Count; i++)
+        {
+            var (prompt, format, requireCapable) = rungs[i];
+            try
+            {
+                var answer = await noosei.AskAsync(
+                    new NooseiCall(
+                        LlmFeature.Brief,
+                        [LlmMessage.System(prompt), LlmMessage.User(userPrompt)],
+                        LoggedPrompt: $"Kurzbrief für {title}",
+                        ResponseFormat: format,
+                        EntityType: entityType,
+                        EntityId: entityId,
+                        ContextRefs: [new LlmContextRef(entityType, entityId, title)],
+                        RequireCapableProviders: requireCapable),
+                    actor,
+                    cancellationToken);
+
+                if (Parse(answer.Text) is { } brief)
+                {
+                    return brief;
+                }
+            }
+            // the endpoint cannot serve this rung at all — try the next, but never past the last one
+            catch (LlmCapabilityException) when (i < rungs.Count - 1)
+            {
+            }
+        }
+        return null;
+    }
+
+    private IEnumerable<(string Prompt, LlmResponseFormat Format, bool RequireCapable)> Rungs()
+    {
+        var strict = LlmResponseFormat.ForSchema(NooseiSchemas.KurzbriefName, NooseiSchemas.Kurzbrief);
+        var jsonMode = NooseiPrompts.WithSchema(NooseiPrompts.Brief, NooseiSchemas.KurzbriefText);
+
+        if (_o.StructuredOutput == StructuredOutputMode.PromptOnly)
+        {
+            yield return (jsonMode, LlmResponseFormat.JsonObject, false);
+            yield break;
+        }
+
+        // rung 0: enforced schema, only capable providers
+        yield return (NooseiPrompts.Brief, strict, _o.RequireCapableProviders && _o.StructuredOutput == StructuredOutputMode.Strict);
+
+        // rung 1: same schema, wider provider pool — many honour a schema without advertising it
+        if (_o.RequireCapableProviders && _o.StructuredOutput == StructuredOutputMode.Strict)
+        {
+            yield return (NooseiPrompts.Brief, strict, false);
+        }
+
+        // rung 2: plain JSON mode with the schema pasted into the prompt
+        yield return (jsonMode, LlmResponseFormat.JsonObject, false);
+    }
+
+    /// <summary>Parses the answer, repairing the two things models get wrong: code fences and surrounding chatter.</summary>
+    public static DossierBrief? Parse(string? answer)
+    {
+        var json = Extract(answer);
+        if (json is null)
+        {
+            return null;
+        }
+        try
+        {
+            var brief = JsonSerializer.Deserialize<DossierBrief>(json, DossierBrief.Json);
+            return brief is null || brief.IsEmpty ? null : Normalise(brief);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static DossierBrief Normalise(DossierBrief brief) => brief with
+    {
+        Tldr = brief.Tldr?.Trim() ?? string.Empty,
+        Kernpunkte = Clean(brief.Kernpunkte),
+        EinstufungBewertung = brief.EinstufungBewertung?.Trim() ?? string.Empty,
+        Verbindungen = (brief.Verbindungen ?? []).Where(v => !string.IsNullOrWhiteSpace(v.Wer)).ToList(),
+        Verlauf = (brief.Verlauf ?? []).Where(v => !string.IsNullOrWhiteSpace(v.Was)).ToList(),
+        OffenePunkte = Clean(brief.OffenePunkte),
+        Risiko = brief.Risiko ?? new BriefRisk("mittel", null),
+    };
+
+    private static IReadOnlyList<string> Clean(IReadOnlyList<string>? items)
+        => (items ?? []).Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+
+    /// <summary>Strips code fences and any chatter around the object, then returns the outermost balanced braces.</summary>
+    private static string? Extract(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+        var trimmed = FenceRegex.Replace(text.Trim(), string.Empty).Trim();
+
+        var start = trimmed.IndexOf('{');
+        if (start < 0)
+        {
+            return null;
+        }
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        for (var i = start; i < trimmed.Length; i++)
+        {
+            var c = trimmed[i];
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\' && inString)
+            {
+                escaped = true;
+                continue;
+            }
+            if (c == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+            if (inString)
+            {
+                continue;
+            }
+            if (c == '{')
+            {
+                depth++;
+            }
+            else if (c == '}' && --depth == 0)
+            {
+                return trimmed[start..(i + 1)];
+            }
+        }
+        return null;
+    }
+
+    private static readonly Regex FenceRegex = new(@"^```[a-zA-Z]*\s*|\s*```$", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    // ---- helpers ----
+
+    private DossierSummaryView View(DossierSummary row, bool stale)
+    {
+        DossierBrief? brief = null;
+        if (!string.IsNullOrWhiteSpace(row.BriefJson))
+        {
+            try
+            {
+                brief = JsonSerializer.Deserialize<DossierBrief>(row.BriefJson, DossierBrief.Json);
+            }
+            catch (JsonException) { /* a stored brief from an older shape simply renders as missing */ }
+        }
+        // an unreadable payload counts as stale, so the panel offers a regenerate instead of an empty box
+        return new DossierSummaryView(IsConfigured, brief is not null, brief, row.GeneratedAt, stale || brief is null);
+    }
 
     // the score-recalculation timestamp advances on every daily sweep even when nothing changed;
     // excluding it keeps a brief from being falsely marked stale after each nightly recompute
     private static readonly Regex VolatileHashLines = new(@"(?im)^Score berechnet am:.*$\r?\n?", RegexOptions.Compiled);
 
+    /// <summary>Content hash incl. prompt and schema version, so a prompt bump invalidates every stored brief.</summary>
     private static string Hash(string text)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(VolatileHashLines.Replace(text, string.Empty))));
-
-    /// <summary>Split the model's "## TL;DR" / "## Zusammenfassung" markdown into (tldr, body); falls back to (null, whole).</summary>
-    public static (string? Tldr, string Body) SplitSections(string? markdown)
     {
-        if (string.IsNullOrWhiteSpace(markdown))
-        {
-            return (null, string.Empty);
-        }
-        var text = markdown.Replace("\r\n", "\n").Trim();
-
-        var bodyHeading = Regex.Match(text, @"(?im)^\s{0,3}#{1,3}\s*(zusammenfassung|details|langfassung|langtext)\b.*$");
-        if (!bodyHeading.Success)
-        {
-            return (null, text);
-        }
-
-        var body = text[(bodyHeading.Index + bodyHeading.Length)..].Trim();
-        var head = text[..bodyHeading.Index];
-        var tldrHeading = Regex.Match(head, @"(?im)^\s{0,3}#{1,3}\s*(tl;?dr|kurzfassung|kurz)\b.*$");
-        var tldr = tldrHeading.Success
-            ? head[(tldrHeading.Index + tldrHeading.Length)..].Trim()
-            : head.Trim();
-        return (string.IsNullOrWhiteSpace(tldr) ? null : tldr, body);
+        var seed = $"v{NooseiPrompts.PromptVersion}/{NooseiSchemas.KurzbriefVersion}\n"
+            + VolatileHashLines.Replace(text, string.Empty);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(seed)));
     }
 }

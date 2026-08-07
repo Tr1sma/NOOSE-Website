@@ -16,7 +16,17 @@ public static class HtmlCleanup
         return Generate().Sanitize(html);
     }
 
-    private static HtmlSanitizer Generate()
+    /// <summary>Sanitizes NOOSEI diff markup: the same allowlist plus the ins/del marks the diff renderer adds.</summary>
+    public static string CleanDiff(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return string.Empty;
+        }
+        return Generate(allowDiffMarks: true).Sanitize(html);
+    }
+
+    private static HtmlSanitizer Generate(bool allowDiffMarks = false)
     {
         var s = new HtmlSanitizer();
 
@@ -29,6 +39,11 @@ public static class HtmlCleanup
         })
         {
             s.AllowedTags.Add(tag);
+        }
+        if (allowDiffMarks)
+        {
+            s.AllowedTags.Add("ins");
+            s.AllowedTags.Add("del");
         }
 
         s.AllowedAttributes.Clear();

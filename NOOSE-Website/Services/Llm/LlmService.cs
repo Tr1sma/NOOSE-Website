@@ -8,46 +8,41 @@ using NOOSE_Website.Models.Llm;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Thin OpenAI-compatible chat client (OpenRouter). All calls are gated by <see cref="Permission.RequireLlmUse"/>.</summary>
+/// <summary>Thin OpenAI-compatible chat client (OpenRouter). One call = one round = one HTTP request; the tool loop
+/// lives a layer up. All calls are gated by <see cref="Permission.RequireLlmUse"/>.</summary>
+/// <remarks>Deliberately database-free: metering and quota belong to the gateway, so this stays testable with nothing
+/// but a stubbed HttpMessageHandler and a charge never lands inside the retry loop.</remarks>
 public interface ILlmService
 {
     bool IsConfigured { get; }
-    string Model { get; }
-    Task<string> ChatAsync(string systemPrompt, string userPrompt, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    Task<LlmResult> CompleteAsync(LlmRequest request, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="ILlmService" />
 public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> options, ILogger<LlmService> logger) : ILlmService
 {
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    private static readonly IReadOnlyList<LlmToolCall> NoToolCalls = [];
+
     private readonly LlmOptions _o = options.Value;
 
     public bool IsConfigured => _o.IsConfigured;
-    public string Model => _o.Model;
 
-    public async Task<string> ChatAsync(string systemPrompt, string userPrompt, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task<LlmResult> CompleteAsync(LlmRequest request, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequireLlmUse(actor);
         if (!_o.IsConfigured)
         {
-            throw new InvalidOperationException("Der KI-Assistent ist nicht konfiguriert.");
+            throw new InvalidOperationException("NOOSEI ist nicht konfiguriert.");
         }
 
-        var payload = new Dictionary<string, object?>
-        {
-            ["model"] = _o.Model,
-            ["temperature"] = 0.3,
-            ["messages"] = new object[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt },
-            },
-        };
-        if (Routing() is { } routing)
-        {
-            payload["provider"] = routing;
-        }
-
+        var payload = Payload(request);
         var client = httpFactory.CreateClient("llm");
         var attempts = Math.Max(0, _o.Retries) + 1;
         var watch = Stopwatch.StartNew();
@@ -67,6 +62,16 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                     var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
                     var detail = ExtractError(body);
                     var status = (int)response.StatusCode;
+
+                    // must be classified before the transient check: with require_parameters a 404 means
+                    // "no CAPABLE provider" and is permanent for this shape, not worth three more attempts
+                    if (Capability(response.StatusCode, detail, request) is { } capability)
+                    {
+                        logger.LogWarning("KI-Endpunkt lehnt die Anfrageform ab: HTTP {Status} {Detail} (Schema {Schema}, Werkzeuge {Tools})",
+                            status, detail, capability.SchemaRelated, capability.ToolsRelated);
+                        throw capability;
+                    }
+
                     if (!last && IsTransient(response.StatusCode))
                     {
                         logger.LogWarning("KI-Aufruf {Attempt}/{Attempts} verworfen: HTTP {Status} {Detail}",
@@ -74,17 +79,29 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                         await DelayAsync(cancellationToken);
                         continue;
                     }
+
                     logger.LogError("KI-Aufruf endgültig fehlgeschlagen: HTTP {Status} {Detail} (Modell {Model}, {Elapsed} ms)",
                         status, detail, _o.Model, watch.ElapsedMilliseconds);
-                    throw new InvalidOperationException(
-                        $"KI-Endpunkt antwortete mit {status}{(detail is null ? "" : ": " + detail)}.");
+                    throw new InvalidOperationException(Public(
+                        $"NOOSEI antwortete nicht (Fehler {status}). Bitte später erneut versuchen.", detail));
                 }
 
                 var doc = await response.Content.ReadFromJsonAsync<ChatResponse>(Json, attemptCts.Token);
-                logger.LogInformation("KI-Antwort ok: Modell {Model}, Provider {Provider}, Versuch {Attempt}/{Attempts}, {Elapsed} ms",
-                    _o.Model, doc?.Provider ?? "?", attempt, attempts, watch.ElapsedMilliseconds);
-                var content = doc?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-                return string.IsNullOrWhiteSpace(content) ? "(Keine Antwort erhalten.)" : content;
+                var choice = doc?.Choices?.FirstOrDefault();
+                logger.LogInformation("KI-Antwort ok: Modell {Model}, Provider {Provider}, Versuch {Attempt}/{Attempts}, {Elapsed} ms, Kosten {Cost}",
+                    doc?.Model ?? _o.Model, doc?.Provider ?? "?", attempt, attempts, watch.ElapsedMilliseconds, doc?.Usage?.Cost ?? 0m);
+
+                return new LlmResult(
+                    // raw on purpose: an empty answer must stay empty, never a sentence that could end up in a document
+                    Text: choice?.Message?.Content,
+                    ToolCalls: ToolCalls(choice?.Message?.ToolCalls),
+                    Usage: Usage(doc?.Usage),
+                    Provider: doc?.Provider,
+                    Model: doc?.Model ?? _o.Model,
+                    FinishReason: choice?.FinishReason,
+                    GenerationId: doc?.Id,
+                    Attempts: attempt,
+                    ElapsedMs: watch.ElapsedMilliseconds);
             }
             // caller cancelled (circuit gone, navigation) — never retry that
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -104,7 +121,7 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                 logger.LogError("KI-Endpunkt hat in {Attempts} Versuchen nicht geantwortet (Modell {Model}, {Elapsed} ms)",
                     attempts, _o.Model, watch.ElapsedMilliseconds);
                 throw new InvalidOperationException(
-                    $"Der KI-Endpunkt hat nicht rechtzeitig geantwortet ({attempts} Versuche à {_o.AttemptTimeoutSeconds} s). Bitte später erneut versuchen.");
+                    "NOOSEI hat nicht rechtzeitig geantwortet. Bitte später erneut versuchen.");
             }
             catch (HttpRequestException ex)
             {
@@ -115,7 +132,7 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                     continue;
                 }
                 logger.LogError(ex, "KI-Endpunkt nicht erreichbar (Modell {Model})", _o.Model);
-                throw new InvalidOperationException($"KI-Endpunkt nicht erreichbar: {ex.Message}");
+                throw new InvalidOperationException(Public("NOOSEI ist derzeit nicht erreichbar.", ex.Message));
             }
         }
     }
@@ -123,8 +140,99 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
     private Task DelayAsync(CancellationToken cancellationToken)
         => _o.RetryDelayMs <= 0 ? Task.CompletedTask : Task.Delay(_o.RetryDelayMs, cancellationToken);
 
+    /// <summary>Message an agent may see; upstream detail can name the model, so it is opt-in.</summary>
+    private string Public(string message, string? detail)
+        => _o.ExposeUpstreamDetail && !string.IsNullOrWhiteSpace(detail) ? message + " (" + detail + ")" : message;
+
+    // ---- wire format ----
+
+    private Dictionary<string, object?> Payload(LlmRequest request)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = _o.Model,
+            ["temperature"] = request.Temperature,
+            ["messages"] = request.Messages.Select(Wire).ToArray(),
+            // cost accounting for the quota subsystem
+            ["usage"] = new { include = true },
+        };
+        if (request.MaxTokens is { } max)
+        {
+            payload["max_tokens"] = max;
+        }
+        if (request.Tools is { Count: > 0 })
+        {
+            payload["tools"] = request.Tools.Select(t => new
+            {
+                type = "function",
+                function = new { name = t.Name, description = t.Description, parameters = t.ParameterSchema },
+            }).ToArray();
+            payload["tool_choice"] = request.ToolChoice switch
+            {
+                LlmToolChoice.None => "none",
+                LlmToolChoice.Required => "required",
+                _ => "auto",
+            };
+        }
+        if (request.ResponseFormat is { } format)
+        {
+            payload["response_format"] = Format(format);
+        }
+        if (Routing(request.RequireCapableProviders) is { } routing)
+        {
+            payload["provider"] = routing;
+        }
+        return payload;
+    }
+
+    private static object Wire(LlmMessage message)
+    {
+        var row = new Dictionary<string, object?>
+        {
+            ["role"] = message.Role switch
+            {
+                LlmRole.System => "system",
+                LlmRole.User => "user",
+                LlmRole.Assistant => "assistant",
+                _ => "tool",
+            },
+            ["content"] = message.Content,
+        };
+        if (message.ToolCalls is { Count: > 0 })
+        {
+            row["tool_calls"] = message.ToolCalls.Select(c => new
+            {
+                id = c.Id,
+                type = "function",
+                function = new { name = c.Name, arguments = c.ArgumentsJson },
+            }).ToArray();
+        }
+        if (message.ToolCallId is not null)
+        {
+            row["tool_call_id"] = message.ToolCallId;
+        }
+        if (message.Name is not null)
+        {
+            row["name"] = message.Name;
+        }
+        return row;
+    }
+
+    private static object Format(LlmResponseFormat format) => format.Kind == LlmResponseFormatKind.JsonObject
+        ? new Dictionary<string, object?> { ["type"] = "json_object" }
+        : new Dictionary<string, object?>
+        {
+            ["type"] = "json_schema",
+            ["json_schema"] = new Dictionary<string, object?>
+            {
+                ["name"] = format.Name,
+                ["strict"] = format.Strict,
+                ["schema"] = format.Schema,
+            },
+        };
+
     /// <summary>Provider routing sent with every request; null when nothing is constrained.</summary>
-    private object? Routing()
+    private object? Routing(bool requireCapableProviders)
     {
         var routing = new Dictionary<string, object?>();
         if (_o.Providers.Count > 0)
@@ -140,8 +248,39 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
         {
             routing["ignore"] = _o.IgnoreProviders;
         }
+        if (requireCapableProviders)
+        {
+            routing["require_parameters"] = true;
+        }
         return routing.Count == 0 ? null : routing;
     }
+
+    private static IReadOnlyList<LlmToolCall> ToolCalls(List<ToolCallDto>? calls)
+    {
+        if (calls is not { Count: > 0 })
+        {
+            return NoToolCalls;
+        }
+        return calls
+            .Where(c => !string.IsNullOrWhiteSpace(c.Function?.Name))
+            .Select((c, i) => new LlmToolCall(
+                c.Id ?? "call_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                c.Function!.Name!,
+                string.IsNullOrWhiteSpace(c.Function.Arguments) ? "{}" : c.Function.Arguments!))
+            .ToList();
+    }
+
+    private static LlmUsage Usage(UsageDto? usage) => usage is null
+        ? LlmUsage.Empty
+        : new LlmUsage(
+            usage.PromptTokens,
+            usage.CompletionTokens,
+            usage.TotalTokens > 0 ? usage.TotalTokens : usage.PromptTokens + usage.CompletionTokens,
+            usage.PromptTokensDetails?.CachedTokens ?? 0,
+            usage.CompletionTokensDetails?.ReasoningTokens ?? 0,
+            usage.Cost ?? 0m);
+
+    // ---- failure classification ----
 
     /// <summary>Upstream failures worth another attempt. 404 belongs here: OpenRouter answers it when no provider can currently serve the request, not only for a wrong model.</summary>
     private static bool IsTransient(HttpStatusCode status)
@@ -152,6 +291,39 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
             or HttpStatusCode.BadGateway
             or HttpStatusCode.ServiceUnavailable
             or HttpStatusCode.GatewayTimeout;
+
+    /// <summary>Recognises "this endpoint cannot do schema/tools" so the caller can downgrade instead of retrying.</summary>
+    private static LlmCapabilityException? Capability(HttpStatusCode status, string? detail, LlmRequest request)
+    {
+        if (status is not (HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.UnprocessableEntity))
+        {
+            return null;
+        }
+
+        var hasSchema = request.ResponseFormat is not null;
+        var hasTools = request.Tools is { Count: > 0 };
+        if (!hasSchema && !hasTools)
+        {
+            return null;
+        }
+
+        var text = detail ?? string.Empty;
+        var schemaRelated = hasSchema && (Mentions(text, "response_format") || Mentions(text, "json_schema")
+            || Mentions(text, "structured output") || Mentions(text, "json mode"));
+        var toolsRelated = hasTools && (Mentions(text, "tool") || Mentions(text, "function call")
+            || Mentions(text, "function_call"));
+
+        // the router filtered every provider out because none supports what we asked for
+        if (Mentions(text, "no endpoints found") || Mentions(text, "no allowed providers"))
+        {
+            schemaRelated = hasSchema;
+            toolsRelated = hasTools;
+        }
+
+        return schemaRelated || toolsRelated ? new LlmCapabilityException(schemaRelated, toolsRelated) : null;
+    }
+
+    private static bool Mentions(string text, string needle) => text.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Pull a human-readable message out of an OpenAI-style error body; falls back to the raw body.</summary>
     private static string? ExtractError(string? body)
@@ -186,7 +358,18 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
         return text.Length > 300 ? text[..300] : text;
     }
 
-    private sealed record ChatResponse(List<Choice>? Choices, string? Provider);
-    private sealed record Choice(Message? Message);
-    private sealed record Message(string? Content);
+    private sealed record ChatResponse(string? Id, List<Choice>? Choices, string? Provider, string? Model, UsageDto? Usage);
+    private sealed record Choice(Message? Message, string? FinishReason);
+    private sealed record Message(string? Content, List<ToolCallDto>? ToolCalls);
+    private sealed record ToolCallDto(string? Id, string? Type, FunctionDto? Function);
+    private sealed record FunctionDto(string? Name, string? Arguments);
+    private sealed record UsageDto(
+        int PromptTokens,
+        int CompletionTokens,
+        int TotalTokens,
+        decimal? Cost,
+        PromptDetails? PromptTokensDetails,
+        CompletionDetails? CompletionTokensDetails);
+    private sealed record PromptDetails(int CachedTokens);
+    private sealed record CompletionDetails(int ReasoningTokens);
 }

@@ -23,6 +23,10 @@ public static class FeedbackPageTabs
         new("module", "Ausbildungsmodule"),
         new("einladungen", "Einladungen"),
         new("finanzierung", "Budget-Regeln"),
+        new("noosei", "NOOSEI-Betrieb"),
+        new("ki-regeln", "Token-Regeln"),
+        new("ki-kontingente", "Kontingente"),
+        new("ki-anfragen", "NOOSEI-Anfragen"),
         new("partner", "Sichtbarkeit & Freigaben"),
         new("basisdaten", "Wertelisten"),
     ];
@@ -47,6 +51,7 @@ public static class FeedbackPageTabs
         new("sperren", "Sperren"),
         new("vorlagen", "Anschreiben-Vorlagen"),
         new("tests", "Eignungstests"),
+        new("anforderungen", "Anforderungen"),
         new("automatik", "Automatik"),
     ];
 

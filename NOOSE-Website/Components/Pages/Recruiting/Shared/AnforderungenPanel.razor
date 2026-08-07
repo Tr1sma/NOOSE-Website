@@ -1,0 +1,154 @@
+@* Requirement list shown publicly on /karriere; maintained by HRB and leadership. *@
+@using NOOSE_Website.Models.Recruiting
+@inject ICareerRequirementsService Requirements
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h6">Anforderungen an Bewerber</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Diese Liste erscheint öffentlich auf der Karriere-Seite (<MudLink Href="/karriere" Target="_blank">/karriere</MudLink>).
+        Alternativen werden unter der Anforderung mit „ODER“ ausgewiesen. Eine leere Liste blendet den
+        Abschnitt auf der Karriere-Seite komplett aus.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        @if (_items.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Keine Anforderungen hinterlegt — auf der Karriere-Seite erscheint derzeit kein Anforderungs-Abschnitt.
+            </MudAlert>
+        }
+
+        @for (var i = 0; i < _items.Count; i++)
+        {
+            // per-iteration copies, the lambdas below capture them
+            var index = i;
+            var item = _items[i];
+            <MudPaper @key="item" Outlined="true" Class="pa-4">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+                        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary" Style="margin-top:12px;flex:0 0 auto;">
+                            @(index + 1).
+                        </MudText>
+                        <MudTextField T="string" @bind-Value="item.Text" Label="Anforderung" Lines="2"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      MaxLength="CareerRequirementsConfig.MaxTextLength" />
+                        <MudStack Row="true" Spacing="0" Style="flex:0 0 auto;">
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" title="Nach oben"
+                                           Disabled="@(index == 0)" OnClick="@(() => Move(index, -1))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" title="Nach unten"
+                                           Disabled="@(index == _items.Count - 1)" OnClick="@(() => Move(index, 1))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           title="Anforderung löschen" OnClick="@(() => _items.Remove(item))" />
+                        </MudStack>
+                    </MudStack>
+
+                    @for (var a = 0; a < item.Alternatives.Count; a++)
+                    {
+                        var slot = a;
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="ml-8">
+                            <MudText Typo="Typo.overline" Color="Color.Primary" Style="flex:0 0 auto;">ODER</MudText>
+                            <MudTextField T="string" Value="@item.Alternatives[slot]"
+                                          ValueChanged="@(value => item.Alternatives[slot] = value ?? string.Empty)"
+                                          Label="Alternative" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          MaxLength="CareerRequirementsConfig.MaxTextLength" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           title="Alternative löschen" Style="flex:0 0 auto;"
+                                           OnClick="@(() => item.Alternatives.RemoveAt(slot))" />
+                        </MudStack>
+                    }
+
+                    <div class="ml-8">
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                                   Disabled="@(item.Alternatives.Count >= CareerRequirementsConfig.MaxAlternatives)"
+                                   OnClick="@(() => item.Alternatives.Add(string.Empty))">ODER-Alternative</MudButton>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        }
+
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary"
+                       Disabled="@(_items.Count >= CareerRequirementsConfig.MaxItems)"
+                       OnClick="Add">Anforderung hinzufügen</MudButton>
+            <MudStack Row="true" Spacing="2">
+                <MudButton OnClick="Reset" StartIcon="@Icons.Material.Filled.RestartAlt">Auf Standard zurücksetzen</MudButton>
+                <AuthorizeView Policy="@Policies.WriteAccess" Context="save">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save"
+                               Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+                </AuthorizeView>
+            </MudStack>
+        </MudStack>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _saving;
+    private ClaimsPrincipal _user = default!;
+    private List<CareerRequirement> _items = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        // editable read: never from the cache, or the form would show a stale state
+        Fill(await Requirements.GetEditableAsync());
+        _load = false;
+    }
+
+    // deep copy, so editing never mutates the shared default instance
+    private void Fill(CareerRequirementsConfig config)
+        => _items = config.Items
+            .Select(i => new CareerRequirement { Text = i.Text, Alternatives = new List<string>(i.Alternatives) })
+            .ToList();
+
+    private void Add() => _items.Add(new CareerRequirement());
+
+    private void Move(int index, int offset)
+    {
+        var target = index + offset;
+        if (target < 0 || target >= _items.Count)
+        {
+            return;
+        }
+        (_items[index], _items[target]) = (_items[target], _items[index]);
+    }
+
+    private void Reset()
+    {
+        Fill(CareerRequirementsConfig.Default());
+        Snackbar.Add("Standard-Anforderungen eingesetzt — noch nicht gespeichert.", Severity.Info);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await Requirements.SaveAsync(new CareerRequirementsConfig { Items = _items }, _user);
+            Snackbar.Add("Anforderungen gespeichert.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

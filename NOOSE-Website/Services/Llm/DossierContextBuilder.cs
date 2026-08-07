@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -22,30 +23,33 @@ public readonly record struct DossierContext(string Title, string Text, bool IsC
 public static class DossierContextBuilder
 {
     /// <summary>Dispatches by CLR type name; returns null for unknown types or missing ids.</summary>
+    /// <param name="scope">Whose eyes the dossier is assembled for. Null uses <see cref="DossierScope.ForRecord"/>,
+    /// the minimum-privilege scope a cached brief must be generated at.</param>
     public static async Task<DossierContext?> BuildAsync(
-        AppDbContext db, string entityType, string entityId, CancellationToken cancellationToken = default)
+        AppDbContext db, string entityType, string entityId, ViewerScope? scope = null, CancellationToken cancellationToken = default)
         => entityType switch
         {
-            nameof(Person) => await BuildPersonAsync(db, entityId, cancellationToken),
-            nameof(Faction) => await BuildFactionAsync(db, entityId, cancellationToken),
-            nameof(PersonGroup) => await BuildPersonGroupAsync(db, entityId, cancellationToken),
-            nameof(Party) => await BuildPartyAsync(db, entityId, cancellationToken),
-            nameof(Operation) => await BuildOperationAsync(db, entityId, cancellationToken),
-            nameof(Case) => await BuildCaseAsync(db, entityId, cancellationToken),
-            nameof(Taskforce) => await BuildTaskforceAsync(db, entityId, cancellationToken),
-            nameof(Document) => await BuildDocumentAsync(db, entityId, cancellationToken),
+            nameof(Person) => await BuildPersonAsync(db, entityId, scope, cancellationToken),
+            nameof(Faction) => await BuildFactionAsync(db, entityId, scope, cancellationToken),
+            nameof(PersonGroup) => await BuildPersonGroupAsync(db, entityId, scope, cancellationToken),
+            nameof(Party) => await BuildPartyAsync(db, entityId, scope, cancellationToken),
+            nameof(Operation) => await BuildOperationAsync(db, entityId, scope, cancellationToken),
+            nameof(Case) => await BuildCaseAsync(db, entityId, scope, cancellationToken),
+            nameof(Taskforce) => await BuildTaskforceAsync(db, entityId, scope, cancellationToken),
+            nameof(Document) => await BuildDocumentAsync(db, entityId, scope, cancellationToken),
             _ => null,
         };
 
     // ---- per-type builders ----
 
-    static async Task<DossierContext?> BuildPersonAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildPersonAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var p = await db.People.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(p.SecrecyLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("Personenakte");
@@ -131,7 +135,7 @@ public static class DossierContextBuilder
                 sb.Append("• ").Append(x.Text);
                 if (!string.IsNullOrWhiteSpace(x.Note))
                 {
-                    sb.Append(" — ").Append(x.Note.Trim());
+                    sb.Append(" — ").Append(Free(x.Note));
                 }
                 sb.AppendLine();
             }
@@ -155,7 +159,7 @@ public static class DossierContextBuilder
                 sb.Append("• ").Append(Fmt(d.Timestamp)).Append(" | Ausgang: ").Append(d.Outcome.ToString());
                 if (!string.IsNullOrWhiteSpace(d.Reason))
                 {
-                    sb.Append(" | Grund: ").Append(d.Reason.Trim());
+                    sb.Append(" | Grund: ").Append(Free(d.Reason));
                 }
                 if (d.TruthSerum)
                 {
@@ -167,7 +171,7 @@ public static class DossierContextBuilder
                 }
                 if (!string.IsNullOrWhiteSpace(d.ReceivedInformation))
                 {
-                    sb.Append(" | Infos: ").Append(d.ReceivedInformation.Trim());
+                    sb.Append(" | Infos: ").Append(Free(d.ReceivedInformation));
                 }
                 sb.AppendLine();
             }
@@ -191,15 +195,15 @@ public static class DossierContextBuilder
                 }
                 if (!string.IsNullOrWhiteSpace(o.Location))
                 {
-                    sb.Append(" | Ort: ").Append(o.Location.Trim());
+                    sb.Append(" | Ort: ").Append(Free(o.Location));
                 }
                 if (!string.IsNullOrWhiteSpace(o.Sighting))
                 {
-                    sb.Append(" | Beobachtung: ").Append(o.Sighting.Trim());
+                    sb.Append(" | Beobachtung: ").Append(Free(o.Sighting));
                 }
                 if (!string.IsNullOrWhiteSpace(o.Result))
                 {
-                    sb.Append(" | Ergebnis: ").Append(o.Result.Trim());
+                    sb.Append(" | Ergebnis: ").Append(Free(o.Result));
                 }
                 if (!string.IsNullOrEmpty(o.ObservingAgentId))
                 {
@@ -219,37 +223,45 @@ public static class DossierContextBuilder
                 r.Type,
                 r.Note,
                 AName = r.PersonA != null ? r.PersonA.Name : null,
-                ARestricted = r.PersonA != null && (r.PersonA.IsClassified || r.PersonA.IsTRUClassified || r.PersonA.IsHRBClassified),
+                AClassified = r.PersonA != null && r.PersonA.IsClassified,
+                ATru = r.PersonA != null && r.PersonA.IsTRUClassified,
+                AHrb = r.PersonA != null && r.PersonA.IsHRBClassified,
                 BName = r.PersonB != null ? r.PersonB.Name : null,
-                BRestricted = r.PersonB != null && (r.PersonB.IsClassified || r.PersonB.IsTRUClassified || r.PersonB.IsHRBClassified),
+                BClassified = r.PersonB != null && r.PersonB.IsClassified,
+                BTru = r.PersonB != null && r.PersonB.IsTRUClassified,
+                BHrb = r.PersonB != null && r.PersonB.IsHRBClassified,
             }).ToListAsync(ct);
             sb.AppendLine($"— Beziehungen ({relTotal}) —");
             foreach (var r in rels)
             {
-                var other = r.PersonAId == id ? r.BName : r.AName;
-                var otherRestricted = r.PersonAId == id ? r.BRestricted : r.ARestricted;
+                var mine = r.PersonAId == id;
+                var other = mine ? r.BName : r.AName;
+                var level = mine
+                    ? DossierScope.LevelOf(r.BClassified, r.BTru, r.BHrb)
+                    : DossierScope.LevelOf(r.AClassified, r.ATru, r.AHrb);
                 var shown = string.IsNullOrWhiteSpace(other) ? "(unbekannt)"
-                    : otherRestricted && !p.IsRestricted ? "(Verschlusssache)" : other;
+                    : view.CanSee(level) ? other : "(Verschlusssache)";
                 sb.Append("• ").Append(r.Type.ToString()).Append(": ").Append(shown);
-                if (!string.IsNullOrWhiteSpace(r.Note))
+                if (Free(r.Note) is { Length: > 0 } note)
                 {
-                    sb.Append(" — ").Append(r.Note.Trim());
+                    sb.Append(" — ").Append(note);
                 }
                 sb.AppendLine();
             }
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Person), id, includeClassificationHistory: true, p.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Person), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{p.Name} ({p.CaseNumber})", sb.ToString(), p.IsRestricted);
     }
 
-    static async Task<DossierContext?> BuildFactionAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildFactionAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var f = await db.Factions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (f is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(f.SecrecyLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("Fraktionsakte");
@@ -288,8 +300,16 @@ public static class DossierContextBuilder
 
         await AppendMembersAsync(sb,
             db.FactionMembers.AsNoTracking().Where(x => x.FactionId == id)
-                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, Restricted = x.Person != null && (x.Person.IsClassified || x.Person.IsTRUClassified || x.Person.IsHRBClassified), RoleOrRank = x.Rank, IsLead = x.IsLead }),
-            "Rang", f.IsRestricted, ct);
+                .Select(x => new MemberProj
+                {
+                    Name = x.Person != null ? x.Person.Name : null,
+                    Classified = x.Person != null && x.Person.IsClassified,
+                    Tru = x.Person != null && x.Person.IsTRUClassified,
+                    Hrb = x.Person != null && x.Person.IsHRBClassified,
+                    RoleOrRank = x.Rank,
+                    IsLead = x.IsLead,
+                }),
+            "Rang", view, ct);
 
         await AppendAgentsAsync(sb, db,
             db.FactionAgents.AsNoTracking().Where(x => x.FactionId == id)
@@ -317,17 +337,18 @@ public static class DossierContextBuilder
             Line(sb, "Fotos", photos.ToString());
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Faction), id, includeClassificationHistory: true, f.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Faction), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{f.Name} ({f.CaseNumber})", sb.ToString(), f.IsRestricted);
     }
 
-    static async Task<DossierContext?> BuildPersonGroupAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildPersonGroupAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var g = await db.PersonGroups.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (g is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(g.SecrecyLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("Personengruppen-Akte");
@@ -345,25 +366,34 @@ public static class DossierContextBuilder
 
         await AppendMembersAsync(sb,
             db.PersonGroupMembers.AsNoTracking().Where(x => x.PersonGroupId == id)
-                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, Restricted = x.Person != null && (x.Person.IsClassified || x.Person.IsTRUClassified || x.Person.IsHRBClassified), RoleOrRank = x.Role, IsLead = x.IsLead }),
-            "Rolle", g.IsRestricted, ct);
+                .Select(x => new MemberProj
+                {
+                    Name = x.Person != null ? x.Person.Name : null,
+                    Classified = x.Person != null && x.Person.IsClassified,
+                    Tru = x.Person != null && x.Person.IsTRUClassified,
+                    Hrb = x.Person != null && x.Person.IsHRBClassified,
+                    RoleOrRank = x.Role,
+                    IsLead = x.IsLead,
+                }),
+            "Rolle", view, ct);
 
         await AppendAgentsAsync(sb, db,
             db.PersonGroupAgents.AsNoTracking().Where(x => x.PersonGroupId == id)
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(PersonGroup), id, includeClassificationHistory: true, g.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(PersonGroup), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{g.Name} ({g.CaseNumber})", sb.ToString(), g.IsRestricted);
     }
 
-    static async Task<DossierContext?> BuildPartyAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildPartyAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var p = await db.Parties.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(p.SecrecyLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("Parteiakte");
@@ -377,25 +407,34 @@ public static class DossierContextBuilder
 
         await AppendMembersAsync(sb,
             db.PartyMembers.AsNoTracking().Where(x => x.PartyId == id)
-                .Select(x => new MemberProj { Name = x.Person != null ? x.Person.Name : null, Restricted = x.Person != null && (x.Person.IsClassified || x.Person.IsTRUClassified || x.Person.IsHRBClassified), RoleOrRank = x.Role, IsLead = x.IsLead }),
-            "Rolle", p.IsRestricted, ct);
+                .Select(x => new MemberProj
+                {
+                    Name = x.Person != null ? x.Person.Name : null,
+                    Classified = x.Person != null && x.Person.IsClassified,
+                    Tru = x.Person != null && x.Person.IsTRUClassified,
+                    Hrb = x.Person != null && x.Person.IsHRBClassified,
+                    RoleOrRank = x.Role,
+                    IsLead = x.IsLead,
+                }),
+            "Rolle", view, ct);
 
         await AppendAgentsAsync(sb, db,
             db.PartyAgents.AsNoTracking().Where(x => x.PartyId == id)
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(Party), id, includeClassificationHistory: true, p.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Party), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{p.Name} ({p.CaseNumber})", sb.ToString(), p.IsRestricted);
     }
 
-    static async Task<DossierContext?> BuildOperationAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildOperationAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var o = await db.Operations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (o is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(o.SecrecyLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("Operationsakte");
@@ -417,17 +456,18 @@ public static class DossierContextBuilder
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsInvestigationLead }),
             "Ermittlungsleiter", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(Operation), id, includeClassificationHistory: true, o.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Operation), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{o.Title} ({o.CaseNumber})", sb.ToString(), o.IsRestricted);
     }
 
-    static async Task<DossierContext?> BuildCaseAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildCaseAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var c = await db.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (c is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(c.SecrecyLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("Vorgangsakte");
@@ -447,17 +487,19 @@ public static class DossierContextBuilder
                 .Select(x => new AgentProj { AgentId = x.AgentId, Flag = x.IsCaseLead }),
             "Fallführer", ct);
 
-        await AppendAttachmentsAsync(sb, db, nameof(Case), id, includeClassificationHistory: true, c.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Case), id, includeClassificationHistory: true, view, ct);
         return new DossierContext($"{c.Title} ({c.CaseNumber})", sb.ToString(), c.IsRestricted);
     }
 
-    static async Task<DossierContext?> BuildTaskforceAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildTaskforceAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var t = await db.Taskforces.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t is null)
         {
             return null;
         }
+        var view = scope ?? DossierScope.ForRecord(
+            t.IsClassified ? DocumentClassification.Leadership : DocumentClassification.None);
 
         var sb = new StringBuilder();
         sb.AppendLine("Taskforce-Akte");
@@ -492,21 +534,27 @@ public static class DossierContextBuilder
             foreach (var m in messages)
             {
                 sb.Append("• ").Append(string.IsNullOrWhiteSpace(m.AuthorName) ? "?" : m.AuthorName)
-                    .Append(": ").AppendLine((m.Text ?? string.Empty).Trim());
+                    .Append(": ").AppendLine(Free(m.Text));
             }
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Taskforce), id, includeClassificationHistory: false, t.IsClassified, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Taskforce), id, includeClassificationHistory: false, view, ct);
         return new DossierContext($"{t.Name} ({t.CaseNumber})", sb.ToString(), t.IsClassified);
     }
 
-    static async Task<DossierContext?> BuildDocumentAsync(AppDbContext db, string id, CancellationToken ct)
+    static async Task<DossierContext?> BuildDocumentAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
     {
         var d = await db.Documents.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (d is null)
         {
             return null;
         }
+        // documents use the leadership-exclusive reading of IsClassified, unlike the record types above
+        var view = scope ?? DossierScope.ForRecord(
+            d.IsClassified ? DocumentClassification.Leadership
+                : d.IsTRUClassified ? DocumentClassification.Tru
+                : d.IsHRBClassified ? DocumentClassification.Hrb
+                : DocumentClassification.None);
 
         var sb = new StringBuilder();
         sb.AppendLine("Dokument");
@@ -530,13 +578,13 @@ public static class DossierContextBuilder
             sb.AppendLine(body);
         }
 
-        await AppendAttachmentsAsync(sb, db, nameof(Document), id, includeClassificationHistory: false, d.IsRestricted, ct);
+        await AppendAttachmentsAsync(sb, db, nameof(Document), id, includeClassificationHistory: false, view, ct);
         return new DossierContext(d.Title, sb.ToString(), d.IsRestricted);
     }
 
     // ---- shared section renderers ----
 
-    static async Task AppendMembersAsync(StringBuilder sb, IQueryable<MemberProj> query, string roleLabel, bool rootClassified, CancellationToken ct)
+    static async Task AppendMembersAsync(StringBuilder sb, IQueryable<MemberProj> query, string roleLabel, ViewerScope view, CancellationToken ct)
     {
         var (rows, total) = await TakeAsync(query, ct);
         if (total == 0)
@@ -546,9 +594,9 @@ public static class DossierContextBuilder
         sb.AppendLine($"— Mitglieder ({total}) —");
         foreach (var m in rows)
         {
-            // a classified member is masked unless the record itself is classified (leadership-only, egress already gated)
+            // a member is masked whenever this viewer may not see them at their own secrecy level
             var shown = string.IsNullOrWhiteSpace(m.Name) ? "(unbekannt)"
-                : m.Restricted && !rootClassified ? "(Verschlusssache)" : m.Name;
+                : view.CanSee(DossierScope.LevelOf(m.Classified, m.Tru, m.Hrb)) ? m.Name : "(Verschlusssache)";
             sb.Append("• ").Append(shown);
             if (!string.IsNullOrWhiteSpace(m.RoleOrRank))
             {
@@ -584,7 +632,7 @@ public static class DossierContextBuilder
     }
 
     static async Task AppendAttachmentsAsync(
-        StringBuilder sb, AppDbContext db, string type, string id, bool includeClassificationHistory, bool rootClassified, CancellationToken ct)
+        StringBuilder sb, AppDbContext db, string type, string id, bool includeClassificationHistory, ViewerScope view, CancellationToken ct)
     {
         var tags = await db.TagMappings.AsNoTracking()
             .Where(m => m.EntityType == type && m.EntityId == id)
@@ -608,10 +656,10 @@ public static class DossierContextBuilder
                 var extra = !string.IsNullOrWhiteSpace(s.Description) ? s.Description
                     : !string.IsNullOrWhiteSpace(s.Url) ? s.Url : null;
                 sb.Append("• ").Append(s.Type.ToString()).Append(": ")
-                    .Append(string.IsNullOrWhiteSpace(s.Title) ? "(ohne Titel)" : s.Title);
-                if (!string.IsNullOrWhiteSpace(extra))
+                    .Append(string.IsNullOrWhiteSpace(s.Title) ? "(ohne Titel)" : Free(s.Title));
+                if (Free(extra) is { Length: > 0 } detail)
                 {
-                    sb.Append(" — ").Append(extra.Trim());
+                    sb.Append(" — ").Append(detail);
                 }
                 sb.AppendLine();
             }
@@ -626,7 +674,7 @@ public static class DossierContextBuilder
             foreach (var c in comments)
             {
                 sb.Append("• ").Append(string.IsNullOrWhiteSpace(c.AuthorName) ? "?" : c.AuthorName)
-                    .Append(": ").AppendLine((c.Text ?? string.Empty).Trim());
+                    .Append(": ").AppendLine(Free(c.Text));
             }
         }
 
@@ -639,7 +687,7 @@ public static class DossierContextBuilder
             foreach (var f in followups)
             {
                 sb.Append("• ").Append(Fmt(f.DueAt)).Append(f.Done ? " [erledigt] " : " [offen] ")
-                    .AppendLine((f.Note ?? string.Empty).Trim());
+                    .AppendLine(Free(f.Note));
             }
         }
 
@@ -672,7 +720,10 @@ public static class DossierContextBuilder
                     : (l.SourceType, l.SourceId);
                 refs.Add(other);
             }
-            var resolved = await RecordsReference.ResolveAsync(db, refs.Distinct().ToList(), ct, mayAllTaskforces: true);
+            // taskforce membership is this viewer's, not a blanket "may see all" — otherwise every linked
+            // taskforce's name and case number lands in the dossier regardless of who is reading it
+            var resolved = await RecordsReference.ResolveAsync(db, refs.Distinct().ToList(), ct,
+                mayAllTaskforces: view.MayAllTaskforces, meId: view.MeId);
             sb.AppendLine($"— Verknüpfungen ({linksTotal}) —");
             foreach (var l in links)
             {
@@ -682,14 +733,15 @@ public static class DossierContextBuilder
                 string display;
                 if (resolved.TryGetValue(other, out var r))
                 {
-                    // mask a classified linked record unless the record itself is classified (egress already gated)
-                    display = r.Classified && !rootClassified ? "(Verschlusssache)" : r.Display;
+                    // the resolver only reports a bool, so this masks conservatively: a TRU-classified link
+                    // stays hidden from a TRU agent too, which is never a leak, only an omission
+                    display = r.Classified && !view.MayClassifiedRead ? "(Verschlusssache)" : r.Display;
                 }
                 else
                 {
                     display = $"{GermanType(other.Item1)} (unbekannt)"; // never surface a raw type+GUID
                 }
-                var label = string.IsNullOrWhiteSpace(l.Label) ? "Verknüpfung" : l.Label;
+                var label = string.IsNullOrWhiteSpace(l.Label) ? "Verknüpfung" : Free(l.Label);
                 sb.Append("• ").Append(label).Append(": ").AppendLine(display);
             }
         }
@@ -706,9 +758,9 @@ public static class DossierContextBuilder
                 foreach (var h in history)
                 {
                     sb.Append("• ").Append(Fmt(h.Timestamp)).Append(": ").Append(h.Value.ToString());
-                    if (!string.IsNullOrWhiteSpace(h.Justification))
+                    if (Free(h.Justification) is { Length: > 0 } why)
                     {
-                        sb.Append(" — ").Append(h.Justification.Trim());
+                        sb.Append(" — ").Append(why);
                     }
                     sb.AppendLine();
                 }
@@ -758,11 +810,15 @@ public static class DossierContextBuilder
 
     static void Line(StringBuilder sb, string label, string? value)
     {
-        if (!string.IsNullOrWhiteSpace(value))
+        if (Free(value) is { Length: > 0 } text)
         {
-            sb.Append(label).Append(": ").AppendLine(value.Trim());
+            sb.Append(label).Append(": ").AppendLine(text);
         }
     }
+
+    /// <summary>Free text on its way out. Mention tokens carry raw GUIDs of possibly classified records and would
+    /// otherwise ship verbatim, so they are dropped here rather than at every append site.</summary>
+    static string Free(string? text) => MentionParser.Strip(text).Trim();
 
     static void Line(StringBuilder sb, string label, bool value)
         => sb.Append(label).Append(": ").AppendLine(value ? "Ja" : "Nein");
@@ -786,7 +842,9 @@ public static class DossierContextBuilder
     sealed class MemberProj
     {
         public string? Name { get; set; }
-        public bool Restricted { get; set; }
+        public bool Classified { get; set; }
+        public bool Tru { get; set; }
+        public bool Hrb { get; set; }
         public string? RoleOrRank { get; set; }
         public bool IsLead { get; set; }
     }

@@ -172,6 +172,70 @@ html, body {
     border-color: var(--mud-palette-lines-default) !important;
 }
 
+/* ---- NOOSEI-Werkzeuge in der Quill-Toolbar ---- */
+.noose-rte-ki-laeuft .ql-toolbar button.ql-noosei-korrigieren,
+.noose-rte-ki-laeuft .ql-toolbar button.ql-noosei-schreiben {
+    opacity: .35;
+    pointer-events: none;
+}
+
+/* ---- NOOSEI-Differenz (Vorschau-Dialog) ---- */
+.noosei-diff ins {
+    background: rgba(76, 175, 80, .18);
+    color: var(--mud-palette-success);
+    text-decoration: underline; /* nie nur Farbe */
+    border-radius: 3px;
+    padding: 0 2px;
+}
+
+.noosei-diff del {
+    background: rgba(244, 67, 54, .18);
+    color: var(--mud-palette-error);
+    text-decoration: line-through;
+    border-radius: 3px;
+    padding: 0 2px;
+}
+
+.noosei-legende {
+    display: inline-block;
+    width: .75rem;
+    height: .75rem;
+    border-radius: 3px;
+    vertical-align: -1px;
+    margin-right: .25rem;
+}
+
+.noosei-legende-neu {
+    background: rgba(76, 175, 80, .45);
+}
+
+.noosei-legende-weg {
+    background: rgba(244, 67, 54, .45);
+}
+
+/* ---- NOOSEI-Kurzbrief ---- */
+.ki-brief-tldr {
+    background: rgba(34, 211, 238, .08);
+    border-left: 3px solid var(--mud-palette-primary);
+    border-radius: 8px;
+}
+
+.ki-brief-risk {
+    background: var(--mud-palette-background-gray);
+    border-radius: 8px;
+}
+
+.ki-brief-list {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.ki-brief-table td {
+    vertical-align: top;
+    padding-top: .35rem;
+    padding-bottom: .35rem;
+}
+
 /* ---- Gerendertes Dokument-HTML (Viewer/Vorschau) ---- */
 .dokument-html {
     color: var(--mud-palette-text-primary);

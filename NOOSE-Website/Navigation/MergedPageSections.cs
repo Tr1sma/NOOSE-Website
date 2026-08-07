@@ -10,6 +10,7 @@ public static class MergedPageSections
         "vorlagen-dok", "vorlagen-dokument", "vorlagen-aktivitaet", "vorlagen-personal",
         "module", "einladungen",
         "finanzierung",
+        "noosei", "ki-regeln", "ki-kontingente", "ki-anfragen",
         "partner",
         "basisdaten",
     ];
@@ -34,7 +35,7 @@ public static class MergedPageSections
 
     public static readonly string[] Absences = ["meine", "uebersicht", "papierkorb"];
 
-    public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests", "automatik"];
+    public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests", "anforderungen", "automatik"];
 
     public static readonly string[] Statistics =
     [

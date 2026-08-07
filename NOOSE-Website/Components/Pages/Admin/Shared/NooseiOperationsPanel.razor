@@ -1,0 +1,61 @@
+@using Microsoft.Extensions.Options
+@using NOOSE_Website.Models.Llm
+@inject IOptions<LlmOptions> Options
+
+@{
+    var o = Options.Value;
+}
+
+@if (!o.IsConfigured)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+        NOOSEI ist nicht einsatzbereit. Endpoint, Modell und Schlüssel kommen aus den User Secrets bzw. den
+        Umgebungsvariablen (<code>Llm__ApiKey</code>, <code>Llm__Model</code>) — nicht aus der Datenbank.
+    </MudAlert>
+}
+else
+{
+    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">NOOSEI ist einsatzbereit.</MudAlert>
+}
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Diese Werte sind Deploy-Konfiguration und hier bewusst nur lesbar — der Schlüssel darf die Datenbank nie sehen.
+    Die einzige Stelle der Seite, an der das technische Modell überhaupt genannt wird.
+</MudText>
+
+<MudSimpleTable Dense="true" Elevation="0">
+    <tbody>
+        <tr><td style="width:260px;">Aktiv</td><td>@(o.Enabled ? "Ja" : "Nein")</td></tr>
+        <tr><td>Modell</td><td><code>@(string.IsNullOrWhiteSpace(o.Model) ? "—" : o.Model)</code></td></tr>
+        <tr><td>Endpoint</td><td class="mud-text-secondary">@Host(o.BaseUrl)</td></tr>
+        <tr><td>Schlüssel hinterlegt</td><td>@(string.IsNullOrWhiteSpace(o.ApiKey) ? "Nein" : "Ja")</td></tr>
+        <tr>
+            <td>Verschlusssachen nach außen</td>
+            <td>@(o.AllowClassifiedEgress ? "Erlaubt (im Rahmen der eigenen Sichtbarkeit)" : "Gesperrt")</td>
+        </tr>
+        <tr><td>Werkzeuge (Aktenzugriff)</td><td>@(o.ToolsEnabled ? $"An, max. {o.MaxToolRounds} Runden" : "Aus")</td></tr>
+        <tr><td>Strukturierte Ausgaben</td><td>@o.StructuredOutput</td></tr>
+        <tr>
+            <td>Anbieter</td>
+            <td class="mud-text-secondary">
+                @(o.Providers.Count > 0 ? string.Join(", ", o.Providers) : $"automatisch ({o.ProviderSort})")
+                @if (o.IgnoreProviders.Count > 0)
+                {
+                    <text> · ausgeschlossen: @string.Join(", ", o.IgnoreProviders)</text>
+                }
+            </td>
+        </tr>
+        <tr>
+            <td>Zeitlimits</td>
+            <td class="mud-text-secondary">
+                @o.AttemptTimeoutSeconds s je Versuch · @o.TotalTimeoutSeconds s je Runde ·
+                @o.TurnTimeoutSeconds s je Anfrage · @o.Retries Wiederholungen
+            </td>
+        </tr>
+    </tbody>
+</MudSimpleTable>
+
+@code {
+    private static string Host(string? baseUrl)
+        => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ? uri.Host : (baseUrl ?? "—");
+}

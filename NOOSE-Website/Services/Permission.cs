@@ -52,12 +52,32 @@ public static class Permission
         throw new UnauthorizedAccessException("Nur die Führung oder der zuständige Führungsagent darf diesen Informanten bearbeiten.");
     }
 
-    /// <summary>Require the actor may use the external AI assistant (never partners or demo sessions).</summary>
+    /// <summary>Require the actor may use NOOSEI (never partners, demo sessions or read-only supervision).</summary>
     public static void RequireLlmUse(ClaimsPrincipal actor)
     {
-        if (actor.IsPartner() || actor.IsDemo())
+        if (actor.IsPartner() || actor.IsDemo() || actor.IsOnlyReader())
         {
-            throw new UnauthorizedAccessException("Der KI-Assistent steht in dieser Rolle nicht zur Verfügung.");
+            throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
+        }
+    }
+
+    /// <summary>Require the actor owns this NOOSEI conversation. Chats are working notes, not an agency record —
+    /// the only other reader is the AI owner, for a concrete misuse suspicion.</summary>
+    public static void RequireOwnConversation(ClaimsPrincipal actor, string ownerId)
+    {
+        if (!string.Equals(actor.GetAgentId(), ownerId, StringComparison.Ordinal) && !actor.IsAiOwner())
+        {
+            throw new UnauthorizedAccessException("Diese Unterhaltung gehört einem anderen Agenten.");
+        }
+    }
+
+    /// <summary>Require the configured AI owner; everyone else may read the quotas but never change them.</summary>
+    public static void RequireAiOwner(ClaimsPrincipal actor)
+    {
+        if (!actor.IsAiOwner())
+        {
+            throw new UnauthorizedAccessException(
+                "Die KI-Kontingente kann nur der KI-Eigner ändern.");
         }
     }
 

@@ -84,6 +84,26 @@
         <FinancingRulesPanel />
     </RecordSection>
 
+    <RecordSection Group="KI" Slug="noosei" Label="NOOSEI-Betrieb"
+                   Icon="@Icons.Material.Filled.SmartToy">
+        <NooseiOperationsPanel />
+    </RecordSection>
+    <RecordSection Group="KI" Slug="ki-regeln" Label="Token-Regeln"
+                   Icon="@Icons.Material.Filled.Rule">
+        <LlmQuotaRulesPanel />
+    </RecordSection>
+    <RecordSection Group="KI" Slug="ki-kontingente" Label="Kontingente"
+                   Icon="@Icons.Material.Filled.Token">
+        <LlmQuotaOverviewPanel />
+    </RecordSection>
+    @* Prompts and answers are stored in full: agents do paste real names, and supervision must never see those. *@
+    <AuthorizeView Policy="@Policies.CounterIntel" Context="kiLogSection">
+        <RecordSection Group="KI" Slug="ki-anfragen" Label="Anfragen"
+                       Icon="@Icons.Material.Filled.Forum">
+            <LlmRequestLogPanel />
+        </RecordSection>
+    </AuthorizeView>
+
     <AuthorizeView Policy="@Policies.AdminPage" Context="partnerSection">
         <RecordSection Group="Partnerbehörden" Slug="partner" Label="Sichtbarkeit &amp; Freigaben"
                        Icon="@Icons.Material.Filled.Handshake">

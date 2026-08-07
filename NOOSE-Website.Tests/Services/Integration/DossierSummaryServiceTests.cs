@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Models.Enums;
@@ -10,28 +9,39 @@ using NSubstitute;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
-/// <summary>Cached AI dossier summaries: the LLM is called only when the source content changed or a regenerate is forced.</summary>
+/// <summary>Cached structured NOOSEI briefs: the model is called only when the source changed or a regenerate is forced,
+/// and an answer that is not valid against the schema is never stored.</summary>
 public sealed class DossierSummaryServiceTests
 {
-    private const string LlmAnswer = "## TL;DR\nKurze Kernaussage.\n\n## Zusammenfassung\nAusführliche Details hier.\n\n- Punkt eins\n- Punkt zwei";
+    private const string BriefJson = """
+        {"tldr":"Kernaussage der Akte.",
+         "kernpunkte":["Erster Punkt","Zweiter Punkt"],
+         "einstufung_bewertung":"Die Einstufung passt zur Aktenlage.",
+         "verbindungen":[{"wer":"Ballas","art":"Mitglied","relevanz":"Führungsebene"}],
+         "verlauf":[{"wann":"2026-07-14","was":"Festnahme"}],
+         "offene_punkte":["Verbleib der Waffe ungeklärt"],
+         "risiko":{"stufe":"hoch","begruendung":"Bewaffnet und einschlägig."}}
+        """;
 
-    private static ILlmService Llm()
+    private static NooseiAnswer Answer(string? text = BriefJson)
+        => new(text, LlmUsage.Empty, new LlmQuotaCharge(0, 0m, LlmQuotaStatus.Empty, null, true), 1, [], false);
+
+    private static INooseiGateway Gateway(string? text = BriefJson)
     {
-        var llm = Substitute.For<ILlmService>();
-        llm.IsConfigured.Returns(true);
-        llm.Model.Returns("test-model");
-        llm.ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
-            .Returns(LlmAnswer);
-        return llm;
+        var gateway = Substitute.For<INooseiGateway>();
+        gateway.IsConfigured.Returns(true);
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(Answer(text));
+        return gateway;
     }
 
-    private static DossierSummaryService Svc(SqliteTestContext ctx, ILlmService llm, bool allowClassified = false)
-        => new(ctx.Factory, llm, Options.Create(new LlmOptions
+    private static DossierSummaryService Svc(SqliteTestContext ctx, INooseiGateway gateway, bool allowClassifiedEgress = false)
+        => new(ctx.Factory, gateway, Options.Create(new LlmOptions
         {
             Enabled = true,
             ApiKey = "k",
             Model = "test-model",
-            AllowClassifiedContent = allowClassified,
+            AllowClassifiedEgress = allowClassifiedEgress,
         }));
 
     private static ClaimsPrincipal Leader() => ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).Build();
@@ -51,63 +61,68 @@ public sealed class DossierSummaryServiceTests
         db.SaveChanges();
     }
 
-    // ---- caching behaviour ----
+    private static Task<int> Calls(INooseiGateway gateway, int expected)
+    {
+        gateway.Received(expected).AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        return Task.FromResult(expected);
+    }
+
+    // ---- caching ----
 
     [Fact]
-    public async Task Generate_Twice_UnchangedSource_CallsLlmOnce()
+    public async Task Generate_Twice_UnchangedSource_CallsTheModelOnce()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p1", "Max Mustermann");
-        var llm = Llm();
-        var svc = Svc(ctx, llm);
+        var gateway = Gateway();
+        var svc = Svc(ctx, gateway);
 
         var v1 = await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: false);
         var v2 = await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: false);
 
-        await llm.Received(1).ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await Calls(gateway, 1);
         Assert.True(v1.Exists);
         Assert.False(v2.IsStale);
-        Assert.Equal("test-model", v2.Model);
-        Assert.False(string.IsNullOrWhiteSpace(v2.TldrHtml));
-        Assert.False(string.IsNullOrWhiteSpace(v2.SummaryHtml));
+        Assert.NotNull(v2.Brief);
+        Assert.Equal("Kernaussage der Akte.", v2.Brief!.Tldr);
     }
 
     [Fact]
-    public async Task Generate_Force_CallsLlmAgain()
+    public async Task Generate_Force_CallsTheModelAgain()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p1", "Max Mustermann");
-        var llm = Llm();
-        var svc = Svc(ctx, llm);
+        var gateway = Gateway();
+        var svc = Svc(ctx, gateway);
 
         await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: false);
         await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: true);
 
-        await llm.Received(2).ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await Calls(gateway, 2);
     }
 
     [Fact]
-    public async Task Generate_AfterContentChange_CallsLlmAgain()
+    public async Task Generate_AfterContentChange_CallsTheModelAgain()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p1", "Max Mustermann");
-        var llm = Llm();
-        var svc = Svc(ctx, llm);
+        var gateway = Gateway();
+        var svc = Svc(ctx, gateway);
 
         await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: false);
         Rename(ctx, "p1", "Moritz Mustermann");
         await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: false);
 
-        await llm.Received(2).ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await Calls(gateway, 2);
     }
 
     [Fact]
-    public async Task Get_AfterContentChange_MarksStale_WithoutLlmCall()
+    public async Task Get_AfterContentChange_MarksStale_WithoutAModelCall()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p1", "Max Mustermann");
-        var llm = Llm();
-        var svc = Svc(ctx, llm);
+        var gateway = Gateway();
+        var svc = Svc(ctx, gateway);
 
         await svc.GenerateAsync(nameof(Person), "p1", Leader(), force: false);
         Rename(ctx, "p1", "Moritz Mustermann");
@@ -116,24 +131,185 @@ public sealed class DossierSummaryServiceTests
         Assert.NotNull(view);
         Assert.True(view!.Exists);
         Assert.True(view.IsStale);
-        // Get never calls the LLM — still exactly one generation call.
-        await llm.Received(1).ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await Calls(gateway, 1);
     }
 
     [Fact]
-    public async Task Get_NoSummaryYet_ReturnsNotExists()
+    public async Task Get_NoBriefYet_ReturnsNotExists()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p1", "Max Mustermann");
 
-        var view = await Svc(ctx, Llm()).GetAsync(nameof(Person), "p1", Leader());
+        var view = await Svc(ctx, Gateway()).GetAsync(nameof(Person), "p1", Leader());
 
         Assert.NotNull(view);
         Assert.False(view!.Exists);
         Assert.True(view.Configured);
     }
 
-    // ---- visibility + classification gates ----
+    // ---- the structured payload ----
+
+    [Fact]
+    public async Task Generate_StoresEveryFieldOfTheSchema()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPerson(ctx, "p1", "Max Mustermann");
+
+        var view = await Svc(ctx, Gateway()).GenerateAsync(nameof(Person), "p1", Leader(), force: false);
+
+        var brief = Assert.IsType<DossierBrief>(view.Brief);
+        Assert.Equal(["Erster Punkt", "Zweiter Punkt"], brief.Kernpunkte);
+        Assert.Equal("Die Einstufung passt zur Aktenlage.", brief.EinstufungBewertung);
+        var link = Assert.Single(brief.Verbindungen);
+        Assert.Equal("Ballas", link.Wer);
+        var step = Assert.Single(brief.Verlauf);
+        Assert.Equal("Festnahme", step.Was);
+        Assert.Single(brief.OffenePunkte);
+        Assert.Equal(BriefRiskLevel.Hoch, brief.Risiko.Level);
+    }
+
+    [Fact]
+    public async Task Generate_StampsTheSchemaAndPromptVersion()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPerson(ctx, "p1", "Max Mustermann");
+
+        await Svc(ctx, Gateway()).GenerateAsync(nameof(Person), "p1", Leader(), force: false);
+
+        await using var db = ctx.NewContext();
+        var row = Assert.Single(db.DossierSummaries.ToList());
+        Assert.Equal(NooseiSchemas.KurzbriefVersion, row.SchemaVersion);
+        Assert.Equal(NooseiPrompts.PromptVersion, row.PromptVersion);
+        Assert.Equal("test-model", row.Model);
+        Assert.NotNull(row.BriefJson);
+    }
+
+    [Fact]
+    public async Task Generate_StoresNothing_WhenTheAnswerIsNotUsable()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPerson(ctx, "p1", "Max Mustermann");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Svc(ctx, Gateway("Tut mir leid, das kann ich nicht.")).GenerateAsync(nameof(Person), "p1", Leader(), force: false));
+
+        await using var db = ctx.NewContext();
+        Assert.Empty(db.DossierSummaries.ToList());
+    }
+
+    // ---- parsing and repair ----
+
+    [Fact]
+    public void Parse_ReadsAStrictAnswer()
+    {
+        var brief = DossierSummaryService.Parse(BriefJson);
+
+        Assert.NotNull(brief);
+        Assert.Equal("Kernaussage der Akte.", brief!.Tldr);
+    }
+
+    [Fact]
+    public void Parse_RepairsCodeFences()
+    {
+        var brief = DossierSummaryService.Parse("```json\n" + BriefJson + "\n```");
+
+        Assert.NotNull(brief);
+        Assert.Equal(2, brief!.Kernpunkte.Count);
+    }
+
+    [Fact]
+    public void Parse_IgnoresChatterAroundTheObject()
+    {
+        var brief = DossierSummaryService.Parse("Gern! Hier ist der Kurzbrief:\n" + BriefJson + "\nSoll ich mehr liefern?");
+
+        Assert.NotNull(brief);
+        Assert.Equal("Kernaussage der Akte.", brief!.Tldr);
+    }
+
+    [Fact]
+    public void Parse_SurvivesBracesInsideStrings()
+    {
+        var brief = DossierSummaryService.Parse(
+            """{"tldr":"Ein } in Anführungszeichen","kernpunkte":[],"einstufung_bewertung":"","verbindungen":[],"verlauf":[],"offene_punkte":[],"risiko":{"stufe":"mittel","begruendung":""}}""");
+
+        Assert.NotNull(brief);
+        Assert.Equal("Ein } in Anführungszeichen", brief!.Tldr);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Kein JSON weit und breit.")]
+    [InlineData("{ kaputt")]
+    public void Parse_RejectsUnusableAnswers(string? answer)
+        => Assert.Null(DossierSummaryService.Parse(answer));
+
+    [Fact]
+    public void Parse_RejectsAnEmptyButValidObject()
+        => Assert.Null(DossierSummaryService.Parse(
+            """{"tldr":"","kernpunkte":[],"einstufung_bewertung":"","verbindungen":[],"verlauf":[],"offene_punkte":[],"risiko":{"stufe":"mittel","begruendung":""}}"""));
+
+    [Fact]
+    public void Parse_FallsBackToMittel_ForAnUnknownRiskLevel()
+    {
+        var brief = DossierSummaryService.Parse(
+            """{"tldr":"Etwas","kernpunkte":[],"einstufung_bewertung":"","verbindungen":[],"verlauf":[],"offene_punkte":[],"risiko":{"stufe":"katastrophal","begruendung":""}}""");
+
+        Assert.NotNull(brief);
+        Assert.Equal(BriefRiskLevel.Mittel, brief!.Risiko.Level);
+    }
+
+    // ---- the fallback ladder ----
+
+    [Fact]
+    public async Task Generate_DropsToPlainJsonMode_WhenTheSchemaIsRefused()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPerson(ctx, "p1", "Max Mustermann");
+        var gateway = Substitute.For<INooseiGateway>();
+        gateway.IsConfigured.Returns(true);
+        var seenFormats = new List<LlmResponseFormatKind?>();
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var format = call.Arg<NooseiCall>().ResponseFormat;
+                seenFormats.Add(format?.Kind);
+                return format?.Kind == LlmResponseFormatKind.JsonSchema
+                    ? throw new LlmCapabilityException(schemaRelated: true, toolsRelated: false)
+                    : Answer();
+            });
+
+        var view = await Svc(ctx, gateway).GenerateAsync(nameof(Person), "p1", Leader(), force: false);
+
+        Assert.True(view.Exists);
+        Assert.Contains(LlmResponseFormatKind.JsonSchema, seenFormats);
+        Assert.Contains(LlmResponseFormatKind.JsonObject, seenFormats);
+    }
+
+    [Fact]
+    public async Task Generate_RetriesOnceWithAWiderProviderPool()
+    {
+        using var ctx = new SqliteTestContext();
+        SeedPerson(ctx, "p1", "Max Mustermann");
+        var gateway = Substitute.For<INooseiGateway>();
+        gateway.IsConfigured.Returns(true);
+        var required = new List<bool>();
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var noosei = call.Arg<NooseiCall>();
+                required.Add(noosei.RequireCapableProviders);
+                return noosei.RequireCapableProviders
+                    ? throw new LlmCapabilityException(schemaRelated: true, toolsRelated: false)
+                    : Answer();
+            });
+
+        await Svc(ctx, gateway).GenerateAsync(nameof(Person), "p1", Leader(), force: false);
+
+        Assert.Equal([true, false], required);
+    }
+
+    // ---- visibility and egress gates ----
 
     [Fact]
     public async Task Get_ClassifiedRecord_InvisibleToNonLeadership_ReturnsNull()
@@ -142,35 +318,32 @@ public sealed class DossierSummaryServiceTests
         SeedPerson(ctx, "p2", "Geheim", p => p.IsClassified = true);
         var junior = ClaimsPrincipalBuilder.Agent("j").WithRank(Rank.JuniorAgent).Build();
 
-        var view = await Svc(ctx, Llm()).GetAsync(nameof(Person), "p2", junior);
-
-        Assert.Null(view);
+        Assert.Null(await Svc(ctx, Gateway()).GetAsync(nameof(Person), "p2", junior));
     }
 
     [Fact]
-    public async Task Generate_ClassifiedRecord_NotAllowed_Throws()
+    public async Task Generate_ClassifiedRecord_BlockedByTheEgressKillSwitch()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p3", "Geheim", p => p.IsClassified = true);
-        var llm = Llm();
-        var svc = Svc(ctx, llm, allowClassified: false);
+        var gateway = Gateway();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.GenerateAsync(nameof(Person), "p3", Leader(), force: false));
-        await llm.DidNotReceive().ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+            () => Svc(ctx, gateway, allowClassifiedEgress: false).GenerateAsync(nameof(Person), "p3", Leader(), force: false));
+
+        await Calls(gateway, 0);
     }
 
     [Fact]
-    public async Task Generate_ClassifiedRecord_Allowed_CallsLlm()
+    public async Task Generate_ClassifiedRecord_AllowedByDefault()
     {
         using var ctx = new SqliteTestContext();
         SeedPerson(ctx, "p3", "Geheim", p => p.IsClassified = true);
-        var llm = Llm();
-        var svc = Svc(ctx, llm, allowClassified: true);
+        var gateway = Gateway();
 
-        await svc.GenerateAsync(nameof(Person), "p3", Leader(), force: false);
+        await Svc(ctx, gateway, allowClassifiedEgress: true).GenerateAsync(nameof(Person), "p3", Leader(), force: false);
 
-        await llm.Received(1).ChatAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await Calls(gateway, 1);
     }
 
     [Fact]
@@ -181,27 +354,10 @@ public sealed class DossierSummaryServiceTests
         var onlyReader = ClaimsPrincipalBuilder.Agent("or").AsTeamLead().Build();
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => Svc(ctx, Llm()).GenerateAsync(nameof(Person), "p4", onlyReader, force: false));
+            () => Svc(ctx, Gateway()).GenerateAsync(nameof(Person), "p4", onlyReader, force: false));
     }
 
-    // ---- markdown split + render helpers (pure) ----
-
-    [Fact]
-    public void Split_ParsesTldrAndBody()
-    {
-        var (tldr, body) = DossierSummaryService.SplitSections("## TL;DR\nKurz.\n\n## Zusammenfassung\nLang.\nMehr.");
-        Assert.Equal("Kurz.", tldr);
-        Assert.Contains("Lang.", body);
-        Assert.DoesNotContain("TL;DR", body);
-    }
-
-    [Fact]
-    public void Split_NoHeadings_AllBody()
-    {
-        var (tldr, body) = DossierSummaryService.SplitSections("Nur Fließtext ohne Struktur.");
-        Assert.Null(tldr);
-        Assert.Equal("Nur Fließtext ohne Struktur.", body);
-    }
+    // ---- rendering helpers ----
 
     [Fact]
     public void Markdown_RendersFormatting()

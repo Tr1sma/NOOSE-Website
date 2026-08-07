@@ -581,6 +581,10 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IstTeamLeitung");
 
+                    b.Property<long?>("LlmQuotaOverride")
+                        .HasColumnType("bigint")
+                        .HasColumnName("KiKontingent");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("tinyint(1)");
 
@@ -1590,6 +1594,10 @@ namespace NOOSE_Website.Data.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("BriefJson")
+                        .HasColumnType("longtext")
+                        .HasColumnName("KurzbriefJson");
+
                     b.Property<string>("ContentHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1617,13 +1625,13 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(128)")
                         .HasColumnName("Modell");
 
-                    b.Property<string>("SummaryHtml")
-                        .HasColumnType("longtext")
-                        .HasColumnName("ZusammenfassungHtml");
+                    b.Property<int>("PromptVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("PromptVersion");
 
-                    b.Property<string>("TldrHtml")
-                        .HasColumnType("longtext")
-                        .HasColumnName("KurzfassungHtml");
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("SchemaVersion");
 
                     b.HasKey("Id");
 
@@ -4437,6 +4445,362 @@ namespace NOOSE_Website.Data.Migrations
                     b.HasIndex("LeadKey");
 
                     b.ToTable("HinweisIgnorierungen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.LlmQuotaAdjustment", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("ErstelltVonName");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("varchar(300)")
+                        .HasColumnName("Grund");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Tokens");
+
+                    b.Property<int>("Week")
+                        .HasColumnType("int")
+                        .HasColumnName("Woche");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int")
+                        .HasColumnName("Jahr");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Year", "Week");
+
+                    b.ToTable("KiKontingentkorrekturen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.LlmQuotaPeriod", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<long>("BaseWeekly")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Grundkontingent");
+
+                    b.Property<long>("CarryIn")
+                        .HasColumnType("bigint")
+                        .HasColumnName("UebertragEin");
+
+                    b.Property<long>("CarryOut")
+                        .HasColumnType("bigint")
+                        .HasColumnName("UebertragAus");
+
+                    b.Property<int>("CarryPercent")
+                        .HasColumnType("int")
+                        .HasColumnName("Uebertragsprozent");
+
+                    b.Property<DateTime>("ClosedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("AbgeschlossenAm");
+
+                    b.Property<long>("Consumed")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Verbraucht");
+
+                    b.Property<int?>("RankAtClose")
+                        .HasColumnType("int")
+                        .HasColumnName("DienstgradBeiAbschluss");
+
+                    b.Property<int>("Week")
+                        .HasColumnType("int")
+                        .HasColumnName("Woche");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("int")
+                        .HasColumnName("Jahr");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Year", "Week")
+                        .IsUnique();
+
+                    b.ToTable("KiKontingentperioden");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.LlmRequestLog", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("AnomalyKind")
+                        .HasColumnType("int")
+                        .HasColumnName("Auffaelligkeit");
+
+                    b.Property<string>("Answer")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Antwort");
+
+                    b.Property<int>("BudgetWeek")
+                        .HasColumnType("int")
+                        .HasColumnName("BudgetWoche");
+
+                    b.Property<int>("BudgetYear")
+                        .HasColumnType("int")
+                        .HasColumnName("BudgetJahr");
+
+                    b.Property<int>("CachedTokens")
+                        .HasColumnType("int")
+                        .HasColumnName("TokensCache");
+
+                    b.Property<int>("CompletionTokens")
+                        .HasColumnType("int")
+                        .HasColumnName("TokensAusgabe");
+
+                    b.Property<string>("ContextRefsJson")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Kontextrefs");
+
+                    b.Property<decimal>("CostUsd")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)")
+                        .HasColumnName("KostenUsd");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("Zeitpunkt");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("int")
+                        .HasColumnName("DauerMs");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("Fehler");
+
+                    b.Property<int>("Feature")
+                        .HasColumnType("int")
+                        .HasColumnName("Funktion");
+
+                    b.Property<bool>("IsAnomalous")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Auffaellig");
+
+                    b.Property<string>("Model")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("Modell");
+
+                    b.Property<string>("Prompt")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Eingabe");
+
+                    b.Property<string>("PromptFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("EingabeFingerabdruck");
+
+                    b.Property<int>("PromptTokens")
+                        .HasColumnType("int")
+                        .HasColumnName("TokensEingabe");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("Anbieter");
+
+                    b.Property<long>("QuotaTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("KontingentTokens");
+
+                    b.Property<int>("ReasoningTokens")
+                        .HasColumnType("int")
+                        .HasColumnName("TokensDenken");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("Erfolg");
+
+                    b.Property<int>("ToolRounds")
+                        .HasColumnType("int")
+                        .HasColumnName("Werkzeugrunden");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("AgentId", "CreatedAt");
+
+                    b.HasIndex("AgentId", "PromptFingerprint");
+
+                    b.HasIndex("Feature", "CreatedAt");
+
+                    b.HasIndex("IsAnomalous", "CreatedAt");
+
+                    b.HasIndex("AgentId", "BudgetYear", "BudgetWeek");
+
+                    b.ToTable("KiAnfragen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.NooseiConversation", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("BesitzerId");
+
+                    b.Property<string>("AnchorEntityId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("AnkerId");
+
+                    b.Property<string>("AnchorEntityType")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("AnkerTyp");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("ErstelltVonId");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeloeschtAm");
+
+                    b.Property<string>("DeletedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeloeschtVonId");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstGeloescht");
+
+                    b.Property<DateTime>("LastMessageAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("LetzteNachrichtAm");
+
+                    b.Property<int>("MessageCount")
+                        .HasColumnType("int")
+                        .HasColumnName("NachrichtenAnzahl");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("GeaendertAm");
+
+                    b.Property<string>("ModifiedById")
+                        .HasColumnType("longtext")
+                        .HasColumnName("GeaendertVonId");
+
+                    b.Property<string>("ScopeStamp")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("RechteStempel");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Titel");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "LastMessageAt");
+
+                    b.ToTable("KiUnterhaltungen");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.NooseiMessage", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("longtext")
+                        .HasColumnName("Inhalt");
+
+                    b.Property<string>("ConversationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("UnterhaltungId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ErstelltAm");
+
+                    b.Property<bool>("IsError")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IstFehler");
+
+                    b.Property<long?>("QuotaTokens")
+                        .HasColumnType("bigint")
+                        .HasColumnName("KontingentTokens");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("Rolle");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("int")
+                        .HasColumnName("Reihenfolge");
+
+                    b.Property<string>("ToolCallId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("WerkzeugAufrufId");
+
+                    b.Property<string>("ToolCallsJson")
+                        .HasColumnType("longtext")
+                        .HasColumnName("WerkzeugAufrufeJson");
+
+                    b.Property<string>("ToolName")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("WerkzeugName");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("KiNachrichten");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.Meeting", b =>
@@ -7861,6 +8225,61 @@ namespace NOOSE_Website.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("BookedBy");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.LlmQuotaAdjustment", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.LlmQuotaPeriod", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.LlmRequestLog", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.NooseiConversation", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Agent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("NOOSE_Website.Data.Entities.Llm.NooseiMessage", b =>
+                {
+                    b.HasOne("NOOSE_Website.Data.Entities.Llm.NooseiConversation", "Conversation")
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
                 });
 
             modelBuilder.Entity("NOOSE_Website.Data.Entities.Meetings.Meeting", b =>

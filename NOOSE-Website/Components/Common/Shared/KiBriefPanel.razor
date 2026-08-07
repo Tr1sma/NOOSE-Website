@@ -1,5 +1,6 @@
 @using System.Security.Claims
 @using NOOSE_Website.Authorization
+@using NOOSE_Website.Models.Llm
 @using NOOSE_Website.Services
 @inject IDossierSummaryService Dossier
 @inject ISnackbar Snackbar
@@ -19,14 +20,14 @@ else if (!_view.Exists)
     @if (!_view.Configured)
     {
         <EmptyState Icon="@Icons.Material.Filled.AutoAwesome"
-                    Text="Der KI-Assistent ist nicht konfiguriert. Ein Admin muss Endpoint, Modell und Schlüssel hinterlegen." />
+                    Text="NOOSEI ist nicht konfiguriert. Ein Admin muss Endpoint, Modell und Schlüssel hinterlegen." />
     }
     else
     {
         <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0" Style="gap:12px;">
             <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" Size="Size.Large" />
             <MudText Typo="Typo.body2" Class="mud-text-secondary" Align="Align.Center">
-                Für diese Akte wurde noch kein KI-Kurzbrief erstellt.
+                Für diese Akte wurde noch kein NOOSEI-Kurzbrief erstellt.
             </MudText>
             @if (_canGenerate)
             {
@@ -36,7 +37,7 @@ else if (!_view.Exists)
         </MudPaper>
     }
 }
-else
+else if (_view.Brief is { } brief)
 {
     <MudStack Spacing="3">
         @if (_busy)
@@ -59,22 +60,107 @@ else
             </MudAlert>
         }
 
-        @if (!string.IsNullOrWhiteSpace(_view.TldrHtml))
+        @if (!string.IsNullOrWhiteSpace(brief.Tldr))
         {
-            <MudPaper Elevation="0" Class="pa-4" Style="background:rgba(34,211,238,0.08);border-left:3px solid var(--mud-palette-primary);border-radius:8px;">
+            <MudPaper Elevation="0" Class="pa-4 ki-brief-tldr">
                 <MudText Typo="Typo.overline" Color="Color.Primary">TL;DR</MudText>
-                <div class="ki-brief-body">@((MarkupString)_view.TldrHtml!)</div>
+                <MudText Typo="Typo.body1">@brief.Tldr</MudText>
             </MudPaper>
         }
 
-        @if (!string.IsNullOrWhiteSpace(_view.SummaryHtml))
+        <MudPaper Elevation="0" Class="pa-3 d-flex align-center ki-brief-risk" Style="gap:12px;">
+            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="@RiskColour(brief.Risiko.Level)" />
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Risiko-Einschätzung</MudText>
+                <MudText Typo="Typo.subtitle2" Color="@RiskColour(brief.Risiko.Level)">@RiskName(brief.Risiko.Level)</MudText>
+                @if (!string.IsNullOrWhiteSpace(brief.Risiko.Begruendung))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@brief.Risiko.Begruendung</MudText>
+                }
+            </div>
+        </MudPaper>
+
+        @if (brief.Kernpunkte.Count > 0)
         {
-            <div class="ki-brief-body">@((MarkupString)_view.SummaryHtml!)</div>
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Kernpunkte</MudText>
+                <MudList T="string" Dense="true" Class="ki-brief-list">
+                    @foreach (var point in brief.Kernpunkte)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.ChevronRight" Text="@point" />
+                    }
+                </MudList>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(brief.EinstufungBewertung))
+        {
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Einstufung</MudText>
+                <MudText Typo="Typo.body2">@brief.EinstufungBewertung</MudText>
+            </div>
+        }
+
+        @if (brief.Verbindungen.Count > 0)
+        {
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Verbindungen</MudText>
+                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="ki-brief-table">
+                    <tbody>
+                        @foreach (var link in brief.Verbindungen)
+                        {
+                            <tr>
+                                <td style="width:34%;"><strong>@link.Wer</strong></td>
+                                <td style="width:22%;">
+                                    @if (!string.IsNullOrWhiteSpace(link.Art))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@link.Art</MudChip>
+                                    }
+                                </td>
+                                <td class="mud-text-secondary">@link.Relevanz</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+
+        @if (brief.Verlauf.Count > 0)
+        {
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Verlauf</MudText>
+                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="ki-brief-table">
+                    <tbody>
+                        @foreach (var step in brief.Verlauf)
+                        {
+                            <tr>
+                                <td style="width:22%;white-space:nowrap;" class="mud-text-secondary">
+                                    @(string.IsNullOrWhiteSpace(step.Wann) ? "—" : step.Wann)
+                                </td>
+                                <td>@step.Was</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+
+        @if (brief.OffenePunkte.Count > 0)
+        {
+            <div>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Offene Punkte</MudText>
+                <MudList T="string" Dense="true" Class="ki-brief-list">
+                    @foreach (var open in brief.OffenePunkte)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.HelpOutline" IconColor="Color.Warning" Text="@open" />
+                    }
+                </MudList>
+            </div>
         }
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-1">
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                KI-generiert, ungeprüft · @(_view.Model ?? "?")
+                NOOSEI · KI-generiert, ungeprüft
                 @if (_view.GeneratedAt is { } g)
                 {
                     <text> · erstellt @g.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</text>
@@ -102,6 +188,20 @@ else
     private bool _canGenerate =>
         _view?.Configured == true && User is { } u && !u.IsPartner() && !u.IsDemo() && !u.IsOnlyReader();
 
+    private static Color RiskColour(BriefRiskLevel level) => level switch
+    {
+        BriefRiskLevel.Niedrig => Color.Success,
+        BriefRiskLevel.Hoch => Color.Error,
+        _ => Color.Warning,
+    };
+
+    private static string RiskName(BriefRiskLevel level) => level switch
+    {
+        BriefRiskLevel.Niedrig => "Niedrig",
+        BriefRiskLevel.Hoch => "Hoch",
+        _ => "Mittel",
+    };
+
     protected override async Task OnParametersSetAsync()
     {
         var key = EntityType + "|" + EntityId;
@@ -117,7 +217,7 @@ else
         }
         catch (Exception ex)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
         }
         finally
         {
@@ -138,7 +238,7 @@ else
         }
         catch (Exception ex)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
         }
         finally
         {

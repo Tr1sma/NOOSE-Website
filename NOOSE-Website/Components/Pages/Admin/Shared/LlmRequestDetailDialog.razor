@@ -1,0 +1,96 @@
+@using NOOSE_Website.Models.Llm
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+            @Detail.Row.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") ·
+            @(Detail.Row.AgentName ?? "—") · @LlmFeatureDisplay.Name(Detail.Row.Feature)
+            @if (Detail.Row.ToolRounds > 0)
+            {
+                <text> · @Detail.Row.ToolRounds Werkzeugrunden</text>
+            }
+        </MudText>
+
+        <MudSimpleTable Dense="true" Elevation="0" Class="mb-3">
+            <tbody>
+                <tr>
+                    <td>Tokens</td>
+                    <td>
+                        @Detail.Row.PromptTokens.ToString("N0") ein · @Detail.Row.CompletionTokens.ToString("N0") aus
+                        @if (Detail.Row.CachedTokens > 0)
+                        {
+                            <text> · @Detail.Row.CachedTokens.ToString("N0") aus dem Cache</text>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <td>Kontingent</td>
+                    <td>@Detail.Row.QuotaTokens.ToString("N0") Token (@LlmQuotaMath.ToCents(Detail.Row.QuotaTokens).ToString("0.##") ¢)</td>
+                </tr>
+                <tr>
+                    <td>Echte Kosten</td>
+                    <td>@Detail.Row.CostUsd.ToString("0.000000") $</td>
+                </tr>
+                <tr>
+                    <td>Modell / Anbieter</td>
+                    <td class="mud-text-secondary">@(Detail.Row.Model ?? "—") / @(Detail.Row.Provider ?? "—")</td>
+                </tr>
+                @if (!Detail.Row.Success)
+                {
+                    <tr>
+                        <td>Fehler</td>
+                        <td><MudText Color="Color.Error" Typo="Typo.body2">@Detail.Row.ErrorMessage</MudText></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        @if (Detail.ContextRefs.Count > 0)
+        {
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Berührte Akten und Werkzeuge</MudText>
+            <div class="mb-3">
+                @foreach (var reference in Detail.ContextRefs)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                             Color="@(reference.Kind == "tool" ? Color.Default : Color.Primary)"
+                             Href="@Route(reference)">
+                        @(reference.Name ?? reference.Kind)
+                    </MudChip>
+                }
+            </div>
+        }
+
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Eingabe</MudText>
+        <MudPaper Elevation="0" Class="pa-3 mb-3" Style="background:rgba(255,255,255,0.04);border-radius:8px;">
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@(Detail.Prompt ?? "—")</MudText>
+        </MudPaper>
+
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Antwort</MudText>
+        <MudPaper Elevation="0" Class="pa-3" Style="background:rgba(34,211,238,0.06);border-radius:8px;">
+            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@(Detail.Answer ?? "—")</MudText>
+        </MudPaper>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public LlmRequestDetail Detail { get; set; } = default!;
+
+    private static string? Route(LlmContextRef reference)
+        => reference.Kind == "tool" || string.IsNullOrEmpty(reference.Id)
+            ? null
+            : SearchNavigation.Route(reference.Kind, reference.Id);
+
+    private void Close() => MudDialog.Close();
+
+    public static async Task ShowAsync(IDialogService dialogs, LlmRequestDetail detail)
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
+        var parameters = new DialogParameters<LlmRequestDetailDialog> { { x => x.Detail, detail } };
+        await dialogs.ShowAsync<LlmRequestDetailDialog>("NOOSEI-Anfrage", parameters, options);
+    }
+}

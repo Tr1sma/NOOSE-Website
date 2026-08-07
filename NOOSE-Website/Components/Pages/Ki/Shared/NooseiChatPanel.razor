@@ -1,0 +1,223 @@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Llm
+@inject INooseiChatService Chat
+@inject ISnackbar Snackbar
+
+@if (!Chat.IsConfigured)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SmartToy"
+                Text="NOOSEI ist nicht konfiguriert. Ein Admin muss Endpoint, Modell und Schlüssel hinterlegen." />
+}
+else
+{
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="3">
+            <MudPaper Elevation="0" Class="pa-2">
+                <MudButton FullWidth="true" Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="StartNew" Disabled="_busy">
+                    Neue Unterhaltung
+                </MudButton>
+                <MudList T="string" Dense="true" Class="mt-2">
+                    @foreach (var row in _conversations)
+                    {
+                        <MudListItem T="string" OnClick="() => OpenAsync(row.Id)"
+                                     Icon="@Icons.Material.Filled.ChatBubbleOutline"
+                                     Class="@(row.Id == _conversationId ? "mud-selected-item" : null)">
+                            <MudText Typo="Typo.body2">@row.Title</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @row.LastMessageAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+                @if (_conversations.Count == 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary pa-2">
+                        Noch keine Unterhaltungen. Unterhaltungen sind privat — nur du siehst sie.
+                    </MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="9">
+            @if (_quota is { } quota)
+            {
+                <div class="d-flex align-center justify-space-between mb-2" style="gap:12px;">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@QuotaColour(quota)"
+                             Icon="@Icons.Material.Filled.Token">
+                        @quota.Remaining.ToString("N0") Token
+                    </MudChip>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @if (_lastCost is { } cost)
+                        {
+                            <text>letzte Antwort: @cost.ToString("N0") Token · @LlmQuotaMath.ToCents(cost).ToString("0.##") ¢ · </text>
+                        }
+                        @quota.PeriodLabel
+                    </MudText>
+                </div>
+            }
+
+            @if (_quota?.IsBlocked == true)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">
+                    Dein NOOSEI-Kontingent ist aufgebraucht.
+                    @if (_quota.NextResetLocal is { } reset)
+                    {
+                        <text> Neues Kontingent ab @reset.ToString("dd.MM.yyyy HH:mm") Uhr.</text>
+                    }
+                </MudAlert>
+            }
+
+            <MudPaper Class="pa-4 mb-3" Elevation="1" Style="min-height:40vh;max-height:60vh;overflow-y:auto;">
+                @if (_messages.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Frag nach der Aktenlage — NOOSEI durchsucht die Datenbank selbst.
+                        Zum Beispiel: „Was weißt du über die Ballas und wer führt sie?"
+                    </MudText>
+                }
+                @foreach (var m in _messages)
+                {
+                    <MudStack Row="true" Justify="@(m.FromUser ? Justify.FlexEnd : Justify.FlexStart)" Class="my-2">
+                        <MudPaper Class="pa-3" Elevation="0"
+                                  Style="@($"max-width:80%;background:{(m.FromUser ? "rgba(34,211,238,0.10)" : "rgba(255,255,255,0.05)")};border-radius:10px;")">
+                            @if (!m.FromUser)
+                            {
+                                <MudText Typo="Typo.overline" Class="mud-text-secondary">NOOSEI · ungeprüft</MudText>
+                            }
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                        </MudPaper>
+                    </MudStack>
+                }
+                @if (_busy)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@_progress</MudText>
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-1" />
+                }
+            </MudPaper>
+
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                <MudTextField @bind-Value="_input" Label="Frage an NOOSEI" Lines="3" Immediate="true"
+                              Variant="Variant.Outlined" Class="flex-grow-1" Disabled="@(_busy || _quota?.IsBlocked == true)" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="SendAsync"
+                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_input) || _quota?.IsBlocked == true)">Senden</MudButton>
+            </MudStack>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                NOOSEI sieht nur, was du sehen darfst. Antworten sind KI-generiert und ungeprüft.
+            </MudText>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal? _user;
+    private IReadOnlyList<NooseiConversationRow> _conversations = [];
+    private readonly List<NooseiChatMessage> _messages = new();
+    private string? _conversationId;
+    private string? _input;
+    private bool _busy;
+    private bool _loaded;
+    private string _progress = "NOOSEI arbeitet …";
+    private LlmQuotaStatus? _quota;
+    private long? _lastCost;
+
+    private static Color QuotaColour(LlmQuotaStatus quota)
+        => quota.IsBlocked || quota.UsedShare >= 0.9 ? Color.Error
+            : quota.UsedShare >= 0.7 ? Color.Warning
+            : Color.Success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        _user = (await AuthStateTask).User;
+        if (!Chat.IsConfigured)
+        {
+            return;
+        }
+        await ReloadConversationsAsync();
+    }
+
+    private async Task ReloadConversationsAsync()
+    {
+        try
+        {
+            _conversations = await Chat.GetConversationsAsync(_user!);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
+    }
+
+    private void StartNew()
+    {
+        _conversationId = null;
+        _messages.Clear();
+    }
+
+    private async Task OpenAsync(string id)
+    {
+        if (_busy || id == _conversationId)
+        {
+            return;
+        }
+        try
+        {
+            _messages.Clear();
+            _messages.AddRange(await Chat.GetMessagesAsync(id, _user!));
+            _conversationId = id;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_input) || _busy || _user is null)
+        {
+            return;
+        }
+        var question = _input!.Trim();
+        _messages.Add(new NooseiChatMessage(Guid.NewGuid().ToString(), true, question, DateTime.UtcNow, false, null));
+        _input = string.Empty;
+        _busy = true;
+        _progress = "NOOSEI arbeitet …";
+
+        var progress = new Progress<string>(step =>
+        {
+            _progress = step;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            var turn = await Chat.AskAsync(_conversationId, question, _user, progress);
+            _conversationId = turn.ConversationId;
+            _messages.Add(turn.Answer);
+            _quota = turn.Quota;
+            _lastCost = turn.QuotaTokens;
+            if (turn.Degraded)
+            {
+                Snackbar.Add("NOOSEI konnte diesmal nicht auf die Aktendatenbank zugreifen.", Severity.Warning);
+            }
+            await ReloadConversationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

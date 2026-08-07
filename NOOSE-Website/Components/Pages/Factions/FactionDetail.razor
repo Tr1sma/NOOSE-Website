@@ -215,10 +215,10 @@ else
                     <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
                 </RecordSection>
                 }
-                @* KI-Kurzbrief: internal only *@
+                @* NOOSEI-Kurzbrief: internal only *@
                 @if (!_isPartner)
                 {
-                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="KI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
+                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="NOOSEI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
                     <KiBriefPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
                 </RecordSection>
                 }

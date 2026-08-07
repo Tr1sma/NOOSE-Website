@@ -719,6 +719,29 @@ public sealed class BewerbungServiceTests
     }
 
     [Fact]
+    public async Task GetMessagesAsync_Bewerber_Owner_HidesAgentCodename()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1"));
+            var fromAgent = Msg("b1", BewerbungMessageAudience.Bewerber, "hallo", T0);
+            fromAgent.AuthorName = "Falcon";
+            db.BewerbungMessages.Add(fromAgent);
+            db.SaveChanges();
+        }
+
+        var forApplicant = await svc.GetMessagesAsync("b1", BewerbungMessageAudience.Bewerber, Applicant("u1"));
+        Assert.Null(Assert.Single(forApplicant).AuthorName);
+
+        // HRB keeps the sender for internal accountability
+        var forHrb = await svc.GetMessagesAsync("b1", BewerbungMessageAudience.Bewerber, Hrb());
+        Assert.Equal("Falcon", Assert.Single(forHrb).AuthorName);
+    }
+
+    [Fact]
     public async Task GetMessagesAsync_Bewerber_Stranger_Throws()
     {
         using var ctx = new SqliteTestContext();

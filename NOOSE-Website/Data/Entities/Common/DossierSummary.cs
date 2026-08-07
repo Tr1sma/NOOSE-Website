@@ -20,14 +20,19 @@ public class DossierSummary
     [Column("InhaltHash")]
     public string ContentHash { get; set; } = string.Empty;
 
-    /// <summary>Short lead paragraph (sanitized HTML).</summary>
-    [Column("KurzfassungHtml")]
-    public string? TldrHtml { get; set; }
+    /// <summary>Structured brief payload (JSON) matching <c>NooseiSchemas.KurzbriefVersion</c>.</summary>
+    [Column("KurzbriefJson")]
+    public string? BriefJson { get; set; }
 
-    /// <summary>Full summary body (sanitized HTML).</summary>
-    [Column("ZusammenfassungHtml")]
-    public string? SummaryHtml { get; set; }
+    /// <summary>Schema generation of <see cref="BriefJson"/>; lets the shape evolve without a migration.</summary>
+    [Column("SchemaVersion")]
+    public int SchemaVersion { get; set; }
 
+    /// <summary>Prompt generation at the time of writing; part of the staleness decision.</summary>
+    [Column("PromptVersion")]
+    public int PromptVersion { get; set; }
+
+    /// <summary>Technical model id for forensics; never rendered to agents.</summary>
     [Column("Modell")]
     public string? Model { get; set; }
 

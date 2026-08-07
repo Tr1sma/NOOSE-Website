@@ -1,0 +1,130 @@
+@using System.Security.Claims
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Data.Entities
+@using NOOSE_Website.Data.Entities.Llm
+@using NOOSE_Website.Models.Llm
+@inject ILlmQuotaService Quota
+@inject ISnackbar Snackbar
+
+@if (Agent.IsTeamLead)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Token" Text="Die Team-Leitung nutzt NOOSEI nicht." />
+}
+else if (!_maySee)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Lock" Text="Kein Zugriff auf das Kontingent dieses Agenten." />
+}
+else if (_status is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="2">
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Savings" Label="Grundkontingent"
+                      Value="@_status.BaseWeekly.ToString("N0")"
+                      Hint="@(_status.IsOverride ? "individuell gesetzt" : "nach Dienstgrad")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.MoveDown" Label="Übertrag" Value="@_status.CarryIn.ToString("N0")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.TrendingDown" Label="Verbraucht" Value="@_status.Consumed.ToString("N0")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.AccountBalanceWallet" Label="Rest"
+                      Colour="@(_status.IsBlocked ? Color.Error : Color.Success)"
+                      Value="@_status.Remaining.ToString("N0")" Hint="@_status.PeriodLabel" />
+        </MudItem>
+    </MudGrid>
+
+    @if (_periods.Count > 0)
+    {
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Abgeschlossene Wochen</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+            <thead>
+                <tr>
+                    <th>Woche</th>
+                    <th class="text-right">Grund</th>
+                    <th class="text-right">Übertrag ein</th>
+                    <th class="text-right">Verbraucht</th>
+                    <th class="text-right">Übertrag aus</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var period in _periods)
+                {
+                    <tr>
+                        <td>@IsoWeekPeriod.Label(period.Year, period.Week)</td>
+                        <td class="text-right">@period.BaseWeekly.ToString("N0")</td>
+                        <td class="text-right">@period.CarryIn.ToString("N0")</td>
+                        <td class="text-right">@period.Consumed.ToString("N0")</td>
+                        <td class="text-right">@period.CarryOut.ToString("N0") (@period.CarryPercent %)</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+
+    @if (_adjustments.Count > 0)
+    {
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Manuelle Korrekturen</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+            <tbody>
+                @foreach (var adjustment in _adjustments)
+                {
+                    <tr>
+                        <td style="width:150px;">@adjustment.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td style="width:120px;">@IsoWeekPeriod.Label(adjustment.Year, adjustment.Week)</td>
+                        <td style="width:120px;" class="text-right">
+                            @(adjustment.Tokens > 0 ? "+" : string.Empty)@adjustment.Tokens.ToString("N0")
+                        </td>
+                        <td class="mud-text-secondary">@adjustment.Reason</td>
+                        <td class="mud-text-secondary" style="width:140px;">@adjustment.CreatedByName</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Agent Agent { get; set; } = default!;
+
+    private LlmQuotaStatus? _status;
+    private List<LlmQuotaPeriod> _periods = [];
+    private List<LlmQuotaAdjustment> _adjustments = [];
+    private bool _maySee;
+    private string? _loadedId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Agent is null || Agent.Id == _loadedId)
+        {
+            return;
+        }
+        _loadedId = Agent.Id;
+
+        var user = (await AuthStateTask).User;
+        _maySee = user.MayClassifiedRead() || user.GetAgentId() == Agent.Id;
+        // supervision reads without triggering the weekly close, which the read-only barrier would veto anyway
+        if (!_maySee || Agent.IsTeamLead)
+        {
+            return;
+        }
+
+        try
+        {
+            _status = await Quota.GetStatusAsync(Agent.Id);
+            _periods = await Quota.GetPeriodsAsync(Agent.Id);
+            _adjustments = await Quota.GetAdjustmentsAsync(Agent.Id);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

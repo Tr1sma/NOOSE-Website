@@ -5,7 +5,7 @@
 
 <PageHeader Icon="@Icons.Material.Filled.HowToReg"
             Title="Bewerbungen"
-            Subtitle="Eingang, Sperren, Anschreiben-Vorlagen und Eignungstests." />
+            Subtitle="Eingang, Sperren, Anschreiben-Vorlagen, Eignungstests und die öffentlichen Anforderungen." />
 
 <RecordSectionRail>
     <RecordSection Group="Verfahren" Slug="eingang" Label="Eingang" Icon="@Icons.Material.Filled.Inbox">
@@ -20,6 +20,9 @@
     </RecordSection>
     <RecordSection Group="Material" Slug="tests" Label="Eignungstests" Icon="@Icons.Material.Filled.Quiz">
         <TestsPanel />
+    </RecordSection>
+    <RecordSection Group="Material" Slug="anforderungen" Label="Anforderungen" Icon="@Icons.Material.Filled.Checklist">
+        <AnforderungenPanel />
     </RecordSection>
 
     <RecordSection Group="Konfiguration" Slug="automatik" Label="Automatik" Icon="@Icons.Material.Filled.AutoMode">

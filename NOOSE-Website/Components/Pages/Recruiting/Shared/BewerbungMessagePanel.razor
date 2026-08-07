@@ -219,7 +219,12 @@
         {
             return IsApplicantView ? "Du" : "Bewerber";
         }
-        return string.IsNullOrWhiteSpace(m.AuthorName) ? "NOOSE" : m.AuthorName!;
+        // agent stays anonymous towards the applicant; the agent side mirrors that view
+        if (Audience == BewerbungMessageAudience.Bewerber || string.IsNullOrWhiteSpace(m.AuthorName))
+        {
+            return "NOOSE";
+        }
+        return m.AuthorName!;
     }
 
     private async Task InsertTemplate(DocumentTemplate t)

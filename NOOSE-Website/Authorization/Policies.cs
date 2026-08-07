@@ -15,6 +15,9 @@ public static class Policies
     /// <summary>Configured bootstrap admin: only gate for demo mode and demo data.</summary>
     public const string BootstrapAdmin = "BootstrapAdmin";
 
+    /// <summary>Configured AI owner: the only one who may change NOOSEI quotas; everyone else reads them.</summary>
+    public const string AiOwner = "KiEigner";
+
     /// <summary>May write at all (everyone except read-only supervision). For mutation controls in AuthorizeView.</summary>
     public const string WriteAccess = "Schreibrecht";
 

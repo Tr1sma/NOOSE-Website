@@ -42,6 +42,10 @@ public static class AgentPrincipalExtensions
     public static bool IsBootstrapAdmin(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsBootstrap), "true", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Configured AI owner (Discord ID in Ki config); sole gate for changing NOOSEI quotas.</summary>
+    public static bool IsAiOwner(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsAiOwner), "true", StringComparison.OrdinalIgnoreCase);
+
     public static bool IsTRU(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTRU), "true", StringComparison.OrdinalIgnoreCase);
 

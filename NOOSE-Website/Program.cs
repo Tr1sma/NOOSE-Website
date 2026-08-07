@@ -218,7 +218,25 @@ builder.Services.AddHttpClient("llm", (sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(Math.Max(5, o.TotalTimeoutSeconds));
 });
 builder.Services.AddScoped<ILlmService, LlmService>();
+// NOOSEI token quota: the gateway is the only path to the transport, so nothing bypasses the meter.
+builder.Services.AddScoped<ILlmQuotaConfigService, LlmQuotaConfigService>();
+builder.Services.AddScoped<ILlmQuotaService, LlmQuotaService>();
+builder.Services.AddScoped<INooseiGateway, NooseiGateway>();
+builder.Services.AddScoped<INooseiSettingsService, NooseiSettingsService>();
 builder.Services.AddScoped<IDossierSummaryService, DossierSummaryService>();
+// NOOSEI record-database tools; the registry resolves whatever is registered here.
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.SearchRecordsTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadRecordTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ListRelatedTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadTimelineTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.RecentChangesTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ResolveMentionTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.GetBriefTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.NooseiToolRegistry>();
+builder.Services.AddScoped<INooseiChatService, NooseiChatService>();
+builder.Services.AddScoped<ITextAssistService, TextAssistService>();
+builder.Services.AddScoped<ILlmRequestLogService, LlmRequestLogService>();
+builder.Services.AddScoped<ILlmAnomalyService, LlmAnomalyService>();
 builder.Services.AddScoped<IOrgChartService, OrgChartService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
@@ -298,6 +316,7 @@ builder.Services.AddScoped<IAgentInviteService, AgentInviteService>();
 builder.Services.AddScoped<IBewerbungService, BewerbungService>();
 builder.Services.AddScoped<IApplicationCaseService, ApplicationCaseService>();
 builder.Services.AddScoped<IRecruitingAutomationService, RecruitingAutomationService>();
+builder.Services.AddScoped<ICareerRequirementsService, CareerRequirementsService>();
 builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();

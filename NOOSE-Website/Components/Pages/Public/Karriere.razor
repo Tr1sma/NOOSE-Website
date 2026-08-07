@@ -2,6 +2,8 @@
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Recruiting
+@inject ICareerRequirementsService Requirements
 
 <PageTitle>Karriere · NOOSE</PageTitle>
 
@@ -13,6 +15,38 @@
             Das Auswahlverfahren umfasst eine Sicherheitsüberprüfung, ggf. einen Eignungstest und ein
             persönliches Vorstellungsgespräch. Der gesamte Ablauf wird vertraulich über dieses Portal abgewickelt.
         </MudText>
+
+        @if (_items.Count > 0)
+        {
+            <MudDivider />
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6">Anforderungen</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Ohne diese Voraussetzungen wird eine Bewerbung nicht weiter geprüft.
+                </MudText>
+
+                <MudStack Spacing="3">
+                    @foreach (var item in _items)
+                    {
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircleOutline" Color="Color.Primary" Size="Size.Small"
+                                     Style="margin-top:3px;flex:0 0 auto;" />
+                            <MudStack Spacing="1">
+                                <MudText Typo="Typo.body1">@item.Text</MudText>
+                                @foreach (var alternative in item.Alternatives)
+                                {
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Baseline">
+                                        <MudText Typo="Typo.overline" Color="Color.Primary" Style="flex:0 0 auto;">ODER</MudText>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@alternative</MudText>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudStack>
+                    }
+                </MudStack>
+            </MudStack>
+            <MudDivider />
+        }
 
         <AuthorizeView>
             <NotAuthorized>
@@ -65,3 +99,10 @@
         </MudText>
     </MudStack>
 </MudPaper>
+
+@code {
+    private IReadOnlyList<CareerRequirement> _items = Array.Empty<CareerRequirement>();
+
+    protected override async Task OnInitializedAsync()
+        => _items = (await Requirements.GetAsync()).Items;
+}

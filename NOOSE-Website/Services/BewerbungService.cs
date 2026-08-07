@@ -301,10 +301,20 @@ public class BewerbungService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureCanReadAsync(db, id, audience, actor, cancellationToken);
-        return await db.BewerbungMessages.AsNoTracking()
+        var messages = await db.BewerbungMessages.AsNoTracking()
             .Where(m => m.BewerbungId == id && m.Audience == audience)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync(cancellationToken);
+
+        // the applicant never learns which agent answered
+        if (audience == BewerbungMessageAudience.Bewerber && !actor.IsHrbOrLeadership())
+        {
+            foreach (var m in messages)
+            {
+                m.AuthorName = null;
+            }
+        }
+        return messages;
     }
 
     public async Task<BewerbungMessage> PostInternalAsync(string id, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

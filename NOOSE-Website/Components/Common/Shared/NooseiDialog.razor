@@ -1,0 +1,151 @@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Llm
+@inject ITextAssistService TextAssist
+
+<MudDialog>
+    <DialogContent>
+        @if (_step == Step.Auftrag)
+        {
+            <MudTextField @bind-Value="_instruction" Label="Was soll NOOSEI schreiben?" Lines="4"
+                          Variant="Variant.Outlined" Immediate="true" AutoFocus="true"
+                          HelperText="Beschreibe kurz Inhalt und Zweck. NOOSEI erfindet keine Namen, Daten oder Aktenzeichen." />
+            @if (Request.HasSelection)
+            {
+                <MudSwitch T="bool" @bind-Value="_replaceSelection" Color="Color.Primary" Class="mt-2"
+                           Label="Markierten Text ersetzen" />
+            }
+        }
+        else if (_step == Step.Laeuft)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">NOOSEI arbeitet …</MudText>
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_step == Step.Fehler)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+        }
+        else if (_result is { } result)
+        {
+            @foreach (var warning in result.Warnings)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@warning</MudAlert>
+            }
+
+            @if (result.Unchanged)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+                    NOOSEI hat nichts zu korrigieren gefunden.
+                </MudAlert>
+            }
+
+            @if (Request.Mode == NooseiMode.Correct && result.DiffHtml is { } diff)
+            {
+                <div class="d-flex align-center mb-2" style="gap:16px;flex-wrap:wrap;">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        <span class="noosei-legende noosei-legende-neu"></span> hinzugefügt
+                        <span class="noosei-legende noosei-legende-weg ml-3"></span> entfernt
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @result.ChangedRatio.ToString("P0") des Textes berührt
+                    </MudText>
+                </div>
+                <div class="dokument-html noosei-diff">@((MarkupString)diff)</div>
+            }
+            else
+            {
+                <div class="dokument-html">@((MarkupString)result.Html)</div>
+            }
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3">
+                NOOSEI · @result.QuotaTokens.ToString("N0") Token
+                (@LlmQuotaMath.ToCents(result.QuotaTokens).ToString("0.##") ¢)
+                · Restkontingent: @result.Quota.Remaining.ToString("N0")
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@(_step == Step.Vorschau ? "Verwerfen" : "Abbrechen")</MudButton>
+        @if (_step == Step.Auftrag)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RunAsync"
+                       Disabled="@string.IsNullOrWhiteSpace(_instruction)">Schreiben lassen</MudButton>
+        }
+        else if (_step == Step.Vorschau && _result is { } ready)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="RunAsync">Neu versuchen (kostet erneut)</MudButton>
+            <MudButton Variant="@(Safe(ready) ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                       OnClick="() => Accept(ready)" Disabled="ready.Unchanged">
+                @(Request.Mode == NooseiMode.Correct ? "Übernehmen" : "Einfügen")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public NooseiRequest Request { get; set; } = default!;
+
+    private enum Step { Auftrag, Laeuft, Vorschau, Fehler }
+
+    private Step _step;
+    private string? _instruction;
+    private bool _replaceSelection = true;
+    private TextAssistResult? _result;
+    private string? _error;
+
+    /// <summary>A heavily changed correction defaults to the safe action, so accepting is a deliberate click.</summary>
+    private static bool Safe(TextAssistResult result)
+        => !result.StructureChanged && result.ChangedRatio <= TextAssistService.RewriteRatio;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Request.Mode == NooseiMode.Correct)
+        {
+            await RunAsync();
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        _step = Step.Laeuft;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            _result = Request.Mode == NooseiMode.Correct
+                ? await TextAssist.CorrectAsync(Request.Html, Request.Context, Request.User)
+                : await TextAssist.ComposeAsync(_instruction ?? string.Empty, Request.SurroundingText,
+                    Request.Context, Request.Subject, Request.User);
+            _step = Step.Vorschau;
+        }
+        catch (Exception ex)
+        {
+            _error = NooseiErrors.Describe(ex);
+            _step = Step.Fehler;
+        }
+    }
+
+    private void Accept(TextAssistResult result)
+        => Dialog.Close(DialogResult.Ok(new NooseiChoice(result.Html, result.QuotaTokens, result.Quota,
+            Request.Mode == NooseiMode.Compose && !_replaceSelection)));
+
+    private void Cancel() => Dialog.Cancel();
+
+    /// <summary>Opens the dialog and returns the agent's choice, or null when they discarded it.</summary>
+    public static async Task<NooseiChoice?> ShowAsync(IDialogService dialogs, NooseiRequest request)
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            BackdropClick = false,
+        };
+        var title = request.Mode == NooseiMode.Correct ? "NOOSEI · Text korrigieren" : "NOOSEI · Text schreiben lassen";
+        var parameters = new DialogParameters<NooseiDialog> { { x => x.Request, request } };
+        var reference = await dialogs.ShowAsync<NooseiDialog>(title, parameters, options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: NooseiChoice choice } ? choice : null;
+    }
+}

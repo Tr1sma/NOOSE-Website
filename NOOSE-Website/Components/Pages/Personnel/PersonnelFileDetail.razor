@@ -89,6 +89,9 @@ else
                 <MudTabPanel Text="Finanzierung" Icon="@Icons.Material.Filled.RequestQuote">
                     <FinancingAgentPanel Agent="_agent" @key="_reloadKey" />
                 </MudTabPanel>
+                <MudTabPanel Text="KI-Kontingent" Icon="@Icons.Material.Filled.Token">
+                    <LlmQuotaAgentPanel Agent="_agent" @key="_reloadKey" />
+                </MudTabPanel>
                 <MudTabPanel Text="Module" Icon="@Icons.Material.Filled.School">
                     <ModulesPanel AgentId="@_agent.Id" MayMark="@AgentSelection.IsSelectable(_agent)" />
                 </MudTabPanel>

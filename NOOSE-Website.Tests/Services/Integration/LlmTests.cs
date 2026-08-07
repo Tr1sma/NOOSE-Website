@@ -33,14 +33,15 @@ public sealed class LlmTests
     public void Clip_Empty_ReturnsEmpty() => Assert.Equal(string.Empty, PromptRedactor.Clip(null));
 
     [Fact]
-    public void GuardClassified_Throws_WhenNotAllowed()
-        => Assert.Throws<InvalidOperationException>(() => PromptRedactor.GuardClassified(true, new LlmOptions { AllowClassifiedContent = false }));
+    public void GuardClassified_Throws_WhenEgressIsSwitchedOff()
+        => Assert.Throws<InvalidOperationException>(() => PromptRedactor.GuardClassified(true, new LlmOptions { AllowClassifiedEgress = false }));
 
     [Fact]
-    public void GuardClassified_Ok_WhenAllowedOrNotClassified()
+    public void GuardClassified_Ok_ByDefault_BecauseScopeDecidesPerRecord()
     {
-        PromptRedactor.GuardClassified(true, new LlmOptions { AllowClassifiedContent = true });
-        PromptRedactor.GuardClassified(false, new LlmOptions());
+        PromptRedactor.GuardClassified(true, new LlmOptions { AllowClassifiedEgress = true });
+        PromptRedactor.GuardClassified(true, new LlmOptions());
+        PromptRedactor.GuardClassified(false, new LlmOptions { AllowClassifiedEgress = false });
     }
 
     // ---- RequireLlmUse ----
@@ -70,19 +71,23 @@ public sealed class LlmTests
 
     [Fact]
     public void IsConfigured_True_WhenComplete()
-    {
-        var svc = Service(new LlmOptions { Enabled = true, ApiKey = "k", Model = "deepseek/deepseek-v4-flash" });
-        Assert.True(svc.IsConfigured);
-        Assert.Equal("deepseek/deepseek-v4-flash", svc.Model);
-    }
+        => Assert.True(Service(new LlmOptions { Enabled = true, ApiKey = "k", Model = "vendor/model" }).IsConfigured);
+
+    /// <summary>The transport must not expose the model id at all, so no component can render it.</summary>
+    [Fact]
+    public void ILlmService_DoesNotExposeTheModelName()
+        => Assert.Null(typeof(ILlmService).GetProperty("Model"));
+
+    private static LlmRequest Request()
+        => new([LlmMessage.System("s"), LlmMessage.User("u")], new LlmCallContext(LlmFeature.Chat));
 
     [Fact]
-    public async Task ChatAsync_Throws_WhenNotConfigured()
-        => await Assert.ThrowsAsync<InvalidOperationException>(() => Service(new LlmOptions()).ChatAsync("s", "u", Agent()));
+    public async Task CompleteAsync_Throws_WhenNotConfigured()
+        => await Assert.ThrowsAsync<InvalidOperationException>(() => Service(new LlmOptions()).CompleteAsync(Request(), Agent()));
 
     [Fact]
-    public async Task ChatAsync_Throws_ForPartner_BeforeAnyCall()
+    public async Task CompleteAsync_Throws_ForPartner_BeforeAnyCall()
         => await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             Service(new LlmOptions { Enabled = true, ApiKey = "k", Model = "m" })
-                .ChatAsync("s", "u", ClaimsPrincipalBuilder.Agent("p").AsPartner(PartnerAgency.LSPD, PartnerRank.Member).Build()));
+                .CompleteAsync(Request(), ClaimsPrincipalBuilder.Agent("p").AsPartner(PartnerAgency.LSPD, PartnerRank.Member).Build()));
 }

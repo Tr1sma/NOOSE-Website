@@ -74,8 +74,9 @@ public static class NavCatalog
             Description: "Chronik, Änderungs- und Zugriffsprotokoll, Gegenaufklärung"),
         new NavEntry("hinweise", "/ermittlungshinweise", Icons.Material.Filled.Lightbulb, "Ermittlungshinweise", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Algorithmische Hinweise: mögliche Verbindungen, Konflikte, veraltete Einstufungen"),
-        new NavEntry("ki", "/ki-assistent", Icons.Material.Filled.SmartToy, "KI-Assistent", NavSection.Analyse, NavArea.Ermittlung,
-            Description: "KI-gestütztes Formulieren, Zusammenfassen und Analysieren von Texten"),
+        // key stays "ki": stored favourites and hidden-entry settings reference it
+        new NavEntry("ki", "/ki-assistent", Icons.Material.Filled.SmartToy, "NOOSEI", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Fragen zur Aktenlage mit Zugriff auf die Aktendatenbank, plus Schreibhilfe"),
         new NavEntry("statistik", "/statistik", Icons.Material.Filled.QueryStats, "Statistik", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Auswertungen, Kennzahlen und Lageberichte"),
         new NavEntry("organigramm", "/organigramm", Icons.Material.Filled.AccountTree, "Organigramm", NavSection.Analyse, NavArea.Dienststelle,

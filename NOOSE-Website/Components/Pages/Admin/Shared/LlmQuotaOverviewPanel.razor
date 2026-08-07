@@ -1,0 +1,190 @@
+@using System.Security.Claims
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Models.Llm
+@inject ILlmQuotaService Quota
+@inject ILlmAnomalyService Anomalies
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+@if (_busy)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+@if (_flags.Count > 0)
+{
+    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border-left:3px solid var(--mud-palette-warning);">
+        <MudText Typo="Typo.subtitle2" Class="mb-1">
+            <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Color="Color.Warning" Size="Size.Small" />
+            Auffälligkeiten (@_flags.Count)
+        </MudText>
+        @foreach (var flag in _flags)
+        {
+            <MudText Typo="Typo.body2">
+                <b>@flag.AgentName</b> ·
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Color="@(flag.Grade >= CounterIntelSeverity.High ? Color.Error : Color.Warning)"
+                         Icon="@LlmAnomalyKindDisplay.Icon(flag.Kind)">
+                    @LlmAnomalyKindDisplay.Name(flag.Kind)
+                </MudChip>
+                <span class="mud-text-secondary">@flag.Detail</span>
+            </MudText>
+        }
+    </MudPaper>
+}
+
+<div class="d-flex align-center justify-space-between mb-2">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        @_periodLabel@(_nextReset is { } reset ? $" · Zurücksetzung am {reset:dd.MM.yyyy HH:mm} Uhr" : string.Empty)
+    </MudText>
+    @if (!_mayManage)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Nur der KI-Eigner kann Kontingente ändern.</MudText>
+    }
+</div>
+
+<MudTable Items="_rows" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="0" Loading="_busy">
+    <HeaderContent>
+        <MudTh>Agent</MudTh>
+        <MudTh>Dienstgrad</MudTh>
+        <MudTh Style="text-align:right">Grundkontingent</MudTh>
+        <MudTh Style="text-align:right">Übertrag</MudTh>
+        <MudTh Style="text-align:right">Verbraucht</MudTh>
+        <MudTh Style="text-align:right">Rest</MudTh>
+        <MudTh Style="width:140px;">Auslastung</MudTh>
+        <MudTh Style="width:130px;"></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Agent">@context.Codename</MudTd>
+        <MudTd DataLabel="Dienstgrad">@(context.Rank is { } r ? RankDisplay.Name(r) : "—")</MudTd>
+        <MudTd DataLabel="Grundkontingent" Style="text-align:right">
+            @context.BaseWeekly.ToString("N0")
+            @if (context.IsOverride)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Class="ml-1">individuell</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Übertrag" Style="text-align:right">@context.CarryIn.ToString("N0")</MudTd>
+        <MudTd DataLabel="Verbraucht" Style="text-align:right">@context.Consumed.ToString("N0")</MudTd>
+        <MudTd DataLabel="Rest" Style="text-align:right">
+            <MudText Typo="Typo.body2" Color="@(context.IsBlocked ? Color.Error : Color.Success)">
+                @context.Remaining.ToString("N0")
+            </MudText>
+        </MudTd>
+        <MudTd DataLabel="Auslastung">
+            <MudProgressLinear Value="@(context.UsedShare * 100)" Size="Size.Small"
+                               Color="@(context.UsedShare >= 0.9 ? Color.Error : context.UsedShare >= 0.7 ? Color.Warning : Color.Success)" />
+        </MudTd>
+        <MudTd>
+            @if (_mayManage)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Tune" Size="Size.Small" Title="Kontingent anpassen"
+                               OnClick="() => OverrideAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Filled.AddCard" Size="Size.Small" Title="Aufstocken"
+                               OnClick="() => TopUpAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Title="Woche zurücksetzen"
+                               OnClick="() => ResetAsync(context)" />
+            }
+            <MudIconButton Icon="@Icons.Material.Filled.Person" Size="Size.Small" Title="Personalakte"
+                           Href="@($"/personal/{context.AgentId}")" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <EmptyState Icon="@Icons.Material.Filled.Token" Text="Keine Agenten mit NOOSEI-Kontingent." />
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = new();
+    private IReadOnlyList<LlmQuotaStatus> _rows = [];
+    private IReadOnlyList<LlmAnomalyFlag> _flags = [];
+    private string _periodLabel = string.Empty;
+    private DateTime? _nextReset;
+    private bool _mayManage;
+    private bool _busy = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // only the AI owner may change budgets; a control that always fails is worse than none
+        _mayManage = _user.IsAiOwner() && _user.MayWrite();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            _rows = await Quota.GetAllStatusAsync();
+            _periodLabel = _rows.FirstOrDefault()?.PeriodLabel ?? IsoWeekPeriod.Label(IsoWeekPeriod.Current().Year, IsoWeekPeriod.Current().Week);
+            _nextReset = _rows.FirstOrDefault()?.NextResetLocal;
+            try
+            {
+                _flags = await Anomalies.GetFlagsAsync(_user);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _flags = []; // read-only supervision sees the numbers, never the behaviour analysis
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OverrideAsync(LlmQuotaStatus row)
+    {
+        var result = await LlmQuotaOverrideDialog.ShowAsync(Dialogs, row);
+        if (result is null)
+        {
+            return;
+        }
+        await RunAsync(() => Quota.SetOverrideAsync(row.AgentId, result.Value.Amount, _user),
+            "Kontingent angepasst.");
+    }
+
+    private async Task TopUpAsync(LlmQuotaStatus row)
+    {
+        var result = await LlmQuotaTopUpDialog.ShowAsync(Dialogs, row);
+        if (result is null)
+        {
+            return;
+        }
+        await RunAsync(() => Quota.TopUpAsync(row.AgentId, result.Value.Tokens, result.Value.Reason, _user),
+            "Korrektur gebucht.");
+    }
+
+    private async Task ResetAsync(LlmQuotaStatus row)
+    {
+        var reason = await ReasonDialog.ShowAsync(Dialogs, "Woche zurücksetzen",
+            $"Der Verbrauch von {row.Codename} in {row.PeriodLabel} wird auf null gesetzt.",
+            confirmText: "Zurücksetzen", mandatoryReason: true, colour: Color.Warning);
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return;
+        }
+        await RunAsync(() => Quota.ResetAsync(row.AgentId, reason, _user), "Woche zurückgesetzt.");
+    }
+
+    private async Task RunAsync(Func<Task> action, string success)
+    {
+        try
+        {
+            await action();
+            Snackbar.Add(success, Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

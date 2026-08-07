@@ -25,6 +25,9 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.BootstrapAdmin, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsBootstrapAdmin()))
+            .AddPolicy(Policies.AiOwner, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IsAiOwner()))
             // write guards
             .AddPolicy(Policies.WriteAccess, p => p
                 .RequireAuthenticatedUser()
