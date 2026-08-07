@@ -247,6 +247,5 @@ public class WorkforceStatisticsService(
     }
 
     /// <summary>In-house staff only: TeamLeads are RP-invisible and partners are not personnel.</summary>
-    private static IQueryable<Data.Entities.Agent> Roster(AppDbContext db)
-        => db.Users.Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null);
+    private static IQueryable<Data.Entities.Agent> Roster(AppDbContext db) => db.Users.OnlySelectable();
 }

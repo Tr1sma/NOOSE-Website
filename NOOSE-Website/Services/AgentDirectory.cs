@@ -7,8 +7,9 @@ namespace NOOSE_Website.Services;
 /// <summary>Roster-backed agent options for the "Agent" filter dropdowns.</summary>
 /// <remarks>
 /// Log tables carry a denormalized actor name that is blank for never-released accounts and stale after a
-/// rename, so filters resolve the name here. Terminated and blocked agents stay listed: their past actions
-/// are exactly what these filters exist for.
+/// rename, so filters resolve the name here. This is the only consumer of AgentSelection's Listable rule:
+/// terminated and blocked agents stay listed, because their past actions are exactly what these filters
+/// exist for. Team leads and partners are excluded like everywhere else.
 /// </remarks>
 public static class AgentDirectory
 {
@@ -16,7 +17,7 @@ public static class AgentDirectory
     public static async Task<List<(string Id, string Codename)>> AllAsync(
         AppDbContext db, CancellationToken cancellationToken = default)
     {
-        var rows = await Selectable(db).Select(u => new { u.Id, u.Codename }).ToListAsync(cancellationToken);
+        var rows = await Listable(db).Select(u => new { u.Id, u.Codename }).ToListAsync(cancellationToken);
         return rows.Select(r => (r.Id, r.Codename)).ToList();
     }
 
@@ -29,14 +30,11 @@ public static class AgentDirectory
         {
             return [];
         }
-        var rows = await Selectable(db).Where(u => ids.Contains(u.Id))
+        var rows = await Listable(db).Where(u => ids.Contains(u.Id))
             .Select(u => new { u.Id, u.Codename }).ToListAsync(cancellationToken);
         return rows.Select(r => (r.Id, r.Codename)).ToList();
     }
 
-    // blank codename = never released (applicant/pending), no agent; IsTeamLead && !IsAdmin = read-only supervisor, hidden RP-wide
-    private static IQueryable<Agent> Selectable(AppDbContext db)
-        => db.Users.AsNoTracking()
-            .Where(u => !string.IsNullOrEmpty(u.Codename) && (!u.IsTeamLead || u.IsAdmin))
-            .OrderBy(u => u.Codename);
+    private static IQueryable<Agent> Listable(AppDbContext db)
+        => db.Users.AsNoTracking().OnlyListable().OrderBy(u => u.Codename);
 }

@@ -117,12 +117,15 @@ public class AgentManagementServiceTests
     }
 
     [Fact]
-    public async Task GetSelectableAsync_OnlyActiveNonTeamLead()
+    public async Task GetSelectableAsync_OnlyActiveInternalNonTeamLead()
     {
         using var f = Make();
         Persist(f.Ctx,
             NewAgent("ok", AgentStatus.Active),
             NewAgent("tl", AgentStatus.Active, cfg: a => a.IsTeamLead = true),
+            // not even with the admin flag on top
+            NewAgent("tl-adm", AgentStatus.Active, cfg: a => { a.IsTeamLead = true; a.IsAdmin = true; }),
+            NewAgent("partner", AgentStatus.Active, cfg: a => a.PartnerAgency = PartnerAgency.LSPD),
             NewAgent("pen", AgentStatus.Pending));
 
         var sel = await f.Svc.GetSelectableAsync();

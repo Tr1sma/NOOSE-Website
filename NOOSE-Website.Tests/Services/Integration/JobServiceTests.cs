@@ -232,6 +232,35 @@ public sealed class JobServiceTests
     // ---------- CreateAsync ----------
 
     [Fact]
+    public async Task CreateAsync_SkipsTeamLeadAndPartnerAgentIds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("ok"));
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        var job = await svc.CreateAsync(new JobInput { Title = "T", Status = JobStatus.Open },
+            new[] { "ok", "tl", "partner" }, Leader("creator"));
+
+        using (var db = ctx.NewContext())
+        {
+            var assignments = await db.JobAssignments.Where(z => z.JobId == job.Id)
+                .Select(z => z.AgentId).ToListAsync();
+            Assert.Equal(new[] { "ok" }, assignments.ToArray());
+        }
+        // only the surviving assignee is notified
+        await notifications.Received(1).NotifyManyAsync(
+            Arg.Is<IReadOnlyCollection<string>>(r => r.Count == 1 && r.Contains("ok")),
+            NotificationType.JobAssigned, Arg.Any<string>(), Arg.Any<string>(), "creator",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task CreateAsync_PersistsJob_AssignsOnlyActive_AndNotifies()
     {
         using var ctx = new SqliteTestContext();
@@ -515,6 +544,38 @@ public sealed class JobServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => svc.AgentAssignAsync("j1", "ghost", Leader()));
+    }
+
+    [Fact]
+    public async Task AgentAssignAsync_Throws_WhenAgentIsTeamLead()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.Jobs.Add(NewJob("j1", "Task", "creator"));
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AgentAssignAsync("j1", "tl", Leader()));
+    }
+
+    [Fact]
+    public async Task AgentAssignAsync_Throws_WhenAgentIsPartner()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.Jobs.Add(NewJob("j1", "Task", "creator"));
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AgentAssignAsync("j1", "partner", Leader()));
     }
 
     [Fact]

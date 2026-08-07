@@ -391,9 +391,10 @@ public class PersonGroupService(
         {
             Permission.RequireLeadership(actor);
         }
-        if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
+        // same rule as the picker: a stale circuit must not allocate a team lead, partner or ex-agent
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == agentId, cancellationToken))
         {
-            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
+            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden oder ist nicht zuteilbar.");
         }
         if (await db.PersonGroupAgents.AnyAsync(a => a.PersonGroupId == groupId && a.AgentId == agentId, cancellationToken))
         {

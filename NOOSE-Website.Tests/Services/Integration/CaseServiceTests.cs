@@ -769,6 +769,35 @@ public sealed class CaseServiceTests
             () => svc.AgentAllocateAsync("c1", "ghost", asCaseLead: false, Director()));
     }
 
+    [Theory]
+    [InlineData("teamlead")]
+    [InlineData("teamlead-admin")]
+    [InlineData("partner")]
+    [InlineData("terminated")]
+    public async Task AgentAllocateAsync_Throws_WhenAgentNotSelectable(string id)
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(NotSelectable(id));
+            db.Cases.Add(NewCase("c1"));
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AgentAllocateAsync("c1", id, asCaseLead: false, Director()));
+    }
+
+    /// <summary>An agent shape no picker offers; the service must reject it too.</summary>
+    private static NOOSE_Website.Data.Entities.Agent NotSelectable(string id) => id switch
+    {
+        "teamlead" => Seed.Agent(id, configure: a => a.IsTeamLead = true),
+        "teamlead-admin" => Seed.Agent(id, configure: a => { a.IsTeamLead = true; a.IsAdmin = true; }),
+        "partner" => Seed.Agent(id, configure: a => a.PartnerAgency = PartnerAgency.LSPD),
+        _ => Seed.Agent(id, status: AgentStatus.Terminated),
+    };
+
     [Fact]
     public async Task AgentAllocateAsync_Throws_WhenAlreadyAssigned()
     {

@@ -7,10 +7,13 @@
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.subtitle1">Beförderungsanträge (@_requests.Count)</MudText>
-        <AuthorizeView Policy="@Policies.Leadership">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.TrendingUp"
-                       OnClick="RequestAsync">Beförderung beantragen</MudButton>
-        </AuthorizeView>
+        @if (_mayRequest)
+        {
+            <AuthorizeView Policy="@Policies.Leadership">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.TrendingUp"
+                           OnClick="RequestAsync">Beförderung beantragen</MudButton>
+            </AuthorizeView>
+        }
     </MudStack>
 
     @if (_load)
@@ -72,6 +75,9 @@
     private bool _load = true;
     private ClaimsPrincipal _user = default!;
     private List<AgentPromotionRequest> _requests = new();
+
+    // a NOOSE rank cannot be granted to a partner account or to someone who left
+    private bool _mayRequest => AgentSelection.IsSelectable(Agent);
 
     protected override async Task OnInitializedAsync()
     {

@@ -37,7 +37,7 @@ public class AbsenceService(
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Absences.AsNoTracking().OnlyVisible(scope, meId);
+        var query = db.Absences.AsNoTracking().OnlyVisible(db, scope, meId);
         if (from is { } f)
         {
             query = query.Where(a => a.ToDate >= f);
@@ -87,7 +87,7 @@ public class AbsenceService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Absences.AsNoTracking()
-            .OnlyVisible(Granted(viewer, requested), viewer.GetAgentId())
+            .OnlyVisible(db, Granted(viewer, requested), viewer.GetAgentId())
             .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
     }
 
@@ -273,9 +273,8 @@ public class AbsenceService(
                 .Where(u => u.Id == actorId).Select(u => u.Codename)
                 .FirstOrDefaultAsync(cancellationToken) ?? "Unbekannt";
 
-            var recipients = await db.Users.AsNoTracking()
-                .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null
-                         && (u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent))
+            var recipients = await db.Users.AsNoTracking().OnlySelectable()
+                .Where(u => u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
 

@@ -226,7 +226,7 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         // other agents' absences: never the free-text reason, and RosterVisible hides invisible agents
         var fromDay = MeetingTime.Day(sourceUtc);
         var untilDay = MeetingTime.Day(untilUtc);
-        foreach (var ab in await db.Absences.RosterVisible()
+        foreach (var ab in await db.Absences.RosterVisible(db)
             .Where(ab => ab.AgentId != meId && ab.FromDate <= untilDay && ab.ToDate >= fromDay)
             .OrderBy(ab => ab.FromDate).Take(PerSourceMax)
             .Select(ab => new { ab.Id, ab.FromDate, ab.ToDate, ab.Category, Codename = ab.Agent!.Codename })

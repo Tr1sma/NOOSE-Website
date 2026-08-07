@@ -15,9 +15,9 @@ public class OrgChartService(IDbContextFactory<AppDbContext> dbFactory) : IOrgCh
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // active staff only; team leads are RP-invisible and rankless agents have no level
-        var roster = await db.Users.AsNoTracking()
-            .Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.Rank != null)
+        // rankless agents have no level to chart
+        var roster = await db.Users.AsNoTracking().OnlySelectable()
+            .Where(a => a.Rank != null)
             .OrderBy(a => a.Codename)
             .ToListAsync(cancellationToken);
 
@@ -41,17 +41,18 @@ public class OrgChartService(IDbContextFactory<AppDbContext> dbFactory) : IOrgCh
 
         // load all members in one flat query, then group in memory
         var tfIds = taskforces.Select(t => t.Id).ToList();
+        var selectable = db.Users.OnlySelectable();
         var members = tfIds.Count == 0
             ? new List<TaskforceAgent>()
             : await db.TaskforceAgents.AsNoTracking()
-                .Where(ta => tfIds.Contains(ta.TaskforceId))
+                .Where(ta => tfIds.Contains(ta.TaskforceId) && selectable.Any(u => u.Id == ta.AgentId))
                 .Include(ta => ta.Agent)
                 .ToListAsync(cancellationToken);
 
         var staffings = taskforces
             .Select(t => new TaskforceStaffing(t,
                 members
-                    .Where(m => m.TaskforceId == t.Id && m.Agent != null && !m.Agent.IsTeamLead)
+                    .Where(m => m.TaskforceId == t.Id)
                     .OrderBy(m => m.Role == TaskforceRole.Member) // leads first
                     .ThenBy(m => m.Role)
                     .ThenBy(m => m.Agent!.Codename)

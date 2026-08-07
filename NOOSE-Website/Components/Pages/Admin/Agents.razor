@@ -243,7 +243,7 @@ else
         2 => _agents.Where(a => a.Status == AgentStatus.Active && a.IsTeamLead),
         3 => PartnerAgents,
         4 => _agents.Where(a => a.Status == AgentStatus.Terminated).OrderByDescending(a => a.TerminatedAt),
-        _ => _agents.Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null),
+        _ => _agents.Where(AgentSelection.IsSelectable),
     };
 
     private IEnumerable<Agent> PartnerAgents
@@ -269,7 +269,7 @@ else
         }
     }
 
-    private int CountActive => _agents.Count(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null);
+    private int CountActive => _agents.Count(AgentSelection.IsSelectable);
     private int CountBlocked => _agents.Count(a => a.Status == AgentStatus.Blocked);
     private int CountTeamLead => _agents.Count(a => a.Status == AgentStatus.Active && a.IsTeamLead);
     private int CountPartner => _agents.Count(a => a.Status == AgentStatus.Active && a.PartnerAgency != null);

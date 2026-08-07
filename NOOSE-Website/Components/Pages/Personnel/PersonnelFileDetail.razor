@@ -90,7 +90,7 @@ else
                     <FinancingAgentPanel Agent="_agent" @key="_reloadKey" />
                 </MudTabPanel>
                 <MudTabPanel Text="Module" Icon="@Icons.Material.Filled.School">
-                    <ModulesPanel AgentId="@_agent.Id" />
+                    <ModulesPanel AgentId="@_agent.Id" MayMark="@AgentSelection.IsSelectable(_agent)" />
                 </MudTabPanel>
                 <MudTabPanel Text="Auszeichnungen" Icon="@Icons.Material.Filled.EmojiEvents">
                     <AgentBadgesPanel AgentId="@_agent.Id" />

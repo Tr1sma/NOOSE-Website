@@ -349,7 +349,7 @@ public class AnnouncementService(
     private static async Task<List<string>> RecipientIdsAsync(AppDbContext db, Announcement a, CancellationToken cancellationToken)
     {
         // Team leads (read-only supervision) and external partners are never acknowledgment recipients.
-        var query = db.Users.Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null);
+        var query = db.Users.OnlySelectable();
         query = a.Audience switch
         {
             AnnouncementAudience.TruUnit => query.Where(u => u.IsTRU),

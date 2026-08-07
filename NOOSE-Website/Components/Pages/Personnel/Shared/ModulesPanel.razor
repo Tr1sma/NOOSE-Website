@@ -30,7 +30,8 @@
             <MudPaper Class="pa-3" Elevation="1">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2" Class="flex-grow-1">
-                        <MudCheckBox T="bool" Value="m.IsCompleted" ReadOnly="@(!_isLeadership || _busy)"
+                        @* MayMark blocks new completions only; an existing one stays correctable *@
+                        <MudCheckBox T="bool" Value="m.IsCompleted" ReadOnly="@(!_isLeadership || _busy || (!MayMark && !m.IsCompleted))"
                                      Color="Color.Success" Dense="true"
                                      ValueChanged="@(v => ToggleAsync(m, v))" />
                         <div>
@@ -72,6 +73,10 @@
 
 @code {
     [Parameter, EditorRequired] public string AgentId { get; set; } = default!;
+
+    /// <summary>False for partner and departed accounts: the training catalogue is NOOSE-internal.</summary>
+    [Parameter] public bool MayMark { get; set; } = true;
+
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _load = true;
@@ -98,7 +103,7 @@
 
     private async Task ToggleAsync(AgentModuleStatus status, bool completed)
     {
-        if (!_isLeadership || _busy || completed == status.IsCompleted)
+        if (!_isLeadership || _busy || completed == status.IsCompleted || (completed && !MayMark))
         {
             return;
         }

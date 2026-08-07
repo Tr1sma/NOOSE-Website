@@ -139,7 +139,8 @@
     {
         _user = (await AuthStateTask).User;
         _agents = await AgentService.GetSelectableAsync();
-        _agentNames = _agents.ToDictionary(a => a.Id, a => a.Codename);
+        // name lookup, not a picker: already-recorded executors must still render
+        _agentNames = (await AgentService.GetAllAsync()).ToDictionary(a => a.Id, a => a.Codename);
         if (_user.IsLeadership())
         {
             await LoadTemplatesAsync();

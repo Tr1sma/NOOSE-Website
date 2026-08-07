@@ -29,9 +29,7 @@ public class FinancingBudgetService(
     {
         var config = await configService.GetAsync(cancellationToken);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // team leads are read-only supervision and RP-wide invisible, so they never appear in a roster
-        var agents = await db.Users.AsNoTracking()
-            .Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null)
+        var agents = await db.Users.AsNoTracking().OnlySelectable()
             .OrderBy(a => a.Codename)
             .ToListAsync(cancellationToken);
 

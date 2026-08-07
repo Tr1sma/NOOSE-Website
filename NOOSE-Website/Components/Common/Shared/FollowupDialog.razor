@@ -56,11 +56,15 @@
         _due = (DueAt ?? DateTime.UtcNow.AddDays(1)).ToLocalTime().Date;
         _note = Note ?? string.Empty;
 
-        // TeamLeads are never selectable
+        // TeamLeads and partners are never selectable
         _all = await AgentService.GetSelectableAsync();
         if (!string.IsNullOrEmpty(ResponsibleAgentId))
         {
-            _agent = _all.FirstOrDefault(a => a.Id == ResponsibleAgentId);
+            // a stored responsible who is no longer selectable must still round-trip; without the
+            // fallback the value saves back as null and the server reassigns it to the editing agent.
+            // Resolved outside _all on purpose, so nobody can newly pick them.
+            _agent = _all.FirstOrDefault(a => a.Id == ResponsibleAgentId)
+                ?? await AgentService.FindAsync(ResponsibleAgentId);
         }
     }
 

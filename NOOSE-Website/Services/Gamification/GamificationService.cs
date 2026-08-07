@@ -52,8 +52,8 @@ public sealed class GamificationService(IDbContextFactory<AppDbContext> dbFactor
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var all = await ComputeAllAsync(db, since, cancellationToken);
 
-        // ranking is over internal, active agents only (partners and inactive users excluded)
-        var agents = await db.Users.Where(u => u.Status == AgentStatus.Active && u.PartnerAgency == null)
+        // ranking is over internal, active agents only; team leads are RP-invisible and never ranked
+        var agents = await db.Users.OnlySelectable()
             .Select(u => new { u.Id, u.Codename })
             .ToListAsync(cancellationToken);
 

@@ -194,8 +194,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
     {
         Permission.RequireLeadership(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await db.Users
-            .Where(u => u.Status == NOOSE_Website.Models.Enums.AgentStatus.Active)
+        var rows = await db.Users.OnlySelectable()
             .Select(u => new { u.Id, u.Codename, u.RealName })
             .ToListAsync(cancellationToken);
         return rows

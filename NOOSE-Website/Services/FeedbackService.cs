@@ -155,9 +155,8 @@ public class FeedbackService(
     {
         try
         {
-            var recipients = await db.Users.AsNoTracking()
-                .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null
-                         && (u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent))
+            var recipients = await db.Users.AsNoTracking().OnlySelectable()
+                .Where(u => u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
 

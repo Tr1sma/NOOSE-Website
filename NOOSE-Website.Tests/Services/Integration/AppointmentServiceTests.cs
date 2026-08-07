@@ -180,6 +180,28 @@ public sealed class AppointmentServiceTests
     // ---- CreateAsync ----
 
     [Fact]
+    public async Task CreateAsync_SkipsTeamLeadAndPartnerAgentIds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("creator-1"));
+            db.Users.Add(Seed.Agent("ok"));
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        var created = await svc.CreateAsync(Input(), new[] { "ok", "tl", "partner" }, NonLeader("creator-1"));
+
+        using var db2 = ctx.NewContext();
+        var assigned = await db2.AppointmentAssignments
+            .Where(z => z.AppointmentId == created.Id).Select(z => z.AgentId).ToListAsync();
+        Assert.Equal(new[] { "ok" }, assigned);
+    }
+
+    [Fact]
     public async Task CreateAsync_PersistsAppointment_AssignsActiveAgents_NotifiesExceptCreator()
     {
         using var ctx = new SqliteTestContext();
@@ -496,6 +518,38 @@ public sealed class AppointmentServiceTests
         using (var db = ctx.NewContext())
         {
             db.Users.Add(Seed.Agent("a1", status: AgentStatus.Pending));
+            db.Appointments.Add(MakeAppointment("t1", createdById: "someone-else"));
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AgentAssignAsync("t1", "a1", Leader()));
+    }
+
+    [Fact]
+    public async Task AgentAssignAsync_Throws_WhenAgentIsTeamLead()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", configure: a => a.IsTeamLead = true));
+            db.Appointments.Add(MakeAppointment("t1", createdById: "someone-else"));
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AgentAssignAsync("t1", "a1", Leader()));
+    }
+
+    [Fact]
+    public async Task AgentAssignAsync_Throws_WhenAgentIsPartner()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
             db.Appointments.Add(MakeAppointment("t1", createdById: "someone-else"));
             db.SaveChanges();
         }

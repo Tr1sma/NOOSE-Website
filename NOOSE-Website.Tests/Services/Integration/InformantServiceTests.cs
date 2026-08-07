@@ -58,6 +58,29 @@ public sealed class InformantServiceTests
         return faction.Id;
     }
 
+    // ---- GetHandlerOptionsAsync ----
+
+    [Fact]
+    public async Task GetHandlerOptionsAsync_ExcludesTeamLeadsAndPartners()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("ok"));
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            // not even with the admin flag on top
+            db.Users.Add(Seed.Agent("tl-adm", configure: a => { a.IsTeamLead = true; a.IsAdmin = true; }));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.Users.Add(Seed.Agent("pending", status: AgentStatus.Pending));
+            db.Users.Add(Seed.Agent("gone", status: AgentStatus.Terminated));
+            db.SaveChanges();
+        }
+
+        var options = await Svc(ctx).GetHandlerOptionsAsync(Leader());
+
+        Assert.Equal("ok", Assert.Single(options).Id);
+    }
+
     // ==================== record visibility ====================
 
     [Fact]

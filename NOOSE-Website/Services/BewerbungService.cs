@@ -462,8 +462,8 @@ public class BewerbungService(
            ?? throw new InvalidOperationException("Bewerbung nicht gefunden.");
 
     private static Task<List<string>> HrbRecipientIdsAsync(AppDbContext db, CancellationToken cancellationToken)
-        => db.Users
-            .Where(u => u.Status == AgentStatus.Active && (u.IsHRB || u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent))
+        => db.Users.OnlySelectable()
+            .Where(u => u.IsHRB || u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent)
             .Select(u => u.Id)
             .ToListAsync(cancellationToken);
 

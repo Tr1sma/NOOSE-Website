@@ -170,7 +170,8 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        // real name gated by mayRealName, kept separate from the classified-read flag
+        // real name gated by mayRealName, kept separate from the classified-read flag.
+        // Deliberately NOT AgentSelection.OnlySelectable: partners stay mentionable here.
         var agents = await db.Users
             .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead
                 && (u.Codename.Contains(s) || (mayRealName && u.RealName != null && u.RealName.Contains(s))))

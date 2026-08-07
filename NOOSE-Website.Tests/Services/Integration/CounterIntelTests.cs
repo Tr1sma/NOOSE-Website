@@ -203,6 +203,36 @@ public sealed class CounterIntelTests
     }
 
     [Fact]
+    public async Task GetAgentOptionsAsync_ExcludesTeamLeadAdminsAndPartners_ButKeepsTerminated()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", configure: a => a.Codename = "Falke"));
+            // a former agent stays listed: rules are written about what they did
+            db.Users.Add(Seed.Agent("gone", status: AgentStatus.Terminated,
+                configure: a => a.Codename = "Ehemalig"));
+            db.Users.Add(Seed.Agent("tl", configure: a => { a.Codename = "Aufsicht"; a.IsTeamLead = true; }));
+            db.Users.Add(Seed.Agent("tl-adm", configure: a =>
+            {
+                a.Codename = "Chef";
+                a.IsTeamLead = true;
+                a.IsAdmin = true;
+            }));
+            db.Users.Add(Seed.Agent("p1", configure: a =>
+            {
+                a.Codename = "Extern";
+                a.PartnerAgency = PartnerAgency.LSPD;
+            }));
+            db.SaveChanges();
+        }
+
+        var options = await new CounterIntelRuleService(ctx.Factory).GetAgentOptionsAsync(Leader());
+
+        Assert.Equal(new[] { "Ehemalig", "Falke" }, options.Select(o => o.Name).ToArray());
+    }
+
+    [Fact]
     public async Task GetAgentsAsync_SkipsAgentsWithoutAccessRows()
     {
         using var ctx = new SqliteTestContext();

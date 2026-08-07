@@ -149,7 +149,9 @@
             _endDate = endLocal.Date;
             _endTime = endLocal.TimeOfDay;
         }
-        _agent = _allAgents.FirstOrDefault(a => a.Id == Exists.ObservingAgentId);
+        // Observer no longer selectable (team lead/partner/departed) → preserve, don't silently clear.
+        _agent = _allAgents.FirstOrDefault(a => a.Id == Exists.ObservingAgentId)
+            ?? (Exists.ObservingAgentId is { } observerId ? await AgentService.FindAsync(observerId) : null);
 
         if (!string.IsNullOrWhiteSpace(Exists.OrgId) && !string.IsNullOrWhiteSpace(Exists.OrgType))
         {

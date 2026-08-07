@@ -137,9 +137,9 @@ public class FinancingStatisticsService(
         CancellationToken cancellationToken)
     {
         var config = await configService.GetAsync(cancellationToken);
-        // team leads never count towards a rank's budget or consumption
-        var agents = await db.Users.AsNoTracking()
-            .Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead && a.PartnerAgency == null && a.Rank != null)
+        // team leads never count towards a rank's budget or consumption; rankless agents have no budget
+        var agents = await db.Users.AsNoTracking().OnlySelectable()
+            .Where(a => a.Rank != null)
             .Select(a => new { a.Id, a.Rank, a.FinancingBudgetOverride })
             .ToListAsync(cancellationToken);
         if (agents.Count == 0)

@@ -163,6 +163,29 @@ public sealed class GamificationServiceTests
     }
 
     [Fact]
+    public async Task GetLeaderboard_ExcludesTeamLeads()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1"));
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("tl-adm", configure: a => { a.IsTeamLead = true; a.IsAdmin = true; }));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            // scoring rows for everyone, so a zero-points filter cannot mask the exclusion
+            db.Cases.Add(Seed.Case(id: "c1", configure: c => c.CreatedById = "a1"));
+            db.Cases.Add(Seed.Case(id: "c2", configure: c => c.CreatedById = "tl"));
+            db.Cases.Add(Seed.Case(id: "c3", configure: c => c.CreatedById = "tl-adm"));
+            db.Cases.Add(Seed.Case(id: "c4", configure: c => c.CreatedById = "partner"));
+            db.SaveChanges();
+        }
+
+        var rows = await Svc(ctx).GetLeaderboardAsync(GamificationPeriod.AllTime);
+
+        Assert.Equal("a1", Assert.Single(rows).AgentId);
+    }
+
+    [Fact]
     public async Task GetLeaderboard_Period_ExcludesRecordsOutsideWindow()
     {
         using var ctx = new SqliteTestContext();

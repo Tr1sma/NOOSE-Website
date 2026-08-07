@@ -422,9 +422,8 @@ public class AbductionService(
                 .Where(u => u.Id == abduction.VictimAgentId).Select(u => u.Codename)
                 .FirstOrDefaultAsync(cancellationToken) ?? "Unbekannt";
 
-            var recipients = await db.Users.AsNoTracking()
-                .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null
-                         && (u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent))
+            var recipients = await db.Users.AsNoTracking().OnlySelectable()
+                .Where(u => u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
 

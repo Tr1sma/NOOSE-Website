@@ -289,7 +289,7 @@ public sealed class AuditLogQueryServiceTests
     }
 
     [Fact]
-    public async Task GetFilterOptionsAsync_SkipsCodenamelessAccountsAndReadOnlySupervisors()
+    public async Task GetFilterOptionsAsync_SkipsCodenamelessAccountsAndEveryTeamLead()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -305,7 +305,7 @@ public sealed class AuditLogQueryServiceTests
                 a.Codename = "Aufsicht";
                 a.IsTeamLead = true;
             }));
-            // team lead WITH admin is a full agent, not a read-only supervisor
+            // not even with the admin flag on top
             db.Users.Add(Seed.Agent("chief", configure: a =>
             {
                 a.Codename = "Chef";
@@ -317,7 +317,27 @@ public sealed class AuditLogQueryServiceTests
 
         var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
 
-        Assert.Equal(new[] { "Alpha", "Chef", "Zulu" }, result.Agents.Select(a => a.Codename).ToArray());
+        Assert.Equal(new[] { "Alpha", "Zulu" }, result.Agents.Select(a => a.Codename).ToArray());
+    }
+
+    [Fact]
+    public async Task GetFilterOptionsAsync_ExcludesPartnerAccounts()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("u1", configure: a => a.Codename = "Intern"));
+            db.Users.Add(Seed.Agent("p1", configure: a =>
+            {
+                a.Codename = "Extern";
+                a.PartnerAgency = PartnerAgency.LSPD;
+            }));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
+
+        Assert.Equal("Intern", Assert.Single(result.Agents).Codename);
     }
 
     [Fact]

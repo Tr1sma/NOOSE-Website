@@ -72,11 +72,11 @@ public class AppointmentService(
         db.Appointments.Add(appointment);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Only assign existing active agents, deduplicated.
+        // Only selectable agents, deduplicated; silently dropped so a stale picker cannot fail the create.
         var valid = agentIds.Count == 0
             ? new List<string>()
-            : await db.Users
-                .Where(u => agentIds.Contains(u.Id) && u.Status == AgentStatus.Active)
+            : await db.Users.OnlySelectable()
+                .Where(u => agentIds.Contains(u.Id))
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
         foreach (var agentId in valid.Distinct())
@@ -173,9 +173,10 @@ public class AppointmentService(
             ?? throw new InvalidOperationException($"Termin '{appointmentId}' nicht gefunden.");
         RequireCreatorOrLeadership(appointment, actor);
 
-        if (!await db.Users.AnyAsync(u => u.Id == agentId && u.Status == AgentStatus.Active, cancellationToken))
+        // same rule as the picker: a stale circuit must not assign a team lead, partner or ex-agent
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == agentId, cancellationToken))
         {
-            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden oder ist nicht aktiv.");
+            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden oder ist nicht zuteilbar.");
         }
         if (await db.AppointmentAssignments.AnyAsync(z => z.AppointmentId == appointmentId && z.AgentId == agentId, cancellationToken))
         {

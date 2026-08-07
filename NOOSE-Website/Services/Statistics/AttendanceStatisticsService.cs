@@ -42,8 +42,7 @@ public class AttendanceStatisticsService(
                 .Select(t => new AttendanceRaw(t.AgentId, t.Status))
                 .ToListAsync(cancellationToken);
 
-        var agents = await db.Users.AsNoTracking()
-            .Where(u => u.Status == AgentStatus.Active && !u.IsTeamLead && u.PartnerAgency == null)
+        var agents = await db.Users.AsNoTracking().OnlySelectable()
             .Select(u => new { u.Id, u.Codename })
             .ToListAsync(cancellationToken);
 
