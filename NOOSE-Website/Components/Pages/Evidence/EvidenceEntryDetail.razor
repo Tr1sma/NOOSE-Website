@@ -64,32 +64,35 @@ else
         </MudGrid>
 
         <MudDivider Class="my-3" />
-        <MudText Typo="Typo.overline" Class="mud-text-secondary">Gegenstände</MudText>
-        <MudSimpleTable Dense="true" Hover="false" Class="mt-1">
-            <thead>
-                <tr><th style="width:64px"></th><th>Gegenstand</th><th style="width:100px">Menge</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var l in _display.Lines)
-                {
-                    <tr>
-                        <td>
-                            @if (l.HasImage)
-                            {
-                                <MudImage Src="@($"/dateien/asservate/{l.ItemId}")" Height="48" Width="48"
-                                          ObjectFit="ObjectFit.Cover" Class="rounded" />
-                            }
-                            else
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Default" />
-                            }
-                        </td>
-                        <td><MudLink Href="@($"/asservatenkammer/item/{l.ItemId}")">@l.ItemName</MudLink></td>
-                        <td>@l.Quantity</td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Gegenstände (@_display.Lines.Count)</MudText>
+        @* a clearing books dozens of positions at once, so cap the height *@
+        <div style="max-height:480px;overflow-y:auto">
+            <MudSimpleTable Dense="true" Hover="false" Class="mt-1">
+                <thead>
+                    <tr><th style="width:64px"></th><th>Gegenstand</th><th style="width:100px">Menge</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in _display.Lines)
+                    {
+                        <tr>
+                            <td>
+                                @if (l.HasImage)
+                                {
+                                    <MudImage Src="@($"/dateien/asservate/{l.ItemId}")" Height="48" Width="48"
+                                              ObjectFit="ObjectFit.Cover" Class="rounded" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Default" />
+                                }
+                            </td>
+                            <td><MudLink Href="@($"/asservatenkammer/item/{l.ItemId}")">@l.ItemName</MudLink></td>
+                            <td>@l.Quantity</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
 
         @if (!string.IsNullOrWhiteSpace(e.Notes))
         {

@@ -66,6 +66,14 @@ else
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     Unbekannte Bezeichnungen werden beim Speichern automatisch als neues Item angelegt.
                 </MudText>
+                @if (_input.Lines.Count > LargeEntry)
+                {
+                    @* clearings produce entries far larger than this form is comfortable with *@
+                    <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                        Dieser Eintrag hat @_input.Lines.Count Positionen — vermutlich eine Räumung.
+                        Zum Rückgängigmachen den Eintrag löschen statt ihn hier zu bearbeiten.
+                    </MudAlert>
+                }
                 @foreach (var line in _input.Lines)
                 {
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
@@ -152,6 +160,9 @@ else
 
     private bool IsEdit => !string.IsNullOrEmpty(Id);
     private const string Noose = EvidenceService.NooseOwner;
+
+    /// <summary>Above this many positions the form warns instead of pretending to be editable.</summary>
+    private const int LargeEntry = 25;
 
     private MudForm _form = default!;
     private EvidenceEntryInput _input = new();

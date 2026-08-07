@@ -36,7 +36,11 @@
                                 @EvidenceEntryTypeDisplay.Name(r.Entry.Type)
                             </MudChip>
                         </td>
-                        <td>@ItemsSummary(r)</td>
+                        <td style="max-width:360px">
+                            <MudTooltip Text="@EvidenceDisplay.ItemsFull(r)">
+                                <span>@EvidenceDisplay.ItemsSummary(r)</span>
+                            </MudTooltip>
+                        </td>
                         @if (_showOwner)
                         {
                             <td>@r.OwnerDisplay</td>
@@ -88,7 +92,4 @@
         }
         _load = false;
     }
-
-    private static string ItemsSummary(EvidenceEntryDisplay r)
-        => r.Lines.Count == 0 ? "—" : string.Join(", ", r.Lines.Select(l => $"{l.Quantity}× {l.ItemName}"));
 }

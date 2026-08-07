@@ -1,0 +1,247 @@
+@* Clearing: books the whole on-hand of every ticked item down to zero. *@
+@inject IEvidenceService Evidence
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:520px;">
+            @if (_load)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_all.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+                    Die Kammer ist bereits leer — kein Item hat einen Bestand ungleich 0.
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Von jedem angehakten Item wird der komplette Bestand auf 0 gebucht — als Herausnahme
+                    auf die NOOSE. Die Items selbst bleiben im Katalog erhalten.
+                </MudText>
+
+                @if (_negativeCount > 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined"
+                              Icon="@Icons.Material.Filled.MoveToInbox">
+                        @_negativeCount @(_negativeCount == 1 ? "Item hat" : "Items haben") einen negativen Bestand.
+                        Davon wird nichts entnommen — sie werden per Einlagerung auf 0 <b>korrigiert</b>.
+                    </MudAlert>
+                }
+
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudTextField T="string" Value="_filter" ValueChanged="FilterChanged" Immediate="true"
+                                  DebounceInterval="200" Placeholder="Item filtern…"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+                                  Class="flex-grow-1" Disabled="_busy" />
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.DoneAll" OnClick="SelectAllVisible">Alle</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy"
+                               StartIcon="@Icons.Material.Filled.CheckBoxOutlineBlank" OnClick="SelectNoneVisible">Keine</MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrWhiteSpace(_filter))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        „Alle“ und „Keine“ wirken nur auf die @_visible.Count gefilterten Zeilen.
+                    </MudText>
+                }
+
+                <MudPaper Class="pa-2" Outlined="true" Style="max-height:340px; overflow-y:auto;">
+                    @if (_visible.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary pa-2">Kein Treffer.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="0">
+                            @foreach (var row in _visible)
+                            {
+                                <MudCheckBox T="bool" Dense="true" Disabled="_busy"
+                                             Color="@(row.OnHand < 0 ? Color.Warning : Color.Primary)"
+                                             Value="@_selected.Contains(row.Item.Id)"
+                                             ValueChanged="@(_ => Toggle(row.Item.Id))">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                        <MudText Typo="Typo.body2">@row.Item.Name</MudText>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 Color="@(row.OnHand < 0 ? Color.Error : Color.Success)">
+                                            Bestand: @row.OnHand
+                                        </MudChip>
+                                        @if (row.OnHand < 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning"
+                                                     Icon="@Icons.Material.Filled.MoveToInbox">
+                                                Korrektur +@(-row.OnHand)
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </MudCheckBox>
+                            }
+                        </MudStack>
+                    }
+                </MudPaper>
+
+                <MudDivider />
+
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
+                             Icon="@Icons.Material.Filled.Outbox">
+                        @TakeItems entnehmen · @TakePieces Stück
+                    </MudChip>
+                    @if (FixItems > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                                 Icon="@Icons.Material.Filled.MoveToInbox">
+                            @FixItems korrigieren · +@FixPieces Stück
+                        </MudChip>
+                    }
+                    <MudSpacer />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @_selected.Count von @_all.Count ausgewählt
+                    </MudText>
+                </MudStack>
+
+                <MentionInput Text="@(_notes ?? string.Empty)" TextChanged="@(v => _notes = v)"
+                              Label="Notiz (optional)" Lines="2" Disabled="_busy"
+                              Placeholder="z. B. Abtransport durch den Dienstleister"
+                              HelperText="@MentionInput.Hint" />
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Die erzeugten Einträge stehen danach unter „Einträge“. Werden sie gelöscht, wird der
+                    Bestand wieder gutgeschrieben.
+                </MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_busy">Abbrechen</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="ApplyAsync"
+                   Disabled="@(_busy || _selected.Count == 0)"
+                   StartIcon="@Icons.Material.Filled.Outbox">
+            @(_busy ? "Wird gebucht…" : "Bestand auf 0 buchen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Item ids ticked on open; null ticks everything.</summary>
+    [Parameter] public IReadOnlyCollection<string>? PreselectedItemIds { get; set; }
+
+    private bool _load = true;
+    private bool _busy;
+    private string? _filter;
+    private string? _notes;
+    private int _negativeCount;
+
+    private List<EvidenceItemDisplay> _all = new();
+    private List<EvidenceItemDisplay> _visible = new();
+    private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
+
+    private IEnumerable<EvidenceItemDisplay> Picked => _all.Where(r => _selected.Contains(r.Item.Id));
+    private int TakeItems => Picked.Count(r => r.OnHand > 0);
+    private int TakePieces => Picked.Where(r => r.OnHand > 0).Sum(r => r.OnHand);
+    private int FixItems => Picked.Count(r => r.OnHand < 0);
+    private int FixPieces => Picked.Where(r => r.OnHand < 0).Sum(r => -r.OnHand);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // read fresh: the tile grid may be minutes old and is search-filtered
+        _all = (await Evidence.GetItemsAsync()).Where(r => r.OnHand != 0).ToList();
+        _negativeCount = _all.Count(r => r.OnHand < 0);
+
+        foreach (var row in _all)
+        {
+            if (PreselectedItemIds is null || PreselectedItemIds.Contains(row.Item.Id))
+            {
+                _selected.Add(row.Item.Id);
+            }
+        }
+        Recompute();
+        _load = false;
+    }
+
+    private void FilterChanged(string? value)
+    {
+        _filter = value;
+        Recompute();
+    }
+
+    private void Recompute()
+        => _visible = string.IsNullOrWhiteSpace(_filter)
+            ? _all
+            : _all.Where(r => r.Item.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private void Toggle(string itemId)
+    {
+        if (!_selected.Remove(itemId))
+        {
+            _selected.Add(itemId);
+        }
+    }
+
+    private void SelectAllVisible()
+    {
+        foreach (var row in _visible)
+        {
+            _selected.Add(row.Item.Id);
+        }
+    }
+
+    private void SelectNoneVisible()
+    {
+        foreach (var row in _visible)
+        {
+            _selected.Remove(row.Item.Id);
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_busy || _selected.Count == 0)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            var result = await Evidence.ClearStockAsync(_selected.ToList(), _notes.TrimToNull(), User);
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            // stay open so a long unticking session survives a failed booking
+            Snackbar.Add(ex.Message, Severity.Error);
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Opens the clearing dialog; returns the booking outcome or null if cancelled.</summary>
+    public static async Task<EvidenceClearingResult?> ShowAsync(IDialogService dialog, ClaimsPrincipal user,
+        IReadOnlyCollection<string>? preselectedItemIds = null)
+    {
+        var parameters = new DialogParameters<EvidenceClearingDialog>
+        {
+            { x => x.User, user },
+            { x => x.PreselectedItemIds, preselectedItemIds },
+        };
+        var reference = await dialog.ShowAsync<EvidenceClearingDialog>("Kammer räumen", parameters,
+            new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseOnEscapeKey = true,
+                BackdropClick = false,
+            });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: EvidenceClearingResult r } ? r : null;
+    }
+}

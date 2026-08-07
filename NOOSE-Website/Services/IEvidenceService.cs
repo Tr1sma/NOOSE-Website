@@ -41,4 +41,8 @@ public interface IEvidenceService
     Task<List<EvidenceEntryDisplay>> GetEntriesForOwnerAsync(string ownerType, string ownerId, CancellationToken cancellationToken = default);
     /// <summary>Entries owned by any current member (person) of the faction, newest first.</summary>
     Task<List<EvidenceEntryDisplay>> GetEntriesForFactionMembersAsync(string factionId, CancellationToken cancellationToken = default);
+
+    // ---- clearing ----
+    /// <summary>Books every selected item's whole balance to zero: one withdrawal for positive stock plus, where needed, one deposit correcting negative stock. Quantities are recomputed server-side, never taken from the caller.</summary>
+    Task<EvidenceClearingResult> ClearStockAsync(IReadOnlyCollection<string> itemIds, string? notes, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

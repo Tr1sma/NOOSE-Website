@@ -27,6 +27,7 @@ public static class MergedPageSections
         "vorgaenge", "operationen", "taskforces", "aufgaben",
         "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen", "entfuehrungen",
         "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
+        "feedback",
     ];
 
     public static readonly string[] Wanted = ["fahndung", "observationen", "doks"];

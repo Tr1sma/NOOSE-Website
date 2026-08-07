@@ -22,6 +22,7 @@ using NOOSE_Website.Data.Entities.Leads;
 using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Data.Entities.Feedback;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.CounterIntel;
 using NOOSE_Website.Data.Entities.Abductions;
@@ -165,6 +166,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // agent sign-offs over whole days
     public DbSet<Absence> Absences => Set<Absence>();
+
+    // agent feedback about the website itself
+    public DbSet<Feedback> Feedbacks => Set<Feedback>();
 
     // meetings, agenda, per-meeting sign-offs & the frozen attendance roster
     public DbSet<Meeting> Meetings => Set<Meeting>();
@@ -1129,6 +1133,21 @@ public class AppDbContext : IdentityDbContext<Agent>
             // "who is away on day D", no agent predicate
             b.HasIndex(a => new { a.FromDate, a.ToDate, a.AgentId });
             b.HasIndex(a => a.AcknowledgedAt);
+        });
+
+        modelBuilder.Entity<Feedback>(b =>
+        {
+            b.Property(f => f.AgentId).HasMaxLength(64).IsRequired();
+            b.Property(f => f.PageRoute).HasMaxLength(128);
+            b.Property(f => f.PageTab).HasMaxLength(64);
+            b.Property(f => f.Text).HasMaxLength(2000).IsRequired();
+
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(f => f.Agent).WithMany()
+                .HasForeignKey(f => f.AgentId).OnDelete(DeleteBehavior.Restrict);
+
+            // the agent's own list
+            b.HasIndex(f => f.AgentId);
         });
 
         modelBuilder.Entity<Meeting>(b =>

@@ -28,13 +28,56 @@ public sealed class EvidenceServiceTests
     private static ClaimsPrincipal OnlyReader()
         => ClaimsPrincipalBuilder.Agent("tl").WithRank(Rank.SpecialAgent).AsTeamLead().Build();
 
-    private static EvidenceService Build(SqliteTestContext ctx)
+    private static EvidenceService Build(SqliteTestContext ctx) => Build(ctx, out _);
+
+    private static EvidenceService Build(SqliteTestContext ctx, out ICaseNumberService caseNumber)
     {
         var caseNo = Substitute.For<ICaseNumberService>();
         var seq = 0;
         caseNo.NextAsync(Arg.Any<AppDbContext>(), "ASS", Arg.Any<CancellationToken>())
             .Returns(_ => $"NOOSE-ASS-2026-{++seq:0000}");
+        caseNumber = caseNo;
         return new EvidenceService(ctx.Factory, caseNo, Substitute.For<IEvidenceImageStorageService>());
+    }
+
+    /// <summary>Like <see cref="Build(SqliteTestContext)"/> but rejects allocation outside a transaction, as the real service does.</summary>
+    private static EvidenceService BuildStrict(SqliteTestContext ctx, out ICaseNumberService caseNumber)
+    {
+        var caseNo = Substitute.For<ICaseNumberService>();
+        var seq = 0;
+        // own number range: the loose builder that seeded the fixture already burned the 0001 series
+        caseNo.NextAsync(Arg.Any<AppDbContext>(), "ASS", Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<AppDbContext>().Database.CurrentTransaction is null
+                ? throw new InvalidOperationException("Aktenzeichen-Vergabe erfordert eine umschließende Transaktion.")
+                : $"NOOSE-ASS-2026-5{++seq:000}");
+        caseNumber = caseNo;
+        return new EvidenceService(ctx.Factory, caseNo, Substitute.For<IEvidenceImageStorageService>());
+    }
+
+    /// <summary>Writes a ledger row straight to the DB, bypassing the stock guard — the only way to fixture a negative balance.</summary>
+    private static void SeedRawEntry(SqliteTestContext ctx, string entryId, EvidenceEntryType type, string itemId, int quantity, bool deleted = false)
+    {
+        using var db = ctx.NewContext();
+        db.EvidenceEntries.Add(new EvidenceEntry
+        {
+            Id = entryId,
+            CaseNumber = $"NOOSE-ASS-2026-9{Math.Abs(entryId.GetHashCode()) % 1000:000}",
+            Type = type,
+            OwnerType = EvidenceService.NooseOwner,
+            HandlerAgentId = "lead",
+            Timestamp = T0,
+            IsDeleted = deleted,
+            DeletedAt = deleted ? T0 : null,
+        });
+        db.EvidenceEntryLines.Add(new EvidenceEntryLine { EntryId = entryId, ItemId = itemId, Quantity = quantity });
+        db.SaveChanges();
+    }
+
+    private static async Task<string> DepositAsync(EvidenceService svc, string itemName, int quantity)
+    {
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = itemName, Quantity = quantity })), Leader());
+        return (await svc.GetItemByNameAsync(itemName))!.Id;
     }
 
     private static EvidenceEntryInput Entry(EvidenceEntryType type, Action<EvidenceEntryInput>? cfg = null)
@@ -380,5 +423,271 @@ public sealed class EvidenceServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
                 i => i.Lines.Add(new EvidenceLineInput { ItemName = "X", Quantity = 1 })), OnlyReader()));
+    }
+
+    // ---- clearing ----
+
+    [Fact]
+    public async Task ClearStock_PositiveStock_BooksOneWithdrawalWithFullQuantities()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var a = await DepositAsync(svc, "Pistole", 10);
+        var b = await DepositAsync(svc, "Messer", 4);
+
+        var result = await svc.ClearStockAsync(new[] { a, b }, null, Leader());
+
+        Assert.Equal(2, result.ClearedItems);
+        Assert.Equal(14, result.ClearedPieces);
+        Assert.Equal(0, result.CorrectedItems);
+        Assert.Null(result.CorrectionCaseNumber);
+        Assert.Equal(0, await svc.GetOnHandAsync(a));
+        Assert.Equal(0, await svc.GetOnHandAsync(b));
+
+        using var db = ctx.NewContext();
+        var booked = db.EvidenceEntries.Single(e => e.Id == result.WithdrawalEntryId);
+        Assert.Equal(EvidenceEntryType.Withdrawal, booked.Type);
+        Assert.Equal(EvidenceService.NooseOwner, booked.OwnerType);
+        Assert.Null(booked.OwnerId);
+        var lines = db.EvidenceEntryLines.Where(l => l.EntryId == booked.Id).ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(10, lines.Single(l => l.ItemId == a).Quantity);
+        Assert.Equal(4, lines.Single(l => l.ItemId == b).Quantity);
+    }
+
+    [Fact]
+    public async Task ClearStock_NegativeStock_BooksCorrectingDeposit()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Zyanid", 2);
+        // a raw withdrawal of 5 drives the balance to -3; the service itself would reject it
+        SeedRawEntry(ctx, "raw", EvidenceEntryType.Withdrawal, id, 5);
+        Assert.Equal(-3, await svc.GetOnHandAsync(id));
+
+        var result = await svc.ClearStockAsync(new[] { id }, null, Leader());
+
+        Assert.Equal(0, result.ClearedItems);
+        Assert.Equal(1, result.CorrectedItems);
+        Assert.Equal(3, result.CorrectedPieces);
+        Assert.Null(result.WithdrawalCaseNumber);
+        Assert.Equal(0, await svc.GetOnHandAsync(id));
+
+        using var db = ctx.NewContext();
+        var booked = db.EvidenceEntries.Single(e => e.Id == result.CorrectionEntryId);
+        Assert.Equal(EvidenceEntryType.Deposit, booked.Type);
+        Assert.Equal(3, db.EvidenceEntryLines.Single(l => l.EntryId == booked.Id).Quantity);
+    }
+
+    [Fact]
+    public async Task ClearStock_MixedBalances_BooksBothEntries_SharingTimestamp()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var a = await DepositAsync(svc, "Pistole", 10);
+        var b = await DepositAsync(svc, "Zyanid", 1);
+        SeedRawEntry(ctx, "raw", EvidenceEntryType.Withdrawal, b, 4);
+
+        var result = await svc.ClearStockAsync(new[] { a, b }, null, Leader());
+
+        Assert.Equal(1, result.ClearedItems);
+        Assert.Equal(1, result.CorrectedItems);
+        Assert.Equal(3, result.CorrectedPieces);
+        Assert.Equal(0, await svc.GetOnHandAsync(a));
+        Assert.Equal(0, await svc.GetOnHandAsync(b));
+
+        using var db = ctx.NewContext();
+        var withdrawal = db.EvidenceEntries.Single(e => e.Id == result.WithdrawalEntryId);
+        var correction = db.EvidenceEntries.Single(e => e.Id == result.CorrectionEntryId);
+        Assert.Equal(withdrawal.Timestamp, correction.Timestamp);
+        Assert.NotEqual(withdrawal.CaseNumber, correction.CaseNumber);
+        Assert.StartsWith("Räumung der Asservatenkammer", withdrawal.Notes);
+        Assert.Contains("Korrektur Negativbestand", correction.Notes);
+    }
+
+    [Fact]
+    public async Task ClearStock_ZeroStockItem_IsSkipped()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var a = await DepositAsync(svc, "Pistole", 5);
+        var b = await DepositAsync(svc, "Messer", 2);
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Withdrawal,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 5 })), Leader());
+
+        var result = await svc.ClearStockAsync(new[] { a, b }, null, Leader());
+
+        Assert.Equal(1, result.ClearedItems);
+        Assert.Equal(1, result.SkippedItems);
+        using var db = ctx.NewContext();
+        var line = db.EvidenceEntryLines.Single(l => l.EntryId == result.WithdrawalEntryId);
+        Assert.Equal(b, line.ItemId);
+    }
+
+    [Fact]
+    public async Task ClearStock_RecomputesOnHand_AfterConcurrentWithdrawal()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 10);
+        // another agent takes 4 between dialog open and apply
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Withdrawal,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 4 })), Leader());
+
+        var result = await svc.ClearStockAsync(new[] { id }, null, Leader());
+
+        Assert.Equal(6, result.ClearedPieces);
+        Assert.Equal(0, await svc.GetOnHandAsync(id));
+    }
+
+    [Fact]
+    public async Task ClearStock_ItemDrainedConcurrently_BooksNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 10);
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Withdrawal,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 10 })), Leader());
+        var before = CountEntries(ctx);
+
+        var result = await svc.ClearStockAsync(new[] { id }, null, Leader());
+
+        Assert.False(result.Booked);
+        Assert.Equal(1, result.SkippedItems);
+        Assert.Equal(before, CountEntries(ctx));
+    }
+
+    [Fact]
+    public async Task ClearStock_EmptySelection_BooksNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx, out var caseNo);
+
+        var result = await svc.ClearStockAsync(Array.Empty<string>(), null, Leader());
+
+        Assert.Equal(EvidenceClearingResult.Empty, result);
+        Assert.Equal(0, CountEntries(ctx));
+        await caseNo.DidNotReceive().NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ClearStock_UnknownAndDeletedItemIds_AreSkipped()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 5);
+        // soft-delete the item but leave its stock intact
+        using (var db = ctx.NewContext())
+        {
+            var item = db.EvidenceItems.Single(i => i.Id == id);
+            item.IsDeleted = true;
+            item.DeletedAt = T0;
+            db.SaveChanges();
+        }
+        var before = CountEntries(ctx);
+
+        var result = await svc.ClearStockAsync(new[] { id, "does-not-exist" }, null, Leader());
+
+        Assert.False(result.Booked);
+        Assert.Equal(2, result.SkippedItems);
+        Assert.Equal(before, CountEntries(ctx));
+    }
+
+    [Fact]
+    public async Task ClearStock_ExcludesDeletedEntriesFromQuantity()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 10);
+        SeedRawEntry(ctx, "ghost", EvidenceEntryType.Deposit, id, 100, deleted: true);
+
+        var result = await svc.ClearStockAsync(new[] { id }, null, Leader());
+
+        Assert.Equal(10, result.ClearedPieces);
+    }
+
+    [Fact]
+    public async Task ClearStock_DuplicateIds_BookOnePositionPerItem()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 7);
+
+        var result = await svc.ClearStockAsync(new[] { id, id }, null, Leader());
+
+        Assert.Equal(1, result.ClearedItems);
+        Assert.Equal(7, result.ClearedPieces);
+        using var db = ctx.NewContext();
+        Assert.Single(db.EvidenceEntryLines.Where(l => l.EntryId == result.WithdrawalEntryId));
+    }
+
+    [Fact]
+    public async Task ClearStock_NonLeadership_Throws_AndWritesNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 5);
+        var before = CountEntries(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.ClearStockAsync(new[] { id }, null, Junior()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.ClearStockAsync(new[] { id }, null, OnlyReader()));
+
+        Assert.Equal(before, CountEntries(ctx));
+        Assert.Equal(5, await svc.GetOnHandAsync(id));
+    }
+
+    [Fact]
+    public async Task ClearStock_AppendsFreeTextNote_ToBothHalves()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var a = await DepositAsync(svc, "Pistole", 3);
+        var b = await DepositAsync(svc, "Zyanid", 1);
+        SeedRawEntry(ctx, "raw", EvidenceEntryType.Withdrawal, b, 2);
+
+        var result = await svc.ClearStockAsync(new[] { a, b }, "Abtransport LSPD", Leader());
+
+        using var db = ctx.NewContext();
+        var withdrawal = db.EvidenceEntries.Single(e => e.Id == result.WithdrawalEntryId);
+        var correction = db.EvidenceEntries.Single(e => e.Id == result.CorrectionEntryId);
+        Assert.Contains("Räumung der Asservatenkammer", withdrawal.Notes);
+        Assert.Contains("Abtransport LSPD", withdrawal.Notes);
+        Assert.Contains("Korrektur Negativbestand", correction.Notes);
+        Assert.Contains("Abtransport LSPD", correction.Notes);
+    }
+
+    [Fact]
+    public async Task ClearStock_AllocatesBothCaseNumbers_InsideOneTransaction()
+    {
+        using var ctx = new SqliteTestContext();
+        var loose = Build(ctx);
+        var a = await DepositAsync(loose, "Pistole", 3);
+        var b = await DepositAsync(loose, "Zyanid", 1);
+        SeedRawEntry(ctx, "raw", EvidenceEntryType.Withdrawal, b, 2);
+
+        var svc = BuildStrict(ctx, out var caseNo);
+        var result = await svc.ClearStockAsync(new[] { a, b }, null, Leader());
+
+        Assert.True(result.Booked);
+        await caseNo.Received(2).NextAsync(Arg.Any<AppDbContext>(), "ASS", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ClearStock_SetsActorAsHandler()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var id = await DepositAsync(svc, "Pistole", 3);
+
+        var result = await svc.ClearStockAsync(new[] { id }, null, Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal("lead", db.EvidenceEntries.Single(e => e.Id == result.WithdrawalEntryId).HandlerAgentId);
+    }
+
+    private static int CountEntries(SqliteTestContext ctx)
+    {
+        using var db = ctx.NewContext();
+        return db.EvidenceEntries.Count();
     }
 }

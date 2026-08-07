@@ -52,7 +52,11 @@
                                 @EvidenceEntryTypeDisplay.Name(r.Entry.Type)
                             </MudChip>
                         </td>
-                        <td>@ItemsSummary(r)</td>
+                        <td style="max-width:360px">
+                            <MudTooltip Text="@EvidenceDisplay.ItemsFull(r)">
+                                <span>@EvidenceDisplay.ItemsSummary(r)</span>
+                            </MudTooltip>
+                        </td>
                         <td>@r.OwnerDisplay</td>
                         <td>@r.HandlerCodename</td>
                         <td>@r.Entry.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
@@ -82,7 +86,4 @@
         _rows = await Evidence.GetEntriesAsync(_type);
         _load = false;
     }
-
-    private static string ItemsSummary(EvidenceEntryDisplay r)
-        => r.Lines.Count == 0 ? "—" : string.Join(", ", r.Lines.Select(l => $"{l.Quantity}× {l.ItemName}"));
 }

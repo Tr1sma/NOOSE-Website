@@ -35,6 +35,7 @@ public static class NavCatalog
             Description: "Eigene Abwesenheiten melden und einsehen"),
         new NavEntry("finanzierungen", "/finanzierungen", Icons.Material.Filled.RequestQuote, "Finanzierungen", NavSection.MeinDienst, NavArea.MeinDienst, BadgeKey: "financing",
             Description: "Finanzierungsanträge stellen und das eigene Monatsbudget einsehen"),
+        new NavEntry("feedback", "/feedback", Icons.Material.Filled.Feedback, "Feedback", NavSection.MeinDienst, NavArea.MeinDienst, Description: "Feedback zur Website"),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten, NavArea.Akten,
             Description: "Zentrale Akte je Person — alles zu einer Person an einem Ort"),

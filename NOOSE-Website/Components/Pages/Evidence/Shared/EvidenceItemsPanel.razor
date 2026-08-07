@@ -1,21 +1,43 @@
-@* Catalog of all evidence items with computed on-hand; searchable. *@
+@* Catalog of all evidence items with computed on-hand; searchable, with bulk clearing. *@
 @inject IEvidenceService Evidence
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 @inject NavigationManager Nav
 
 <MudStack Spacing="3">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
         <MudText Typo="Typo.h6">Bestand</MudText>
         <MudSpacer />
-        <AuthorizeView Policy="@Policies.Leadership">
-            <MudButton Href="/asservatenkammer/item/neu" Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add">Neues Item</MudButton>
-        </AuthorizeView>
+        @if (_mayClear)
+        {
+            @if (_selectMode)
+            {
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Close"
+                           OnClick="ExitSelect">Auswahl beenden</MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@(_rows.Count == 0)"
+                           StartIcon="@Icons.Material.Filled.Checklist" OnClick="EnterSelect">Auswählen</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                           Disabled="@(_rows.Count == 0 && string.IsNullOrWhiteSpace(_search))"
+                           StartIcon="@Icons.Material.Filled.Outbox"
+                           OnClick="@(() => ClearAsync(null))">Kammer räumen</MudButton>
+                <MudButton Href="/asservatenkammer/item/neu" Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add">Neues Item</MudButton>
+            }
+        }
     </MudStack>
 
-    <MudTextField T="string" @bind-Value="_search" Immediate="true" DebounceInterval="300"
-                  OnDebounceIntervalElapsed="@(_ => ReloadAsync())"
-                  Placeholder="Item suchen…" Adornment="Adornment.Start"
-                  AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Clearable="true" />
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <MudTextField T="string" @bind-Value="_search" Immediate="true" DebounceInterval="300"
+                      OnDebounceIntervalElapsed="@(_ => ReloadAsync())"
+                      Placeholder="Item suchen…" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Clearable="true"
+                      Class="flex-grow-1" />
+        <MudSwitch T="bool" Value="_showZero" ValueChanged="ShowZeroChanged" Color="Color.Primary"
+                   Label="Bestand 0 anzeigen" />
+    </MudStack>
 
     @if (_load)
     {
@@ -23,16 +45,48 @@
     }
     else if (_rows.Count == 0)
     {
-        <EmptyState Icon="@Icons.Material.Filled.Inventory2" Title="Keine Items"
-                    Text="Lege ein Item an oder erfasse einen Eintrag — neue Gegenstände werden automatisch als Item angelegt." />
+        @if (!string.IsNullOrWhiteSpace(_search))
+        {
+            <EmptyState Icon="@Icons.Material.Filled.Search" Title="Kein Treffer"
+                        Text="@($"Kein Item passt zu „{_search}“.")" />
+        }
+        else if (_zeroCount > 0)
+        {
+            <EmptyState Icon="@Icons.Material.Filled.Inventory2" Title="Kammer ist leer"
+                        Text="@($"Alle {_zeroCount} Items stehen auf Bestand 0. Sie bleiben im Katalog und tauchen wieder auf, sobald etwas eingelagert wird.")">
+                <Actions>
+                    <MudButton Href="/asservatenkammer/eintrag/neu" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add">Neuer Eintrag</MudButton>
+                </Actions>
+            </EmptyState>
+        }
+        else
+        {
+            <EmptyState Icon="@Icons.Material.Filled.Inventory2" Title="Keine Items"
+                        Text="Lege ein Item an oder erfasse einen Eintrag — neue Gegenstände werden automatisch als Item angelegt." />
+        }
     }
     else
     {
         <div class="d-flex flex-wrap gap-3">
             @foreach (var r in _rows)
             {
-                <MudPaper Class="pa-2" Elevation="2" Style="width:184px;cursor:pointer"
-                          @onclick="@(() => Nav.NavigateTo($"/asservatenkammer/item/{r.Item.Id}"))">
+                var picked = _selectMode && _picked.Contains(r.Item.Id);
+                <MudPaper Elevation="2" Style="width:184px;cursor:pointer"
+                          Class="@($"pa-2 asservat-kachel{(picked ? " asservat-kachel-gewaehlt" : string.Empty)}")"
+                          role="@(_selectMode ? "checkbox" : "link")"
+                          aria-checked="@(_selectMode ? (picked ? "true" : "false") : null)"
+                          aria-label="@TileLabel(r)"
+                          tabindex="0"
+                          @onclick="@(() => ActivateTile(r))"
+                          @onkeydown="@(e => TileKeyDown(e, r))">
+                    @if (_selectMode)
+                    {
+                        <div class="asservat-kachel-haken">
+                            <MudIcon Size="Size.Small" Color="@(picked ? Color.Primary : Color.Default)"
+                                     Icon="@(picked ? Icons.Material.Filled.CheckBox : Icons.Material.Filled.CheckBoxOutlineBlank)" />
+                        </div>
+                    }
                     @if (r.HasImage)
                     {
                         <MudImage Src="@($"/dateien/asservate/{r.Item.Id}")" Alt="@r.Item.Name"
@@ -55,20 +109,157 @@
             }
         </div>
     }
+
+    @if (_selectMode && _mayClear)
+    {
+        <MudPaper Elevation="8" Class="asservat-aktionsleiste">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                <MudIcon Icon="@Icons.Material.Filled.Checklist" Color="Color.Primary" />
+                <MudText Typo="Typo.body2">
+                    <b>@_picked.Count</b> @(_picked.Count == 1 ? "Item" : "Items") · <b>@PickedPieces</b> Stück
+                </MudText>
+                @if (PickedNegatives > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">
+                        @PickedNegatives negativ
+                    </MudChip>
+                }
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="PickAllVisible">Alle</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="PickNone">Keine</MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="@(_picked.Count == 0)"
+                           StartIcon="@Icons.Material.Filled.Outbox"
+                           OnClick="@(() => ClearAsync(_picked.ToList()))">Bestand auf 0</MudButton>
+            </MudStack>
+        </MudPaper>
+    }
 </MudStack>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
     private bool _load = true;
+    private bool _mayClear;
+    private bool _selectMode;
+    private bool _showZero;
     private string? _search;
+    private int _zeroCount;
+    private ClaimsPrincipal _user = default!;
     private List<EvidenceItemDisplay> _rows = new();
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private readonly HashSet<string> _picked = new(StringComparer.Ordinal);
+    // stock of every row seen so far, so the counter survives a search that hides a picked tile
+    private readonly Dictionary<string, int> _stockById = new(StringComparer.Ordinal);
+
+    private int PickedPieces => _picked.Sum(id => Math.Abs(_stockById.GetValueOrDefault(id)));
+    private int PickedNegatives => _picked.Count(id => _stockById.GetValueOrDefault(id) < 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayClear = _user.IsLeadership() && _user.MayWrite();
+        await ReloadAsync();
+    }
 
     private async Task ReloadAsync()
     {
         _load = true;
-        // hide items with nothing on hand; negatives (data anomalies) stay visible in red
-        _rows = (await Evidence.GetItemsAsync(_search)).Where(r => r.OnHand != 0).ToList();
+        StateHasChanged();
+        var all = await Evidence.GetItemsAsync(_search);
+        // hide items with nothing on hand unless asked; negatives (data anomalies) stay visible in red
+        _rows = _showZero ? all : all.Where(r => r.OnHand != 0).ToList();
+        // an empty grid after a clearing is not an empty catalog — the empty state says which
+        _zeroCount = all.Count(r => r.OnHand == 0);
+        foreach (var r in _rows)
+        {
+            _stockById[r.Item.Id] = r.OnHand;
+        }
         _load = false;
+    }
+
+    private async Task ShowZeroChanged(bool value)
+    {
+        _showZero = value;
+        await ReloadAsync();
+    }
+
+    private void EnterSelect() => _selectMode = true;
+
+    private void ExitSelect()
+    {
+        _selectMode = false;
+        _picked.Clear();
+    }
+
+    private void ActivateTile(EvidenceItemDisplay r)
+    {
+        if (_selectMode)
+        {
+            TogglePick(r);
+            return;
+        }
+        Nav.NavigateTo($"/asservatenkammer/item/{r.Item.Id}");
+    }
+
+    // keyboard parity for the tile click
+    private void TileKeyDown(KeyboardEventArgs e, EvidenceItemDisplay r)
+    {
+        if (e.Key is "Enter" or " ")
+        {
+            ActivateTile(r);
+        }
+    }
+
+    private void TogglePick(EvidenceItemDisplay r)
+    {
+        if (!_picked.Remove(r.Item.Id))
+        {
+            _picked.Add(r.Item.Id);
+        }
+    }
+
+    private void PickAllVisible()
+    {
+        foreach (var r in _rows)
+        {
+            _picked.Add(r.Item.Id);
+        }
+    }
+
+    private void PickNone() => _picked.Clear();
+
+    private static string TileLabel(EvidenceItemDisplay r) => $"{r.Item.Name}, Bestand {r.OnHand}";
+
+    private async Task ClearAsync(IReadOnlyCollection<string>? preselected)
+    {
+        var result = await EvidenceClearingDialog.ShowAsync(DialogService, _user, preselected);
+        if (result is null)
+        {
+            return;
+        }
+        _selectMode = false;
+        _picked.Clear();
+        await ReloadAsync();
+
+        if (!result.Booked)
+        {
+            Snackbar.Add("Nichts zu räumen — die ausgewählten Items standen bereits auf 0.", Severity.Warning);
+            return;
+        }
+
+        var parts = new List<string>();
+        if (result.ClearedItems > 0)
+        {
+            parts.Add($"{result.ClearedItems} Items entnommen ({result.ClearedPieces} Stück)");
+        }
+        if (result.CorrectedItems > 0)
+        {
+            parts.Add($"{result.CorrectedItems} negative Bestände korrigiert (+{result.CorrectedPieces} Stück)");
+        }
+        if (result.SkippedItems > 0)
+        {
+            parts.Add($"{result.SkippedItems} übersprungen");
+        }
+        Snackbar.Add($"Kammer geräumt: {string.Join(", ", parts)}.", Severity.Success);
     }
 }

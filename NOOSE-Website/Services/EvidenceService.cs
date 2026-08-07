@@ -476,6 +476,97 @@ public class EvidenceService(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    // ---- clearing ----
+
+    /// <summary>Stable note prefixes so a clearing is recognisable in the ledger and findable in the global search.</summary>
+    private const string ClearingNote = "Räumung der Asservatenkammer";
+    private const string ClearingCorrectionNote = "Räumung der Asservatenkammer · Korrektur Negativbestand";
+
+    public async Task<EvidenceClearingResult> ClearStockAsync(IReadOnlyCollection<string> itemIds, string? notes, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        RequireManage(actor);
+
+        var ids = itemIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+        {
+            return EvidenceClearingResult.Empty;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // one transaction so both halves and both counter bumps commit together
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // soft-deleted items drop out through the global query filter
+        var live = await db.EvidenceItems
+            .Where(i => ids.Contains(i.Id))
+            .Select(i => i.Id)
+            .ToListAsync(cancellationToken);
+        if (live.Count == 0)
+        {
+            // an empty id list would make ComputeOnHandAsync scan the whole catalog
+            return EvidenceClearingResult.Empty with { SkippedItems = ids.Count };
+        }
+
+        // authoritative balance at apply time; the caller's view may be stale
+        var onHand = await ComputeOnHandAsync(db, live, cancellationToken);
+        var surplus = live.Where(id => onHand.GetValueOrDefault(id) > 0)
+            .Select(id => (ItemId: id, Quantity: onHand[id])).ToList();
+        var deficit = live.Where(id => onHand.GetValueOrDefault(id) < 0)
+            .Select(id => (ItemId: id, Quantity: -onHand[id])).ToList();
+
+        var skipped = ids.Count - surplus.Count - deficit.Count;
+        if (surplus.Count == 0 && deficit.Count == 0)
+        {
+            return EvidenceClearingResult.Empty with { SkippedItems = skipped };
+        }
+
+        var note = notes.TrimToNull();
+        var handlerId = actor.GetAgentId() ?? string.Empty;
+        // one instant ties both halves together on the ledger
+        var timestamp = DateTime.UtcNow;
+
+        var withdrawal = surplus.Count == 0 ? null : await BookClearingEntryAsync(
+            db, EvidenceEntryType.Withdrawal, surplus, handlerId, timestamp, Compose(ClearingNote, note), cancellationToken);
+
+        // Type is per entry and Quantity is positive, so a negative balance needs its own deposit
+        var correction = deficit.Count == 0 ? null : await BookClearingEntryAsync(
+            db, EvidenceEntryType.Deposit, deficit, handlerId, timestamp, Compose(ClearingCorrectionNote, note), cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+
+        return new EvidenceClearingResult(
+            surplus.Count, surplus.Sum(p => p.Quantity),
+            deficit.Count, deficit.Sum(p => p.Quantity),
+            skipped,
+            withdrawal?.Id, withdrawal?.CaseNumber,
+            correction?.Id, correction?.CaseNumber);
+    }
+
+    /// <summary>Books one NOOSE-owned clearing entry whose positions carry each item's whole balance.</summary>
+    private async Task<EvidenceEntry> BookClearingEntryAsync(AppDbContext db, EvidenceEntryType type, IReadOnlyList<(string ItemId, int Quantity)> positions, string handlerId, DateTime timestamp, string? note, CancellationToken cancellationToken)
+    {
+        var entry = new EvidenceEntry
+        {
+            CaseNumber = await caseNumber.NextAsync(db, CasePrefix, cancellationToken),
+            Type = type,
+            OwnerType = NooseOwner,
+            OwnerId = null,
+            HandlerAgentId = handlerId,
+            Timestamp = timestamp,
+            Notes = note,
+        };
+        foreach (var p in positions)
+        {
+            entry.Lines.Add(new EvidenceEntryLine { ItemId = p.ItemId, Quantity = p.Quantity });
+        }
+        db.EvidenceEntries.Add(entry);
+        await db.SaveChangesAsync(cancellationToken);
+        return entry;
+    }
+
+    private static string Compose(string prefix, string? note)
+        => note is null ? prefix : $"{prefix} · {note}";
+
     // ---- helpers ----
 
     /// <summary>Enrich entries with resolved owner (NOOSE sentinel / Agent / Person), handler codename and item positions.</summary>
