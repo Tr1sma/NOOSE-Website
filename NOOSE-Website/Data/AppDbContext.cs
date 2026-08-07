@@ -895,9 +895,12 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(i => i.Name).HasMaxLength(200).IsRequired();
             b.Property(i => i.Description).HasColumnType("longtext");
+            // 300 matches ProfileSuggestion.Value, so a category survives the suggestion catalog
+            b.Property(i => i.Category).HasMaxLength(300);
             b.Property(i => i.ImageFileName).HasMaxLength(200);
             b.Property(i => i.ImageContentType).HasMaxLength(100);
             b.HasIndex(i => i.Name).IsUnique();
+            b.HasIndex(i => i.Category);
         });
 
         modelBuilder.Entity<EvidenceEntry>(b =>

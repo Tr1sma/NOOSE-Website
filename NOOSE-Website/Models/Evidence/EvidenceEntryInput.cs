@@ -28,4 +28,7 @@ public class EvidenceLineInput
     public string? ItemId { get; set; }
     public string ItemName { get; set; } = string.Empty;
     public int Quantity { get; set; } = 1;
+
+    /// <summary>Category for an item this position auto-creates; ignored when the name already exists.</summary>
+    public string? NewItemCategory { get; set; }
 }

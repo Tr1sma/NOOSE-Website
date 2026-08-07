@@ -15,6 +15,10 @@ public class EvidenceItem : IAuditable, ISoftDelete
     [Column("Beschreibung")]
     public string? Description { get; set; }
 
+    /// <summary>Grouping label from the admin-maintained suggestion catalog.</summary>
+    [Column("Kategorie")]
+    public string? Category { get; set; }
+
     /// <summary>Server-assigned image file name; null when no picture uploaded.</summary>
     [Column("BildDatei")]
     public string? ImageFileName { get; set; }

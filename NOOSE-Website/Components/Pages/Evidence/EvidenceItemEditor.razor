@@ -3,6 +3,7 @@
 @attribute [Authorize(Policy = Policies.Leadership)]
 @inject IEvidenceService Evidence
 @inject IEvidenceImageStorageService Storage
+@inject IProfileSuggestionService SuggestionService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
@@ -26,6 +27,12 @@ else
                               RequiredError="Bezeichnung ist erforderlich" Variant="Variant.Outlined" />
                 <MudTextField @bind-Value="_input.Description" Label="Beschreibung (optional)" Lines="2"
                               Variant="Variant.Outlined" />
+                <MudAutocomplete T="string" @bind-Value="_input.Category" Label="Kategorie (optional)"
+                                 SearchFunc="@CategorySearch" Variant="Variant.Outlined"
+                                 CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                                 MinCharacters="0" Immediate="true" MaxItems="20" Clearable="true"
+                                 MaxLength="300" Placeholder="z. B. Waffen, Drogen, Fahrzeugteile"
+                                 HelperText="Freie Eingabe legt eine neue Kategorie an" />
 
                 <div>
                     <MudText Typo="Typo.subtitle2" Class="mb-2">Bild</MudText>
@@ -87,6 +94,7 @@ else
     private bool _load = true;
     private bool _saving;
     private string? _loadedKey;
+    private IReadOnlyList<string> _categories = Array.Empty<string>();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -101,6 +109,7 @@ else
         _file = null;
         _hasImage = false;
         _user = (await AuthStateTask).User;
+        _categories = await SuggestionService.GetAsync(SuggestionType.EvidenceCategory);
 
         if (IsEdit)
         {
@@ -109,10 +118,21 @@ else
             {
                 _input.Name = item.Name;
                 _input.Description = item.Description;
+                _input.Category = item.Category;
                 _hasImage = !string.IsNullOrEmpty(item.ImageFileName);
             }
         }
         _load = false;
+    }
+
+    private async Task<IEnumerable<string>> CategorySearch(string value, CancellationToken token)
+    {
+        await Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return _categories;
+        }
+        return _categories.Where(c => c.Contains(value, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OnFileChanged(IBrowserFile file)

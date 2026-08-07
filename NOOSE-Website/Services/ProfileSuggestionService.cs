@@ -224,6 +224,10 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
                 await db.FinancingItems.IgnoreQueryFilters().Where(i => i.Category == oldValue)
                     .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, newValue), cancellationToken);
                 break;
+            case SuggestionType.EvidenceCategory:
+                await db.EvidenceItems.IgnoreQueryFilters().Where(i => i.Category == oldValue)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, newValue), cancellationToken);
+                break;
         }
     }
 
@@ -274,6 +278,10 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
                 await db.FinancingItems.IgnoreQueryFilters().Where(i => i.Category == value)
                     .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, (string?)null), cancellationToken);
                 break;
+            case SuggestionType.EvidenceCategory:
+                await db.EvidenceItems.IgnoreQueryFilters().Where(i => i.Category == value)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, (string?)null), cancellationToken);
+                break;
         }
     }
 
@@ -313,6 +321,9 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
                 break;
             case SuggestionType.FinancingCategory:
                 await MergeCountsAsync(db.FinancingItems.IgnoreQueryFilters().Where(i => i.Category != null).Select(i => i.Category!), map, cancellationToken);
+                break;
+            case SuggestionType.EvidenceCategory:
+                await MergeCountsAsync(db.EvidenceItems.IgnoreQueryFilters().Where(i => i.Category != null).Select(i => i.Category!), map, cancellationToken);
                 break;
         }
         return map;

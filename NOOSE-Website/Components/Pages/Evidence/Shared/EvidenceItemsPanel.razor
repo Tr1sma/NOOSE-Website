@@ -1,5 +1,6 @@
 @* Catalog of all evidence items with computed on-hand; searchable, with bulk clearing. *@
 @inject IEvidenceService Evidence
+@inject IProfileSuggestionService SuggestionService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
@@ -20,9 +21,11 @@
                 <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@(_rows.Count == 0)"
                            StartIcon="@Icons.Material.Filled.Checklist" OnClick="EnterSelect">Auswählen</MudButton>
                 <MudButton Variant="Variant.Outlined" Color="Color.Warning"
-                           Disabled="@(_rows.Count == 0 && string.IsNullOrWhiteSpace(_search))"
+                           Disabled="@(_rows.Count == 0 && !HasFilter)"
                            StartIcon="@Icons.Material.Filled.Outbox"
-                           OnClick="@(() => ClearAsync(null))">Kammer räumen</MudButton>
+                           OnClick="@(() => ClearAsync(null))">
+                    @(_category is null ? "Kammer räumen" : $"„{EvidenceCategories.Label(_category)}“ räumen")
+                </MudButton>
                 <MudButton Href="/asservatenkammer/item/neu" Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Add">Neues Item</MudButton>
             }
@@ -35,6 +38,15 @@
                       Placeholder="Item suchen…" Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Clearable="true"
                       Class="flex-grow-1" />
+        <MudSelect T="string" Value="_category" ValueChanged="CategoryChanged" Clearable="true" Dense="true"
+                   Placeholder="Alle Kategorien" Style="min-width:200px;max-width:240px" Variant="Variant.Outlined"
+                   ToStringFunc="@(c => c is null ? string.Empty : EvidenceCategories.Label(c))">
+            @foreach (var c in _categories)
+            {
+                <MudSelectItem T="string" Value="@c">@c</MudSelectItem>
+            }
+            <MudSelectItem T="string" Value="@EvidenceCategories.None">Ohne Kategorie</MudSelectItem>
+        </MudSelect>
         <MudSwitch T="bool" Value="_showZero" ValueChanged="ShowZeroChanged" Color="Color.Primary"
                    Label="Bestand 0 anzeigen" />
     </MudStack>
@@ -45,10 +57,10 @@
     }
     else if (_rows.Count == 0)
     {
-        @if (!string.IsNullOrWhiteSpace(_search))
+        @if (HasFilter)
         {
             <EmptyState Icon="@Icons.Material.Filled.Search" Title="Kein Treffer"
-                        Text="@($"Kein Item passt zu „{_search}“.")" />
+                        Text="@FilterMissText" />
         }
         else if (_zeroCount > 0)
         {
@@ -101,10 +113,20 @@
                     }
                     <MudText Typo="Typo.body2" Class="mt-1"
                              Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@r.Item.Name</MudText>
-                    <MudChip T="string" Size="Size.Small"
-                             Color="@(r.OnHand < 0 ? Color.Error : r.OnHand == 0 ? Color.Default : Color.Success)">
-                        Bestand: @r.OnHand
-                    </MudChip>
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(r.OnHand < 0 ? Color.Error : r.OnHand == 0 ? Color.Default : Color.Success)">
+                            Bestand: @r.OnHand
+                        </MudChip>
+                        @if (!string.IsNullOrWhiteSpace(r.Item.Category))
+                        {
+                            <MudTooltip Text="@r.Item.Category">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                    @Shorten(r.Item.Category)
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    </MudStack>
                 </MudPaper>
             }
         </div>
@@ -143,9 +165,11 @@
     private bool _selectMode;
     private bool _showZero;
     private string? _search;
+    private string? _category;
     private int _zeroCount;
     private ClaimsPrincipal _user = default!;
     private List<EvidenceItemDisplay> _rows = new();
+    private IReadOnlyList<string> _categories = Array.Empty<string>();
 
     private readonly HashSet<string> _picked = new(StringComparer.Ordinal);
     // stock of every row seen so far, so the counter survives a search that hides a picked tile
@@ -154,10 +178,31 @@
     private int PickedPieces => _picked.Sum(id => Math.Abs(_stockById.GetValueOrDefault(id)));
     private int PickedNegatives => _picked.Count(id => _stockById.GetValueOrDefault(id) < 0);
 
+    private bool HasFilter => !string.IsNullOrWhiteSpace(_search) || _category is not null;
+
+    private string FilterMissText
+    {
+        get
+        {
+            var scope = _category switch
+            {
+                null => "Kein Item",
+                var c when EvidenceCategories.IsNone(c) => "Kein Item ohne Kategorie",
+                var c => $"Kein Item in der Kategorie „{c}“",
+            };
+            var miss = string.IsNullOrWhiteSpace(_search) ? $"{scope}." : $"{scope} passt zu „{_search}“.";
+            // the hidden-zero switch is the likelier reason than an empty catalog, so name it
+            return _zeroCount > 0 && !_showZero
+                ? $"{miss} {_zeroCount} {(_zeroCount == 1 ? "Item steht" : "Items stehen")} auf Bestand 0 — mit „Bestand 0 anzeigen“ sichtbar."
+                : miss;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _mayClear = _user.IsLeadership() && _user.MayWrite();
+        _categories = await SuggestionService.GetAsync(SuggestionType.EvidenceCategory);
         await ReloadAsync();
     }
 
@@ -165,7 +210,7 @@
     {
         _load = true;
         StateHasChanged();
-        var all = await Evidence.GetItemsAsync(_search);
+        var all = await Evidence.GetItemsAsync(_search, _category);
         // hide items with nothing on hand unless asked; negatives (data anomalies) stay visible in red
         _rows = _showZero ? all : all.Where(r => r.OnHand != 0).ToList();
         // an empty grid after a clearing is not an empty catalog — the empty state says which
@@ -182,6 +227,16 @@
         _showZero = value;
         await ReloadAsync();
     }
+
+    private async Task CategoryChanged(string? category)
+    {
+        _category = category;
+        await ReloadAsync();
+    }
+
+    /// <summary>Keeps a long category label inside the fixed-width tile; the full value sits in the tooltip.</summary>
+    private static string Shorten(string category)
+        => category.Length <= 16 ? category : category[..15] + "…";
 
     private void EnterSelect() => _selectMode = true;
 
@@ -228,15 +283,22 @@
 
     private void PickNone() => _picked.Clear();
 
-    private static string TileLabel(EvidenceItemDisplay r) => $"{r.Item.Name}, Bestand {r.OnHand}";
+    private static string TileLabel(EvidenceItemDisplay r)
+        => string.IsNullOrWhiteSpace(r.Item.Category)
+            ? $"{r.Item.Name}, Bestand {r.OnHand}"
+            : $"{r.Item.Name}, {r.Item.Category}, Bestand {r.OnHand}";
 
     private async Task ClearAsync(IReadOnlyCollection<string>? preselected)
     {
-        var result = await EvidenceClearingDialog.ShowAsync(DialogService, _user, preselected);
-        if (result is null)
+        // "Kammer räumen" inherits the active category; an explicit pick must not be narrowed by it,
+        // because _picked deliberately survives a filter change and would then book unseen rows
+        var outcome = await EvidenceClearingDialog.ShowAsync(DialogService, _user, preselected,
+            preselected is null ? _category : null);
+        if (outcome is null)
         {
             return;
         }
+        var result = outcome.Result;
         _selectMode = false;
         _picked.Clear();
         await ReloadAsync();
@@ -260,6 +322,10 @@
         {
             parts.Add($"{result.SkippedItems} übersprungen");
         }
-        Snackbar.Add($"Kammer geräumt: {string.Join(", ", parts)}.", Severity.Success);
+        // scope comes from the dialog, not from this panel's filter — the two can disagree
+        var scope = outcome.Category is null
+            ? "Kammer geräumt"
+            : $"„{EvidenceCategories.Label(outcome.Category)}“ geräumt";
+        Snackbar.Add($"{scope}: {string.Join(", ", parts)}.", Severity.Success);
     }
 }

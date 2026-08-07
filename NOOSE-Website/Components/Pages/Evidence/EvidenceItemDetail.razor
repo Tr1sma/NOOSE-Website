@@ -25,6 +25,13 @@ else
                  Color="@(_display.OnHand < 0 ? Color.Error : _display.OnHand == 0 ? Color.Default : Color.Success)">
             Bestand: @_display.OnHand
         </MudChip>
+        @if (!string.IsNullOrWhiteSpace(item.Category))
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                     Icon="@Icons.Material.Filled.Category">
+                @item.Category
+            </MudChip>
+        }
         <MudSpacer />
         <AuthorizeView Policy="@Policies.Leadership" Context="edit">
             <MudButton Href="@($"/asservatenkammer/item/{item.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary"

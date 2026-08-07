@@ -37,7 +37,9 @@ public sealed class EvidenceServiceTests
         caseNo.NextAsync(Arg.Any<AppDbContext>(), "ASS", Arg.Any<CancellationToken>())
             .Returns(_ => $"NOOSE-ASS-2026-{++seq:0000}");
         caseNumber = caseNo;
-        return new EvidenceService(ctx.Factory, caseNo, Substitute.For<IEvidenceImageStorageService>());
+        // real suggestion service: category learning is part of what these tests assert
+        return new EvidenceService(ctx.Factory, caseNo, Substitute.For<IEvidenceImageStorageService>(),
+            new ProfileSuggestionService(ctx.Factory));
     }
 
     /// <summary>Like <see cref="Build(SqliteTestContext)"/> but rejects allocation outside a transaction, as the real service does.</summary>
@@ -51,7 +53,9 @@ public sealed class EvidenceServiceTests
                 ? throw new InvalidOperationException("Aktenzeichen-Vergabe erfordert eine umschließende Transaktion.")
                 : $"NOOSE-ASS-2026-5{++seq:000}");
         caseNumber = caseNo;
-        return new EvidenceService(ctx.Factory, caseNo, Substitute.For<IEvidenceImageStorageService>());
+        // real suggestion service: category learning is part of what these tests assert
+        return new EvidenceService(ctx.Factory, caseNo, Substitute.For<IEvidenceImageStorageService>(),
+            new ProfileSuggestionService(ctx.Factory));
     }
 
     /// <summary>Writes a ledger row straight to the DB, bypassing the stock guard — the only way to fixture a negative balance.</summary>
@@ -683,6 +687,294 @@ public sealed class EvidenceServiceTests
 
         using var db = ctx.NewContext();
         Assert.Equal("lead", db.EvidenceEntries.Single(e => e.Id == result.WithdrawalEntryId).HandlerAgentId);
+    }
+
+    // ---------- categories ----------
+
+    [Fact]
+    public async Task CreateItem_PersistsCategory_AndLearnsSuggestion()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        var item = await svc.CreateItemAsync(
+            new EvidenceItemInput { Name = "Kokainpaket", Category = "  Drogen  " }, null, null, Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal("Drogen", db.EvidenceItems.Single(i => i.Id == item.Id).Category);
+        Assert.Equal("Drogen", db.ProfileSuggestions
+            .Single(v => v.Type == SuggestionType.EvidenceCategory).Value);
+    }
+
+    [Fact]
+    public async Task CreateItem_WithoutCategory_LearnsNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        var item = await svc.CreateItemAsync(new EvidenceItemInput { Name = "Aktentasche" }, null, null, Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Null(db.EvidenceItems.Single(i => i.Id == item.Id).Category);
+        Assert.Empty(db.ProfileSuggestions.Where(v => v.Type == SuggestionType.EvidenceCategory));
+    }
+
+    [Fact]
+    public async Task UpdateItem_ChangesCategory_AndLearnsSuggestion()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var item = await svc.CreateItemAsync(
+            new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+
+        await svc.UpdateItemAsync(item.Id,
+            new EvidenceItemInput { Name = "Kokainpaket", Category = "Betäubungsmittel" }, Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal("Betäubungsmittel", db.EvidenceItems.Single(i => i.Id == item.Id).Category);
+        // the old value stays in the catalog; only the admin panel removes values
+        Assert.Equal(2, db.ProfileSuggestions.Count(v => v.Type == SuggestionType.EvidenceCategory));
+    }
+
+    [Fact]
+    public async Task UpdateItem_ClearingCategory_NullsIt()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var item = await svc.CreateItemAsync(
+            new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+
+        await svc.UpdateItemAsync(item.Id, new EvidenceItemInput { Name = "Kokainpaket", Category = "   " }, Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Null(db.EvidenceItems.Single(i => i.Id == item.Id).Category);
+    }
+
+    [Fact]
+    public async Task GetItems_FiltersByCategory()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Pistole", Category = "Waffen" }, null, null, Leader());
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Aktentasche" }, null, null, Leader());
+
+        var rows = await svc.GetItemsAsync(category: "Drogen");
+
+        Assert.Equal("Kokainpaket", Assert.Single(rows).Item.Name);
+    }
+
+    [Fact]
+    public async Task GetItems_NoneSentinel_ReturnsOnlyUncategorised()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Aktentasche" }, null, null, Leader());
+
+        var rows = await svc.GetItemsAsync(category: EvidenceCategories.None);
+
+        Assert.Equal("Aktentasche", Assert.Single(rows).Item.Name);
+    }
+
+    [Fact]
+    public async Task GetItems_NullCategory_ReturnsEverything()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Aktentasche" }, null, null, Leader());
+
+        Assert.Equal(2, (await svc.GetItemsAsync()).Count);
+    }
+
+    [Fact]
+    public async Task GetItems_CombinesSearchAndCategory()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainwaage", Category = "Werkzeug" }, null, null, Leader());
+
+        var rows = await svc.GetItemsAsync("Kokain", "Drogen");
+
+        Assert.Equal("Kokainpaket", Assert.Single(rows).Item.Name);
+    }
+
+    [Fact]
+    public async Task GetItems_CategoryWithoutMatches_ReturnsEmpty()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await DepositAsync(svc, "Kokainpaket", 5);
+
+        // an empty match set must not fall back to reading the whole ledger
+        Assert.Empty(await svc.GetItemsAsync(category: "Waffen"));
+    }
+
+    [Fact]
+    public async Task CreateItem_OverlongCategory_Throws_AndWritesNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CreateItemAsync(
+            new EvidenceItemInput { Name = "Kokainpaket", Category = new string('x', 301) }, null, null, Leader()));
+
+        using var db = ctx.NewContext();
+        Assert.Empty(db.EvidenceItems);
+    }
+
+    [Fact]
+    public async Task UpdateItem_OverlongCategory_Throws_AndKeepsOldValue()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var item = await svc.CreateItemAsync(
+            new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.UpdateItemAsync(item.Id,
+            new EvidenceItemInput { Name = "Kokainpaket", Category = new string('x', 301) }, Leader()));
+
+        using var db = ctx.NewContext();
+        Assert.Equal("Drogen", db.EvidenceItems.Single().Category);
+    }
+
+    [Fact]
+    public async Task CreateItem_MaximumLengthCategory_IsAccepted()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var category = new string('x', 300);
+
+        var item = await svc.CreateItemAsync(
+            new EvidenceItemInput { Name = "Kokainpaket", Category = category }, null, null, Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal(category, db.EvidenceItems.Single(i => i.Id == item.Id).Category);
+    }
+
+    [Fact]
+    public async Task CreateEntry_AutoCreatedItem_TakesLineCategory_AndLearnsSuggestion()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit, i =>
+            i.Lines.Add(new EvidenceLineInput { ItemName = "Handgranate", Quantity = 2, NewItemCategory = "Waffen" })),
+            Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal("Waffen", db.EvidenceItems.Single(i => i.Name == "Handgranate").Category);
+        Assert.Equal("Waffen", db.ProfileSuggestions
+            .Single(v => v.Type == SuggestionType.EvidenceCategory).Value);
+    }
+
+    [Fact]
+    public async Task CreateEntry_ExistingItem_KeepsCategory_WhenLineSuppliesAnother()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Pistole", Category = "Waffen" }, null, null, Leader());
+
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit, i =>
+            i.Lines.Add(new EvidenceLineInput { ItemName = "pistole", Quantity = 1, NewItemCategory = "Spielzeug" })),
+            Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal("Waffen", db.EvidenceItems.Single().Category);
+    }
+
+    [Fact]
+    public async Task GetEntries_FiltersByPositionCategory()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Pistole", Category = "Waffen" }, null, null, Leader());
+        await DepositAsync(svc, "Kokainpaket", 5);
+        await DepositAsync(svc, "Pistole", 1);
+
+        var rows = await svc.GetEntriesAsync(category: "Drogen");
+
+        Assert.Equal("Kokainpaket", Assert.Single(Assert.Single(rows).Lines).ItemName);
+    }
+
+    [Fact]
+    public async Task GetEntries_NoneSentinel_ReturnsEntriesWithUncategorisedPositions()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await DepositAsync(svc, "Kokainpaket", 5);
+        await DepositAsync(svc, "Aktentasche", 1);
+
+        var rows = await svc.GetEntriesAsync(category: EvidenceCategories.None);
+
+        Assert.Equal("Aktentasche", Assert.Single(Assert.Single(rows).Lines).ItemName);
+    }
+
+    [Fact]
+    public async Task GetItems_NoneSentinel_MatchesEmptyStringToo()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        using (var db = ctx.NewContext())
+        {
+            // the write paths trim to null, but the SQL branch has to cover "" as well
+            db.EvidenceItems.Add(new EvidenceItem { Name = "Aktentasche", Category = string.Empty });
+            db.SaveChanges();
+        }
+        await DepositAsync(svc, "Aktentasche", 1);
+
+        Assert.Equal("Aktentasche",
+            Assert.Single(await svc.GetItemsAsync(category: EvidenceCategories.None)).Item.Name);
+    }
+
+    [Fact]
+    public async Task GetEntries_UnknownCategory_ReturnsEmpty()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await DepositAsync(svc, "Kokainpaket", 5);
+
+        Assert.Empty(await svc.GetEntriesAsync(category: "Waffen"));
+    }
+
+    [Fact]
+    public async Task UpdateEntry_ReplacingLines_KeepsThemOnOneCommit()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var created = await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 3 })), Leader());
+
+        await svc.UpdateEntryAsync(created.Id, Entry(EvidenceEntryType.Deposit, i =>
+        {
+            i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 1 });
+            i.Lines.Add(new EvidenceLineInput { ItemName = "Handgranate", Quantity = 2, NewItemCategory = "Waffen" });
+        }), Leader());
+
+        using var db = ctx.NewContext();
+        Assert.Equal(2, db.EvidenceEntryLines.Count(l => l.EntryId == created.Id));
+        Assert.Equal("Waffen", db.EvidenceItems.Single(i => i.Name == "Handgranate").Category);
+    }
+
+    [Fact]
+    public async Task GetEntries_CombinesTypeAndCategory()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await svc.CreateItemAsync(new EvidenceItemInput { Name = "Kokainpaket", Category = "Drogen" }, null, null, Leader());
+        await DepositAsync(svc, "Kokainpaket", 5);
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Withdrawal,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Kokainpaket", Quantity = 2 })), Leader());
+
+        var rows = await svc.GetEntriesAsync(EvidenceEntryType.Withdrawal, null, "Drogen");
+
+        Assert.Equal(EvidenceEntryType.Withdrawal, Assert.Single(rows).Entry.Type);
     }
 
     private static int CountEntries(SqliteTestContext ctx)

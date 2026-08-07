@@ -31,22 +31,39 @@
                     </MudAlert>
                 }
 
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                     <MudTextField T="string" Value="_filter" ValueChanged="FilterChanged" Immediate="true"
                                   DebounceInterval="200" Placeholder="Item filtern…"
                                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                                   Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
                                   Class="flex-grow-1" Disabled="_busy" />
+                    <MudSelect T="string" Value="_category" ValueChanged="CategoryChanged" Clearable="true" Dense="true"
+                               Placeholder="Alle Kategorien" Margin="Margin.Dense" Disabled="_busy"
+                               ToStringFunc="@(c => c is null ? string.Empty : EvidenceCategories.Label(c))"
+                               Style="min-width:180px;max-width:220px" Variant="Variant.Outlined">
+                        @foreach (var c in _categories)
+                        {
+                            <MudSelectItem T="string" Value="@c">@c</MudSelectItem>
+                        }
+                        @if (_hasUncategorised)
+                        {
+                            <MudSelectItem T="string" Value="@EvidenceCategories.None">Ohne Kategorie</MudSelectItem>
+                        }
+                    </MudSelect>
                     <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy"
                                StartIcon="@Icons.Material.Filled.DoneAll" OnClick="SelectAllVisible">Alle</MudButton>
                     <MudButton Size="Size.Small" Variant="Variant.Text" Disabled="_busy"
                                StartIcon="@Icons.Material.Filled.CheckBoxOutlineBlank" OnClick="SelectNoneVisible">Keine</MudButton>
                 </MudStack>
 
-                @if (!string.IsNullOrWhiteSpace(_filter))
+                @if (HasFilter)
                 {
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
                         „Alle“ und „Keine“ wirken nur auf die @_visible.Count gefilterten Zeilen.
+                        @if (_category is not null)
+                        {
+                            <text>Die Kategorie begrenzt die Buchung — ausgeblendete Items werden nicht gebucht.</text>
+                        }
                     </MudText>
                 }
 
@@ -66,6 +83,12 @@
                                              ValueChanged="@(_ => Toggle(row.Item.Id))">
                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                                         <MudText Typo="Typo.body2">@row.Item.Name</MudText>
+                                        @if (!string.IsNullOrWhiteSpace(row.Item.Category))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">
+                                                @row.Item.Category
+                                            </MudChip>
+                                        }
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
                                                  Color="@(row.OnHand < 0 ? Color.Error : Color.Success)">
                                             Bestand: @row.OnHand
@@ -131,18 +154,26 @@
 
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
 
-    /// <summary>Item ids ticked on open; null ticks everything.</summary>
+    /// <summary>Item ids ticked on open; null ticks everything the category filter leaves visible.</summary>
     [Parameter] public IReadOnlyCollection<string>? PreselectedItemIds { get; set; }
+
+    /// <summary>Category the dialog opens filtered to; null shows every category.</summary>
+    [Parameter] public string? InitialCategory { get; set; }
 
     private bool _load = true;
     private bool _busy;
     private string? _filter;
+    private string? _category;
     private string? _notes;
     private int _negativeCount;
+    private bool _hasUncategorised;
 
     private List<EvidenceItemDisplay> _all = new();
     private List<EvidenceItemDisplay> _visible = new();
+    private List<string> _categories = new();
     private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
+
+    private bool HasFilter => !string.IsNullOrWhiteSpace(_filter) || _category is not null;
 
     private IEnumerable<EvidenceItemDisplay> Picked => _all.Where(r => _selected.Contains(r.Item.Id));
     private int TakeItems => Picked.Count(r => r.OnHand > 0);
@@ -154,16 +185,37 @@
     {
         // read fresh: the tile grid may be minutes old and is search-filtered
         _all = (await Evidence.GetItemsAsync()).Where(r => r.OnHand != 0).ToList();
-        _negativeCount = _all.Count(r => r.OnHand < 0);
 
+        // only categories that actually hold stock belong in this dropdown
+        _categories = _all
+            .Select(r => r.Item.Category)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c, StringComparer.CurrentCulture)
+            .ToList();
+        _hasUncategorised = _all.Any(r => string.IsNullOrWhiteSpace(r.Item.Category));
+        _category = InitialCategory;
+        // keep the incoming filter selectable even when nothing of it holds stock
+        if (_category is not null && !EvidenceCategories.IsNone(_category)
+            && !_categories.Contains(_category, StringComparer.OrdinalIgnoreCase))
+        {
+            _categories.Add(_category);
+            _categories.Sort(StringComparer.CurrentCulture);
+        }
+        _hasUncategorised |= EvidenceCategories.IsNone(_category);
+
+        Recompute();
+        // an explicit pick may name zero-stock rows this dialog never loads, so keep _selected inside _all
+        var preselect = (PreselectedItemIds ?? _visible.Select(r => r.Item.Id).ToList())
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var row in _all)
         {
-            if (PreselectedItemIds is null || PreselectedItemIds.Contains(row.Item.Id))
+            if (preselect.Contains(row.Item.Id))
             {
                 _selected.Add(row.Item.Id);
             }
         }
-        Recompute();
         _load = false;
     }
 
@@ -173,10 +225,34 @@
         Recompute();
     }
 
+    private void CategoryChanged(string? value)
+    {
+        _category = value;
+        Recompute();
+        // the booking must never contain what the category hides, so the selection only ever shrinks
+        var inScope = InCategory(_all).Select(r => r.Item.Id).ToHashSet(StringComparer.Ordinal);
+        _selected.RemoveWhere(id => !inScope.Contains(id));
+    }
+
     private void Recompute()
-        => _visible = string.IsNullOrWhiteSpace(_filter)
-            ? _all
-            : _all.Where(r => r.Item.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+    {
+        var scoped = InCategory(_all).ToList();
+        // the hint must describe the booking scope, which the text filter does not narrow
+        _negativeCount = scoped.Count(r => r.OnHand < 0);
+        IEnumerable<EvidenceItemDisplay> rows = scoped;
+        if (!string.IsNullOrWhiteSpace(_filter))
+        {
+            var needle = _filter.Trim();
+            rows = rows.Where(r => r.Item.Name.Contains(needle, StringComparison.OrdinalIgnoreCase));
+        }
+        _visible = rows.ToList();
+    }
+
+    /// <summary>Category scope of the booking; the text filter only narrows what is shown.</summary>
+    private IEnumerable<EvidenceItemDisplay> InCategory(IEnumerable<EvidenceItemDisplay> rows)
+        => _category is null
+            ? rows
+            : rows.Where(r => EvidenceCategories.Matches(r.Item.Category, _category));
 
     private void Toggle(string itemId)
     {
@@ -212,7 +288,8 @@
         try
         {
             var result = await Evidence.ClearStockAsync(_selected.ToList(), _notes.TrimToNull(), User);
-            MudDialog.Close(DialogResult.Ok(result));
+            // the caller must not name its own filter: the dialog's scope may have moved since it opened
+            MudDialog.Close(DialogResult.Ok(new Outcome(result, _category)));
         }
         catch (Exception ex)
         {
@@ -224,14 +301,18 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    /// <summary>Booking outcome plus the category it was booked under; a null category means no scope.</summary>
+    public record Outcome(EvidenceClearingResult Result, string? Category);
+
     /// <summary>Opens the clearing dialog; returns the booking outcome or null if cancelled.</summary>
-    public static async Task<EvidenceClearingResult?> ShowAsync(IDialogService dialog, ClaimsPrincipal user,
-        IReadOnlyCollection<string>? preselectedItemIds = null)
+    public static async Task<Outcome?> ShowAsync(IDialogService dialog, ClaimsPrincipal user,
+        IReadOnlyCollection<string>? preselectedItemIds = null, string? initialCategory = null)
     {
         var parameters = new DialogParameters<EvidenceClearingDialog>
         {
             { x => x.User, user },
             { x => x.PreselectedItemIds, preselectedItemIds },
+            { x => x.InitialCategory, initialCategory },
         };
         var reference = await dialog.ShowAsync<EvidenceClearingDialog>("Kammer räumen", parameters,
             new DialogOptions
@@ -242,6 +323,6 @@
                 BackdropClick = false,
             });
         var result = await reference.Result;
-        return result is { Canceled: false, Data: EvidenceClearingResult r } ? r : null;
+        return result is { Canceled: false, Data: Outcome outcome } ? outcome : null;
     }
 }

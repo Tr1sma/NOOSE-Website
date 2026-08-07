@@ -9,7 +9,8 @@ namespace NOOSE_Website.Services;
 public interface IEvidenceService
 {
     // ---- items ----
-    Task<List<EvidenceItemDisplay>> GetItemsAsync(string? search = null, CancellationToken cancellationToken = default);
+    /// <summary>Catalog items with on-hand; category null means no filter, <see cref="EvidenceCategories.None"/> asks for the uncategorised ones.</summary>
+    Task<List<EvidenceItemDisplay>> GetItemsAsync(string? search = null, string? category = null, CancellationToken cancellationToken = default);
     Task<EvidenceItem?> GetItemAsync(string id, CancellationToken cancellationToken = default);
     /// <summary>Finds a live item by exact (case-insensitive) name; used to attach an image to a just-auto-created item.</summary>
     Task<EvidenceItem?> GetItemByNameAsync(string name, CancellationToken cancellationToken = default);
@@ -28,7 +29,8 @@ public interface IEvidenceService
     Task<Dictionary<string, int>> GetOnHandManyAsync(IReadOnlyCollection<string> itemIds, CancellationToken cancellationToken = default);
 
     // ---- entries (ledger) ----
-    Task<List<EvidenceEntryDisplay>> GetEntriesAsync(EvidenceEntryType? type = null, string? itemId = null, CancellationToken cancellationToken = default);
+    /// <summary>Ledger entries; category keeps an entry when any of its positions carries that item category.</summary>
+    Task<List<EvidenceEntryDisplay>> GetEntriesAsync(EvidenceEntryType? type = null, string? itemId = null, string? category = null, CancellationToken cancellationToken = default);
     Task<EvidenceEntry?> GetEntryAsync(string id, CancellationToken cancellationToken = default);
     Task<EvidenceEntryDisplay?> GetEntryDisplayAsync(string id, CancellationToken cancellationToken = default);
     Task<EvidenceEntry> CreateEntryAsync(EvidenceEntryInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

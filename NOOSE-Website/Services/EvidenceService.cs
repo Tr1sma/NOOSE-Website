@@ -15,7 +15,8 @@ namespace NOOSE_Website.Services;
 public class EvidenceService(
     IDbContextFactory<AppDbContext> dbFactory,
     ICaseNumberService caseNumber,
-    IEvidenceImageStorageService imageStorage) : IEvidenceService
+    IEvidenceImageStorageService imageStorage,
+    IProfileSuggestionService suggestions) : IEvidenceService
 {
     private const string CasePrefix = "ASS";
     public const string NooseOwner = "NOOSE";
@@ -25,7 +26,7 @@ public class EvidenceService(
 
     // ---- items ----
 
-    public async Task<List<EvidenceItemDisplay>> GetItemsAsync(string? search = null, CancellationToken cancellationToken = default)
+    public async Task<List<EvidenceItemDisplay>> GetItemsAsync(string? search = null, string? category = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var query = db.EvidenceItems.AsNoTracking();
@@ -34,7 +35,19 @@ public class EvidenceService(
             var s = search.Trim();
             query = query.Where(i => EF.Functions.Like(i.Name, $"%{s}%"));
         }
+        if (category is not null)
+        {
+            // empty string asks for the uncategorised ones; null means no filter at all
+            query = EvidenceCategories.IsNone(category)
+                ? query.Where(i => i.Category == null || i.Category == "")
+                : query.Where(i => i.Category == category);
+        }
         var items = await query.OrderBy(i => i.Name).ToListAsync(cancellationToken);
+        if (items.Count == 0)
+        {
+            // an empty id list makes ComputeOnHandAsync drop its WHERE and read the whole ledger
+            return new();
+        }
         var balances = await ComputeOnHandAsync(db, items.Select(i => i.Id).ToList(), cancellationToken);
         return items.Select(i => new EvidenceItemDisplay(i, balances.GetValueOrDefault(i.Id))).ToList();
     }
@@ -85,9 +98,16 @@ public class EvidenceService(
             throw new InvalidOperationException($"Ein Item „{name}“ existiert bereits.");
         }
 
-        var item = new EvidenceItem { Name = name, Description = input.Description.TrimToNull() };
+        var item = new EvidenceItem
+        {
+            Name = name,
+            Description = input.Description.TrimToNull(),
+            Category = NormalizeCategory(input.Category),
+        };
         await ApplyImageAsync(item, image, imageContentType, cancellationToken);
         db.EvidenceItems.Add(item);
+        // stage the category so a new value is learned atomically with the item
+        await StageCategoryAsync(db, item.Category, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return item;
     }
@@ -113,6 +133,8 @@ public class EvidenceService(
 
         item.Name = name;
         item.Description = input.Description.TrimToNull();
+        item.Category = NormalizeCategory(input.Category);
+        await StageCategoryAsync(db, item.Category, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -282,7 +304,7 @@ public class EvidenceService(
 
     // ---- entries ----
 
-    public async Task<List<EvidenceEntryDisplay>> GetEntriesAsync(EvidenceEntryType? type = null, string? itemId = null, CancellationToken cancellationToken = default)
+    public async Task<List<EvidenceEntryDisplay>> GetEntriesAsync(EvidenceEntryType? type = null, string? itemId = null, string? category = null, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var query = db.EvidenceEntries.Include(e => e.Lines).ThenInclude(l => l.Item).AsQueryable();
@@ -293,6 +315,19 @@ public class EvidenceService(
         if (!string.IsNullOrWhiteSpace(itemId))
         {
             query = query.Where(e => e.Lines.Any(l => l.ItemId == itemId));
+        }
+        if (category is not null)
+        {
+            // flat id list first, then the same EXISTS shape the itemId filter already uses
+            var matching = EvidenceCategories.IsNone(category)
+                ? db.EvidenceItems.Where(i => i.Category == null || i.Category == "")
+                : db.EvidenceItems.Where(i => i.Category == category);
+            var categoryItemIds = await matching.Select(i => i.Id).ToListAsync(cancellationToken);
+            if (categoryItemIds.Count == 0)
+            {
+                return new();
+            }
+            query = query.Where(e => e.Lines.Any(l => categoryItemIds.Contains(l.ItemId)));
         }
         var list = await query.OrderByDescending(e => e.Timestamp).ToListAsync(cancellationToken);
         return await ToDisplayAsync(db, list, cancellationToken);
@@ -320,7 +355,7 @@ public class EvidenceService(
     }
 
     public async Task<List<EvidenceEntryDisplay>> GetEntriesForItemAsync(string itemId, CancellationToken cancellationToken = default)
-        => await GetEntriesAsync(null, itemId, cancellationToken);
+        => await GetEntriesAsync(null, itemId, null, cancellationToken);
 
     public async Task<List<EvidenceEntryDisplay>> GetEntriesForOwnerAsync(string ownerType, string ownerId, CancellationToken cancellationToken = default)
     {
@@ -413,6 +448,8 @@ public class EvidenceService(
 
         // available stock is computed without this entry's own (old) lines
         await EnsureWithdrawalWithinStockAsync(db, input, id, cancellationToken);
+        // positions are replaced wholesale, so a throw mid-loop must not leave the entry empty
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
         entry.Type = input.Type;
         entry.OwnerType = input.OwnerType;
@@ -439,6 +476,7 @@ public class EvidenceService(
             });
         }
         await db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task DeleteEntryAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -619,7 +657,7 @@ public class EvidenceService(
     }
 
     /// <summary>Resolve an existing item by id/name or auto-create a new catalog item from the position's name.</summary>
-    private static async Task<string> ResolveOrCreateItemAsync(AppDbContext db, EvidenceLineInput line, CancellationToken cancellationToken)
+    private async Task<string> ResolveOrCreateItemAsync(AppDbContext db, EvidenceLineInput line, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(line.ItemId)
             && await db.EvidenceItems.AnyAsync(i => i.Id == line.ItemId, cancellationToken))
@@ -637,13 +675,36 @@ public class EvidenceService(
         var match = await db.EvidenceItems.FirstOrDefaultAsync(i => i.Name.ToLower() == lower, cancellationToken);
         if (match is not null)
         {
+            // an existing item keeps its own category; only the item editor may change it
             return match.Id;
         }
 
-        var created = new EvidenceItem { Name = name };
+        var created = new EvidenceItem { Name = name, Category = NormalizeCategory(line.NewItemCategory) };
         db.EvidenceItems.Add(created);
+        await StageCategoryAsync(db, created.Category, cancellationToken);
         await db.SaveChangesAsync(cancellationToken); // persist so later positions in this entry dedupe against it
         return created.Id;
+    }
+
+    /// <summary>Trims the category and rejects what the catalog could not hold; a raw DbUpdateException would kill the circuit.</summary>
+    private static string? NormalizeCategory(string? category)
+    {
+        var value = category.TrimToNull();
+        if (value is { Length: > 300 })
+        {
+            throw new InvalidOperationException("Die Kategorie darf höchstens 300 Zeichen lang sein.");
+        }
+        return value;
+    }
+
+    /// <summary>Learns a new category into the suggestion catalog; the caller persists it.</summary>
+    private async Task StageCategoryAsync(AppDbContext db, string? category, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return;
+        }
+        await suggestions.StageAsync(db, SuggestionType.EvidenceCategory, [category], cancellationToken);
     }
 
     private static List<EvidenceLineInput> NormalizeLines(IEnumerable<EvidenceLineInput> lines)

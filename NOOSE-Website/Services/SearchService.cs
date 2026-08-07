@@ -324,11 +324,18 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             var q = db.EvidenceItems.AsQueryable();
             if (hasText)
             {
-                q = q.Where(i => i.Name.Contains(s!) || (i.Description != null && i.Description.Contains(s!)));
+                q = q.Where(i => i.Name.Contains(s!)
+                    || (i.Description != null && i.Description.Contains(s!))
+                    || (i.Category != null && i.Category.Contains(s!)));
             }
-            var hit = await q.OrderBy(i => i.Name).Take(MaxPerCategory)
-                .Select(i => new SearchHit(nameof(EvidenceItem), i.Id, i.Name, i.Description ?? string.Empty, string.Empty))
+            var rows = await q.OrderBy(i => i.Name).Take(MaxPerCategory)
+                .Select(i => new { i.Id, i.Name, i.Description, i.Category })
                 .ToListAsync(cancellationToken);
+            // category leads the snippet so a category match is visibly the reason for the hit
+            var hit = rows.Select(i => new SearchHit(nameof(EvidenceItem), i.Id, i.Name,
+                    string.Join(" · ", new[] { i.Category, i.Description }.Where(p => !string.IsNullOrWhiteSpace(p))),
+                    string.Empty))
+                .ToList();
             if (hit.Count > 0)
             {
                 groups.Add(new SearchResultGroup(nameof(EvidenceItem), "Asservate", hit));

@@ -15,6 +15,7 @@ public static class SuggestionTypeDisplay
         SuggestionType.CaseType => "Vorgangsarten",
         SuggestionType.DrugRoute => "Drogenrouten",
         SuggestionType.FinancingCategory => "Finanzierungs-Kategorien",
+        SuggestionType.EvidenceCategory => "Asservat-Kategorien",
         _ => "—",
     };
 
@@ -31,5 +32,6 @@ public static class SuggestionTypeDisplay
         SuggestionType.OperationType,
         SuggestionType.CaseType,
         SuggestionType.FinancingCategory,
+        SuggestionType.EvidenceCategory,
     };
 }

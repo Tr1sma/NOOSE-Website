@@ -5,6 +5,7 @@
 @inject IEvidenceImageStorageService Storage
 @inject IAgentManagementService Agents
 @inject IPersonService PersonService
+@inject IProfileSuggestionService SuggestionService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
@@ -92,10 +93,19 @@ else
                             Bestand von „@line.ItemName" ist @OnHandFor(line.ItemName) — Herausnahme von @line.Quantity übersteigt den Bestand.
                         </MudText>
                     }
-                    @if (IsNewItem(line))
+                    @* a line that still points at an item is never a new one, even if its name no longer resolves *@
+                    @if (string.IsNullOrWhiteSpace(line.ItemId) && IsNewItem(line))
                     {
-                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="ml-2">
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Neues Item „@line.ItemName.Trim()" — Bild (optional):</MudText>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="ml-2" Wrap="Wrap.Wrap">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Neues Item „@line.ItemName.Trim()" — Kategorie (optional):</MudText>
+                            <MudAutocomplete T="string" Value="@line.NewItemCategory"
+                                             ValueChanged="@(v => line.NewItemCategory = v)"
+                                             SearchFunc="@CategorySearch" Variant="Variant.Outlined" Dense="true"
+                                             Margin="Margin.Dense" CoerceText="false" CoerceValue="true"
+                                             ResetValueOnEmptyText="false" MinCharacters="0" Immediate="true"
+                                             MaxItems="20" Clearable="true" MaxLength="300" Placeholder="Kategorie"
+                                             Style="max-width:220px" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Bild (optional):</MudText>
                             @if (_lineImages.TryGetValue(line, out var f))
                             {
                                 <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info"
@@ -174,6 +184,7 @@ else
     private AffiliationDialog.RecordHit? _owner;
 
     private List<string> _itemNames = new();
+    private IReadOnlyList<string> _categories = Array.Empty<string>();
     private Dictionary<string, int> _onHandByName = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _existingNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<EvidenceLineInput, IBrowserFile> _lineImages = new();
@@ -215,6 +226,7 @@ else
             _onHandByName[i.Item.Name] = i.OnHand;
         }
         _existingNames = items.Select(i => i.Item.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _categories = await SuggestionService.GetAsync(SuggestionType.EvidenceCategory);
 
         if (IsEdit)
         {
@@ -318,6 +330,16 @@ else
             return _itemNames.Take(20);
         }
         return _itemNames.Where(n => n.Contains(value, StringComparison.OrdinalIgnoreCase)).Take(20);
+    }
+
+    private async Task<IEnumerable<string>> CategorySearch(string value, CancellationToken token)
+    {
+        await Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return _categories;
+        }
+        return _categories.Where(c => c.Contains(value, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<IEnumerable<AffiliationDialog.RecordHit>> SearchOwner(string value, CancellationToken token)
