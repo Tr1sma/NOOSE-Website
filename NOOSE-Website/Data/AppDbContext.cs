@@ -1141,6 +1141,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(f => f.PageRoute).HasMaxLength(128);
             b.Property(f => f.PageTab).HasMaxLength(64);
             b.Property(f => f.Text).HasMaxLength(2000).IsRequired();
+            b.Property(f => f.Response).HasMaxLength(2000);
+            b.Property(f => f.DeciderName).HasMaxLength(128);
 
             // Restrict FK to identity Agent (no cascade from the user table)
             b.HasOne(f => f.Agent).WithMany()

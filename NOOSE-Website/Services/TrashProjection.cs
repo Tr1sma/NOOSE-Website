@@ -17,6 +17,7 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
+using FeedbackEntity = NOOSE_Website.Data.Entities.Feedback.Feedback;
 
 namespace NOOSE_Website.Services;
 
@@ -82,6 +83,15 @@ public static class TrashProjection
     public static TrashItem FinancingRequest(FinancingRequest x)
         => new("finanzierungen", x.Id, x.CaseNumber, FinancingStatusDisplay.Name(x.Status),
             Join(Money.Format(x.ApprovedSubsidy ?? x.RequestedSubsidy), $"{x.Lines.Count} Positionen"), x.DeletedAt);
+
+    // feedback carries no Aktenzeichen; the kind plus a text snippet identifies the row
+    public static TrashItem Feedback(FeedbackEntity x)
+        => new("feedback", x.Id, null,
+            $"{FeedbackKindDisplay.Name(x.Kind)}: {Snippet(x.Text)}",
+            x.Agent?.Codename ?? x.AgentId, x.DeletedAt);
+
+    private static string Snippet(string text)
+        => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");
 
     private static string Moment(DateTime value) => value.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 

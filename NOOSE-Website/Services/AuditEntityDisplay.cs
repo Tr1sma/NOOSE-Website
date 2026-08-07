@@ -28,6 +28,7 @@ public static class AuditEntityDisplay
         "MeetingAttendance" => "Anwesenheit",
         "MeetingSignOff" => "Abmeldung (Besprechung)",
         "Absence" => "Abmeldung",
+        "Feedback" => "Feedback-Meldung",
         "KassenBuchung" => "Kassenbuchung",
         "FinancingRequest" => "Finanzierungsantrag",
         "FinancingRequestLine" => "Finanzierungsposition (Antrag)",
@@ -55,6 +56,8 @@ public static class AuditEntityDisplay
         "Meeting" => $"/besprechungen/{id}",
         // absences have no detail page; the audit viewer is admin-only, so point at the overview
         "Absence" => "/abmeldungen/uebersicht",
+        // feedback entries have no detail page either; point at the feedback hub
+        "Feedback" => "/feedback",
         "KassenBuchung" => $"/kasse/buchung/{id}",
         "FinancingRequest" => $"/finanzierungen/{id}",
         // catalog positions and config have no own page; point at the section that edits them

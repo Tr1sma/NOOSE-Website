@@ -1,0 +1,158 @@
+@using NOOSE_Website.Navigation
+@inject IFeedbackService FeedbackService
+@inject ITrashService TrashService
+@inject IAuthorizationService Authorization
+@inject ISnackbar Snackbar
+
+<MudForm @ref="_form">
+    <MudStack Spacing="4">
+        @* ToStringFunc keeps the closed select single-line; the two-line layout lives in the items only *@
+        <MudSelect T="FeedbackKind" @bind-Value="_input.Kind" Label="Meldungsart" Variant="Variant.Outlined"
+                   ToStringFunc="@(k => FeedbackKindDisplay.Name(k))">
+            @foreach (var kind in FeedbackKindDisplay.All)
+            {
+                <MudSelectItem T="FeedbackKind" Value="@kind">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@FeedbackKindDisplay.Icon(kind)" Size="Size.Small" Color="Color.Primary" />
+                        <div class="d-flex flex-column">
+                            <MudText Typo="Typo.body2">@FeedbackKindDisplay.Name(kind)</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Hint(kind)</MudText>
+                        </div>
+                    </MudStack>
+                </MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="string" Value="_input.PageRoute" ValueChanged="RouteChanged" Label="Seite (optional)"
+                   Variant="Variant.Outlined" Clearable="true" Placeholder="Keine Zuordnung">
+            @foreach (var area in _areas)
+            {
+                @* selects have no group headers; a disabled item captions each area *@
+                <MudSelectItem T="string" Value="@("group:" + area)" Disabled="true">
+                    <MudText Typo="Typo.overline">@NavAreaCatalog.Name(area)</MudText>
+                </MudSelectItem>
+                @foreach (var e in Permitted(area))
+                {
+                    <MudSelectItem T="string" Value="@e.Route">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@e.Icon" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@e.Label</MudText>
+                        </MudStack>
+                    </MudSelectItem>
+                }
+            }
+        </MudSelect>
+
+        @if (_tabs.Count > 0)
+        {
+            <MudSelect T="string" @bind-Value="_input.PageTab" Label="Tab (optional)" Variant="Variant.Outlined"
+                       Clearable="true" Placeholder="Kein Tab">
+                @foreach (var tab in _tabs)
+                {
+                    <MudSelectItem T="string" Value="@tab.Slug">@tab.Label</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        <MudTextField @bind-Value="_input.Text" Label="Deine Meldung" Lines="5" Required="true"
+                      RequiredError="Bitte eine Meldung eingeben." Counter="2000" MaxLength="2000"
+                      Immediate="true" Variant="Variant.Outlined" />
+
+        @* write guard: read-only supervision files nothing *@
+        <AuthorizeView Policy="@Policies.WriteAccess">
+            <div>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Send"
+                           OnClick="SubmitAsync" Disabled="_sending">Absenden</MudButton>
+            </div>
+        </AuthorizeView>
+    </MudStack>
+</MudForm>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private MudForm _form = default!;
+    private ClaimsPrincipal _user = default!;
+    private readonly FeedbackInput _input = new();
+    private readonly Dictionary<string, bool> _policyOk = new(StringComparer.Ordinal);
+    private List<NavArea> _areas = [];
+    private List<FeedbackTab> _tabs = [];
+    private bool _sending;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask!).User;
+        // same per-policy snapshot the nav customizer takes, so the picker never offers a hidden page
+        foreach (var policy in NavAreaCatalog.DistinctPolicies)
+        {
+            _policyOk[policy] = (await Authorization.AuthorizeAsync(_user, policy)).Succeeded;
+        }
+        _areas = new List<NavArea> { NavArea.Primary }
+            .Concat(NavAreaCatalog.Areas)
+            .Where(a => Permitted(a).Any())
+            .ToList();
+    }
+
+    private IEnumerable<NavEntry> Permitted(NavArea area)
+        => NavAreaCatalog.Entries(area).Where(e => _policyOk.GetValueOrDefault(NavSectionPolicy.For(e.Section)));
+
+    private void RouteChanged(string? route)
+    {
+        _input.PageRoute = route;
+        // a tab belongs to its page
+        _input.PageTab = null;
+        _tabs = TabsFor(route);
+    }
+
+    private List<FeedbackTab> TabsFor(string? route)
+    {
+        // trash tabs come from the runtime catalog
+        if (string.Equals(route, "/papierkorb", StringComparison.OrdinalIgnoreCase))
+        {
+            return TrashService.Kinds.Select(k => new FeedbackTab(k.Key, k.Label)).ToList();
+        }
+        return FeedbackPageTabs.TabsFor(route).ToList();
+    }
+
+    private async Task SubmitAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        _sending = true;
+        try
+        {
+            await FeedbackService.CreateAsync(_input, _user);
+            Snackbar.Add("Meldung gesendet. Danke für dein Feedback!", Severity.Success);
+            _input.Kind = FeedbackKind.Improvement;
+            _input.PageRoute = null;
+            _input.PageTab = null;
+            _input.Text = string.Empty;
+            _tabs = [];
+            await _form.ResetValidationAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private static string Hint(FeedbackKind kind) => kind switch
+    {
+        FeedbackKind.Improvement => "Konkrete Idee, wie etwas besser werden könnte",
+        FeedbackKind.Bug => "Ein Fehler auf der Website",
+        FeedbackKind.Complaint => "Etwas ist schlecht oder unübersichtlich, aber keine konkrete Idee",
+        FeedbackKind.FeatureRequest => "Wunsch nach einer neuen Funktion",
+        _ => string.Empty,
+    };
+}

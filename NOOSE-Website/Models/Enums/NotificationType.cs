@@ -58,6 +58,9 @@ public enum NotificationType
 
     /// <summary>Funding request filed or decided.</summary>
     Financing = 17,
+
+    /// <summary>New website feedback filed.</summary>
+    Feedback = 18,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -83,6 +86,7 @@ public static class NotificationTypeDisplay
         NotificationType.ThreatSpike => "Bedrohungs-Score gestiegen",
         NotificationType.AbductionFiled => "Agenten-Entführung",
         NotificationType.Financing => "Finanzierung",
+        NotificationType.Feedback => "Feedback",
         _ => "Benachrichtigung",
     };
 
@@ -107,6 +111,7 @@ public static class NotificationTypeDisplay
         NotificationType.ThreatSpike => Icons.Material.Filled.TrendingUp,
         NotificationType.AbductionFiled => Icons.Material.Filled.PersonOff,
         NotificationType.Financing => Icons.Material.Filled.RequestQuote,
+        NotificationType.Feedback => Icons.Material.Filled.Feedback,
         _ => Icons.Material.Filled.Notifications,
     };
 }

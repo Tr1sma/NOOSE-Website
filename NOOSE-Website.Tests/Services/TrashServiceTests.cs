@@ -30,7 +30,8 @@ public class TrashServiceTests
         Substitute.For<IAbductionService>(),
         Substitute.For<IEvidenceService>(),
         Substitute.For<IKassenService>(),
-        Substitute.For<IFinancingService>());
+        Substitute.For<IFinancingService>(),
+        Substitute.For<IFeedbackService>());
 
     [Fact]
     public void Kind_keys_are_unique()

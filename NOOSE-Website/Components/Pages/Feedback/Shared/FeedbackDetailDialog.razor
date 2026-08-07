@@ -1,0 +1,185 @@
+@* Full view of one feedback report; leadership sets status and answers here. *@
+@using NOOSE_Website.Navigation
+@inject IFeedbackService FeedbackService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@FeedbackStatusDisplay.ChipColor(Row.Status)"
+                         Icon="@FeedbackStatusDisplay.Icon(Row.Status)">@FeedbackStatusDisplay.Name(Row.Status)</MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Icon="@FeedbackKindDisplay.Icon(Row.Kind)">@FeedbackKindDisplay.Name(Row.Kind)</MudChip>
+            </MudStack>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Gemeldet am @Row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @Row.AgentCodename
+            </MudText>
+
+            @if (Row.PageRoute is { } route)
+            {
+                <MudText Typo="Typo.body2">
+                    <b>Seite:</b>
+                    <MudLink Href="@(route + (Row.PageTab is { } tab ? "?tab=" + tab : ""))">
+                        @(NavCatalog.ByRoute(route)?.Label ?? route)
+                    </MudLink>
+                </MudText>
+            }
+
+            <div>
+                <MudText Typo="Typo.subtitle2">Meldung</MudText>
+                <MudText Typo="Typo.body2" Style="white-space:pre-line;">@Row.Text</MudText>
+            </div>
+
+            @* whoever may decide reads the reply in the editable field below instead *@
+            @if (!MayDecide && Row.DecidedAt is { } answered)
+            {
+                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" NoIcon="true" Dense="true">
+                    <MudText Typo="Typo.subtitle2">Antwort der Führung</MudText>
+                    <MudText Typo="Typo.body2" Style="white-space:pre-line;">
+                        @(string.IsNullOrWhiteSpace(Row.Response) ? "—" : Row.Response)
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @(Row.DeciderName ?? "—") · @answered.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                </MudAlert>
+            }
+
+            @if (MayDecide)
+            {
+                <MudDivider />
+                @* any status may follow any other, so a wrong pick stays correctable *@
+                <MudSelect T="FeedbackStatus" @bind-Value="_status" Label="Status" Variant="Variant.Outlined"
+                           ToStringFunc="@(s => FeedbackStatusDisplay.Name(s))">
+                    @foreach (var status in FeedbackStatusDisplay.All)
+                    {
+                        <MudSelectItem T="FeedbackStatus" Value="@status">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@FeedbackStatusDisplay.Icon(status)" Size="Size.Small"
+                                         Color="@FeedbackStatusDisplay.ChipColor(status)" />
+                                <MudText Typo="Typo.body2">@FeedbackStatusDisplay.Name(status)</MudText>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudTextField @bind-Value="_response" Label="Antwort an den Melder (optional)" Lines="4"
+                              Counter="2000" MaxLength="2000" Immediate="true" Variant="Variant.Outlined" />
+
+                @if (Row.DecidedAt is { } decided)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Zuletzt bearbeitet von @(Row.DeciderName ?? "—")
+                        am @decided.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                }
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (MayDelete)
+        {
+            <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Löschen</MudButton>
+        }
+        @if (MayDecide)
+        {
+            <MudButton OnClick="Close">Schließen</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync" Disabled="_saving">Speichern</MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Schließen</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public FeedbackRow Row { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private FeedbackStatus _status;
+    private string? _response;
+    private bool _saving;
+
+    // read-only supervision reads the inbox but decides nothing
+    private bool MayDecide => User.IsLeadership() && User.MayWrite();
+
+    // both list sources only surface rows the caller may delete: own reports, or the whole inbox for leadership
+    private bool MayDelete => User.MayWrite();
+
+    protected override void OnInitialized()
+    {
+        _status = Row.Status;
+        _response = Row.Response;
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await FeedbackService.SetStatusAsync(Row.Id, _status, _response, User);
+            Snackbar.Add("Status gespeichert.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Meldung löschen?",
+            "Die Meldung wird in den Papierkorb verschoben.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await FeedbackService.DeleteAsync(Row.Id, User);
+            Snackbar.Add("Meldung gelöscht.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    /// <summary>Shows the feedback detail view; returns true if the entry was changed or deleted (so the caller can reload).</summary>
+    public static async Task<bool> ShowAsync(IDialogService dialog, FeedbackRow row, ClaimsPrincipal user)
+    {
+        var parameters = new DialogParameters<FeedbackDetailDialog>
+        {
+            { x => x.Row, row },
+            { x => x.User, user },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var reference = await dialog.ShowAsync<FeedbackDetailDialog>(
+            $"Feedback · {FeedbackKindDisplay.Name(row.Kind)}", parameters, options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: bool modified } && modified;
+    }
+}

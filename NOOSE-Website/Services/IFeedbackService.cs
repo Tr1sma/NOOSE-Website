@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Feedback;
 using FeedbackEntity = NOOSE_Website.Data.Entities.Feedback.Feedback;
 
@@ -13,8 +14,12 @@ public interface IFeedbackService
     /// <summary>Caller's own entries, newest first.</summary>
     Task<IReadOnlyList<FeedbackRow>> GetMyAsync(ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
 
-    /// <summary>All entries, newest first; leadership only.</summary>
+    /// <summary>All entries, newest first; leadership and read-only supervision.</summary>
     Task<IReadOnlyList<FeedbackRow>> GetInboxAsync(ClaimsPrincipal viewer, CancellationToken cancellationToken = default);
+
+    /// <summary>Sets status and the reply to the reporter; any status may follow any other. Leadership only.</summary>
+    Task SetStatusAsync(string id, FeedbackStatus status, string? response, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

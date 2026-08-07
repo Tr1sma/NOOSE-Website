@@ -20,8 +20,12 @@ public class FeedbackInput
 public record FeedbackRow(
     string Id,
     FeedbackKind Kind,
+    FeedbackStatus Status,
     string? PageRoute,
     string? PageTab,
     string Text,
     string AgentCodename,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? Response,
+    string? DeciderName,
+    DateTime? DecidedAt);

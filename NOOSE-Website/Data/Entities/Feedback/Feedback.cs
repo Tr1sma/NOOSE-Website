@@ -29,6 +29,18 @@ public sealed class Feedback : IAuditable, ISoftDelete
     [Column("Text")]
     public string Text { get; set; } = string.Empty;
 
+    /// <summary>Where the report stands in the leadership workflow.</summary>
+    public FeedbackStatus Status { get; set; } = FeedbackStatus.New;
+
+    /// <summary>Leadership's reply to the reporter.</summary>
+    [Column("Antwort")]
+    public string? Response { get; set; }
+
+    [Column("EntscheiderName")]
+    public string? DeciderName { get; set; }
+    [Column("EntschiedenAm")]
+    public DateTime? DecidedAt { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

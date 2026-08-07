@@ -82,6 +82,8 @@ public static class AuditDisplay
         ["AcknowledgedAt"] = "Kenntnis genommen am", ["AcknowledgedByName"] = "Kenntnis genommen von",
         ["Sighting"] = "Wahrnehmung", ["IsInternalOnly"] = "Nur intern",
         ["IsInvestigationLead"] = "Ermittlungsleitung",
+        ["PageRoute"] = "Seite", ["PageTab"] = "Seiten-Tab",
+        ["Response"] = "Antwort", ["DeciderName"] = "Entschieden von", ["DecidedAt"] = "Entschieden am",
     };
 
     // whole-day values carry no instant, so they must never be shifted into a time zone
@@ -94,7 +96,7 @@ public static class AuditDisplay
     {
         "Zeitpunkt", "TotBis", "Beginn", "Ende",
         "Timestamp", "DeadUntil", "Start", "End", "Expiry",
-        "DueDate", "DueAt", "DoneAt", "CompletedAt", "ScoreCalculatedAt", "AcknowledgedAt",
+        "DueDate", "DueAt", "DoneAt", "CompletedAt", "ScoreCalculatedAt", "AcknowledgedAt", "DecidedAt",
     };
 
     /// <summary>Parses JSON into field changes; empty on null/invalid.
