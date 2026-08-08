@@ -10,4 +10,9 @@ public interface ITimelineService
     Task<IReadOnlyList<TimelineEntry>> GetTimelineAsync(
         string entityType, string entityId, ClaimsPrincipal viewer,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Merged visible events of several records in one pass, newest first; records the viewer may not see contribute nothing.</summary>
+    Task<IReadOnlyList<TimelineEntry>> GetTimelineForRecordsAsync(
+        IReadOnlyList<(string Type, string Id)> records, ClaimsPrincipal viewer,
+        CancellationToken cancellationToken = default);
 }

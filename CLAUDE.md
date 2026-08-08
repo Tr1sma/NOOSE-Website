@@ -80,7 +80,7 @@ Schichten innerhalb von `NOOSE-Website/`:
 - **Render-Mode** wird pro Seite in `App.razor` gesetzt: `InteractiveServer`, außer `[ExcludeFromInteractiveRouting]` (Error, NotFound, Login, Pending, Blocked, Legal) → statisch.
 - **Culture global auf de-DE** fixiert (`UseRequestLocalization` + `CultureInfo.DefaultThread*`).
 - **Middleware-Reihenfolge** (load-bearing): `UseForwardedHeaders` (zuerst, vertraut nur Loopback/nginx) → `RequestLocalization` → (nur Prod) `ExceptionHandler`+`HSTS` → `StatusCodePagesWithReExecute("/not-found")` → `HttpsRedirection` → `Authentication` → `Authorization` → `RateLimiter` → `Antiforgery` → `MapStaticAssets` → `/health` → `MapRazorComponents<App>` → `Map*Endpoints`-Gruppen.
-- **SignalR Hub:** `MaximumReceiveMessageSize = 5 MB` (für den RichTextEditor, der volles HTML über SignalR streamt — nicht zurücksetzen).
+- **SignalR Hub:** `MaximumReceiveMessageSize = 25 MB` (für den RichTextEditor, der volles HTML inkl. base64-Bildern über SignalR streamt — nicht zurücksetzen).
 - **Background-Worker** (`AddHostedService`): `FollowupDueWorker` (Wiedervorlagen), `ThreatScoreSweepWorker` (tägl. Score-Decay, seedet Fraktionen beim ersten Start), `SituationReportWorker` (monatl. Lageberichte). Laufen pro Host-Instanz → keine Multi-Instanz gegen eine DB.
 - **Health-Check** `/health` (`AddDbContextCheck`) — von Deploy-Skript und Status-Seite genutzt.
 
@@ -104,7 +104,26 @@ Schichten innerhalb von `NOOSE-Website/`:
 - **Interface-first:** jeder DI-Service ist `I<Name>Service` + `<Name>Service`, `AddScoped`. Implementierungen nutzen **Primary Constructors**. Jede public-async-Methode hat ein trailing `CancellationToken cancellationToken = default`.
 - **Live-Updates per Singleton-Broadcaster/Dispatcher:** scoped Service schreibt die Row, ruft dann den Singleton (`NotificationBroadcaster`, `TaskforceChatBroadcaster`, `SharesBroadcaster`, `AcknowledgmentBroadcaster`, `WatchlistDispatcher`) zum Push an verbundene Circuits.
 - **Authorization wird IM Service-Layer durchgesetzt**, nicht nur in der UI: statische Guards `Permission.Require*` (werfen `UnauthorizedAccessException`), Sichtbarkeit zentral in statischem `Visibility`/`*Visibility`/`RecordsReference`. Write-Methoden nehmen `ClaimsPrincipal actor` und rufen den Guard als erste Anweisung.
-- **Statische Helfer in `Services/`** (NICHT DI-registriert): `Permission`, `Visibility`, `ClassificationHelper`, `TextSimilarity`, `RecordsReference`, `MentionParser`, `HtmlCleanup`, `TrashProjection`. Geteilte Logik dorthin extrahieren statt kopieren.
+- **Statische Helfer in `Services/`** (NICHT DI-registriert): `Permission`, `Visibility`, `AgentSelection`, `ClassificationHelper`, `TextSimilarity`, `RecordsReference`, `MentionParser`, `HtmlCleanup`, `TrashProjection`. Geteilte Logik dorthin extrahieren statt kopieren.
+- **Wer in eine Agenten-Auswahlliste darf, entscheidet ausschließlich `Services/AgentSelection.cs`.**
+  `db.Users.OnlySelectable()` = `Active && !IsTeamLead && PartnerAgency == null` für **jeden** Picker,
+  Dropdown, Roster und Roster-Fan-out (also überall, wo Empfänger *aus dem Gesamtbestand* gewählt werden);
+  `OnlyListable()` = `Codename != "" && !IsTeamLead && PartnerAgency == null` **nur** für die Log-Filter
+  (`AgentDirectory`), die Gekündigte/Gesperrte bewusst behalten. `IsSelectable(agent)` ist der
+  In-Memory-Zwilling. Nie `db.Users` von Hand nach Status/Flags filtern — und den **Schreibpfad mit
+  demselben Prädikat absichern** (`OnlySelectable().AnyAsync(...)`), sonst bleibt der SignalR-Pfad offen.
+- **Bewusste Ausnahmen von `AgentSelection`** — nicht „aufräumen":
+  `MentionService` (Partner bleiben erwähnbar) · `GetAllAsync`/`GetPendingAsync` (Admin-Roster mit eigenen
+  Tabs für TL/Partner/Gekündigte) · `PartnerShareService.GetSelectablePartnersAsync` (die Inverse) · alle
+  ID→Codename-Wörterbücher (müssen gekündigte Akteure in historischen Zeilen auflösen) ·
+  `NotificationService.NotifyManyAsync`, `FollowupDueWorker`, `WatchlistFanout` (filtern eine **übergebene**
+  Empfängerliste, kein Roster — Partner müssen Freigabe-/Chat-Benachrichtigungen weiter erhalten) ·
+  `AnnouncementService` Bestätigungs-Zähler (ohne Status-Klausel, sonst fällt die Zeile eines gekündigten
+  Agenten aus `TotalCount`) · `CounterIntelEventLoader` (braucht jeden User, er *erkennt* TL-Zugriffe).
+- **Ein Picker, der eine gespeicherte Agenten-ID auflöst, muss auf `FindAsync` zurückfallen**, wenn die ID
+  nicht mehr auswählbar ist (`FollowupDialog`, `ObservationDialog`). Sonst bleibt das Objekt `null` und der
+  Speichern-Pfad *löscht die Zuordnung still* bzw. schreibt sie auf den Bearbeiter um. Auflösen **außerhalb**
+  der Angebotsliste, damit niemand die Person neu auswählen kann.
 - **`ITrashService`** fächert den globalen Papierkorb über alle 13 Record-Dienste auf. Alle haben dieselbe
   Signatur (`GetTrashAsync(ct)` / `RestoreAsync(id, actor, ct)`), also bindet Restore als **Methodengruppe** —
   kein generischer EF-Pfad, kein Bulk-SQL, Permission-Guard und Audit-Interceptor laufen weiter mit.
@@ -124,6 +143,7 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
 - **Führung (Leadership)** = Rang ≥ `SupervisorySpecialAgent(4)` **oder** Admin. **`HöchsteEinstufung`** ≥ `SeniorSpecialAgent(3)`, **`BeförderungEntscheiden`** ≥ `DeputyDirector(5)`.
 - **Admin = Boolean-Flag** (`Agent.IsAdmin` / Claim `noose:admin`), **nicht** der Rang und **nicht** die geseedete Identity-Rolle „Admin" (die ist ungenutzt). Admin short-circuited jedes `RankRequirement`.
 - **Nur-Lese-Aufsicht (`OnlyReader`)** = `IsTeamLead && !IsAdmin` (abgeleitet, kein Flag): liest alles (inkl. VS), schreibt **nichts** (vom `ReadOnlyBarrierInterceptor` hart vetoed), sieht **nie** Klarnamen. `IsTeamLead` allein gewährt sonst keine Rechte; TeamLeads sind RP-weit unsichtbar.
+  - **`IsTeamLead` entfernt den Account aus jeder Auswahlliste** (`AgentSelection`), auch mit `IsAdmin` obendrauf. Deshalb zeigt die **Einsichtsliste eines VS-Dokuments die Aufsicht nicht**, obwohl `DocumentViewerScope.CanSee` ihr den Lesezugriff weiterhin gewährt — die Liste ist absichtlich unvollständig, sonst würde sie die Existenz der Aufsicht verraten. Nicht „reparieren".
 - **Claims werden beim Login** in den Cookie geschrieben (`AgentClaimsPrincipalFactory`) → keine DB-Hits pro Request. Rang-/Rollen-/Status-Änderung rotiert den `SecurityStamp` (`Save(agent, newStamp: true)`) → erzwingt Re-Login (`SecurityStampValidator` revalidiert alle 30s).
 - **Neue Policy anlegen:** Konstante in `Policies.cs` → registrieren in `AuthorizationRegistration.AddNooseAuthorization` (`RankRequirement` für Rang-Gate **oder** `RequireAssertion(ctx => ctx.User.SomeExtension())`) → ggf. Extension in `AgentPrincipalExtensions.cs`. **Policy-Strings nie hardcoden** — immer `Policies.*`.
 - **Account-Flow:** Discord-Login → `Agent` mit `Status=Pending` → Freigabe durch Führung/Admin (`AgentManagementService.ReleaseAsync`) setzt `Active` + Rang + Flags. Bootstrap-Admins via `Bootstrap:AdminDiscordId(s)`.
@@ -140,11 +160,12 @@ Drei orthogonale Achsen: **(1) Rang** (`Models/Enums/Rank.cs`, int-backed `Junio
 
 ### V1.5: zusammengefasste Seiten
 
-Seit V1.5 gibt es statt vieler Einzelseiten sechs Sammelseiten mit `RecordSectionRail`:
+Seit V1.5 gibt es statt vieler Einzelseiten sieben Sammelseiten mit `RecordSectionRail`:
 
 | Route | ersetzt |
 |---|---|
-| `/einstellungen` | 14 Admin-Seiten (System, Discord, Status, Tags, Custom-Felder, Aktualität, Bedrohungs-Score, Vorlagen ×4, Module, Einladungen, Partner, Protokoll, Basisdaten) |
+| `/einstellungen` | 13 Admin-Seiten (System, Discord, Status, Tags, Custom-Felder, Aktualität, Bedrohungs-Score, Vorlagen ×4, Module, Einladungen, Partner, Basisdaten) |
+| `/nachweis` | `/chronik`, `/einstellungen?tab=protokoll` (Änderungen + Zugriffe), `?tab=gegenaufklaerung`, `?tab=gegenaufklaerung-regeln` |
 | `/papierkorb` | 12 `*Trash.razor`-Seiten, getrieben von `ITrashService` |
 | `/fahndung` | `/observationen`, `/doks` |
 | `/abmeldungen` | `/abmeldungen/uebersicht`, `/abmeldungen/papierkorb` |
@@ -152,7 +173,9 @@ Seit V1.5 gibt es statt vieler Einzelseiten sechs Sammelseiten mit `RecordSectio
 | `/statistik` | `/lageberichte` |
 
 - **Alte Routen leben weiter** in **einer** Shell: `Components/Common/Navigation/LegacyRouteRedirect.razor`
-  trägt alle ~37 entfernten `@page`-Direktiven und schlägt das Ziel in `Navigation/LegacyRoutes.cs` nach.
+  trägt alle ~38 entfernten `@page`-Direktiven und schlägt das Ziel in `Navigation/LegacyRoutes.cs` nach.
+  Abschnitte, die eine **überlebende** Seite verlassen, brauchen zusätzlich `LegacyRoutes.MovedSettingsTab`
+  (`Target()` matcht nur ganze entfernte Routen) — so leitet `/einstellungen?tab=protokoll` auf `/nachweis`.
   **Beim Entfernen einer Route: `@page` erst in die Shell eintragen, wenn die alte Datei im selben Schritt
   gelöscht wird** — zwei Komponenten auf derselben Route werfen erst zur *Laufzeit*, nicht beim Kompilieren.
 - `Navigation/MergedPageSections.cs` hält die Slug-Listen der Sammelseiten; `LegacyRoutesTests` prüft
@@ -215,14 +238,161 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
-- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=6`, `app.js?v=2`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting.
-- **`NOOSE-Website/BuildNumber.txt` erhöht sich automatisch bei jedem echten Build** (`dotnet build`/`watch`/`publish`, MSBuild-Target in der `.csproj`; IDE-Design-Time-Builds sind ausgenommen) und wird als `1.0.<Zahl>` auf `/einstellungen?tab=status` angezeigt. Datei ist in Git eingecheckt → taucht nach jedem lokalen Build in `git status`, **muss mitcommittet werden**.
+- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=10`, `app.js?v=2`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting.
+- **Bewerbungs-Platzhalter sind groß-/kleinschreibungsabhängig.** `BewerbungTemplateRenderer` matcht `\bNAME\b`
+  case-sensitiv; aus `NAME` ein `Name` zu machen schaltet die `███████`-Schwärzung für jede daraus gebaute
+  Nachricht still ab. `TextAssistService` lehnt eine NOOSEI-Korrektur deshalb hart ab, wenn Anzahl **oder**
+  Schreibweise dieser Tokens abweicht (Kontext `RecruitingTemplate`).
+- **`NOOSE-Website/BuildNumber.txt` erhöht sich automatisch bei jedem echten Build** (`dotnet build`/`watch`/`publish`, MSBuild-Target in der `.csproj`; IDE-Design-Time-Builds sind ausgenommen) und wird als `1.0.<Zahl>` auf `/einstellungen?tab=status` angezeigt. Datei ist **gitignored** (`.gitignore` Zeile 386) → taucht nie in `git status` auf und wird nicht mitcommittet; die Prod-Nummer wächst allein über `deploy.ps1`.
 - **`graph.js`-JSON-Keys = englische CLR-Typnamen** (`nameof`), nicht die deutschen Display-Namen; C#- und JS-Map müssen synchron bleiben.
 - **Connection-Strings nie in `appsettings.json`** — nur User-Secrets/Env.
 - **Discord-Redirect** muss im Developer-Portal als `https://noose.info/signin-discord` registriert sein.
 - **Score-Writes gehen via `ExecuteUpdateAsync`**, um den Audit-Interceptor zu umgehen (sonst stempelt jeder Recompute `GeaendertAm` → bricht die Aktualitäts-Ampel). **Bulk-/Raw-SQL umgeht generell die Interceptors** → `Permission.RequireWriteAccess` dann explizit aufrufen.
+- **Fraktions-Aktualität hängt NICHT an `GeaendertAm`**, sondern an vier eigenen Stempeln auf `Fraktionen`
+  (`MitgliederAktualisiertAm`, `BestaendeAktualisiertAm`, `AktivitaetenAktualisiertAm`, `DoksAktualisiertAm`).
+  Der **älteste** davon bestimmt die Ampel; Stammdaten-Edits setzen sie nicht zurück. Alles zentral in
+  `Services/FactionRecency.cs` (`Reference`/`Oldest`/`Facets`/`ReferenceBefore`/`StampAsync`) — Lesepfade
+  (Liste, Karte, Druck, Dashboard, Statistik, `LeadService`) gehen ausschließlich darüber. Neuer Schreibpfad
+  auf Mitglieder/Bestände/Aktivitäten/Doks ⇒ `FactionRecency.StampAsync` **nach** dem `SaveChanges` aufrufen
+  (Raw-Update, damit der Stempel selbst kein `GeaendertAm`/Audit-Eintrag erzeugt).
+- **Nachvollziehbarkeit:** Ein Schreibpfad, der den Interceptor umgeht (`ExecuteUpdate/Delete`/Raw-SQL) **oder** eine nicht-`IAuditable`-Zuordnung ändert (z. B. `TagMapping`), muss selbst eine Zeile via `ManualAudit.Row(entityType, entityId, …)` schreiben — gegen die **Akte** geloggt (⇒ Zeitstrahl + Chronik + Protokoll), bei reinen Config-Aktionen gegen einen Config-Typ (nur Protokoll). `ChangesJson` folgt der `{Feld:[alt,neu]}`-Form (`ManualAudit.Change`), sonst rendert `AuditDisplay.Parse` nichts.
+- **Neue Kind-/Anhang-Tabelle einer Akte** (auditiert, aber unsichtbar auf dem Zeitstrahl) → Fall in `TimelineService.AuditSourceAsync` (Fan-out per FK bzw. polymorph über `EntityType/EntityId`) **und** einen Titel in `TimelineDisplay.MapAudit` ergänzen — sonst erscheint sie generisch als „Akte geändert" oder gar nicht.
 - **Bewerbungs-Anschreiben nie auf `{{...}}` „normalisieren"** — `BewerbungTemplateRenderer` schwärzt `\bNAME\b` zu `███████`, damit der Agent gegenüber Bewerbern anonym bleibt; `{{Agent}}` würde stattdessen den Codename ausliefern. `DocumentTemplates` ist dieselbe Tabelle für Bibliothek **und** Bewerbung → Consumer müssen nach `Category` (`RecruitingSeeder.TemplateCategory`) filtern.
 - **Stale Docs:** `Authorization/README.md` und `Infrastructure/README.md` sind veraltete „Phase 0"-Stubs; viele `<see cref>`-Tags zeigen auf alte deutsche Typnamen. Quelle ist der Code, nicht die READMEs.
+
+## NOOSEI (KI-Integration)
+
+- **Ein einziger Weg zum Modell:** `INooseiGateway.AskAsync`. Es prüft `Permission.RequireLlmUse`, dann das
+  Wochenkontingent, führt aus (bei Werkzeugen mehrere Runden), bucht **genau einmal** ab und schreibt eine
+  Zeile in `KiAnfragen`. `ILlmService` ist reiner Transport (eine Runde = ein HTTP-Call) und bleibt DB-frei.
+  `NooseiGatewayCoverageTests` schlägt fehl, sobald ein vierter Produktionsdateiname `ILlmService` nennt.
+- **Der Modellname ist aus `ILlmService` entfernt.** Keine Komponente *kann* ihn rendern; sichtbar ist er nur
+  in `/einstellungen?tab=noosei`. Nach außen heißt alles NOOSEI.
+- **Werkzeuge** (`Services/Llm/Tools/`) liefern deutschen Klartext und filtern **jeder für sich** über den
+  `ViewerScope` des fragenden Agenten. `NooseiToolResult.NotFound()` ist für „existiert nicht" und „darfst du
+  nicht sehen" **absichtlich identisch** — alles andere macht ein Werkzeug zum Existenz-Orakel für VS-Akten.
+  Keine Schreibwerkzeuge: NOOSEI liest, Agenten schreiben.
+- **Ein Werkzeug muss seine `Refs` liefern.** `NooseiToolResult.Refs` ist der einzige Weg, auf dem eine berührte
+  Akte in die Quellen-Chips unter der Antwort (`KiNachrichten.Quellen`) und in die Aktenliste der Protokollzeile
+  kommt — der `NooseiToolExecutor` gibt deshalb `NooseiToolOutcome(Text, Refs)` zurück, nicht nur Text. Refs ohne
+  `Id` (die Werkzeug-Zähleinträge des Gateways) fallen bei den Chips bewusst raus.
+- **Eine Anzahl ist eine Aussage über den Bestand.** `finde_akten` (Merkmalssuche und Zählung) fächert deshalb
+  über die Listendienste aus und filtert im Speicher — die VS-Filterung kommt aus dem kanonischen Lesepfad, nicht
+  aus einer zweiten Abfrage. Genauso `hole_kennzahlen`: `isLeadership` wird aus `Scope.MayClassifiedRead`
+  **abgeleitet**, nie als `true` übergeben, sonst verrät ein Aggregat die Existenz eingestufter Akten, die kein
+  Werkzeug nennen würde.
+- **Welcher Aktentyp in welches Werkzeug darf, steht ausschließlich in `NooseiRecordTypes`** (`INooseiTool.cs`):
+  eine Zeile je Typ mit den Flags `Read`/`List`/`Search`/`Chronicle`, aus denen die vier Schema-Enums beim
+  statischen Init berechnet werden. **Jedes Werkzeug mit `typ`-Parameter nimmt den geprüften Overload
+  `Clr(german, NooseiUse.X)`** — nicht das nackte `Clr(german)`. Das Schema-Enum ist nur ein Hinweis, und ein
+  durchgerutschter Typ landet in `Visibility.IsRecordVisibleAsync`, das jeden **unbekannten** Typ als „für alle
+  sichtbar" beantwortet (gilt für `Job`/`Appointment`, deren echte Regeln in `JobVisibility`/`AppointmentVisibility`
+  stehen). Vier Achsen statt einer Liste, weil sonst die schmalste Fähigkeit für alle entscheidet.
+  `NooseiRecordTypesTests` prüft je Flag per Dateiscan, dass der Dienst dahinter es auch kann.
+  `German(clr)` fällt nie auf den CLR-Namen zurück, sondern auf `"Eintrag"` — ein englischer Typname liest sich
+  für das Modell wie eine Aktenart, die es öffnen darf.
+- **Modell pro Funktion** über `LlmOptions.ModelByFeature` (`ModelFor(feature)`, leer = Standardmodell).
+  `LlmService` löst es aus `request.Context.Feature` auf — es gibt bewusst kein `Model` auf `LlmRequest`, damit
+  Funktion und Modell nicht auseinanderlaufen können. Sichtbar bleibt es nur in `/einstellungen?tab=noosei`.
+- **Der Akten-Anker der Unterhaltung wird jede Runde neu geprüft**, nicht einmal beim Anlegen: `?akte=Typ:Id`
+  ist eine Nutzereingabe, und die Systemzeile nennt die Akte beim Namen. Ohne
+  `Visibility.IsRecordVisibleAsync` gegen den *aktuellen* Scope wäre der Anker ein Existenz-Orakel.
+- **„Verbindung" heißt drei Tabellen, nicht eine.** Mitgliedschaften (`FraktionMitglieder`/`PersonengruppeMitglieder`/
+  `ParteiMitglieder`), typisierte `PersonBeziehungen` und die manuellen `Verknuepfungen` — `GraphEdgeLoader` ist die
+  kanonische Aufzählung. `zeige_verbindungen` deckt alle drei ab, **in beide Richtungen** (Person → ihre Fraktionen,
+  Fraktion → ihre Mitglieder); `finde_verbindungsweg` geht über `IGraphService.FindPathAsync` mehrere Schritte weit.
+  Ein neuer Verbindungstyp gehört in `GraphEdgeLoader` **und** in `ListRelatedTool`, sonst ist er für NOOSEI unsichtbar.
+  Ebenso: eine Akte, die eine Zuordnung nur von einer Seite rendert, macht sie im Kurzbrief der anderen Seite unsichtbar
+  (war so bei `DossierContextBuilder`: Fraktionen listeten ihre Mitglieder, Personen nicht ihre Fraktionen).
+- **`lies_kalender` nimmt bewusst nur `ICalendarService`, keinen `IDbContextFactory`.** Neun Quellen mit neun
+  eigenen Sichtbarkeitsregeln (Agenda am Uhrzeit-Gate, Aufgaben am Kippschalter, Abmeldungen am Roster) laufen
+  dort schon durch; ohne DB-Handle gibt es im Werkzeug baulich keinen Weg daran vorbei. `CalendarEntry.EntityType`/
+  `EntityId` setzt **nur**, wer schon entschieden hat, dass der Betrachter die Akte kennen darf — eine
+  Wiedervorlage auf eingestuftem Elternteil trägt weder Titel noch Link noch Referenz.
+- **Der Kurzbrief-Cache wird auf minimalem Privileg erzeugt** (`DossierScope.ForRecord`), weil eine Zeile pro
+  Akte von jedem gelesen wird, der die Akte sehen darf. `DossierContextBuilder.BuildAsync(..., scope: null, ...)`
+  wählt genau das; der Werkzeug-Pfad übergibt den echten Scope.
+- **Die Werkzeugaufrufe einer Runde laufen zusammen**, nicht nacheinander (`Task.WhenAll`); vier serialisierte
+  Aktenlesungen sprengen sonst das Turn-Budget, das jede einzelne mühelos einhält. Zwei Regeln hängen daran:
+  die **Wiederholungserkennung bleibt sequenziell** und in der Reihenfolge des Modells (sonst entscheiden zwei
+  identische Aufrufe je nach Laufzeit unterschiedlich, und die Refs verlieren die Ordnung, auf die
+  `MaxSources` beim Deduplizieren baut), und das **Turn-Budget wird genau einmal *nach* dem Bündel geprüft**
+  (`turnCts.Token.ThrowIfCancellationRequested()`) — `RunToolAsync` wirft deshalb nie, auch nicht bei
+  Abbruch, weil ein liegengelassener Werkzeug-Task später als unbeobachtete Ausnahme ohne zugehörige Anfrage
+  auftaucht.
+- **Ein abgelaufener Turn liefert aus, was da ist.** Läuft die Zeit ab, während ein Werkzeug noch liest, wird
+  der Text der letzten Runde mit `Truncated` und einem deutschen Hinweis ausgeliefert statt einer Ausnahme —
+  120 Sekunden Spinner, Kontingent belastet und kein Wort war die schlechteste aller Antworten. Der
+  **Abbruch durch den Agenten fällt weiter durch** (Unterscheidung über `!cancellationToken.IsCancellationRequested`),
+  und ohne bereits erzeugten Text wird nichts gerettet. Die Zeile ist `Erfolg = true` **mit**
+  `Fehlerart = Timeout`: der Agent hat eine Antwort bekommen, und genau diese Kombination zählt die Auswertung.
+- **`KiAnfragen` trägt acht nullable Betriebsspalten** (`Abschlussgrund`, `Versuche`, `ModellDauerMs`,
+  `Werkzeugaufrufe`, `Werkzeugfehler`, `Eingeschraenkt`, `AbbruchGrund`, `Fehlerart`), befüllt über
+  `LlmRequestTrace` am `LlmChargeInput`. **Nullable heißt „nicht gemessen"**, 0 heißt „gemessen und keins" —
+  eine Zeile von vor der Migration darf nicht als Turn ohne Werkzeuge durchgehen. `DauerMs − ModellDauerMs`
+  ist das Werkzeugbudget und die einzige Zahl, die ein langsames Modell von einer langsamen Datenbank trennt.
+  Ausgewertet in `/einstellungen?tab=ki-betrieb` (`NooseiHealthPanel`) — **ausschließlich in Kontingent-Token**,
+  damit `NooseiCostVisibilityTests` dort gar nicht erst greifen muss. Die Werkzeug-Rangliste ist eine
+  **Stichprobe** der neuesten Zeilen (die Namen liegen in `Kontextrefs`, das kein Index erreicht) und sagt das
+  auch dazu.
+- **Kontingente:** ISO-Woche, Reset Montag 00:00 lokal, träge beim Lesen (kein Worker), Vorbild ist das
+  Finanzierungsbudget. **1.000 Kontingent-Token = 1 Cent** echter API-Kosten (`usage.cost` von OpenRouter).
+  Der Übertrag ist auf `Basis · %/100` **gedeckelt** (`LlmQuotaMath.CarryOut`) und wird auch **beim Lesen**
+  geklemmt — anders als beim Finanzierungsbudget, das compoundieren kann.
+- **Tagesgrenze zusätzlich zur Woche:** `LlmRankQuota.DailyPercent` (Standard 40 %), durchgesetzt in
+  `EnsureAvailableAsync`. Gemessen an der **Basis, nicht an Basis + Übertrag** — eine Woche mit Übertrag soll
+  länger reichen, nicht schneller ausgebbar sein; ein individuelles `LlmQuotaOverride` verschiebt sie mit.
+  **Die Wochensperre schlägt die Tagessperre** (`IsDayBlocked` enthält `!IsBlocked`), sonst verspräche die
+  Meldung „ab morgen früh" etwas, das erst am Montag stimmt. Die Burn-Rate-Regel R2 *meldet* weiterhin nur;
+  gestoppt wird hier.
+- **Der Kontingent-Lesepfad fragt vier Mal, egal für wie viele.** `QuotaSnapshot.LoadAsync` holt geschlossene
+  Perioden, Verbrauch je Woche, Korrekturen und den heutigen Verbrauch gruppiert; `CloseElapsedAsync` liest
+  danach gar nichts mehr, auch nicht im `ReadPredecessor`-Sonderfall. Vorher waren es sieben Abfragen **je
+  Agent** — bei dreißig Agenten 210 Round-Trips in einem synchronen Render, und derselbe Pfad hängt hinter
+  jeder Antwort, weil die Abrechnung mit einem Status-Lesen abschließt.
+- **Nur der KI-Eigner ändert Kontingente** (`Ki:OwnerDiscordId(s)` → Claim `noose:kiowner` → `Policies.AiOwner` /
+  `Permission.RequireAiOwner`). Führung und andere Admins lesen nur. Bewusst eine eigene Achse neben den
+  Bootstrap-Admins, von denen es mehrere gibt.
+- **`RequireLlmUse` sperrt Partner, Demo und die Nur-Lese-Aufsicht.** Unterhaltungen (`KiUnterhaltungen`)
+  sind besitzer-privat, liegen **nicht** im globalen Papierkorb, und ihr `RechteStempel` verwirft beim
+  Replay alle Werkzeug-Antworten, sobald sich der Scope des Besitzers geändert hat. Weil es keinen Papierkorb
+  gibt, ist `DeleteAsync` ein **Hard-Delete** — der Dialog im Chat sagt deshalb „endgültig" und „nicht
+  wiederherstellbar".
+- **Die Werkzeug-Spur unter einer Antwort kommt aus den gespeicherten `tool`-Zeilen**, nicht aus einer zweiten
+  Kopie auf der Assistant-Zeile — sonst zeigen frische und wiedergeöffnete Unterhaltung Unterschiedliches.
+  Folge: ein Aufruf ohne Ergebnis fehlt in der Spur, weil genau diese Zeilen bewusst nicht gespeichert werden.
+  Deutsche Bezeichnung und Fortschrittstext eines Werkzeugs stehen zusammen in `NooseiToolLabels` — getrennt
+  driften sie, und ein neues Werkzeug erscheint dann in der einen Liste als roher Bezeichner.
+- **Vorschlags-Chips kosten nichts.** Startfragen sind fest, Folgefragen werden aus den Quellen der letzten
+  Antwort abgeleitet — kein Modellaufruf. Ein Chip **füllt nur das Eingabefeld**, dieselbe Regel wie bei einer
+  aus der Befehlspalette übernommenen Frage: Senden bleibt eine bewusste Handlung, weil es Kontingent kostet.
+- **Der Bild-Platzhalter des Editors ist ein Attribut, kein `src`.** `richtext.js` ersetzt jedes base64-Bild
+  durch `data-noosei-bild="n"` und tauscht es beim Übernehmen zurück. Ein Platzhalter *im* `src` funktioniert
+  nicht: `src` ist ein URI-Attribut, und `HtmlCleanup` wirft jedes unbekannte Schema weg — das löschte das Bild
+  still aus dem korrigierten Dokument. Deshalb geht der Editor-Pfad über `HtmlCleanup.CleanAiPayload`
+  (Allowlist + Marker), alle anderen Pfade über `Clean`, das den Marker bewusst verwirft.
+- **Echtes Geld sieht ausschließlich der KI-Eigner.** Alle anderen — Agenten, Führung, andere Admins, die
+  Nur-Lese-Aufsicht — rechnen in Kontingent-Token. Zwei Schichten sichern das: Beträge stehen nur unter
+  `Components/Pages/Admin/` (Seite hängt an `Policies.LeadershipPage`, Anfragen-Protokoll zusätzlich an
+  `Policies.CounterIntel`), **und** dort nochmals hinter `IsAiOwner()` — als `_maySeeCost` in den Panels, als
+  Parameter `MaySeeCost` im `LlmRequestDetailDialog` (Standard `false`, damit ein neuer Aufrufer nichts leakt).
+  Auch der Umrechnungssatz „1.000 Token = 1 Cent" ist ein Preis und fällt darunter. `NooseiCostVisibilityTests`
+  prüft beide Schichten per Dateiscan. `LlmQuotaMath.ToCents`/`ToCost` bleiben — nur die Anzeige ist begrenzt.
+- **Wochenkosten:** `LlmCostForecast.MaxTokens` summiert `Available` (Basis **+** Übertrag, nicht die Rang-Basis)
+  über den `OnlySelectable()`-Bestand — das Maximum, wenn alle restlos verbrauchen. `Expected` mittelt die
+  **abgeschlossenen** Wochen aus `ILlmRequestLogService.GetWeeklySpendAsync`; die laufende Woche ist als
+  `Running` markiert und fliegt raus, sonst fiele die Prognose jeden Montag ab und stiege bis Sonntag wieder.
+- **Verbrauch wird beim Erzeugen gebucht, nicht beim Übernehmen.** Der Editor-Dialog meldet die Kosten über
+  `NooseiDialog.OnGenerated`, sobald die Antwort da ist. Verwerfen, Escape und ein zweiter Anlauf kosten
+  genauso; über das Dialog-*Ergebnis* zu buchen zeigte nach einem „Verwerfen" die Zahlen des letzten
+  *angenommenen* Durchgangs an. `_lastDiscarded` wird erst nach dem erfolgreichen `applyAiResult` gelöscht.
+- **Kontingent-Lesepfade nehmen den `ClaimsPrincipal`** (`Permission.RequireQuotaRead`: eigenes immer, fremdes
+  bzw. der ganze Bestand nur mit `MayClassifiedRead`). Die Nur-Lese-Aufsicht sieht die Zahlen, die
+  Anomalie-Auswertung darüber bleibt hinter `RequireLeadershipNoReader`.
+- **Editor-Korrektur sieht nie Markup:** `TextBlocks` zerlegt das HTML in nummerierte Klartext-Blöcke und
+  schreibt die Korrektur in die Textknoten zurück. Formatierung, Gliederung und base64-Bilder sind damit
+  mechanisch geschützt, nicht per Prompt. Danach laufen harte Prüfungen (Zahlen, Aktenzeichen, `{{…}}`,
+  Erwähnungen, Bewerbungs-Tokens) — ein Verstoß verwirft die Antwort.
 
 ## Domänen-Glossar
 

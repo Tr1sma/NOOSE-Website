@@ -127,6 +127,25 @@ public sealed class OrgChartServiceTests
     }
 
     [Fact]
+    public async Task GetAsync_ExcludesPartnersFromRoster()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Ag("internal", Rank.SpecialAgent));
+            // a partner carrying a NOOSE rank is still not in-house personnel
+            db.Users.Add(Seed.Agent("partner", Rank.SpecialAgent,
+                configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.SaveChanges();
+        }
+
+        var data = await NewService(ctx).GetAsync(Leader());
+
+        var ids = data.Ranks.SelectMany(g => g.Agents).Select(a => a.Id).ToList();
+        Assert.Equal(new[] { "internal" }, ids.ToArray());
+    }
+
+    [Fact]
     public async Task GetAsync_ExcludesRanklessAgents()
     {
         using var ctx = new SqliteTestContext();
@@ -284,6 +303,32 @@ public sealed class OrgChartServiceTests
             db.Taskforces.Add(Tf("t1"));
             db.TaskforceAgents.Add(Alloc("t1", "normal"));
             db.TaskforceAgents.Add(Alloc("t1", "teamlead"));
+            db.SaveChanges();
+        }
+
+        var data = await NewService(ctx).GetAsync(Leader());
+
+        var members = data.Taskforces.Single().Members;
+        Assert.Equal(new[] { "normal" }, members.Select(m => m.AgentId).ToArray());
+    }
+
+    [Fact]
+    public async Task GetAsync_ExcludesTerminatedAndPartnerMembersFromStaffing()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Ag("normal", Rank.SpecialAgent, codename: "Normal"));
+            db.Users.Add(Ag("gone", Rank.SpecialAgent, AgentStatus.Terminated, codename: "Weg"));
+            db.Users.Add(Seed.Agent("partner", Rank.SpecialAgent, configure: a =>
+            {
+                a.Codename = "Extern";
+                a.PartnerAgency = PartnerAgency.LSPD;
+            }));
+            db.Taskforces.Add(Tf("t1"));
+            db.TaskforceAgents.Add(Alloc("t1", "normal"));
+            db.TaskforceAgents.Add(Alloc("t1", "gone"));
+            db.TaskforceAgents.Add(Alloc("t1", "partner"));
             db.SaveChanges();
         }
 

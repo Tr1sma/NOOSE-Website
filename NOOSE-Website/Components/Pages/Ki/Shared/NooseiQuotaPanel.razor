@@ -1,0 +1,124 @@
+@using System.Security.Claims
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Models.Llm
+@using MudBlazor.Charts
+@inject ILlmQuotaService Quota
+@inject ILlmRequestLogService Log
+@inject ISnackbar Snackbar
+
+@if (_status is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="2">
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Savings" Label="Grundkontingent"
+                      Value="@_status.BaseWeekly.ToString("N0")"
+                      Hint="@(_status.IsOverride ? "individuell gesetzt" : "nach Dienstgrad")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.MoveDown" Label="Übertrag aus Vorwoche"
+                      Value="@_status.CarryIn.ToString("N0")"
+                      Hint="@($"{_status.CarryPercent} % des Restes, höchstens {_status.CarryCap:N0}")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.TrendingDown" Label="Verbraucht"
+                      Value="@_status.Consumed.ToString("N0")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.AccountBalanceWallet" Label="Rest"
+                      Colour="@(_status.IsBlocked ? Color.Error : Color.Success)"
+                      Value="@_status.Remaining.ToString("N0")"
+                      Hint="@_status.PeriodLabel" />
+        </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+        @if (_status.NextResetLocal is { } reset)
+        {
+            <text>Nächste Zurücksetzung: @reset.ToString("dddd, dd.MM.yyyy HH:mm") Uhr. </text>
+        }
+        @* the token/cent rate stays in the settings; an agent's page names no money at all *@
+        Lange Antworten mit vielen Aktenzugriffen kosten mehr Kontingent als eine kurze Rückfrage.
+    </MudText>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mt-2"
+              Icon="@Icons.Material.Filled.AddCircleOutline">
+        Reicht dein Kontingent für einen bestimmten Einsatz nicht aus, kannst du im Einzelfall bei
+        <b>Atze</b> mehr anfragen.
+    </MudAlert>
+
+    @if (_trend.Count > 1)
+    {
+        <MudPaper Elevation="0" Class="pa-3 mt-4">
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Verbrauch der letzten Wochen</MudText>
+            <MudChart ChartType="ChartType.Line" ChartSeries="@_series" XAxisLabels="@_labels" Height="220px" />
+        </MudPaper>
+    }
+
+    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Meine letzten Anfragen</MudText>
+    <MudTable Items="_recent" Dense="true" Hover="true" Elevation="0" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Zeitpunkt</MudTh>
+            <MudTh>Funktion</MudTh>
+            <MudTh Style="text-align:right">Kontingent</MudTh>
+            <MudTh>Status</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Zeitpunkt">@context.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Funktion">@LlmFeatureDisplay.Name(context.Feature)</MudTd>
+            <MudTd DataLabel="Kontingent" Style="text-align:right">@context.QuotaTokens.ToString("N0")</MudTd>
+            <MudTd DataLabel="Status">
+                @if (!context.Success)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">Fehler</MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <EmptyState Icon="@Icons.Material.Filled.Token" Text="Du hast NOOSEI noch nicht genutzt." />
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = new();
+    private LlmQuotaStatus? _status;
+    private IReadOnlyList<LlmRequestRow> _recent = [];
+    private IReadOnlyList<LlmWeekPoint> _trend = [];
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        var agentId = _user.GetAgentId();
+        if (string.IsNullOrEmpty(agentId))
+        {
+            return;
+        }
+        try
+        {
+            _status = await Quota.GetStatusAsync(agentId, _user);
+            _recent = await Log.GetOwnAsync(_user);
+            _trend = await Log.GetWeeklyTrendAsync(agentId, _user);
+            if (_trend.Count > 1)
+            {
+                _labels = _trend.Select(p => IsoWeekPeriod.Label(p.Year, p.Week)).ToArray();
+                _series =
+                [
+                    new ChartSeries<double> { Name = "Verbraucht", Data = _trend.Select(p => (double)p.Consumed).ToArray() },
+                    new ChartSeries<double> { Name = "Verfügbar", Data = _trend.Select(p => (double)p.Available).ToArray() },
+                ];
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
+    }
+}

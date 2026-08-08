@@ -9,24 +9,43 @@ public static class MergedPageSections
         "custom-felder", "tags", "aktualitaet", "bedrohungs-score",
         "vorlagen-dok", "vorlagen-dokument", "vorlagen-aktivitaet", "vorlagen-personal",
         "module", "einladungen",
+        "finanzierung",
+        "noosei", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
         "partner",
-        "protokoll", "basisdaten",
+        "basisdaten",
+    ];
+
+    public static readonly string[] Monitoring =
+    [
+        "chronik",
+        "aenderungen", "zugriffe",
+        "lagebild", "agenten-profil", "auffaelligkeiten", "regeln",
     ];
 
     public static readonly string[] Trash =
     [
         "personen", "fraktionen", "personengruppen", "parteien",
         "vorgaenge", "operationen", "taskforces", "aufgaben",
-        "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen",
+        "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen", "entfuehrungen",
+        "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
+        "feedback",
     ];
 
     public static readonly string[] Wanted = ["fahndung", "observationen", "doks"];
 
     public static readonly string[] Absences = ["meine", "uebersicht", "papierkorb"];
 
-    public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests"];
+    public static readonly string[] Recruiting = ["eingang", "sperren", "vorlagen", "tests", "anforderungen", "automatik"];
 
-    public static readonly string[] Statistics = ["auswertung", "lageberichte"];
+    public static readonly string[] Statistics =
+    [
+        "ueberblick", "bestand", "aktivitaet", "bedrohung", "entfuehrungen", "netzwerk", "kasse", "finanzierung", "dienststelle", "lageberichte",
+    ];
+
+    public static readonly string[] Financing =
+    [
+        "meine", "alle", "katalog", "budgets", "statistik", "papierkorb",
+    ];
 
     /// <summary>Section slugs of a merged page, keyed by its route.</summary>
     public static readonly IReadOnlyDictionary<string, string[]> ByRoute =
@@ -38,5 +57,7 @@ public static class MergedPageSections
             ["/abmeldungen"] = Absences,
             ["/bewerbungen"] = Recruiting,
             ["/statistik"] = Statistics,
+            ["/nachweis"] = Monitoring,
+            ["/finanzierungen"] = Financing,
         };
 }

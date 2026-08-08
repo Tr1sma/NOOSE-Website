@@ -1,6 +1,8 @@
 @page "/dashboard"
 @using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Timeline
 @inject IDashboardService Dashboard
+@inject IGlobalChronikService Chronik
 @inject IFollowupService FollowupService
 @inject NavigationManager Nav
 @inject IAuthorizationService Authorization
@@ -174,7 +176,7 @@ else if (_distributions is { } v)
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                         <RecencyIndicator Level="a.Level" ReferenceDateUtc="a.ReferenceUtc" />
                                         <div>
-                                            <MudText Typo="Typo.body2"><b>@TypeLabel(a.Type)</b> »@a.Name«</MudText>
+                                            <MudText Typo="Typo.body2"><b>@RecordTypeDisplay.Name(a.Type.ToString())</b> »@a.Name«</MudText>
                                             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                                                 @a.CaseNumber · zuletzt @a.ReferenceUtc.ToLocalTime().ToString("dd.MM.yyyy")
                                             </MudText>
@@ -203,8 +205,10 @@ else if (_distributions is { } v)
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
                     <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Letzte Änderungen</MudText>
+                    <MudSpacer />
+                    <MudLink Href="/nachweis?tab=chronik" Typo="Typo.caption">Zur Chronik</MudLink>
                 </MudStack>
-                @if (_changes.Count == 0)
+                @if (_chronik.Count == 0)
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Änderungen erfasst.</MudText>
                 }
@@ -212,24 +216,31 @@ else if (_distributions is { } v)
                 {
                     <div class="dashboard-spalte-body">
                         <MudTimeline TimelinePosition="TimelinePosition.Start" Class="mt-2">
-                            @foreach (var x in _changes)
+                            @foreach (var x in _chronik)
                             {
-                                <MudTimelineItem Color="@Colour(x.Action)" Size="Size.Small">
+                                <MudTimelineItem Color="@TimelineCategoryDisplay.Colour(x.Category)" Size="Size.Small">
                                     <MudText Typo="Typo.body2">
-                                        <b>@TypeLabel(x.RecordType)</b>
-                                        @if (x.RecordDeleted)
+                                        <b>@RecordTypeDisplay.Name(x.EntityType)</b>
+                                        @if (x.RecordDeleted || string.IsNullOrEmpty(x.Href))
                                         {
-                                            <span>»@x.RecordName«</span>
-                                            <span class="mud-text-secondary"> (im Papierkorb)</span>
+                                            <span>»@x.Name«</span>
+                                            @if (x.RecordDeleted)
+                                            {
+                                                <span class="mud-text-secondary"> (im Papierkorb)</span>
+                                            }
                                         }
                                         else
                                         {
-                                            <MudLink Href="@Link(x)">»@x.RecordName«</MudLink>
+                                            <MudLink Href="@x.Href">»@x.Name«</MudLink>
                                         }
-                                        <span class="mud-text-secondary"> · @ActionText(x)</span>
+                                        <span class="mud-text-secondary"> · @x.Title</span>
                                     </MudText>
+                                    @if (!string.IsNullOrWhiteSpace(x.Detail))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@x.Detail</MudText>
+                                    }
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        @x.CaseNumber · @x.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(x.AgentName ?? "System")
+                                        @x.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · @(x.ActorName ?? "System")
                                     </MudText>
                                 </MudTimelineItem>
                             }
@@ -252,7 +263,7 @@ else if (_distributions is { } v)
     private bool _mayShares;
     private DashboardMetrics? _metrics;
     private DashboardDistributions? _distributions;
-    private List<DashboardChange> _changes = new();
+    private List<ChronikEvent> _chronik = new();
     private List<FollowupDashboardItem> _myDue = new();
     private List<DashboardStaleRecord> _updateNeed = new();
     private List<DashboardFactionHazard> _factionsHazard = new();
@@ -279,7 +290,10 @@ else if (_distributions is { } v)
         var meId = user.GetAgentId(); // for taskforce-membership visibility of metrics/lists
         _metrics = await Dashboard.GetMetricsAsync(_isLeadership, meId);
         _distributions = await Dashboard.GetDistributionsAsync(_isLeadership, meId);
-        _changes = await Dashboard.GetLastChangesAsync(_isLeadership, meId, 50);
+        // same feed the chronicle renders; wide window so a quiet week still fills the panel
+        var chronik = await Chronik.GetEventsAsync(
+            new ChronikQuery(DateTime.UtcNow.AddYears(-1), DateTime.UtcNow.AddMinutes(1), MinEvents: 20), user);
+        _chronik = chronik.Events.Take(20).ToList();
         _myDue = await FollowupService.GetMyDueAsync(user);
         _updateNeed = await Dashboard.GetUpdateNeedAsync(_isLeadership, meId);
         _factionsHazard = await Dashboard.GetFactionsByHazardAsync(_isLeadership);
@@ -304,47 +318,4 @@ else if (_distributions is { } v)
         return string.IsNullOrWhiteSpace(codename) ? "Unbenannter Agent" : codename;
     }
 
-    private static string TypeLabel(DashboardRecordType t) => t switch
-    {
-        DashboardRecordType.Person => "Person",
-        DashboardRecordType.Faction => "Fraktion",
-        DashboardRecordType.Party => "Partei",
-        DashboardRecordType.Operation => "Operation",
-        DashboardRecordType.Taskforce => "Taskforce",
-        DashboardRecordType.Case => "Vorgang",
-        _ => "Personengruppe",
-    };
-
-    private static string Link(DashboardChange x) => x.RecordType switch
-    {
-        DashboardRecordType.Person => $"/personen/{x.RecordId}",
-        DashboardRecordType.Faction => $"/fraktionen/{x.RecordId}",
-        DashboardRecordType.Party => $"/parteien/{x.RecordId}",
-        DashboardRecordType.Operation => $"/operationen/{x.RecordId}",
-        DashboardRecordType.Taskforce => $"/taskforces/{x.RecordId}",
-        DashboardRecordType.Case => $"/vorgaenge/{x.RecordId}",
-        _ => $"/personengruppen/{x.RecordId}",
-    };
-
-    private static string ActionText(DashboardChange x)
-    {
-        var verb = x.Action switch
-        {
-            AuditAction.Created => x.Detail is null ? "angelegt" : "hinzugefügt",
-            AuditAction.Modified => "geändert",
-            AuditAction.Deleted => x.Detail is null ? "in den Papierkorb verschoben" : "entfernt",
-            AuditAction.Restored => "wiederhergestellt",
-            _ => x.Action.ToString(),
-        };
-        return x.Detail is null ? verb : $"{x.Detail} {verb}";
-    }
-
-    private static Color Colour(AuditAction a) => a switch
-    {
-        AuditAction.Created => Color.Success,
-        AuditAction.Modified => Color.Info,
-        AuditAction.Deleted => Color.Error,
-        AuditAction.Restored => Color.Warning,
-        _ => Color.Default,
-    };
 }

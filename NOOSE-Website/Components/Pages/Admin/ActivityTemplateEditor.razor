@@ -67,7 +67,7 @@ else
             </MudAlert>
 
             <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
-            <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" />
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" MinHeight="360px" Ai="TextAssistContext.ActivityTemplate" />
         </MudStack>
     </MudPaper>
 }

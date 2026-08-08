@@ -130,11 +130,8 @@ public sealed class MeetingReminderWorker(IServiceScopeFactory scopeFactory, ILo
         // time-zone conversion is not EF-translatable
         var day = MeetingTime.Day(meetingStart);
 
-        var roster = await db.Users.AsNoTracking()
-            .Where(u => u.Status == AgentStatus.Active
-                     && !u.IsTeamLead
-                     && u.PartnerAgency == null
-                     && (u.ReleasedAt ?? u.RegisteredAt) <= meetingStart)
+        var roster = await db.Users.AsNoTracking().OnlySelectable()
+            .Where(u => (u.ReleasedAt ?? u.RegisteredAt) <= meetingStart)
             .Select(u => u.Id)
             .ToListAsync(cancellationToken);
         if (roster.Count == 0)

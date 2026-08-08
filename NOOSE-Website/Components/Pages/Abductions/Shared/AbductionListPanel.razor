@@ -1,0 +1,91 @@
+@* Full list of all documented abductions. *@
+@inject IAbductionService AbductionService
+@inject NavigationManager Nav
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Dokumentierte Entführungen</MudText>
+        <MudSpacer />
+        <AuthorizeView Policy="@Policies.WriteAccess">
+            <MudButton Href="/entfuehrungen/neu" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neue Entführung</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.PersonOff" Title="Noch keine Entführungen dokumentiert"
+                    Text="Wenn ein NOOSE-Agent entführt wurde, hier den Vorfall und den Informationsabfluss festhalten." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Aktenzeichen</th>
+                    <th>Opfer</th>
+                    <th>Täter</th>
+                    <th>Zeitpunkt</th>
+                    <th>Ausgang</th>
+                    <th>Leak</th>
+                    <th>Kompromittiert</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/entfuehrungen/{r.Abduction.Id}"))">
+                        <td>@r.Abduction.CaseNumber</td>
+                        <td>@r.VictimCodename</td>
+                        <td>@(r.PerpetratorName ?? "—")</td>
+                        <td>@r.Abduction.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@AbductionOutcomeDisplay.ChipColor(r.Abduction.Outcome)">
+                                @AbductionOutcomeDisplay.Name(r.Abduction.Outcome)
+                            </MudChip>
+                        </td>
+                        <td>
+                            @if (r.Abduction.InformationLeaked)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@LeakSeverityDisplay.ChipColor(r.Abduction.LeakSeverity)">
+                                    @LeakSeverityDisplay.Name(r.Abduction.LeakSeverity)
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                            }
+                        </td>
+                        <td>
+                            @if (r.CompromisedActiveCount > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.GppBad">
+                                    @r.CompromisedActiveCount
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    private bool _load = true;
+    private List<AbductionDisplay> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rows = await AbductionService.GetListAsync();
+        _load = false;
+    }
+}

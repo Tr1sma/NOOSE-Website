@@ -339,6 +339,32 @@ public sealed class TrainingModuleServiceTests
             NewService(ctx).MarkCompletedAsync("ghost", "m1", null, Leader()));
     }
 
+    [Theory]
+    [InlineData("teamlead")]
+    [InlineData("teamlead-admin")]
+    [InlineData("partner")]
+    [InlineData("terminated")]
+    public async Task MarkCompletedAsync_Throws_WhenAgentNotSelectable(string id)
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.TrainingModules.Add(Mod("m1", "Alpha"));
+            db.Users.Add(id switch
+            {
+                "teamlead" => Seed.Agent(id, configure: a => a.IsTeamLead = true),
+                "teamlead-admin" => Seed.Agent(id, configure: a => { a.IsTeamLead = true; a.IsAdmin = true; }),
+                "partner" => Seed.Agent(id, configure: a => a.PartnerAgency = PartnerAgency.LSPD),
+                _ => Seed.Agent(id, status: AgentStatus.Terminated),
+            });
+            db.SaveChanges();
+        }
+
+        // the training catalogue is NOOSE-internal
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            NewService(ctx).MarkCompletedAsync(id, "m1", null, Leader()));
+    }
+
     [Fact]
     public async Task MarkCompletedAsync_UnknownModule_Throws()
     {

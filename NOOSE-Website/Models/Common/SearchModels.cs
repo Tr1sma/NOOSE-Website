@@ -10,6 +10,10 @@ using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Financing;
+using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Recruiting;
 
 namespace NOOSE_Website.Models.Common;
@@ -59,9 +63,29 @@ public static class SearchNavigation
         nameof(Document) => $"/dokumente/{targetId}",
         nameof(Law) => $"/gesetze/{targetId}",
         nameof(Agent) => $"/personal/{targetId}",
+        nameof(AgentAbduction) => $"/entfuehrungen/{targetId}",
+        nameof(EvidenceItem) => $"/asservatenkammer/item/{targetId}",
+        nameof(EvidenceEntry) => $"/asservatenkammer/eintrag/{targetId}",
+        nameof(KassenBuchung) => $"/kasse/buchung/{targetId}",
         nameof(Bewerbung) => $"/bewerbungen/{targetId}",
+        nameof(FinancingRequest) => $"/finanzierungen/{targetId}",
         _ => $"/personen/{targetId}",
     };
+
+    /// <summary>Types <see cref="Route"/> maps explicitly. Everything else falls through to the person route,
+    /// which is right for a search hit (its category is always one of these or a person) but wrong for a caller
+    /// that must not produce a link into the wrong record — that caller asks here first.</summary>
+    private static readonly HashSet<string> Routed = new(StringComparer.Ordinal)
+    {
+        "Person", nameof(Faction), nameof(PersonGroup), nameof(Party), nameof(Operation),
+        nameof(AgentActivity), nameof(Taskforce), nameof(Case), nameof(Job), nameof(Appointment),
+        nameof(Meeting), nameof(Document), nameof(Law), nameof(Agent), nameof(AgentAbduction),
+        nameof(EvidenceItem), nameof(EvidenceEntry), nameof(KassenBuchung), nameof(Bewerbung),
+        nameof(FinancingRequest),
+    };
+
+    /// <summary>Whether <see cref="Route"/> has a real route for this type rather than the person fallback.</summary>
+    public static bool Knows(string? recordsType) => recordsType is not null && Routed.Contains(recordsType);
 
     /// <summary>Route of a hit: explicit target type, else category.</summary>
     public static string Route(SearchHit hit) => Route(hit.TargetType ?? hit.Category, hit.TargetId);

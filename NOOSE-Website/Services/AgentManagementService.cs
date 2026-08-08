@@ -43,8 +43,7 @@ public class AgentManagementService(
     public async Task<List<Agent>> GetSelectableAsync(CancellationToken cancellationToken = default)
     {
         await using var readDb = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await readDb.Users.AsNoTracking()
-            .Where(a => a.Status == AgentStatus.Active && !a.IsTeamLead)
+        return await readDb.Users.AsNoTracking().OnlySelectable()
             .OrderBy(a => a.Codename)
             .ToListAsync(cancellationToken);
     }

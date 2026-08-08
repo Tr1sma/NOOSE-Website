@@ -33,6 +33,7 @@ public sealed class ClaimsPrincipalBuilder
 
     public ClaimsPrincipalBuilder AsAdmin(bool value = true) => Flag(AgentClaimTypes.IsAdmin, value);
     public ClaimsPrincipalBuilder AsBootstrap(bool value = true) => Flag(AgentClaimTypes.IsBootstrap, value);
+    public ClaimsPrincipalBuilder AsAiOwner(bool value = true) => Flag(AgentClaimTypes.IsAiOwner, value);
     public ClaimsPrincipalBuilder AsTru(bool value = true) => Flag(AgentClaimTypes.IsTRU, value);
     public ClaimsPrincipalBuilder AsHrb(bool value = true) => Flag(AgentClaimTypes.IsHRB, value);
     public ClaimsPrincipalBuilder AsTeamLead(bool value = true) => Flag(AgentClaimTypes.IsTeamLead, value);

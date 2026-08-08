@@ -23,7 +23,10 @@ public sealed class SituationReportServiceTests
         statistics.GetReportAsync(Arg.Any<bool>(), Arg.Any<string?>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(report ?? SampleReport());
         var notifications = Substitute.For<INotificationService>();
-        var svc = new SituationReportService(ctx.Factory, statistics, notifications,
+        var financing = Substitute.For<IFinancingStatisticsService>();
+        financing.GetMonthAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(FinancingReport.Empty);
+        var svc = new SituationReportService(ctx.Factory, statistics, financing, notifications,
             NullLogger<SituationReportService>.Instance);
         return (svc, statistics, notifications);
     }

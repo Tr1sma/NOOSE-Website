@@ -61,6 +61,15 @@ else
                 @* Sanitized server-side on save, so safe as MarkupString. *@
                 <div class="dokument-html">@((MarkupString)_document.ContentHtml)</div>
             </MudPaper>
+            @if (!_isPartner)
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="1">
+                    <MudText Typo="Typo.h6" GutterBottom="true" Class="d-flex align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Class="mr-2" />NOOSEI-Kurzbrief
+                    </MudText>
+                    <KiBriefPanel EntityType="@nameof(Document)" EntityId="@_document.Id" User="_user" />
+                </MudPaper>
+            }
         </MudItem>
         <MudItem xs="12" md="4" lg="3">
             <MudPaper Class="pa-4" Elevation="1">

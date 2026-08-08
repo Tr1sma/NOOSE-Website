@@ -24,6 +24,7 @@ else
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personen" aria-label="Zurück" />
+        <CompromisedBadge EntityType="@nameof(Person)" EntityId="@_person.Id" />
         <MudSpacer />
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
@@ -115,6 +116,15 @@ else
                     <ObservationPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
                 </RecordSection>
                 }
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel PerpetratorType="@nameof(Person)" PerpetratorId="@_person.Id" />
+                </RecordSection>
+                <RecordSection Group="Akte" Slug="asservate" Label="Asservate" Icon="@Icons.Material.Filled.Inventory2">
+                    <EvidenceOwnerPanel OwnerType="@nameof(Person)" OwnerId="@_person.Id" />
+                </RecordSection>
+                }
                 @if (TabOn("einstufung"))
                 {
                 <RecordSection Group="Akte" Slug="einstufung" Label="Einstufung" Icon="@Icons.Material.Filled.Shield">
@@ -137,6 +147,8 @@ else
                     }
                     <HazardPanel Score="_person.ThreatScore" Confidence="_person.ThreatConfidence"
                                       DetailJson="@_person.ThreatDetailJson" />
+                    <MudDivider Class="my-4" />
+                    <RecordThreatTrend EntityType="@nameof(Person)" EntityId="@_person.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("fotos"))
@@ -192,6 +204,12 @@ else
                 {
                 <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" @key="_historyKey" />
+                </RecordSection>
+                }
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="NOOSEI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
+                    <KiBriefPanel EntityType="@nameof(Person)" EntityId="@_person.Id" User="_user" />
                 </RecordSection>
                 }
             </RecordSectionRail>

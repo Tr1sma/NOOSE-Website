@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -117,6 +118,22 @@ public class TagService(IDbContextFactory<AppDbContext> dbFactory) : ITagService
 
         db.TagMappings.RemoveRange(toRemove);
         db.TagMappings.AddRange(toSupplement);
+
+        // TagMapping is not IAuditable → log the change against the record so it lands on its timeline
+        var changedIds = toRemove.Select(z => z.TagId).Concat(toSupplement.Select(z => z.TagId)).Distinct().ToList();
+        var names = await db.Tags.Where(t => changedIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, cancellationToken);
+        var changes = new Dictionary<string, object?[]>();
+        if (toSupplement.Count > 0)
+        {
+            changes["Tags hinzugefügt"] = new object?[] { null, string.Join(", ", toSupplement.Select(z => names.GetValueOrDefault(z.TagId, z.TagId))) };
+        }
+        if (toRemove.Count > 0)
+        {
+            changes["Tags entfernt"] = new object?[] { null, string.Join(", ", toRemove.Select(z => names.GetValueOrDefault(z.TagId, z.TagId))) };
+        }
+        db.AuditLogs.Add(ManualAudit.Row(entityType, entityId, AuditAction.Modified, actor, changes));
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }

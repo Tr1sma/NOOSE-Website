@@ -88,7 +88,7 @@ else
                     @if (_canWrite)
                     {
                         <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.PersonPin"
-                                   OnClick="AssignSelf">Mir zuweisen</MudButton>
+                                   OnClick="AssignSelf" Disabled="_assigning">Mir zuweisen</MudButton>
                     }
                 </MudStack>
 
@@ -233,10 +233,15 @@ else
         => ImageLightbox.ShowAsync(DialogService,
             [new ImageLightbox.LightboxImage($"/dateien/bewerbungen/anhang/{_b!.Id}?inline=true", _b.AttachmentOriginalName)]);
 
+    private bool _assigning;
+
     private async Task AssignSelf()
     {
+        if (_assigning) return;
+        _assigning = true;
         try { await BewerbungService.AssignSelfAsync(Id, _user); await LoadAsync(); }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _assigning = false; }
     }
 
     private async Task SetStatus(BewerbungStatus target)

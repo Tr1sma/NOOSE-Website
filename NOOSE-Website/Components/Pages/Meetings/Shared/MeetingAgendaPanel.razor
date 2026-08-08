@@ -86,7 +86,7 @@ else
                                 <MudText Typo="Typo.subtitle2" Class="mb-2">Notiz</MudText>
                                 @if (CanNote)
                                 {
-                                    <RichTextEditor @ref="_itemEditor" @key="item.Id" Value="@_noteHtml" MinHeight="220px" />
+                                    <RichTextEditor @ref="_itemEditor" @key="item.Id" Value="@_noteHtml" MinHeight="220px" Ai="TextAssistContext.AgendaNote" AiSubject="@item.Title" />
                                     <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
                                         <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                                                    OnClick="@(() => NoteSaveAsync(item))" Disabled="@_saving">

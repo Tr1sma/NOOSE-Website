@@ -1,0 +1,26 @@
+@page "/feedback"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+
+<PageTitle>Feedback · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Feedback"
+            Title="Feedback"
+            Subtitle="Fehler, Ideen und Wünsche zur Website melden; die Führung liest den Eingang." />
+
+<RecordSectionRail>
+    <RecordSection Slug="melden" Label="Melden" Icon="@Icons.Material.Filled.Feedback">
+        <FeedbackForm />
+    </RecordSection>
+
+    @* the panel loads itself, so a freshly filed report shows up without a page reload *@
+    <RecordSection Slug="meine" Label="Meine Meldungen" Icon="@Icons.Material.Filled.Person">
+        <FeedbackListPanel Inbox="false" />
+    </RecordSection>
+
+    @* the inbox section neither renders nor registers for anyone below leadership *@
+    <AuthorizeView Policy="@Policies.LeadershipPage" Context="inboxSection">
+        <RecordSection Slug="eingang" Label="Eingang" Icon="@Icons.Material.Filled.Inbox">
+            <FeedbackListPanel Inbox="true" />
+        </RecordSection>
+    </AuthorizeView>
+</RecordSectionRail>

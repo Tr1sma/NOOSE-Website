@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Activities;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
@@ -202,6 +203,64 @@ public sealed class ProfileSuggestionAdminTests
             // different type: the party role must stay untouched
             Assert.Equal("Anführer", db.PartyMembers.Single().Role);
         }
+    }
+
+    [Fact]
+    public async Task EvidenceCategory_RenameAndDelete_ReachSoftDeletedItemsToo()
+    {
+        using var ctx = new SqliteTestContext();
+        string entryId;
+        using (var db = ctx.NewContext())
+        {
+            var entry = new ProfileSuggestion { Type = SuggestionType.EvidenceCategory, Value = "Drogen" };
+            db.ProfileSuggestions.Add(entry);
+            entryId = entry.Id;
+            db.EvidenceItems.Add(new EvidenceItem { Name = "Kokainpaket", Category = "Drogen" });
+            db.EvidenceItems.Add(new EvidenceItem { Name = "Pistole", Category = "Waffen" });
+            // in the trash, so the propagation has to ignore the soft-delete filter
+            db.EvidenceItems.Add(new EvidenceItem { Name = "Heroin", Category = "Drogen", IsDeleted = true });
+            db.SaveChanges();
+        }
+
+        var svc = Build(ctx);
+        await svc.RenameAsync(entryId, "Betäubungsmittel", Leader);
+
+        using (var db = ctx.NewContext())
+        {
+            Assert.Equal("Betäubungsmittel", db.EvidenceItems.Single(i => i.Name == "Kokainpaket").Category);
+            Assert.Equal("Betäubungsmittel",
+                db.EvidenceItems.IgnoreQueryFilters().Single(i => i.Name == "Heroin").Category);
+            // different value: the weapon category must stay untouched
+            Assert.Equal("Waffen", db.EvidenceItems.Single(i => i.Name == "Pistole").Category);
+        }
+
+        await svc.DeleteAsync(entryId, Leader);
+
+        using (var db = ctx.NewContext())
+        {
+            Assert.Null(db.EvidenceItems.Single(i => i.Name == "Kokainpaket").Category);
+            Assert.Null(db.EvidenceItems.IgnoreQueryFilters().Single(i => i.Name == "Heroin").Category);
+            // the item itself survives; only its label goes
+            Assert.Equal(2, db.EvidenceItems.Count());
+            Assert.Equal("Waffen", db.EvidenceItems.Single(i => i.Name == "Pistole").Category);
+        }
+    }
+
+    [Fact]
+    public async Task EvidenceCategory_UsageCount_CountsTrashedItems()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.ProfileSuggestions.Add(new ProfileSuggestion { Type = SuggestionType.EvidenceCategory, Value = "Drogen" });
+            db.EvidenceItems.Add(new EvidenceItem { Name = "Kokainpaket", Category = "Drogen" });
+            db.EvidenceItems.Add(new EvidenceItem { Name = "Heroin", Category = "Drogen", IsDeleted = true });
+            db.SaveChanges();
+        }
+
+        var entries = await Build(ctx).GetEntriesAsync(SuggestionType.EvidenceCategory);
+
+        Assert.Equal(2, Assert.Single(entries).UsageCount);
     }
 
     [Fact]

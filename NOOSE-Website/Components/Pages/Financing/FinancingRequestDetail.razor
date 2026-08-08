@@ -1,0 +1,365 @@
+@page "/finanzierungen/{Id}"
+@inject IFinancingService Financing
+@inject IFinancingBudgetService Budgets
+@inject IKassenService Kasse
+@inject FinancingBroadcaster Broadcaster
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_request?.CaseNumber ?? "Finanzierungsantrag") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_request is null)
+{
+    <PageHeader Icon="@Icons.Material.Filled.RequestQuote" Title="Finanzierungsantrag" BackHref="/finanzierungen" />
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Nicht verfügbar"
+                Text="Dieser Antrag existiert nicht oder ist für dich nicht sichtbar." />
+}
+else
+{
+    <PageHeader Icon="@Icons.Material.Filled.RequestQuote"
+                Title="@_request.CaseNumber"
+                Subtitle="@($"{_agentCodename} · {FinancingStatusDisplay.Name(_request.Status)}")"
+                BackHref="/finanzierungen">
+        <Actions>
+            @if (_mayDecide && _request.Status is FinancingStatus.Requested or FinancingStatus.Rejected)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check"
+                           OnClick="ApproveAsync">Annehmen</MudButton>
+            }
+            @if (_mayDecide && _request.Status == FinancingStatus.Requested)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Close"
+                           OnClick="RejectAsync">Ablehnen</MudButton>
+            }
+            @if (_mayDecide && _request.Status == FinancingStatus.Approved)
+            {
+                <MudTooltip Text="@PayoutHint" Disabled="@CanPay">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Payments"
+                               Disabled="@(!CanPay)" OnClick="PayAsync">Auszahlen</MudButton>
+                </MudTooltip>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Undo"
+                           OnClick="RevokeAsync">Genehmigung zurücknehmen</MudButton>
+            }
+            @if (_mayDecide && _request.Status == FinancingStatus.Paid)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Undo"
+                           OnClick="CancelPaymentAsync">Auszahlung stornieren</MudButton>
+            }
+            @if (_mayActAsOwner && _request.Status == FinancingStatus.Requested)
+            {
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Undo"
+                           OnClick="WithdrawAsync">Zurückziehen</MudButton>
+            }
+            @if (_mayDelete)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                               OnClick="DeleteAsync" aria-label="Antrag löschen" />
+            }
+        </Actions>
+    </PageHeader>
+
+    <RecordSectionRail>
+        <RecordSection Slug="uebersicht" Label="Übersicht" Icon="@Icons.Material.Filled.Article">
+            <MudStack Spacing="3">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudSimpleTable Dense="true" Striped="true">
+                        <thead>
+                            <tr>
+                                <th>Position</th>
+                                <th style="text-align:right">Einzelpreis</th>
+                                <th style="text-align:right">Zuschuss</th>
+                                <th style="text-align:right">Beantragt</th>
+                                <th style="text-align:right">Genehmigt</th>
+                                <th style="text-align:right">NOOSE zahlt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var line in _request.Lines)
+                            {
+                                <tr>
+                                    <td>
+                                        @line.ItemName
+                                        @if (!string.IsNullOrWhiteSpace(line.Category))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@line.Category</MudText>
+                                        }
+                                    </td>
+                                    <td style="text-align:right">@Money.Format(line.UnitPrice)</td>
+                                    <td style="text-align:right">@line.SubsidyPercent %</td>
+                                    <td style="text-align:right">@line.Quantity</td>
+                                    <td style="text-align:right">
+                                        @if (line.ApprovedQuantity is { } granted)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="@(granted < line.Quantity ? Color.Warning : Color.Default)">@granted</MudText>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </td>
+                                    <td style="text-align:right">@Money.Format(FinancingMath.EffectiveSubsidy(line))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+
+                    <MudStack Spacing="1" Class="mt-3">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.body2">Warenwert</MudText>
+                            <MudText Typo="Typo.body2">@Money.Format(_request.RequestedGross)</MudText>
+                        </MudStack>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.body2">Beantragter Zuschuss</MudText>
+                            <MudText Typo="Typo.body2">@Money.Format(_request.RequestedSubsidy)</MudText>
+                        </MudStack>
+                        @if (_request.ApprovedSubsidy is { } approved)
+                        {
+                            <MudDivider Class="my-1" />
+                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.subtitle1"><b>Genehmigter Zuschuss</b></MudText>
+                                <MudText Typo="Typo.subtitle1"><b>@Money.Format(approved)</b></MudText>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Begründung</MudText>
+                    <MentionDisplay Text="@_request.Justification" User="_user" />
+                </MudPaper>
+
+                @if (_request.OverrunAmount is { } overrun)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        <b>Budget-Überschreitung um @Money.Format(overrun)</b>
+                        @if (!string.IsNullOrWhiteSpace(_request.OverrunReason))
+                        {
+                            <div>@_request.OverrunReason</div>
+                        }
+                    </MudAlert>
+                }
+
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body2">
+                            Gestellt am @_request.CreatedAt.ToLocalTime().ToString("dddd, d. MMMM yyyy 'um' HH:mm")
+                        </MudText>
+                        @if (_request.DecidedAt is { } decidedAt)
+                        {
+                            <MudText Typo="Typo.body2">
+                                Entschieden von @(_request.DeciderName ?? "—") am
+                                @decidedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_request.DecisionNote))
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@_request.DecisionNote</MudText>
+                        }
+                        @if (_request.PaidAt is { } paidAt)
+                        {
+                            <MudText Typo="Typo.body2">
+                                Ausgezahlt von @(_request.PaidByName ?? "—") am
+                                @paidAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                @if (_mayDecide && !string.IsNullOrEmpty(_request.KassenBuchungId))
+                                {
+                                    <MudLink Href="@($"/kasse/buchung/{_request.KassenBuchungId}")" Class="ml-1">zur Kassenbuchung</MudLink>
+                                }
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        </RecordSection>
+
+        <RecordSection Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
+            <CommentPanel EntityType="@nameof(FinancingRequest)" EntityId="@_request.Id" User="_user" />
+        </RecordSection>
+
+        <RecordSection Slug="historie" Label="Historie" Icon="@Icons.Material.Filled.History">
+            <TimelinePanel EntityType="@nameof(FinancingRequest)" EntityId="@_request.Id" User="_user" />
+        </RecordSection>
+    </RecordSectionRail>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private ClaimsPrincipal _user = default!;
+    private FinancingRequest? _request;
+    private string _agentCodename = "—";
+    private FinancingBudgetStatus _budget = FinancingBudgetStatus.Empty;
+    private decimal _gruengeld;
+    private bool _mayDecide;
+    private bool _mayWrite;
+    private bool _isOwner;
+    private string? _loadedId;
+
+    /// <summary>The requester's own controls; read-only supervision and partners never get them.</summary>
+    private bool _mayActAsOwner => _isOwner && _mayWrite;
+
+    private bool _mayDelete => _request is not null
+        && _request.Status != FinancingStatus.Paid
+        && (_mayDecide || (_mayActAsOwner && _request.Status == FinancingStatus.Requested));
+
+    private decimal PayoutAmount => _request?.ApprovedSubsidy ?? 0m;
+
+    private bool CanPay => PayoutAmount > 0 && _gruengeld >= PayoutAmount;
+
+    private string PayoutHint => PayoutAmount <= 0
+        ? "Für diesen Antrag ist kein Zuschuss genehmigt."
+        : $"Grüngeld-Bestand {Money.Format(_gruengeld)} — benötigt {Money.Format(PayoutAmount)}, es fehlen {Money.Format(PayoutAmount - _gruengeld)}.";
+
+    // both routes bind the same component type, so loading belongs here with an id guard
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _user = (await AuthStateTask).User;
+        _mayWrite = _user.MayWrite();
+        _mayDecide = _user.IsLeadership() && _mayWrite;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        // record-to-record navigation reuses this component, so blank the view while the new one loads —
+        // otherwise the old request stays on screen while the action buttons already act on the new Id.
+        // The request is published only once budget and balance match it, so no action ever reads a mix.
+        _load = true;
+        _request = null;
+
+        var loaded = await Financing.GetAsync(Id, _user);
+        if (loaded is not null)
+        {
+            _agentCodename = loaded.Agent?.Codename ?? "(unbekannt)";
+            _isOwner = loaded.AgentId == _user.GetAgentId();
+            if (_mayDecide)
+            {
+                _budget = await Budgets.GetStatusAsync(loaded.AgentId);
+                // read once per load: the balance is a fold over the whole ledger
+                _gruengeld = await Kasse.GetBalanceAsync(KassenKonto.Gruengeld);
+            }
+        }
+        _request = loaded;
+        _load = false;
+    }
+
+    private async Task ApproveAsync()
+    {
+        if (_request is null)
+        {
+            return;
+        }
+        var decision = await FinancingDecisionDialog.ShowAsync(DialogService, _request, _budget);
+        if (decision is null)
+        {
+            return;
+        }
+        await RunAsync(() => Financing.DecideAsync(Id, approved: true, decision, _user), "Antrag angenommen.");
+    }
+
+    private async Task RejectAsync()
+    {
+        var note = await ReasonDialog.ShowAsync(DialogService, "Antrag ablehnen?",
+            "Der Antragsteller wird benachrichtigt. Die Ablehnung lässt sich später zurücknehmen.",
+            "Ablehnen", "Notiz", mandatoryReason: false, Color.Error);
+        if (note is null)
+        {
+            return;
+        }
+        await RunAsync(() => Financing.DecideAsync(Id, approved: false,
+            new FinancingDecisionInput { Note = note }, _user), "Antrag abgelehnt.");
+    }
+
+    private async Task RevokeAsync()
+    {
+        var note = await ReasonDialog.ShowAsync(DialogService, "Genehmigung zurücknehmen?",
+            "Der Antrag geht zurück auf „Beantragt“ und gibt das reservierte Budget wieder frei.",
+            "Zurücknehmen", "Notiz");
+        if (note is null)
+        {
+            return;
+        }
+        await RunAsync(() => Financing.RevokeApprovalAsync(Id, reject: false, note, _user),
+            "Genehmigung zurückgenommen.");
+    }
+
+    private async Task PayAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Jetzt auszahlen?",
+            $"{Money.Format(PayoutAmount)} werden als Auszahlung aus der Grüngeld-Kasse gebucht.", "Auszahlen");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => Financing.PayAsync(Id, _user), "Auszahlung gebucht.");
+    }
+
+    private async Task CancelPaymentAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Auszahlung stornieren?",
+            "Die Kassenbuchung wird storniert und der Antrag geht zurück auf „Angenommen“.", "Stornieren");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => Financing.CancelPaymentAsync(Id, _user), "Auszahlung storniert.");
+    }
+
+    private async Task WithdrawAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Antrag zurückziehen?",
+            "Der Antrag wird geschlossen und kann danach nicht mehr entschieden werden.", "Zurückziehen");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => Financing.WithdrawAsync(Id, _user), "Antrag zurückgezogen.");
+    }
+
+    private async Task DeleteAsync()
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Antrag löschen?",
+            "Der Antrag landet im Papierkorb und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Financing.DeleteAsync(Id, _user);
+            Broadcaster.Report();
+            Snackbar.Add("Antrag gelöscht.", Severity.Success);
+            Nav.NavigateTo("/finanzierungen");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RunAsync(Func<Task> action, string success)
+    {
+        try
+        {
+            await action();
+            Broadcaster.Report();
+            Snackbar.Add(success, Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

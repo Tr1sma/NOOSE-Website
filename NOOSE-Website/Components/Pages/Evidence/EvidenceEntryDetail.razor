@@ -1,0 +1,163 @@
+@page "/asservatenkammer/eintrag/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IEvidenceService Evidence
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>@(_display?.Entry.CaseNumber ?? "Eintrag") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_display is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Eintrag nicht gefunden.</MudAlert>
+}
+else
+{
+    var e = _display.Entry;
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/asservatenkammer" aria-label="Zurück" />
+        <MudChip T="string" Size="Size.Small" Color="@EvidenceEntryTypeDisplay.ChipColor(e.Type)"
+                 Icon="@EvidenceEntryTypeDisplay.Icon(e.Type)">
+            @EvidenceEntryTypeDisplay.Name(e.Type)
+        </MudChip>
+        <MudText Typo="Typo.h5">@e.CaseNumber</MudText>
+        <MudSpacer />
+        <MudTooltip Text="Druckansicht">
+            <MudIconButton Icon="@Icons.Material.Filled.Print" Href="@($"/asservatenkammer/eintrag/{e.Id}/druck")" Target="_blank"
+                           aria-label="Druckansicht öffnen" />
+        </MudTooltip>
+        <AuthorizeView Policy="@Policies.Leadership" Context="edit">
+            <MudButton Href="@($"/asservatenkammer/eintrag/{e.Id}/bearbeiten")" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Edit">Bearbeiten</MudButton>
+            <MudButton Color="Color.Error" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete"
+                       OnClick="DeleteAsync">Löschen</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Besitzer</MudText>
+                <MudText Typo="Typo.body1">
+                    @if (_display.OwnerHref is { } href)
+                    {
+                        <MudLink Href="@href">@_display.OwnerDisplay</MudLink>
+                    }
+                    else
+                    {
+                        @_display.OwnerDisplay
+                    }
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Bearbeiter</MudText>
+                <MudText Typo="Typo.body1">@_display.HandlerCodename</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Datum</MudText>
+                <MudText Typo="Typo.body1">@e.Timestamp.ToLocalTime().ToString("dddd, d. MMMM yyyy 'um' HH:mm")</MudText>
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-3" />
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Gegenstände (@_display.Lines.Count)</MudText>
+        @* a clearing books dozens of positions at once, so cap the height *@
+        <div style="max-height:480px;overflow-y:auto">
+            <MudSimpleTable Dense="true" Hover="false" Class="mt-1">
+                <thead>
+                    <tr><th style="width:64px"></th><th>Gegenstand</th><th style="width:100px">Menge</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in _display.Lines)
+                    {
+                        <tr>
+                            <td>
+                                @if (l.HasImage)
+                                {
+                                    <MudImage Src="@($"/dateien/asservate/{l.ItemId}")" Height="48" Width="48"
+                                              ObjectFit="ObjectFit.Contain" Class="rounded" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Default" />
+                                }
+                            </td>
+                            <td><MudLink Href="@($"/asservatenkammer/item/{l.ItemId}")">@l.ItemName</MudLink></td>
+                            <td>@l.Quantity</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(e.Notes))
+        {
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Zusatznotiz</MudText>
+            <MudText Typo="Typo.body2" Style="white-space:pre-line;"><MentionDisplay Text="@e.Notes" /></MudText>
+        }
+    </MudPaper>
+
+    <RecordSectionRail>
+        <RecordSection Slug="kommentare" Label="Kommentare" Icon="@Icons.Material.Filled.Comment">
+            <CommentPanel EntityType="@nameof(EvidenceEntry)" EntityId="@e.Id" User="_user" />
+        </RecordSection>
+        <RecordSection Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
+            <TimelinePanel EntityType="@nameof(EvidenceEntry)" EntityId="@e.Id" User="_user" @key="_historyKey" />
+        </RecordSection>
+    </RecordSectionRail>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private EvidenceEntryDisplay? _display;
+    private ClaimsPrincipal _user = default!;
+    private Guid _historyKey = Guid.NewGuid();
+    private string? _loadedId;
+
+    protected override async Task OnInitializedAsync() => _user = (await AuthStateTask).User;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        _load = true;
+        _display = await Evidence.GetEntryDisplayAsync(Id);
+        _load = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_display is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Eintrag löschen?",
+            "Der Eintrag wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden. Der Bestand wird entsprechend angepasst.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Evidence.DeleteEntryAsync(_display.Entry.Id, _user);
+            Snackbar.Add("Eintrag in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/asservatenkammer");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

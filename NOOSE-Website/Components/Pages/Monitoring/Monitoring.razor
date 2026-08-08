@@ -1,0 +1,94 @@
+@page "/nachweis"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject INavPreferencesService NavPreferences
+@inject IAuditLogQueryService AuditQuery
+
+<PageTitle>Nachweis · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.FactCheck"
+            Title="Nachweis & Gegenaufklärung"
+            Subtitle="Wer hat was wann geändert, eingesehen oder ausgelöst — behördenweit an einer Stelle." />
+
+@* One AuthorizeView per policy: an unrendered section never registers, so its rail button is absent
+   and a hand-edited ?tab= falls back to the first allowed section. *@
+<RecordSectionRail HideRailWhenSingle="true">
+    <RecordSection Slug="chronik" Label="Chronik" Icon="@Icons.Material.Filled.Timeline">
+        <ChronikPanel LastSeenUtc="_lastSeen" OnOpened="StampSeenAsync" />
+    </RecordSection>
+
+    <AuthorizeView Policy="@Policies.LeadershipPage" Context="logSections">
+        <RecordSection Group="Protokoll" Slug="aenderungen" Label="Änderungen"
+                       Icon="@Icons.Material.Filled.EditNote">
+            <AuditChangesPanel Options="_auditOptions" />
+        </RecordSection>
+        <RecordSection Group="Protokoll" Slug="zugriffe" Label="Zugriffe"
+                       Icon="@Icons.Material.Filled.Visibility">
+            <AuditAccessPanel Options="_auditOptions" />
+        </RecordSection>
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.CounterIntel" Context="ciSections">
+        <RecordSection Group="Gegenaufklärung" Slug="lagebild" Label="Lagebild"
+                       Icon="@Icons.Material.Filled.Shield">
+            <CounterIntelOverviewPanel />
+        </RecordSection>
+        <RecordSection Group="Gegenaufklärung" Slug="agenten-profil" Label="Agenten-Profil"
+                       Icon="@Icons.Material.Filled.PersonSearch">
+            <CounterIntelProfilePanel />
+        </RecordSection>
+        <RecordSection Group="Gegenaufklärung" Slug="auffaelligkeiten" Label="Auffälligkeiten"
+                       Icon="@Icons.Material.Filled.Warning">
+            <CounterIntelFlagsPanel />
+        </RecordSection>
+        <RecordSection Group="Gegenaufklärung" Slug="regeln" Label="Regeln"
+                       Icon="@Icons.Material.Filled.Rule">
+            <CounterIntelRulesPanel />
+        </RecordSection>
+    </AuthorizeView>
+</RecordSectionRail>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    // both live on the page, not in a panel: the rail keys its content pane per section, so every
+    // switch destroys the panel — the visit stamp would re-fire and the option lists would re-query
+    private DateTime? _lastSeen;
+    private AuditFilterOptions _auditOptions = new(Array.Empty<AuditAgentOption>(), Array.Empty<string>());
+
+    private string? _agentId;
+    private bool _stamped;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _agentId = user.GetAgentId();
+
+        if (!string.IsNullOrEmpty(_agentId))
+        {
+            var prefs = await NavPreferences.GetAsync(_agentId);
+            _lastSeen = prefs.ChronikLastSeenUtc;
+        }
+
+        if (user.MayClassifiedRead())
+        {
+            try
+            {
+                _auditOptions = await AuditQuery.GetFilterOptionsAsync(user);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                /* section stays gated */
+            }
+        }
+    }
+
+    private async Task StampSeenAsync()
+    {
+        if (_stamped || string.IsNullOrEmpty(_agentId))
+        {
+            return;
+        }
+        _stamped = true;
+        await NavPreferences.SetChronikLastSeenAsync(_agentId, DateTime.UtcNow);
+    }
+}

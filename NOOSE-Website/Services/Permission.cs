@@ -17,6 +17,16 @@ public static class Permission
         }
     }
 
+    /// <summary>Require leadership or admin, but NOT read-only supervisors (OnlyReader).</summary>
+    public static void RequireLeadershipNoReader(ClaimsPrincipal actor)
+    {
+        if (!actor.MayCounterIntel())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Auswertung ist der Führung vorbehalten und für die Nur-Lese-Aufsicht gesperrt.");
+        }
+    }
+
     /// <summary>Require write access; denies read-only supervisors and partners.</summary>
     public static void RequireWriteAccess(ClaimsPrincipal actor)
     {
@@ -24,6 +34,65 @@ public static class Permission
         {
             throw new UnauthorizedAccessException(
                 "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+    }
+
+    /// <summary>Require leadership or the assigned informant handler; denies read-only supervisors and partners.</summary>
+    public static void RequireInformantWrite(ClaimsPrincipal actor, string? handlerId)
+    {
+        if (actor.IsOnlyReader() || actor.IsPartner())
+        {
+            throw new UnauthorizedAccessException("Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        var me = actor.GetAgentId();
+        if (actor.IsLeadership() || (handlerId is not null && me is not null && me == handlerId))
+        {
+            return;
+        }
+        throw new UnauthorizedAccessException("Nur die Führung oder der zuständige Führungsagent darf diesen Informanten bearbeiten.");
+    }
+
+    /// <summary>Require the actor may use NOOSEI (never partners, demo sessions or read-only supervision).</summary>
+    public static void RequireLlmUse(ClaimsPrincipal actor)
+    {
+        if (actor.IsPartner() || actor.IsDemo() || actor.IsOnlyReader())
+        {
+            throw new UnauthorizedAccessException("NOOSEI steht in dieser Rolle nicht zur Verfügung.");
+        }
+    }
+
+    /// <summary>Require the actor owns this NOOSEI conversation. Chats are working notes, not an agency record —
+    /// the only other reader is the AI owner, for a concrete misuse suspicion.</summary>
+    public static void RequireOwnConversation(ClaimsPrincipal actor, string ownerId)
+    {
+        if (!string.Equals(actor.GetAgentId(), ownerId, StringComparison.Ordinal) && !actor.IsAiOwner())
+        {
+            throw new UnauthorizedAccessException("Diese Unterhaltung gehört einem anderen Agenten.");
+        }
+    }
+
+    /// <summary>Require the actor may read NOOSEI quotas: their own always, anyone else's (or the whole roster,
+    /// with no id) only with the classified-read scope. Read-only supervision keeps the bare numbers here; the
+    /// behaviour analysis on top of them stays behind <see cref="RequireLeadershipNoReader"/>.</summary>
+    public static void RequireQuotaRead(ClaimsPrincipal actor, string? agentId = null)
+    {
+        if (agentId is not null && string.Equals(actor.GetAgentId(), agentId, StringComparison.Ordinal))
+        {
+            return;
+        }
+        if (!actor.MayClassifiedRead())
+        {
+            throw new UnauthorizedAccessException("Kein Zugriff auf dieses NOOSEI-Kontingent.");
+        }
+    }
+
+    /// <summary>Require the configured AI owner; everyone else may read the quotas but never change them.</summary>
+    public static void RequireAiOwner(ClaimsPrincipal actor)
+    {
+        if (!actor.IsAiOwner())
+        {
+            throw new UnauthorizedAccessException(
+                "Die KI-Kontingente kann nur der KI-Eigner ändern.");
         }
     }
 
@@ -108,6 +177,53 @@ public static class Permission
         {
             throw new UnauthorizedAccessException(
                 "Besprechungen und Tagesordnungspunkte darf nur Senior Special Agent aufwärts oder ein Admin bearbeiten.");
+        }
+    }
+
+    /// <summary>Require the right to file an evidence-room entry: depositing is open to every writing agent, taking something out stays with leadership.</summary>
+    public static void RequireEvidenceEntryWrite(ClaimsPrincipal actor, EvidenceEntryType type)
+    {
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        // fail closed: anything that is not a deposit needs leadership
+        if (type != EvidenceEntryType.Deposit && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Herausnahmen aus der Asservatenkammer bucht nur die Führung; einlagern darf jeder Agent.");
+        }
+    }
+
+    /// <summary>Require the right to picture an evidence item: a first picture is additive, replacing an existing one stays with leadership.</summary>
+    public static void RequireEvidenceImageWrite(ClaimsPrincipal actor, bool itemHasImage)
+    {
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        if (itemHasImage && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Ein vorhandenes Bild ersetzt nur die Führung.");
+        }
+    }
+
+    /// <summary>Require the right to file a treasury booking: paying in is open to every writing agent, paying out and setting the balance stay with leadership.</summary>
+    public static void RequireKassenBookingWrite(ClaimsPrincipal actor, KassenBuchungArt kind)
+    {
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        // fail closed: anything that is not a deposit needs leadership
+        if (kind != KassenBuchungArt.Einzahlung && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Auszahlungen und Korrekturen bucht nur die Führung; einzahlen darf jeder Agent.");
         }
     }
 

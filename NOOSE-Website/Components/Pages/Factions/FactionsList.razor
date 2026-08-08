@@ -99,10 +99,19 @@ else
             </TemplateColumn>
             <TemplateColumn Sortable="true" Title="Aktualität" SortBy="x => x.Level">
                 <CellTemplate>
-                    <RecencyIndicator Level="context.Item.Level" ReferenceDateUtc="context.Item.RefreshedUtc" />
+                    <RecencyIndicator Level="context.Item.Level" ReferenceDateUtc="context.Item.RefreshedUtc"
+                                      ReferenceName="@FactionRecencyFacetDisplay.Name(context.Item.OldestFacet)" />
                 </CellTemplate>
             </TemplateColumn>
-            <PropertyColumn Property="x => x.Refreshed" Title="Zuletzt" Format="dd.MM.yyyy HH:mm" />
+            @* the light follows the longest-neglected of the four sections, so name it here *@
+            <TemplateColumn Sortable="true" Title="Ältester Stand" SortBy="x => x.RefreshedUtc">
+                <CellTemplate>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@context.Item.Refreshed.ToString("dd.MM.yyyy HH:mm")</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@FactionRecencyFacetDisplay.Name(context.Item.OldestFacet)</MudText>
+                    </MudStack>
+                </CellTemplate>
+            </TemplateColumn>
         </Columns>
         <NoRecordsContent>
             @if (HasFilter)
@@ -166,7 +175,8 @@ else
         var now = DateTime.UtcNow;
         _rows = factions.Select(f =>
         {
-            var referenceUtc = f.ModifiedAt ?? f.CreatedAt;
+            // freshness follows the oldest of members/stocks/activities/docs, not the last master-data edit
+            var referenceUtc = FactionRecency.Reference(f);
             return new FactionRow
             {
                 Id = f.Id,
@@ -185,6 +195,7 @@ else
                 SecrecyLevel = f.SecrecyLevel,
                 RefreshedUtc = referenceUtc,
                 Refreshed = referenceUtc.ToLocalTime(),
+                OldestFacet = FactionRecency.Oldest(f),
                 // state factions and exempt records never go stale
                 Level = settings.AgingDisabled || f.IsStateFaction || f.AgingDisabled ? RecencyLevel.Fresh : RecencyAssessment.Level(settings.WarningDays, settings.StaleDays, referenceUtc, now),
             };
@@ -270,6 +281,7 @@ else
         public DocumentClassification SecrecyLevel { get; set; }
         public DateTime RefreshedUtc { get; set; }
         public DateTime Refreshed { get; set; }
+        public FactionRecencyFacet OldestFacet { get; set; }
         public RecencyLevel Level { get; set; }
     }
 }

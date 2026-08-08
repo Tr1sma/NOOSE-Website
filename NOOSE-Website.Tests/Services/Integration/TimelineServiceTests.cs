@@ -3,6 +3,7 @@ using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
@@ -364,10 +365,16 @@ public sealed class TimelineServiceTests
                 PersonId = "p1", Start = Utc(2), Location = "Hafen",
                 Sighting = "Übergabe beobachtet",
             });
+            // photos surface via the audit fan-out (Person → PersonPhoto), not a direct query
             db.PersonPhotos.Add(new PersonPhoto
             {
-                PersonId = "p1", OriginalName = "foto.jpg", FileNameSaved = "abc.jpg",
+                Id = "ph1", PersonId = "p1", OriginalName = "foto.jpg", FileNameSaved = "abc.jpg",
                 ContentType = "image/jpeg", CreatedAt = Utc(3),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "PersonPhoto", EntityId = "ph1", Action = AuditAction.Created,
+                AgentName = "Falcon", Timestamp = Utc(3),
             });
             db.SaveChanges();
         }
@@ -382,7 +389,83 @@ public sealed class TimelineServiceTests
 
         var photo = Assert.Single(result.Where(e => e.Category == TimelineCategory.Photo));
         Assert.Equal("Foto hinzugefügt", photo.Title);
-        Assert.Equal("foto.jpg", photo.Detail);
+        Assert.Equal("Falcon", photo.ActorName);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_PhotoRemoval_AuditFanOut_ShowsRemoval()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            // soft-deleted photo still fanned in via IgnoreQueryFilters → removal is traceable
+            db.PersonPhotos.Add(new PersonPhoto
+            {
+                Id = "ph1", PersonId = "p1", OriginalName = "foto.jpg", FileNameSaved = "abc.jpg",
+                ContentType = "image/jpeg", CreatedAt = Utc(1), IsDeleted = true, DeletedAt = Utc(4),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = "PersonPhoto", EntityId = "ph1", Action = AuditAction.Deleted, Timestamp = Utc(4),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var photo = Assert.Single(result.Where(e => e.Category == TimelineCategory.Photo));
+        Assert.Equal("Foto entfernt", photo.Title);
+    }
+
+    // ---------- meeting fan-out ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_MeetingChildren_FannedIn()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Meetings.Add(new Meeting { Id = "mtg1", Title = "Wochenlage", CreatedAt = Utc(1) });
+            db.MeetingAgendaItems.Add(new MeetingAgendaItem { Id = "ag1", MeetingId = "mtg1", Title = "TOP 1", CreatedAt = Utc(2) });
+            db.MeetingAttendances.Add(new MeetingAttendance { Id = "at1", MeetingId = "mtg1", AgentId = "a1", CreatedAt = Utc(2) });
+            db.MeetingSignOffs.Add(new MeetingSignOff { Id = "so1", MeetingId = "mtg1", AgentId = "a2", CreatedAt = Utc(2) });
+            db.AuditLogs.Add(new AuditLog { EntityType = "MeetingAgendaItem", EntityId = "ag1", Action = AuditAction.Created, Timestamp = Utc(2) });
+            db.AuditLogs.Add(new AuditLog { EntityType = "MeetingAttendance", EntityId = "at1", Action = AuditAction.Modified, Timestamp = Utc(3) });
+            db.AuditLogs.Add(new AuditLog { EntityType = "MeetingSignOff", EntityId = "so1", Action = AuditAction.Created, Timestamp = Utc(3) });
+            db.AuditLogs.Add(new AuditLog { EntityType = "MeetingSignOff", EntityId = "so1", Action = AuditAction.Deleted, Timestamp = Utc(4) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Meeting", "mtg1", Leader());
+
+        Assert.Single(result.Where(e => e.Category == TimelineCategory.Agenda && e.Title == "Tagesordnungspunkt angelegt"));
+        Assert.Single(result.Where(e => e.Category == TimelineCategory.Attendance && e.Title == "Anwesenheit geändert"));
+        Assert.Single(result.Where(e => e.Category == TimelineCategory.SignOff && e.Title == "Abmeldung eingetragen"));
+        Assert.Single(result.Where(e => e.Category == TimelineCategory.SignOff && e.Title == "Abmeldung entfernt"));
+    }
+
+    // ---------- custom-field fan-out ----------
+
+    [Fact]
+    public async Task GetTimelineAsync_CustomFieldValue_FannedIn()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.CustomFieldValues.Add(new CustomFieldValue { Id = "cfv1", EntityType = "Person", EntityId = "p1", CustomFieldDefinitionId = "d1", Value = "42" });
+            db.AuditLogs.Add(new AuditLog { EntityType = "CustomFieldValue", EntityId = "cfv1", Action = AuditAction.Modified, Timestamp = Utc(2) });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Change));
+        Assert.Equal("Sonderfeld geändert", entry.Title);
     }
 
     [Fact]

@@ -24,6 +24,7 @@ public class AgentClaimsPrincipalFactory(
         identity.AddClaim(new Claim(AgentClaimTypes.Status, user.Status.ToString()));
         identity.AddClaim(new Claim(AgentClaimTypes.IsAdmin, user.IsAdmin ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsBootstrap, BootstrapAdmins.Contains(configuration, user.DiscordId) ? "true" : "false"));
+        identity.AddClaim(new Claim(AgentClaimTypes.IsAiOwner, AiOwners.Contains(configuration, user.DiscordId) ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsTRU, user.IsTRU ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsHRB, user.IsHRB ? "true" : "false"));
         identity.AddClaim(new Claim(AgentClaimTypes.IsTeamLead, user.IsTeamLead ? "true" : "false"));

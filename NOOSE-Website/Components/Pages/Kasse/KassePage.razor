@@ -1,0 +1,88 @@
+@page "/kasse"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject IKassenService Kasse
+@inject IKassenTemplateService Templates
+
+<PageTitle>Kasse · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.AccountBalanceWallet"
+            Title="NOOSE-Kasse"
+            Subtitle="Schwarz- und Grüngeld: Buchungen, Vorlagen und Auswertungen an einem Ort." />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Class="mb-2">
+        @foreach (var s in _summaries)
+        {
+            <MudItem xs="12" sm="6">
+                <StatTile Icon="@KassenKontoDisplay.Icon(s.Account)" Colour="@KassenKontoDisplay.Colour(s.Account)"
+                          Label="@KassenKontoDisplay.Name(s.Account)" Value="@Money.Format(s.Balance)"
+                          Hint="@Hint(s)" />
+            </MudItem>
+        }
+    </MudGrid>
+
+    <QuickBookBar Templates="_templates" Summaries="_summaries" User="_user" OnBooked="ReloadAsync" />
+
+    <RecordSectionRail>
+        <RecordSection Slug="schwarzgeld" Label="Schwarzgeld" Icon="@Icons.Material.Filled.MoneyOff">
+            <KassenLedgerPanel Account="KassenKonto.Schwarzgeld" Refresh="_refresh" />
+        </RecordSection>
+        <RecordSection Slug="gruengeld" Label="Grüngeld" Icon="@Icons.Material.Filled.Payments">
+            <KassenLedgerPanel Account="KassenKonto.Gruengeld" Refresh="_refresh" />
+        </RecordSection>
+        @* an unrendered section never registers, so the rail button is absent and a hand-edited ?tab= falls back *@
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="templatesSection">
+            <RecordSection Slug="vorlagen" Label="Vorlagen" Icon="@Icons.Material.Filled.Bookmarks">
+                <KassenTemplatesPanel OnChanged="ReloadAsync" />
+            </RecordSection>
+        </AuthorizeView>
+        @* the statistics service has no guard of its own, so this wrapper is load-bearing *@
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="statsSection">
+            <RecordSection Slug="statistik" Label="Statistik" Icon="@Icons.Material.Filled.QueryStats">
+                <CascadingValue Value="_statsScope">
+                    <KasseStatisticsPanel />
+                </CascadingValue>
+            </RecordSection>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="trashSection">
+            <RecordSection Slug="papierkorb" Label="Papierkorb" Icon="@Icons.Material.Filled.Delete">
+                <TrashPanel Kind="kasse-buchungen" />
+            </RecordSection>
+        </AuthorizeView>
+    </RecordSectionRail>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private int _refresh;
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<KassenKontoSummary> _summaries = [];
+    private IReadOnlyList<KassenBuchungVorlage> _templates = [];
+    private readonly StatisticsScope _statsScope = new(false, StatisticsRange.Months12);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await ReloadAsync();
+        _load = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _summaries = await Kasse.GetSummariesAsync();
+        _templates = await Templates.GetActiveAsync();
+        _refresh++;
+    }
+
+    private static string Hint(KassenKontoSummary s)
+        => s.LastBookingAt is { } t
+            ? $"{s.Count} Buchungen · zuletzt {t.ToLocalTime():dd.MM.yyyy}"
+            : "Noch keine Buchungen";
+}

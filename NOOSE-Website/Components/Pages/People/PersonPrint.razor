@@ -8,7 +8,9 @@
 @inject ILinkService LinkService
 @inject ICommentService CommentService
 @inject IAccessLogService AccessLog
+@inject IInformantService InformantService
 @inject IJSRuntime JS
+@using NOOSE_Website.Models.Informants
 
 <PageTitle>@(_person is null ? "Druckansicht" : $"Personenakte {_person.CaseNumber}") · NOOSE</PageTitle>
 
@@ -57,6 +59,13 @@ else
                     <tr><th>Aktenzeichen</th><td>@_person.CaseNumber</td></tr>
                     <tr><th>Lebensstatus</th><td>@LifeStatusDisplay.Name(LifeStatusLogic.Effective(_person.LifeStatus, _person.DeadUntil, DateTime.UtcNow))</td></tr>
                     <tr><th>Einstufung</th><td>@ClassificationDisplay.Name(_person.Classification)</td></tr>
+                    @if (_informant is not null)
+                    {
+                        <tr>
+                            <th>Informant</th>
+                            <td>Als Informant geführt · @InformantEnumDisplay.Status(_informant.Status)@(_informant.MayOpen ? $" · {_informant.CaseNumber}" : string.Empty)</td>
+                        </tr>
+                    }
                     @if (!string.IsNullOrWhiteSpace(_person.Description))
                     {
                         <tr><th>Beschreibung</th><td class="druck-mehrzeilig"><MentionDisplay Text="@_person.Description" Plain="true" /></td></tr>
@@ -326,6 +335,7 @@ else
     private List<ClassificationHistory> _classificationHistory = new();
     private List<LinkDisplay> _links = new();
     private List<Comment> _comments = new();
+    private InformantPersonMarker? _informant;
 
     protected override async Task OnInitializedAsync()
     {
@@ -341,6 +351,7 @@ else
             // partners: core only
             if (!user.IsPartner())
             {
+                _informant = await InformantService.GetPersonMarkerAsync(Id, user);
                 _affiliations = await PersonService.GetAffiliationsAsync(Id, scope);
                 _relations = await RelationService.GetForPersonAsync(Id, scope);
                 _docs = await DocService.GetForPersonAsync(Id, scope);

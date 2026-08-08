@@ -41,6 +41,8 @@ public sealed class ThreatScoreConfiguration
     public double S3Denominator { get; set; } = 4.0;
     public double ConflictWeight { get; set; } = 2.0;
     public double AllianceWeight { get; set; } = 1.0;
+    /// <summary>Per-incident hostility weight for agent abductions committed by the faction (S3).</summary>
+    public double AbductionWeight { get; set; } = 2.5;
 
     // ---- Faction S4 ----
     public double CapS4 { get; set; } = 8.0;
@@ -69,10 +71,18 @@ public sealed class ThreatScoreConfiguration
     public double AllyWeight { get; set; } = 1.0;
     public double GpWeight { get; set; } = 1.0;
     public double LeadWeight { get; set; } = 1.5;
+    /// <summary>Per-incident hostility weight for agent abductions committed by the person (P4).</summary>
+    public double PersonAbductionWeight { get; set; } = 2.5;
 
     // ---- Person P5 ----
     public double CapP5 { get; set; } = 8.0;
     public double P5Denominator { get; set; } = 4.0;
+
+    // ---- Trend alarm ----
+    /// <summary>Minimum score rise between two snapshots that alerts leadership.</summary>
+    public double AlarmDeltaThreshold { get; set; } = 15.0;
+    /// <summary>Only alert once the new score reaches at least this value.</summary>
+    public int AlarmMinScore { get; set; } = 50;
 
     /// <summary>Default instance.</summary>
     public static ThreatScoreConfiguration Default() => new();

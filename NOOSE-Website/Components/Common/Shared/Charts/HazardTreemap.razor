@@ -1,0 +1,55 @@
+@* Area is size, colour is hazard. Shows at a glance which large organisations are also dangerous. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@(Tiles.Count == 0)"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <ChildContent>
+        <EChartsCanvas Kind="treemap" Payload="@_payload" Height="@Height" />
+    </ChildContent>
+    <Footer>
+        <div class="d-flex align-center justify-end mt-2" style="gap:.75rem;flex-wrap:wrap;">
+            @foreach (var level in HazardLevelLogic.All)
+            {
+                <span class="d-flex align-center" style="gap:.25rem;">
+                    <span style="@($"display:inline-block;width:10px;height:10px;border-radius:2px;background:{ChartPalette.ForHazard(level)};")"></span>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@HazardLevelLogic.Name(level)</MudText>
+                </span>
+            }
+        </div>
+    </Footer>
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartTile> Tiles { get; set; } = [];
+
+    /// <summary>Unit for the tooltip, e.g. "Mitglieder".</summary>
+    [Parameter] public string? Unit { get; set; }
+
+    [Parameter] public string Height { get; set; } = "320px";
+
+    [Parameter] public string EmptyText { get; set; } = "Noch keine erfassten Mitglieder";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private object _payload = new();
+
+    protected override void OnParametersSet()
+        => _payload = new
+        {
+            tiles = Tiles.Select(t => new
+            {
+                name = t.Name,
+                weight = t.Weight,
+                // hazard is a status scale with its own legend, not a series colour
+                colour = ChartPalette.ForHazard(t.Level),
+            }).ToList(),
+            unit = Unit,
+        };
+}

@@ -1,0 +1,58 @@
+@* Print view of a cash booking (Kassenbuchung announcement). *@
+@page "/kasse/buchung/{Id}/druck"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@layout PrintLayout
+@inject IKassenService Kasse
+
+<PageTitle>@(_display is null ? "Druckansicht" : $"Kassenbuchung {_display.Buchung.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_display is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Buchung existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    var b = _display.Buchung;
+    <PrintFrame Title="@($"Kasse · {KassenKontoDisplay.Name(b.Account).ToUpperInvariant()}")"
+                BackHref="@($"/kasse/buchung/{Id}")" PrintedBy="@_printBy" IsClassified="false">
+        <section>
+            <h2>Kassenbuchung</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Aktenzeichen</th><td>@b.CaseNumber</td></tr>
+                    <tr><th>Kasse</th><td>@KassenKontoDisplay.Name(b.Account)</td></tr>
+                    <tr><th>Art</th><td>@KassenBuchungArtDisplay.Name(b.Kind)</td></tr>
+                    <tr>
+                        <th>@(b.Kind == KassenBuchungArt.Auszahlung ? "Abgebucht" : b.Kind == KassenBuchungArt.Einzahlung ? "Eingezahlt" : "Betrag")</th>
+                        <td>@(b.Kind == KassenBuchungArt.Korrektur ? Money.Format(b.Amount) : Money.Signed(_display.Delta))</td>
+                    </tr>
+                    <tr><th>Neuer Stand</th><td>@Money.Format(_display.BalanceAfter)</td></tr>
+                    <tr><th>Grund</th><td>@(string.IsNullOrWhiteSpace(b.Reason) ? "—" : b.Reason)</td></tr>
+                    <tr><th>Gebucht von</th><td>@_display.BookedByCodename</td></tr>
+                    <tr><th>Zeitpunkt</th><td>@b.Timestamp.ToLocalTime().ToString("dddd, d. MMMM yyyy 'um' HH:mm")</td></tr>
+                </tbody>
+            </table>
+        </section>
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private KassenBuchungDisplay? _display;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+        _display = await Kasse.GetDisplayAsync(Id);
+        _load = false;
+    }
+}

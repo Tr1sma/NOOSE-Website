@@ -401,7 +401,8 @@
         _bewerbung = null; _meeting = null;
         if (_targetType == nameof(Agent) && _allAgents is null)
         {
-            _allAgents = (await AgentService.GetAllAsync()).Where(a => a.Status == AgentStatus.Active).ToList();
+            // TeamLeads are never selectable
+            _allAgents = await AgentService.GetSelectableAsync();
         }
         if (_targetType == nameof(PersonDoc) && _allDocs is null)
         {

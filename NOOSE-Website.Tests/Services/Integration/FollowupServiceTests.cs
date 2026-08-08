@@ -303,6 +303,100 @@ public sealed class FollowupServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_KeepsResponsible_WhenUnchangedAndAgentTerminated()
+    {
+        using var ctx = new SqliteTestContext();
+        var f = MakeFollowup("Person", "p11", x =>
+        {
+            x.CreatedById = "me";
+            x.DueAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            x.ResponsibleAgentId = "gone";
+        });
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p11"));
+            db.Users.Add(Seed.Agent("gone", status: AgentStatus.Terminated));
+            db.Followups.Add(f);
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+        var newDue = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // re-saving a followup whose responsible has since left must not fail
+        await svc.RefreshAsync(f.Id, new FollowupInput(newDue, null, "gone"), Junior("me"));
+
+        using var check = ctx.NewContext();
+        var stored = await check.Followups.SingleAsync(w => w.Id == f.Id);
+        Assert.Equal(newDue, stored.DueAt);
+        Assert.Equal("gone", stored.ResponsibleAgentId);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NullResponsible_FallsBackToActor_WhichIsWhyTheDialogMustResendTheStoredId()
+    {
+        using var ctx = new SqliteTestContext();
+        var f = MakeFollowup("Person", "p14", x =>
+        {
+            x.CreatedById = "me";
+            x.ResponsibleAgentId = "gone";
+        });
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p14"));
+            db.Users.Add(Seed.Agent("gone", status: AgentStatus.Terminated));
+            db.Followups.Add(f);
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        // Pins the contract FollowupDialog depends on: a null pick means "me", so a dialog that fails to
+        // resolve an unselectable stored responsible would silently steal the assignment. The dialog
+        // therefore falls back to FindAsync instead of sending null.
+        await svc.RefreshAsync(f.Id, new FollowupInput(Future, null, null), Junior("me"));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("me", (await check.Followups.SingleAsync(w => w.Id == f.Id)).ResponsibleAgentId);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Throws_WhenNewResponsibleIsPartner()
+    {
+        using var ctx = new SqliteTestContext();
+        var f = MakeFollowup("Person", "p12", x =>
+        {
+            x.CreatedById = "me";
+            x.ResponsibleAgentId = "me";
+        });
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p12"));
+            db.Users.Add(Seed.Agent("partner", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.Followups.Add(f);
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.RefreshAsync(f.Id, new FollowupInput(Future, null, "partner"), Junior("me")));
+    }
+
+    [Fact]
+    public async Task CreateAsync_Throws_WhenResponsibleIsTeamLead()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p13"));
+            db.Users.Add(Seed.Agent("tl", configure: a => a.IsTeamLead = true));
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.CreateAsync("Person", "p13", new FollowupInput(Future, null, "tl"), Junior("me")));
+    }
+
+    [Fact]
     public async Task RefreshAsync_Throws_WhenNotFound()
     {
         using var ctx = new SqliteTestContext();

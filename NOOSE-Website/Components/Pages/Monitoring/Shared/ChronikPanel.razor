@@ -1,0 +1,459 @@
+@* Agency-wide event chronicle: filters, KPI row, activity band and the day-grouped feed. *@
+@using NOOSE_Website.Models.Timeline
+@inject IGlobalChronikService Chronik
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<MudPaper Class="pa-3 mb-3" Elevation="1">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            @foreach (var preset in Presets)
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Variant="@(_customRange is null && _presetDays == preset.Days ? Variant.Filled : Variant.Outlined)"
+                         Color="Color.Primary" OnClick="@(() => OnPresetAsync(preset.Days))">
+                    @preset.Label
+                </MudChip>
+            }
+            <MudDateRangePicker Label="Zeitraum" DateRange="_customRange" DateRangeChanged="OnCustomRangeAsync"
+                                Clearable="true" Margin="Margin.Dense" Style="min-width:230px;" />
+            <MudSpacer />
+            <MudTextField T="string" Value="_text" ValueChanged="OnTextAsync" Immediate="true"
+                          DebounceInterval="400" Placeholder="Akte, Ereignis oder Agent suchen"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Clearable="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                          Style="min-width:260px;" />
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudSelect T="string" Label="Aktentyp" MultiSelection="true" SelectedValues="_types"
+                       SelectedValuesChanged="OnTypesAsync" Dense="true" Margin="Margin.Dense"
+                       Style="min-width:210px;" MultiSelectionTextFunc="@(v => TypeSummary(v))">
+                @foreach (var t in _options.Types)
+                {
+                    <MudSelectItem T="string" Value="@t">@RecordTypeDisplay.Name(t)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="string" Label="Agent" MultiSelection="true" SelectedValues="_agents"
+                       SelectedValuesChanged="OnAgentsAsync" Dense="true" Margin="Margin.Dense"
+                       Style="min-width:210px;">
+                @foreach (var a in _options.Agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@a.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSpacer />
+
+            @if (HasFilters)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.FilterAltOff"
+                           OnClick="ResetFiltersAsync">Filter zurücksetzen</MudButton>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+<MudGrid Spacing="2" Class="mb-3">
+    <MudItem xs="6" sm="3">
+        <StatTile Icon="@Icons.Material.Filled.Bolt" Colour="Color.Primary" Label="Ereignisse"
+                  Value="@(_density.Total.ToString("N0"))"
+                  Hint="Für dich sichtbare Akten-Ereignisse im gewählten Zeitraum" />
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <StatTile Icon="@Icons.Material.Filled.People" Colour="Color.Info" Label="Aktive Agenten"
+                  Value="@(_density.DistinctAgents.ToString("N0"))" Href="/personal"
+                  Hint="Agenten, die im Zeitraum etwas verändert haben" />
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <StatTile Icon="@Icons.Material.Filled.FolderOpen" Colour="Color.Tertiary" Label="Betroffene Akten"
+                  Value="@(_density.DistinctRecords.ToString("N0"))"
+                  Hint="Verschiedene Akten, an denen im Zeitraum etwas passiert ist" />
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <StatTile Icon="@Icons.Material.Filled.Timeline" Colour="Color.Default" Label="Ø pro Tag"
+                  Value="@(_density.AveragePerDay.ToString("N0"))"
+                  Hint="Ereignisse je Tag über den ganzen Zeitraum, nicht nur über die aktiven Tage" />
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-3 mb-3" Elevation="1">
+    <ActivityBand Buckets="_density.Buckets" Unit="_density.Unit" Headline="@Headline"
+                  PickedLocal="_picked" OnBucketPicked="OnBucketPickedAsync" Stale="TextActive" />
+
+    <div class="noose-band-legende">
+        @for (var slot = 0; slot < ActivityBandDisplay.Slots; slot++)
+        {
+            var current = slot;
+            var count = SlotCount(current);
+            var selectable = ActivityBandDisplay.Categories(current).Count > 0;
+            <button type="button" class="@(LegendActive(current) ? "noose-band-legende-aktiv" : null)"
+                    disabled="@(!selectable)"
+                    title="@(selectable ? "Verlauf auf diese Gruppe eingrenzen" : "Sammelgruppe, nicht filterbar")"
+                    @onclick="@(() => ToggleGroupAsync(current))">
+                <i style="@Swatch(current)"></i>
+                @ActivityBandDisplay.Label(current)
+                <span class="mud-text-secondary">@count.ToString("N0")</span>
+            </button>
+        }
+    </div>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">@Caption</MudText>
+</MudPaper>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+<MudPaper Class="pa-4" Elevation="1">
+    @if (_picked is { } picked)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                     OnClose="@(() => OnBucketPickedAsync(null))">
+                Nur @PickedLabel(picked)
+            </MudChip>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Klick auf den Balken hebt die Eingrenzung auf.</MudText>
+        </MudStack>
+    }
+
+    <ChronikFeed Events="_events" LastSeenUtc="LastSeenUtc" />
+
+    @if (_hasMore)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="mt-4">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_loadMore"
+                       StartIcon="@Icons.Material.Filled.ExpandMore" OnClick="LoadMoreAsync">
+                @(_loadMore ? "Lädt …" : "Mehr laden")
+            </MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Divider anchor for "new since your last visit"; owned by the page so a section switch keeps it.</summary>
+    [Parameter] public DateTime? LastSeenUtc { get; set; }
+
+    /// <summary>Raised once after the first load, so the page can stamp the visit.</summary>
+    [Parameter] public EventCallback OnOpened { get; set; }
+
+    private static readonly (int Days, string Label)[] Presets =
+    {
+        (1, "Heute"), (7, "7 Tage"), (30, "30 Tage"), (90, "90 Tage"),
+    };
+
+    private ClaimsPrincipal _user = default!;
+    private ChronikFilterOptions _options = new(Array.Empty<string>(), Array.Empty<ChronikAgentOption>());
+
+    private List<ChronikEvent> _events = new();
+    private ChronikDensity _density = ChronikDensity.Empty;
+    private DateTime? _cursor;
+    private bool _hasMore;
+    private bool _load = true;
+    private bool _loadMore;
+    private int _loadGen;
+
+    private int _presetDays = 30;
+    private DateRange? _customRange;
+    private DateTime _windowFrom;
+    private DateTime _windowTo;
+    private DateTime _from;
+    private DateTime _to;
+    private DateTime? _picked;
+
+    private HashSet<string> _types = new();
+    private HashSet<string> _agents = new();
+    private readonly HashSet<TimelineCategory> _categories = new();
+    private string? _text;
+
+    private bool TextActive => !string.IsNullOrWhiteSpace(_text);
+
+    private bool HasFilters => _types.Count > 0 || _agents.Count > 0 || _categories.Count > 0 || TextActive;
+
+    private string Headline
+        => $"{_density.Total:N0} Ereignisse · ø {_density.AveragePerDay:N0}/Tag";
+
+    private string Caption
+    {
+        get
+        {
+            if (TextActive)
+            {
+                return "Band zeigt den Zeitraum ohne Textsuche – die Textsuche greift erst im Verlauf darunter.";
+            }
+            if (_density.Capped)
+            {
+                return "Sehr viele Ereignisse: das Band zeigt den neuesten Teil des Zeitraums. Für ältere enger filtern.";
+            }
+            return "Balken anklicken, um den Verlauf auf diesen Zeitraum einzugrenzen.";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _options = await Chronik.GetFilterOptionsAsync(_user);
+
+        ReadUrlState();
+        ApplyWindow();
+        await ReloadAsync(withDensity: true);
+
+        if (OnOpened.HasDelegate)
+        {
+            await OnOpened.InvokeAsync();
+        }
+    }
+
+    // ---------------------------------------------------------------- loading
+
+    private ChronikQuery BuildQuery(DateTime? before, DateTime fromUtc, DateTime toUtc) => new(
+        fromUtc, toUtc,
+        _types.Count == 0 ? null : _types.ToList(),
+        _agents.Count == 0 ? null : _agents.ToList(),
+        _categories.Count == 0 ? null : _categories.ToList(),
+        string.IsNullOrWhiteSpace(_text) ? null : _text,
+        before);
+
+    private async Task ReloadAsync(bool withDensity)
+    {
+        var gen = ++_loadGen;
+        _load = true;
+        StateHasChanged();
+
+        // both take their own context from the factory, so they may run side by side
+        var eventsTask = Chronik.GetEventsAsync(BuildQuery(null, _from, _to), _user);
+        var densityTask = withDensity
+            ? Chronik.GetDensityAsync(BuildQuery(null, _windowFrom, _windowTo), _user)
+            : Task.FromResult(_density);
+        await Task.WhenAll(eventsTask, densityTask);
+
+        if (gen != _loadGen)
+        {
+            return; // a newer filter load superseded this one
+        }
+        _density = await densityTask;
+        var result = await eventsTask;
+        _events = result.Events.ToList();
+        _cursor = result.NextCursorUtc;
+        _hasMore = result.HasMore;
+        _load = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (_cursor is not { } cursor || _loadMore)
+        {
+            return;
+        }
+        var gen = _loadGen;
+        _loadMore = true;
+        StateHasChanged();
+
+        var result = await Chronik.GetEventsAsync(BuildQuery(cursor, _from, _to), _user);
+        if (gen != _loadGen)
+        {
+            return;
+        }
+        _events.AddRange(result.Events);
+        _cursor = result.NextCursorUtc;
+        _hasMore = result.HasMore;
+        _loadMore = false;
+        StateHasChanged();
+    }
+
+    // ---------------------------------------------------------------- filters
+
+    private async Task OnPresetAsync(int days)
+    {
+        _presetDays = days;
+        _customRange = null;
+        _picked = null;
+        ApplyWindow();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnCustomRangeAsync(DateRange? range)
+    {
+        _customRange = range?.Start is null || range.End is null ? null : range;
+        _picked = null;
+        ApplyWindow();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnTypesAsync(IEnumerable<string> values)
+    {
+        _types = values.ToHashSet();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnAgentsAsync(IEnumerable<string> values)
+    {
+        _agents = values.ToHashSet();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    // the band honours the category filter now, so the legend and the bars stay in step
+    private async Task ToggleGroupAsync(int slot)
+    {
+        var members = ActivityBandDisplay.Categories(slot);
+        if (members.Count == 0)
+        {
+            return;
+        }
+        if (LegendActive(slot))
+        {
+            foreach (var category in members)
+            {
+                _categories.Remove(category);
+            }
+        }
+        else
+        {
+            foreach (var category in members)
+            {
+                _categories.Add(category);
+            }
+        }
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    private async Task OnTextAsync(string? value)
+    {
+        _text = value;
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: false);
+    }
+
+    private async Task ResetFiltersAsync()
+    {
+        _types.Clear();
+        _agents.Clear();
+        _categories.Clear();
+        _text = null;
+        _picked = null;
+        ApplyWindow();
+        await WriteUrlStateAsync();
+        await ReloadAsync(withDensity: true);
+    }
+
+    // picking a bar narrows only the feed; the band keeps showing the whole window
+    private async Task OnBucketPickedAsync(DateTime? startLocal)
+    {
+        _picked = startLocal;
+        if (startLocal is { } start)
+        {
+            _from = DateTime.SpecifyKind(start, DateTimeKind.Local).ToUniversalTime();
+            _to = DateTime.SpecifyKind(BucketEnd(start), DateTimeKind.Local).ToUniversalTime();
+        }
+        else
+        {
+            _from = _windowFrom;
+            _to = _windowTo;
+        }
+        await ReloadAsync(withDensity: false);
+    }
+
+    private DateTime BucketEnd(DateTime start) => _density.Unit switch
+    {
+        ChronikBucketUnit.Hour => start.AddHours(1),
+        ChronikBucketUnit.Week => start.AddDays(7),
+        ChronikBucketUnit.Month => start.AddMonths(1),
+        _ => start.AddDays(1),
+    };
+
+    private string PickedLabel(DateTime start) => _density.Unit switch
+    {
+        ChronikBucketUnit.Hour => $"{start:dd.MM.} {start:HH:mm}–{start.AddHours(1):HH:mm}",
+        ChronikBucketUnit.Week => $"{start:dd.MM.}–{start.AddDays(6):dd.MM.yyyy}",
+        ChronikBucketUnit.Month => start.ToString("MMMM yyyy"),
+        _ => start.ToString("dd.MM.yyyy"),
+    };
+
+    // ---------------------------------------------------------------- legend
+
+    private bool LegendActive(int slot)
+    {
+        var members = ActivityBandDisplay.Categories(slot);
+        return members.Count > 0 && _categories.Count > 0 && members.All(_categories.Contains);
+    }
+
+    private int SlotCount(int slot)
+        => _density.Buckets.Sum(b => b.Segments.Where(s => s.Slot == slot).Sum(s => s.Count));
+
+    private static string Swatch(int slot) => $"background:{ActivityBandDisplay.Hex(slot)};";
+
+    // ---------------------------------------------------------------- window + url
+
+    private void ApplyWindow()
+    {
+        if (_customRange is { Start: { } start, End: { } end })
+        {
+            // a hand-edited ?von=/?bis= may arrive reversed; ordering it here keeps every average positive
+            var (first, last) = start <= end ? (start, end) : (end, start);
+            _windowFrom = DateTime.SpecifyKind(first.Date, DateTimeKind.Local).ToUniversalTime();
+            _windowTo = DateTime.SpecifyKind(last.Date.AddDays(1), DateTimeKind.Local).ToUniversalTime();
+        }
+        else
+        {
+            _windowTo = DateTime.UtcNow.AddMinutes(1);
+            var firstDay = DateTime.Now.Date.AddDays(-(_presetDays - 1));
+            _windowFrom = DateTime.SpecifyKind(firstDay, DateTimeKind.Local).ToUniversalTime();
+        }
+        _from = _windowFrom;
+        _to = _windowTo;
+    }
+
+    private void ReadUrlState()
+    {
+        if (int.TryParse(QueryState.Read(Nav, "zeit"), out var days) && Presets.Any(p => p.Days == days))
+        {
+            _presetDays = days;
+        }
+        if (DateTime.TryParse(QueryState.Read(Nav, "von"), out var from)
+            && DateTime.TryParse(QueryState.Read(Nav, "bis"), out var to))
+        {
+            _customRange = new DateRange(from.Date, to.Date);
+        }
+        _types = SplitCsv(QueryState.Read(Nav, "typ")).Where(_options.Types.Contains).ToHashSet();
+        _agents = SplitCsv(QueryState.Read(Nav, "agent")).Where(a => _options.Agents.Any(o => o.Id == a)).ToHashSet();
+        foreach (var raw in SplitCsv(QueryState.Read(Nav, "kat")))
+        {
+            if (Enum.TryParse<TimelineCategory>(raw, ignoreCase: true, out var category))
+            {
+                _categories.Add(category);
+            }
+        }
+        _text = QueryState.Read(Nav, "q");
+    }
+
+    private Task WriteUrlStateAsync() => QueryState.WriteAsync(JS, Nav,
+        ("zeit", _customRange is null ? _presetDays.ToString() : null),
+        ("von", _customRange?.Start?.ToString("yyyy-MM-dd")),
+        ("bis", _customRange?.End?.ToString("yyyy-MM-dd")),
+        ("typ", _types.Count == 0 ? null : string.Join(',', _types)),
+        ("agent", _agents.Count == 0 ? null : string.Join(',', _agents)),
+        ("kat", _categories.Count == 0 ? null : string.Join(',', _categories)),
+        ("q", _text));
+
+    private static IEnumerable<string> SplitCsv(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static string TypeSummary(IReadOnlyList<string>? selected)
+        => selected is not { Count: > 0 }
+            ? "Alle Typen"
+            : selected.Count <= 2
+                ? string.Join(", ", selected.Select(RecordTypeDisplay.Name))
+                : $"{selected.Count} Typen";
+}

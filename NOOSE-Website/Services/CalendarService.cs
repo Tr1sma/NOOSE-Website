@@ -55,7 +55,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             .ToListAsync(ct))
         {
             entries.Add(new CalendarEntry($"tm:{t.Id}", t.Title, Local(t.Start), LocalOpt(t.End),
-                t.AllDay, CalendarSource.Appointment, $"/kalender/{t.Id}", AppointmentStatusDisplay.IsObsolete(t.Status)));
+                t.AllDay, CalendarSource.Appointment, $"/kalender/{t.Id}", AppointmentStatusDisplay.IsObsolete(t.Status),
+                nameof(Appointment), t.Id));
         }
 
         // assigned jobs
@@ -67,7 +68,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             .ToListAsync(ct))
         {
             entries.Add(new CalendarEntry($"auf:{a.Id}", a.Title, Local(a.DueDate!.Value), null,
-                false, CalendarSource.Job, $"/aufgaben/{a.Id}", JobStatusDisplay.IsCompleted(a.Status)));
+                false, CalendarSource.Job, $"/aufgaben/{a.Id}", JobStatusDisplay.IsCompleted(a.Status),
+                nameof(Job), a.Id));
         }
 
         // open followups
@@ -89,7 +91,9 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                 var @base = mayName ? $"Wiedervorlage: {parents.Display}" : "Wiedervorlage fällig";
                 var title = string.IsNullOrWhiteSpace(w.Note) ? @base : $"{@base} · {w.Note}";
                 entries.Add(new CalendarEntry($"wv:{w.Id}", title, Local(w.DueAt), null,
-                    false, CalendarSource.Followup, mayName ? parents.Href : null));
+                    false, CalendarSource.Followup, mayName ? parents.Href : null,
+                    // same gate as the title and the link: a classified parent is not named, not linked, not referenced
+                    EntityType: mayName ? w.EntityType : null, EntityId: mayName ? w.EntityId : null));
             }
         }
 
@@ -123,7 +127,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
                     || excusedSpans.Any(a => a.FromDate <= day && a.ToDate >= day);
                 entries.Add(new CalendarEntry($"bes:{m.Id}", m.Title, Local(m.Start), LocalOpt(m.End),
                     false, CalendarSource.Meeting, $"/besprechungen/{m.Id}",
-                    excused || MeetingStatusDisplay.IsObsolete(m.Status)));
+                    excused || MeetingStatusDisplay.IsObsolete(m.Status),
+                    nameof(Data.Entities.Meetings.Meeting), m.Id));
             }
         }
 
@@ -155,7 +160,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             .ToListAsync(ct))
         {
             entries.Add(new CalendarEntry($"tm:{t.Id}", t.Title, Local(t.Start), LocalOpt(t.End),
-                t.AllDay, CalendarSource.Appointment, $"/kalender/{t.Id}", AppointmentStatusDisplay.IsObsolete(t.Status)));
+                t.AllDay, CalendarSource.Appointment, $"/kalender/{t.Id}", AppointmentStatusDisplay.IsObsolete(t.Status),
+                nameof(Appointment), t.Id));
         }
 
         // operations
@@ -167,7 +173,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             .ToListAsync(ct))
         {
             entries.Add(new CalendarEntry($"op:{o.Id}", o.Title, Local(o.Start!.Value), LocalOpt(o.End),
-                false, CalendarSource.Operation, $"/operationen/{o.Id}", o.Status == OperationStatus.Aborted));
+                false, CalendarSource.Operation, $"/operationen/{o.Id}", o.Status == OperationStatus.Aborted,
+                nameof(Operation), o.Id));
         }
 
         // observations
@@ -179,8 +186,10 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
             .ToListAsync(ct))
         {
             var title = string.IsNullOrWhiteSpace(ob.Location) ? "Observation" : $"Observation – {ob.Location}";
+            // the observation has no page of its own, so the record it belongs to is the person
             entries.Add(new CalendarEntry($"ob:{ob.Id}", title, Local(ob.Start), LocalOpt(ob.End),
-                false, CalendarSource.Observation, $"/personen/{ob.PersonId}"));
+                false, CalendarSource.Observation, $"/personen/{ob.PersonId}", false,
+                nameof(Person), ob.PersonId));
         }
 
         // person docs
@@ -193,7 +202,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         {
             var title = string.IsNullOrWhiteSpace(d.Reason) ? $"Dok: {d.PersonName}" : $"Dok: {d.PersonName} – {Truncate(d.Reason!)}";
             entries.Add(new CalendarEntry($"dok:{d.Id}", title, Local(d.Timestamp), null,
-                false, CalendarSource.PersonDoc, $"/personen/{d.PersonId}?tab=doks"));
+                false, CalendarSource.PersonDoc, $"/personen/{d.PersonId}?tab=doks", false,
+                nameof(Person), d.PersonId));
         }
 
         // faction activities (AgentActivities linked to a faction)
@@ -208,7 +218,8 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         {
             var title = string.IsNullOrWhiteSpace(fa.Kind) ? fa.Title : $"{fa.Title} ({fa.Kind})";
             entries.Add(new CalendarEntry($"fa:{fa.Id}:{fa.FactionId}", title, Local(fa.ActivityDate), null,
-                false, CalendarSource.FactionActivity, $"/fraktionen/{fa.FactionId}"));
+                false, CalendarSource.FactionActivity, $"/fraktionen/{fa.FactionId}", false,
+                nameof(Faction), fa.FactionId));
         }
 
         // meetings
@@ -220,13 +231,14 @@ public class CalendarService(IDbContextFactory<AppDbContext> dbFactory) : ICalen
         {
             entries.Add(new CalendarEntry($"bes:{m.Id}", m.Title, Local(m.Start), LocalOpt(m.End),
                 false, CalendarSource.Meeting, $"/besprechungen/{m.Id}",
-                MeetingStatusDisplay.IsObsolete(m.Status)));
+                MeetingStatusDisplay.IsObsolete(m.Status),
+                nameof(Data.Entities.Meetings.Meeting), m.Id));
         }
 
         // other agents' absences: never the free-text reason, and RosterVisible hides invisible agents
         var fromDay = MeetingTime.Day(sourceUtc);
         var untilDay = MeetingTime.Day(untilUtc);
-        foreach (var ab in await db.Absences.RosterVisible()
+        foreach (var ab in await db.Absences.RosterVisible(db)
             .Where(ab => ab.AgentId != meId && ab.FromDate <= untilDay && ab.ToDate >= fromDay)
             .OrderBy(ab => ab.FromDate).Take(PerSourceMax)
             .Select(ab => new { ab.Id, ab.FromDate, ab.ToDate, ab.Category, Codename = ab.Agent!.Codename })

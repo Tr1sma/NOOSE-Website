@@ -15,6 +15,9 @@
     /// <summary>UTC reference date, for self-computation and tooltip.</summary>
     [Parameter] public DateTime? ReferenceDateUtc { get; set; }
 
+    /// <summary>Names what the reference date belongs to (e.g. the oldest faction facet); shown in the tooltip.</summary>
+    [Parameter] public string? ReferenceName { get; set; }
+
     [Parameter] public Size Size { get; set; } = Size.Small;
 
     private RecencyLevel _level;
@@ -42,7 +45,8 @@
             }
             var days = (int)Math.Floor((DateTime.UtcNow - d).TotalDays);
             var alter = days <= 0 ? "heute" : days == 1 ? "vor 1 Tag" : $"vor {days} Tagen";
-            return $"{name} · zuletzt aktualisiert {alter}";
+            var what = string.IsNullOrEmpty(ReferenceName) ? "zuletzt aktualisiert" : $"{ReferenceName} zuletzt aktualisiert";
+            return $"{name} · {what} {alter}";
         }
     }
 }

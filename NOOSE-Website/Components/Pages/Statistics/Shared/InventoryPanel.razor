@@ -1,0 +1,114 @@
+@* Distributions of the record inventory. Ordered scales get an ordinal ramp, comparisons get grouped bars, *@
+@* and only the one genuine part-to-whole keeps a donut. *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+@inject IInventoryStatisticsService Inventory
+@inject NavigationManager Nav
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6" Class="d-flex">
+                @* classification is a progression, so the ramp carries the order *@
+                <CategoryBarChart Title="Personen nach Einstufung"
+                                  Subtitle="Prüffall → Verdachtsfall → gesichert staatsgefährdend"
+                                  Grid="@_classification" Ordinal="true"
+                                  YAxisTitle="Personen" Height="300px" Stale="@_stale"
+                                  OnSelect="@OnClassificationSelect" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Vorgänge nach Status" Subtitle="Der Vorgangs-Durchlauf als Stufenfolge"
+                                  Grid="@_cases" Ordinal="true"
+                                  YAxisTitle="Vorgänge" Height="300px" Stale="@_stale"
+                                  OnSelect="@OnCaseSelect" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Gefährdung Personen vs. Fraktionen"
+                                  Subtitle="Gleiche Skala, zwei Grundgesamtheiten"
+                                  Grid="@_hazard" Colours="@_hazardColours"
+                                  YAxisTitle="Akten" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                @* three segments of one whole - the one case a donut is still the right form *@
+                <DistributionChart Title="Personen nach Lebensstatus" Segments="@_lifeStatus"
+                                   Colours="@_lifeColours" Height="300px" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <CategoryBarChart Title="Maßnahme-Ausgänge im Zeitverlauf"
+                                  Subtitle="Nicht nur der Anteil, sondern die Entwicklung"
+                                  Grid="@_outcomes" Stacked="true"
+                                  YAxisTitle="Maßnahmen" Height="340px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <ChartFrame Title="Aktualität je Aktenart" Subtitle="Anteil der Akten innerhalb ihres Warn-Fensters"
+                            Height="220px" IsEmpty="@(_recency.Count == 0)" Stale="@_stale">
+                    <RatioMeter Rows="@_recency" />
+                </ChartFrame>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+
+    private ChartGrid _classification = ChartGrid.Empty;
+    private ChartGrid _cases = ChartGrid.Empty;
+    private ChartGrid _hazard = ChartGrid.Empty;
+    private ChartGrid _outcomes = ChartGrid.Empty;
+    private IReadOnlyList<DistributionSegment> _lifeStatus = [];
+    private IReadOnlyList<ChartRatio> _recency = [];
+
+    private static readonly string[] _hazardColours = [ChartPalette.Hazard[2], ChartPalette.Hazard[3]];
+    private static readonly string[] _lifeColours =
+        [ChartPalette.Hazard[1], ChartPalette.Hazard[4], ChartPalette.Hazard[3]];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
+        _classification = await Inventory.GetClassificationAsync(Scope);
+        _cases = await Inventory.GetCaseFunnelAsync(Scope);
+        _hazard = await Inventory.GetHazardComparisonAsync(Scope);
+        _outcomes = await Inventory.GetMeasureOutcomeTrendAsync(Scope);
+        _lifeStatus = await Inventory.GetLifeStatusAsync(Scope);
+        _recency = await Inventory.GetRecencyAsync(Scope);
+
+        _first = false;
+        _stale = false;
+    }
+
+    private void OnClassificationSelect(int index)
+    {
+        if (index >= 0 && index < ClassificationDisplay.All.Count)
+        {
+            Nav.NavigateTo($"/personen?einstufung={ClassificationDisplay.All[index]}");
+        }
+    }
+
+    private void OnCaseSelect(int index)
+    {
+        if (index >= 0 && index < CaseStatusDisplay.All.Count)
+        {
+            Nav.NavigateTo($"/vorgaenge?status={CaseStatusDisplay.All[index]}");
+        }
+    }
+}

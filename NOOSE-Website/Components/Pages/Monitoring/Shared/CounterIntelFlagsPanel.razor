@@ -1,0 +1,85 @@
+@* Rule hits grouped by rule, worst first. Leadership only (service-guarded). *@
+@using NOOSE_Website.Models.CounterIntel
+@inject ICounterIntelService CounterIntel
+@inject NavigationManager Nav
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Treffer der aktiven Gegenaufklärungs-Regeln. Jede Regel bringt ihr eigenes Beobachtungsfenster mit –
+    die Bedingungen stehen unter <MudLink Href="/nachweis?tab=regeln">Regeln</MudLink>.
+</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_flags.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.VerifiedUser"
+                Title="Keine Auffälligkeiten erkannt"
+                Text="Welche Muster gesucht werden, legst du unter „Regeln“ fest." />
+}
+else
+{
+    @foreach (var group in _flags.GroupBy(f => f.Rule).OrderByDescending(g => g.First().Grade))
+    {
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">
+            <MudChip T="string" Size="Size.Small" Color="@Colour(group.First().Grade)"
+                     Variant="@(group.First().Grade == CounterIntelSeverity.Critical ? Variant.Filled : Variant.Outlined)">
+                @CounterIntelSeverityDisplay.Name(group.First().Grade)
+            </MudChip>
+            @group.Key
+        </MudText>
+        <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+            <tbody>
+                @foreach (var f in group)
+                {
+                    <tr style="cursor:pointer;" @onclick="@(() => Go(f.Href))">
+                        <td style="width:14rem;"><b>@f.AgentName</b></td>
+                        <td>@f.Detail</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _error;
+    private IReadOnlyList<InsiderFlag> _flags = Array.Empty<InsiderFlag>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        try
+        {
+            _flags = await CounterIntel.GetFlagsAsync(user);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+        _load = false;
+    }
+
+    private static Color Colour(CounterIntelSeverity severity) => severity switch
+    {
+        CounterIntelSeverity.Info => Color.Info,
+        CounterIntelSeverity.Warning => Color.Warning,
+        _ => Color.Error,
+    };
+
+    private void Go(string? href)
+    {
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+}

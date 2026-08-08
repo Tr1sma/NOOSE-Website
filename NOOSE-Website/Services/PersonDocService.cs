@@ -177,6 +177,8 @@ public class PersonDocService(
         var altOutcome = doc.Outcome;
         var altTimestamp = doc.Timestamp;
         var oldText = MentionNotify.Scope(doc.Reason, doc.ReceivedInformation);
+        // a re-linked doc refreshes both the old and the new faction
+        var altOrg = (doc.OrgType, doc.OrgId);
 
         doc.Timestamp = input.Timestamp;
         doc.Reason = input.Reason.TrimToNull();
@@ -197,6 +199,7 @@ public class PersonDocService(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await DocsStampAsync(db, new[] { altOrg, (doc.OrgType, doc.OrgId) }, cancellationToken);
         // changed outcome/timestamp affects faction heat and the person score
         await threat.NewCalculateForPersonAsync(doc.PersonId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(doc.PersonId, cancellationToken);
@@ -276,8 +279,16 @@ public class PersonDocService(
 
         db.PersonDocs.Add(doc);
         await db.SaveChangesAsync(cancellationToken);
+        await DocsStampAsync(db, new[] { (doc.OrgType, doc.OrgId) }, cancellationToken);
         return doc;
     }
+
+    /// <summary>Docs are one of the four faction freshness facets; only faction links carry a stamp.</summary>
+    private static Task DocsStampAsync(AppDbContext db, IEnumerable<(string? OrgType, string? OrgId)> links,
+        CancellationToken cancellationToken)
+        => FactionRecency.StampAsync(db,
+            links.Where(l => l.OrgType == nameof(Faction) && !string.IsNullOrEmpty(l.OrgId)).Select(l => l.OrgId!),
+            FactionRecencyFacet.Docs, cancellationToken);
 
     public async Task DeleteAsync(string docId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
@@ -303,8 +314,10 @@ public class PersonDocService(
         }
 
         var personId = doc.PersonId;
+        var org = (doc.OrgType, doc.OrgId);
         db.PersonDocs.Remove(doc);
         await db.SaveChangesAsync(cancellationToken);
+        await DocsStampAsync(db, new[] { org }, cancellationToken);
         // removed measure drops out of faction heat and the person score
         await threat.NewCalculateForPersonAsync(personId, cancellationToken);
         await threat.NewCalculatePersonScoreAsync(personId, cancellationToken);

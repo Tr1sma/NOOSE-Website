@@ -1,0 +1,48 @@
+@* Inline-SVG mini score trend (0–100 domain), no JS. Shows a dash when there is too little history. *@
+
+@if (Values.Count >= 2)
+{
+    <svg width="@Width" height="@Height" viewBox="@($"0 0 {Width} {Height}")" preserveAspectRatio="none"
+         style="display:block;overflow:visible;" role="img" aria-label="Score-Verlauf">
+        <polyline points="@_points" fill="none" stroke="@Colour" stroke-width="1.5"
+                  stroke-linejoin="round" stroke-linecap="round" />
+    </svg>
+}
+else
+{
+    <span class="mud-text-secondary" style="font-size:.7rem;">–</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<int> Values { get; set; } = Array.Empty<int>();
+    [Parameter] public int Width { get; set; } = 64;
+    [Parameter] public int Height { get; set; } = 20;
+    [Parameter] public string Colour { get; set; } = "#22D3EE";
+
+    private string _points = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (Values.Count < 2)
+        {
+            _points = string.Empty;
+            return;
+        }
+        // invariant culture: SVG coords must use '.' decimals, never the de-DE comma
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var n = Values.Count;
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < n; i++)
+        {
+            var x = (double)i / (n - 1) * Width;
+            var v = Math.Clamp(Values[i], 0, 100);
+            var y = Height - v / 100.0 * Height;
+            if (i > 0)
+            {
+                sb.Append(' ');
+            }
+            sb.Append(x.ToString("0.#", ci)).Append(',').Append(y.ToString("0.#", ci));
+        }
+        _points = sb.ToString();
+    }
+}

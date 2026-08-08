@@ -15,6 +15,7 @@ namespace NOOSE_Website.Services.Statistics;
 public class SituationReportService(
     IDbContextFactory<AppDbContext> dbFactory,
     IStatisticsService statistics,
+    IFinancingStatisticsService financingStatistics,
     INotificationService notifications,
     ILogger<SituationReportService> logger) : ISituationReportService
 {
@@ -57,6 +58,7 @@ public class SituationReportService(
         }
 
         var report = await statistics.GetReportAsync(isLeadership: true, meId: null, cancellationToken: cancellationToken);
+        var financing = await financingStatistics.GetMonthAsync(year, month, cancellationToken);
         var title = $"Lagebericht {new DateTime(year, month, 1).ToString("MMMM yyyy", DeDe)}";
 
         var bulletin = new SituationReport
@@ -65,6 +67,8 @@ public class SituationReportService(
             Month = month,
             Title = title,
             SnapshotJson = JsonSerializer.Serialize(report, JsonOptions),
+            // own column: SnapshotJson is a frozen wire format that must not gain members
+            FinancingJson = JsonSerializer.Serialize(financing, JsonOptions),
             CreatedById = triggerId,
         };
         db.SituationReports.Add(bulletin);
@@ -118,6 +122,20 @@ public class SituationReportService(
             return null;
         }
 
+        // reports archived before funding requests existed carry no value here; degrade instead of failing
+        FinancingReport? financing = null;
+        if (!string.IsNullOrWhiteSpace(bulletin.FinancingJson))
+        {
+            try
+            {
+                financing = JsonSerializer.Deserialize<FinancingReport>(bulletin.FinancingJson, JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "Lagebericht {Id} hat unlesbare Finanzierungszahlen.", id);
+            }
+        }
+
         string? generatedBy = null;
         if (!string.IsNullOrEmpty(bulletin.CreatedById))
         {
@@ -125,7 +143,7 @@ public class SituationReportService(
                 .Select(u => u.Codename).FirstOrDefaultAsync(cancellationToken);
         }
 
-        return new SituationReportDisplay(bulletin.Id, bulletin.Title, bulletin.CreatedAt, generatedBy, report);
+        return new SituationReportDisplay(bulletin.Id, bulletin.Title, bulletin.CreatedAt, generatedBy, report, financing);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -147,9 +165,8 @@ public class SituationReportService(
     {
         try
         {
-            var leadershipIds = await db.Users
-                .Where(u => u.Status == AgentStatus.Active && u.Rank != null
-                    && u.Rank >= Rank.SupervisorySpecialAgent)
+            var leadershipIds = await db.Users.OnlySelectable()
+                .Where(u => u.Rank != null && u.Rank >= Rank.SupervisorySpecialAgent)
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
 

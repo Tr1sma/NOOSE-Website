@@ -9,6 +9,9 @@ public class FileUploadOptions
     /// <summary>Factions upload path.</summary>
     public string FactionsPath { get; set; } = "App_Data/uploads/fraktionen";
 
+    /// <summary>Evidence-room item images path.</summary>
+    public string AsservatePath { get; set; } = "App_Data/uploads/asservate";
+
     /// <summary>Max file size.</summary>
     public long MaxBytes { get; set; } = 10 * 1024 * 1024;
 

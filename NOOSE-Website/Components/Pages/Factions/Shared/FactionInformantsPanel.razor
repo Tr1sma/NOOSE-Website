@@ -1,0 +1,63 @@
+@* Informants linked to this faction. Names only for viewers who may open the V-person file. *@
+@using NOOSE_Website.Models.Informants
+@inject IInformantService Service
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_entries.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine Informanten mit dieser Fraktion verknüpft.</MudText>
+}
+else
+{
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Verknüpfung wird in der Informanten-Akte gesetzt.
+        </MudText>
+        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+            @foreach (var e in _entries)
+            {
+                <MudTooltip Text="@Tooltip(e)">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@StatusColour(e.Status)"
+                             Icon="@Icons.Material.Filled.VisibilityOff"
+                             Href="@(e.MayOpen ? $"/informanten/{e.InformantId}" : null)">@e.Name</MudChip>
+                </MudTooltip>
+            }
+        </MudStack>
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string FactionId { get; set; } = default!;
+    [Parameter] public ClaimsPrincipal? User { get; set; }
+
+    private bool _load = true;
+    private string _loadedFor = string.Empty;
+    private List<InformantFactionEntry> _entries = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (User is null || FactionId == _loadedFor)
+        {
+            return;
+        }
+        _loadedFor = FactionId;
+        _load = true;
+        _entries = await Service.GetForFactionAsync(FactionId, User);
+        _load = false;
+    }
+
+    private static string Tooltip(InformantFactionEntry e)
+        => e.MayOpen
+            ? $"{e.CaseNumber} · {InformantEnumDisplay.Status(e.Status)}"
+            : $"{InformantEnumDisplay.Status(e.Status)} · kein Zugriff auf diese Akte";
+
+    private static Color StatusColour(InformantStatus s) => s switch
+    {
+        InformantStatus.Active => Color.Success,
+        InformantStatus.Burned => Color.Error,
+        _ => Color.Default,
+    };
+}

@@ -50,14 +50,25 @@ function ladeVisNetwork() {
     return visLadenPromise;
 }
 
-function knotenfarbe(k) {
+// key figures (centrality workbench): gold fill + glow. The border stays free for type/classification.
+const SCHLUESSEL_GOLD = '#FFC857';
+const SCHLUESSEL_FUELLUNG = '#4A3708';
+const SCHLUESSEL_HELL = '#5E4609';
+const SCHLUESSEL_GROESSE = 1.8; // value factor over the busiest ordinary node
+
+function fuellung(schluessel) {
+    return schluessel ? SCHLUESSEL_FUELLUNG : '#161B22';
+}
+
+function knotenfarbe(k, schluessel) {
     const basis = TYP_FARBE[k.type] || '#8B98A8';
     const rand = EINSTUFUNG_RAND[k.classificationLevel] || basis;
+    const hell = schluessel ? SCHLUESSEL_HELL : '#1F2630';
     return {
-        background: '#161B22',
+        background: fuellung(schluessel),
         border: rand,
-        highlight: { background: '#1F2630', border: '#22D3EE' },
-        hover: { background: '#1F2630', border: rand },
+        highlight: { background: hell, border: '#22D3EE' },
+        hover: { background: hell, border: rand },
     };
 }
 
@@ -78,22 +89,40 @@ function baueTooltip(k) {
         unter.textContent = k.subtitle;
         div.appendChild(unter);
     }
+    if (k.isKeyFigure) {
+        const schluessel = document.createElement('div');
+        schluessel.style.cssText = 'font-size:12px;font-weight:600;color:' + SCHLUESSEL_GOLD + ';margin-top:4px;';
+        const wert = typeof k.betweenness === 'number' ? ' · Vermittlerwert ' + k.betweenness.toFixed(2) : '';
+        schluessel.textContent = '★ Schlüsselfigur' + wert;
+        div.appendChild(schluessel);
+    }
     return div;
 }
 
-function mapKnoten(k) {
+// community palette (workbench cluster colouring)
+const CLUSTER_FARBE = ['#22D3EE', '#F0883E', '#3FB950', '#A371F7', '#D29922', '#58A6FF', '#F85149', '#2DD4BF', '#7C8CF8', '#C9A227'];
+
+function mapKnoten(k, maxWert) {
+    const schluessel = !!k.isKeyFigure;
+    const wert = 1 + (k.degree || 0);
     const node = {
         id: k.id,
-        label: k.designation,
+        label: (schluessel ? '★ ' : '') + k.designation,
         title: baueTooltip(k),
-        color: knotenfarbe(k),
-        value: 1 + (k.degree || 0),
-        borderWidth: k.classificationLevel >= 3 ? 3 : 2,
-        borderWidthSelected: 4,
-        shadow: k.classificationLevel >= 3
-            ? { enabled: true, color: 'rgba(248,81,73,0.55)', size: 18, x: 0, y: 0 }
-            : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
+        color: knotenfarbe(k, schluessel),
+        // outgrow every ordinary node — a bridge node can be key with only two links
+        value: schluessel ? Math.max(wert, Math.round(maxWert * SCHLUESSEL_GROESSE)) : wert,
+        borderWidth: schluessel ? 5 : (k.classificationLevel >= 3 ? 3 : 2),
+        borderWidthSelected: schluessel ? 6 : 5,
+        shadow: schluessel
+            ? { enabled: true, color: 'rgba(255,200,87,0.9)', size: 34, x: 0, y: 0 }
+            : k.classificationLevel >= 3
+                ? { enabled: true, color: 'rgba(248,81,73,0.55)', size: 18, x: 0, y: 0 }
+                : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
     };
+    if (schluessel) {
+        node.font = { color: SCHLUESSEL_GOLD, strokeWidth: 4, strokeColor: '#0B0E13', face: 'Inter, Segoe UI, sans-serif' };
+    }
     if (k.photoUrl) {
         node.shape = 'circularImage';
         node.image = k.photoUrl;
@@ -115,6 +144,49 @@ function mapKante(e) {
         color: { color: farbe, highlight: '#22D3EE', hover: '#22D3EE', opacity: 1 },
         font: { color: '#9BA8B8', size: 11, strokeWidth: 0, background: 'rgba(14,17,22,0.85)' },
     };
+}
+
+// free mode: share of the drag delta a neighbour follows, per hop distance
+const ZUG_ANTEIL = [0.5, 0.18];
+
+function baueNachbarn(kanten) {
+    const map = new Map();
+    (kanten || []).forEach((e) => {
+        if (!e || e.source == null || e.target == null || e.source === e.target) {
+            return;
+        }
+        if (!map.has(e.source)) { map.set(e.source, new Set()); }
+        if (!map.has(e.target)) { map.set(e.target, new Set()); }
+        map.get(e.source).add(e.target);
+        map.get(e.target).add(e.source);
+    });
+    return map;
+}
+
+// neighbourhood of the dragged node(s), weighted by hop distance
+function zugKreis(nachbarn, startIds) {
+    const gewicht = new Map();
+    const gesehen = new Set(startIds);
+    let rand = startIds.slice();
+    for (let hop = 0; hop < ZUG_ANTEIL.length && rand.length > 0; hop++) {
+        const naechste = [];
+        rand.forEach((id) => {
+            const nb = nachbarn.get(id);
+            if (!nb) {
+                return;
+            }
+            nb.forEach((n) => {
+                if (gesehen.has(n)) {
+                    return;
+                }
+                gesehen.add(n);
+                gewicht.set(n, ZUG_ANTEIL[hop]);
+                naechste.push(n);
+            });
+        });
+        rand = naechste;
+    }
+    return gewicht;
 }
 
 function optionen(knotenAnzahl, kantenAnzahl) {
@@ -151,7 +223,8 @@ export async function render(containerId, datenJson, dotnetRef) {
     zerstoere(containerId);
 
     const daten = typeof datenJson === 'string' ? JSON.parse(datenJson) : datenJson;
-    const knotenListe = (daten.node || []).map(mapKnoten);
+    const maxWert = (daten.node || []).reduce((m, k) => Math.max(m, 1 + (k.degree || 0)), 1);
+    const knotenListe = (daten.node || []).map((k) => mapKnoten(k, maxWert));
     const kantenListe = (daten.edges || []).map(mapKante);
     const nodes = new window.vis.DataSet(knotenListe);
     const edges = new window.vis.DataSet(kantenListe);
@@ -176,22 +249,94 @@ export async function render(containerId, datenJson, dotnetRef) {
     });
     network.on('selectNode', (params) => {
         if (params.nodes && params.nodes.length > 0) {
-            network.focus(params.nodes[0], { scale: 1.15, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            const id = params.nodes[0];
+            network.focus(id, { scale: 1.15, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            try { dotnetRef.invokeMethodAsync('OnNodeSelect', id); } catch (e) { /* ignore */ }
+        }
+    });
+
+    // free mode has physics off, so springs cannot pull neighbours — do it by hand
+    network.on('dragStart', (params) => {
+        const inst = instanzen.get(containerId);
+        if (!inst) {
+            return;
+        }
+        inst.zug = null;
+        const gezogen = (params.nodes || []).filter((id) => id != null);
+        if (!inst.frei || gezogen.length === 0) {
+            return;
+        }
+        const gewicht = zugKreis(inst.nachbarn, gezogen);
+        if (gewicht.size === 0) {
+            return;
+        }
+        const pos = network.getPositions([...gezogen, ...gewicht.keys()]);
+        const anker = pos[gezogen[0]];
+        if (!anker) {
+            return;
+        }
+        const ziele = [];
+        gewicht.forEach((w, id) => {
+            if (pos[id]) {
+                ziele.push({ id, w, x: pos[id].x, y: pos[id].y });
+            }
+        });
+        const start = params.pointer && params.pointer.canvas ? params.pointer.canvas : null;
+        inst.zug = { anker: gezogen[0], startX: anker.x, startY: anker.y, ziele, zeiger: start ? { x: start.x, y: start.y } : null };
+    });
+    network.on('dragging', (params) => {
+        const inst = instanzen.get(containerId);
+        const zug = inst && inst.zug;
+        if (!zug || zug.ziele.length === 0) {
+            return;
+        }
+        // 'dragging' fires before vis moves the node — take the delta from the pointer, not the node
+        const zeiger = zug.zeiger && params && params.pointer ? params.pointer.canvas : null;
+        let dx;
+        let dy;
+        if (zeiger) {
+            dx = zeiger.x - zug.zeiger.x;
+            dy = zeiger.y - zug.zeiger.y;
+        } else {
+            const jetzt = network.getPositions([zug.anker])[zug.anker];
+            if (!jetzt) {
+                return;
+            }
+            dx = jetzt.x - zug.startX;
+            dy = jetzt.y - zug.startY;
+        }
+        // write positions straight to the body: moveNode() per node would redraw per node
+        const koerper = network.body && network.body.nodes ? network.body.nodes : null;
+        zug.ziele.forEach((z) => {
+            const kn = koerper ? koerper[z.id] : null;
+            if (kn) {
+                kn.x = z.x + dx * z.w;
+                kn.y = z.y + dy * z.w;
+            } else {
+                try { network.moveNode(z.id, z.x + dx * z.w, z.y + dy * z.w); } catch (e) { /* ignore */ }
+            }
+        });
+        if (koerper) {
+            try { network.redraw(); } catch (e) { /* ignore */ }
+        }
+    });
+    network.on('dragEnd', () => {
+        const inst = instanzen.get(containerId);
+        if (inst) {
+            inst.zug = null;
         }
     });
 
     // save defaults
-    instanzen.set(containerId, { network, nodes, edges, dotnetRef, physikStandard: opts.physics, frei: false });
+    instanzen.set(containerId, {
+        network, nodes, edges, dotnetRef,
+        physikStandard: opts.physics,
+        frei: false,
+        zug: null,
+        nachbarn: baueNachbarn(daten.edges),
+        rohKnoten: daten.node || [],
+    });
 }
-
-// free mode physics
-const PHYSIK_FREI = {
-    enabled: true,
-    solver: 'forceAtlas2Based',
-    forceAtlas2Based: { gravitationalConstant: 0, centralGravity: 0, springLength: 150, springConstant: 0.03, damping: 0.9, avoidOverlap: 0 },
-    stabilization: false,
-    minVelocity: 0.5,
-};
 
 export function setzeFreierModus(containerId, frei) {
     const inst = instanzen.get(containerId);
@@ -199,7 +344,15 @@ export function setzeFreierModus(containerId, frei) {
         return;
     }
     inst.frei = !!frei;
-    inst.network.setOptions({ physics: frei ? PHYSIK_FREI : inst.physikStandard });
+    inst.zug = null;
+    if (inst.frei) {
+        // frozen layout: nothing drifts, nothing collapses; dragging pulls neighbours instead
+        inst.network.setOptions({ physics: false });
+        return;
+    }
+    inst.network.setOptions({ physics: { ...inst.physikStandard, enabled: true, stabilization: false } });
+    // setOptions alone only re-enables physics, it does not restart the loop
+    try { inst.network.startSimulation(); } catch (e) { /* ignore */ }
 }
 
 // highlight path
@@ -273,6 +426,127 @@ export function alsBildExportieren(containerId) {
         a.download = 'noose-beziehungsgraph.png';
         a.click();
     } catch (e) { /* ignore */ }
+}
+
+// colour nodes by detected community, or restore base colours
+export function faerbeNachCommunity(containerId, an) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    const roh = new Map((inst.rohKnoten || []).map((k) => [k.id, k]));
+    inst.nodes.forEach((n) => {
+        const k = roh.get(n.id);
+        if (!k) {
+            return;
+        }
+        const schluessel = !!k.isKeyFigure;
+        if (an) {
+            // cluster colour takes over the border; the key-figure fill must survive it
+            const farbe = CLUSTER_FARBE[(k.communityId || 0) % CLUSTER_FARBE.length];
+            const grund = fuellung(schluessel);
+            const hell = schluessel ? SCHLUESSEL_HELL : '#1F2630';
+            inst.nodes.update({ id: n.id, color: { background: grund, border: farbe, highlight: { background: hell, border: '#22D3EE' }, hover: { background: hell, border: farbe } } });
+        } else {
+            inst.nodes.update({ id: n.id, color: knotenfarbe(k, schluessel) });
+        }
+    });
+}
+
+// id → creation timestamp, parsed once per render instead of once per scrub step
+function zeitIndex(inst) {
+    if (!inst.zeiten) {
+        inst.zeiten = new Map((inst.rohKnoten || []).map((k) => [k.id, k.createdAt ? new Date(k.createdAt).getTime() : null]));
+    }
+    return inst.zeiten;
+}
+
+// hide nodes created after the cutoff (network-growth scrubber); null shows all
+export function setzeZeitfenster(containerId, grenzeIso) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    const grenze = grenzeIso ? new Date(grenzeIso).getTime() : null;
+    const zeiten = zeitIndex(inst);
+    // every update() call rebuilds vis' whole graph state — collect, then write once
+    const aenderungen = [];
+    inst.nodes.forEach((n) => {
+        const erstellt = zeiten.get(n.id);
+        const versteckt = grenze != null && erstellt != null && erstellt > grenze;
+        if (!!n.hidden !== versteckt) {
+            aenderungen.push({ id: n.id, hidden: versteckt });
+        }
+    });
+    if (aenderungen.length > 0) {
+        inst.nodes.update(aenderungen);
+    }
+}
+
+// edge-drawing mode: user drags between two nodes → OnEdgeDrawn(from,to); we never add it visually
+export function starteVerknuepfungsModus(containerId) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    inst.network.setOptions({
+        manipulation: {
+            enabled: false,
+            addEdge: (data, callback) => {
+                if (data.from !== data.to) {
+                    try { inst.dotnetRef.invokeMethodAsync('OnEdgeDrawn', data.from, data.to); } catch (e) { /* ignore */ }
+                }
+                callback(null); // C# persists + reloads
+            },
+        },
+    });
+    try { inst.network.addEdgeMode(); } catch (e) { /* ignore */ }
+}
+
+export function beendeVerknuepfungsModus(containerId) {
+    const inst = instanzen.get(containerId);
+    if (inst) {
+        try { inst.network.disableEditMode(); } catch (e) { /* ignore */ }
+    }
+}
+
+export function holePositionen(containerId) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return '{}';
+    }
+    try {
+        inst.network.storePositions();
+        return JSON.stringify(inst.network.getPositions());
+    } catch (e) {
+        return '{}';
+    }
+}
+
+export function setzePositionen(containerId, json) {
+    const inst = instanzen.get(containerId);
+    if (!inst) {
+        return;
+    }
+    let pos;
+    try { pos = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+    // freeze physics so the loaded layout sticks
+    inst.frei = true;
+    inst.zug = null;
+    inst.network.setOptions({ physics: false });
+    const koerper = inst.network.body && inst.network.body.nodes ? inst.network.body.nodes : null;
+    Object.keys(pos || {}).forEach((id) => {
+        const p = pos[id];
+        if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
+            return;
+        }
+        // records deleted since the view was saved are simply absent — moveNode would log for each
+        if (koerper && !koerper[id]) {
+            return;
+        }
+        try { inst.network.moveNode(id, p.x, p.y); } catch (e) { /* ignore */ }
+    });
+    try { inst.network.fit({ animation: { duration: 400 } }); } catch (e) { /* ignore */ }
 }
 
 export function zerstoere(containerId) {

@@ -214,10 +214,15 @@ public class SourceService(
         {
             throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
         }
-        // ExecuteUpdate on purpose: pinning is not a content edit, skip the audit stamp
+        // ExecuteUpdate on purpose: pinning is not a content edit, skip the modified stamp
         await db.Sources
             .Where(q => q.Id == sourceId)
             .ExecuteUpdateAsync(s => s.SetProperty(q => q.Pinned, pinned), cancellationToken);
+
+        // audit manually: the ExecuteUpdate bypassed the interceptor
+        db.AuditLogs.Add(ManualAudit.Row(nameof(Source), sourceId, AuditAction.Modified, actor,
+            ManualAudit.Change("Angepinnt", null, pinned)));
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<Source?> GetForDownloadAsync(string sourceId, ViewerScope scope, CancellationToken cancellationToken = default)

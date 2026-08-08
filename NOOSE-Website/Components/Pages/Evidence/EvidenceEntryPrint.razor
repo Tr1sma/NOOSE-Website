@@ -1,0 +1,73 @@
+@* Print view of an evidence-room entry (Asservatenkammer card). *@
+@page "/asservatenkammer/eintrag/{Id}/druck"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@layout PrintLayout
+@inject IEvidenceService Evidence
+
+<PageTitle>@(_display is null ? "Druckansicht" : $"Asservat {_display.Entry.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_display is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Dieser Eintrag existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    var e = _display.Entry;
+    <PrintFrame Title="@($"Asservatenkammer · {EvidenceEntryTypeDisplay.Name(e.Type).ToUpperInvariant()}")"
+                BackHref="@($"/asservatenkammer/eintrag/{Id}")" PrintedBy="@_printBy" IsClassified="false">
+        <section>
+            <h2>Eintrag</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Aktenzeichen</th><td>@e.CaseNumber</td></tr>
+                    <tr><th>Art</th><td>@EvidenceEntryTypeDisplay.Name(e.Type)</td></tr>
+                    <tr><th>Besitzer</th><td>@_display.OwnerDisplay</td></tr>
+                    <tr><th>Bearbeiter</th><td>@_display.HandlerCodename</td></tr>
+                    <tr><th>Datum</th><td>@e.Timestamp.ToLocalTime().ToString("dddd, d. MMMM yyyy 'um' HH:mm")</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Gegenstände</h2>
+            <table class="druck-tabelle">
+                <thead><tr><th>Gegenstand</th><th>Menge</th></tr></thead>
+                <tbody>
+                    @foreach (var l in _display.Lines)
+                    {
+                        <tr><td>@l.ItemName</td><td>@l.Quantity</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(e.Notes))
+        {
+            <section>
+                <h2>Zusatznotiz</h2>
+                <div class="druck-mehrzeilig"><MentionDisplay Text="@e.Notes" Plain="true" /></div>
+            </section>
+        }
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private EvidenceEntryDisplay? _display;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+        _display = await Evidence.GetEntryDisplayAsync(Id);
+        _load = false;
+    }
+}

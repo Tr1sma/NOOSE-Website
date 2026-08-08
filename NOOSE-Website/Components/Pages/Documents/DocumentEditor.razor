@@ -73,7 +73,7 @@ else
                 </MudSelect>
             }
 
-            <RichTextEditor @ref="_editor" Value="@_contentHtml" />
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.Document" AiSubject="@_title" />
         </MudStack>
     </MudPaper>
 }

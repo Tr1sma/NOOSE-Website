@@ -1,0 +1,81 @@
+@* Meeting log for one informant. Add form only when the viewer may write. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Informants
+@inject IInformantService Service
+@inject ISnackbar Snackbar
+
+@if (MayWrite)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Treffen protokollieren</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_date" Label="Datum" />
+            </MudItem>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_location" Label="Ort" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_content" Label="Inhalt / Meldung" Lines="3" />
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="AddAsync" Class="mt-2">Hinzufügen</MudButton>
+    </MudPaper>
+}
+
+@if (_meetings.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Treffen erfasst.</MudText>
+}
+else
+{
+    <MudTimeline>
+        @foreach (var m in _meetings)
+        {
+            <MudTimelineItem Color="Color.Primary" Size="Size.Small">
+                <MudText Typo="Typo.body2"><b>@m.MeetingDate.ToLocalTime().ToString("dd.MM.yyyy")</b>@(string.IsNullOrWhiteSpace(m.Location) ? "" : $" · {m.Location}")</MudText>
+                @if (!string.IsNullOrWhiteSpace(m.Content))
+                {
+                    <MudText Typo="Typo.body2">@m.Content</MudText>
+                }
+                @if (!string.IsNullOrWhiteSpace(m.AuthorName))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">erfasst von @m.AuthorName</MudText>
+                }
+            </MudTimelineItem>
+        }
+    </MudTimeline>
+}
+
+@code {
+    [Parameter, EditorRequired] public string InformantId { get; set; } = string.Empty;
+    [Parameter] public bool MayWrite { get; set; }
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    private List<InformantMeetingDisplay> _meetings = new();
+    private DateTime? _date = DateTime.Today;
+    private string? _location;
+    private string? _content;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _meetings = await Service.GetMeetingsAsync(InformantId, User);
+
+    private async Task AddAsync()
+    {
+        try
+        {
+            await Service.AddMeetingAsync(InformantId,
+                new InformantMeetingInput(_date ?? DateTime.UtcNow, _location, _content), User);
+            _location = null;
+            _content = null;
+            _date = DateTime.Today;
+            await ReloadAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

@@ -46,7 +46,7 @@
                         }
                     </MudSelect>
                 }
-                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" />
+                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" Ai="TextAssistContext.PersonnelNote" />
                 <div>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newHtml))">Hinzufügen</MudButton>
@@ -139,7 +139,8 @@
     {
         _user = (await AuthStateTask).User;
         _agents = await AgentService.GetSelectableAsync();
-        _agentNames = _agents.ToDictionary(a => a.Id, a => a.Codename);
+        // name lookup, not a picker: already-recorded executors must still render
+        _agentNames = (await AgentService.GetAllAsync()).ToDictionary(a => a.Id, a => a.Codename);
         if (_user.IsLeadership())
         {
             await LoadTemplatesAsync();

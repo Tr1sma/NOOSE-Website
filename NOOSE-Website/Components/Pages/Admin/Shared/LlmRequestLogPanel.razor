@@ -1,0 +1,239 @@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Llm
+@inject ILlmRequestLogService Log
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Jede NOOSEI-Anfrage mit Eingabe, Antwort und Kosten. Der angehängte Akteninhalt wird bewusst nicht
+    mitgeschrieben — nur, welche Akten und Werkzeuge berührt wurden.
+</MudText>
+
+<MudGrid Spacing="2" Class="mb-2">
+    <MudItem xs="12" sm="6" md="3">
+        <MudSelect T="string" @bind-Value="_filter.AgentId" Label="Agent" Clearable="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense">
+            @foreach (var agent in _options.Agents)
+            {
+                <MudSelectItem T="string" Value="@agent.Id">@agent.Codename</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="2">
+        <MudSelect T="LlmFeature?" @bind-Value="_filter.Feature" Label="Funktion" Clearable="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense">
+            @foreach (var feature in LlmFeatureDisplay.All)
+            {
+                <MudSelectItem T="LlmFeature?" Value="@feature">@LlmFeatureDisplay.Name(feature)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="2">
+        <MudSelect T="bool?" @bind-Value="_filter.Success" Label="Status" Clearable="true"
+                   Variant="Variant.Outlined" Margin="Margin.Dense">
+            <MudSelectItem T="bool?" Value="@true">Erfolgreich</MudSelectItem>
+            <MudSelectItem T="bool?" Value="@false">Fehlgeschlagen</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="2">
+        <MudDatePicker @bind-Date="_from" Label="Von" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="2">
+        <MudDatePicker @bind-Date="_to" Label="Bis" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudTextField @bind-Value="_filter.Text" Label="Volltext" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3" Class="d-flex align-center">
+        <MudSwitch T="bool" @bind-Value="_filter.AnomalousOnly" Color="Color.Warning" Label="Nur Auffällige" />
+    </MudItem>
+    <MudItem xs="12" md="6" Class="d-flex align-center justify-end" Style="gap:8px;">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyAsync" Disabled="_busy">Filtern</MudButton>
+        <MudButton Variant="Variant.Text" OnClick="ResetAsync" Disabled="_busy">Zurücksetzen</MudButton>
+    </MudItem>
+</MudGrid>
+
+<div class="d-flex align-center justify-space-between mb-1">
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        @_page.TotalCount Anfragen · @_page.TotalQuotaTokens.ToString("N0") Kontingent-Token
+        @if (_maySeeCost)
+        {
+            <text> · @_page.TotalCostUsd.ToString("0.0000") $ echte Kosten</text>
+        }
+    </MudText>
+</div>
+
+@if (_page.Capped)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+        @_page.TotalCount Treffer insgesamt – es werden die neuesten @_page.Rows.Count angezeigt.
+    </MudAlert>
+}
+
+<MudTable Items="_page.Rows" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="0"
+          Loading="_busy" OnRowClick="@((TableRowClickEventArgs<LlmRequestRow> e) => OpenAsync(e.Item))"
+          RowStyle="cursor:pointer;">
+    <HeaderContent>
+        <MudTh>Zeitpunkt</MudTh>
+        <MudTh>Agent</MudTh>
+        <MudTh>Funktion</MudTh>
+        <MudTh Style="text-align:right">Tokens</MudTh>
+        <MudTh Style="text-align:right">Kontingent</MudTh>
+        @if (_maySeeCost)
+        {
+            <MudTh Style="text-align:right">Kosten</MudTh>
+        }
+        <MudTh Style="text-align:right">Dauer</MudTh>
+        <MudTh>Status</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Zeitpunkt">@context.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</MudTd>
+        <MudTd DataLabel="Agent">@(context.AgentName ?? "—")</MudTd>
+        <MudTd DataLabel="Funktion">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@LlmFeatureDisplay.Icon(context.Feature)">
+                @LlmFeatureDisplay.Name(context.Feature)
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Tokens" Style="text-align:right">
+            @context.PromptTokens.ToString("N0") / @context.CompletionTokens.ToString("N0")
+        </MudTd>
+        <MudTd DataLabel="Kontingent" Style="text-align:right">@context.QuotaTokens.ToString("N0")</MudTd>
+        @if (_maySeeCost)
+        {
+            <MudTd DataLabel="Kosten" Style="text-align:right">@context.CostUsd.ToString("0.0000") $</MudTd>
+        }
+        <MudTd DataLabel="Dauer" Style="text-align:right">@(context.DurationMs / 1000.0).ToString("0.0") s</MudTd>
+        <MudTd DataLabel="Status">
+            @if (!context.Success)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">Fehler</MudChip>
+            }
+            @if (context.IsAnomalous && context.AnomalyKind is { } kind)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                         Icon="@Icons.Material.Filled.PriorityHigh">@LlmAnomalyKindDisplay.Name(kind)</MudChip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <EmptyState Icon="@Icons.Material.Filled.Forum" Text="Keine Anfragen im gewählten Zeitraum." />
+    </NoRecordsContent>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = new();
+    private LlmRequestFilter _filter = new();
+    private LlmRequestPage _page = new([], 0, 0, 0);
+    private LlmRequestFilterOptions _options = new([], []);
+    private DateTime? _from;
+    private DateTime? _to;
+    private bool _busy = true;
+
+    /// <summary>Real money is the AI owner's alone. Counter-intelligence reads this log for behaviour, and
+    /// behaviour is fully described by tokens.</summary>
+    private bool _maySeeCost;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _maySeeCost = _user.IsAiOwner();
+        // the rail recreates this panel on every section switch, so the filter lives in the URL
+        ReadUrlState();
+        try
+        {
+            _options = await Log.GetFilterOptionsAsync(_user);
+        }
+        catch (UnauthorizedAccessException) { /* section stays gated */ }
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            // pickers are local dates; treat "Bis" as an inclusive whole day
+            _filter.FromUtc = _from?.Date.ToUniversalTime();
+            _filter.ToUtc = _to?.Date.AddDays(1).ToUniversalTime();
+            _page = await Log.QueryAsync(_filter, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        await WriteUrlStateAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        _filter = new LlmRequestFilter();
+        _from = null;
+        _to = null;
+        await ApplyAsync();
+    }
+
+    private async Task OpenAsync(LlmRequestRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+        try
+        {
+            var detail = await Log.GetAsync(row.Id, _user);
+            if (detail is not null)
+            {
+                await LlmRequestDetailDialog.ShowAsync(Dialogs, detail, _maySeeCost);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void ReadUrlState()
+    {
+        _filter.AgentId = QueryState.Read(Nav, "ag");
+        _filter.Feature = QueryState.ReadEnum<LlmFeature>(Nav, "fn");
+        _filter.Model = QueryState.Read(Nav, "mdl");
+        _filter.AnomalousOnly = QueryState.ReadFlag(Nav, "auf");
+        _filter.Text = QueryState.Read(Nav, "q");
+        var status = QueryState.Read(Nav, "st");
+        _filter.Success = status == "ok" ? true : status == "fehler" ? false : null;
+        if (DateTime.TryParse(QueryState.Read(Nav, "von"), out var from))
+        {
+            _from = from.Date;
+        }
+        if (DateTime.TryParse(QueryState.Read(Nav, "bis"), out var to))
+        {
+            _to = to.Date;
+        }
+    }
+
+    private Task WriteUrlStateAsync() => QueryState.WriteAsync(JS, Nav,
+        ("ag", _filter.AgentId),
+        ("fn", _filter.Feature?.ToString()),
+        ("mdl", _filter.Model),
+        ("st", _filter.Success is true ? "ok" : _filter.Success is false ? "fehler" : null),
+        ("auf", _filter.AnomalousOnly ? "1" : null),
+        ("q", _filter.Text),
+        ("von", _from?.ToString("yyyy-MM-dd")),
+        ("bis", _to?.ToString("yyyy-MM-dd")));
+}

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Models.Threat;
@@ -12,7 +13,8 @@ using NOOSE_Website.Models.Enums;
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="IThreatScoreService" />
-public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThreatScoreConfigService configService)
+public class ThreatScoreService(
+    IDbContextFactory<AppDbContext> dbFactory, IThreatScoreConfigService configService, INotificationService notifications)
     : IThreatScoreService
 {
     public static readonly JsonSerializerOptions JsonOptions = new()
@@ -69,15 +71,17 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         double infraPkt = Saturate(infraRaw, k.CapInfra, k.InfraDenominator);
         double s2 = Math.Min(k.CapS2, sizePkt + structurePkt + weaponsPkt + infraPkt);
 
-        // ---- S3: conflict/alliance ----
-        double rawS3 = k.ConflictWeight * e.ConflictCount + k.AllianceWeight * e.AllianceCount;
+        // ---- S3: conflict/alliance/hostility ----
+        double rawS3 = k.ConflictWeight * e.ConflictCount + k.AllianceWeight * e.AllianceCount
+                     + k.AbductionWeight * e.AbductionHostility;
         double s3 = Saturate(rawS3, k.CapS3, k.S3Denominator);
 
         // ---- S4: network centrality ----
         double rawS4 = e.DefaultEdgesDegree;
         double s4 = Saturate(rawS4, k.CapS4, k.S4Denominator);
 
-        double content = s1 + s2 + s3 + s4; // Caps 55+22+15+8 = 100 (Default)
+        // clamp: a config whose caps don't sum to 100 must not push content past the 0–100 panel scale
+        double content = Math.Clamp(s1 + s2 + s3 + s4, 0, 100);
         int @base = ThreatScoreConstants.Base(e.Classification);
         int score = BandScore(content, @base);
 
@@ -135,13 +139,15 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
 
         // ---- P4: social risk ----
         double rawP4 = k.EnemyWeight * e.EnemyCount + k.AllyWeight * e.AllyCount
-                     + k.GpWeight * e.BusinessPartnerCount + k.LeadWeight * e.LeadershipRolesCount;
+                     + k.GpWeight * e.BusinessPartnerCount + k.LeadWeight * e.LeadershipRolesCount
+                     + k.PersonAbductionWeight * e.AbductionHostility;
         double p4 = Saturate(rawP4, k.CapP4, k.P4Denominator);
 
         // ---- P5: network centrality ----
         double p5 = Saturate(e.DefaultEdgesDegree, k.CapP5, k.P5Denominator);
 
-        double content = p1 + p2 + p3 + p4 + p5; // Caps 40+22+18+12+8 = 100 (Default)
+        // clamp: a config whose caps don't sum to 100 must not push content past the 0–100 panel scale
+        double content = Math.Clamp(p1 + p2 + p3 + p4 + p5, 0, 100);
         int @base = ThreatScoreConstants.Base(e.Classification);
         int score = BandScore(content, @base);
 
@@ -267,6 +273,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         var t = new List<string>();
         if (e.ConflictCount > 0) { t.Add($"{e.ConflictCount} aktive(r) Konflikt(e)"); }
         if (e.AllianceCount > 0) { t.Add($"{e.AllianceCount} Bündnis(se)"); }
+        if (e.AbductionCount > 0) { t.Add($"{e.AbductionCount} Agenten-Entführung(en)"); }
         if (t.Count == 0) { t.Add("keine Konflikte/Bündnisse"); }
         return t;
     }
@@ -312,6 +319,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         if (e.AllyCount > 0) { t.Add($"{e.AllyCount} Verbündete(r)"); }
         if (e.BusinessPartnerCount > 0) { t.Add($"{e.BusinessPartnerCount} Geschäftspartner"); }
         if (e.LeadershipRolesCount > 0) { t.Add($"{e.LeadershipRolesCount} Leitungsrolle(n)"); }
+        if (e.AbductionCount > 0) { t.Add($"{e.AbductionCount} Agenten-Entführung(en)"); }
         if (t.Count == 0) { t.Add("keine relevanten Beziehungen/Leitung"); }
         return t;
     }
@@ -457,7 +465,7 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             triage);
     }
 
-    private static async Task CalculateFactionAsync(AppDbContext db, string factionId, ThreatScoreConfiguration config, CancellationToken ct)
+    private async Task CalculateFactionAsync(AppDbContext db, string factionId, ThreatScoreConfiguration config, CancellationToken ct)
     {
         // Load faction scalars.
         var f = await db.Factions
@@ -483,9 +491,10 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
 
         var result = Calculate(input, DateTime.UtcNow, config);
         await PersistFactionAsync(db, factionId, result, ct);
+        await AppendHistoryAndAlarmAsync(db, nameof(Faction), factionId, result, config, ct);
     }
 
-    private static async Task CalculatePersonAsync(AppDbContext db, string personId, ThreatScoreConfiguration config, CancellationToken ct)
+    private async Task CalculatePersonAsync(AppDbContext db, string personId, ThreatScoreConfiguration config, CancellationToken ct)
     {
         var p = await db.People
             .Where(x => x.Id == personId)
@@ -505,6 +514,74 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         var input = await LoadPersonInputAsync(db, personId, p.Classification, p.LifeStatus, p.DeadUntil, p.Captured, ct);
         var result = CalculatePerson(input, DateTime.UtcNow, config);
         await PersistPersonAsync(db, personId, result, ct);
+        await AppendHistoryAndAlarmAsync(db, nameof(Person), personId, result, config, ct);
+    }
+
+    // append a snapshot only when score/confidence changed; alert leadership on a significant rise
+    private async Task AppendHistoryAndAlarmAsync(AppDbContext db, string entityType, string entityId,
+        ThreatScoreResult result, ThreatScoreConfiguration config, CancellationToken ct)
+    {
+        var last = await db.ThreatScoreHistory
+            .Where(h => h.EntityType == entityType && h.EntityId == entityId)
+            .OrderByDescending(h => h.Timestamp)
+            .Select(h => new { h.Score, h.Confidence })
+            .FirstOrDefaultAsync(ct);
+
+        if (last is not null && last.Score == result.Score && last.Confidence == result.Confidence)
+        {
+            return; // dedupe against the many event-driven recomputes
+        }
+
+        db.ThreatScoreHistory.Add(new ThreatScoreHistory
+        {
+            EntityType = entityType,
+            EntityId = entityId,
+            Score = result.Score,
+            Confidence = result.Confidence,
+            DetailJson = JsonSerializer.Serialize(result.Detail, JsonOptions),
+            Timestamp = result.Detail.CalculatedAtUtc,
+        });
+        // history is not IAuditable → audit interceptor ignores it
+        await db.SaveChangesAsync(ct);
+
+        if (last is { Score: { } prev } && result.Score is { } now
+            && now > prev && now - prev >= config.AlarmDeltaThreshold && now >= config.AlarmMinScore)
+        {
+            await AlarmAsync(db, entityType, entityId, prev, now, ct);
+        }
+    }
+
+    private async Task AlarmAsync(AppDbContext db, string entityType, string entityId, int prev, int now, CancellationToken ct)
+    {
+        string? name;
+        string href;
+        if (entityType == nameof(Faction))
+        {
+            name = await db.Factions.Where(f => f.Id == entityId).Select(f => f.Name).FirstOrDefaultAsync(ct);
+            href = $"/fraktionen/{entityId}";
+        }
+        else if (entityType == nameof(Person))
+        {
+            name = await db.People.Where(p => p.Id == entityId).Select(p => p.Name).FirstOrDefaultAsync(ct);
+            href = $"/personen/{entityId}";
+        }
+        else
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        // leadership sees classified records, so no per-record visibility gate needed here
+        var leadershipIds = await db.Users.OnlySelectable()
+            .Where(u => u.IsAdmin || (u.Rank != null && u.Rank >= Rank.SupervisorySpecialAgent))
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+
+        await notifications.NotifyManyAsync(leadershipIds, NotificationType.ThreatSpike,
+            $"Bedrohungs-Score gestiegen: {name} ({prev} → {now})", href, null, ct);
     }
 
     private static async Task<ThreatScoreInput> LoadInputAsync(AppDbContext db, string factionId,
@@ -600,6 +677,8 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             .FirstOrDefaultAsync(ct);
         latest = Later(latest, lastClassification);
 
+        var abduction = await LoadAbductionSignalAsync(db, nameof(Faction), factionId, ct);
+
         return new ThreatScoreInput
         {
             IsStateFaction = false,
@@ -616,6 +695,8 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             DocsPerMember = docsPerMember,
             ConflictCount = kinds.Count(a => a == LinkKind.Conflict),
             AllianceCount = kinds.Count(a => a == LinkKind.Alliance),
+            AbductionCount = abduction.Count,
+            AbductionHostility = abduction.Hostility,
             DefaultEdgesDegree = defaultEdgesDegree,
             LatestCaptureUtc = latest,
         };
@@ -674,6 +755,8 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             latest = Later(latest, o.ModifiedAt ?? o.CreatedAt);
         }
 
+        var abduction = await LoadAbductionSignalAsync(db, nameof(Person), personId, ct);
+
         return new PersonThreatScoreInput
         {
             Classification = classification,
@@ -686,6 +769,8 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
             AllyCount = relationTypes.Count(t => t == RelationType.Ally),
             BusinessPartnerCount = relationTypes.Count(t => t == RelationType.BusinessPartner),
             LeadershipRolesCount = leadFr + leadGr + leadPa,
+            AbductionCount = abduction.Count,
+            AbductionHostility = abduction.Hostility,
             DefaultEdgesDegree = defaultEdgesDegree,
             MembershipsCount = memberFr + memberGr + memberPa,
             DataRichness = aliases + vehicles + phones + locations,
@@ -723,6 +808,22 @@ public class ThreatScoreService(IDbContextFactory<AppDbContext> dbFactory, IThre
         .Select(s => s.Trim())
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .Count();
+
+    /// <summary>Abductions committed by a perpetrator: count for the driver, weighted hostility for the score (leak severity / truth serum / killing raise it).</summary>
+    private static async Task<(int Count, double Hostility)> LoadAbductionSignalAsync(
+        AppDbContext db, string perpetratorType, string perpetratorId, CancellationToken ct)
+    {
+        var rows = await db.AgentAbductions
+            .Where(a => a.PerpetratorType == perpetratorType && a.PerpetratorId == perpetratorId)
+            .Select(a => new { a.InformationLeaked, a.LeakSeverity, a.TruthSerum, a.Outcome })
+            .ToListAsync(ct);
+        double hostility = rows.Sum(a =>
+            1.0
+            + 0.5 * (a.InformationLeaked ? (int)a.LeakSeverity : 0)
+            + (a.TruthSerum ? 0.5 : 0.0)
+            + (a.Outcome == AbductionOutcome.Killed ? 1.0 : 0.0));
+        return (rows.Count, hostility);
+    }
 
     private static DateTime? Later(DateTime? a, DateTime? b) => (a, b) switch
     {

@@ -1,0 +1,102 @@
+@* Embeddable abduction list: victim view (VictimAgentId) or perpetrator view (PerpetratorType + PerpetratorId). *@
+@inject IAbductionService AbductionService
+@inject NavigationManager Nav
+
+<MudStack Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.subtitle1">Entführungen</MudText>
+        <MudSpacer />
+        <AuthorizeView Policy="@Policies.WriteAccess">
+            <MudButton Href="/entfuehrungen/neu" Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neu</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.PersonOff" Title="Keine Entführungen dokumentiert." />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Aktenzeichen</th>
+                    <th>@(IsPerpetratorView ? "Opfer" : "Täter")</th>
+                    <th>Zeitpunkt</th>
+                    <th>Ausgang</th>
+                    <th>Leak</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/entfuehrungen/{r.Abduction.Id}"))">
+                        <td>@r.Abduction.CaseNumber</td>
+                        <td>@(IsPerpetratorView ? r.VictimCodename : (r.PerpetratorName ?? "—"))</td>
+                        <td>@r.Abduction.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@AbductionOutcomeDisplay.ChipColor(r.Abduction.Outcome)">
+                                @AbductionOutcomeDisplay.Name(r.Abduction.Outcome)
+                            </MudChip>
+                        </td>
+                        <td>
+                            @if (r.Abduction.InformationLeaked)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@LeakSeverityDisplay.ChipColor(r.Abduction.LeakSeverity)">
+                                    @LeakSeverityDisplay.Name(r.Abduction.LeakSeverity)
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">kein Abfluss</MudText>
+                            }
+                        </td>
+                        <td>
+                            @if (r.CompromisedActiveCount > 0)
+                            {
+                                <MudTooltip Text="@($"{r.CompromisedActiveCount} kompromittierte Akte(n)")">
+                                    <MudIcon Icon="@Icons.Material.Filled.GppBad" Color="Color.Error" Size="Size.Small" />
+                                </MudTooltip>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public string? VictimAgentId { get; set; }
+    [Parameter] public string? PerpetratorType { get; set; }
+    [Parameter] public string? PerpetratorId { get; set; }
+
+    private bool IsPerpetratorView => !string.IsNullOrEmpty(PerpetratorId);
+
+    private bool _load = true;
+    private List<AbductionDisplay> _rows = new();
+    private string? _key;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{VictimAgentId}|{PerpetratorType}|{PerpetratorId}";
+        if (_key == key)
+        {
+            return;
+        }
+        _key = key;
+        _load = true;
+        _rows = IsPerpetratorView
+            ? await AbductionService.GetForPerpetratorAsync(PerpetratorType!, PerpetratorId!)
+            : !string.IsNullOrEmpty(VictimAgentId)
+                ? await AbductionService.GetForVictimAsync(VictimAgentId)
+                : new();
+        _load = false;
+    }
+}

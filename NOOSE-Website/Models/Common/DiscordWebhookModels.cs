@@ -49,7 +49,8 @@ public static class DiscordRouting
 public sealed record DiscordWebhookConfig(
     bool Enabled, string SiteBaseUrl,
     IReadOnlyDictionary<NotificationType, string?> Webhooks,
-    IReadOnlyDictionary<NotificationType, string?> Roles)
+    IReadOnlyDictionary<NotificationType, string?> Roles,
+    bool IncludeHeadline)
 {
     /// <summary>Default site base for absolute links in Discord messages when unset.</summary>
     public const string DefaultBaseUrl = "https://noose.info";
@@ -66,4 +67,7 @@ public sealed class DiscordWebhookConfigInput
 
     /// <summary>Role id to ping per broadcast category; empty/null falls back to the default role.</summary>
     public Dictionary<NotificationType, string?> Roles { get; set; } = new();
+
+    /// <summary>Include the record header/title in role-ping posts (Announcement, Recruiting).</summary>
+    public bool IncludeHeadline { get; set; } = true;
 }

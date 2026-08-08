@@ -1,0 +1,81 @@
+@* Before -> after per record. Diverging: cool for a fall, warm for a rise, values always labelled. *@
+@using System.Globalization
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+@inject NavigationManager Nav
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@(Moves.Count == 0)"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <ChildContent>
+        <div class="d-flex flex-column" style="gap:.35rem;">
+            @foreach (var move in Moves)
+            {
+                var rise = move.To >= move.From;
+                var colour = rise ? ChartPalette.DivergingWarm : ChartPalette.DivergingCool;
+                var fromPct = Percent(move.From);
+                var toPct = Percent(move.To);
+                var left = Math.Min(fromPct, toPct);
+                var width = Math.Abs(toPct - fromPct);
+                <div class="@(move.Href is null ? string.Empty : "cursor-pointer")"
+                     role="@(move.Href is null ? null : "link")"
+                     @onclick="@(() => Open(move.Href))"
+                     title="@($"{move.Name}: {Format(move.From)} → {Format(move.To)}")">
+                    <div class="d-flex align-center justify-space-between">
+                        <MudText Typo="Typo.body2"><b>@move.Name</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @Format(move.From) → <b style="color:@colour;">@Format(move.To)</b>
+                            (@(rise ? "+" : string.Empty)@Format(move.To - move.From))
+                        </MudText>
+                    </div>
+                    @if (move.Caption is { Length: > 0 } caption)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@caption</MudText>
+                    }
+                    <div style="@($"position:relative;height:14px;margin-top:2px;background:{ChartPalette.DivergingNeutral};border-radius:7px;")">
+                        <div style="@Bar(left, width, colour)"></div>
+                        <span style="@Dot(fromPct, ChartPalette.Muted)"></span>
+                        <span style="@Dot(toPct, colour)"></span>
+                    </div>
+                </div>
+            }
+        </div>
+    </ChildContent>
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartMove> Moves { get; set; } = [];
+
+    /// <summary>Upper bound of the shared scale; both ends of every row are placed against it.</summary>
+    [Parameter] public double AxisMax { get; set; } = 100;
+
+    [Parameter] public string Height { get; set; } = "280px";
+
+    [Parameter] public string EmptyText { get; set; } = "Keine Bewegungen im Zeitraum";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private double Percent(double value) => AxisMax <= 0 ? 0 : Math.Clamp(value / AxisMax * 100, 0, 100);
+
+    private static string Format(double value) => value.ToString("0.#", CultureInfo.GetCultureInfo("de-DE"));
+
+    private static string Bar(double left, double width, string colour) => string.Create(CultureInfo.InvariantCulture,
+        $"position:absolute;top:5px;left:{left:0.##}%;width:{width:0.##}%;height:4px;background:{colour};border-radius:2px;");
+
+    // 2px surface ring keeps the two ends legible where they overlap
+    private static string Dot(double at, string colour) => string.Create(CultureInfo.InvariantCulture,
+        $"position:absolute;top:2px;left:{at:0.##}%;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:{colour};box-shadow:0 0 0 2px {ChartPalette.Surface};");
+
+    private void Open(string? href)
+    {
+        if (!string.IsNullOrEmpty(href))
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+}

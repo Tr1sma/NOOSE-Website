@@ -1,0 +1,194 @@
+@page "/ermittlungshinweise"
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Leads
+@inject ILeadService LeadService
+@inject ILinkService LinkService
+@inject ISnackbar Snackbar
+
+<PageTitle>Ermittlungshinweise · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Lightbulb"
+            Title="Ermittlungshinweise"
+            Subtitle="Algorithmisch erzeugte Hinweise – mögliche Verbindungen, neue Konflikte, veraltete Einstufungen." />
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_groups.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Lightbulb" Text="Aktuell keine offenen Hinweise." />
+}
+else
+{
+    <MudExpansionPanels MultiExpansion="true">
+        @foreach (var group in _groups)
+        {
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@LeadKindDisplay.Icon(group.Kind)" Color="Color.Primary" />
+                        <MudText>@LeadKindDisplay.Name(group.Kind)</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@group.Leads.Count</MudChip>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    <MudList T="string" Dense="false">
+                        @foreach (var lead in group.Leads)
+                        {
+                            var segments = Segments(lead);
+                            <MudListItem T="string">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="flex-wrap">
+                                    <div>
+                                        <MudText Typo="Typo.body1">
+                                            @foreach (var seg in segments)
+                                            {
+                                                @if (seg.Href is not null)
+                                                {
+                                                    <MudLink Href="@seg.Href" Typo="Typo.body1" Underline="Underline.Hover"><b>@seg.Text</b></MudLink>
+                                                }
+                                                else
+                                                {
+                                                    @seg.Text
+                                                }
+                                            }
+                                        </MudText>
+                                    </div>
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                        @* fallback button only when the name isn't already a link inside the sentence *@
+                                        @if (!string.IsNullOrWhiteSpace(lead.PrimaryHref) && !segments.Any(s => s.Href == lead.PrimaryHref))
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" Href="@lead.PrimaryHref">@lead.PrimaryName</MudButton>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(lead.SecondaryHref) && !segments.Any(s => s.Href == lead.SecondaryHref))
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" Href="@lead.SecondaryHref">@lead.SecondaryName</MudButton>
+                                        }
+                                        @if (lead.Kind == LeadKind.LinkPrediction && _mayWrite && lead.SecondaryId is not null)
+                                        {
+                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                       StartIcon="@Icons.Material.Filled.AddLink"
+                                                       OnClick="@(() => LinkAsync(lead))">Verknüpfen</MudButton>
+                                        }
+                                        @if (_mayWrite)
+                                        {
+                                            <MudTooltip Text="Hinweis ignorieren">
+                                                <MudIconButton Icon="@Icons.Material.Filled.NotInterested" Size="Size.Small"
+                                                               OnClick="@(() => IgnoreAsync(lead))" />
+                                            </MudTooltip>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _mayWrite;
+    private bool _load = true;
+    private IReadOnlyList<LeadGroup> _groups = Array.Empty<LeadGroup>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _mayWrite = _user.MayWrite();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        _groups = await LeadService.GetFeedAsync(_user);
+        _load = false;
+    }
+
+    private async Task IgnoreAsync(Lead lead)
+    {
+        try
+        {
+            await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task LinkAsync(Lead lead)
+    {
+        if (lead.SecondaryType is null || lead.SecondaryId is null)
+        {
+            return;
+        }
+        try
+        {
+            await LinkService.CreateAsync(lead.PrimaryType, lead.PrimaryId, lead.SecondaryType, lead.SecondaryId, null, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+        try
+        {
+            // linked = resolved: dismiss the lead so it leaves the feed immediately (raw candidates are cached ~5 min)
+            await LeadService.IgnoreAsync(lead.Key, lead.Kind, _user);
+        }
+        catch { /* best effort */ }
+        Snackbar.Add("Verknüpfung angelegt.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private readonly record struct DetailSegment(string Text, string? Href);
+
+    // turns the record names the sentence already contains into links
+    private static List<DetailSegment> Segments(Lead lead)
+    {
+        var marks = new List<(int Start, int Length, string Href)>();
+        void Mark(string? name, string? href)
+        {
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(href))
+            {
+                return;
+            }
+            var at = lead.Detail.IndexOf(name, StringComparison.Ordinal);
+            if (at >= 0)
+            {
+                marks.Add((at, name.Length, href));
+            }
+        }
+        Mark(lead.PrimaryName, lead.PrimaryHref);
+        Mark(lead.SecondaryName, lead.SecondaryHref);
+        marks.Sort((x, y) => x.Start.CompareTo(y.Start));
+
+        var segments = new List<DetailSegment>();
+        var pos = 0;
+        foreach (var m in marks)
+        {
+            if (m.Start < pos)
+            {
+                continue; // overlaps an earlier name
+            }
+            if (m.Start > pos)
+            {
+                segments.Add(new DetailSegment(lead.Detail[pos..m.Start], null));
+            }
+            segments.Add(new DetailSegment(lead.Detail.Substring(m.Start, m.Length), m.Href));
+            pos = m.Start + m.Length;
+        }
+        if (pos < lead.Detail.Length)
+        {
+            segments.Add(new DetailSegment(lead.Detail[pos..], null));
+        }
+        return segments;
+    }
+}

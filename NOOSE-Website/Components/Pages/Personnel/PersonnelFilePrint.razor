@@ -159,7 +159,8 @@ else
         _agent = await AgentService.FindAsync(Id);
         if (_agent is not null)
         {
-            _agentNames = (await AgentService.GetSelectableAsync()).ToDictionary(a => a.Id, a => a.Codename);
+            // name lookup, not a picker: terminated authors must still render
+            _agentNames = (await AgentService.GetAllAsync()).ToDictionary(a => a.Id, a => a.Codename);
             _rankHistory = await PersonnelFileService.GetRankHistoryAsync(Id);
             _notes = await PersonnelFileService.GetNotesAsync(Id);
             _completedModules = (await ModuleService.GetStatusForAgentAsync(Id)).Where(m => m.IsCompleted).ToList();

@@ -1,0 +1,114 @@
+@* Print view of an abduction record. *@
+@page "/entfuehrungen/{Id}/druck"
+@layout PrintLayout
+@inject IAbductionService AbductionService
+
+<PageTitle>@(_display is null ? "Druckansicht" : $"Entführung {_display.Abduction.CaseNumber}") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_display is null)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Diese Akte existiert nicht (mehr).</MudAlert>
+}
+else
+{
+    var a = _display.Abduction;
+    <PrintFrame Title="@($"Entführung {a.CaseNumber}")" BackHref="@($"/entfuehrungen/{Id}")"
+                 PrintedBy="@_printBy" IsClassified="false">
+        <section>
+            <h2>Stammdaten</h2>
+            <table class="druck-felder">
+                <tbody>
+                    <tr><th>Aktenzeichen</th><td>@a.CaseNumber</td></tr>
+                    <tr><th>Entführter Agent</th><td>@_display.VictimCodename</td></tr>
+                    <tr><th>Täter</th><td>@(_display.PerpetratorName ?? "—")</td></tr>
+                    <tr><th>Zeitpunkt</th><td>@a.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    @if (a.ReleasedAt is { } rel)
+                    {
+                        <tr><th>Freigelassen</th><td>@rel.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td></tr>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(a.Location))
+                    {
+                        <tr><th>Ort</th><td>@a.Location</td></tr>
+                    }
+                    <tr><th>Ausgang</th><td>@AbductionOutcomeDisplay.Name(a.Outcome)</td></tr>
+                    <tr><th>Wahrheitsserum</th><td>@(a.TruthSerum ? "Ja" : "Nein")</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Informationsabfluss</h2>
+            @if (a.InformationLeaked)
+            {
+                <table class="druck-felder">
+                    <tbody>
+                        <tr><th>Schweregrad</th><td>@LeakSeverityDisplay.Name(a.LeakSeverity)</td></tr>
+                        @if (a.LeakCategories != LeakCategory.None)
+                        {
+                            <tr><th>Kategorien</th><td>@string.Join(", ", LeakCategoryDisplay.Flags(a.LeakCategories).Select(LeakCategoryDisplay.Name))</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p>Kein Informationsabfluss dokumentiert.</p>
+            }
+        </section>
+
+        @if (_compromises.Count > 0)
+        {
+            <section>
+                <h2>Kompromittierte Akten</h2>
+                <table class="druck-tabelle">
+                    <thead><tr><th>Akte</th><th>Typ</th><th>Status</th><th>Notiz</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in _compromises)
+                        {
+                            <tr>
+                                <td>@c.TargetDisplay</td>
+                                <td>@c.TargetType</td>
+                                <td>@CompromiseStatusDisplay.Name(c.Status)</td>
+                                <td>@c.Note</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(a.Notes))
+        {
+            <section>
+                <h2>Notizen</h2>
+                <div class="druck-mehrzeilig"><MentionDisplay Text="@a.Notes" Plain="true" /></div>
+            </section>
+        }
+    </PrintFrame>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private string? _printBy;
+    private AbductionDisplay? _display;
+    private List<CompromisedRecord> _compromises = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _printBy = user.GetCodename();
+        _display = await AbductionService.GetDisplayAsync(Id);
+        if (_display is not null)
+        {
+            _compromises = await AbductionService.GetCompromisesForAbductionAsync(Id);
+        }
+        _load = false;
+    }
+}

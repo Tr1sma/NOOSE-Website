@@ -1,0 +1,121 @@
+@* Threat picture: how scores are spread, how the spread moved, what drives the top records. *@
+@* All numbers are classification-filtered per caller. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Models.Threat
+@using NOOSE_Website.Theme
+@inject IThreatTrendService Trend
+@inject IThreatStatisticsService Stats
+@inject NavigationManager Nav
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <HistogramChart Title="Score-Verteilung" Subtitle="Wie viele Akten in welcher Punktespanne liegen"
+                                Buckets="@_buckets" SeriesName="Akten"
+                                XAxisTitle="Bedrohungs-Score" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CorrelationScatter Title="Score gegen Konfidenz"
+                                    Subtitle="Punkte oben links sind hohe Scores auf dünner Datenlage"
+                                    Clouds="@_clouds" XAxisTitle="Konfidenz (%)" YAxisTitle="Score"
+                                    Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <MatrixHeatmap Title="Gefährdungsstufen im Zeitverlauf (Fraktionen)"
+                               Subtitle="Verschiebt sich die Verteilung nach oben oder nach unten?"
+                               Matrix="@_bands" Unit="Fraktionen" Height="300px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ComponentRadar Title="Score-Treiber der Top-Fraktionen"
+                                Subtitle="Punkte je Teil-Score (S1–S4)"
+                                Grid="@_factionProfiles" AxisMax="55" Height="340px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ComponentRadar Title="Score-Treiber der Top-Personen"
+                                Subtitle="Punkte je Teil-Score (P1–P5)"
+                                Grid="@_personProfiles" AxisMax="40" Height="340px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <DumbbellChart Title="Größte Score-Bewegungen (30 Tage)"
+                               Subtitle="Grau ist der alte Stand, farbig der neue"
+                               Moves="@_moves" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <ChartFrame Title="Gefährlichste Fraktionen im Zeitverlauf"
+                            Subtitle="Monat für Monat, absteigend nach Score"
+                            Height="300px" IsEmpty="@(_frames.Count == 0)">
+                    <BarChartRace Frames="@_frames" />
+                </ChartFrame>
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+
+    private IReadOnlyList<ThreatRaceFrame> _frames = [];
+    private IReadOnlyList<ChartMove> _moves = [];
+    private IReadOnlyList<ChartBucket> _buckets = [];
+    private IReadOnlyList<(string Name, IReadOnlyList<ChartPoint> Points)> _clouds = [];
+    private ChartMatrix _bands = ChartMatrix.Empty;
+    private ChartGrid _factionProfiles = ChartGrid.Empty;
+    private ChartGrid _personProfiles = ChartGrid.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
+        var user = (await AuthStateTask).User;
+        _frames = await Trend.GetFactionRaceAsync(user);
+
+        var movers = await Trend.GetTopMoversAsync(user);
+        _moves = movers
+            .Select(m => new ChartMove(
+                (m.Classified ? "🔒 " : string.Empty) + m.Name,
+                TypeLabel(m.EntityType), m.FromScore, m.ToScore, m.Href))
+            .ToList();
+
+        var histogram = await Stats.GetScoreHistogramAsync(Scope);
+        _buckets = histogram.Labels
+            .Select((label, i) => new ChartBucket(label, i * 10, i * 10 + 10,
+                (int)histogram.Series.Sum(s => i < s.Values.Count ? s.Values[i] : 0)))
+            .ToList();
+
+        _clouds = await Stats.GetScoreVsConfidenceAsync(Scope);
+        _bands = await Stats.GetBandOverTimeAsync(Scope, nameof(NOOSE_Website.Data.Entities.Factions.Faction));
+        _factionProfiles = await Stats.GetComponentProfilesAsync(Scope,
+            nameof(NOOSE_Website.Data.Entities.Factions.Faction));
+        _personProfiles = await Stats.GetComponentProfilesAsync(Scope,
+            nameof(NOOSE_Website.Data.Entities.People.Person));
+
+        _first = false;
+        _stale = false;
+    }
+
+    private static string TypeLabel(string entityType) => entityType switch
+    {
+        nameof(NOOSE_Website.Data.Entities.Factions.Faction) => "Fraktion",
+        nameof(NOOSE_Website.Data.Entities.People.Person) => "Person",
+        _ => entityType,
+    };
+}

@@ -15,6 +15,9 @@ public static class Policies
     /// <summary>Configured bootstrap admin: only gate for demo mode and demo data.</summary>
     public const string BootstrapAdmin = "BootstrapAdmin";
 
+    /// <summary>Configured AI owner: the only one who may change NOOSEI quotas; everyone else reads them.</summary>
+    public const string AiOwner = "KiEigner";
+
     /// <summary>May write at all (everyone except read-only supervision). For mutation controls in AuthorizeView.</summary>
     public const string WriteAccess = "Schreibrecht";
 
@@ -38,6 +41,9 @@ public static class Policies
 
     /// <summary>Admin page access: admin OR read-only supervision (opens read-only).</summary>
     public const string AdminPage = "AdminSeite";
+
+    /// <summary>Counter-intelligence cockpit: leadership but never read-only supervision.</summary>
+    public const string CounterIntel = "Gegenaufklaerung";
 
     /// <summary>Set "secured state-threatening" directly: rank ≥ Senior Special Agent or admin.</summary>
     public const string HighestClassification = "HoechsteEinstufung";

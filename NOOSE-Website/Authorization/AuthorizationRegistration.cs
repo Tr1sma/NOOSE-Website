@@ -25,6 +25,9 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.BootstrapAdmin, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsBootstrapAdmin()))
+            .AddPolicy(Policies.AiOwner, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.IsAiOwner()))
             // write guards
             .AddPolicy(Policies.WriteAccess, p => p
                 .RequireAuthenticatedUser()
@@ -52,6 +55,9 @@ public static class AuthorizationRegistration
             .AddPolicy(Policies.AdminPage, p => p
                 .RequireAuthenticatedUser()
                 .RequireAssertion(ctx => ctx.User.IsAdmin() || ctx.User.IsOnlyReader()))
+            .AddPolicy(Policies.CounterIntel, p => p
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ctx => ctx.User.MayCounterIntel()))
             .AddPolicy(Policies.HighestClassification, p => p
                 .RequireAuthenticatedUser()
                 .AddRequirements(new RankRequirement(Rank.SeniorSpecialAgent)))

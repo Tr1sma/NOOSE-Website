@@ -1,0 +1,28 @@
+@* Loads a record's threat-score history and renders it as a line chart. Read-only; the caller has already gated visibility. *@
+@using NOOSE_Website.Models.Threat
+@inject IThreatTrendService Trend
+
+<ThreatTrendChart Title="@Title" Points="_points" Height="@Height" />
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = "Bedrohungs-Score-Verlauf";
+    [Parameter] public string Height { get; set; } = "260px";
+    [Parameter] public int Days { get; set; } = 180;
+
+    private IReadOnlyList<ThreatScorePoint> _points = Array.Empty<ThreatScorePoint>();
+    private string _loadedKey = string.Empty;
+
+    // reload guard: the component instance may be recycled across records
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{EntityType}:{EntityId}:{Days}";
+        if (key == _loadedKey)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _points = await Trend.GetHistoryAsync(EntityType, EntityId, Days);
+    }
+}

@@ -1,8 +1,12 @@
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Announcements;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
+using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Meetings;
@@ -13,6 +17,7 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
+using FeedbackEntity = NOOSE_Website.Data.Entities.Feedback.Feedback;
 
 namespace NOOSE_Website.Services;
 
@@ -56,6 +61,37 @@ public static class TrashProjection
                  $"{x.Days} Tage",
                  AbsenceCategoryDisplay.Name(x.Category)),
             x.DeletedAt);
+
+    // abductions identify by Aktenzeichen; the victim codename is the detail
+    public static TrashItem Abduction(AgentAbduction x)
+        => new("entfuehrungen", x.Id, x.CaseNumber, x.VictimAgent?.Codename ?? x.VictimAgentId,
+            AbductionOutcomeDisplay.Name(x.Outcome), x.DeletedAt);
+
+    // evidence items carry no Aktenzeichen; the name identifies the row
+    public static TrashItem EvidenceItem(EvidenceItem x)
+        => new("asservate-items", x.Id, null, x.Name, x.Description, x.DeletedAt);
+
+    public static TrashItem EvidenceEntry(EvidenceEntry x)
+        => new("asservate-eintraege", x.Id, x.CaseNumber, EvidenceEntryTypeDisplay.Name(x.Type),
+            Moment(x.Timestamp), x.DeletedAt);
+
+    public static TrashItem KassenBuchung(KassenBuchung x)
+        => new("kasse-buchungen", x.Id, x.CaseNumber,
+            $"{KassenKontoDisplay.Name(x.Account)} · {KassenBuchungArtDisplay.Name(x.Kind)}",
+            Join(Money.Format(x.Amount), Moment(x.Timestamp)), x.DeletedAt);
+
+    public static TrashItem FinancingRequest(FinancingRequest x)
+        => new("finanzierungen", x.Id, x.CaseNumber, FinancingStatusDisplay.Name(x.Status),
+            Join(Money.Format(x.ApprovedSubsidy ?? x.RequestedSubsidy), $"{x.Lines.Count} Positionen"), x.DeletedAt);
+
+    // feedback carries no Aktenzeichen; the kind plus a text snippet identifies the row
+    public static TrashItem Feedback(FeedbackEntity x)
+        => new("feedback", x.Id, null,
+            $"{FeedbackKindDisplay.Name(x.Kind)}: {Snippet(x.Text)}",
+            x.Agent?.Codename ?? x.AgentId, x.DeletedAt);
+
+    private static string Snippet(string text)
+        => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");
 
     private static string Moment(DateTime value) => value.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 

@@ -1,0 +1,489 @@
+@* Rule builder: every condition category is optional, they combine with AND. Returns the input. *@
+@using NOOSE_Website.Models.CounterIntel
+@inject ICounterIntelRuleService RuleService
+@inject ICounterIntelService CounterIntel
+@inject ITagService TagService
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3" Style="min-width:min(720px, 80vw);">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Innerhalb einer Auswahl gilt <b>ODER</b>, zwischen den Abschnitten <b>UND</b>.
+                    Leer heißt „keine Einschränkung“.
+                </MudAlert>
+
+                <MudExpansionPanels MultiExpansion="true" Elevation="1">
+
+                    @* ---- basics ---- *@
+                    <MudExpansionPanel Text="Grunddaten" Expanded="true">
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="_input.Name" Label="Regel-Name" Variant="Variant.Outlined"
+                                          Required="true" RequiredError="Name ist erforderlich" Immediate="true"
+                                          HelperText="Erscheint als Muster-Chip bei jeder Auffälligkeit." />
+                            <MudTextField @bind-Value="_input.Description" Label="Beschreibung" Lines="2"
+                                          Variant="Variant.Outlined" HelperText="Wofür diese Regel da ist (optional)." />
+                            <MudGrid>
+                                <MudItem xs="12" sm="4">
+                                    <MudSelect T="CounterIntelSeverity" Label="Schweregrad" @bind-Value="_input.Severity"
+                                               Variant="Variant.Outlined" Dense="true">
+                                        @foreach (var s in CounterIntelSeverityDisplay.All)
+                                        {
+                                            <MudSelectItem Value="s">@CounterIntelSeverityDisplay.Name(s)</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudNumericField T="int" @bind-Value="_input.Order" Label="Reihenfolge"
+                                                     Variant="Variant.Outlined" HelperText="Kleinere Werte zuerst." />
+                                </MudItem>
+                                <MudItem xs="6" sm="4" Class="d-flex align-center">
+                                    <MudSwitch T="bool" @bind-Value="_input.IsActive" Color="Color.Primary" Label="Aktiv" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    @* ---- events ---- *@
+                    <MudExpansionPanel Text="@($"Ereignisse — {ActionsLabel}")">
+                        <MudStack Spacing="3">
+                            <MudSelect T="CounterIntelActionKind" Label="Aktionen" MultiSelection="true"
+                                       SelectedValues="_definition.Actions" SelectedValuesChanged="OnActionsChanged"
+                                       Variant="Variant.Outlined" Dense="true"
+                                       HelperText="Leer = jede Aktion. „Gelesen“ kommt aus dem Zugriffsprotokoll, der Rest aus dem Audit-Protokoll.">
+                                @foreach (var a in CounterIntelActionKindDisplay.All)
+                                {
+                                    <MudSelectItem Value="a">@CounterIntelActionKindDisplay.Name(a)</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudNumericField T="int" @bind-Value="_definition.WindowDays" Label="Zeitraum (Tage)"
+                                             Min="1" Max="90" Variant="Variant.Outlined"
+                                             HelperText="Wie weit die Regel zurückschaut (max. 90 Tage)." />
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    @* ---- target ---- *@
+                    <MudExpansionPanel Text="@($"Ziel-Akte — {TargetLabel}")">
+                        <MudStack Spacing="3">
+                            <MudSelect T="string" Label="Aktentypen" MultiSelection="true"
+                                       SelectedValues="_definition.EntityTypes" SelectedValuesChanged="OnTypesChanged"
+                                       Variant="Variant.Outlined" Dense="true" HelperText="Leer = alle Aktentypen.">
+                                @foreach (var t in CustomFieldRecordTypes.All)
+                                {
+                                    <MudSelectItem Value="@t.TypeName">@t.Display</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <div>
+                                <MudAutocomplete T="RecordOption" Label="Bestimmte Akten" Variant="Variant.Outlined" Dense="true"
+                                                 SearchFunc="SearchRecordsAsync" ToStringFunc="@(r => r?.Label ?? string.Empty)"
+                                                 ValueChanged="AddRecord" Clearable="true" ResetValueOnEmptyText="true"
+                                                 HelperText="Optional: Köder-Akten, auf die jeder Zugriff zählt. Leer = alle Akten." />
+                                @if (_pickedRecords.Count > 0)
+                                {
+                                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
+                                        @foreach (var r in _pickedRecords)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                                                     OnClose="@(() => RemoveRecord(r.Id))">@r.Label</MudChip>
+                                        }
+                                    </MudStack>
+                                }
+                            </div>
+
+                            <MudSelect T="bool?" Label="Verschlusssache" @bind-Value="_definition.ClassifiedOnly"
+                                       Variant="Variant.Outlined" Dense="true">
+                                <MudSelectItem T="bool?" Value="@((bool?)null)">egal</MudSelectItem>
+                                <MudSelectItem T="bool?" Value="@((bool?)true)">nur VS-Akten</MudSelectItem>
+                                <MudSelectItem T="bool?" Value="@((bool?)false)">nur Akten ohne VS</MudSelectItem>
+                            </MudSelect>
+
+                            <MudSelect T="Classification" Label="Einstufung" MultiSelection="true"
+                                       SelectedValues="_definition.Classifications" SelectedValuesChanged="OnClassificationsChanged"
+                                       Variant="Variant.Outlined" Dense="true" HelperText="Leer = jede Einstufung.">
+                                @foreach (var c in ClassificationDisplay.All)
+                                {
+                                    <MudSelectItem Value="c">@ClassificationDisplay.Name(c)</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <MudSelect T="string" Label="Tags" MultiSelection="true"
+                                       SelectedValues="_definition.TagIds" SelectedValuesChanged="OnTagsChanged"
+                                       Variant="Variant.Outlined" Dense="true"
+                                       HelperText="Ziel-Akte trägt mindestens einen dieser Tags. Leer = keine Tag-Bedingung.">
+                                @foreach (var t in _tags)
+                                {
+                                    <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    @* ---- actor ---- *@
+                    <MudExpansionPanel Text="@($"Akteur — {ActorLabel}")">
+                        <MudStack Spacing="3">
+                            <MudSelect T="Rank" Label="Dienstgrade" MultiSelection="true"
+                                       SelectedValues="_definition.ActorRanks" SelectedValuesChanged="OnRanksChanged"
+                                       Variant="Variant.Outlined" Dense="true" HelperText="Leer = jeder Dienstgrad.">
+                                @foreach (var r in Ranks)
+                                {
+                                    <MudSelectItem Value="r">@RankDisplay.Name(r)</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <MudSelect T="string" Label="Nur diese Agenten" MultiSelection="true"
+                                       SelectedValues="_definition.ActorIds" SelectedValuesChanged="OnActorsChanged"
+                                       Variant="Variant.Outlined" Dense="true" HelperText="Leer = alle Agenten.">
+                                @foreach (var a in _agents)
+                                {
+                                    <MudSelectItem Value="@a.Id">@a.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <MudSelect T="string" Label="Diese Agenten nie" MultiSelection="true"
+                                       SelectedValues="_definition.ExcludedActorIds" SelectedValuesChanged="OnExcludedChanged"
+                                       Variant="Variant.Outlined" Dense="true" HelperText="Bekannte Vielnutzer ausnehmen.">
+                                @foreach (var a in _agents)
+                                {
+                                    <MudSelectItem Value="@a.Id">@a.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <MudGrid>
+                                <MudItem xs="12" sm="4">@Flag("TRU", _definition.RequireTru, v => _definition.RequireTru = v)</MudItem>
+                                <MudItem xs="12" sm="4">@Flag("HRB", _definition.RequireHrb, v => _definition.RequireHrb = v)</MudItem>
+                                <MudItem xs="12" sm="4">@Flag("Admin", _definition.RequireAdmin, v => _definition.RequireAdmin = v)</MudItem>
+                            </MudGrid>
+
+                            <MudSelect T="CounterIntelPartnerScope" Label="Zugehörigkeit" @bind-Value="_definition.PartnerScope"
+                                       Variant="Variant.Outlined" Dense="true">
+                                @foreach (var s in CounterIntelPartnerScopeDisplay.All)
+                                {
+                                    <MudSelectItem Value="s">@CounterIntelPartnerScopeDisplay.Name(s)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    @* ---- time ---- *@
+                    <MudExpansionPanel Text="@($"Zeit — {TimeLabel}")">
+                        <MudStack Spacing="3">
+                            <MudGrid>
+                                <MudItem xs="6">
+                                    <MudNumericField T="int" @bind-Value="_definition.FromHour" Label="Von (Stunde)"
+                                                     Min="0" Max="23" Variant="Variant.Outlined" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudNumericField T="int" @bind-Value="_definition.ToHour" Label="Bis (Stunde)"
+                                                     Min="0" Max="23" Variant="Variant.Outlined" />
+                                </MudItem>
+                            </MudGrid>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Gleiche Werte = ganzer Tag. Über Mitternacht ist erlaubt (22 bis 6 = Nachtfenster).
+                            </MudText>
+                            <MudSelect T="DayOfWeek" Label="Wochentage" MultiSelection="true"
+                                       SelectedValues="_definition.Weekdays" SelectedValuesChanged="OnWeekdaysChanged"
+                                       Variant="Variant.Outlined" Dense="true" HelperText="Leer = jeden Tag.">
+                                @foreach (var d in Weekdays)
+                                {
+                                    <MudSelectItem Value="d">@WeekdayName(d)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    @* ---- trigger ---- *@
+                    <MudExpansionPanel Text="@($"Auslösung — {CounterIntelRuleDisplay.Trigger(_definition)}")" Expanded="true">
+                        <MudGrid>
+                            <MudItem xs="12" sm="6">
+                                <MudNumericField T="int" @bind-Value="_definition.Threshold" Label="Schwelle (ab)"
+                                                 Min="1" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="CounterIntelCountMode" Label="Gezählt werden" @bind-Value="_definition.CountMode"
+                                           Variant="Variant.Outlined" Dense="true">
+                                    @foreach (var m in CounterIntelCountModeDisplay.All)
+                                    {
+                                        <MudSelectItem Value="m">@CounterIntelCountModeDisplay.Name(m)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="CounterIntelBucket" Label="Bezugsfenster" @bind-Value="_definition.Bucket"
+                                           Variant="Variant.Outlined" Dense="true">
+                                    @foreach (var b in CounterIntelBucketDisplay.All)
+                                    {
+                                        <MudSelectItem Value="b">@CounterIntelBucketDisplay.Name(b)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            @if (_definition.Bucket == CounterIntelBucket.Sliding)
+                            {
+                                <MudItem xs="12" sm="6">
+                                    <MudNumericField T="int" @bind-Value="_definition.SlidingMinutes" Label="Fenster (Minuten)"
+                                                     Min="1" Max="1440" Variant="Variant.Outlined" />
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+
+                @* ---- preview ---- *@
+                <MudPaper Class="pa-3" Elevation="0" Outlined="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Preview"
+                                   OnClick="PreviewAsync" Disabled="_previewing">
+                            Vorschau
+                        </MudButton>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@CounterIntelRuleDisplay.Summary(_definition)</MudText>
+                    </MudStack>
+                    @if (_previewing)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+                    }
+                    else if (_preview is not null)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            <b>@_preview.Count</b> Treffer bei <b>@_preview.Select(f => f.AgentId).Distinct().Count()</b> Agenten
+                            im aktuellen Bestand.
+                        </MudText>
+                        @foreach (var f in _preview.Take(5))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@f.AgentName — @f.Detail</MudText>
+                        }
+                    }
+                    @if (_previewError is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-2">@_previewError</MudAlert>
+                    }
+                </MudPaper>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Existing rule to prefill when editing; null when creating.</summary>
+    [Parameter] public CounterIntelRuleView? Exists { get; set; }
+
+    private static readonly Rank[] Ranks = Enum.GetValues<Rank>();
+    private static readonly DayOfWeek[] Weekdays =
+        [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+         DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
+
+    private MudForm _form = default!;
+    private ClaimsPrincipal _user = default!;
+    private readonly CounterIntelRuleInput _input = new();
+    private CounterIntelRuleDefinition _definition = new();
+
+    private IReadOnlyList<AgentOption> _agents = Array.Empty<AgentOption>();
+    private List<Tag> _tags = new();
+    private List<RecordOption> _pickedRecords = new();
+
+    private IReadOnlyList<InsiderFlag>? _preview;
+    private string? _previewError;
+    private bool _previewing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+
+        if (Exists is { } rule)
+        {
+            _input.Name = rule.Name;
+            _input.Description = rule.Description;
+            _input.Severity = rule.Severity;
+            _input.IsActive = rule.IsActive;
+            _input.Order = rule.Order;
+            // edit a copy so cancelling leaves the loaded rule untouched
+            _definition = rule.Definition.Clone();
+        }
+        _input.Definition = _definition;
+
+        try
+        {
+            _agents = await RuleService.GetAgentOptionsAsync(_user);
+            _tags = await TagService.GetAllAsync();
+            if (_definition.EntityIds.Count > 0)
+            {
+                _pickedRecords = (await RuleService.DescribeRecordsAsync(_user, _definition.EntityIds)).ToList();
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            /* ignore */
+        }
+    }
+
+    // ---- multi-select plumbing: MudSelect hands back IEnumerable, the definition stores List ----
+
+    private void OnActionsChanged(IEnumerable<CounterIntelActionKind> values) => _definition.Actions = values.ToList();
+    private void OnTypesChanged(IEnumerable<string> values) => _definition.EntityTypes = values.ToList();
+    private void OnClassificationsChanged(IEnumerable<Classification> values) => _definition.Classifications = values.ToList();
+    private void OnTagsChanged(IEnumerable<string> values) => _definition.TagIds = values.ToList();
+    private void OnRanksChanged(IEnumerable<Rank> values) => _definition.ActorRanks = values.ToList();
+    private void OnActorsChanged(IEnumerable<string> values) => _definition.ActorIds = values.ToList();
+    private void OnExcludedChanged(IEnumerable<string> values) => _definition.ExcludedActorIds = values.ToList();
+    private void OnWeekdaysChanged(IEnumerable<DayOfWeek> values) => _definition.Weekdays = values.ToList();
+
+    private async Task<IEnumerable<RecordOption>> SearchRecordsAsync(string? text, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(text) || text.Length < 2)
+        {
+            return Array.Empty<RecordOption>();
+        }
+        try
+        {
+            return await RuleService.SearchRecordsAsync(_user, _definition.EntityTypes, text, token);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Array.Empty<RecordOption>();
+        }
+    }
+
+    private void AddRecord(RecordOption? record)
+    {
+        if (record is null || _definition.EntityIds.Contains(record.Id))
+        {
+            return;
+        }
+        _definition.EntityIds.Add(record.Id);
+        _pickedRecords.Add(record);
+    }
+
+    private void RemoveRecord(string id)
+    {
+        _definition.EntityIds.Remove(id);
+        _pickedRecords.RemoveAll(r => r.Id == id);
+    }
+
+    private async Task PreviewAsync()
+    {
+        _previewing = true;
+        _preview = null;
+        _previewError = null;
+        try
+        {
+            CounterIntelRuleValidation.Validate(_definition);
+            var draft = new CounterIntelRuleView(
+                Exists?.Id ?? string.Empty, string.IsNullOrWhiteSpace(_input.Name) ? "Entwurf" : _input.Name,
+                _input.Description, _input.Severity, true, _input.Order, _definition);
+            _preview = await CounterIntel.PreviewAsync(_user, draft);
+        }
+        catch (Exception ex)
+        {
+            _previewError = ex.Message;
+        }
+        _previewing = false;
+    }
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        try
+        {
+            CounterIntelRuleValidation.Validate(_input);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _previewError = ex.Message;
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(_input));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    // ---- header summaries, so a collapsed panel still says what it does ----
+
+    private string ActionsLabel => _definition.Actions.Count == 0
+        ? "alle Aktionen"
+        : string.Join(" / ", _definition.Actions.Select(CounterIntelActionKindDisplay.Name));
+
+    private string TargetLabel
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (_definition.EntityTypes.Count > 0) parts.Add($"{_definition.EntityTypes.Count} Typ(en)");
+            if (_definition.EntityIds.Count > 0) parts.Add($"{_definition.EntityIds.Count} Akte(n)");
+            if (_definition.ClassifiedOnly is { } c) parts.Add(c ? "nur VS" : "ohne VS");
+            if (_definition.Classifications.Count > 0) parts.Add($"{_definition.Classifications.Count} Einstufung(en)");
+            if (_definition.TagIds.Count > 0) parts.Add($"{_definition.TagIds.Count} Tag(s)");
+            return parts.Count == 0 ? "alle Akten" : string.Join(", ", parts);
+        }
+    }
+
+    private string ActorLabel
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (_definition.ActorRanks.Count > 0) parts.Add($"{_definition.ActorRanks.Count} Rang/Ränge");
+            if (_definition.ActorIds.Count > 0) parts.Add($"{_definition.ActorIds.Count} Agent(en)");
+            if (_definition.ExcludedActorIds.Count > 0) parts.Add($"{_definition.ExcludedActorIds.Count} ausgenommen");
+            if (_definition.RequireTru is not null) parts.Add("TRU");
+            if (_definition.RequireHrb is not null) parts.Add("HRB");
+            if (_definition.RequireAdmin is not null) parts.Add("Admin");
+            if (_definition.PartnerScope != CounterIntelPartnerScope.Any)
+            {
+                parts.Add(CounterIntelPartnerScopeDisplay.Name(_definition.PartnerScope));
+            }
+            return parts.Count == 0 ? "alle Agenten" : string.Join(", ", parts);
+        }
+    }
+
+    private string TimeLabel
+    {
+        get
+        {
+            var window = _definition.IsAllDay ? "ganztägig" : $"{_definition.FromHour}–{_definition.ToHour} Uhr";
+            return _definition.Weekdays.Count is > 0 and < 7
+                ? $"{window}, {string.Join("/", _definition.Weekdays.Select(WeekdayShort))}"
+                : window;
+        }
+    }
+
+    private static string WeekdayName(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Montag",
+        DayOfWeek.Tuesday => "Dienstag",
+        DayOfWeek.Wednesday => "Mittwoch",
+        DayOfWeek.Thursday => "Donnerstag",
+        DayOfWeek.Friday => "Freitag",
+        DayOfWeek.Saturday => "Samstag",
+        _ => "Sonntag",
+    };
+
+    private static string WeekdayShort(DayOfWeek day) => WeekdayName(day)[..2];
+
+    private RenderFragment Flag(string label, bool? value, Action<bool?> set) =>@<MudSelect T="bool?" Label="@label"
+        Value="value" ValueChanged="set" Variant="Variant.Outlined" Dense="true">
+        <MudSelectItem T="bool?" Value="@((bool?)null)">egal</MudSelectItem>
+        <MudSelectItem T="bool?" Value="@((bool?)true)">@($"nur {label}")</MudSelectItem>
+        <MudSelectItem T="bool?" Value="@((bool?)false)">@($"ohne {label}")</MudSelectItem>
+    </MudSelect>;
+
+    /// <summary>Shows the create/edit dialog; returns null if cancelled.</summary>
+    public static async Task<CounterIntelRuleInput?> ShowAsync(
+        IDialogService dialog, string title, CounterIntelRuleView? exists = null)
+    {
+        var parameters = new DialogParameters<CounterIntelRuleDialog> { { x => x.Exists, exists } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var reference = await dialog.ShowAsync<CounterIntelRuleDialog>(title, parameters, options);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: CounterIntelRuleInput input } ? input : null;
+    }
+}

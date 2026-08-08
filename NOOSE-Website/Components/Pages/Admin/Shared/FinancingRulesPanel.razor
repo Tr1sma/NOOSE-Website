@@ -1,0 +1,120 @@
+@* Per-rank funding budget and carry-over share; the rules behind every budget figure. *@
+@inject IFinancingConfigService Config
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h6">Monatsbudget je Dienstgrad</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Das Grundbudget steht jedem Agenten des Dienstgrades pro Kalendermonat zur Verfügung. Vom nicht
+        genutzten Rest wandert der eingestellte Anteil in den Folgemonat — und nur dorthin, nicht weiter.
+        Ein individuell gesetztes Budget in der Personalakte schlägt den Wert hier.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Dienstgrad</th>
+                    <th style="width:220px">Grundbudget ($)</th>
+                    <th style="width:180px">Übertrag (%)</th>
+                    <th style="text-align:right">Maximal im Monat</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var rank in RankDisplay.All)
+                {
+                    var budget = _rows[rank];
+                    <tr>
+                        <td>@RankDisplay.Name(rank)</td>
+                        <td>
+                            <MudNumericField T="decimal" @bind-Value="budget.BaseMonthly" Min="0" Variant="Variant.Outlined"
+                                             Margin="Margin.Dense" Adornment="Adornment.End" AdornmentText="$"
+                                             HideSpinButtons="true" />
+                        </td>
+                        <td>
+                            <MudNumericField T="int" @bind-Value="budget.CarryOverPercent" Min="0" Max="100"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense"
+                                             Adornment="Adornment.End" AdornmentText="%" />
+                        </td>
+                        <td style="text-align:right">
+                            @Money.Format(budget.BaseMonthly + FinancingMath.CarryOut(budget.BaseMonthly, budget.CarryOverPercent))
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+            <MudButton OnClick="ResetAsync" StartIcon="@Icons.Material.Filled.RestartAlt">Auf Standard zurücksetzen</MudButton>
+            <AuthorizeView Policy="@Policies.Leadership" Context="save">
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save"
+                           Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+            </AuthorizeView>
+        </MudStack>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _saving;
+    private ClaimsPrincipal _user = default!;
+    private Dictionary<Rank, FinancingRankBudget> _rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        // editable read: never from the cache, or the form would show a stale state
+        var config = await Config.GetEditableAsync();
+        Fill(config);
+        _load = false;
+    }
+
+    private void Fill(FinancingBudgetConfig config)
+        => _rows = RankDisplay.All.ToDictionary(rank => rank, rank =>
+        {
+            var stored = config.For(rank);
+            return new FinancingRankBudget { BaseMonthly = stored.BaseMonthly, CarryOverPercent = stored.CarryOverPercent };
+        });
+
+    private void ResetAsync()
+    {
+        Fill(FinancingBudgetConfig.Default());
+        Snackbar.Add("Standardwerte eingesetzt — noch nicht gespeichert.", Severity.Info);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var config = new FinancingBudgetConfig
+            {
+                Ranks = _rows.ToDictionary(entry => FinancingBudgetConfig.RankKey(entry.Key), entry => entry.Value),
+            };
+            await Config.SaveAsync(config, _user);
+            Snackbar.Add("Finanzierungs-Budgets gespeichert.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

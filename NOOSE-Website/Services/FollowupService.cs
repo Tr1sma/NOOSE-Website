@@ -78,7 +78,7 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory, INotific
             throw new UnauthorizedAccessException("Für diese Akte darf keine Wiedervorlage angelegt werden.");
         }
 
-        var responsibleId = await DetermineResponsibleAsync(db, input.ResponsibleAgentId, actor, cancellationToken);
+        var responsibleId = await DetermineResponsibleAsync(db, input.ResponsibleAgentId, current: null, actor, cancellationToken);
 
         var note = input.Note.TrimToNull();
         db.Followups.Add(new Followup
@@ -112,7 +112,8 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory, INotific
         var oldNote = w.Note;
         w.DueAt = newDue;
         w.Note = input.Note.TrimToNull();
-        w.ResponsibleAgentId = await DetermineResponsibleAsync(db, input.ResponsibleAgentId, actor, cancellationToken);
+        w.ResponsibleAgentId = await DetermineResponsibleAsync(db, input.ResponsibleAgentId,
+            w.ResponsibleAgentId, actor, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         await MentionNotify.DeltaAsync(notifications, oldNote, w.Note, Mentioned, w.EntityType, w.EntityId,
@@ -209,7 +210,11 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory, INotific
         return result;
     }
 
-    private static async Task<string?> DetermineResponsibleAsync(AppDbContext db, string? desired,
+    /// <summary>Resolves the responsible agent; only a changed pick is validated.</summary>
+    /// <remarks>
+    /// Re-saving a followup whose responsible has since left must not fail, so an unchanged id passes through.
+    /// </remarks>
+    private static async Task<string?> DetermineResponsibleAsync(AppDbContext db, string? desired, string? current,
         ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         // No selection defaults to the creator.
@@ -217,10 +222,13 @@ public class FollowupService(IDbContextFactory<AppDbContext> dbFactory, INotific
         {
             return actor.GetAgentId();
         }
-        var valid = await db.Users.AnyAsync(u => u.Id == desired && u.Status == AgentStatus.Active, cancellationToken);
-        if (!valid)
+        if (desired == current)
         {
-            throw new InvalidOperationException("Der gewählte zuständige Agent wurde nicht gefunden oder ist nicht aktiv.");
+            return desired;
+        }
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == desired, cancellationToken))
+        {
+            throw new InvalidOperationException("Der gewählte zuständige Agent wurde nicht gefunden oder ist nicht zuteilbar.");
         }
         return desired;
     }

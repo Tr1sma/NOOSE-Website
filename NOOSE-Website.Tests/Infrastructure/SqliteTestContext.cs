@@ -37,6 +37,9 @@ public sealed class SqliteTestContext : IDisposable
 
     public DbContextOptions<AppDbContext> Options { get; }
 
+    /// <summary>The shared connection, for tests that need their own options (e.g. with interceptors attached).</summary>
+    public SqliteConnection Connection => _connection;
+
     /// <summary>Factory mirroring the production `IDbContextFactory` injection pattern.</summary>
     public TestDbContextFactory Factory { get; }
 

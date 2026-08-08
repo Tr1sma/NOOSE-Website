@@ -1,0 +1,85 @@
+@page "/informanten"
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Informants
+@inject IInformantService Service
+@inject NavigationManager Nav
+
+<PageTitle>Informanten · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.VisibilityOff"
+            Title="Informanten"
+            Subtitle="Vertrauliche Quellen (V-Personen) — kein Deckname, nur Klarname. Sichtbar für Führung und den zuständigen Führungsagenten.">
+    <Actions>
+        @if (_mayCreate)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       Href="/informanten/neu">Neuer Informant</MudButton>
+        }
+    </Actions>
+</PageHeader>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_list.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.VisibilityOff" Text="Keine für dich sichtbaren Informanten." />
+}
+else
+{
+    <MudGrid>
+        @foreach (var i in _list)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="pa-4" Elevation="2" Style="cursor:pointer;height:100%;" @onclick="@(() => Nav.NavigateTo($"/informanten/{i.Id}"))">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.h6">@i.Name</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@StatusColour(i.Status)">@InformantEnumDisplay.Status(i.Status)</MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@i.CaseNumber · @InformantEnumDisplay.Reliability(i.Reliability)</MudText>
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap mt-2">
+                        @if (i.PersonId is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
+                                     Icon="@Icons.Material.Filled.Badge">Akte @i.PersonCaseNumber</MudChip>
+                        }
+                        @if (i.FactionId is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                     Icon="@Icons.Material.Filled.Groups">@i.FactionName</MudChip>
+                        }
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(i.HandlerName))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">Führung: @i.HandlerName</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _mayCreate;
+    private List<InformantDisplay> _list = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthStateTask).User;
+        _mayCreate = user.IsLeadership();
+        _list = await Service.GetListAsync(user);
+        _load = false;
+    }
+
+    private static Color StatusColour(InformantStatus s) => s switch
+    {
+        InformantStatus.Active => Color.Success,
+        InformantStatus.Inactive => Color.Default,
+        InformantStatus.Burned => Color.Error,
+        _ => Color.Default,
+    };
+}

@@ -1,0 +1,234 @@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Llm
+@inject ILlmRequestLogService Log
+@inject ISnackbar Snackbar
+
+@* Quota tokens and durations only. Operating quality is not a price, so no money is computed anywhere here — which
+   is also why the cost-visibility guard has nothing to catch on this page. *@
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Wie NOOSEI läuft — Erfolgsquote, Tempo, Werkzeugeinsatz und wie viel des Prompts der Endpunkt aus seinem
+    eigenen Cache bedient hat. Gerechnet wird ausschließlich in Kontingent-Token.
+</MudText>
+
+<MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudSelect T="int" @bind-Value="_days" @bind-Value:after="LoadAsync" Label="Zeitraum" Dense="true"
+               Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px;">
+        <MudSelectItem T="int" Value="7">letzte 7 Tage</MudSelectItem>
+        <MudSelectItem T="int" Value="30">letzte 30 Tage</MudSelectItem>
+        <MudSelectItem T="int" Value="90">letzte 90 Tage</MudSelectItem>
+    </MudSelect>
+    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadAsync" Disabled="_busy">Aktualisieren</MudButton>
+</MudStack>
+
+@if (_busy)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_report is not { TotalRequests: > 0 } report)
+{
+    <EmptyState Icon="@Icons.Material.Filled.QueryStats" Text="In diesem Zeitraum gibt es keine NOOSEI-Anfragen." />
+}
+else
+{
+    <MudGrid Spacing="2" Class="mb-4">
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Forum" Label="Anfragen"
+                      Value="@report.TotalRequests.ToString("N0")" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.CheckCircle" Label="Erfolgsquote"
+                      Value="@report.SuccessShare.ToString("P0")"
+                      Hint="Anteil der Anfragen, die eine Antwort geliefert haben."
+                      Colour="@(report.SuccessShare >= 0.95 ? Color.Success : report.SuccessShare >= 0.85 ? Color.Warning : Color.Error)" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            @* the one figure that moves when a round stops breaking the cached prompt prefix *@
+            <StatTile Icon="@Icons.Material.Filled.Bolt" Label="Prompt aus dem Cache"
+                      Value="@report.CacheHitShare.ToString("P0")"
+                      Hint="Anteil der Eingabe-Token, die der Endpunkt aus seinem Cache bedient hat."
+                      Colour="@(report.CacheHitShare >= 0.5 ? Color.Success : report.CacheHitShare > 0 ? Color.Warning : Color.Default)" />
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <StatTile Icon="@Icons.Material.Filled.Token" Label="Kontingent-Token"
+                      Value="@report.QuotaTokens.ToString("N0")" />
+        </MudItem>
+    </MudGrid>
+
+    @if (report.ToolCalls > 0)
+    {
+        <MudAlert Severity="@(report.ToolFailureShare >= 0.25 ? Severity.Warning : Severity.Normal)" Dense="true" Class="mb-4">
+            @report.ToolCalls.ToString("N0") Werkzeugaufrufe, davon @report.ToolFailures.ToString("N0")
+            ohne Ergebnis (@report.ToolFailureShare.ToString("P0")).
+            @* a repeat is counted here too: it is a call the model paid for and learned nothing from *@
+            Mitgezählt sind Wiederholungen, die aus dem Verlauf beantwortet wurden.
+        </MudAlert>
+    }
+
+    <MudText Typo="Typo.subtitle2" Class="mb-2">Je Funktion</MudText>
+    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-6">
+        <thead>
+            <tr>
+                <th>Funktion</th>
+                <th class="text-right">Anfragen</th>
+                <th class="text-right">Erfolg</th>
+                <th class="text-right">Median</th>
+                <th class="text-right">p95</th>
+                <th class="text-right">davon Werkzeuge</th>
+                <th class="text-right">Kontingent-Token</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var stat in report.ByFeature)
+            {
+                <tr>
+                    <td>@LlmFeatureDisplay.Name(stat.Feature)</td>
+                    <td class="text-right">@stat.Total.ToString("N0")</td>
+                    <td class="text-right">
+                        <MudText Typo="Typo.body2" Color="@(stat.SuccessShare >= 0.95 ? Color.Success : stat.SuccessShare >= 0.85 ? Color.Warning : Color.Error)">
+                            @stat.SuccessShare.ToString("P0")
+                        </MudText>
+                    </td>
+                    <td class="text-right">@Seconds(stat.MedianMs)</td>
+                    <td class="text-right">@Seconds(stat.P95Ms)</td>
+                    @* duration minus time inside the endpoint: says whether a slow answer was the model or the database *@
+                    <td class="text-right mud-text-secondary">@(stat.MedianToolMs > 0 ? Seconds(stat.MedianToolMs) : "—")</td>
+                    <td class="text-right">@stat.QuotaTokens.ToString("N0")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Werkzeuge</MudText>
+            @if (report.Tools.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Kein Werkzeug wurde benutzt.</MudText>
+            }
+            else
+            {
+                @Bars(report.Tools)
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1 d-block">
+                    @* said out loud: a truncated ranking otherwise reads as a complete one *@
+                    Aus den neuesten @report.ToolSample.ToString("N0") Anfragen des Zeitraums.
+                </MudText>
+            }
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Werkzeugrunden</MudText>
+            @* says directly whether MaxToolRounds is set right: a pile at the ceiling means it is too low *@
+            @Bars(report.Rounds)
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Wie die Runde endete</MudText>
+            @if (report.Withdrawals.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Anfrage mit Werkzeugen.</MudText>
+            }
+            else
+            {
+                @Bars(report.Withdrawals)
+            }
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Fehler</MudText>
+            @if (report.Failures.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine fehlgeschlagene Anfrage.</MudText>
+            }
+            else
+            {
+                @Bars(report.Failures)
+            }
+        </MudItem>
+        @if (report.FinishReasons.Count > 0)
+        {
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Abschlussgrund des Modells</MudText>
+                @Bars(report.FinishReasons)
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-4 d-block">
+        Anfragen von vor dieser Auswertung tragen die neuen Felder nicht; sie zählen bei Anzahl und Token mit,
+        fehlen aber in den Verteilungen darunter.
+    </MudText>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal? _user;
+    private LlmOperationsReport? _report;
+    private int _days = 30;
+    private bool _busy = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_user is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            _report = await Log.GetOperationsAsync(_days, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Seconds(int milliseconds)
+        => milliseconds >= 1000 ? (milliseconds / 1000.0).ToString("0.0") + " s" : milliseconds + " ms";
+
+    /// <summary>Horizontal bars, scaled to the biggest entry. A chart library for six numbers is not worth a
+    /// dependency, and these have to stay readable next to each other.</summary>
+    private static RenderFragment Bars(IReadOnlyList<LlmCountStat> stats) => builder =>
+    {
+        var max = stats.Count == 0 ? 1 : Math.Max(1, stats.Max(s => s.Count));
+        var sequence = 0;
+        foreach (var stat in stats)
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "d-flex align-center mb-1");
+            builder.AddAttribute(sequence++, "style", "gap:8px;");
+
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "style", "flex:0 0 42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;");
+            builder.AddContent(sequence++, stat.Label);
+            builder.CloseElement();
+
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "style",
+                $"flex:1 1 auto;height:8px;border-radius:4px;background:rgba(255,255,255,0.06);");
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "style",
+                $"width:{stat.Count * 100.0 / max:0.#}%;height:8px;border-radius:4px;background:var(--mud-palette-primary);");
+            builder.CloseElement();
+            builder.CloseElement();
+
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "mud-text-secondary");
+            builder.AddAttribute(sequence++, "style", "flex:0 0 64px;text-align:right;");
+            builder.AddContent(sequence++, stat.Count.ToString("N0"));
+            builder.CloseElement();
+
+            builder.CloseElement();
+        }
+    };
+}

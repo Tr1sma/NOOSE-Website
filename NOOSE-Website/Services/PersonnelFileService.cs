@@ -127,9 +127,10 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory, IDi
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
+        // TargetRank is a NOOSE Rank; approving one for a partner would write it onto an external account
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == agentId, cancellationToken))
         {
-            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
+            throw new InvalidOperationException("Beförderungen können nur für aktive NOOSE-Agents beantragt werden.");
         }
         if (await db.AgentPromotionRequests.AnyAsync(a => a.AgentId == agentId && a.Status == PromotionStatus.Requested, cancellationToken))
         {

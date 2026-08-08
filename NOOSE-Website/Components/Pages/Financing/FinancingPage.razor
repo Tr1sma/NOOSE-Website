@@ -1,0 +1,138 @@
+@page "/finanzierungen"
+@inject IFinancingService Financing
+@inject IFinancingBudgetService Budgets
+
+<PageTitle>Finanzierungen · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.RequestQuote"
+            Title="Finanzierungen"
+            Subtitle="Ausrüstung beantragen, Budget im Blick behalten — die Auszahlung läuft über die Grüngeld-Kasse.">
+    <Actions>
+        @if (_mayRequest)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       Href="/finanzierungen/neu">Neuer Antrag</MudButton>
+        }
+    </Actions>
+</PageHeader>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <RecordSectionRail>
+        <RecordSection Slug="meine" Label="Meine Anträge" Icon="@Icons.Material.Filled.Person">
+            @if (_isTeamLead)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.VisibilityOff" Title="Kein eigenes Budget"
+                            Text="Die Team-Leitung ist Nur-Lese-Aufsicht: kein Monatsbudget, keine eigenen Anträge." />
+            }
+            else
+            {
+                <MudStack Spacing="3">
+                    <FinancingBudgetTiles Status="_budget" />
+                    <FinancingRequestTable Rows="_own"
+                                           EmptyTitle="Noch keine eigenen Anträge"
+                                           EmptyText="Wähle Positionen aus dem Katalog und stelle deinen ersten Finanzierungsantrag." />
+                </MudStack>
+            }
+        </RecordSection>
+
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="inbox">
+            <RecordSection Slug="alle" Label="Alle Anträge" Icon="@Icons.Material.Filled.Inbox">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudSelect T="FinancingStatus?" Value="_filter" ValueChanged="OnFilterChangedAsync"
+                                   Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:280px">
+                            <MudSelectItem T="FinancingStatus?" Value="@((FinancingStatus?)null)">Alle</MudSelectItem>
+                            @foreach (var status in FinancingStatusDisplay.All)
+                            {
+                                <MudSelectItem T="FinancingStatus?" Value="@status">@FinancingStatusDisplay.Name(status)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudSpacer />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Grüngeld-Bestand: <b>@Money.Format(_gruengeld)</b>
+                        </MudText>
+                    </MudStack>
+                    <FinancingRequestTable Rows="_all" ShowAgent="true"
+                                           EmptyTitle="Keine Anträge in diesem Status" />
+                </MudStack>
+            </RecordSection>
+        </AuthorizeView>
+
+        <RecordSection Slug="katalog" Label="Katalog" Icon="@Icons.Material.Filled.Inventory">
+            <FinancingCatalogPanel />
+        </RecordSection>
+
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="budgetSection">
+            <RecordSection Slug="budgets" Label="Budgets" Icon="@Icons.Material.Filled.Savings">
+                <FinancingBudgetsOverviewPanel Refresh="_refresh" />
+            </RecordSection>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="statsSection">
+            <RecordSection Slug="statistik" Label="Statistik" Icon="@Icons.Material.Filled.QueryStats">
+                <CascadingValue Value="_statsScope">
+                    <FinancingStatisticsPanel />
+                </CascadingValue>
+            </RecordSection>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="trashSection">
+            <RecordSection Slug="papierkorb" Label="Papierkorb" Icon="@Icons.Material.Filled.Delete">
+                <TrashPanel Kind="finanzierungen" />
+            </RecordSection>
+        </AuthorizeView>
+    </RecordSectionRail>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [Inject] private IKassenService Kasse { get; set; } = default!;
+
+    private bool _load = true;
+    private bool _isTeamLead;
+    private bool _mayRequest;
+    private int _refresh;
+    private ClaimsPrincipal _user = default!;
+    private FinancingBudgetStatus _budget = FinancingBudgetStatus.Empty;
+    private List<FinancingRequestDisplay> _own = new();
+    private List<FinancingRequestDisplay> _all = new();
+    private FinancingStatus? _filter = FinancingStatus.Requested;
+    private decimal _gruengeld;
+    private readonly StatisticsScope _statsScope = new(false, StatisticsRange.Months12);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        // supervision has no budget of its own and cannot file, so skip both (the admin flag would
+        // otherwise let a team lead past MayWrite)
+        _isTeamLead = _user.IsTeamLead();
+        _mayRequest = _user.MayWrite() && !_isTeamLead;
+
+        var agentId = _user.GetAgentId();
+        if (!_isTeamLead && !string.IsNullOrEmpty(agentId))
+        {
+            _budget = await Budgets.GetStatusAsync(agentId);
+            _own = await Financing.GetOwnAsync(_user);
+        }
+
+        if (_user.MayClassifiedRead())
+        {
+            _all = await Financing.GetVisibleAsync(_filter, _user);
+            // read once per page load: the balance is a fold over the whole ledger
+            _gruengeld = await Kasse.GetBalanceAsync(KassenKonto.Gruengeld);
+        }
+        _refresh++;
+        _load = false;
+    }
+
+    private async Task OnFilterChangedAsync(FinancingStatus? status)
+    {
+        _filter = status;
+        _all = await Financing.GetVisibleAsync(_filter, _user);
+    }
+}

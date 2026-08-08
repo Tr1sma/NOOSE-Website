@@ -136,9 +136,10 @@ public class TrainingModuleService(IDbContextFactory<AppDbContext> dbFactory) : 
         Permission.RequireLeadership(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
+        // the training catalogue is NOOSE-internal; partners carry a PartnerRank, not a NOOSE Rank
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == agentId, cancellationToken))
         {
-            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
+            throw new InvalidOperationException("Module können nur für aktive NOOSE-Agents markiert werden.");
         }
         if (!await db.TrainingModules.AnyAsync(m => m.Id == moduleId, cancellationToken))
         {

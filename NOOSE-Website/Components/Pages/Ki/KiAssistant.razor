@@ -1,0 +1,27 @@
+@page "/ki-assistent"
+@using NOOSE_Website.Components.Pages.Ki.Shared
+
+<PageTitle>NOOSEI · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.SmartToy"
+            Title="NOOSEI"
+            Subtitle="Fragt die Aktendatenbank für dich ab, formuliert und fasst zusammen. Antworten sind KI-generiert und ungeprüft." />
+
+<RecordSectionRail>
+    <RecordSection Group="NOOSEI" Slug="chat" Label="Chat" Icon="@Icons.Material.Filled.Forum">
+        <NooseiChatPanel Anchor="@Record" Draft="@Question" />
+    </RecordSection>
+    <RecordSection Group="NOOSEI" Slug="kontingent" Label="Mein Kontingent" Icon="@Icons.Material.Filled.Token">
+        <NooseiQuotaPanel />
+    </RecordSection>
+</RecordSectionRail>
+
+@code {
+    /// <summary>Record the chat was opened from, as <c>Typ:Id</c>. Whether it may be seen is decided server-side.</summary>
+    [SupplyParameterFromQuery(Name = "akte")]
+    private string? Record { get; set; }
+
+    /// <summary>Question carried in from the command palette; pre-filled, never sent on its own.</summary>
+    [SupplyParameterFromQuery(Name = "frage")]
+    private string? Question { get; set; }
+}

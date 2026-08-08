@@ -219,6 +219,15 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
                 await db.Cases.IgnoreQueryFilters().Where(c => c.Type == oldValue)
                     .ExecuteUpdateAsync(s => s.SetProperty(c => c.Type, newValue), cancellationToken);
                 break;
+            case SuggestionType.FinancingCategory:
+                // only the live catalog: a filed request line carries a frozen snapshot and must not move
+                await db.FinancingItems.IgnoreQueryFilters().Where(i => i.Category == oldValue)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, newValue), cancellationToken);
+                break;
+            case SuggestionType.EvidenceCategory:
+                await db.EvidenceItems.IgnoreQueryFilters().Where(i => i.Category == oldValue)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, newValue), cancellationToken);
+                break;
         }
     }
 
@@ -265,6 +274,14 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
                 await db.Cases.IgnoreQueryFilters().Where(c => c.Type == value)
                     .ExecuteUpdateAsync(s => s.SetProperty(c => c.Type, (string?)null), cancellationToken);
                 break;
+            case SuggestionType.FinancingCategory:
+                await db.FinancingItems.IgnoreQueryFilters().Where(i => i.Category == value)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, (string?)null), cancellationToken);
+                break;
+            case SuggestionType.EvidenceCategory:
+                await db.EvidenceItems.IgnoreQueryFilters().Where(i => i.Category == value)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.Category, (string?)null), cancellationToken);
+                break;
         }
     }
 
@@ -301,6 +318,12 @@ public class ProfileSuggestionService(IDbContextFactory<AppDbContext> dbFactory)
                 break;
             case SuggestionType.CaseType:
                 await MergeCountsAsync(db.Cases.IgnoreQueryFilters().Where(c => c.Type != null).Select(c => c.Type!), map, cancellationToken);
+                break;
+            case SuggestionType.FinancingCategory:
+                await MergeCountsAsync(db.FinancingItems.IgnoreQueryFilters().Where(i => i.Category != null).Select(i => i.Category!), map, cancellationToken);
+                break;
+            case SuggestionType.EvidenceCategory:
+                await MergeCountsAsync(db.EvidenceItems.IgnoreQueryFilters().Where(i => i.Category != null).Select(i => i.Category!), map, cancellationToken);
                 break;
         }
         return map;

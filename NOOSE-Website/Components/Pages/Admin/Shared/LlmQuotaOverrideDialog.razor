@@ -1,0 +1,65 @@
+@using NOOSE_Website.Models.Llm
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Individuelles Wochenkontingent für <b>@Status.Codename</b>. Ohne Häkchen gilt der Wert des Dienstgrads.
+        </MudText>
+        <MudSwitch T="bool" @bind-Value="_custom" Color="Color.Primary" Label="Individuelles Kontingent verwenden" />
+        @if (_custom)
+        {
+            <MudNumericField T="long" @bind-Value="_amount" Min="0" Step="1000" Label="Grundkontingent"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3"
+                             Adornment="Adornment.End" AdornmentText="Token" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Höchstbestand mit @Status.CarryPercent % Übertrag:
+                @LlmQuotaMath.Ceiling(_amount, Status.CarryPercent).ToString("N0") Token
+                @if (MaySeeCost)
+                {
+                    <text>(≈ @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(_amount, Status.CarryPercent)).ToString("0.00") $ pro Woche)</text>
+                }
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirm">Übernehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public LlmQuotaStatus Status { get; set; } = default!;
+
+    /// <summary>Whether to show real money. Only the AI owner can open this dialog today, but the flag is passed
+    /// in rather than assumed — default off, so the gate survives the opener being relaxed later.</summary>
+    [Parameter] public bool MaySeeCost { get; set; }
+
+    public readonly record struct Choice(long? Amount);
+
+    private bool _custom;
+    private long _amount;
+
+    protected override void OnInitialized()
+    {
+        _custom = Status.IsOverride;
+        _amount = Status.BaseWeekly;
+    }
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(new Choice(_custom ? _amount : null)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public static async Task<Choice?> ShowAsync(IDialogService dialogs, LlmQuotaStatus status, bool maySeeCost = false)
+    {
+        var parameters = new DialogParameters<LlmQuotaOverrideDialog>
+        {
+            { x => x.Status, status },
+            { x => x.MaySeeCost, maySeeCost },
+        };
+        var reference = await dialogs.ShowAsync<LlmQuotaOverrideDialog>("KI-Kontingent anpassen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Choice choice } ? choice : null;
+    }
+}

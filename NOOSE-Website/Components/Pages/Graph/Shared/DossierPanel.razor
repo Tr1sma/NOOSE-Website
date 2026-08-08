@@ -1,0 +1,117 @@
+@* Side dossier for the selected graph node: quick facts + its links. Read-only; the node was already visibility-resolved. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Common
+@inject ILinkService LinkService
+
+<MudPaper Class="pa-4" Elevation="3" Style="height:100%;overflow:auto;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">@TypeLabel</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="OnClose" />
+    </MudStack>
+    <MudText Typo="Typo.h6">@Designation</MudText>
+    @if (!string.IsNullOrWhiteSpace(Subtitle))
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Subtitle</MudText>
+    }
+
+    <MudStack Row="true" Spacing="1" Class="my-3" AlignItems="AlignItems.Center">
+        @if (ThreatScore is { } score)
+        {
+            <MudChip T="string" Size="Size.Small" Color="@ScoreColour(score)" Icon="@Icons.Material.Filled.Warning">Score @score</MudChip>
+        }
+        @if (IsClassified)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Lock">Verschlusssache</MudChip>
+        }
+        @if (IsKeyFigure)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Star">Schlüsselfigur</MudChip>
+        }
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(Href))
+    {
+        <MudButton Href="@Href" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   StartIcon="@Icons.Material.Filled.OpenInNew" Class="mb-4">Akte öffnen</MudButton>
+    }
+
+    <MudText Typo="Typo.subtitle2" Class="mb-1">Verknüpfungen (@_links.Count)</MudText>
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_links.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine sichtbaren Verknüpfungen.</MudText>
+    }
+    else
+    {
+        <MudList T="string" Dense="true">
+            @foreach (var l in _links)
+            {
+                <MudListItem T="string" Href="@l.Href" Icon="@Icons.Material.Filled.East">
+                    <MudText Typo="Typo.body2">@l.OtherDesignation</MudText>
+                    @if (!string.IsNullOrWhiteSpace(l.Label))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@l.Label</MudText>
+                    }
+                </MudListItem>
+            }
+        </MudList>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = string.Empty;
+    [Parameter] public string Designation { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public int? ThreatScore { get; set; }
+    [Parameter] public bool IsClassified { get; set; }
+    [Parameter] public bool IsKeyFigure { get; set; }
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<LinkDisplay> _links = new();
+    private bool _loading = true;
+    private string _loadedKey = string.Empty;
+
+    private string TypeLabel => EntityType switch
+    {
+        "Person" => "Person",
+        "Faction" => "Fraktion",
+        "PersonGroup" => "Personengruppe",
+        "Party" => "Partei",
+        "Operation" => "Operation",
+        "Case" => "Vorgang",
+        "Taskforce" => "Taskforce",
+        "Job" => "Aufgabe",
+        "Law" => "Gesetz",
+        "PersonDoc" => "Dok",
+        "Observation" => "Observation",
+        "Agent" => "Agent",
+        _ => EntityType,
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{EntityType}:{EntityId}";
+        if (key == _loadedKey)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _loading = true;
+        _links = await LinkService.GetForRecordAsync(EntityType, EntityId, ViewerScope.From(User));
+        _loading = false;
+    }
+
+    private static Color ScoreColour(int score) => score switch
+    {
+        >= 75 => Color.Error,
+        >= 50 => Color.Warning,
+        >= 25 => Color.Info,
+        _ => Color.Default,
+    };
+}

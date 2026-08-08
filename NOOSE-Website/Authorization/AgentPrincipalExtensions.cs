@@ -42,6 +42,10 @@ public static class AgentPrincipalExtensions
     public static bool IsBootstrapAdmin(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsBootstrap), "true", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Configured AI owner (Discord ID in Ki config); sole gate for changing NOOSEI quotas.</summary>
+    public static bool IsAiOwner(this ClaimsPrincipal user)
+        => string.Equals(user.FindFirstValue(AgentClaimTypes.IsAiOwner), "true", StringComparison.OrdinalIgnoreCase);
+
     public static bool IsTRU(this ClaimsPrincipal user)
         => string.Equals(user.FindFirstValue(AgentClaimTypes.IsTRU), "true", StringComparison.OrdinalIgnoreCase);
 
@@ -105,6 +109,9 @@ public static class AgentPrincipalExtensions
 
     /// <summary>May see the otherwise-hidden real name = leadership/admin but never read-only supervision. Sole source of the real-name rule.</summary>
     public static bool MayRealNameSee(this ClaimsPrincipal user) => user.IsLeadership() && !user.IsOnlyReader();
+
+    /// <summary>May use the counter-intelligence cockpit = leadership but never read-only supervision (it would audit itself). Sole source of this rule.</summary>
+    public static bool MayCounterIntel(this ClaimsPrincipal user) => user.IsLeadership() && !user.IsOnlyReader();
 
     /// <summary>May set "secured state-threatening" directly = rank ≥ Senior Special Agent or admin.</summary>
     public static bool MayHighestClassification(this ClaimsPrincipal user)

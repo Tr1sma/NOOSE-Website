@@ -72,8 +72,51 @@ public class LegacyRoutesTests
     [InlineData("personen/papierkorb", "/papierkorb?tab=personen")]
     [InlineData("abmeldungen/papierkorb", "/abmeldungen?tab=papierkorb")]
     [InlineData("bewerbungen/sperren", "/bewerbungen?tab=sperren")]
+    [InlineData("chronik", "/nachweis?tab=chronik")]
+    [InlineData("admin/protokoll", "/nachweis?tab=aenderungen")]
     public void Target_resolves_removed_routes(string path, string expected)
         => Assert.Equal(expected, LegacyRoutes.Target(path));
+
+    [Theory]
+    [InlineData("chronik?zeit=7", "/nachweis?tab=chronik&zeit=7")]
+    [InlineData("chronik?zeit=7&kat=Doc", "/nachweis?tab=chronik&zeit=7&kat=Doc")]
+    // an old ?tab= must not win over the section the target already names
+    [InlineData("chronik?tab=irgendwas&zeit=7", "/nachweis?tab=chronik&zeit=7")]
+    public void Chronicle_filters_survive_the_redirect(string path, string expected)
+        => Assert.Equal(expected, LegacyRoutes.Target(path));
+
+    [Theory]
+    [InlineData("protokoll", "/nachweis?tab=aenderungen")]
+    [InlineData("gegenaufklaerung", "/nachweis?tab=lagebild")]
+    [InlineData("gegenaufklaerung-regeln", "/nachweis?tab=regeln")]
+    public void Moved_settings_tabs_forward_to_their_new_page(string slug, string expected)
+        => Assert.Equal(expected, LegacyRoutes.MovedSettingsTab(slug));
+
+    [Theory]
+    [InlineData("system")]
+    [InlineData("basisdaten")]
+    [InlineData(null)]
+    public void Surviving_settings_tabs_are_not_forwarded(string? slug)
+        => Assert.Null(LegacyRoutes.MovedSettingsTab(slug));
+
+    [Fact]
+    public void Moved_settings_tabs_are_gone_from_the_settings_page()
+    {
+        foreach (var slug in new[] { "protokoll", "gegenaufklaerung", "gegenaufklaerung-regeln" })
+        {
+            Assert.DoesNotContain(slug, MergedPageSections.Settings);
+        }
+    }
+
+    [Fact]
+    public void Merged_page_slugs_are_unique_per_page()
+    {
+        foreach (var (route, slugs) in MergedPageSections.ByRoute)
+        {
+            Assert.Equal(slugs.Length, slugs.Distinct(StringComparer.Ordinal).Count());
+            Assert.All(slugs, s => Assert.False(string.IsNullOrWhiteSpace(s), $"{route} has a blank slug"));
+        }
+    }
 
     [Theory]
     [InlineData("personen")]
@@ -90,6 +133,7 @@ public class LegacyRoutesTests
     [InlineData("status", "einstellungen")]
     [InlineData("doks", "fahndung")]
     [InlineData("lageberichte", "statistik")]
+    [InlineData("admin.protokoll", "chronik")]
     [InlineData("bewerbungen.tests", "bewerbungen")]
     public void Orphaned_favorites_alias_to_the_absorbing_entry(string oldKey, string expected)
         => Assert.Equal(expected, LegacyRoutes.AliasKey(oldKey));

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
@@ -19,7 +20,9 @@ public class BewerbungService(
     ISourcesStorageService storage,
     BewerbungBroadcaster broadcaster,
     IBewerbungssperreService sperren,
-    INotificationService notifications) : IBewerbungService
+    INotificationService notifications,
+    IApplicationCaseService applicationCases,
+    ILogger<BewerbungService> logger) : IBewerbungService
 {
     public async Task<Bewerbung?> GetOwnAsync(ClaimsPrincipal applicant, CancellationToken cancellationToken = default)
     {
@@ -104,7 +107,7 @@ public class BewerbungService(
         {
             var recipients = await HrbRecipientIdsAsync(db, cancellationToken);
             await notifications.NotifyManyAsync(recipients, NotificationType.Recruiting,
-                $"Neue Bewerbung ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", userId, cancellationToken);
+                $"Neue Bewerbung: {bewerbung.Name} ({bewerbung.CaseNumber})", $"/bewerbungen/{bewerbung.Id}", userId, cancellationToken);
         }
         catch { /* best effort */ }
 
@@ -148,6 +151,10 @@ public class BewerbungService(
         bewerbung.AssignedAgentName = actor.GetCodename();
         await db.SaveChangesAsync(cancellationToken);
         broadcaster.Report(id);
+
+        // auto-create the Bewerbungsverfahren case + Sicherheitsüberprüfung document; the assignment stands regardless
+        try { await applicationCases.EnsureSecurityCheckCaseAsync(id, actor, cancellationToken); }
+        catch (Exception ex) { logger.LogError(ex, "Auto case/document provisioning for application {Id} failed.", id); }
     }
 
     public async Task SetStatusAsync(string id, BewerbungStatus target, string? note, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -294,10 +301,20 @@ public class BewerbungService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await EnsureCanReadAsync(db, id, audience, actor, cancellationToken);
-        return await db.BewerbungMessages.AsNoTracking()
+        var messages = await db.BewerbungMessages.AsNoTracking()
             .Where(m => m.BewerbungId == id && m.Audience == audience)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync(cancellationToken);
+
+        // the applicant never learns which agent answered
+        if (audience == BewerbungMessageAudience.Bewerber && !actor.IsHrbOrLeadership())
+        {
+            foreach (var m in messages)
+            {
+                m.AuthorName = null;
+            }
+        }
+        return messages;
     }
 
     public async Task<BewerbungMessage> PostInternalAsync(string id, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -455,8 +472,8 @@ public class BewerbungService(
            ?? throw new InvalidOperationException("Bewerbung nicht gefunden.");
 
     private static Task<List<string>> HrbRecipientIdsAsync(AppDbContext db, CancellationToken cancellationToken)
-        => db.Users
-            .Where(u => u.Status == AgentStatus.Active && (u.IsHRB || u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent))
+        => db.Users.OnlySelectable()
+            .Where(u => u.IsHRB || u.IsAdmin || u.Rank >= Rank.SupervisorySpecialAgent)
             .Select(u => u.Id)
             .ToListAsync(cancellationToken);
 

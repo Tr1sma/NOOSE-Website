@@ -1,0 +1,141 @@
+@* Funding budget and recent requests of one agent; leadership can set an individual budget here. *@
+@inject IFinancingBudgetService Budgets
+@inject IFinancingService Financing
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (Agent.IsTeamLead)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.VisibilityOff" Title="Kein Finanzierungsbudget"
+                    Text="Die Team-Leitung ist Nur-Lese-Aufsicht und stellt keine Finanzierungsanträge." />
+    }
+    else if (!_maySee)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.Lock" Title="Nicht öffentlich"
+                    Text="Budget und Finanzierungsanträge sieht nur der Agent selbst — und die Führung." />
+    }
+    else
+    {
+        <FinancingBudgetTiles Status="_budget" />
+
+        @if (_mayManage)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                    <MudText Typo="Typo.body2">
+                        Monatsbudget: <b>@Money.Format(_budget.BaseBudget)</b>
+                        @(_budget.IsOverride ? " (individuell gesetzt)" : $" (Standard für {RankDisplay.Name(_budget.Rank)})")
+                    </MudText>
+                    <MudSpacer />
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Tune"
+                               OnClick="OverrideAsync">Budget anpassen</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudText Typo="Typo.subtitle1">Letzte Anträge (@_requests.Count)</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ChevronRight"
+                       Href="/finanzierungen">Alle Finanzierungen</MudButton>
+        </MudStack>
+        <FinancingRequestTable Rows="_requests"
+                               EmptyTitle="Keine Finanzierungsanträge"
+                               EmptyText="Dieser Agent hat noch nichts beantragt." />
+
+        @if (_periods.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-2">Abgeschlossene Monate</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Monat</th>
+                        <th style="text-align:right">Grundbudget</th>
+                        <th style="text-align:right">Übertrag ein</th>
+                        <th style="text-align:right">Verbraucht</th>
+                        <th style="text-align:right">Übertrag aus</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var period in _periods)
+                    {
+                        <tr>
+                            <td>@FinancingPeriod.Label(period.Year, period.Month)</td>
+                            <td style="text-align:right">@Money.Format(period.BaseBudget)</td>
+                            <td style="text-align:right">@Money.Format(period.CarryIn)</td>
+                            <td style="text-align:right">@Money.Format(period.Consumed)</td>
+                            <td style="text-align:right">@Money.Format(period.CarryOut) (@period.CarryPercent %)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Agent Agent { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const int MaxRequests = 10;
+
+    private bool _load = true;
+    private bool _maySee;
+    private bool _mayManage;
+    private ClaimsPrincipal _user = default!;
+    private FinancingBudgetStatus _budget = FinancingBudgetStatus.Empty;
+    private List<FinancingRequestDisplay> _requests = new();
+    private List<FinancingBudgetPeriod> _periods = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        // the personnel file itself is open to every internal agent, but a budget is private:
+        // only the agent themselves and readers-of-everything (leadership/supervision) see it
+        _maySee = _user.MayClassifiedRead() || _user.GetAgentId() == Agent.Id;
+        // read-only supervision sees the budget but must not get a control that always fails
+        _mayManage = _user.IsLeadership() && _user.MayWrite();
+        // supervision has no funding budget at all, so do not even close periods for it
+        if (!_maySee || Agent.IsTeamLead)
+        {
+            _load = false;
+            return;
+        }
+        _budget = await Budgets.GetStatusAsync(Agent.Id);
+        _requests = await Financing.GetForAgentAsync(Agent.Id, MaxRequests, _user);
+        _periods = await Budgets.GetPeriodsAsync(Agent.Id);
+        _load = false;
+    }
+
+    private async Task OverrideAsync()
+    {
+        var entered = await FinancingBudgetOverrideDialog.ShowAsync(DialogService, _budget);
+        if (entered is null)
+        {
+            return;
+        }
+        try
+        {
+            await Budgets.SetOverrideAsync(Agent.Id, entered.Amount, _user);
+            Snackbar.Add(entered.Amount is null
+                ? "Budget auf den Rang-Standard zurückgesetzt."
+                : "Individuelles Budget gesetzt.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

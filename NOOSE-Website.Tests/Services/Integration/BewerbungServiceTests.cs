@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Recruiting;
@@ -29,7 +30,9 @@ public sealed class BewerbungServiceTests
         var broadcaster = new BewerbungBroadcaster();
         var reported = new List<string>();
         broadcaster.Modified += id => reported.Add(id);
-        var svc = new BewerbungService(ctx.Factory, caseNo, storage, broadcaster, sperren, notifications);
+        var applicationCases = Substitute.For<IApplicationCaseService>();
+        var logger = Substitute.For<ILogger<BewerbungService>>();
+        var svc = new BewerbungService(ctx.Factory, caseNo, storage, broadcaster, sperren, notifications, applicationCases, logger);
         return (svc, storage, sperren, notifications, broadcaster, reported);
     }
 
@@ -330,6 +333,54 @@ public sealed class BewerbungServiceTests
         var (svc, _, _, _, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.AssignSelfAsync("b1", Junior("me")));
+    }
+
+    private static (BewerbungService Svc, IApplicationCaseService ApplicationCases) BuildWithProvisioning(SqliteTestContext ctx)
+    {
+        var caseNo = Substitute.For<ICaseNumberService>();
+        caseNo.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(CaseNo);
+        var applicationCases = Substitute.For<IApplicationCaseService>();
+        var svc = new BewerbungService(ctx.Factory, caseNo, Substitute.For<ISourcesStorageService>(),
+            new BewerbungBroadcaster(), Substitute.For<IBewerbungssperreService>(),
+            Substitute.For<INotificationService>(), applicationCases, Substitute.For<ILogger<BewerbungService>>());
+        return (svc, applicationCases);
+    }
+
+    [Fact]
+    public async Task AssignSelfAsync_Hrb_InvokesAutoProvisioning()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1"));
+            db.SaveChanges();
+        }
+        var (svc, applicationCases) = BuildWithProvisioning(ctx);
+        var hrb = Hrb("hrb", "Falcon");
+
+        await svc.AssignSelfAsync("b1", hrb);
+
+        await applicationCases.Received(1).EnsureSecurityCheckCaseAsync("b1", hrb, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AssignSelfAsync_ProvisioningThrows_AssignmentStillSucceeds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1"));
+            db.SaveChanges();
+        }
+        var (svc, applicationCases) = BuildWithProvisioning(ctx);
+        applicationCases
+            .When(x => x.EnsureSecurityCheckCaseAsync(Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>()))
+            .Do(_ => throw new InvalidOperationException("boom"));
+
+        await svc.AssignSelfAsync("b1", Hrb("hrb", "Falcon"));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("hrb", check.Bewerbungen.Single(b => b.Id == "b1").AssignedAgentId);
     }
 
     // ---------- SetStatusAsync ----------
@@ -665,6 +716,29 @@ public sealed class BewerbungServiceTests
         var msgs = await svc.GetMessagesAsync("b1", BewerbungMessageAudience.Bewerber, Applicant("u1"));
 
         Assert.Equal(new[] { "hallo" }, msgs.Select(m => m.Text).ToArray());
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_Bewerber_Owner_HidesAgentCodename()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        using (var db = ctx.NewContext())
+        {
+            db.Bewerbungen.Add(Bew("b1", "u1"));
+            var fromAgent = Msg("b1", BewerbungMessageAudience.Bewerber, "hallo", T0);
+            fromAgent.AuthorName = "Falcon";
+            db.BewerbungMessages.Add(fromAgent);
+            db.SaveChanges();
+        }
+
+        var forApplicant = await svc.GetMessagesAsync("b1", BewerbungMessageAudience.Bewerber, Applicant("u1"));
+        Assert.Null(Assert.Single(forApplicant).AuthorName);
+
+        // HRB keeps the sender for internal accountability
+        var forHrb = await svc.GetMessagesAsync("b1", BewerbungMessageAudience.Bewerber, Hrb());
+        Assert.Equal("Falcon", Assert.Single(forHrb).AuthorName);
     }
 
     [Fact]

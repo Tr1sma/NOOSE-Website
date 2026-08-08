@@ -66,7 +66,11 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         // A type with aging disabled contributes nothing; exempt records drop out per type.
         var staleRecords =
               (settings[nameof(Person)].AgingDisabled ? 0 : await db.People.CountAsync(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < sP, cancellationToken))
-            + (settings[nameof(Faction)].AgingDisabled ? 0 : await db.Factions.CountAsync(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled && (f.ModifiedAt ?? f.CreatedAt) < sF, cancellationToken))
+            // factions age by their four facet stamps, so the cutoff test goes through the shared filter
+            + (settings[nameof(Faction)].AgingDisabled ? 0 : await db.Factions
+                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled)
+                .Where(FactionRecency.ReferenceBefore(sF))
+                .CountAsync(cancellationToken))
             + (settings[nameof(PersonGroup)].AgingDisabled ? 0 : await db.PersonGroups.CountAsync(g => (isLeadership || !g.IsClassified) && !g.AgingDisabled && (g.ModifiedAt ?? g.CreatedAt) < sG, cancellationToken))
             + (settings[nameof(Party)].AgingDisabled ? 0 : await db.Parties.CountAsync(p => (isLeadership || !p.IsClassified) && !p.AgingDisabled && (p.ModifiedAt ?? p.CreatedAt) < sPt, cancellationToken))
             + (settings[nameof(Operation)].AgingDisabled ? 0 : await db.Operations.CountAsync(o => (isLeadership || !o.IsClassified) && !o.AgingDisabled && (o.ModifiedAt ?? o.CreatedAt) < sO, cancellationToken))
@@ -106,11 +110,25 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
         if (!setF.AgingDisabled)
         {
             var cutF = now.AddDays(-setF.WarningDays);
-            foreach (var x in await db.Factions
-                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled && (f.ModifiedAt ?? f.CreatedAt) < cutF)
-                .OrderBy(f => f.ModifiedAt ?? f.CreatedAt)
-                .Select(f => new { f.Id, f.Name, f.CaseNumber, Reference = f.ModifiedAt ?? f.CreatedAt })
-                .Take(max).ToListAsync(cancellationToken))
+            // The oldest of four facet stamps has no SQL minimum, so cap in memory after the cutoff filter.
+            var factionRows = await db.Factions
+                .Where(f => (isLeadership || !f.IsClassified) && !f.IsStateFaction && !f.AgingDisabled)
+                .Where(FactionRecency.ReferenceBefore(cutF))
+                .Select(f => new
+                {
+                    f.Id, f.Name, f.CaseNumber, f.CreatedAt,
+                    f.MembersRefreshedAt, f.StockRefreshedAt, f.ActivitiesRefreshedAt, f.DocsRefreshedAt,
+                })
+                .ToListAsync(cancellationToken);
+            foreach (var x in factionRows
+                .Select(f => new
+                {
+                    f.Id, f.Name, f.CaseNumber,
+                    Reference = FactionRecency.Reference(f.CreatedAt, f.MembersRefreshedAt, f.StockRefreshedAt,
+                        f.ActivitiesRefreshedAt, f.DocsRefreshedAt),
+                })
+                .OrderBy(f => f.Reference)
+                .Take(max))
             {
                 result.Add(new DashboardStaleRecord(DashboardRecordType.Faction, x.Name, x.CaseNumber, $"/fraktionen/{x.Id}",
                     RecencyAssessment.Level(setF.WarningDays, setF.StaleDays, x.Reference, now), x.Reference));
@@ -283,207 +301,4 @@ public class DashboardService(IDbContextFactory<AppDbContext> dbFactory, IReques
 
         return new DashboardDistributions(casesByClassification, measureOutcomes, factionsByHazard, openRequestsByKind);
     }
-
-    public async Task<List<DashboardChange>> GetLastChangesAsync(bool isLeadership, string? meId, int max = 8, CancellationToken cancellationToken = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-
-        // Over-fetch: classification filter and unresolvable entries thin the list before we cap to max.
-        var raw = await db.AuditLogs
-            .OrderByDescending(a => a.Timestamp)
-            .ThenByDescending(a => a.Id)
-            .Take(Math.Max(max, 1) * 8)
-            .ToListAsync(cancellationToken);
-
-        if (raw.Count == 0)
-        {
-            return new List<DashboardChange>();
-        }
-
-        // Roll child entities up to their parent record via batch lookups.
-        var docIds = Ids(raw, nameof(PersonDoc));
-        var docToPerson = docIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.PersonDocs.IgnoreQueryFilters().Where(d => docIds.Contains(d.Id))
-                .Select(d => new { d.Id, d.PersonId }).ToDictionaryAsync(x => x.Id, x => x.PersonId, cancellationToken);
-
-        // IgnoreQueryFilters: a departure soft-deletes the membership, so the "member removed" event would otherwise be unmappable.
-        var fmIds = Ids(raw, nameof(FactionMember));
-        var memberToFaction = fmIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.FactionMembers.IgnoreQueryFilters().Where(m => fmIds.Contains(m.Id))
-                .Select(m => new { m.Id, m.FactionId }).ToDictionaryAsync(x => x.Id, x => x.FactionId, cancellationToken);
-
-        var pmIds = Ids(raw, nameof(PersonGroupMember));
-        var memberToGroup = pmIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.PersonGroupMembers.IgnoreQueryFilters().Where(m => pmIds.Contains(m.Id))
-                .Select(m => new { m.Id, m.PersonGroupId }).ToDictionaryAsync(x => x.Id, x => x.PersonGroupId, cancellationToken);
-
-        var paIds = Ids(raw, nameof(PersonGroupAgent));
-        var agentToGroup = paIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.PersonGroupAgents.Where(a => paIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.PersonGroupId }).ToDictionaryAsync(x => x.Id, x => x.PersonGroupId, cancellationToken);
-
-        var pmPartyIds = Ids(raw, nameof(PartyMember));
-        var memberToParty = pmPartyIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.PartyMembers.IgnoreQueryFilters().Where(m => pmPartyIds.Contains(m.Id))
-                .Select(m => new { m.Id, m.PartyId }).ToDictionaryAsync(x => x.Id, x => x.PartyId, cancellationToken);
-
-        var paPartyIds = Ids(raw, nameof(PartyAgent));
-        var agentToParty = paPartyIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.PartyAgents.Where(a => paPartyIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.PartyId }).ToDictionaryAsync(x => x.Id, x => x.PartyId, cancellationToken);
-
-        var oaIds = Ids(raw, nameof(OperationAgent));
-        var agentToOperation = oaIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.OperationAgents.Where(a => oaIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.OperationId }).ToDictionaryAsync(x => x.Id, x => x.OperationId, cancellationToken);
-
-        var taIds = Ids(raw, nameof(TaskforceAgent));
-        var agentToTaskforce = taIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.TaskforceAgents.Where(a => taIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.TaskforceId }).ToDictionaryAsync(x => x.Id, x => x.TaskforceId, cancellationToken);
-
-        var vaIds = Ids(raw, nameof(CaseAgent));
-        var agentToCase = vaIds.Count == 0 ? new Dictionary<string, string>()
-            : await db.CaseAgents.Where(a => vaIds.Contains(a.Id))
-                .Select(a => new { a.Id, a.CaseId }).ToDictionaryAsync(x => x.Id, x => x.CaseId, cancellationToken);
-
-        // Map each audit entry to a target record, or drop it.
-        var targets = new List<(AuditLog Log, DashboardRecordType Type, string RecordId, string? Detail)>();
-        foreach (var log in raw)
-        {
-            (DashboardRecordType Type, string RecordId, string? Detail)? target = log.EntityType switch
-            {
-                nameof(Person) => (DashboardRecordType.Person, log.EntityId, (string?)null),
-                nameof(Faction) => (DashboardRecordType.Faction, log.EntityId, null),
-                nameof(PersonGroup) => (DashboardRecordType.PersonGroup, log.EntityId, null),
-                nameof(PersonDoc) when docToPerson.TryGetValue(log.EntityId, out var pid)
-                    => (DashboardRecordType.Person, pid, "Dok"),
-                nameof(FactionMember) when memberToFaction.TryGetValue(log.EntityId, out var fid)
-                    => (DashboardRecordType.Faction, fid, "Mitglied"),
-                nameof(PersonGroupMember) when memberToGroup.TryGetValue(log.EntityId, out var gid)
-                    => (DashboardRecordType.PersonGroup, gid, "Mitglied"),
-                nameof(PersonGroupAgent) when agentToGroup.TryGetValue(log.EntityId, out var gid2)
-                    => (DashboardRecordType.PersonGroup, gid2, "Agent-Zuteilung"),
-                nameof(Party) => (DashboardRecordType.Party, log.EntityId, null),
-                nameof(PartyMember) when memberToParty.TryGetValue(log.EntityId, out var prid)
-                    => (DashboardRecordType.Party, prid, "Mitglied"),
-                nameof(PartyAgent) when agentToParty.TryGetValue(log.EntityId, out var prid2)
-                    => (DashboardRecordType.Party, prid2, "Agent-Zuteilung"),
-                nameof(Operation) => (DashboardRecordType.Operation, log.EntityId, null),
-                nameof(OperationAgent) when agentToOperation.TryGetValue(log.EntityId, out var oid)
-                    => (DashboardRecordType.Operation, oid, "Agent-Zuteilung"),
-                nameof(Taskforce) => (DashboardRecordType.Taskforce, log.EntityId, null),
-                nameof(TaskforceAgent) when agentToTaskforce.TryGetValue(log.EntityId, out var tid)
-                    => (DashboardRecordType.Taskforce, tid, "Agent-Zuteilung"),
-                nameof(Case) => (DashboardRecordType.Case, log.EntityId, null),
-                nameof(CaseAgent) when agentToCase.TryGetValue(log.EntityId, out var vid)
-                    => (DashboardRecordType.Case, vid, "Agent-Zuteilung"),
-                _ => null,
-            };
-
-            if (target is { } z)
-            {
-                targets.Add((log, z.Type, z.RecordId, z.Detail));
-            }
-        }
-
-        // Load display data in one batch, including trash so deleted records stay nameable.
-        var personMap = await PersonInfos(db, TargetIds(targets, DashboardRecordType.Person), cancellationToken);
-        var factionMap = await FactionInfos(db, TargetIds(targets, DashboardRecordType.Faction), cancellationToken);
-        var groupMap = await GroupInfos(db, TargetIds(targets, DashboardRecordType.PersonGroup), cancellationToken);
-        var partyMap = await PartyInfos(db, TargetIds(targets, DashboardRecordType.Party), cancellationToken);
-        var operationMap = await OperationInfos(db, TargetIds(targets, DashboardRecordType.Operation), cancellationToken);
-        var taskforceMap = await TaskforceInfos(db, TargetIds(targets, DashboardRecordType.Taskforce), cancellationToken);
-        // For taskforces, membership (not classification) decides feed visibility.
-        var visibleTf = await TaskforceVisibility.VisibleIdsAsync(db, TargetIds(targets, DashboardRecordType.Taskforce), isLeadership, meId, cancellationToken);
-        var caseMap = await CaseInfos(db, TargetIds(targets, DashboardRecordType.Case), cancellationToken);
-
-        var result = new List<DashboardChange>();
-        foreach (var (log, type, recordId, detail) in targets)
-        {
-            var info = type switch
-            {
-                DashboardRecordType.Person => personMap.GetValueOrDefault(recordId),
-                DashboardRecordType.Faction => factionMap.GetValueOrDefault(recordId),
-                DashboardRecordType.Party => partyMap.GetValueOrDefault(recordId),
-                DashboardRecordType.Operation => operationMap.GetValueOrDefault(recordId),
-                DashboardRecordType.Taskforce => taskforceMap.GetValueOrDefault(recordId),
-                DashboardRecordType.Case => caseMap.GetValueOrDefault(recordId),
-                _ => groupMap.GetValueOrDefault(recordId),
-            };
-
-            // Record no longer resolvable.
-            if (info is null)
-            {
-                continue;
-            }
-            // Taskforce gated by membership; other types by classification.
-            if (type == DashboardRecordType.Taskforce)
-            {
-                if (!visibleTf.Contains(recordId))
-                {
-                    continue;
-                }
-            }
-            else if (info.IsClassified && !isLeadership)
-            {
-                continue;
-            }
-
-            result.Add(new DashboardChange(
-                log.Timestamp, log.AgentName, log.Action, type,
-                recordId, info.Name, info.CaseNumber, detail, info.IsDeleted));
-
-            if (result.Count >= max)
-            {
-                break;
-            }
-        }
-
-        return result;
-    }
-
-    private sealed record RecordInfo(string Name, string CaseNumber, bool IsClassified, bool IsDeleted);
-
-    private static List<string> Ids(List<AuditLog> logs, string type)
-        => logs.Where(a => a.EntityType == type).Select(a => a.EntityId).Distinct().ToList();
-
-    private static List<string> TargetIds(
-        IEnumerable<(AuditLog Log, DashboardRecordType Type, string RecordId, string? Detail)> targets, DashboardRecordType type)
-        => targets.Where(z => z.Type == type).Select(z => z.RecordId).Distinct().ToList();
-
-    private static async Task<Dictionary<string, RecordInfo>> PersonInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.People.IgnoreQueryFilters().Where(p => ids.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => new RecordInfo(p.Name, p.CaseNumber, p.IsClassified, p.IsDeleted), ct);
-
-    private static async Task<Dictionary<string, RecordInfo>> FactionInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.Factions.IgnoreQueryFilters().Where(f => ids.Contains(f.Id))
-                .ToDictionaryAsync(f => f.Id, f => new RecordInfo(f.Name, f.CaseNumber, f.IsClassified, f.IsDeleted), ct);
-
-    private static async Task<Dictionary<string, RecordInfo>> GroupInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.PersonGroups.IgnoreQueryFilters().Where(g => ids.Contains(g.Id))
-                .ToDictionaryAsync(g => g.Id, g => new RecordInfo(g.Name, g.CaseNumber, g.IsClassified, g.IsDeleted), ct);
-
-    private static async Task<Dictionary<string, RecordInfo>> PartyInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.Parties.IgnoreQueryFilters().Where(p => ids.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => new RecordInfo(p.Name, p.CaseNumber, p.IsClassified, p.IsDeleted), ct);
-
-    private static async Task<Dictionary<string, RecordInfo>> OperationInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.Operations.IgnoreQueryFilters().Where(o => ids.Contains(o.Id))
-                .ToDictionaryAsync(o => o.Id, o => new RecordInfo(o.Title, o.CaseNumber, o.IsClassified, o.IsDeleted), ct);
-
-    private static async Task<Dictionary<string, RecordInfo>> TaskforceInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.Taskforces.IgnoreQueryFilters().Where(t => ids.Contains(t.Id))
-                .ToDictionaryAsync(t => t.Id, t => new RecordInfo(t.Name, t.CaseNumber, t.IsClassified, t.IsDeleted), ct);
-
-    private static async Task<Dictionary<string, RecordInfo>> CaseInfos(AppDbContext db, List<string> ids, CancellationToken ct)
-        => ids.Count == 0 ? new()
-            : await db.Cases.IgnoreQueryFilters().Where(v => ids.Contains(v.Id))
-                .ToDictionaryAsync(v => v.Id, v => new RecordInfo(v.Title, v.CaseNumber, v.IsClassified, v.IsDeleted), ct);
 }

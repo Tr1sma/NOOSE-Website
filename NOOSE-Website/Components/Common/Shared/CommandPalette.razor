@@ -44,6 +44,7 @@
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     private bool _open;
+    private bool _mayUseNoosei;
     private ViewerScope _scope;
     private string? _agentId;
     private MudAutocomplete<PaletteItem> _auto = default!;
@@ -59,6 +60,8 @@
         var user = (await AuthStateTask).User;
         _scope = ViewerScope.From(user);
         _agentId = user.GetAgentId();
+        // same three exclusions Permission.RequireLlmUse enforces; no point offering an entry that would refuse
+        _mayUseNoosei = !user.IsPartner() && !user.IsDemo() && !user.IsOnlyReader();
         if (user.IsPartner())
         {
             // partners: only the record types their rank may see, plus global search
@@ -190,6 +193,13 @@
             {
                 // fall back to static commands on search failure
                 Logger.LogDebug(ex, "Schnellsuche in der Command-Palette fehlgeschlagen.");
+            }
+
+            // last, so it never pushes a real hit out of sight; the chat only pre-fills the question
+            if (_mayUseNoosei)
+            {
+                result.Add(new PaletteItem($"NOOSEI fragen: {v}", null, Icons.Material.Filled.SmartToy,
+                    "/ki-assistent?frage=" + Uri.EscapeDataString(v)));
             }
         }
         return result;

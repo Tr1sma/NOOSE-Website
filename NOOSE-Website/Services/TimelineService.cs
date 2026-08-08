@@ -2,8 +2,10 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Abductions;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
@@ -12,6 +14,7 @@ using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Timeline;
 
@@ -30,7 +33,32 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var raw = new List<Raw>();
+        var actorIds = new HashSet<string>();
+        await BuildAsync(db, entityType, entityId, viewer, raw, actorIds, cancellationToken);
+        return await MaterializeAsync(db, raw, actorIds, cancellationToken);
+    }
 
+    public async Task<IReadOnlyList<TimelineEntry>> GetTimelineForRecordsAsync(
+        IReadOnlyList<(string Type, string Id)> records, ClaimsPrincipal viewer,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var raw = new List<Raw>();
+        var actorIds = new HashSet<string>();
+        // one context for the whole batch; each record keeps its own visibility gate
+        foreach (var (type, id) in records)
+        {
+            await BuildAsync(db, type, id, viewer, raw, actorIds, cancellationToken);
+        }
+        return await MaterializeAsync(db, raw, actorIds, cancellationToken);
+    }
+
+    // appends the visible events of one record into raw/actorIds; no-op if the viewer may not see it
+    private async Task BuildAsync(
+        AppDbContext db, string entityType, string entityId, ClaimsPrincipal viewer,
+        List<Raw> raw, HashSet<string> actorIds, CancellationToken cancellationToken)
+    {
         var scope = ViewerScope.From(viewer);
         var agency = scope.PartnerAgency;
         var isPartner = agency is not null;
@@ -40,14 +68,14 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
 
         if (!await Visibility.IsRecordVisibleAsync(db, entityType, entityId, scope, cancellationToken))
         {
-            return Array.Empty<TimelineEntry>();
+            return;
         }
         if (entityType == nameof(Job))
         {
             var visible = await JobVisibility.VisibleIdsAsync(db, new[] { entityId }, mayAllTf, meId, cancellationToken);
             if (!visible.Contains(entityId))
             {
-                return Array.Empty<TimelineEntry>();
+                return;
             }
         }
         if (entityType == nameof(Appointment))
@@ -55,12 +83,9 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             var visible = await AppointmentVisibility.VisibleIdsAsync(db, new[] { entityId }, mayAllTf, meId, cancellationToken);
             if (!visible.Contains(entityId))
             {
-                return Array.Empty<TimelineEntry>();
+                return;
             }
         }
-
-        var raw = new List<Raw>();
-        var actorIds = new HashSet<string>();
 
         // ---- 1) audit base ----
         string[] types;
@@ -81,7 +106,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .Select(a => new { a.Timestamp, a.EntityType, a.Action, a.ChangesJson, a.AgentName })
             .ToListAsync(cancellationToken))
         {
-            var (kat, title) = MapAudit(log.EntityType, log.Action);
+            var (kat, title) = TimelineDisplay.MapAudit(log.EntityType, log.Action);
             raw.Add(new Raw(log.Timestamp, kat, title, null, log.AgentName, null, null,
                 AuditDisplay.Parse(log.ChangesJson)));
         }
@@ -108,7 +133,7 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         foreach (var k in comments)
         {
             raw.Add(new Raw(k.CreatedAt, TimelineCategory.Comment,
-                "Kommentar", Truncate(k.Text), k.AuthorName, null, null, null));
+                "Kommentar", TimelineDisplay.Truncate(k.Text), k.AuthorName, null, null, null));
         }
 
         // ---- 4) sources/attachments ----
@@ -200,23 +225,10 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 Remember(actorIds, o.CreatedById);
                 var title = string.IsNullOrWhiteSpace(o.Location) ? "Observation" : $"Observation – {o.Location}";
                 raw.Add(new Raw(o.Start, TimelineCategory.Observation, title,
-                    Truncate(o.Sighting), null, o.CreatedById, null, null));
+                    TimelineDisplay.Truncate(o.Sighting), null, o.CreatedById, null, null));
             }
 
-            var photos = await db.PersonPhotos
-                .Where(f => f.PersonId == entityId)
-                .Select(f => new { f.Id, f.OriginalName, f.CreatedAt, f.CreatedById })
-                .ToListAsync(cancellationToken);
-            if (isPartner)
-            {
-                photos = await PartnerVisibility.FilterChildrenAsync(db, nameof(Person), entityId, nameof(PersonPhoto), photos, f => f.Id, agency!.Value, meId, cancellationToken);
-            }
-            foreach (var f in photos)
-            {
-                Remember(actorIds, f.CreatedById);
-                raw.Add(new Raw(f.CreatedAt, TimelineCategory.Photo, "Foto hinzugefügt",
-                    f.OriginalName, null, f.CreatedById, null, null));
-            }
+            // photos now surface via the audit fan-out (Person → PersonPhoto)
 
             // cross-ref: skip for partners
             var bez = isPartner ? null : await db.PersonRelations
@@ -257,8 +269,12 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 raw.Add(new Raw(a.ActivityDate, TimelineCategory.Activity, title, PlainSnippet(a.ContentHtml), null, a.CreatedById, null, null));
             }
         }
+    }
 
-        // ---- resolve actor names ----
+    // resolves actor names once, projects + sorts newest first
+    private async Task<IReadOnlyList<TimelineEntry>> MaterializeAsync(
+        AppDbContext db, List<Raw> raw, HashSet<string> actorIds, CancellationToken cancellationToken)
+    {
         var names = actorIds.Count == 0
             ? new Dictionary<string, string?>()
             : await db.Users.Where(u => actorIds.Contains(u.Id))
@@ -284,81 +300,83 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
         return text.Length == 0 ? null : text.Length > max ? text[..max] + "…" : text;
     }
 
+    // record self + its audited children; a common tail fans in polymorphic per-record custom-field values
     private static async Task<(string[] Types, HashSet<string> Ids)> AuditSourceAsync(
         AppDbContext db, string type, string id, CancellationToken ct)
     {
         var ids = new HashSet<string> { id };
+        var types = new List<string> { type };
         switch (type)
         {
             case nameof(Person):
                 ids.UnionWith(await db.PersonDocs.IgnoreQueryFilters().Where(d => d.PersonId == id).Select(d => d.Id).ToListAsync(ct));
-                return ([nameof(Person), nameof(PersonDoc)], ids);
+                ids.UnionWith(await db.PersonPhotos.IgnoreQueryFilters().Where(f => f.PersonId == id).Select(f => f.Id).ToListAsync(ct));
+                types.AddRange([nameof(PersonDoc), nameof(PersonPhoto)]);
+                break;
             case nameof(Faction):
                 ids.UnionWith(await db.FactionMembers.IgnoreQueryFilters().Where(m => m.FactionId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.FactionAgents.IgnoreQueryFilters().Where(a => a.FactionId == id).Select(a => a.Id).ToListAsync(ct));
-                return ([nameof(Faction), nameof(FactionMember), nameof(FactionAgent)], ids);
+                ids.UnionWith(await db.FactionPhotos.IgnoreQueryFilters().Where(f => f.FactionId == id).Select(f => f.Id).ToListAsync(ct));
+                types.AddRange([nameof(FactionMember), nameof(FactionAgent), nameof(FactionPhoto)]);
+                break;
             case nameof(PersonGroup):
                 ids.UnionWith(await db.PersonGroupMembers.IgnoreQueryFilters().Where(m => m.PersonGroupId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.PersonGroupAgents.IgnoreQueryFilters().Where(a => a.PersonGroupId == id).Select(a => a.Id).ToListAsync(ct));
-                return ([nameof(PersonGroup), nameof(PersonGroupMember), nameof(PersonGroupAgent)], ids);
+                types.AddRange([nameof(PersonGroupMember), nameof(PersonGroupAgent)]);
+                break;
             case nameof(Party):
                 ids.UnionWith(await db.PartyMembers.IgnoreQueryFilters().Where(m => m.PartyId == id).Select(m => m.Id).ToListAsync(ct));
                 ids.UnionWith(await db.PartyAgents.IgnoreQueryFilters().Where(a => a.PartyId == id).Select(a => a.Id).ToListAsync(ct));
-                return ([nameof(Party), nameof(PartyMember), nameof(PartyAgent)], ids);
+                types.AddRange([nameof(PartyMember), nameof(PartyAgent)]);
+                break;
             case nameof(Operation):
                 ids.UnionWith(await db.OperationAgents.IgnoreQueryFilters().Where(a => a.OperationId == id).Select(a => a.Id).ToListAsync(ct));
-                return ([nameof(Operation), nameof(OperationAgent)], ids);
+                types.Add(nameof(OperationAgent));
+                break;
+            case nameof(AgentAbduction):
+                ids.UnionWith(await db.AbductionCompromises.Where(c => c.AbductionId == id).Select(c => c.Id).ToListAsync(ct));
+                types.Add(nameof(AbductionCompromise));
+                break;
             case nameof(Case):
                 ids.UnionWith(await db.CaseAgents.IgnoreQueryFilters().Where(a => a.CaseId == id).Select(a => a.Id).ToListAsync(ct));
-                return ([nameof(Case), nameof(CaseAgent)], ids);
+                types.Add(nameof(CaseAgent));
+                break;
             case nameof(Taskforce):
                 ids.UnionWith(await db.TaskforceAgents.IgnoreQueryFilters().Where(a => a.TaskforceId == id).Select(a => a.Id).ToListAsync(ct));
-                return ([nameof(Taskforce), nameof(TaskforceAgent)], ids);
+                types.Add(nameof(TaskforceAgent));
+                break;
             case nameof(Job):
                 ids.UnionWith(await db.JobAssignments.IgnoreQueryFilters().Where(z => z.JobId == id).Select(z => z.Id).ToListAsync(ct));
-                return ([nameof(Job), nameof(JobAssignment)], ids);
+                types.Add(nameof(JobAssignment));
+                break;
             case nameof(Appointment):
                 ids.UnionWith(await db.AppointmentAssignments.IgnoreQueryFilters().Where(z => z.AppointmentId == id).Select(z => z.Id).ToListAsync(ct));
-                return ([nameof(Appointment), nameof(AppointmentAssignment)], ids);
-            default:
-                return ([type], ids);
-        }
-    }
-
-    private static (TimelineCategory Kat, string Title) MapAudit(string entityType, AuditAction action)
-    {
-        string Verb(string created, string deleted) => action switch
-        {
-            AuditAction.Created => created,
-            AuditAction.Modified => "geändert",
-            AuditAction.Deleted => deleted,
-            AuditAction.Restored => "wiederhergestellt",
-            _ => action.ToString(),
-        };
-
-        if (entityType == nameof(PersonDoc))
-        {
-            return (TimelineCategory.Doc, $"Dok {Verb("angelegt", "gelöscht")}");
-        }
-        if (entityType is nameof(FactionMember) or nameof(PersonGroupMember) or nameof(PartyMember))
-        {
-            return (TimelineCategory.Membership, $"Mitglied {Verb("aufgenommen", "entfernt")}");
-        }
-        if (entityType is nameof(FactionAgent) or nameof(PersonGroupAgent) or nameof(PartyAgent)
-            or nameof(OperationAgent) or nameof(CaseAgent) or nameof(TaskforceAgent) or nameof(JobAssignment)
-            or nameof(AppointmentAssignment))
-        {
-            return (TimelineCategory.Allocation, $"Agent {Verb("zugeteilt", "entfernt")}");
+                types.Add(nameof(AppointmentAssignment));
+                break;
+            case nameof(Meeting):
+                ids.UnionWith(await db.MeetingAgendaItems.IgnoreQueryFilters().Where(x => x.MeetingId == id).Select(x => x.Id).ToListAsync(ct));
+                ids.UnionWith(await db.MeetingAttendances.Where(x => x.MeetingId == id).Select(x => x.Id).ToListAsync(ct));
+                ids.UnionWith(await db.MeetingSignOffs.Where(x => x.MeetingId == id).Select(x => x.Id).ToListAsync(ct));
+                types.AddRange([nameof(MeetingAgendaItem), nameof(MeetingAttendance), nameof(MeetingSignOff)]);
+                break;
+            case nameof(FinancingRequest):
+                // lines are not soft-deletable, so no filter to ignore; quantity cuts show as line changes
+                ids.UnionWith(await db.FinancingRequestLines.Where(l => l.RequestId == id).Select(l => l.Id).ToListAsync(ct));
+                types.Add(nameof(FinancingRequestLine));
+                break;
         }
 
-        var kat = action switch
+        // polymorphic attachment: custom-field values on any record type
+        var customFieldIds = await db.CustomFieldValues
+            .Where(v => v.EntityType == type && v.EntityId == id)
+            .Select(v => v.Id).ToListAsync(ct);
+        if (customFieldIds.Count > 0)
         {
-            AuditAction.Created => TimelineCategory.Asset,
-            AuditAction.Deleted => TimelineCategory.Deletion,
-            AuditAction.Restored => TimelineCategory.Restoration,
-            _ => TimelineCategory.Change,
-        };
-        return (kat, $"Akte {Verb("angelegt", "gelöscht")}");
+            ids.UnionWith(customFieldIds);
+            types.Add(nameof(CustomFieldValue));
+        }
+
+        return (types.ToArray(), ids);
     }
 
     private static (string Name, string? Href) CounterpartDisplay(
@@ -390,15 +408,5 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             return name;
         }
         return null;
-    }
-
-    private static string? Truncate(string? text, int max = 160)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-        text = text.Trim();
-        return text.Length <= max ? text : string.Concat(text.AsSpan(0, max), "…");
     }
 }

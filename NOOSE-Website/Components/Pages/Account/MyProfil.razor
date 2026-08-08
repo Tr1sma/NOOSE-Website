@@ -4,121 +4,156 @@
 @inject IRequestService RequestService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IGamificationService Gamification
+@using NOOSE_Website.Models.Gamification
 
 <PageTitle>Mein Profil · NOOSE</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-    <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Mein Profil</MudText>
-</MudStack>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-    @if (!_mayWrite)
+@* Centred column; MainLayout already supplies the horizontal gutter. *@
+<MudContainer MaxWidth="MaxWidth.Large" Class="px-0">
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" Size="Size.Large" />
+        <MudText Typo="Typo.h4">Mein Profil</MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+        @if (!_mayWrite)
+        {
+            <span>Hier siehst du deine Stammdaten. Änderungen sind in deiner Rolle nicht möglich.</span>
+        }
+        else if (_isLeadership)
+        {
+            <span>Hier änderst du deine eigenen Stammdaten. Als Führungskraft greifen deine Änderungen <b>sofort</b>.</span>
+        }
+        else
+        {
+            <span>Hier änderst du deine eigenen Stammdaten. Deine Änderungen müssen von der Führung <b>freigegeben</b> werden, bevor sie wirksam werden.</span>
+        }
+    </MudText>
+
+    @if (_load)
     {
-        <span>Hier siehst du deine Stammdaten. Änderungen sind in deiner Rolle nicht möglich.</span>
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
-    else if (_isLeadership)
+    else if (_agent is null)
     {
-        <span>Hier änderst du deine eigenen Stammdaten. Als Führungskraft greifen deine Änderungen <b>sofort</b>.</span>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+            Dein Konto konnte nicht geladen werden. Bitte melde dich neu an.
+        </MudAlert>
     }
     else
     {
-        <span>Hier änderst du deine eigenen Stammdaten. Deine Änderungen müssen von der Führung <b>freigegeben</b> werden, bevor sie wirksam werden.</span>
+        @if (_agent.NameChangeRequestedAt is not null)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.HourglassTop">
+                Dein Antrag auf Stammdatenänderung wartet auf Freigabe durch die Führung
+                (eingereicht am @_agent.NameChangeRequestedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")).
+                Beantragter Codename: <b>@_agent.PendingCodename</b>.
+                Du kannst die Eingaben unten anpassen und den Antrag erneut absenden.
+            </MudAlert>
+        }
+
+        @* Centres the lone card when the performance column is absent. *@
+        <MudGrid Spacing="6" Justify="Justify.Center">
+
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-6" Elevation="2" Style="height:100%;">
+                    <MudForm @ref="_form">
+                        <MudStack Spacing="3">
+                            <MudAlert Severity="Severity.Normal" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Shield">
+                                @RankDisplay.Name(_agent.Rank)
+                                @if (!string.IsNullOrWhiteSpace(_agent.DiscordUsername))
+                                {
+                                    <span class="mud-text-secondary"> · Discord: @_agent.DiscordUsername</span>
+                                }
+                            </MudAlert>
+
+                            @if (!_mayWrite)
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">
+                                    @(_isPartner ? "Als Partnerbehörde" : "In der Aufsichtsrolle") können Sie Ihre Stammdaten nur einsehen, nicht ändern.
+                                </MudAlert>
+                            }
+
+                            <MudTextField @bind-Value="_realName" Label="Klarname (echter Name)" Variant="Variant.Outlined"
+                                          AutoFocus="@_mayWrite" ReadOnly="@(!_mayWrite)"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.VisibilityOff"
+                                          HelperText="Nur für die Führungsebene sichtbar – wird rangniedrigeren Nutzern nie angezeigt." />
+
+                            <MudTextField @bind-Value="_codename" Label="Codename (Deckname)" Variant="Variant.Outlined"
+                                          Required="true" RequiredError="Der Codename darf nicht leer sein." ReadOnly="@(!_mayWrite)"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge"
+                                          HelperText="Für alle Nutzer sichtbar – dein überall angezeigter Name." />
+
+                            <MudTextField @bind-Value="_badgeNumber" Label="Dienstnummer" Variant="Variant.Outlined"
+                                          ReadOnly="@(!_mayWrite)"
+                                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Numbers"
+                                          HelperText="Für alle Nutzer sichtbar (Freitext, optional)." />
+
+                            @if (_mayWrite)
+                            {
+                                <MudStack Row="true" Justify="Justify.FlexEnd">
+                                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
+                                               Disabled="_save" StartIcon="@(_isLeadership ? Icons.Material.Filled.Save : Icons.Material.Filled.Send)">
+                                        @(_isLeadership ? "Speichern" : "Zur Freigabe einreichen")
+                                    </MudButton>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudForm>
+                </MudPaper>
+            </MudItem>
+
+            @if (!_isPartner)
+            {
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-6" Elevation="2" Style="height:100%;">
+                        <MudText Typo="Typo.h6" Class="mb-3">Meine Leistung</MudText>
+                        <MudStack Row="true" Class="flex-wrap mb-4" Spacing="3">
+                            <StatTile Icon="@Icons.Material.Filled.FolderOpen" Label="Akten" Value="@_stats.Records.ToString()" />
+                            <StatTile Icon="@Icons.Material.Filled.Description" Label="Doks" Value="@_stats.Docs.ToString()" />
+                            <StatTile Icon="@Icons.Material.Filled.Hub" Label="Verknüpfungen" Value="@_stats.Links.ToString()" />
+                            <StatTile Icon="@Icons.Material.Filled.Shield" Label="Einstufungen" Value="@_stats.Classifications.ToString()" />
+                            <StatTile Icon="@Icons.Material.Filled.Visibility" Label="Observationen" Value="@_stats.Observations.ToString()" />
+                            <StatTile Icon="@Icons.Material.Filled.TaskAlt" Label="Gelöste Vorgänge" Value="@_stats.SolvedCases.ToString()" />
+                        </MudStack>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Auszeichnungen</MudText>
+                        <AgentBadgesPanel AgentId="@_agent.Id" />
+                    </MudPaper>
+                </MudItem>
+            }
+
+            @if (_myRequests.Count > 0)
+            {
+                <MudItem xs="12">
+                    <MudPaper Class="pa-6" Elevation="2">
+                        <MudText Typo="Typo.h6" Class="mb-1">Meine Hochstufungs-Anträge</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+                            Von dir gestellte Anträge auf die Einstufung „Gesichert staatsgefährdend“.
+                        </MudText>
+                        <MudStack Spacing="2">
+                            @foreach (var a in _myRequests)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudChip T="string" Size="Size.Small" Color="@StatusColour(a.Status)" Variant="Variant.Filled">@RequestStatusDisplay.Name(a.Status)</MudChip>
+                                    <MudText Typo="Typo.body2">@a.TargetDesignation</MudText>
+                                    <MudSpacer />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                                </MudStack>
+                                @if (!string.IsNullOrWhiteSpace(a.DecisionNote))
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">Notiz: <MentionDisplay Text="@a.DecisionNote" /></MudText>
+                                }
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            }
+
+        </MudGrid>
     }
-</MudText>
 
-@if (_load)
-{
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-}
-else if (_agent is null)
-{
-    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
-        Dein Konto konnte nicht geladen werden. Bitte melde dich neu an.
-    </MudAlert>
-}
-else
-{
-    @if (_agent.NameChangeRequestedAt is not null)
-    {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.HourglassTop">
-            Dein Antrag auf Stammdatenänderung wartet auf Freigabe durch die Führung
-            (eingereicht am @_agent.NameChangeRequestedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")).
-            Beantragter Codename: <b>@_agent.PendingCodename</b>.
-            Du kannst die Eingaben unten anpassen und den Antrag erneut absenden.
-        </MudAlert>
-    }
-
-    <MudPaper Class="pa-6" Elevation="2" Style="max-width:640px;">
-        <MudForm @ref="_form">
-            <MudStack Spacing="3">
-                <MudAlert Severity="Severity.Normal" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Shield">
-                    @RankDisplay.Name(_agent.Rank)
-                    @if (!string.IsNullOrWhiteSpace(_agent.DiscordUsername))
-                    {
-                        <span class="mud-text-secondary"> · Discord: @_agent.DiscordUsername</span>
-                    }
-                </MudAlert>
-
-                @if (!_mayWrite)
-                {
-                    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lock">
-                        @(_isPartner ? "Als Partnerbehörde" : "In der Aufsichtsrolle") können Sie Ihre Stammdaten nur einsehen, nicht ändern.
-                    </MudAlert>
-                }
-
-                <MudTextField @bind-Value="_realName" Label="Klarname (echter Name)" Variant="Variant.Outlined"
-                              AutoFocus="@_mayWrite" ReadOnly="@(!_mayWrite)"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.VisibilityOff"
-                              HelperText="Nur für die Führungsebene sichtbar – wird rangniedrigeren Nutzern nie angezeigt." />
-
-                <MudTextField @bind-Value="_codename" Label="Codename (Deckname)" Variant="Variant.Outlined"
-                              Required="true" RequiredError="Der Codename darf nicht leer sein." ReadOnly="@(!_mayWrite)"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge"
-                              HelperText="Für alle Nutzer sichtbar – dein überall angezeigter Name." />
-
-                <MudTextField @bind-Value="_badgeNumber" Label="Dienstnummer" Variant="Variant.Outlined"
-                              ReadOnly="@(!_mayWrite)"
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Numbers"
-                              HelperText="Für alle Nutzer sichtbar (Freitext, optional)." />
-
-                @if (_mayWrite)
-                {
-                    <MudStack Row="true" Justify="Justify.FlexEnd">
-                        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync"
-                                   Disabled="_save" StartIcon="@(_isLeadership ? Icons.Material.Filled.Save : Icons.Material.Filled.Send)">
-                            @(_isLeadership ? "Speichern" : "Zur Freigabe einreichen")
-                        </MudButton>
-                    </MudStack>
-                }
-            </MudStack>
-        </MudForm>
-    </MudPaper>
-
-    @if (_myRequests.Count > 0)
-    {
-        <MudPaper Class="pa-6 mt-6" Elevation="2" Style="max-width:640px;">
-            <MudText Typo="Typo.h6" Class="mb-1">Meine Hochstufungs-Anträge</MudText>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
-                Von dir gestellte Anträge auf die Einstufung „Gesichert staatsgefährdend“.
-            </MudText>
-            <MudStack Spacing="2">
-                @foreach (var a in _myRequests)
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColour(a.Status)" Variant="Variant.Filled">@RequestStatusDisplay.Name(a.Status)</MudChip>
-                        <MudText Typo="Typo.body2">@a.TargetDesignation</MudText>
-                        <MudSpacer />
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
-                    </MudStack>
-                    @if (!string.IsNullOrWhiteSpace(a.DecisionNote))
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">Notiz: <MentionDisplay Text="@a.DecisionNote" /></MudText>
-                    }
-                }
-            </MudStack>
-        </MudPaper>
-    }
-}
+</MudContainer>
 
 @code {
     [CascadingParameter]
@@ -132,6 +167,7 @@ else
     private ClaimsPrincipal _user = default!;
     private Agent? _agent;
     private List<Request> _myRequests = new();
+    private AgentStats _stats = AgentStats.Empty;
 
     private MudForm _form = default!;
     private string _codename = string.Empty;
@@ -154,6 +190,10 @@ else
         if (!string.IsNullOrWhiteSpace(id))
         {
             _myRequests = await RequestService.GetMyAsync(id);
+            if (!_isPartner)
+            {
+                _stats = await Gamification.GetStatsAsync(id);
+            }
         }
         _load = false;
     }

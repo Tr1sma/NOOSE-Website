@@ -1,0 +1,154 @@
+@* Leading numbers first, then the three charts that answer "how is the inventory doing right now". *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+@inject IDashboardService Dashboard
+@inject IInventoryStatisticsService Inventory
+@inject IThreatStatisticsService Threat
+
+<div class="dashboard-seite">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Class="mb-4">
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="/statistik/export/verteilungen.csv" Target="_blank">Verteilungen (CSV)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="@($"/statistik/export/bestand.csv?range={StatisticsRangeDisplay.Token(Scope.Range)}")"
+                   Target="_blank">Bestand (CSV)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="@($"/statistik/export/durchlauf.csv?range={StatisticsRangeDisplay.Token(Scope.Range)}")"
+                   Target="_blank">Durchlauf (CSV)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="@($"/statistik/export/bedrohung.csv?range={StatisticsRangeDisplay.Token(Scope.Range)}")"
+                   Target="_blank">Bedrohung (CSV)</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Download"
+                   Href="/statistik/export/personen.csv" Target="_blank">Personen (CSV)</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print"
+                   Href="/statistik/druck" Target="_blank">Druck / PDF</MudButton>
+    </MudStack>
+
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        @* exactly one hero figure per view *@
+        <MudPaper Class="pa-6 mb-4" Elevation="2">
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">Akten mit erhöhter Bedrohung (Score ab 50)</MudText>
+            <div style="font-size:3rem;line-height:1.1;font-weight:600;">@_threat.Elevated</div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                von @_threat.ScoredRecords bewerteten Akten · davon @_threat.Critical kritisch (ab 75)
+                · Durchschnitt @_threat.AverageScore.ToString("0.#") Punkte
+                bei @_threat.AverageConfidence.ToString("0.#") % Konfidenz
+            </MudText>
+        </MudPaper>
+
+        <MudGrid>
+            <MudItem xs="6" sm="4" md="2">
+                <StatTile Icon="@Icons.Material.Filled.Badge" Label="Personen" Value="@_metrics.People.ToString()"
+                          Href="/personen" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <StatTile Icon="@Icons.Material.Filled.Groups" Label="Organisationen"
+                          Value="@_metrics.FactionsAndGroups.ToString()" Href="/fraktionen" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <StatTile Icon="@Icons.Material.Filled.Radar" Label="Operationen"
+                          Value="@_metrics.Operations.ToString()" Href="/operationen" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <StatTile Icon="@Icons.Material.Filled.FolderSpecial" Label="Offene Vorgänge"
+                          Value="@_metrics.OpenCases.ToString()" Href="/vorgaenge" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <StatTile Icon="@Icons.Material.Filled.Inbox" Label="Offene Anträge" Colour="Color.Warning"
+                          Value="@_metrics.OpenRequests.ToString()" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <StatTile Icon="@Icons.Material.Filled.HistoryToggleOff" Label="Veraltete Akten" Colour="Color.Error"
+                          Value="@_metrics.StaleRecords.ToString()"
+                          Hint="Akten außerhalb ihres Aktualitäts-Fensters" />
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid Class="mt-4">
+            <MudItem xs="12" lg="8" Class="d-flex">
+                <TrendChart Title="Neue Akten je Bucket" Subtitle="Wohin die Erfassungsarbeit fließt"
+                            Dates="@_growthDates" Series="@_growth.Series" Granularity="@Scope.Granularity"
+                            Area="true" YAxisTitle="Akten" Height="320px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" lg="4" Class="d-flex">
+                <ChartFrame Title="Aktualität des Bestands" Subtitle="Anteil im Aktualitäts-Fenster"
+                            Height="320px" IsEmpty="@(_recency.Count == 0)" Stale="@_stale">
+                    <RatioMeter Rows="@_recency" />
+                </ChartFrame>
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <HistogramChart Title="Verteilung der Bedrohungs-Scores"
+                                Subtitle="Wie sich Personen und Fraktionen über die Punkteskala verteilen"
+                                Buckets="@_personBuckets" SeriesName="Personen"
+                                XAxisTitle="Score" Height="300px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Gefährdung Personen vs. Fraktionen"
+                                  Subtitle="Zwei Grundgesamtheiten direkt vergleichbar"
+                                  Grid="@_hazard" Colours="@_hazardColours"
+                                  YAxisTitle="Akten" Height="300px" Stale="@_stale" />
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+
+    private DashboardMetrics _metrics = new(0, 0, 0, 0, 0, 0, 0);
+    private ThreatHeadline _threat = new(0, 0, 0, 0, 0);
+    private ChartGrid _growth = ChartGrid.Empty;
+    private List<DateTime> _growthDates = [];
+    private ChartGrid _hazard = ChartGrid.Empty;
+    private IReadOnlyList<ChartRatio> _recency = [];
+    private IReadOnlyList<ChartBucket> _personBuckets = [];
+
+    // hazard is a reserved status scale, never a series colour
+    private static readonly string[] _hazardColours = [ChartPalette.Hazard[2], ChartPalette.Hazard[3]];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // the rail remounts this panel on every section switch, so guard on the scope token
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+
+        _metrics = await Dashboard.GetMetricsAsync(Scope.IncludeClassified, null);
+        _threat = await Threat.GetHeadlineAsync(Scope);
+        _growth = await Inventory.GetGrowthAsync(Scope);
+        _hazard = await Inventory.GetHazardComparisonAsync(Scope);
+        _recency = await Inventory.GetRecencyAsync(Scope);
+
+        var histogram = await Threat.GetScoreHistogramAsync(Scope);
+        _personBuckets = ToBuckets(histogram);
+        _growthDates = StatisticsBuckets.Starts(Scope, DateTime.UtcNow);
+
+        _first = false;
+        _stale = false;
+    }
+
+    /// <summary>Folds the two-series histogram grid into the bucket shape the histogram chart takes.</summary>
+    private static IReadOnlyList<ChartBucket> ToBuckets(ChartGrid grid)
+    {
+        if (grid.Labels.Count == 0 || grid.Series.Count == 0)
+        {
+            return [];
+        }
+        return grid.Labels
+            .Select((label, i) => new ChartBucket(label, i * 10, i * 10 + 10,
+                (int)grid.Series.Sum(s => i < s.Values.Count ? s.Values[i] : 0)))
+            .ToList();
+    }
+}

@@ -10,7 +10,8 @@ public interface IAgentManagementService
     Task<List<Agent>> GetPendingAsync(CancellationToken cancellationToken = default);
     Task<List<Agent>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Active agents without the team-lead marker, sorted by codename; team-leads are never selectable or mentionable.</summary>
+    /// <summary>Every agent a picker may offer, sorted by codename; see <see cref="AgentSelection"/>.</summary>
+    /// <remarks>Team leads and partners are never selectable, no matter which flags they carry.</remarks>
     Task<List<Agent>> GetSelectableAsync(CancellationToken cancellationToken = default);
 
     Task<Agent?> FindAsync(string agentId, CancellationToken cancellationToken = default);

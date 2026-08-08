@@ -1,0 +1,111 @@
+@* Feedback list, either the caller's own reports or the leadership inbox. *@
+@using NOOSE_Website.Navigation
+@inject IFeedbackService FeedbackService
+@inject IDialogService DialogService
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">@EmptyText</MudAlert>
+}
+else
+{
+    <MudTable T="FeedbackRow" Items="_rows" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1"
+              RowClass="cursor-pointer" OnRowClick="@(args => OpenAsync(args.Item))">
+        <HeaderContent>
+            <MudTh>Art</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Meldung</MudTh>
+            <MudTh>Seite</MudTh>
+            <MudTh>Agent</MudTh>
+            <MudTh>Gemeldet</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="row">
+            <MudTd DataLabel="Art">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@FeedbackKindDisplay.Icon(row.Kind)" Size="Size.Small" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2">@FeedbackKindDisplay.Name(row.Kind)</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@FeedbackStatusDisplay.ChipColor(row.Status)"
+                         Icon="@FeedbackStatusDisplay.Icon(row.Status)">@FeedbackStatusDisplay.Name(row.Status)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Meldung">
+                <MudText Typo="Typo.body2">@Snippet(row.Text)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Seite">
+                @* link stops row click from opening the dialog *@
+                @if (row.PageRoute is { } route)
+                {
+                    <MudLink Href="@(route + (row.PageTab is { } tab ? "?tab=" + tab : ""))" Typo="Typo.body2"
+                             @onclick:stopPropagation="true">
+                        @(NavCatalog.ByRoute(route)?.Label ?? route)
+                    </MudLink>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Agent">@row.AgentCodename</MudTd>
+            <MudTd DataLabel="Gemeldet">@row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Leadership inbox instead of the caller's own reports.</summary>
+    [Parameter] public bool Inbox { get; set; }
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<FeedbackRow> _rows = [];
+    private bool? _loadedInbox;
+    private bool _load = true;
+
+    private string EmptyText => Inbox
+        ? "Es liegt kein Feedback vor."
+        : "Du hast bisher kein Feedback gemeldet.";
+
+    // the rail may swap the parameter while the component stays alive, so react to parameters, not to init
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedInbox == Inbox)
+        {
+            return;
+        }
+        _loadedInbox = Inbox;
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        _rows = Inbox
+            ? await FeedbackService.GetInboxAsync(_user)
+            : await FeedbackService.GetMyAsync(_user);
+        _load = false;
+    }
+
+    private async Task OpenAsync(FeedbackRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+        if (await FeedbackDetailDialog.ShowAsync(DialogService, row, _user))
+        {
+            await LoadAsync();
+        }
+    }
+
+    private static string Snippet(string text)
+        => text.Length <= 100 ? text : string.Concat(text.AsSpan(0, 100), "…");
+}

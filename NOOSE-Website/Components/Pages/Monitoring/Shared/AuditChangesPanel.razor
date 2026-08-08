@@ -1,0 +1,190 @@
+@* Change log: who altered which record, with the field-level before/after. Leadership and read-only supervision. *@
+@inject IAuditLogQueryService AuditQuery
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Jede Änderung an einer Akte mit Feld-Verlauf. Je Filter werden höchstens @AuditLogFilter.MaxRows Treffer geladen –
+    bei Bedarf enger filtern.
+</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+}
+else
+{
+    <AuditFilterBar Filter="_filter" Options="Options" ShowAction="true" Busy="_busy"
+                    From="_from" FromChanged="OnFromAsync" To="_to" ToChanged="OnToAsync"
+                    OnApply="ApplyAsync" OnReset="ResetAsync" />
+
+    @if (_busy)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+    }
+
+    @if (_page.Capped)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            @_page.TotalCount Treffer insgesamt – es werden die neuesten @_page.Rows.Count angezeigt.
+            Filter verfeinern für ältere Einträge.
+        </MudAlert>
+    }
+
+    <MudTable Items="_page.Rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0" Dense="true"
+              Loading="_busy" LoadingProgressColor="Color.Primary">
+        <HeaderContent>
+            <MudTh>Zeitpunkt</MudTh>
+            <MudTh>Agent</MudTh>
+            <MudTh>Objekt</MudTh>
+            <MudTh>Aktion</MudTh>
+            <MudTh>Änderungen</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Zeitpunkt">@context.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")</MudTd>
+            <MudTd DataLabel="Agent">@(string.IsNullOrWhiteSpace(context.AgentName) ? "System" : context.AgentName)</MudTd>
+            <MudTd DataLabel="Objekt">@RecordLink(context.EntityType, context.EntityId)</MudTd>
+            <MudTd DataLabel="Aktion">
+                <MudChip T="string" Size="Size.Small" Color="@AuditActionDisplay.Colour(context.Action)"
+                         Variant="Variant.Filled">@AuditActionDisplay.Name(context.Action)</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Änderungen">
+                @{
+                    var changes = AuditDisplay.Parse(context.ChangesJson);
+                }
+                @if (changes.Count == 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="0">
+                        @foreach (var fc in changes)
+                        {
+                            <MudText Typo="Typo.caption"><b>@fc.Field:</b> @fc.Alt → @fc.New</MudText>
+                        }
+                    </MudStack>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Keine Änderungen für diesen Filter.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Dropdown sources, loaded once by the page so a section switch does not re-query them.</summary>
+    [Parameter, EditorRequired] public AuditFilterOptions Options { get; set; } =
+        new(Array.Empty<AuditAgentOption>(), Array.Empty<string>());
+
+    private ClaimsPrincipal _user = new();
+    private AuditLogFilter _filter = new();
+    private AuditLogPage _page = new(Array.Empty<AuditChangeRow>(), 0);
+    private DateTime? _from;
+    private DateTime? _to;
+    private bool _busy = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        ReadUrlState();
+        await ReloadAsync();
+    }
+
+    private async Task OnFromAsync(DateTime? value)
+    {
+        _from = value;
+        await ApplyAsync();
+    }
+
+    private async Task OnToAsync(DateTime? value)
+    {
+        _to = value;
+        await ApplyAsync();
+    }
+
+    private async Task ApplyAsync()
+    {
+        await WriteUrlStateAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        _filter = new AuditLogFilter();
+        _from = null;
+        _to = null;
+        await ApplyAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            // pickers are local dates; treat "Bis" as an inclusive whole day
+            _filter.FromUtc = _from?.Date.ToUniversalTime();
+            _filter.ToUtc = _to?.Date.AddDays(1).ToUniversalTime();
+            _page = await AuditQuery.QueryChangesAsync(_filter, _user);
+            _error = null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Protokoll konnte nicht geladen werden: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // the rail recreates this panel on every section switch, so the filter lives in the URL
+    private void ReadUrlState()
+    {
+        _filter.AgentId = QueryState.Read(Nav, "ag");
+        _filter.EntityType = QueryState.Read(Nav, "objtyp");
+        _filter.EntityId = QueryState.Read(Nav, "objid");
+        _filter.Action = QueryState.ReadEnum<AuditAction>(Nav, "aktion");
+        if (DateTime.TryParse(QueryState.Read(Nav, "von"), out var from))
+        {
+            _from = from.Date;
+        }
+        if (DateTime.TryParse(QueryState.Read(Nav, "bis"), out var to))
+        {
+            _to = to.Date;
+        }
+    }
+
+    private Task WriteUrlStateAsync() => QueryState.WriteAsync(JS, Nav,
+        ("ag", _filter.AgentId),
+        ("objtyp", _filter.EntityType),
+        ("objid", _filter.EntityId),
+        ("aktion", _filter.Action?.ToString()),
+        ("von", _from?.ToString("yyyy-MM-dd")),
+        ("bis", _to?.ToString("yyyy-MM-dd")));
+
+    private RenderFragment RecordLink(string type, string id) => __builder =>
+    {
+        var label = AuditEntityDisplay.Label(type);
+        var route = AuditEntityDisplay.Route(type, id);
+        if (route is null)
+        {
+            <MudText Typo="Typo.body2">@label</MudText>
+        }
+        else
+        {
+            <MudLink Href="@route">@label</MudLink>
+        }
+    };
+}

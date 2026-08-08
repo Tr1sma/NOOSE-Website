@@ -50,14 +50,8 @@
         <MudDivider />
 
         <MudStack Spacing="1">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                @* state factions and exempt records never go stale: forced Fresh wins *@
-                <RecencyIndicator Level="@(Faction.IsStateFaction || Faction.AgingDisabled ? RecencyLevel.Fresh : (RecencyLevel?)null)"
-                                  RecordsType="@nameof(Faction)" ReferenceDateUtc="@(Faction.ModifiedAt ?? Faction.CreatedAt)" />
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Zuletzt aktualisiert: @((Faction.ModifiedAt ?? Faction.CreatedAt).ToLocalTime().ToString("dd.MM.yyyy HH:mm"))
-                </MudText>
-            </MudStack>
+            @* state factions and exempt records never go stale: forced Fresh wins *@
+            <FactionRecencyPanel Faction="Faction" ForcedFresh="@(Faction.IsStateFaction || Faction.AgingDisabled)" />
             <AuthorizeView Policy="@Policies.Leadership">
                 <MudSwitch T="bool" Value="Faction.AgingDisabled" ValueChanged="ToggleAgingAsync"
                            Color="Color.Info" Size="Size.Small" Label="Veralterung deaktiviert" />

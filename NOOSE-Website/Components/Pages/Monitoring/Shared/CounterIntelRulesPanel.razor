@@ -1,0 +1,205 @@
+@* Rule list for the counter-intelligence cockpit: create, tune, switch off. Leadership-only (service-guarded). *@
+@using NOOSE_Website.Models.CounterIntel
+@inject ICounterIntelRuleService RuleService
+@inject ICounterIntelService CounterIntel
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Restore"
+               OnClick="RestoreDefaultsAsync">
+        Standard-Regeln
+    </MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               OnClick="NewAsync">
+        Neue Regel
+    </MudButton>
+</MudStack>
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Eigene Muster für die Gegenaufklärung. Jede Regel kombiniert Aktion, Ziel-Akte, Akteur und Tageszeit und
+    schlägt an, sobald ein Agent ihre Schwelle reißt. Treffer erscheinen im Reiter „Auffälligkeiten“ der
+    Gegenaufklärung. Nur-Lese-Aufsicht und System-Zugriffe bleiben überall ausgeblendet.
+</MudText>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@_error</MudAlert>
+}
+else if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_rules" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Regel</MudTh>
+            <MudTh>Schweregrad</MudTh>
+            <MudTh>Bedingungen</MudTh>
+            <MudTh Style="text-align:right;">Treffer</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Regel">
+                <MudText Typo="Typo.body2"><b>@context.Name</b></MudText>
+                @if (!string.IsNullOrWhiteSpace(context.Description))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Description</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Schweregrad">
+                <MudChip T="string" Size="Size.Small" Color="@Colour(context.Severity)"
+                         Variant="@(context.Severity == CounterIntelSeverity.Critical ? Variant.Filled : Variant.Outlined)">
+                    @CounterIntelSeverityDisplay.Name(context.Severity)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Bedingungen">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@CounterIntelRuleDisplay.Summary(context.Definition)</MudText>
+            </MudTd>
+            <MudTd DataLabel="Treffer" Style="text-align:right;">
+                @if (_hits.TryGetValue(context.Id, out var hits) && hits > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">@hits</MudChip>
+                }
+                else if (context.IsActive)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">0</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">—</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudSwitch T="bool" Value="context.IsActive" Color="Color.Primary" Size="Size.Small"
+                           ValueChanged="@((bool v) => ToggleAsync(context, v))" />
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditAsync(context))" aria-label="Regel bearbeiten" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                   OnClick="@(() => DuplicateAsync(context))" aria-label="Regel duplizieren" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteAsync(context))" aria-label="Regel löschen" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">
+                Noch keine Regeln angelegt — die Gegenaufklärung meldet damit keine Auffälligkeiten.
+                „Standard-Regeln“ legt die drei mitgelieferten Muster wieder an.
+            </MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private string? _error;
+    private IReadOnlyList<CounterIntelRuleView> _rules = Array.Empty<CounterIntelRuleView>();
+    private Dictionary<string, int> _hits = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rules = await RuleService.GetAllAsync(_user);
+            var flags = await CounterIntel.GetFlagsAsync(_user);
+            _hits = flags.GroupBy(f => f.RuleId).ToDictionary(g => g.Key, g => g.Count());
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _error = ex.Message;
+        }
+        _load = false;
+    }
+
+    private async Task NewAsync()
+    {
+        var input = await CounterIntelRuleDialog.ShowAsync(DialogService, "Neue Regel");
+        if (input is null)
+        {
+            return;
+        }
+        await RunAsync(() => RuleService.CreateAsync(input, _user), "Regel angelegt.");
+    }
+
+    private async Task EditAsync(CounterIntelRuleView rule)
+    {
+        var input = await CounterIntelRuleDialog.ShowAsync(DialogService, "Regel bearbeiten", rule);
+        if (input is null)
+        {
+            return;
+        }
+        await RunAsync(() => RuleService.UpdateAsync(rule.Id, input, _user), "Regel gespeichert.");
+    }
+
+    private async Task DuplicateAsync(CounterIntelRuleView rule)
+        => await RunAsync(() => RuleService.DuplicateAsync(rule.Id, _user), "Kopie angelegt — sie ist noch inaktiv.");
+
+    private async Task ToggleAsync(CounterIntelRuleView rule, bool isActive)
+        => await RunAsync(() => RuleService.SetActiveAsync(rule.Id, isActive, _user),
+            isActive ? "Regel aktiviert." : "Regel deaktiviert.");
+
+    private async Task DeleteAsync(CounterIntelRuleView rule)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Regel löschen?",
+            $"„{rule.Name}“ wird gelöscht und meldet keine Auffälligkeiten mehr.");
+        if (!ok)
+        {
+            return;
+        }
+        await RunAsync(() => RuleService.DeleteAsync(rule.Id, _user), "Regel gelöscht.");
+    }
+
+    private async Task RestoreDefaultsAsync()
+    {
+        try
+        {
+            var added = await RuleService.RestoreDefaultsAsync(_user);
+            Snackbar.Add(added == 0 ? "Alle Standard-Regeln sind bereits vorhanden." : $"{added} Standard-Regel(n) wiederhergestellt.",
+                added == 0 ? Severity.Info : Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    // every write follows the same shape: run, report, reload
+    private async Task RunAsync(Func<Task> action, string success)
+    {
+        try
+        {
+            await action();
+            Snackbar.Add(success, Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private static Color Colour(CounterIntelSeverity severity) => severity switch
+    {
+        CounterIntelSeverity.Info => Color.Info,
+        CounterIntelSeverity.Warning => Color.Warning,
+        _ => Color.Error,
+    };
+}

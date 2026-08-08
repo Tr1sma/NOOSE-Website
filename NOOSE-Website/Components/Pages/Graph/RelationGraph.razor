@@ -1,5 +1,10 @@
 @page "/graph"
+@using NOOSE_Website.Data.Entities.Common
 @inject IGraphService GraphService
+@inject IGraphCanvasLayoutService LayoutService
+@inject ILinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject Microsoft.Extensions.Logging.ILogger<RelationGraph> Logger
@@ -15,7 +20,7 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Verknüpfungen &amp; Beziehungen aller Akten als interaktives Lagebild.</MudText>
         </div>
         <MudSpacer />
-        <MudTooltip Text="@(_freeMode ? "Freies Anordnen aktiv – Knoten lassen sich frei ziehen und schieben. Klicken zum Zurückschalten auf die lebendige Animation." : "Frei anordnen: Animation &amp; automatisches Auseinanderdrücken aus – Knoten frei ziehen und schieben")">
+        <MudTooltip Text="@(_freeMode ? "Graph angehalten – nichts bewegt sich von selbst. Knoten frei ziehen; verbundene Knoten (z. B. die Fraktion) kommen mit. Klicken zum Zurückschalten auf die lebendige Animation." : "Anhalten &amp; frei anordnen: Animation aus, Positionen bleiben stehen – Knoten ziehen nimmt verbundene Knoten mit")">
             <MudIconButton Icon="@(_freeMode ? Icons.Material.Filled.PanTool : Icons.Material.Outlined.PanTool)"
                            Color="@(_freeMode ? Color.Primary : Color.Default)"
                            OnClick="ToggleFreeModeAsync" Disabled="@(!_ready)" />
@@ -45,7 +50,12 @@
             @if (_modeFocus)
             {
                 <GraphRecordPicker Label="Fokus-Akte" IsLeadership="_isLeadership" MeId="_meId" MayAllTf="_mayAllTf"
-                                 Selected="FocusSelectedAsync" />
+                                 Selected="FocusSelectedAsync" Preset="_focusPreset" />
+                @if (_focusPreset is not null && !string.IsNullOrWhiteSpace(_focusPreset.Designation))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                             Icon="@Icons.Material.Filled.CenterFocusWeak">@_focusPreset.Designation</MudChip>
+                }
                 <MudSelect T="int" @bind-Value="_depth" @bind-Value:after="LoadAndDrawAsync" Label="Tiefe" Dense="true"
                            Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:110px;">
                     <MudSelectItem Value="1">1 Hop</MudSelectItem>
@@ -70,6 +80,51 @@
                 <MudSelectItem T="string" Value="@("Konflikt")">Konflikt</MudSelectItem>
                 <MudSelectItem T="string" Value="@("Buendnis")">Bündnis</MudSelectItem>
             </MudSelect>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-3" Elevation="1">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">ANALYSE-WORKBENCH</MudText>
+            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Star"
+                       Variant="@(_computeCentrality ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_computeCentrality ? Color.Warning : Color.Default)"
+                       OnClick="CentralityToggleAsync" Disabled="@(!_ready)">Schlüsselfiguren</MudButton>
+            @if (_computeCentrality && _data is not null)
+            {
+                var keyCount = _data.Node.Count(n => n.IsKeyFigure);
+                <MudText Typo="Typo.caption" Style="@($"color:{KeyFigureGold};")">
+                    @(keyCount == 0
+                        ? "keine Schlüsselfigur – zu kleines oder gleichmäßig vernetztes Netz"
+                        : keyCount == 1 ? "1 Schlüsselfigur: ★ groß & gold hervorgehoben" : $"{keyCount} Schlüsselfiguren: ★ groß & gold hervorgehoben")
+                </MudText>
+            }
+            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.BubbleChart"
+                       Variant="@(_communityOn ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_communityOn ? Color.Primary : Color.Default)"
+                       OnClick="CommunityToggleAsync" Disabled="@(!_ready)">Cluster einfärben</MudButton>
+            @if (_user.MayWrite())
+            {
+                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.AddLink"
+                           Variant="@(_linkMode ? Variant.Filled : Variant.Outlined)"
+                           Color="@(_linkMode ? Color.Secondary : Color.Default)"
+                           OnClick="LinkModeToggleAsync" Disabled="@(!_ready)">Verknüpfen</MudButton>
+            }
+            <MudSpacer />
+            @if (_user.MayWrite())
+            {
+                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" Variant="Variant.Text"
+                           OnClick="SaveLayoutAsync" Disabled="@(!_ready)">Ansicht speichern</MudButton>
+            }
+            @if (_layouts.Count > 0)
+            {
+                <MudMenu Label="Ansicht laden" StartIcon="@Icons.Material.Filled.FolderOpen" Variant="Variant.Text" Dense="true">
+                    @foreach (var lay in _layouts)
+                    {
+                        <MudMenuItem OnClick="@(() => LoadLayoutAsync(lay))">@lay.Name</MudMenuItem>
+                    }
+                </MudMenu>
+            }
         </MudStack>
     </MudPaper>
 
@@ -106,7 +161,28 @@
                 </MudStack>
             </div>
         }
+        @if (_selectedNode is not null)
+        {
+            <div style="position:absolute;top:8px;right:8px;bottom:8px;width:340px;z-index:6;">
+                <DossierPanel EntityType="@_selType" EntityId="@_selId" Designation="@_selectedNode.Designation"
+                              Subtitle="@_selectedNode.Subtitle" Href="@_selectedNode.Href"
+                              ThreatScore="_selectedNode.ThreatScore" IsClassified="_selectedNode.IsClassified"
+                              IsKeyFigure="_selectedNode.IsKeyFigure" User="_user"
+                              OnClose="@(() => _selectedNode = null)" />
+            </div>
+        }
     </MudPaper>
+
+    @if (_scrubMin is { } smin && _scrubMax is { } smax && smax > smin)
+    {
+        <MudPaper Class="pa-3" Elevation="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="min-width:8rem;">Netzwerk-Wachstum</MudText>
+                <TimelineScrubberBar MinDate="smin" MaxDate="smax" OnCutoffChanged="CutoffChangedAsync" />
+            </MudStack>
+        </MudPaper>
+    }
 
     <MudPaper Class="pa-3" Elevation="1">
         <MudStack Row="true" Spacing="4" Class="flex-wrap" AlignItems="AlignItems.Center">
@@ -127,6 +203,10 @@
             </MudStack>
             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                 <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Error" /><MudText Typo="Typo.caption">roter Rand = staatsgefährdend</MudText>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <span class="noose-graph-punkt noose-graph-schluessel"></span>
+                <MudText Typo="Typo.caption">★ groß &amp; gold = Schlüsselfigur</MudText>
             </MudStack>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">· Doppelklick öffnet die Akte</MudText>
         </MudStack>
@@ -219,8 +299,11 @@
     private bool _load = true;
     private bool _freeMode;
 
+    private const string KeyFigureGold = "#FFC857";
+
     private bool _modeFocus;
     private GraphRecordChoice? _focus;
+    private GraphRecordChoice? _focusPreset; // focus set by deep link or saved view, not by the picker
     private int _depth = 2;
     private IReadOnlyCollection<string> _typeFilter = new HashSet<string>();
     private string _kindChoice = "alle";
@@ -230,6 +313,17 @@
     private PathResult? _path;
     private bool _pathSearched;
     private bool _pathRunning;
+
+    // workbench state
+    private bool _computeCentrality;
+    private bool _communityOn;
+    private bool _linkMode;
+    private GraphNode? _selectedNode;
+    private string _selType = string.Empty;
+    private string _selId = string.Empty;
+    private List<GraphCanvasLayout> _layouts = new();
+    private DateTime? _scrubMin;
+    private DateTime? _scrubMax;
 
     private record TypeOption(string Value, string Display, string Colour);
     private static readonly TypeOption[] _allTypes =
@@ -255,12 +349,14 @@
         _isLeadership = _user.IsLeadership();
         _meId = _user.GetAgentId();
         _mayAllTf = _user.MayAllTaskforcesSee();
+        _layouts = await LayoutService.GetForAgentAsync(_meId ?? string.Empty);
 
         // Start focused when arriving with ?typ=&id=
         if (!string.IsNullOrWhiteSpace(FocusTypeQuery) && !string.IsNullOrWhiteSpace(FocusIdQuery))
         {
             _modeFocus = true;
             _focus = new GraphRecordChoice(FocusTypeQuery!, FocusIdQuery!, string.Empty);
+            _focusPreset = _focus;
         }
     }
 
@@ -273,7 +369,7 @@
         try
         {
             // Bump ?v= when graph.js changes
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=8");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=12");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             await LoadAndDrawAsync();
@@ -320,7 +416,9 @@
                     _modeFocus ? _focus!.Id : null,
                     _depth,
                     _typeFilter.Any() ? _typeFilter.ToList() : null,
-                    KindFilter);
+                    KindFilter,
+                    ComputeCentrality: _computeCentrality,
+                    ComputeCommunities: _communityOn);
                 _data = await GraphService.GetGraphAsync(query, _user);
             }
         }
@@ -329,6 +427,12 @@
             Logger.LogWarning(ex, "Beziehungsgraph: Daten konnten nicht geladen werden.");
             _data = new GraphData(Array.Empty<GraphNode>(), Array.Empty<GraphEdge>(), false);
         }
+
+        // reset selection + derive the network-growth window from node creation dates
+        _selectedNode = null;
+        var dates = _data.Node.Where(n => n.CreatedAt.HasValue).Select(n => n.CreatedAt!.Value).ToList();
+        _scrubMin = dates.Count > 0 ? dates.Min() : null;
+        _scrubMax = dates.Count > 0 ? dates.Max() : null;
 
         _load = false;
         StateHasChanged();
@@ -344,10 +448,18 @@
         try
         {
             await _module.InvokeVoidAsync("render", ContainerId, _data, _ref);
-            // render() resets physics; re-apply free mode afterwards
+            // render() resets physics/manipulation; re-apply the active workbench modes afterwards
             if (_freeMode)
             {
                 await _module.InvokeVoidAsync("setzeFreierModus", ContainerId, true);
+            }
+            if (_communityOn)
+            {
+                await _module.InvokeVoidAsync("faerbeNachCommunity", ContainerId, true);
+            }
+            if (_linkMode)
+            {
+                await _module.InvokeVoidAsync("starteVerknuepfungsModus", ContainerId);
             }
         }
         catch (JSDisconnectedException) { /* ignore */ }
@@ -366,6 +478,7 @@
     private async Task FocusSelectedAsync(GraphRecordChoice? choice)
     {
         _focus = choice;
+        _focusPreset = null; // the picker now shows the selection itself
         if (_modeFocus)
         {
             await LoadAndDrawAsync();
@@ -448,6 +561,165 @@
             // Marshal back to the render context from JS interop
             await InvokeAsync(() => Nav.NavigateTo(node.Href!));
         }
+    }
+
+    [JSInvokable]
+    public Task OnNodeSelect(string nodeId)
+    {
+        var node = _data?.Node.FirstOrDefault(k => k.Id == nodeId);
+        if (node is null)
+        {
+            return Task.CompletedTask;
+        }
+        var idx = nodeId.IndexOf(':');
+        _selType = idx > 0 ? nodeId[..idx] : node.Type;
+        _selId = idx > 0 ? nodeId[(idx + 1)..] : string.Empty;
+        _selectedNode = node;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnEdgeDrawn(string fromId, string toId)
+    {
+        var from = _data?.Node.FirstOrDefault(k => k.Id == fromId);
+        var to = _data?.Node.FirstOrDefault(k => k.Id == toId);
+        if (from is null || to is null)
+        {
+            return;
+        }
+        (string Type, string Id) Split(string key)
+        {
+            var i = key.IndexOf(':');
+            return i > 0 ? (key[..i], key[(i + 1)..]) : (key, string.Empty);
+        }
+        var (st, si) = Split(fromId);
+        var (tt, ti) = Split(toId);
+
+        var parameters = new DialogParameters { ["FromName"] = from.Designation, ["ToName"] = to.Designation };
+        var dialog = await DialogService.ShowAsync<EdgeKindDialog>("Verknüpfung anlegen", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not ValueTuple<LinkKind, string?> data)
+        {
+            return;
+        }
+        try
+        {
+            var label = string.IsNullOrWhiteSpace(data.Item2) ? null : data.Item2;
+            await LinkService.CreateAsync(st, si, tt, ti, label, _user, data.Item1);
+            Snackbar.Add("Verknüpfung angelegt.", Severity.Success);
+            await LoadAndDrawAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Beziehungsgraph: Verknüpfung anlegen fehlgeschlagen.");
+        }
+    }
+
+    private async Task CentralityToggleAsync()
+    {
+        _computeCentrality = !_computeCentrality;
+        await LoadAndDrawAsync();
+    }
+
+    private async Task CommunityToggleAsync()
+    {
+        _communityOn = !_communityOn;
+        await LoadAndDrawAsync();
+    }
+
+    private async Task LinkModeToggleAsync()
+    {
+        _linkMode = !_linkMode;
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        if (_linkMode)
+        {
+            Snackbar.Add("Verknüpfungs-Modus: von einem Knoten zum anderen ziehen.", Severity.Info);
+        }
+        try { await _module.InvokeVoidAsync(_linkMode ? "starteVerknuepfungsModus" : "beendeVerknuepfungsModus", ContainerId); }
+        catch (JSDisconnectedException) { /* ignore */ }
+    }
+
+    private async Task CutoffChangedAsync(DateTime? cutoff)
+    {
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        try { await _module.InvokeVoidAsync("setzeZeitfenster", ContainerId, cutoff?.ToString("o")); }
+        catch (JSDisconnectedException) { /* ignore */ }
+    }
+
+    private async Task SaveLayoutAsync()
+    {
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        string? name;
+        try { name = await JS.InvokeAsync<string?>("prompt", "Name der Ansicht:", "Meine Ansicht"); }
+        catch (JSDisconnectedException) { return; }
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+        try
+        {
+            var json = await _module.InvokeAsync<string>("holePositionen", ContainerId);
+            // a saved view is positions *plus* the workbench/filter state that produced them
+            var payload = GraphViewPayload.Wrap(json, new GraphViewState(
+                Centrality: _computeCentrality,
+                Community: _communityOn,
+                FocusMode: _modeFocus,
+                FocusType: _focus?.Type,
+                FocusId: _focus?.Id,
+                FocusName: string.IsNullOrWhiteSpace(_focus?.Designation) ? null : _focus!.Designation,
+                Depth: _depth,
+                Types: _typeFilter.Count > 0 ? _typeFilter.ToList() : null,
+                Kind: _kindChoice));
+            await LayoutService.SaveAsync(name, payload, _user);
+            _layouts = await LayoutService.GetForAgentAsync(_meId ?? string.Empty);
+            Snackbar.Add("Ansicht gespeichert.", Severity.Success);
+        }
+        catch (UnauthorizedAccessException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception ex) { Logger.LogWarning(ex, "Beziehungsgraph: Ansicht speichern fehlgeschlagen."); }
+    }
+
+    private async Task LoadLayoutAsync(GraphCanvasLayout layout)
+    {
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        var (positions, view) = GraphViewPayload.Unwrap(layout.LayoutJson);
+        if (view is not null)
+        {
+            _computeCentrality = view.Centrality;
+            _communityOn = view.Community;
+            _modeFocus = view.FocusMode;
+            _depth = view.Depth;
+            _typeFilter = view.Types is { Count: > 0 } t ? new HashSet<string>(t) : new HashSet<string>();
+            _kindChoice = view.Kind;
+            _focus = view.FocusType is not null && view.FocusId is not null
+                ? new GraphRecordChoice(view.FocusType, view.FocusId, view.FocusName ?? string.Empty)
+                : null;
+            _focusPreset = _focus;
+            // filters and analytics change the node set, so re-query before placing the nodes
+            await LoadAndDrawAsync();
+        }
+        try
+        {
+            _freeMode = true; // loaded positions only stick with physics frozen
+            await _module.InvokeVoidAsync("setzePositionen", ContainerId, positions);
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
     }
 
     public async ValueTask DisposeAsync()

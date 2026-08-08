@@ -1,0 +1,95 @@
+@* Evidence entries linked to a record: an owner (person) or a faction's current members. *@
+@inject IEvidenceService Evidence
+@inject NavigationManager Nav
+
+<MudStack Spacing="2">
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Keine sichergestellten Gegenstände.</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Aktenzeichen</th>
+                    <th>Art</th>
+                    <th>Gegenstände</th>
+                    @if (_showOwner)
+                    {
+                        <th>Besitzer</th>
+                    }
+                    <th>Datum</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/asservatenkammer/eintrag/{r.Entry.Id}"))">
+                        <td>@r.Entry.CaseNumber</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@EvidenceEntryTypeDisplay.ChipColor(r.Entry.Type)">
+                                @EvidenceEntryTypeDisplay.Name(r.Entry.Type)
+                            </MudChip>
+                        </td>
+                        <td style="max-width:360px">
+                            <MudTooltip Text="@EvidenceDisplay.ItemsFull(r)">
+                                <span>@EvidenceDisplay.ItemsSummary(r)</span>
+                            </MudTooltip>
+                        </td>
+                        @if (_showOwner)
+                        {
+                            <td>@r.OwnerDisplay</td>
+                        }
+                        <td>@r.Entry.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    /// <summary>Owner mode: entries whose owner is this record.</summary>
+    [Parameter] public string? OwnerType { get; set; }
+    [Parameter] public string? OwnerId { get; set; }
+
+    /// <summary>Faction mode: entries owned by any current member of this faction.</summary>
+    [Parameter] public string? FactionId { get; set; }
+
+    private bool _load = true;
+    private bool _showOwner;
+    private List<EvidenceEntryDisplay> _rows = new();
+    private string? _key;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = !string.IsNullOrEmpty(FactionId) ? $"f:{FactionId}" : $"{OwnerType}:{OwnerId}";
+        if (_key == key)
+        {
+            return;
+        }
+        _key = key;
+        _load = true;
+
+        if (!string.IsNullOrEmpty(FactionId))
+        {
+            _showOwner = true;
+            _rows = await Evidence.GetEntriesForFactionMembersAsync(FactionId);
+        }
+        else if (!string.IsNullOrEmpty(OwnerType) && !string.IsNullOrEmpty(OwnerId))
+        {
+            _showOwner = false;
+            _rows = await Evidence.GetEntriesForOwnerAsync(OwnerType, OwnerId);
+        }
+        else
+        {
+            _rows = new();
+        }
+        _load = false;
+    }
+}

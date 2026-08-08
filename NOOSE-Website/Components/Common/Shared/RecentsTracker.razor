@@ -74,7 +74,8 @@
             return true;
         }
         return p == "suche" || p.StartsWith("suche/", StringComparison.Ordinal)
-            || p == "papierkorb" || p == "einstellungen"
+            // the audit and counter-intelligence surfaces were never recorded while they sat in settings
+            || p == "papierkorb" || p == "einstellungen" || p == "nachweis"
             || p.EndsWith("/neu", StringComparison.Ordinal) || p.EndsWith("/bearbeiten", StringComparison.Ordinal)
             || p.EndsWith("/druck", StringComparison.Ordinal) || p.EndsWith("/papierkorb", StringComparison.Ordinal)
             || p.StartsWith("admin/", StringComparison.Ordinal) || p.StartsWith("account/", StringComparison.Ordinal);

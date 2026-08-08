@@ -1,0 +1,142 @@
+@* The single ECharts host. Follows the ChronikStrip interop pattern: lazy import, GUID container, *@
+@* payload diffing, JS-side destroy before dispose, every interop call guarded. *@
+@using System.Globalization
+@using System.Text.Json
+@using NOOSE_Website.Theme
+@inject IJSRuntime JS
+@inject ILogger<EChartsCanvas> Logger
+@implements IAsyncDisposable
+
+<div id="@_containerId" style="@($"width:100%;height:{Height};")"></div>
+@if (_failed)
+{
+    <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-2">
+        Diagramm konnte nicht geladen werden.
+    </MudText>
+}
+
+@code {
+    /// <summary>Which ECharts chart to draw: calendar, treemap or race.</summary>
+    [Parameter, EditorRequired] public string Kind { get; set; } = "calendar";
+
+    /// <summary>Chart-specific payload; serialised as camelCase JSON and merged with the theme block.</summary>
+    [Parameter, EditorRequired] public object Payload { get; set; } = new();
+
+    [Parameter] public string Height { get; set; } = "220px";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        // SVG/JSON numbers must not pick up the de-DE decimal comma
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict,
+    };
+
+    private readonly string _containerId = "noose-echart-" + Guid.NewGuid().ToString("N");
+    private IJSObjectReference? _module;
+    private bool _ready;
+    private bool _failed;
+    private string _lastJson = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/statistik-charts.js?v=1");
+            _lastJson = BuildJson();
+            await _module.InvokeVoidAsync("render", _containerId, Kind, _lastJson);
+            _ready = true;
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ECharts-Diagramm konnte nicht initialisiert werden (JS-Interop).");
+            _failed = true;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_ready || _module is null)
+        {
+            return;
+        }
+        var json = BuildJson();
+        if (json == _lastJson)
+        {
+            return;
+        }
+        _lastJson = json;
+        try { await _module.InvokeVoidAsync("setData", _containerId, json); }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>Starts the race animation client-side.</summary>
+    public async Task PlayAsync(int intervalMs = 1200)
+    {
+        if (!_ready || _module is null)
+        {
+            return;
+        }
+        try { await _module.InvokeVoidAsync("play", _containerId, intervalMs); }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>Stops the race animation.</summary>
+    public async Task PauseAsync()
+    {
+        if (!_ready || _module is null)
+        {
+            return;
+        }
+        try { await _module.InvokeVoidAsync("pause", _containerId); }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>Jumps the race to one frame, for the scrubber.</summary>
+    public async Task ShowFrameAsync(int index)
+    {
+        if (!_ready || _module is null)
+        {
+            return;
+        }
+        try { await _module.InvokeVoidAsync("showFrame", _containerId, index); }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>Payload plus the theme block; canvas cannot read CSS variables, so colours travel as hex.</summary>
+    private string BuildJson()
+    {
+        var node = JsonSerializer.SerializeToNode(Payload, JsonOptions)?.AsObject();
+        node?.Add("theme", JsonSerializer.SerializeToNode(new
+        {
+            surface = ChartPalette.Surface,
+            gridline = ChartPalette.Gridline,
+            textPrimary = "#E6EDF3",
+            textSecondary = "#9BA8B8",
+        }, JsonOptions));
+        return node?.ToJsonString() ?? "{}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("destroy", _containerId);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+}

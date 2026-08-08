@@ -21,9 +21,12 @@ using NOOSE_Website.Infrastructure.Announcements;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.Authorization;
 using NOOSE_Website.Infrastructure.Threat;
+using NOOSE_Website.Infrastructure.Gamification;
+using NOOSE_Website.Infrastructure.Search;
 using NOOSE_Website.Infrastructure.Chat;
 using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Infrastructure.Shares;
+using NOOSE_Website.Infrastructure.Financing;
 using NOOSE_Website.Infrastructure.Notifications;
 using NOOSE_Website.Infrastructure.Statistics;
 using NOOSE_Website.Infrastructure.Storage;
@@ -73,6 +76,7 @@ builder.Services.AddSingleton<ICurrentUserService, CurrentUserService>();
 builder.Services.AddSingleton<ReadOnlyBarrierInterceptor>();
 builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
 builder.Services.AddSingleton<WatchlistChangeInterceptor>();
+builder.Services.AddSingleton<SearchIndexInterceptor>();
 
 // Singleton factory so created contexts don't hang off the circuit scope (avoids ObjectDisposedException on dialog/nav refresh)
 builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
@@ -80,7 +84,8 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
            .AddInterceptors(
                sp.GetRequiredService<ReadOnlyBarrierInterceptor>(),
                sp.GetRequiredService<AuditSaveChangesInterceptor>(),
-               sp.GetRequiredService<WatchlistChangeInterceptor>())
+               sp.GetRequiredService<WatchlistChangeInterceptor>(),
+               sp.GetRequiredService<SearchIndexInterceptor>()) // last: rebuilds the search side-index from final state
            .ConfigureWarnings(w => w.Ignore(CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
 
 builder.Services.AddHealthChecks()
@@ -152,9 +157,18 @@ builder.Services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
+builder.Services.AddScoped<IEvidenceImageStorageService, EvidenceImageStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
+builder.Services.AddScoped<IAbductionService, AbductionService>();
+builder.Services.AddScoped<IEvidenceService, EvidenceService>();
+builder.Services.AddScoped<IKassenService, KassenService>();
+builder.Services.AddScoped<IKassenTemplateService, KassenTemplateService>();
+builder.Services.AddScoped<IFinancingConfigService, FinancingConfigService>();
+builder.Services.AddScoped<IFinancingCatalogService, FinancingCatalogService>();
+builder.Services.AddScoped<IFinancingBudgetService, FinancingBudgetService>();
+builder.Services.AddScoped<IFinancingService, FinancingService>();
 builder.Services.AddScoped<IProfileSuggestionService, ProfileSuggestionService>();
 builder.Services.AddScoped<IValueListLabelService, ValueListLabelService>();
 builder.Services.AddScoped<IDocTemplateService, DocTemplateService>();
@@ -175,19 +189,78 @@ builder.Services.AddScoped<ICustomFieldValueService, CustomFieldValueService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IRelationService, RelationService>();
 builder.Services.AddScoped<IGraphService, GraphService>();
+builder.Services.AddScoped<IGraphCanvasLayoutService, GraphCanvasLayoutService>();
 builder.Services.AddScoped<ILinkSuggestionService, LinkSuggestionService>();
 builder.Services.AddScoped<ITimelineService, TimelineService>();
+builder.Services.AddScoped<IGlobalChronikService, GlobalChronikService>();
+builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<ICounterIntelRuleService, CounterIntelRuleService>();
+builder.Services.AddScoped<ICounterIntelService, CounterIntelService>();
+builder.Services.AddScoped<IInformantService, InformantService>();
+
+// AI assistant (OpenAI-compatible / OpenRouter). Key comes from user-secrets / env, never the repo.
+builder.Services.Configure<NOOSE_Website.Models.Llm.LlmOptions>(
+    builder.Configuration.GetSection(NOOSE_Website.Models.Llm.LlmOptions.SectionName));
+builder.Services.AddHttpClient("llm", (sp, client) =>
+{
+    var o = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<NOOSE_Website.Models.Llm.LlmOptions>>().Value;
+    if (!string.IsNullOrWhiteSpace(o.BaseUrl))
+    {
+        client.BaseAddress = new Uri(o.BaseUrl.TrimEnd('/') + "/");
+    }
+    if (!string.IsNullOrWhiteSpace(o.ApiKey))
+    {
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.ApiKey);
+    }
+    client.DefaultRequestHeaders.TryAddWithoutValidation("HTTP-Referer", "https://noose.info");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("X-Title", "NOOSE Intelligence");
+    // Ceiling over all attempts; the per-attempt budget lives in LlmService.
+    client.Timeout = TimeSpan.FromSeconds(Math.Max(5, o.TotalTimeoutSeconds));
+});
+builder.Services.AddScoped<ILlmService, LlmService>();
+// NOOSEI token quota: the gateway is the only path to the transport, so nothing bypasses the meter.
+builder.Services.AddScoped<ILlmQuotaConfigService, LlmQuotaConfigService>();
+builder.Services.AddScoped<ILlmQuotaService, LlmQuotaService>();
+builder.Services.AddScoped<INooseiGateway, NooseiGateway>();
+builder.Services.AddScoped<INooseiSettingsService, NooseiSettingsService>();
+builder.Services.AddScoped<IDossierSummaryService, DossierSummaryService>();
+// NOOSEI record-database tools; the registry resolves whatever is registered here.
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.SearchRecordsTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.FilterRecordsTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.StatisticsTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadRecordTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ListRelatedTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.FindPathTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadTimelineTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.RecentChangesTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ResolveMentionTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.GetBriefTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadCalendarTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ExplainThreatScoreTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.MyRecordsTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.NooseiToolRegistry>();
+builder.Services.AddScoped<INooseiChatService, NooseiChatService>();
+builder.Services.AddScoped<ITextAssistService, TextAssistService>();
+builder.Services.AddScoped<ILlmRequestLogService, LlmRequestLogService>();
+builder.Services.AddScoped<ILlmAnomalyService, LlmAnomalyService>();
 builder.Services.AddScoped<IOrgChartService, OrgChartService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
 builder.Services.AddScoped<IAbsenceService, AbsenceService>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddScoped<IAttendanceStatisticsService, AttendanceStatisticsService>();
 builder.Services.AddScoped<IMeetingService, MeetingService>();
 builder.Services.AddHostedService<MeetingReminderWorker>();
 builder.Services.AddScoped<IThreatScoreConfigService, ThreatScoreConfigService>();
 builder.Services.AddScoped<IThreatScoreService, ThreatScoreService>();
+builder.Services.AddScoped<IThreatTrendService, ThreatTrendService>();
 builder.Services.AddHostedService<ThreatScoreSweepWorker>();
+builder.Services.AddScoped<IGamificationService, GamificationService>();
+builder.Services.AddHostedService<GamificationSweepWorker>();
+builder.Services.AddScoped<ITopAgentAwardService, TopAgentAwardService>();
+builder.Services.AddHostedService<TopAgentAwardWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddHostedService<SearchIndexBackfillWorker>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
 builder.Services.AddScoped<IFactionService, FactionService>();
 builder.Services.AddScoped<IPersonGroupService, PersonGroupService>();
@@ -209,6 +282,15 @@ builder.Services.AddScoped<ITrainingModuleService, TrainingModuleService>();
 builder.Services.AddScoped<IRequestService, RequestService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IStatisticsService, StatisticsService>();
+builder.Services.AddScoped<IInventoryStatisticsService, InventoryStatisticsService>();
+builder.Services.AddScoped<IThreatStatisticsService, ThreatStatisticsService>();
+builder.Services.AddScoped<IActivityStatisticsService, ActivityStatisticsService>();
+builder.Services.AddScoped<IThroughputStatisticsService, ThroughputStatisticsService>();
+builder.Services.AddScoped<INetworkStatisticsService, NetworkStatisticsService>();
+builder.Services.AddScoped<IWorkforceStatisticsService, WorkforceStatisticsService>();
+builder.Services.AddScoped<IAbductionStatisticsService, AbductionStatisticsService>();
+builder.Services.AddScoped<IKasseStatisticsService, KasseStatisticsService>();
+builder.Services.AddScoped<IFinancingStatisticsService, FinancingStatisticsService>();
 builder.Services.AddScoped<ISituationReportService, SituationReportService>();
 builder.Services.AddHostedService<SituationReportWorker>();
 builder.Services.AddHttpClient("discord", client => client.Timeout = TimeSpan.FromSeconds(5));
@@ -218,6 +300,7 @@ builder.Services.AddSingleton<NotificationBroadcaster>();
 builder.Services.AddSingleton<SharesBroadcaster>();
 builder.Services.AddSingleton<DocumentAccessBroadcaster>();
 builder.Services.AddSingleton<AcknowledgmentBroadcaster>();
+builder.Services.AddSingleton<FinancingBroadcaster>();
 builder.Services.AddScoped<IWatchlistService, WatchlistService>();
 builder.Services.AddScoped<WatchlistFanout>();
 builder.Services.AddSingleton<WatchlistDispatcher>();
@@ -237,6 +320,9 @@ builder.Services.AddScoped<IPartnerShareService, PartnerShareService>();
 // ---- recruiting (applications, invites, tests) ----
 builder.Services.AddScoped<IAgentInviteService, AgentInviteService>();
 builder.Services.AddScoped<IBewerbungService, BewerbungService>();
+builder.Services.AddScoped<IApplicationCaseService, ApplicationCaseService>();
+builder.Services.AddScoped<IRecruitingAutomationService, RecruitingAutomationService>();
+builder.Services.AddScoped<ICareerRequirementsService, CareerRequirementsService>();
 builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
@@ -297,6 +383,7 @@ app.MapNooseAccountEndpoints();
 app.MapNoosePeopleFileEndpoints();
 app.MapNooseSourcesFileEndpoints();
 app.MapNooseFactionsFileEndpoints();
+app.MapNooseEvidenceFileEndpoints();
 app.MapNooseLibraryFileEndpoints();
 app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
@@ -316,6 +403,9 @@ using (var scope = app.Services.CreateScope())
 
     // seed the default recruiting message templates (idempotent)
     await NOOSE_Website.Infrastructure.RecruitingSeeder.SeedTemplatesAsync(db);
+
+    // seed the auto-provisioned Sicherheitsüberprüfung case-document template (idempotent)
+    await NOOSE_Website.Infrastructure.ApplicationTemplateSeeder.SeedAsync(db);
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

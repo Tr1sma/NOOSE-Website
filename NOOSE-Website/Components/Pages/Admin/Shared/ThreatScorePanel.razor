@@ -28,7 +28,13 @@ else
                 <MudNumericField @bind-Value="_k.OutcomeInjection" Label="Ausgang: Spritze" Min="0" Step="0.5" />
                 <MudNumericField @bind-Value="_k.OutcomeRunningStill" Label="Ausgang: läuft noch" Min="0" Step="0.5" />
                 <MudNumericField @bind-Value="_k.OutcomeReleased" Label="Ausgang: entlassen" Min="0" Step="0.5" />
+                <MudNumericField @bind-Value="_k.AlarmDeltaThreshold" Label="Trend-Alarm ab Anstieg" Min="0" Step="1" />
+                <MudNumericField @bind-Value="_k.AlarmMinScore" Label="Trend-Alarm ab Mindest-Score" Min="0" Max="100" />
             </div>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                Steigt der Score einer Akte zwischen zwei Berechnungen um mindestens „Trend-Alarm ab Anstieg"
+                und erreicht dabei mindestens den Mindest-Score, wird die Führung benachrichtigt.
+            </MudText>
         </MudExpansionPanel>
 
         <MudExpansionPanel>

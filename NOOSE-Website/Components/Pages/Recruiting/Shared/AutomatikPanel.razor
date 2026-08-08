@@ -1,0 +1,90 @@
+@using NOOSE_Website.Infrastructure
+@inject IRecruitingAutomationService AutomationService
+@inject IDocumentTemplateService TemplateService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Weist ein HRB-Agent sich eine Bewerbung zu, werden automatisch ein Vorgang
+    „Bewerbungsverfahren | Name“ und ein Dokument „Sicherheitsüberprüfung | Name“ aus der gewählten
+    Vorlage erstellt und miteinander verknüpft. Platzhalter im Dokument werden dabei ausgefüllt.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudStack Spacing="4" Style="max-width: 640px;">
+        <MudSwitch T="bool" @bind-Value="_enabled" Color="Color.Primary"
+                   Label="Vorgang + Dokument automatisch erstellen" />
+
+        <MudSelect T="string" @bind-Value="_templateId" Label="Vorlage für die Sicherheitsüberprüfung"
+                   Disabled="@(!_enabled)" Dense="true" Variant="Variant.Outlined">
+            @foreach (var t in _templates)
+            {
+                <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+            }
+        </MudSelect>
+        @if (_templates.Count == 0)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                Keine passende Dokument-Vorlage vorhanden. Lege eine allgemeine Vorlage an (unter Einstellungen → Vorlagen).
+            </MudAlert>
+        }
+
+        <div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync" Disabled="_saving">Speichern</MudButton>
+        </div>
+    </MudStack>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _saving;
+    private bool _enabled;
+    private string? _templateId;
+    private List<DocumentTemplate> _templates = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        // exclude the recruiting letter templates (bare-word token scheme; not general documents)
+        _templates = (await TemplateService.GetActiveAsync())
+            .Where(t => t.Category != RecruitingSeeder.TemplateCategory)
+            .ToList();
+        var config = await AutomationService.GetAsync();
+        _enabled = config.AutoCaseEnabled;
+        _templateId = config.TemplateId;
+        _load = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await AutomationService.SaveAsync(new RecruitingAutomationConfig(_enabled, _templateId ?? string.Empty), _user);
+            Snackbar.Add("Automatik-Einstellungen gespeichert.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

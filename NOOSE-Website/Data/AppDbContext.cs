@@ -18,9 +18,18 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
+using NOOSE_Website.Data.Entities.Leads;
+using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Data.Entities.Feedback;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.CounterIntel;
+using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Kasse;
+using NOOSE_Website.Data.Entities.Financing;
+using NOOSE_Website.Data.Entities.Llm;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -54,6 +63,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Source> Sources => Set<Source>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<TagMapping> TagMappings => Set<TagMapping>();
+    public DbSet<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey> SearchPhoneticKeys => Set<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey>();
+    public DbSet<NOOSE_Website.Data.Entities.Search.SearchStemToken> SearchStemTokens => Set<NOOSE_Website.Data.Entities.Search.SearchStemToken>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<EnumLabelOverride> EnumLabelOverrides => Set<EnumLabelOverride>();
 
@@ -62,6 +73,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<PersonRelation> PersonRelations => Set<PersonRelation>();
 
     public DbSet<SavedSearch> SavedSearch => Set<SavedSearch>();
+    public DbSet<GraphCanvasLayout> GraphCanvasLayouts => Set<GraphCanvasLayout>();
 
     // factions
     public DbSet<Faction> Factions => Set<Faction>();
@@ -105,6 +117,32 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- observations ----
     public DbSet<Observation> Observations => Set<Observation>();
 
+    // ---- agent abductions + compromised records ----
+    public DbSet<AgentAbduction> AgentAbductions => Set<AgentAbduction>();
+    public DbSet<AbductionCompromise> AbductionCompromises => Set<AbductionCompromise>();
+
+    // ---- evidence room (Asservatenkammer) ----
+    public DbSet<EvidenceItem> EvidenceItems => Set<EvidenceItem>();
+    public DbSet<EvidenceEntry> EvidenceEntries => Set<EvidenceEntry>();
+    public DbSet<EvidenceEntryLine> EvidenceEntryLines => Set<EvidenceEntryLine>();
+
+    // ---- Fraktions-Kasse (NOOSE treasury) ----
+    public DbSet<KassenBuchung> KassenBuchungen => Set<KassenBuchung>();
+    public DbSet<KassenBuchungVorlage> KassenVorlagen => Set<KassenBuchungVorlage>();
+
+    // ---- funding requests (catalog, basket, monthly budget) ----
+    public DbSet<FinancingItem> FinancingItems => Set<FinancingItem>();
+    public DbSet<FinancingRequest> FinancingRequests => Set<FinancingRequest>();
+    public DbSet<FinancingRequestLine> FinancingRequestLines => Set<FinancingRequestLine>();
+    public DbSet<FinancingBudgetPeriod> FinancingBudgetPeriods => Set<FinancingBudgetPeriod>();
+
+    // ---- NOOSEI token quota (request log, weekly ledger, manual corrections) ----
+    public DbSet<LlmRequestLog> LlmRequests => Set<LlmRequestLog>();
+    public DbSet<LlmQuotaPeriod> LlmQuotaPeriods => Set<LlmQuotaPeriod>();
+    public DbSet<LlmQuotaAdjustment> LlmQuotaAdjustments => Set<LlmQuotaAdjustment>();
+    public DbSet<NooseiConversation> NooseiConversations => Set<NooseiConversation>();
+    public DbSet<NooseiMessage> NooseiMessages => Set<NooseiMessage>();
+
     // per-agent personnel file
     public DbSet<AgentRankHistory> AgentRankHistories => Set<AgentRankHistory>();
     public DbSet<AgentNote> AgentNotes => Set<AgentNote>();
@@ -122,6 +160,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // watchlist (followed records)
     public DbSet<WatchlistEntry> Watchlists => Set<WatchlistEntry>();
+    public DbSet<LeadDismissal> LeadDismissals => Set<LeadDismissal>();
+    public DbSet<Informant> Informants => Set<Informant>();
+    public DbSet<InformantMeeting> InformantMeetings => Set<InformantMeeting>();
 
     // jobs/to-dos & assignments
     public DbSet<Job> Jobs => Set<Job>();
@@ -133,6 +174,9 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // agent sign-offs over whole days
     public DbSet<Absence> Absences => Set<Absence>();
+
+    // agent feedback about the website itself
+    public DbSet<Feedback> Feedbacks => Set<Feedback>();
 
     // meetings, agenda, per-meeting sign-offs & the frozen attendance roster
     public DbSet<Meeting> Meetings => Set<Meeting>();
@@ -147,6 +191,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     // doc templates (admin-defined entry masks)
     public DbSet<DocTemplate> DocTemplates => Set<DocTemplate>();
 
+    // leadership-defined counter-intelligence rules
+    public DbSet<CounterIntelRule> CounterIntelRules => Set<CounterIntelRule>();
+
     // configurable custom fields per record type
     public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
     public DbSet<CustomFieldValue> CustomFieldValues => Set<CustomFieldValue>();
@@ -158,7 +205,12 @@ public class AppDbContext : IdentityDbContext<Agent>
     // ---- recency + followups ----
     public DbSet<RecencyThreshold> RecencyThresholds => Set<RecencyThreshold>();
     public DbSet<ThreatScoreConfig> ThreatScoreConfigs => Set<ThreatScoreConfig>();
+    public DbSet<ThreatScoreHistory> ThreatScoreHistory => Set<ThreatScoreHistory>();
+    public DbSet<NOOSE_Website.Data.Entities.Gamification.AgentBadge> AgentBadges => Set<NOOSE_Website.Data.Entities.Gamification.AgentBadge>();
     public DbSet<Followup> Followups => Set<Followup>();
+
+    // cached AI dossier summaries (one current row per record)
+    public DbSet<DossierSummary> DossierSummaries => Set<DossierSummary>();
 
     // archived monthly situation reports
     public DbSet<SituationReport> SituationReports => Set<SituationReport>();
@@ -201,6 +253,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.TerminationReason).HasMaxLength(2000);
             // longtext for JSON
             b.Property(a => a.NavPreferencesJson).HasColumnType("longtext");
+            b.Property(a => a.FinancingBudgetOverride).HasPrecision(18, 2);
             b.HasIndex(a => a.DiscordId).IsUnique();
         });
 
@@ -212,6 +265,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.AgentName).HasMaxLength(128);
             b.HasIndex(a => new { a.EntityType, a.EntityId });
             b.HasIndex(a => a.Timestamp);
+            // window scans: Leads / Chronik / Gamification
+            b.HasIndex(a => new { a.EntityType, a.Timestamp });
         });
 
         modelBuilder.Entity<AccessLog>(b =>
@@ -221,6 +276,81 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.AgentId).HasMaxLength(64);
             b.Property(a => a.AgentName).HasMaxLength(128);
             b.HasIndex(a => new { a.EntityType, a.EntityId });
+            // counter-intelligence cockpit: window + per-agent scans
+            b.HasIndex(a => a.Timestamp);
+            b.HasIndex(a => new { a.AgentId, a.Timestamp });
+        });
+
+        modelBuilder.Entity<ThreatScoreHistory>(b =>
+        {
+            b.Property(a => a.EntityType).HasMaxLength(128);
+            b.Property(a => a.EntityId).HasMaxLength(64);
+            b.Property(a => a.DetailJson).HasColumnType("longtext");
+            b.HasIndex(a => new { a.EntityType, a.EntityId, a.Timestamp });
+            // chronicle scans a plain time window across all records
+            b.HasIndex(a => a.Timestamp);
+        });
+
+        modelBuilder.Entity<NOOSE_Website.Data.Entities.Gamification.AgentBadge>(b =>
+        {
+            b.Property(a => a.BadgeKey).HasMaxLength(64);
+            b.HasIndex(a => new { a.AgentId, a.BadgeKey }).IsUnique();
+            b.HasOne<Agent>().WithMany().HasForeignKey(a => a.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DossierSummary>(b =>
+        {
+            b.Property(a => a.EntityType).HasMaxLength(128);
+            b.Property(a => a.EntityId).HasMaxLength(64);
+            b.Property(a => a.ContentHash).HasMaxLength(64);
+            b.Property(a => a.Model).HasMaxLength(128);
+            b.Property(a => a.BriefJson).HasColumnType("longtext");
+            b.HasIndex(a => new { a.EntityType, a.EntityId }).IsUnique();
+        });
+
+        modelBuilder.Entity<GraphCanvasLayout>(b =>
+        {
+            b.Property(a => a.AgentId).HasMaxLength(64);
+            b.Property(a => a.Name).HasMaxLength(160);
+            b.Property(a => a.LayoutJson).HasColumnType("longtext");
+            b.HasIndex(a => a.AgentId);
+        });
+
+        modelBuilder.Entity<LeadDismissal>(b =>
+        {
+            b.Property(a => a.LeadKey).HasMaxLength(256);
+            b.HasIndex(a => a.LeadKey);
+        });
+
+        modelBuilder.Entity<Informant>(b =>
+        {
+            b.Property(i => i.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(i => i.RealName).HasMaxLength(256);
+            b.Property(i => i.PersonId).HasMaxLength(64);
+            b.Property(i => i.FactionId).HasMaxLength(64);
+            b.Property(i => i.Description).HasColumnType("longtext");
+            b.Property(i => i.ContactInfo).HasColumnType("longtext");
+            b.Property(i => i.Notes).HasColumnType("longtext");
+            b.Property(i => i.HandlerId).HasMaxLength(64);
+            b.HasIndex(i => i.CaseNumber).IsUnique();
+            b.HasIndex(i => i.HandlerId);
+            // at most one informant per person record (MySQL allows repeated NULLs here)
+            b.HasIndex(i => i.PersonId).IsUnique();
+            // several informants may report on the same faction
+            b.HasIndex(i => i.FactionId);
+            // never cascade off the Agent table
+            b.HasOne<Agent>().WithMany().HasForeignKey(i => i.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Person>().WithMany().HasForeignKey(i => i.PersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Faction>().WithMany().HasForeignKey(i => i.FactionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(i => i.Meetings).WithOne()
+                .HasForeignKey(m => m.InformantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InformantMeeting>(b =>
+        {
+            b.Property(m => m.Location).HasMaxLength(256);
+            b.Property(m => m.Content).HasColumnType("longtext");
+            b.HasIndex(m => m.InformantId);
         });
 
         modelBuilder.Entity<Person>(b =>
@@ -231,6 +361,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(p => p.CaseNumber).IsUnique();
             b.HasIndex(p => p.Name);
             b.HasIndex(p => p.IsClassified);
+            // growth and capture series scan a date window over the whole table
+            b.HasIndex(p => p.CreatedAt);
 
             b.HasMany(p => p.Aliases).WithOne(a => a.Person!)
                 .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.Cascade);
@@ -300,6 +432,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(e => e.AgentName).HasMaxLength(128);
             b.Property(e => e.RequestId).HasMaxLength(64);
             b.HasIndex(e => new { e.EntityType, e.EntityId });
+            // the classification-flow sankey windows on the timestamp per type
+            b.HasIndex(e => new { e.EntityType, e.Timestamp });
         });
 
         modelBuilder.Entity<PersonDoc>(b =>
@@ -309,6 +443,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(d => d.OrgId).HasMaxLength(64);
             b.HasIndex(d => d.PersonId);
             b.HasIndex(d => new { d.OrgType, d.OrgId });
+            // measure trends and the outcome series window on the RP timestamp
+            b.HasIndex(d => d.Timestamp);
         });
 
         modelBuilder.Entity<Observation>(b =>
@@ -364,6 +500,15 @@ public class AppDbContext : IdentityDbContext<Agent>
             // no unique: soft-delete safe
             b.HasIndex(v => v.Name);
             b.HasIndex(v => v.IsActive);
+        });
+
+        // leadership-defined counter-intelligence rules (condition set as JSON)
+        modelBuilder.Entity<CounterIntelRule>(b =>
+        {
+            b.Property(r => r.Name).HasMaxLength(150).IsRequired();
+            b.Property(r => r.Description).HasMaxLength(1000);
+            b.Property(r => r.DefinitionJson).HasColumnType("longtext");
+            b.HasIndex(r => new { r.IsActive, r.Order });
         });
 
         modelBuilder.Entity<CustomFieldDefinition>(b =>
@@ -448,6 +593,7 @@ public class AppDbContext : IdentityDbContext<Agent>
         {
             b.Property(l => l.Title).HasMaxLength(200).IsRequired();
             b.Property(l => l.SnapshotJson).HasColumnType("longtext");
+            b.Property(l => l.FinancingJson).HasColumnType("longtext");
             b.HasIndex(l => new { l.Year, l.Month });
         });
 
@@ -480,6 +626,26 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(k => k.EntityId).HasMaxLength(64);
             b.Property(k => k.AuthorName).HasMaxLength(128);
             b.HasIndex(k => new { k.EntityType, k.EntityId });
+        });
+
+        modelBuilder.Entity<NOOSE_Website.Data.Entities.Search.SearchPhoneticKey>(b =>
+        {
+            b.Property(z => z.EntityType).HasMaxLength(128);
+            b.Property(z => z.EntityId).HasMaxLength(64);
+            b.Property(z => z.SourceId).HasMaxLength(64);
+            b.Property(z => z.Key).HasMaxLength(NOOSE_Website.Services.SearchTokenizer.MaxPhoneticLength);
+            b.HasIndex(z => z.Key);
+            b.HasIndex(z => z.SourceId);
+        });
+
+        modelBuilder.Entity<NOOSE_Website.Data.Entities.Search.SearchStemToken>(b =>
+        {
+            b.Property(z => z.EntityType).HasMaxLength(128);
+            b.Property(z => z.EntityId).HasMaxLength(64);
+            b.Property(z => z.SourceId).HasMaxLength(64);
+            b.Property(z => z.Stem).HasMaxLength(NOOSE_Website.Services.SearchTokenizer.MaxStemLength);
+            b.HasIndex(z => z.Stem);
+            b.HasIndex(z => z.SourceId);
         });
 
         modelBuilder.Entity<Link>(b =>
@@ -696,6 +862,242 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(a => a.AgentId);
         });
 
+        modelBuilder.Entity<AgentAbduction>(b =>
+        {
+            b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.PerpetratorType).HasMaxLength(128);
+            b.Property(x => x.PerpetratorId).HasMaxLength(64);
+            b.Property(x => x.Location).HasMaxLength(300);
+            b.Property(x => x.Notes).HasColumnType("longtext");
+            b.HasIndex(x => x.CaseNumber).IsUnique();
+            b.HasIndex(x => x.VictimAgentId);
+            b.HasIndex(x => new { x.PerpetratorType, x.PerpetratorId });
+            b.HasIndex(x => x.Timestamp);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(x => x.VictimAgent).WithMany()
+                .HasForeignKey(x => x.VictimAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(x => x.Compromises).WithOne(c => c.Abduction!)
+                .HasForeignKey(c => c.AbductionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AbductionCompromise>(b =>
+        {
+            b.Property(c => c.TargetType).HasMaxLength(128);
+            b.Property(c => c.TargetId).HasMaxLength(64);
+            b.Property(c => c.Note).HasMaxLength(1000);
+            // badge lookup: is this record currently compromised?
+            b.HasIndex(c => new { c.TargetType, c.TargetId, c.Status });
+            // one entry per (abduction, target); blocks concurrent duplicate inserts
+            b.HasIndex(c => new { c.AbductionId, c.TargetType, c.TargetId }).IsUnique();
+        });
+
+        modelBuilder.Entity<EvidenceItem>(b =>
+        {
+            b.Property(i => i.Name).HasMaxLength(200).IsRequired();
+            b.Property(i => i.Description).HasColumnType("longtext");
+            // 300 matches ProfileSuggestion.Value, so a category survives the suggestion catalog
+            b.Property(i => i.Category).HasMaxLength(300);
+            b.Property(i => i.ImageFileName).HasMaxLength(200);
+            b.Property(i => i.ImageContentType).HasMaxLength(100);
+            b.HasIndex(i => i.Name).IsUnique();
+            b.HasIndex(i => i.Category);
+        });
+
+        modelBuilder.Entity<EvidenceEntry>(b =>
+        {
+            b.Property(e => e.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(e => e.OwnerType).HasMaxLength(128);
+            b.Property(e => e.OwnerId).HasMaxLength(64);
+            b.Property(e => e.HandlerAgentId).HasMaxLength(255);
+            b.Property(e => e.Notes).HasColumnType("longtext");
+            b.HasIndex(e => e.CaseNumber).IsUnique();
+            b.HasIndex(e => new { e.OwnerType, e.OwnerId });
+            b.HasIndex(e => e.Type);
+            b.HasIndex(e => e.Timestamp);
+            b.HasIndex(e => e.HandlerAgentId);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(e => e.HandlerAgent).WithMany()
+                .HasForeignKey(e => e.HandlerAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasMany(e => e.Lines).WithOne(l => l.Entry!)
+                .HasForeignKey(l => l.EntryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EvidenceEntryLine>(b =>
+        {
+            b.Property(l => l.Quantity);
+            b.HasIndex(l => l.EntryId);
+            b.HasIndex(l => l.ItemId);
+            // Restrict: an item stays as long as any position references it
+            b.HasOne(l => l.Item).WithMany()
+                .HasForeignKey(l => l.ItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KassenBuchung>(b =>
+        {
+            b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.Reason).HasMaxLength(500);
+            b.Property(x => x.BookedById).HasMaxLength(255);
+            b.HasIndex(x => x.CaseNumber).IsUnique();
+            b.HasIndex(x => x.Account);
+            b.HasIndex(x => x.Timestamp);
+            b.HasIndex(x => x.BookedById);
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(x => x.BookedBy).WithMany()
+                .HasForeignKey(x => x.BookedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KassenBuchungVorlage>(b =>
+        {
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.Reason).HasMaxLength(500);
+            b.HasIndex(x => x.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<FinancingItem>(b =>
+        {
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            // 300 matches ProfileSuggestion.Value, so a category survives the suggestion catalog
+            b.Property(x => x.Category).HasMaxLength(300);
+            b.Property(x => x.Description).HasMaxLength(1000);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            // not unique in the DB: a soft-deleted position would block reuse of its name forever,
+            // and request lines reference it with Restrict, so it can never be hard-deleted.
+            // The service enforces uniqueness across the live rows instead.
+            b.HasIndex(x => x.Name);
+            b.HasIndex(x => x.Category);
+            b.HasIndex(x => x.IsActive);
+        });
+
+        modelBuilder.Entity<FinancingRequest>(b =>
+        {
+            b.Property(x => x.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Justification).HasMaxLength(2000).IsRequired();
+            b.Property(x => x.RequestedGross).HasPrecision(18, 2);
+            b.Property(x => x.RequestedSubsidy).HasPrecision(18, 2);
+            b.Property(x => x.ApprovedSubsidy).HasPrecision(18, 2);
+            b.Property(x => x.OverrunAmount).HasPrecision(18, 2);
+            b.Property(x => x.OverrunReason).HasMaxLength(500);
+            b.Property(x => x.DeciderName).HasMaxLength(128);
+            b.Property(x => x.DecisionNote).HasMaxLength(2000);
+            b.Property(x => x.PaidByName).HasMaxLength(128);
+            b.Property(x => x.KassenBuchungId).HasMaxLength(255);
+            b.HasIndex(x => x.CaseNumber).IsUnique();
+            b.HasIndex(x => new { x.AgentId, x.Status });
+            b.HasIndex(x => x.Status);
+            b.HasIndex(x => new { x.BudgetYear, x.BudgetMonth });
+            // unique so the same request can never be booked twice (MySQL allows many NULLs)
+            b.HasIndex(x => x.KassenBuchungId).IsUnique();
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FinancingRequestLine>(b =>
+        {
+            b.Property(x => x.RequestId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.ItemName).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Category).HasMaxLength(300);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            b.HasIndex(x => x.RequestId);
+            b.HasIndex(x => x.ItemId);
+            b.HasOne(x => x.Request).WithMany(r => r.Lines)
+                .HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Cascade);
+            // Restrict: a catalog position stays as long as any line references it
+            b.HasOne(x => x.Item).WithMany()
+                .HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FinancingBudgetPeriod>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.BaseBudget).HasPrecision(18, 2);
+            b.Property(x => x.CarryIn).HasPrecision(18, 2);
+            b.Property(x => x.Consumed).HasPrecision(18, 2);
+            b.Property(x => x.CarryOut).HasPrecision(18, 2);
+            // carries the race safety of the period close
+            b.HasIndex(x => new { x.AgentId, x.Year, x.Month }).IsUnique();
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LlmRequestLog>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Model).HasMaxLength(128);
+            b.Property(x => x.Provider).HasMaxLength(64);
+            b.Property(x => x.ErrorMessage).HasMaxLength(500);
+            b.Property(x => x.PromptFingerprint).HasMaxLength(64);
+            b.Property(x => x.FinishReason).HasMaxLength(32);
+            b.Property(x => x.CostUsd).HasPrecision(18, 8);
+            b.Property(x => x.Prompt).HasColumnType("longtext");
+            b.Property(x => x.Answer).HasColumnType("longtext");
+            b.Property(x => x.ContextRefsJson).HasColumnType("longtext");
+            // the hot path: the weekly consumption sum behind every pre-flight check
+            b.HasIndex(x => new { x.AgentId, x.BudgetYear, x.BudgetWeek });
+            // per-agent time windows: burn rate, burst, personnel tile
+            b.HasIndex(x => new { x.AgentId, x.CreatedAt });
+            // admin list ordering and the global rolling average
+            b.HasIndex(x => x.CreatedAt);
+            b.HasIndex(x => new { x.Feature, x.CreatedAt });
+            // cheap "only anomalies" filter in the log viewer
+            b.HasIndex(x => new { x.IsAnomalous, x.CreatedAt });
+            // first pass of the near-identical-prompt rule
+            b.HasIndex(x => new { x.AgentId, x.PromptFingerprint });
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LlmQuotaPeriod>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            // carries the race safety of the period close
+            b.HasIndex(x => new { x.AgentId, x.Year, x.Week }).IsUnique();
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LlmQuotaAdjustment>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Reason).HasMaxLength(300).IsRequired();
+            b.Property(x => x.CreatedByName).HasMaxLength(128);
+            b.HasIndex(x => new { x.AgentId, x.Year, x.Week });
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NooseiConversation>(b =>
+        {
+            b.Property(x => x.AgentId).HasMaxLength(255).IsRequired();
+            b.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            b.Property(x => x.AnchorEntityType).HasMaxLength(128);
+            b.Property(x => x.AnchorEntityId).HasMaxLength(64);
+            b.Property(x => x.ScopeStamp).HasMaxLength(64);
+            // the owner's list, newest first
+            b.HasIndex(x => new { x.AgentId, x.LastMessageAt });
+            b.HasOne(x => x.Agent).WithMany()
+                .HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<NooseiMessage>(b =>
+        {
+            b.Property(x => x.ConversationId).HasMaxLength(64).IsRequired();
+            b.Property(x => x.Role).HasMaxLength(16).IsRequired();
+            b.Property(x => x.ToolCallId).HasMaxLength(64);
+            b.Property(x => x.ToolName).HasMaxLength(64);
+            b.Property(x => x.UnsupportedCitations).HasMaxLength(300);
+            b.Property(x => x.Content).HasColumnType("longtext");
+            b.Property(x => x.ToolCallsJson).HasColumnType("longtext");
+            b.Property(x => x.SourcesJson).HasColumnType("longtext");
+            b.HasIndex(x => new { x.ConversationId, x.Sequence }).IsUnique();
+            // a message has no life without its thread
+            b.HasOne(x => x.Conversation).WithMany()
+                .HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<AgentActivity>(b =>
         {
             b.Property(a => a.Title).HasMaxLength(200).IsRequired();
@@ -731,6 +1133,8 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(v => v.Title);
             b.HasIndex(v => v.Status);
             b.HasIndex(v => v.IsClassified);
+            // cycle time and the open-vs-closed flow window on the completion date
+            b.HasIndex(v => v.CompletedAt);
 
             b.HasMany(v => v.Agents).WithOne(a => a.Case!)
                 .HasForeignKey(a => a.CaseId).OnDelete(DeleteBehavior.Cascade);
@@ -814,6 +1218,23 @@ public class AppDbContext : IdentityDbContext<Agent>
             // "who is away on day D", no agent predicate
             b.HasIndex(a => new { a.FromDate, a.ToDate, a.AgentId });
             b.HasIndex(a => a.AcknowledgedAt);
+        });
+
+        modelBuilder.Entity<Feedback>(b =>
+        {
+            b.Property(f => f.AgentId).HasMaxLength(64).IsRequired();
+            b.Property(f => f.PageRoute).HasMaxLength(128);
+            b.Property(f => f.PageTab).HasMaxLength(64);
+            b.Property(f => f.Text).HasMaxLength(2000).IsRequired();
+            b.Property(f => f.Response).HasMaxLength(2000);
+            b.Property(f => f.DeciderName).HasMaxLength(128);
+
+            // Restrict FK to identity Agent (no cascade from the user table)
+            b.HasOne(f => f.Agent).WithMany()
+                .HasForeignKey(f => f.AgentId).OnDelete(DeleteBehavior.Restrict);
+
+            // the agent's own list
+            b.HasIndex(f => f.AgentId);
         });
 
         modelBuilder.Entity<Meeting>(b =>
@@ -1099,6 +1520,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(v => v.AttachmentContentType).HasMaxLength(100);
             b.Property(v => v.AssignedAgentName).HasMaxLength(128);
             b.Property(v => v.LinkedPersonId).HasMaxLength(64);
+            b.Property(v => v.LinkedCaseId).HasMaxLength(64);
             b.Property(v => v.DecisionNote).HasColumnType("longtext");
             b.Property(v => v.DecidedByName).HasMaxLength(128);
             b.HasIndex(v => v.CaseNumber).IsUnique();
@@ -1110,6 +1532,8 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(v => v.AssignedAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne<Person>().WithMany()
                 .HasForeignKey(v => v.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Case>().WithMany()
+                .HasForeignKey(v => v.LinkedCaseId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Bewerbungssperre>(b =>

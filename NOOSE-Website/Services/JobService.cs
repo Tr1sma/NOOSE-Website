@@ -134,11 +134,11 @@ public class JobService(
         db.Jobs.Add(job);
         await db.SaveChangesAsync(cancellationToken);
 
-        // assign only existing, active agents
+        // only selectable agents; silently dropped so a stale picker cannot fail the create
         var valid = agentIds.Count == 0
             ? new List<string>()
-            : await db.Users
-                .Where(u => agentIds.Contains(u.Id) && u.Status == AgentStatus.Active)
+            : await db.Users.OnlySelectable()
+                .Where(u => agentIds.Contains(u.Id))
                 .Select(u => u.Id)
                 .ToListAsync(cancellationToken);
         foreach (var agentId in valid.Distinct())
@@ -250,9 +250,10 @@ public class JobService(
             ?? throw new InvalidOperationException($"Aufgabe '{jobId}' nicht gefunden.");
         RequireCreatorOrLeadership(job, actor);
 
-        if (!await db.Users.AnyAsync(u => u.Id == agentId && u.Status == AgentStatus.Active, cancellationToken))
+        // same rule as the picker: a stale circuit must not assign a team lead, partner or ex-agent
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == agentId, cancellationToken))
         {
-            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden oder ist nicht aktiv.");
+            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden oder ist nicht zuteilbar.");
         }
         if (await db.JobAssignments.AnyAsync(z => z.JobId == jobId && z.AgentId == agentId, cancellationToken))
         {

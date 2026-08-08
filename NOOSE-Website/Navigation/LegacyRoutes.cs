@@ -23,8 +23,11 @@ public static class LegacyRoutes
         ["admin/einladungen"] = "/einstellungen?tab=einladungen",
         ["admin/partner-sichtbarkeit"] = "/einstellungen?tab=partner",
         ["admin/partner-freigabe"] = "/einstellungen?tab=partner",
-        ["admin/protokoll"] = "/einstellungen?tab=protokoll",
         ["admin/basisdaten"] = "/einstellungen?tab=basisdaten",
+
+        // chronicle, audit log and counter-intelligence merged into /nachweis
+        ["chronik"] = "/nachweis?tab=chronik",
+        ["admin/protokoll"] = "/nachweis?tab=aenderungen",
 
         // 12 record trash pages merged into the global recycle bin
         ["personen/papierkorb"] = "/papierkorb?tab=personen",
@@ -62,6 +65,15 @@ public static class LegacyRoutes
         ["personal-vorlagen"] = "vorlagen-personal",
     };
 
+    /// <summary>Settings sections that moved to another page; the settings page forwards these itself,
+    /// because /einstellungen survives and <see cref="Target"/> only matches whole removed routes.</summary>
+    private static readonly Dictionary<string, string> MovedSettingsTabs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["protokoll"] = "/nachweis?tab=aenderungen",
+        ["gegenaufklaerung"] = "/nachweis?tab=lagebild",
+        ["gegenaufklaerung-regeln"] = "/nachweis?tab=regeln",
+    };
+
     /// <summary>Nav keys that no longer exist, mapped to the entry that absorbed them.</summary>
     private static readonly Dictionary<string, string> KeyAliases = new(StringComparer.Ordinal)
     {
@@ -78,7 +90,8 @@ public static class LegacyRoutes
         ["admin.aktualitaet"] = "einstellungen",
         ["admin.bedrohungs-score"] = "einstellungen",
         ["admin.basisdaten"] = "einstellungen",
-        ["admin.protokoll"] = "einstellungen",
+        // the audit log left /einstellungen for /nachweis, whose catalog key is still "chronik"
+        ["admin.protokoll"] = "chronik",
         ["admin.discord"] = "einstellungen",
         ["admin.module"] = "einstellungen",
         ["admin.partner-sichtbarkeit"] = "einstellungen",
@@ -92,6 +105,10 @@ public static class LegacyRoutes
 
     /// <summary>Surviving nav key for a stored favorite that pointed at a merged entry, or null.</summary>
     public static string? AliasKey(string key) => KeyAliases.GetValueOrDefault(key);
+
+    /// <summary>New home of a settings section that moved to another page, or null when it still lives there.</summary>
+    public static string? MovedSettingsTab(string? slug)
+        => string.IsNullOrWhiteSpace(slug) ? null : MovedSettingsTabs.GetValueOrDefault(slug);
 
     /// <summary>Merged destination for a removed route, or null when the route is unknown.</summary>
     public static string? Target(string? relativePath)
@@ -114,6 +131,31 @@ public static class LegacyRoutes
                 return $"/einstellungen?tab={mapped}";
             }
         }
+
+        // the chronicle is the only merged route carrying filter state; a bookmarked link must keep it
+        if (split.Length == 2 && string.Equals(path, "chronik", StringComparison.OrdinalIgnoreCase))
+        {
+            return WithCarriedQuery(target, split[1]);
+        }
         return target;
+    }
+
+    // values arrive decoded from ParseQuery, so AddQueryString must escape them exactly once
+    private static string WithCarriedQuery(string target, string query)
+    {
+        var carried = new List<KeyValuePair<string, string?>>();
+        foreach (var (key, values) in QueryHelpers.ParseQuery(query))
+        {
+            // the target already names its section; an old ?tab= must not win over it
+            if (string.Equals(key, "tab", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            foreach (var value in values)
+            {
+                carried.Add(new KeyValuePair<string, string?>(key, value));
+            }
+        }
+        return carried.Count == 0 ? target : QueryHelpers.AddQueryString(target, carried);
     }
 }

@@ -23,6 +23,7 @@ else
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/fraktionen" aria-label="Zurück" />
+        <CompromisedBadge EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
         <MudSpacer />
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
@@ -121,6 +122,15 @@ else
                 <RecordSection Group="Struktur" Slug="agents" Label="Zugeteilte Agents" Icon="@Icons.Material.Filled.ManageAccounts">
                     <FactionAgentsPanel FactionId="@_faction.Id" User="_user" Changed="InvestigationLeadRefreshAsync" />
                 </RecordSection>
+                <RecordSection Group="Ermittlung" Slug="informanten" Label="Informanten" Icon="@Icons.Material.Filled.VisibilityOff">
+                    <FactionInformantsPanel FactionId="@_faction.Id" User="_user" />
+                </RecordSection>
+                <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel PerpetratorType="@nameof(Faction)" PerpetratorId="@_faction.Id" />
+                </RecordSection>
+                <RecordSection Group="Ermittlung" Slug="asservate-mitglieder" Label="Asservate (Mitglieder)" Icon="@Icons.Material.Filled.Inventory">
+                    <EvidenceOwnerPanel FactionId="@_faction.Id" />
+                </RecordSection>
                 }
                 @if (TabOn("bestaende"))
                 {
@@ -157,6 +167,8 @@ else
                 <RecordSection Group="Akte" Slug="gefaehrdung" Label="Gefährdung" Icon="@Icons.Material.Filled.Warning">
                     <HazardPanel Score="_faction.ThreatScore" Confidence="_faction.ThreatConfidence"
                                       DetailJson="@_faction.ThreatDetailJson" />
+                    <MudDivider Class="my-4" />
+                    <RecordThreatTrend EntityType="@nameof(Faction)" EntityId="@_faction.Id" />
                 </RecordSection>
                 }
                 @if (TabOn("doks"))
@@ -201,6 +213,13 @@ else
                 {
                 <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" @key="_historyKey" />
+                </RecordSection>
+                }
+                @* NOOSEI-Kurzbrief: internal only *@
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="NOOSEI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
+                    <KiBriefPanel EntityType="@nameof(Faction)" EntityId="@_faction.Id" User="_user" />
                 </RecordSection>
                 }
             </RecordSectionRail>

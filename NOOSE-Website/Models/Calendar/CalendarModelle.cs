@@ -25,6 +25,9 @@ public enum CalendarMode
 }
 
 /// <summary>Single calendar entry passed to FullCalendar.</summary>
+/// <param name="EntityType">Record this entry belongs to, as its CLR type name; null when there is none to name.
+/// Only set where the producer already decided the viewer may know the record — a followup on a classified parent
+/// carries no reference, exactly as it carries no title and no link.</param>
 public record CalendarEntry(
     string Id,
     string Title,
@@ -33,7 +36,9 @@ public record CalendarEntry(
     bool WholeDay,
     CalendarSource Source,
     string? Href,
-    bool Obsolete = false);
+    bool Obsolete = false,
+    string? EntityType = null,
+    string? EntityId = null);
 
 /// <summary>Display helper; colour per source.</summary>
 public static class CalendarDisplay

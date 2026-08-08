@@ -52,7 +52,7 @@ Staatsfraktionen (`IsStateFaction`) sind ausgenommen → `score = null`.
 |---|------|-------------------|-----------|---------------------|
 | **S1** | Aktivitäts- & Maßnahmen-Heat | `Σ KindWeight(art)·decay(aktivität)` + `DocHeatWeight · Σ min(PerMemberDocCap, Σ OutcomeWeight·decay(dok))` | Saturate | Cap 55 · Denom 6 |
 | **S2** | Organisation & Reichweite | `Größe⊕ + Struktur + Waffen⊕ + Infrastruktur⊕` | `min(CapS2, Σ)` | Cap 22 |
-| **S3** | Konflikt & Bündnis | `ConflictWeight·#Konflikte + AllianceWeight·#Bündnisse` | Saturate | Cap 15 · Denom 4 |
+| **S3** | Konflikt & Bündnis | `ConflictWeight·#Konflikte + AllianceWeight·#Bündnisse + AbductionWeight·Entführungs-Hostilität` | Saturate | Cap 15 · Denom 4 |
 | **S4** | Netzwerk-Zentralität | `Grad der sonstigen Default-Kanten` | Saturate | Cap 8 · Denom 4 |
 
 `⊕` = per `Saturate` gedeckelt. **S2-Bausteine** (Default):
@@ -72,13 +72,18 @@ Erschossen=2,0 · Spritze=1,5 · läuft noch=1,2 · entlassen=1,0.
 | **P1** | Maßnahmen-Heat | `Σ OutcomeWeight(ausgang)·decay(dok)` | Saturate | Cap 40 · Denom 4 |
 | **P2** | Bewaffnung & Eskalation | `Waffen⊕ + (flüchtig ? FugitivePoints : 0)` | `min(CapP2, Σ)` | Cap 22 |
 | **P3** | Observations-Heat | `Σ (laufend ? 1 : ObsCompletedWeight=0,6)·decay(start)` | Saturate | Cap 18 · Denom 3 |
-| **P4** | Soziale Gefahr | `EnemyW·#Feinde + AllyW·#Verbündete + GpW·#Geschäftsp. + LeadW·#Leitungsrollen` | Saturate | Cap 12 · Denom 4 |
+| **P4** | Soziale Gefahr | `EnemyW·#Feinde + AllyW·#Verbündete + GpW·#Geschäftsp. + LeadW·#Leitungsrollen + AbductionW·Entführungs-Hostilität` | Saturate | Cap 12 · Denom 4 |
 | **P5** | Netzwerk-Zentralität | `Grad der sonstigen Default-Kanten` | Saturate | Cap 8 · Denom 4 |
 
 **P2-Bausteine** (Default): Waffen = `Saturate(#Waffenarten, PersonCapWeapons=14, Denom=2)`; Flüchtig-Bonus
 `FugitivePoints=8` (nur wenn effektiver Lebensstatus = flüchtig). **P4-Gewichte** (Default): Feind=2 ·
 Verbündeter=1 · Geschäftspartner=1 · Leitungsrolle=1,5. Personen-Score nutzt bewusst **nur personen-eigene
 Daten** (keine Fraktions-Scores) → keine Zirkularität.
+
+**Entführungs-Hostilität** (Fraktion S3 wie Person P4): Summe über alle vom Täter (Fraktion bzw. Person)
+begangenen Agenten-Entführungen mit Pro-Vorfall-Gewicht `1 + 0,5·Schweregrad(0–4, nur bei Informationsabfluss)
++ (Wahrheitsserum ? 0,5 : 0) + (getötet ? 1 : 0)`, skaliert mit `AbductionWeight`/`PersonAbductionWeight`
+(Default je 2,5). Nicht zeitlich gedämpft (wie Konflikt/Bündnis). Personengruppen tragen keinen Score.
 
 ## Konfidenz (Datengüte, 0–100 %)
 

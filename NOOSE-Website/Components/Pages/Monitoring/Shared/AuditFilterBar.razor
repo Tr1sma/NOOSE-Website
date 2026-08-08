@@ -1,0 +1,79 @@
+@* Shared filter bar of the change- and access-log sections. Presentational: mutates the filter it is given. *@
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="Filter.AgentId" Label="Agent" Clearable="true"
+                       Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var a in Options.Agents)
+                {
+                    <MudSelectItem T="string" Value="@a.Id">@(string.IsNullOrWhiteSpace(a.Codename) ? "(unbenannt)" : a.Codename)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="Filter.EntityType" Label="Objekt-Typ" Clearable="true"
+                       Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var t in Options.EntityTypes)
+                {
+                    <MudSelectItem T="string" Value="@t">@AuditEntityDisplay.Label(t)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Date="@From" DateChanged="FromChanged" Label="Von" Editable="true"
+                           DateFormat="dd.MM.yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Date="@To" DateChanged="ToChanged" Label="Bis" Editable="true"
+                           DateFormat="dd.MM.yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+
+        @if (ShowAction)
+        {
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="AuditAction?" @bind-Value="Filter.Action" Label="Aktion" Clearable="true"
+                           Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var ac in AuditActionDisplay.All)
+                    {
+                        <MudSelectItem T="AuditAction?" Value="@((AuditAction?)ac)">@AuditActionDisplay.Name(ac)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        }
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="Filter.EntityId" Label="Objekt-ID (optional)" Clearable="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" md="@(ShowAction ? 6 : 9)" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FilterAlt"
+                       OnClick="OnApply" Disabled="Busy">Filtern</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Clear"
+                       OnClick="OnReset" Disabled="Busy">Zurücksetzen</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@code {
+    /// <summary>Filter the inputs mutate in place; the owning panel reloads on OnApply.</summary>
+    [Parameter, EditorRequired] public AuditLogFilter Filter { get; set; } = new();
+
+    /// <summary>Dropdown sources; never null, because the first render happens before they are loaded.</summary>
+    [Parameter, EditorRequired] public AuditFilterOptions Options { get; set; } =
+        new(Array.Empty<AuditAgentOption>(), Array.Empty<string>());
+
+    /// <summary>Local "from" date; the panel converts it to UTC.</summary>
+    [Parameter] public DateTime? From { get; set; }
+    [Parameter] public EventCallback<DateTime?> FromChanged { get; set; }
+
+    /// <summary>Local "to" date, treated as an inclusive whole day by the panel.</summary>
+    [Parameter] public DateTime? To { get; set; }
+    [Parameter] public EventCallback<DateTime?> ToChanged { get; set; }
+
+    /// <summary>Offer the action select; only the change log has actions.</summary>
+    [Parameter] public bool ShowAction { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+}

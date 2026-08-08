@@ -1,4 +1,5 @@
 @* Person identity card: mugshot and core data at a glance. *@
+@using NOOSE_Website.Models.Informants
 @{
     var photo = Person.Photos.OrderByDescending(f => f.CreatedAt).FirstOrDefault();
 }
@@ -28,6 +29,14 @@
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Warning" Size="Size.Small" Title="@DocumentClassificationDisplay.Label(Person.SecrecyLevel)" />
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">@DocumentClassificationDisplay.ChipLabel(Person.SecrecyLevel)</MudChip>
+                }
+                @if (_informant is not null)
+                {
+                    <MudTooltip Text="@InformantTooltip()">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                                 Icon="@Icons.Material.Filled.VisibilityOff"
+                                 Href="@(_informant.MayOpen ? $"/informanten/{_informant.InformantId}" : null)">Informant</MudChip>
+                    </MudTooltip>
                 }
             </MudStack>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Person.CaseNumber</MudText>
@@ -94,6 +103,26 @@
     [Inject] private IRecencyService Recency { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
     [Inject] private IDialogService DialogService { get; set; } = default!;
+    [Inject] private IInformantService Informants { get; set; } = default!;
+
+    private InformantPersonMarker? _informant;
+    private string _markerFor = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (User is null || Person.Id == _markerFor)
+        {
+            return;
+        }
+        _markerFor = Person.Id;
+        _informant = await Informants.GetPersonMarkerAsync(Person.Id, User);
+    }
+
+    private string InformantTooltip()
+    {
+        var text = $"Als Informant geführt · {InformantEnumDisplay.Status(_informant!.Status)}";
+        return _informant.MayOpen ? $"{text} · {_informant.CaseNumber}" : text;
+    }
 
     private async Task OpenLightboxAsync(PersonPhoto photo)
         => await ImageLightbox.ShowAsync(DialogService,

@@ -17,9 +17,6 @@ public interface IDashboardService
     /// <summary>People sorted by hazard score descending.</summary>
     Task<List<DashboardFactionHazard>> GetPeopleByHazardAsync(bool isLeadership, CancellationToken cancellationToken = default);
 
-    /// <summary>Recent changes across all records, newest first.</summary>
-    Task<List<DashboardChange>> GetLastChangesAsync(bool isLeadership, string? meId, int max = 8, CancellationToken cancellationToken = default);
-
     /// <summary>Four distribution charts for the dashboard.</summary>
     Task<DashboardDistributions> GetDistributionsAsync(bool isLeadership, string? meId, CancellationToken cancellationToken = default);
 }

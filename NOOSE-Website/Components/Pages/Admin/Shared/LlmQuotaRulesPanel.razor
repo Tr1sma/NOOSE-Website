@@ -1,0 +1,239 @@
+@using System.Security.Claims
+@using NOOSE_Website.Authorization
+@using NOOSE_Website.Models.Llm
+@inject ILlmQuotaConfigService Config
+@inject INooseiSettingsService NooseiSettings
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+    Wöchentliches NOOSEI-Kontingent je Dienstgrad.
+    @if (_maySeeCost)
+    {
+        @* the exchange rate is a real price too: it turns every token figure on the page into money *@
+        <text><b>1.000 Token entsprechen einem Cent</b> echter API-Kosten.</text>
+    }
+    Der Übertrag ist auf denselben Prozentsatz der Basis gedeckelt — mehr als „Basis + Übertrag" kann niemand
+    ansammeln, egal wie viele Wochen ungenutzt bleiben.
+    Die Tagesgrenze zählt vom Grundkontingent, nicht vom Übertrag: eine Woche mit Übertrag soll länger reichen,
+    nicht schneller ausgebbar sein. 0 % schaltet sie ab.
+</MudText>
+
+@if (!_mayEdit)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        Nur der KI-Eigner kann diese Werte ändern. Du siehst sie hier lesend.
+    </MudAlert>
+}
+
+@if (_config is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+        <thead>
+            <tr>
+                <th>Dienstgrad</th>
+                <th style="width:180px;">Grundkontingent</th>
+                <th style="width:140px;">Übertrag</th>
+                <th style="width:140px;">Tagesgrenze</th>
+                <th style="width:160px;" class="text-right">Max. in der Woche</th>
+                <th style="width:150px;" class="text-right">Max. am Tag</th>
+                @if (_maySeeCost)
+                {
+                    <th style="width:160px;" class="text-right">≈ Realkosten/Woche</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var rank in RankDisplay.All)
+            {
+                var quota = Rules(rank);
+                <tr>
+                    <td>@RankDisplay.Name(rank)</td>
+                    <td>
+                        <MudNumericField T="long" @bind-Value="quota.BaseWeekly" Min="0" Step="1000"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit"
+                                         Adornment="Adornment.End" AdornmentText="Token" />
+                    </td>
+                    <td>
+                        <MudNumericField T="int" @bind-Value="quota.CarryOverPercent" Min="0" Max="100"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit"
+                                         Adornment="Adornment.End" AdornmentText="%" />
+                    </td>
+                    <td>
+                        <MudNumericField T="int" @bind-Value="quota.DailyPercent" Min="0" Max="100"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit"
+                                         Adornment="Adornment.End" AdornmentText="%" />
+                    </td>
+                    <td class="text-right">@LlmQuotaMath.Ceiling(quota.BaseWeekly, quota.CarryOverPercent).ToString("N0")</td>
+                    <td class="text-right mud-text-secondary">
+                        @{ var daily = LlmQuotaMath.DailyLimit(quota.BaseWeekly, quota.DailyPercent); }
+                        @(daily <= 0 ? "ohne Grenze" : daily.ToString("N0"))
+                    </td>
+                    @if (_maySeeCost)
+                    {
+                        <td class="text-right mud-text-secondary">
+                            @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(quota.BaseWeekly, quota.CarryOverPercent)).ToString("0.00") $
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+
+    <MudText Typo="Typo.subtitle2" Class="mt-6 mb-2">Auffälligkeiten</MudText>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-3">
+                <MudSwitch T="bool" @bind-Value="_config.Anomalies.SpikeEnabled" Color="Color.Primary"
+                           Disabled="!_mayEdit" Label="Kostenausreißer" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Eine einzelne Anfrage, die ein Vielfaches des Durchschnitts kostet.
+                </MudText>
+                <MudNumericField T="double" @bind-Value="_config.Anomalies.SpikeFactor" Min="1" Max="50" Step="0.5"
+                                 Label="Faktor" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+                <MudNumericField T="long" @bind-Value="_config.Anomalies.SpikeMinTokens" Min="0" Step="500"
+                                 Label="Mindestens Token" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+                <MudNumericField T="int" @bind-Value="_config.Anomalies.SpikeMinBaselineCount" Min="1" Max="500"
+                                 Label="Mindestens Vergleichsanfragen" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-3">
+                <MudSwitch T="bool" @bind-Value="_config.Anomalies.BurnEnabled" Color="Color.Primary"
+                           Disabled="!_mayEdit" Label="Schneller Verbrauch" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Ein großer Teil des Wochenkontingents in kurzer Zeit.
+                </MudText>
+                <MudNumericField T="int" @bind-Value="_config.Anomalies.BurnPercent" Min="1" Max="100"
+                                 Label="Anteil" Adornment="Adornment.End" AdornmentText="%"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+                <MudNumericField T="int" @bind-Value="_config.Anomalies.BurnHours" Min="1" Max="168"
+                                 Label="Innerhalb von" Adornment="Adornment.End" AdornmentText="h"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-3">
+                <MudSwitch T="bool" @bind-Value="_config.Anomalies.BurstEnabled" Color="Color.Primary"
+                           Disabled="!_mayEdit" Label="Anfrage-Serie" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Viele Anfragen in wenigen Minuten, mehrere davon fast gleichlautend.
+                </MudText>
+                <MudNumericField T="int" @bind-Value="_config.Anomalies.BurstRequests" Min="2" Max="200"
+                                 Label="Anfragen" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+                <MudNumericField T="int" @bind-Value="_config.Anomalies.BurstMinutes" Min="1" Max="1440"
+                                 Label="Innerhalb von" Adornment="Adornment.End" AdornmentText="min"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+                <MudNumericField T="int" @bind-Value="_config.Anomalies.BurstDuplicates" Min="2" Max="200"
+                                 Label="Davon ähnlich" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-3">
+                <MudSwitch T="bool" @bind-Value="_config.Anomalies.OutlierEnabled" Color="Color.Primary"
+                           Disabled="!_mayEdit" Label="Verbrauchs-Ausreißer" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Eine Woche weit über dem eigenen Schnitt oder dem des Dienstgrads.
+                </MudText>
+                <MudNumericField T="double" @bind-Value="_config.Anomalies.OutlierOwnFactor" Min="1" Max="50" Step="0.5"
+                                 Label="Faktor eigener Schnitt" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+                <MudNumericField T="double" @bind-Value="_config.Anomalies.OutlierRankFactor" Min="1" Max="50" Step="0.5"
+                                 Label="Faktor Rang-Schnitt" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit" Class="mt-2" />
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.subtitle2" Class="mt-6 mb-2">Hausregel für NOOSEI</MudText>
+    <MudTextField @bind-Value="_addendum" Label="Zusatzhinweis (optional)" Lines="3" Variant="Variant.Outlined"
+                  Disabled="!_mayEdit" Counter="@NooseiPrompts.MaxAddendumChars" MaxLength="@NooseiPrompts.MaxAddendumChars"
+                  HelperText="Wird hinter die festen Regeln gehängt, z. B. „Nutze immer Codenamen, nie Klarnamen." Kann Regeln ergänzen, aber keine entfernen." />
+
+    @if (_mayEdit)
+    {
+        <MudStack Row="true" Spacing="2" Class="mt-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_busy">Speichern</MudButton>
+            <MudButton Variant="Variant.Text" OnClick="ResetAsync" Disabled="_busy">Auf Standard zurücksetzen</MudButton>
+        </MudStack>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = new();
+    private LlmQuotaConfig? _config;
+    private string? _addendum;
+    private bool _mayEdit;
+
+    /// <summary>Real money is the AI owner's alone — they pay the bill. Leadership and other admins run the
+    /// quota in tokens, which is the unit every other surface of the site uses anyway.</summary>
+    private bool _maySeeCost;
+
+    private bool _busy;
+
+    private LlmRankQuota Rules(Rank rank)
+    {
+        var key = LlmQuotaConfig.RankKey(rank);
+        if (!_config!.Ranks.TryGetValue(key, out var quota))
+        {
+            quota = new LlmRankQuota();
+            _config.Ranks[key] = quota;
+        }
+        return quota;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _maySeeCost = _user.IsAiOwner();
+        _mayEdit = _maySeeCost && _user.MayWrite();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            // never the cache here: the editor must show what is actually stored
+            _config = await Config.GetEditableAsync();
+            _addendum = await NooseiSettings.GetAddendumAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Config.SaveAsync(_config, _user);
+            await NooseiSettings.SaveAddendumAsync(_addendum, _user);
+            Snackbar.Add("Token-Regeln gespeichert.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        _config = LlmQuotaConfig.Default();
+        await Task.CompletedTask;
+        Snackbar.Add("Standardwerte eingesetzt — noch nicht gespeichert.", Severity.Info);
+    }
+}

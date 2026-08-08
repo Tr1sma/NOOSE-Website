@@ -84,4 +84,12 @@ public class Agent : IdentityUser
     /// <summary>Per-user nav preferences (favorites, order, recents) as JSON.</summary>
     [Column("NavEinstellungen")]
     public string? NavPreferencesJson { get; set; }
+
+    /// <summary>Monthly funding budget overriding the rank default; null = rank default applies.</summary>
+    [Column("Finanzierungsbudget")]
+    public decimal? FinancingBudgetOverride { get; set; }
+
+    /// <summary>Weekly NOOSEI token quota overriding the rank default; null = rank default applies.</summary>
+    [Column("KiKontingent")]
+    public long? LlmQuotaOverride { get; set; }
 }

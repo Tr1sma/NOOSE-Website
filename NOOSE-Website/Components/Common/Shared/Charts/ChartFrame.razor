@@ -1,0 +1,79 @@
+@* Shared shell for every chart: tile, title, legend slot and the empty-data hint. *@
+@* Charts must never hand MudChart an all-zero dataset - it draws NaN geometry and empties the legend. *@
+
+@if (Bare)
+{
+    <div class="d-flex flex-column flex-grow-1" style="min-width:0;width:100%;">
+        @Head
+        @Body
+    </div>
+}
+else
+{
+    <MudPaper Class="pa-4 d-flex flex-column flex-grow-1" Elevation="2" Style="min-width:0;width:100%;">
+        @Head
+        @Body
+    </MudPaper>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    /// <summary>Optional one-line reading aid under the title.</summary>
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Plot height; must leave room for the axis label band.</summary>
+    [Parameter] public string Height { get; set; } = "300px";
+
+    /// <summary>Render the hint instead of the chart.</summary>
+    [Parameter] public bool IsEmpty { get; set; }
+
+    /// <summary>Text shown when there is nothing to plot.</summary>
+    [Parameter] public string EmptyText { get; set; } = "Noch keine Daten";
+
+    /// <summary>Render without an own tile (for grids that supply their own).</summary>
+    [Parameter] public bool Bare { get; set; }
+
+    /// <summary>Dim the plot while fresh data loads, instead of collapsing to a skeleton.</summary>
+    [Parameter] public bool Stale { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Optional footnote under the plot, e.g. a scale legend.</summary>
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    private RenderFragment Head =>@<text>
+        @if (Bare)
+        {
+            <MudText Typo="Typo.subtitle2" Align="Align.Center" Class="mb-1">@Title</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.subtitle1">@Title</MudText>
+        }
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">@Subtitle</MudText>
+        }
+        else
+        {
+            <div class="mb-2"></div>
+        }
+    </text>;
+
+    private RenderFragment Body =>@<text>
+        @if (IsEmpty)
+        {
+            <div class="d-flex align-center justify-center flex-grow-1" style="@($"min-height:{Height};")">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@EmptyText</MudText>
+            </div>
+        }
+        else
+        {
+            <div style="@($"width:100%;{(Stale ? "opacity:.45;transition:opacity .2s;" : string.Empty)}")">
+                @ChildContent
+            </div>
+            @Footer
+        }
+    </text>;
+}

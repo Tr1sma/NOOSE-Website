@@ -1,0 +1,43 @@
+@using NOOSE_Website.Models.Llm
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Korrektur für <b>@Status.Codename</b> in @Status.PeriodLabel.
+            Positiv stockt auf, negativ bucht ab. Aktueller Rest: @Status.Remaining.ToString("N0") Token.
+        </MudText>
+        <MudNumericField T="long" @bind-Value="_tokens" Step="1000" Label="Korrektur"
+                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                         Adornment="Adornment.End" AdornmentText="Token" />
+        <MudTextField @bind-Value="_reason" Label="Begründung" Lines="2" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="mt-3" Immediate="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirm"
+                   Disabled="@(_tokens == 0 || string.IsNullOrWhiteSpace(_reason))">Buchen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public LlmQuotaStatus Status { get; set; } = default!;
+
+    public readonly record struct Choice(long Tokens, string Reason);
+
+    private long _tokens = 5_000;
+    private string? _reason;
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(new Choice(_tokens, _reason!.Trim())));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public static async Task<Choice?> ShowAsync(IDialogService dialogs, LlmQuotaStatus status)
+    {
+        var parameters = new DialogParameters<LlmQuotaTopUpDialog> { { x => x.Status, status } };
+        var reference = await dialogs.ShowAsync<LlmQuotaTopUpDialog>("KI-Kontingent korrigieren", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: Choice choice } ? choice : null;
+    }
+}

@@ -27,6 +27,26 @@ public class HtmlCleanupTests
         Assert.NotNull(HtmlCleanup.Clean(null));
     }
 
+    // ---- the NOOSEI image placeholder ----
+
+    [Fact]
+    public void CleanAiPayload_KeepsTheImagePlaceholder_WhileCleanDropsIt()
+    {
+        const string html = "<p>Text</p><p><img data-noosei-bild=\"0\"></p>";
+
+        Assert.Contains("data-noosei-bild=\"0\"", HtmlCleanup.CleanAiPayload(html));
+        // everywhere else the marker is meaningless and has no business being stored
+        Assert.DoesNotContain("data-noosei-bild", HtmlCleanup.Clean(html));
+    }
+
+    [Fact]
+    public void CleanAiPayload_StillDropsAnUnknownScheme()
+    {
+        // why the marker is an attribute and not a fake src: src is a URI attribute and gets sanitized
+        Assert.DoesNotContain("noosei-bild", HtmlCleanup.CleanAiPayload("<p><img src=\"noosei-bild:0\"></p>"));
+        Assert.DoesNotContain("javascript", HtmlCleanup.CleanAiPayload("<p><a href=\"javascript:alert(1)\">x</a></p>"));
+    }
+
     // ---- plain text passthrough ----
 
     [Fact]

@@ -23,6 +23,7 @@ else
 {
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/personengruppen" aria-label="Zurück" />
+        <CompromisedBadge EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" />
         <MudSpacer />
         <MudTooltip Text="Druckansicht – Akte drucken / als PDF speichern">
             <MudIconButton Icon="@Icons.Material.Filled.Print" Color="Color.Default"
@@ -120,6 +121,12 @@ else
                     <OrgDocsPanel OrgType="@nameof(PersonGroup)" OrgId="@_group.Id" User="_user" />
                 </RecordSection>
                 }
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Ermittlung" Slug="entfuehrungen" Label="Verübte Entführungen" Icon="@Icons.Material.Filled.PersonOff">
+                    <AbductionsPanel PerpetratorType="@nameof(PersonGroup)" PerpetratorId="@_group.Id" />
+                </RecordSection>
+                }
                 @if (TabOn("aktivitaeten"))
                 {
                 <RecordSection Group="Ermittlung" Slug="aktivitaeten" Label="Aktivitäten" Icon="@Icons.Material.Filled.Bolt">
@@ -162,6 +169,13 @@ else
                 {
                 <RecordSection Group="Verlauf" Slug="historie" Label="Zeitstrahl" Icon="@Icons.Material.Filled.Timeline">
                     <TimelinePanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" @key="_historyKey" />
+                </RecordSection>
+                }
+                @* AI short brief: internal only *@
+                @if (!_isPartner)
+                {
+                <RecordSection Group="Analyse" Slug="ki-kurzbrief" Label="NOOSEI-Kurzbrief" Icon="@Icons.Material.Filled.AutoAwesome">
+                    <KiBriefPanel EntityType="@nameof(PersonGroup)" EntityId="@_group.Id" User="_user" />
                 </RecordSection>
                 }
             </RecordSectionRail>

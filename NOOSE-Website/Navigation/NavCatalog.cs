@@ -33,6 +33,9 @@ public static class NavCatalog
             Description: "Diensteinträge, die Agenten über sich selbst führen — für alle sichtbar"),
         new NavEntry("abmeldungen", "/abmeldungen", Icons.Material.Filled.EventBusy, "Abmeldungen", NavSection.MeinDienst, NavArea.MeinDienst,
             Description: "Eigene Abwesenheiten melden und einsehen"),
+        new NavEntry("finanzierungen", "/finanzierungen", Icons.Material.Filled.RequestQuote, "Finanzierungen", NavSection.MeinDienst, NavArea.MeinDienst, BadgeKey: "financing",
+            Description: "Finanzierungsanträge stellen und das eigene Monatsbudget einsehen"),
+        new NavEntry("feedback", "/feedback", Icons.Material.Filled.Feedback, "Feedback", NavSection.MeinDienst, NavArea.MeinDienst, Description: "Feedback zur Website"),
 
         new NavEntry("personen", "/personen", Icons.Material.Filled.Badge, "Personen-Akten", NavSection.Akten, NavArea.Akten,
             Description: "Zentrale Akte je Person — alles zu einer Person an einem Ort"),
@@ -42,6 +45,8 @@ public static class NavCatalog
             Description: "Lose Zusammenschlüsse ohne feste Fraktionsstruktur"),
         new NavEntry("parteien", "/parteien", Icons.Material.Filled.AccountBalance, "Parteien", NavSection.Akten, NavArea.Akten,
             Description: "Politische Parteien mit Mitgliedern und Ausrichtung"),
+        new NavEntry("asservatenkammer", "/asservatenkammer", Icons.Material.Filled.Inventory2, "Asservatenkammer", NavSection.Akten, NavArea.Dienststelle,
+            Description: "Ein- und Auslagerung von Gegenständen mit Bestand, Bild und Besitzer"),
 
         new NavEntry("vorgaenge", "/vorgaenge", Icons.Material.Filled.FolderSpecial, "Vorgänge", NavSection.VorgaengeEinsaetze, NavArea.Akten,
             Description: "Übergeordnete Ermittlungsakte, die mehrere Akten bündelt"),
@@ -52,6 +57,10 @@ public static class NavCatalog
 
         new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung & Überwachung", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Gesuchte Personen, Observationen und Vernehmungen"),
+        new NavEntry("informanten", "/informanten", Icons.Material.Filled.VisibilityOff, "Informanten", NavSection.Fahndung, NavArea.Ermittlung,
+            Description: "Vertrauliche Quellen (V-Personen) — Zeilen-Sichtbarkeit je Führungsagent"),
+        new NavEntry("entfuehrungen", "/entfuehrungen", Icons.Material.Filled.PersonOff, "Entführungen", NavSection.Fahndung, NavArea.Ermittlung,
+            Description: "Entführungen von NOOSE-Agenten: Täter, Informationsabfluss und kompromittierte Akten"),
 
         new NavEntry("dokumente", "/dokumente", Icons.Material.Filled.MenuBook, "Dokumenten-Bibliothek", NavSection.Wissen, NavArea.Ermittlung,
             Description: "Zentrale Ablage aller behördlichen Dokumente"),
@@ -60,6 +69,14 @@ public static class NavCatalog
 
         new NavEntry("graph", "/graph", Icons.Material.Filled.Hub, "Beziehungsgraph", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Verknüpfungen zwischen Akten als Netzdiagramm"),
+        // key stays "chronik": stored favorites reference it, and LegacyRoutes aliases onto it
+        new NavEntry("chronik", "/nachweis", Icons.Material.Filled.FactCheck, "Nachweis & Gegenaufklärung", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Chronik, Änderungs- und Zugriffsprotokoll, Gegenaufklärung"),
+        new NavEntry("hinweise", "/ermittlungshinweise", Icons.Material.Filled.Lightbulb, "Ermittlungshinweise", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Algorithmische Hinweise: mögliche Verbindungen, Konflikte, veraltete Einstufungen"),
+        // key stays "ki": stored favourites and hidden-entry settings reference it
+        new NavEntry("ki", "/ki-assistent", Icons.Material.Filled.SmartToy, "NOOSEI", NavSection.Analyse, NavArea.Ermittlung,
+            Description: "Fragen zur Aktenlage mit Zugriff auf die Aktendatenbank, plus Schreibhilfe"),
         new NavEntry("statistik", "/statistik", Icons.Material.Filled.QueryStats, "Statistik", NavSection.Analyse, NavArea.Ermittlung,
             Description: "Auswertungen, Kennzahlen und Lageberichte"),
         new NavEntry("organigramm", "/organigramm", Icons.Material.Filled.AccountTree, "Organigramm", NavSection.Analyse, NavArea.Dienststelle,
@@ -69,6 +86,8 @@ public static class NavCatalog
             Description: "Behördliche Ankündigungen, teils quittierungspflichtig"),
         new NavEntry("personal", "/personal", Icons.Material.Filled.People, "Personal", NavSection.Dienststelle, NavArea.Dienststelle,
             Description: "Agenten der Behörde mit Personalakte und Dienstgrad"),
+        new NavEntry("bestenliste", "/bestenliste", Icons.Material.Filled.EmojiEvents, "Bestenliste", NavSection.Dienststelle, NavArea.Dienststelle,
+            Description: "Team-Ranking nach dokumentierter Ermittlungsarbeit"),
         new NavEntry("besprechungen", "/besprechungen", Icons.Material.Filled.Groups, "Besprechungen", NavSection.Dienststelle, NavArea.Dienststelle,
             Description: "Dienstbesprechungen mit Tagesordnung und Protokoll"),
         new NavEntry("kalender", "/kalender", Icons.Material.Filled.CalendarMonth, "Kalender", NavSection.Dienststelle, NavArea.Dienststelle,
@@ -82,6 +101,8 @@ public static class NavCatalog
 
         new NavEntry("admin.agenten", "/admin/agenten", Icons.Material.Filled.ManageAccounts, "Agenten-Verwaltung", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "Dienstgrad, Status und Rechte der Agenten setzen"),
+        new NavEntry("kasse", "/kasse", Icons.Material.Filled.AccountBalanceWallet, "Kasse", NavSection.Dienststelle, NavArea.Dienststelle,
+            Description: "NOOSE-Kasse: Schwarz- und Grüngeld buchen, Vorlagen und Statistik"),
         new NavEntry("einstellungen", "/einstellungen", Icons.Material.Filled.SettingsApplications, "Einstellungen", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "System, Vorlagen, Tags, Score, Partner und Protokoll an einer Stelle"),
         new NavEntry("papierkorb", "/papierkorb", Icons.Material.Filled.Delete, "Papierkorb", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,

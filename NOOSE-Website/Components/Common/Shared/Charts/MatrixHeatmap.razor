@@ -1,0 +1,85 @@
+@* Row x column magnitude. One hue family, brighter means more; a zero cell stays surface-coloured. *@
+@using System.Globalization
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@Matrix.IsEmpty"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <ChildContent>
+        <MudChart T="double" ChartType="ChartType.HeatMap" ChartSeries="@_series" ChartLabels="@_labels"
+                  ChartOptions="@_options" Width="100%" Height="@Height" />
+    </ChildContent>
+    <Footer>
+        <div class="d-flex align-center justify-end mt-2" style="gap:.5rem;">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">0</MudText>
+            @foreach (var step in ChartPalette.Sequential)
+            {
+                <span style="@($"display:inline-block;width:18px;height:10px;background:{step};border:1px solid {ChartPalette.Gridline};")"></span>
+            }
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Matrix.Max @Unit</MudText>
+        </div>
+    </Footer>
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public ChartMatrix Matrix { get; set; } = ChartMatrix.Empty;
+
+    [Parameter] public string Height { get; set; } = "320px";
+
+    /// <summary>Unit shown at the top of the scale legend.</summary>
+    [Parameter] public string? Unit { get; set; }
+
+    /// <summary>Print the count inside each cell; only readable on a coarse grid.</summary>
+    [Parameter] public bool ShowValues { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Noch keine Daten";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private HeatMapChartOptions _options = new();
+
+    protected override void OnParametersSet()
+    {
+        _labels = Matrix.Columns.ToArray();
+        _series = Matrix.Rows
+            .Select((row, i) => new ChartSeries<double>
+            {
+                Name = row,
+                Data = (i < Matrix.Cells.Count ? Matrix.Cells[i] : [])
+                    .Select(c => (double)c).ToArray(),
+                Visible = true,
+            })
+            .ToList();
+
+        _options = new HeatMapChartOptions
+        {
+            // single-hue ramp, interpolated so neighbouring counts stay distinguishable
+            ChartPalette = ChartPalette.Sequential,
+            EnableSmoothGradient = true,
+            ShowLabels = ShowValues,
+            ShowLegendLabels = false,
+            ShowLegend = false,
+            ShowToolTips = true,
+            ValueFormatString = "0",
+            XAxisLabelPosition = XAxisLabelPosition.Bottom,
+            YAxisLabelPosition = YAxisLabelPosition.Left,
+        };
+    }
+
+    /// <summary>Cell tint for the hand-rolled fallback grid; null keeps the surface showing through.</summary>
+    private static string CellStyle(int value, int max)
+    {
+        var fill = ChartPalette.ForMagnitude(value, max);
+        var background = fill is null ? "transparent" : fill;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"width:18px;height:18px;border:1px solid {ChartPalette.Gridline};background:{background};");
+    }
+}

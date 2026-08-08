@@ -1,0 +1,71 @@
+@* One ratio against a limit. Track is a lighter step of the fill's own ramp, so state reads across the bar. *@
+@using System.Globalization
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+@inject NavigationManager Nav
+
+<div class="d-flex flex-column" style="gap:.25rem;">
+    @foreach (var row in Rows)
+    {
+        var share = row.Share;
+        var pct = (share * 100).ToString("0", CultureInfo.InvariantCulture);
+        var fill = Fill(share);
+        <div class="@(row.Href is null ? string.Empty : "cursor-pointer")"
+             role="@(row.Href is null ? null : "link")"
+             @onclick="@(() => Open(row.Href))">
+            <div class="d-flex align-center justify-space-between">
+                <MudText Typo="Typo.body2">@row.Label</MudText>
+                @* the value is always visible, so the meter never depends on hover *@
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    <b style="color:var(--mud-palette-text-primary);">@row.Value</b> / @row.Total
+                    <span style="opacity:.7;">(@pct&nbsp;%)</span>
+                </MudText>
+            </div>
+            <div style="@($"height:8px;border-radius:4px;overflow:hidden;background:{Track};")"
+                 title="@($"{row.Label}: {row.Value} von {row.Total}")">
+                <div style="@($"width:{pct}%;height:100%;background:{fill};border-radius:4px;transition:width .3s ease;")"></div>
+            </div>
+        </div>
+    }
+    @if (Rows.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@EmptyText</MudText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ChartRatio> Rows { get; set; } = [];
+
+    /// <summary>Below this share the fill turns critical; between it and <see cref="GoodAbove"/> it warns.</summary>
+    [Parameter] public double CriticalBelow { get; set; } = 0.5;
+
+    /// <summary>At or above this share the fill reads good.</summary>
+    [Parameter] public double GoodAbove { get; set; } = 0.8;
+
+    /// <summary>Invert the scale for metrics where a high share is bad (e.g. share of stale records).</summary>
+    [Parameter] public bool HighIsBad { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Noch keine Daten";
+
+    /// <summary>Unfilled track: a lighter step of the same ramp rather than a neutral gray.</summary>
+    private const string Track = "#1E2731";
+
+    private string Fill(double share)
+    {
+        var good = HighIsBad ? 1 - share : share;
+        // status hues, because this value genuinely means good or bad - not series identity
+        if (good >= GoodAbove)
+        {
+            return ChartPalette.Hazard[1];
+        }
+        return good >= CriticalBelow ? ChartPalette.Hazard[3] : ChartPalette.Hazard[4];
+    }
+
+    private void Open(string? href)
+    {
+        if (!string.IsNullOrEmpty(href))
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+}

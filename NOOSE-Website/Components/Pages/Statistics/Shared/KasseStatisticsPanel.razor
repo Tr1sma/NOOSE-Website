@@ -1,0 +1,76 @@
+@* Treasury statistics: balances, cash flow over time, and what the money was booked for. *@
+@using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Services
+@using NOOSE_Website.Theme
+@inject IKasseStatisticsService Stats
+
+<div class="dashboard-seite">
+    @if (_first)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.MoneyOff" Colour="Color.Error"
+                          Label="Schwarzgeld" Value="@Money.Format(_data.SchwarzgeldBalance)" Href="/kasse" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.Payments" Colour="Color.Success"
+                          Label="Grüngeld" Value="@Money.Format(_data.GruengeldBalance)" Href="/kasse" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.TrendingUp" Colour="Color.Success"
+                          Label="Einzahlungen (Zeitraum)" Value="@Money.Format(_data.TotalDeposits)" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <StatTile Icon="@Icons.Material.Filled.TrendingDown" Colour="Color.Warning"
+                          Label="Auszahlungen (Zeitraum)" Value="@Money.Format(_data.TotalWithdrawals)" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex">
+                <CategoryBarChart Title="Geldbewegungen im Zeitverlauf"
+                                  Subtitle="Ein- und Auszahlungen beider Kassen"
+                                  Grid="@_data.MovementsOverTime"
+                                  YAxisTitle="Dollar" Height="320px" Stale="@_stale" />
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex">
+                <CategoryBarChart Title="Kontostände"
+                                  Subtitle="Aktueller Stand je Kasse"
+                                  Grid="@_data.Balances"
+                                  YAxisTitle="Dollar" Height="320px" Stale="@_stale" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex">
+                <DistributionChart Title="Häufigste Verwendungszwecke" Segments="@_data.TopReasons"
+                                   Colours="@_reasonColours" Height="320px" />
+            </MudItem>
+        </MudGrid>
+    }
+</div>
+
+@code {
+    [CascadingParameter] private StatisticsScope Scope { get; set; } = new(false, StatisticsRange.Months12);
+
+    private bool _first = true;
+    private bool _stale;
+    private string _loaded = string.Empty;
+    private KasseStatistics _data = KasseStatistics.Empty;
+
+    private static readonly string[] _reasonColours = ChartPalette.Categorical;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Scope.CacheToken)
+        {
+            return;
+        }
+        _loaded = Scope.CacheToken;
+        _stale = !_first;
+        _data = await Stats.GetAsync(Scope);
+        _first = false;
+        _stale = false;
+    }
+}

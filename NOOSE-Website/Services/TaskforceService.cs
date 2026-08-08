@@ -226,9 +226,10 @@ public class TaskforceService(
             throw new UnauthorizedAccessException("Diese Akte ist als Verschlusssache nur für die Führung zugänglich.");
         }
         await RequireLeadershipOrLeadAsync(db, taskforceId, actor, cancellationToken);
-        if (!await db.Users.AnyAsync(u => u.Id == agentId, cancellationToken))
+        // partner read access to a taskforce comes from PartnerShare, never from a membership row
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == agentId, cancellationToken))
         {
-            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden.");
+            throw new InvalidOperationException("Der gewählte Agent wurde nicht gefunden oder ist nicht zuteilbar.");
         }
         if (await db.TaskforceAgents.AnyAsync(a => a.TaskforceId == taskforceId && a.AgentId == agentId, cancellationToken))
         {

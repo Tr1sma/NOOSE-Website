@@ -1,0 +1,140 @@
+@* Ledger of one cash account, newest first, with the running balance per row. *@
+@inject IKassenService Kasse
+@inject NavigationManager Nav
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Typo="Typo.h6">Buchungen · @KassenKontoDisplay.Name(Account)</MudText>
+        <MudSpacer />
+        @if (_bookers.Count > 0)
+        {
+            <MudSelect T="string" Value="_agentFilter" ValueChanged="OnAgentFilterChanged" Clearable="true" Dense="true"
+                       Placeholder="Alle Agenten" Style="max-width:240px" Variant="Variant.Outlined"
+                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Badge">
+                @foreach (var b in _bookers)
+                {
+                    <MudSelectItem T="string" Value="@b.Id">@b.Codename</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        <AuthorizeView Policy="@Policies.WriteAccess">
+            <MudButton Href="@($"/kasse/buchung/neu?konto={(int)Account}")" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add">Neue Buchung</MudButton>
+        </AuthorizeView>
+    </MudStack>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.ReceiptLong" Title="Keine Buchungen"
+                    Text="In dieser Kasse wurde noch nichts gebucht." />
+    }
+    else
+    {
+        var rows = Filtered();
+        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+            <thead>
+                <tr>
+                    <th>Aktenzeichen</th>
+                    <th>Art</th>
+                    <th style="text-align:right">Betrag</th>
+                    <th>Grund</th>
+                    <th>Gebucht von</th>
+                    <th>Zeitpunkt</th>
+                    <th style="text-align:right">Stand nachher</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Count == 0)
+                {
+                    <tr><td colspan="7" class="mud-text-secondary">Keine Buchungen dieses Agenten.</td></tr>
+                }
+                @foreach (var r in rows)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/kasse/buchung/{r.Buchung.Id}"))">
+                        <td>@r.Buchung.CaseNumber</td>
+                        <td>
+                            <MudChip T="string" Size="Size.Small" Color="@KassenBuchungArtDisplay.ChipColor(r.Buchung.Kind)"
+                                     Icon="@KassenBuchungArtDisplay.Icon(r.Buchung.Kind)">
+                                @KassenBuchungArtDisplay.Name(r.Buchung.Kind)
+                            </MudChip>
+                        </td>
+                        <td style="text-align:right">
+                            <MudText Typo="Typo.body2" Color="@DeltaColour(r.Delta)">@Money.Signed(r.Delta)</MudText>
+                        </td>
+                        <td>
+                            @if (r.FinancingRequestId is { } financingId)
+                            {
+                                @* stopPropagation so the link wins over the row's navigation to the booking *@
+                                <MudLink Href="@($"/finanzierungen/{financingId}")" Typo="Typo.body2" @onclick:stopPropagation="true">
+                                    @(r.Buchung.Reason ?? r.FinancingCaseNumber)
+                                </MudLink>
+                            }
+                            else
+                            {
+                                @(string.IsNullOrWhiteSpace(r.Buchung.Reason) ? "—" : r.Buchung.Reason)
+                            }
+                        </td>
+                        <td>@r.BookedByCodename</td>
+                        <td>@r.Buchung.Timestamp.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td style="text-align:right">@Money.Format(r.BalanceAfter)</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public KassenKonto Account { get; set; }
+
+    /// <summary>Bumped by the page after a booking elsewhere forces a reload.</summary>
+    [Parameter] public int Refresh { get; set; }
+
+    private bool _load = true;
+    private string? _loadedKey;
+    private string? _agentFilter;
+    private IReadOnlyList<KassenBuchungDisplay> _rows = [];
+    private IReadOnlyList<Booker> _bookers = [];
+
+    private sealed record Booker(string Id, string Codename);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Account}:{Refresh}";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _load = true;
+        _rows = await Kasse.GetLedgerAsync(Account);
+        // distinct bookers present in this ledger drive the filter dropdown
+        _bookers = _rows
+            .Where(r => !string.IsNullOrEmpty(r.Buchung.BookedById))
+            .GroupBy(r => r.Buchung.BookedById!)
+            .Select(g => new Booker(g.Key, g.First().BookedByCodename))
+            .OrderBy(b => b.Codename)
+            .ToList();
+        // drop a filter that no longer matches any row after reload
+        if (_agentFilter is not null && _bookers.All(b => b.Id != _agentFilter))
+        {
+            _agentFilter = null;
+        }
+        _load = false;
+    }
+
+    private void OnAgentFilterChanged(string? agentId) => _agentFilter = agentId;
+
+    // balance is computed over ALL rows; only the displayed rows are filtered, so "Stand nachher" stays correct
+    private List<KassenBuchungDisplay> Filtered()
+        => (_agentFilter is null
+            ? _rows
+            : _rows.Where(r => r.Buchung.BookedById == _agentFilter)).ToList();
+
+    private static Color DeltaColour(decimal delta)
+        => delta > 0 ? Color.Success : delta < 0 ? Color.Warning : Color.Default;
+}

@@ -182,19 +182,35 @@ public sealed class DocumentAccessServiceTests
     }
 
     [Fact]
-    public async Task GetAccessListAsync_Classified_IncludesOnlyLeadershipAndOnlyReader()
+    public async Task GetAccessListAsync_Classified_IncludesOnlyLeadership_NeverReadOnlySupervision()
     {
         using var ctx = new SqliteTestContext();
         AddDocument(ctx, "d1", d => d.IsClassified = true);
         AddAgent(ctx, "plain");
         AddAgent(ctx, "boss", rank: Rank.SupervisorySpecialAgent);
         AddAgent(ctx, "adm", configure: a => a.IsAdmin = true);
+        // read-only supervision can read the file, it is just never listed anywhere
         AddAgent(ctx, "tl", configure: a => a.IsTeamLead = true);
         var (svc, _) = Build(ctx);
 
         var ids = (await svc.GetAccessListAsync("d1", Leader())).Select(e => e.AgentId).ToHashSet();
 
-        Assert.Equal(new HashSet<string> { "boss", "adm", "tl" }, ids);
+        Assert.Equal(new HashSet<string> { "boss", "adm" }, ids);
+    }
+
+    [Fact]
+    public async Task GetAccessListAsync_TeamLeadAdmin_IsNotListed()
+    {
+        using var ctx = new SqliteTestContext();
+        AddDocument(ctx, "d1", d => d.IsClassified = true);
+        AddAgent(ctx, "adm", configure: a => a.IsAdmin = true);
+        // the admin flag must not resurrect a team lead
+        AddAgent(ctx, "tl-adm", configure: a => { a.IsTeamLead = true; a.IsAdmin = true; });
+        var (svc, _) = Build(ctx);
+
+        var ids = (await svc.GetAccessListAsync("d1", Leader())).Select(e => e.AgentId).ToHashSet();
+
+        Assert.Equal(new HashSet<string> { "adm" }, ids);
     }
 
     [Fact]

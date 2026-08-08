@@ -21,12 +21,9 @@ public class MeetingService(
     /// <summary>Sparse ordering leaves room to move items without renumbering.</summary>
     private const int SortingStep = 10;
 
-    /// <summary>Roster of a meeting: GetSelectableAsync's predicate plus the two clauses a roster needs.</summary>
+    /// <summary>Roster of a meeting: the selectable agents, narrowed to those already released back then.</summary>
     private static IQueryable<Agent> Roster(AppDbContext db, DateTime meetingStartUtc)
-        => db.Users.Where(u => u.Status == AgentStatus.Active
-                            && !u.IsTeamLead
-                            && u.PartnerAgency == null
-                            && (u.ReleasedAt ?? u.RegisteredAt) <= meetingStartUtc);
+        => db.Users.OnlySelectable().Where(u => (u.ReleasedAt ?? u.RegisteredAt) <= meetingStartUtc);
 
     // ---- reads ----
 

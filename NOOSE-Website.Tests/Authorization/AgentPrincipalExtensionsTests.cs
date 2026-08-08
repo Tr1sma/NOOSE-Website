@@ -577,6 +577,37 @@ public class AgentPrincipalExtensionsTests
         Assert.False(user.MayRealNameSee());
     }
 
+    // ---------- MayCounterIntel (leadership && !onlyReader) ----------
+
+    [Fact]
+    public void MayCounterIntel_leadershipByRank_returnsTrue()
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SupervisorySpecialAgent).Build();
+        Assert.True(user.MayCounterIntel());
+    }
+
+    [Fact]
+    public void MayCounterIntel_adminTeamLead_returnsTrue()
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().AsTeamLead().AsAdmin().Build();
+        Assert.True(user.MayCounterIntel());
+    }
+
+    [Fact]
+    public void MayCounterIntel_onlyReaderWithLeadershipRank_returnsFalse()
+    {
+        // this is the case Policies.Leadership would have let through while the service throws.
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.SupervisorySpecialAgent).Build();
+        Assert.False(user.MayCounterIntel());
+    }
+
+    [Fact]
+    public void MayCounterIntel_juniorAgent_returnsFalse()
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().WithRank(Rank.JuniorAgent).Build();
+        Assert.False(user.MayCounterIntel());
+    }
+
     // ---------- MayHighestClassification (admin || rank >= SeniorSpecialAgent(3)) ----------
 
     [Theory]

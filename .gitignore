@@ -384,3 +384,6 @@ App_Data/uploads/
 # ----- NOOSE: Deploy-Artefakt (deploy.ps1 packt/entpackt es lokal) -----
 noose-publish.tgz
 /NOOSE-Website/BuildNumber.txt
+
+# live secrets (untracked); commit appsettings.json.template instead
+NOOSE-Website/appsettings.json

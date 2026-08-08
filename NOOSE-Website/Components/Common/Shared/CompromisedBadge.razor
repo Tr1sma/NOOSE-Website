@@ -1,0 +1,81 @@
+@* Shows a red flag on any record currently compromised by an abduction; lets a writer re-classify it as normal. *@
+@inject IAbductionService AbductionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+@if (_active.Count > 0)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <MudTooltip Text="@_tooltip">
+            <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
+                     Icon="@Icons.Material.Filled.GppBad" OnClick="GoToSource">Kompromittiert</MudChip>
+        </MudTooltip>
+        <AuthorizeView Policy="@Policies.WriteAccess">
+            <MudTooltip Text="Alle offenen Kompromittierungen dieser Akte als bereinigt markieren">
+                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success"
+                               OnClick="ClearAllAsync" aria-label="Wieder als normal einstufen" />
+            </MudTooltip>
+        </AuthorizeView>
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string EntityType { get; set; } = default!;
+    [Parameter, EditorRequired] public string EntityId { get; set; } = default!;
+
+    /// <summary>Raised after the flag is cleared, so the host can refresh.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private List<CompromisedRecord> _active = new();
+    private string _tooltip = string.Empty;
+    private string? _key;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{EntityType}:{EntityId}";
+        if (_key == key)
+        {
+            return;
+        }
+        _key = key;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrEmpty(EntityType) || string.IsNullOrEmpty(EntityId))
+        {
+            _active = new();
+            return;
+        }
+        var all = await AbductionService.GetForTargetAsync(EntityType, EntityId);
+        _active = all.Where(c => c.Status == CompromiseStatus.Compromised).ToList();
+        _tooltip = _active.Count == 0
+            ? string.Empty
+            : "Kompromittiert durch: " + string.Join(", ", _active.Select(c => c.AbductionCaseNumber).Distinct());
+    }
+
+    private void GoToSource()
+    {
+        var first = _active.FirstOrDefault();
+        if (first is not null)
+        {
+            Nav.NavigateTo($"/entfuehrungen/{first.AbductionId}");
+        }
+    }
+
+    private async Task ClearAllAsync()
+    {
+        var user = (await AuthStateTask).User;
+        foreach (var c in _active)
+        {
+            await AbductionService.SetCompromiseStatusAsync(c.CompromiseId, CompromiseStatus.Cleared, user);
+        }
+        await LoadAsync();
+        Snackbar.Add("Akte wieder als normal eingestuft.", Severity.Success);
+        await OnChanged.InvokeAsync();
+        StateHasChanged();
+    }
+}

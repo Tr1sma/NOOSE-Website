@@ -3,6 +3,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
@@ -61,6 +62,12 @@ public static class Visibility
         {
             return (scope.MayClassifiedRead || scope.IsHrb)
                 && await db.Bewerbungen.AnyAsync(b => b.Id == entityId, cancellationToken);
+        }
+        // funding requests: the requester plus anyone who reads everything (leadership/supervision).
+        // MUST stay explicit — the tail of this method treats an unknown type as visible to all.
+        if (entityType == nameof(FinancingRequest))
+        {
+            return await FinancingVisibility.IsVisibleAsync(db, entityId, scope.MayClassifiedRead, scope.MeId, cancellationToken);
         }
 
         SecrecyRow? row = entityType switch

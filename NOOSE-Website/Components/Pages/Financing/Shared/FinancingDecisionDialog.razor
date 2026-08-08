@@ -1,0 +1,112 @@
+@* Approve a funding request: cut quantities per line, note the decision, justify a budget overrun. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSimpleTable Dense="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>Position</th>
+                        <th style="text-align:right">Einzelpreis</th>
+                        <th style="text-align:right">Beantragt</th>
+                        <th style="text-align:right">Genehmigt</th>
+                        <th style="text-align:right">Zuschuss</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in Request.Lines)
+                    {
+                        var lineId = line.Id;
+                        <tr>
+                            <td>@line.ItemName <MudText Typo="Typo.caption" Class="mud-text-secondary">(@line.SubsidyPercent %)</MudText></td>
+                            <td style="text-align:right">@Money.Format(line.UnitPrice)</td>
+                            <td style="text-align:right">@line.Quantity</td>
+                            <td style="text-align:right; width:120px">
+                                <MudNumericField T="int" Value="@_quantities[lineId]" Min="0" Max="@line.Quantity"
+                                                 ValueChanged="@(v => SetQuantity(lineId, v))"
+                                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </td>
+                            <td style="text-align:right">
+                                @Money.Format(FinancingMath.Subsidy(line.UnitPrice, _quantities[lineId], line.SubsidyPercent))
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+
+            <MudAlert Severity="@(Overrun > 0 ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined" Dense="true">
+                Zuschuss <b>@Money.Format(Subsidy)</b> · Restbudget @Budget.Codename
+                <b>@Money.Format(Budget.Remaining)</b>
+                @if (Overrun > 0)
+                {
+                    <span> — <b>Überschreitung um @Money.Format(Overrun)</b></span>
+                }
+            </MudAlert>
+
+            @if (Overrun > 0)
+            {
+                <MudTextField T="string" @bind-Value="_overrunReason" Label="Begründung der Überschreitung"
+                              Variant="Variant.Outlined" Lines="2" MaxLength="500" Required="true"
+                              RequiredError="Für eine Überschreitung ist eine Begründung nötig"
+                              HelperText="Wird am Antrag festgehalten und ist im Protokoll nachvollziehbar" />
+            }
+
+            <MudTextField T="string" @bind-Value="_note" Label="Notiz zur Entscheidung (optional)"
+                          Variant="Variant.Outlined" Lines="2" MaxLength="2000" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Check"
+                   Disabled="@(Subsidy <= 0 || (Overrun > 0 && string.IsNullOrWhiteSpace(_overrunReason)))"
+                   OnClick="Confirm">Annehmen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public FinancingRequest Request { get; set; } = default!;
+    [Parameter, EditorRequired] public FinancingBudgetStatus Budget { get; set; } = FinancingBudgetStatus.Empty;
+
+    private readonly Dictionary<string, int> _quantities = new();
+    private string? _note;
+    private string? _overrunReason;
+
+    private decimal Subsidy => Request.Lines
+        .Sum(l => FinancingMath.Subsidy(l.UnitPrice, _quantities.GetValueOrDefault(l.Id), l.SubsidyPercent));
+
+    private decimal Overrun => Subsidy - Budget.Remaining;
+
+    protected override void OnInitialized()
+    {
+        foreach (var line in Request.Lines)
+        {
+            _quantities[line.Id] = line.Quantity;
+        }
+    }
+
+    private void SetQuantity(string lineId, int value) => _quantities[lineId] = value;
+
+    private void Confirm()
+        => MudDialog.Close(DialogResult.Ok(new FinancingDecisionInput
+        {
+            ApprovedQuantities = new Dictionary<string, int>(_quantities),
+            Note = _note,
+            OverrunReason = _overrunReason,
+        }));
+
+    /// <summary>Asks for the approval details; returns null when cancelled.</summary>
+    public static async Task<FinancingDecisionInput?> ShowAsync(IDialogService dialog, FinancingRequest request,
+        FinancingBudgetStatus budget)
+    {
+        var parameters = new DialogParameters<FinancingDecisionDialog>
+        {
+            { x => x.Request, request },
+            { x => x.Budget, budget },
+        };
+        var reference = await dialog.ShowAsync<FinancingDecisionDialog>($"Antrag {request.CaseNumber} annehmen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: FinancingDecisionInput input } ? input : null;
+    }
+}

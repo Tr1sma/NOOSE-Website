@@ -1,5 +1,7 @@
 @page "/einstellungen"
 @attribute [Authorize(Policy = Policies.LeadershipPage)]
+@using NOOSE_Website.Navigation
+@inject NavigationManager Nav
 
 <PageTitle>Einstellungen · NOOSE</PageTitle>
 
@@ -19,6 +21,11 @@
     <RecordSection Group="Betrieb" Slug="discord" Label="Discord-Benachrichtigungen"
                    Icon="@Icons.Material.Filled.Notifications">
         <DiscordPanel />
+    </RecordSection>
+
+    <RecordSection Group="Betrieb" Slug="bester-agent" Label="Bester Agent der Woche"
+                   Icon="@Icons.Material.Filled.EmojiEvents">
+        <BestAgentPanel />
     </RecordSection>
 
     <AuthorizeView Policy="@Policies.AdminPage" Context="statusSection">
@@ -72,6 +79,36 @@
         <InvitesPanel />
     </RecordSection>
 
+    <RecordSection Group="Finanzierung" Slug="finanzierung" Label="Budget-Regeln"
+                   Icon="@Icons.Material.Filled.RequestQuote">
+        <FinancingRulesPanel />
+    </RecordSection>
+
+    <RecordSection Group="KI" Slug="noosei" Label="NOOSEI-Betrieb"
+                   Icon="@Icons.Material.Filled.SmartToy">
+        <NooseiOperationsPanel />
+    </RecordSection>
+    <RecordSection Group="KI" Slug="ki-regeln" Label="Token-Regeln"
+                   Icon="@Icons.Material.Filled.Rule">
+        <LlmQuotaRulesPanel />
+    </RecordSection>
+    @* aggregates only, no prompt text — so this stays at leadership and needs no counter-intel gate *@
+    <RecordSection Group="KI" Slug="ki-betrieb" Label="Betriebszahlen"
+                   Icon="@Icons.Material.Filled.QueryStats">
+        <NooseiHealthPanel />
+    </RecordSection>
+    <RecordSection Group="KI" Slug="ki-kontingente" Label="Kontingente"
+                   Icon="@Icons.Material.Filled.Token">
+        <LlmQuotaOverviewPanel />
+    </RecordSection>
+    @* Prompts and answers are stored in full: agents do paste real names, and supervision must never see those. *@
+    <AuthorizeView Policy="@Policies.CounterIntel" Context="kiLogSection">
+        <RecordSection Group="KI" Slug="ki-anfragen" Label="Anfragen"
+                       Icon="@Icons.Material.Filled.Forum">
+            <LlmRequestLogPanel />
+        </RecordSection>
+    </AuthorizeView>
+
     <AuthorizeView Policy="@Policies.AdminPage" Context="partnerSection">
         <RecordSection Group="Partnerbehörden" Slug="partner" Label="Sichtbarkeit &amp; Freigaben"
                        Icon="@Icons.Material.Filled.Handshake">
@@ -79,12 +116,20 @@
         </RecordSection>
     </AuthorizeView>
 
-    <RecordSection Group="Nachweis" Slug="protokoll" Label="Audit-Protokoll"
-                   Icon="@Icons.Material.Filled.FactCheck">
-        <AuditLogPanel />
-    </RecordSection>
+    @* Protokoll and Gegenaufklärung moved to /nachweis; only the value lists stay here. *@
     <RecordSection Group="Nachweis" Slug="basisdaten" Label="Wertelisten"
                    Icon="@Icons.Material.Filled.Storage">
         <BaseDataPanel />
     </RecordSection>
 </RecordSectionRail>
+
+@code {
+    // three sections left for /nachweis; forward old deep links instead of silently falling back
+    protected override void OnInitialized()
+    {
+        if (LegacyRoutes.MovedSettingsTab(QueryState.Read(Nav, "tab")) is { } target)
+        {
+            Nav.NavigateTo(target, replace: true);
+        }
+    }
+}

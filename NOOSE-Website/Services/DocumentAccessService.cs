@@ -34,17 +34,17 @@ public class DocumentAccessService(IDbContextFactory<AppDbContext> dbFactory, Do
 
         await RequireManageAsync(db, doc.CreatedById, doc.OwnerTaskforceId, actor, cancellationToken);
 
-        // internal, active agents only
-        var q = db.Users.AsNoTracking().Where(a => a.PartnerAgency == null && a.Status == AgentStatus.Active);
+        // diverges from DocumentViewerScope on purpose: read-only supervision can read the file but is
+        // never listed anywhere, so this answers "who is listed", not "who can read"
+        var q = db.Users.AsNoTracking().OnlySelectable();
 
-        // classification gate, replicated from DocumentViewerScope against stored fields:
-        // mayClassified(a) = leadership(a) || onlyReader(a) = (IsAdmin || Rank>=floor) || (IsTeamLead && !IsAdmin)
+        // classification gate against stored fields: mayClassified(a) = IsAdmin || Rank >= floor
         if (doc.IsClassified)
-            q = q.Where(a => a.IsAdmin || a.Rank >= LeadershipFloor || (a.IsTeamLead && !a.IsAdmin));
+            q = q.Where(a => a.IsAdmin || a.Rank >= LeadershipFloor);
         else if (doc.IsTRUClassified)
-            q = q.Where(a => a.IsAdmin || a.Rank >= LeadershipFloor || (a.IsTeamLead && !a.IsAdmin) || a.IsTRU);
+            q = q.Where(a => a.IsAdmin || a.Rank >= LeadershipFloor || a.IsTRU);
         else if (doc.IsHRBClassified)
-            q = q.Where(a => a.IsAdmin || a.Rank >= LeadershipFloor || (a.IsTeamLead && !a.IsAdmin) || a.IsHRB);
+            q = q.Where(a => a.IsAdmin || a.Rank >= LeadershipFloor || a.IsHRB);
 
         // taskforce-internal: members and leadership/admin only
         if (doc.OwnerTaskforceId is { } tfId)
@@ -84,12 +84,15 @@ public class DocumentAccessService(IDbContextFactory<AppDbContext> dbFactory, Do
 
         var target = await db.Users.AsNoTracking()
             .Where(a => a.Id == agentId)
-            .Select(a => new { a.IsAdmin, a.PartnerAgency, a.Rank })
+            .Select(a => new { a.IsAdmin, a.PartnerAgency, a.Rank, a.IsTeamLead })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new InvalidOperationException("Agent nicht gefunden.");
         if (target.IsAdmin)
             throw new InvalidOperationException("Einem Admin kann der Zugriff nicht entzogen werden.");
         if (target.PartnerAgency != null)
+            throw new InvalidOperationException("Nur interne Agenten stehen auf der Einsichtsliste.");
+        // mirrors the read side: an unlisted target would leave an exclusion nobody can undo
+        if (target.IsTeamLead)
             throw new InvalidOperationException("Nur interne Agenten stehen auf der Einsichtsliste.");
         // non-leadership actors must not revoke leadership (admins already blocked above)
         if (!actor.IsLeadership() && target.Rank >= LeadershipFloor)

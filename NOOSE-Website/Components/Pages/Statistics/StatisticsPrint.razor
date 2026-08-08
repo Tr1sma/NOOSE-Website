@@ -2,7 +2,10 @@
 @page "/statistik/druck"
 @layout PrintLayout
 @using NOOSE_Website.Models.Dashboard
+@using NOOSE_Website.Models.Statistics
 @inject IStatisticsService Statistics
+@inject IInventoryStatisticsService Inventory
+@inject IThroughputStatisticsService Throughput
 
 <PageTitle>Statistik – Druckansicht · NOOSE</PageTitle>
 
@@ -16,6 +19,8 @@ else if (_report is { } r)
                  PrintedBy="@_printBy" IsClassified="false"
                  Footer="NOOSE-interne Auswertung · Stand der Erzeugung · Weitergabe nur nach Freigabe durch die Führung.">
         <StatisticsReportTables Report="r" />
+        <StatisticsChartTables Classification="@_classification" Hazard="@_hazard" CaseFunnel="@_caseFunnel"
+                               CycleTime="@_cycleTime" Recency="@_recency" />
     </PrintFrame>
 }
 
@@ -26,11 +31,26 @@ else if (_report is { } r)
     private string? _printBy;
     private StatisticsReport? _report;
 
+    private ChartGrid? _classification;
+    private ChartGrid? _hazard;
+    private ChartGrid? _caseFunnel;
+    private IReadOnlyList<ChartBucket>? _cycleTime;
+    private IReadOnlyList<ChartRatio>? _recency;
+
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
         _printBy = user.GetCodename();
         _report = await Statistics.GetReportAsync(user.IsLeadership(), user.GetAgentId());
+
+        // the print view has no filter bar, so it prints the widest window the viewer may see
+        var scope = new StatisticsScope(user.MayClassifiedRead(), StatisticsRange.Months12);
+        _classification = await Inventory.GetClassificationAsync(scope);
+        _hazard = await Inventory.GetHazardComparisonAsync(scope);
+        _caseFunnel = await Inventory.GetCaseFunnelAsync(scope);
+        _cycleTime = await Throughput.GetCaseCycleTimeAsync(scope);
+        _recency = await Inventory.GetRecencyAsync(scope);
+
         _load = false;
     }
 }

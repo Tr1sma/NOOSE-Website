@@ -280,6 +280,34 @@ public sealed class PersonnelFileServiceTests
         Assert.Equal(1, verify.AgentPromotionRequests.Count(r => r.AgentId == "target-1"));
     }
 
+    [Theory]
+    [InlineData("teamlead")]
+    [InlineData("teamlead-admin")]
+    [InlineData("partner")]
+    [InlineData("terminated")]
+    public async Task PromotionRequestAsync_Throws_WhenAgentNotSelectable(string id)
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(id switch
+            {
+                "teamlead" => Seed.Agent(id, configure: a => a.IsTeamLead = true),
+                "teamlead-admin" => Seed.Agent(id, configure: a => { a.IsTeamLead = true; a.IsAdmin = true; }),
+                "partner" => Seed.Agent(id, configure: a => a.PartnerAgency = PartnerAgency.LSPD),
+                _ => Seed.Agent(id, status: AgentStatus.Terminated),
+            });
+            db.SaveChanges();
+        }
+
+        // TargetRank is a NOOSE Rank; it must never land on a partner or departed account
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            NewService(ctx).PromotionRequestAsync(id, Rank.SpecialAgent, null, Leadership()));
+
+        using var verify = ctx.NewContext();
+        Assert.Equal(0, verify.AgentPromotionRequests.Count(r => r.AgentId == id));
+    }
+
     [Fact]
     public async Task PromotionRequestAsync_EmptyJustification_StoredAsNull()
     {

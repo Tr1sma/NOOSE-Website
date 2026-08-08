@@ -43,7 +43,9 @@ else
             </MudAlert>
 
             <MudText Typo="Typo.subtitle2">Vorlagen-Inhalt</MudText>
-            <RichTextEditor @ref="_editor" Value="@_contentHtml" />
+            @* RecruitingTemplate, nicht Document: nur dieser Kontext prüft NAME/BEWERBER/… auf Anzahl UND
+               Groß-/Kleinschreibung — sonst schaltet eine „Korrektur" die Schwärzung still ab. *@
+            <RichTextEditor @ref="_editor" Value="@_contentHtml" Ai="TextAssistContext.RecruitingTemplate" />
         </MudStack>
     </MudPaper>
 }

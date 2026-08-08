@@ -24,7 +24,7 @@ public class DiscordWebhookService(
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
 
     public async Task PushAsync(NotificationType type, string? href,
-        IReadOnlyCollection<string>? recipientAgentIds, CancellationToken cancellationToken = default)
+        IReadOnlyCollection<string>? recipientAgentIds, string? headline = null, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -38,7 +38,10 @@ public class DiscordWebhookService(
                 return;
             }
             var mention = await ResolveMentionAsync(type, recipientAgentIds, config, cancellationToken);
-            await SendAsync(url, Compose(type, config.SiteBaseUrl, href), mention, cancellationToken);
+            var content = ShouldIncludeHeadline(type, config, headline)
+                ? ComposeHeadline(headline!, config.SiteBaseUrl, href)
+                : Compose(type, config.SiteBaseUrl, href);
+            await SendAsync(url, content, mention, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -88,6 +91,33 @@ public class DiscordWebhookService(
         {
             /* best effort */
             logger.LogWarning(ex, "Discord personnel-entry embed failed.");
+        }
+    }
+
+    // app-authored broadcast (e.g. weekly top-agent post): custom content + the category's ping + optional link
+    public async Task<bool> PushCustomAsync(NotificationType type, string content, string? href = null, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (!DiscordRouting.IsRoutable(type) || string.IsNullOrWhiteSpace(content))
+            {
+                return false;
+            }
+            var config = await GetCachedConfigAsync(cancellationToken);
+            if (!config.Enabled || !config.Webhooks.TryGetValue(type, out var url) || string.IsNullOrWhiteSpace(url))
+            {
+                return false;
+            }
+            var mention = await ResolveMentionAsync(type, null, config, cancellationToken);
+            var link = Link(config.SiteBaseUrl, href);
+            var body = link is null ? content : $"{content}\n{link}";
+            return await SendAsync(url, body, mention, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            /* best effort */
+            logger.LogWarning(ex, "Discord custom push for {Type} failed.", type);
+            return false;
         }
     }
 
@@ -169,6 +199,7 @@ public class DiscordWebhookService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         await SetAsync(db, SystemSettingKeys.DiscordEnabled, input.Enabled ? "true" : "false", cancellationToken);
         await SetAsync(db, SystemSettingKeys.SiteBaseUrl, baseUrl, cancellationToken);
+        await SetAsync(db, SystemSettingKeys.DiscordIncludeHeadline, input.IncludeHeadline ? "true" : "false", cancellationToken);
         foreach (var type in DiscordRouting.RoutableTypes)
         {
             input.Webhooks.TryGetValue(type, out var raw);
@@ -259,6 +290,23 @@ public class DiscordWebhookService(
         return sb.ToString();
     }
 
+    // categories whose role-ping post may carry the record header/title (opt-in, admin-toggleable)
+    private static bool ShouldIncludeHeadline(NotificationType type, DiscordWebhookConfig config, string? headline)
+        => config.IncludeHeadline && !string.IsNullOrWhiteSpace(headline)
+            && type is NotificationType.Announcement or NotificationType.Recruiting;
+
+    // app-authored header + login-gated link; single-line, capped, mentions stay inert via allowed_mentions
+    private static string ComposeHeadline(string headline, string baseUrl, string? href)
+    {
+        var sb = new StringBuilder(Truncate(headline.Replace('\r', ' ').Replace('\n', ' ').Trim(), 300));
+        var link = Link(baseUrl, href);
+        if (link is not null)
+        {
+            sb.Append('\n').Append(link);
+        }
+        return sb.ToString();
+    }
+
     // category landing page used when a notification carries no record link
     private static string FallbackRoute(NotificationType type) => type switch
     {
@@ -318,7 +366,9 @@ public class DiscordWebhookService(
             roles[type] = Trim(values.GetValueOrDefault(SystemSettingKeys.DiscordRolePrefix + type))
                 ?? DiscordRouting.DefaultRole(type);
         }
-        return new DiscordWebhookConfig(enabled, baseUrl, map, roles);
+        // default on: only an explicit "false" suppresses headers
+        var includeHeadline = !string.Equals(values.GetValueOrDefault(SystemSettingKeys.DiscordIncludeHeadline), "false", StringComparison.OrdinalIgnoreCase);
+        return new DiscordWebhookConfig(enabled, baseUrl, map, roles, includeHeadline);
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

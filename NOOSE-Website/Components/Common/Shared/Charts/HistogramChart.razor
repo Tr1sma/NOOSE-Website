@@ -1,0 +1,76 @@
+@* Distribution of one continuous measure over fixed buckets. One hue, magnitude only. *@
+@using NOOSE_Website.Models.Statistics
+@using NOOSE_Website.Theme
+
+<ChartFrame Title="@Title" Subtitle="@Subtitle" Height="@Height" IsEmpty="@_empty"
+            Bare="@Bare" Stale="@Stale" EmptyText="@EmptyText">
+    <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_series" ChartLabels="@_labels"
+              ChartOptions="@_options" SelectedIndex="@SelectedIndex"
+              SelectedIndexChanged="@OnSelectedIndexChanged"
+              Width="100%" Height="@Height" />
+</ChartFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<ChartBucket> Buckets { get; set; } = [];
+
+    /// <summary>Name of the counted thing; used for the tooltip series label.</summary>
+    [Parameter] public string SeriesName { get; set; } = "Anzahl";
+
+    [Parameter] public string Height { get; set; } = "300px";
+
+    [Parameter] public string? XAxisTitle { get; set; }
+
+    [Parameter] public string YAxisTitle { get; set; } = "Akten";
+
+    [Parameter] public string EmptyText { get; set; } = "Noch keine Daten";
+
+    [Parameter] public bool Bare { get; set; }
+
+    [Parameter] public bool Stale { get; set; }
+
+    [Parameter] public int SelectedIndex { get; set; } = -1;
+
+    /// <summary>Raised with the clicked bucket index, for drill-down into that band.</summary>
+    [Parameter] public EventCallback<int> OnSelect { get; set; }
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private BarChartOptions _options = new();
+    private bool _empty = true;
+
+    protected override void OnParametersSet()
+    {
+        _empty = Buckets.Count == 0 || Buckets.All(b => b.Count == 0);
+        _labels = Buckets.Select(b => b.Label).ToArray();
+        _series =
+        [
+            new ChartSeries<double> { Name = SeriesName, Data = Buckets.Select(b => (double)b.Count).ToArray(), Visible = true },
+        ];
+
+        _options = new BarChartOptions
+        {
+            // a histogram is one measure, so the bars share the single sequential top step
+            ChartPalette = [ChartPalette.Sequential[^1]],
+            ShowLegend = false,
+            ShowToolTips = true,
+            XAxisTitle = XAxisTitle,
+            YAxisTitle = YAxisTitle,
+            YAxisLines = true,
+            XAxisLines = false,
+            BarSpacingRatio = 0.08,
+        };
+    }
+
+    private async Task OnSelectedIndexChanged(int index)
+    {
+        SelectedIndex = index;
+        if (OnSelect.HasDelegate && index >= 0)
+        {
+            await OnSelect.InvokeAsync(index);
+        }
+    }
+}
