@@ -1167,15 +1167,33 @@ div.vis-tooltip {
     background: var(--mud-palette-action-default-hover);
 }
 
-/* One line, clipped. A wrapping second chip made the tiles different heights and broke the grid;
-   the category is already shortened and repeated in full by the tooltip, so cutting is no loss. */
+/* One line, never two: a wrapping second chip made the tiles different heights and broke the grid.
+   The category gives way rather than the row being clipped — the chip keeps its rounded end and
+   ellipsises its own label, so nothing looks sheared off. The tooltip still carries the full name. */
 .asservat-kachel-chips {
     flex-wrap: nowrap;
-    overflow: hidden;
+    min-width: 0;
 }
 
-.asservat-kachel-chips > * {
+/* the stock is the number people scan for; it keeps its full width */
+.asservat-kachel-chips > :first-child {
     flex: 0 0 auto;
+}
+
+/* the category shrinks instead, down to nothing if it has to */
+.asservat-kachel-chips > :last-child {
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.asservat-kachel-chips .mud-chip {
+    max-width: 100%;
+}
+
+.asservat-kachel-chips .mud-chip-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Inert marker, not a checkbox: the tile owns the click, so this must not be a second target. */

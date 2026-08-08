@@ -126,9 +126,11 @@
                         </MudChip>
                         @if (!string.IsNullOrWhiteSpace(r.Item.Category))
                         {
+                            @* full text on purpose: the chip ellipsises by width in CSS, so it shows
+                               as much as fits instead of always cutting at a fixed character count *@
                             <MudTooltip Text="@r.Item.Category">
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
-                                    @Shorten(r.Item.Category)
+                                    @r.Item.Category
                                 </MudChip>
                             </MudTooltip>
                         }
@@ -242,9 +244,6 @@
         await ReloadAsync();
     }
 
-    /// <summary>Keeps a long category label inside the fixed-width tile; the full value sits in the tooltip.</summary>
-    private static string Shorten(string category)
-        => category.Length <= 16 ? category : category[..15] + "…";
 
     private void EnterSelect() => _selectMode = true;
 
