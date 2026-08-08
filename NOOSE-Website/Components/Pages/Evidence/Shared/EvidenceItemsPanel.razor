@@ -118,7 +118,8 @@
                     }
                     <MudText Typo="Typo.body2" Class="mt-1"
                              Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@r.Item.Name</MudText>
-                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.NoWrap" AlignItems="AlignItems.Center"
+                              Class="asservat-kachel-chips">
                         <MudChip T="string" Size="Size.Small"
                                  Color="@(r.OnHand < 0 ? Color.Error : r.OnHand == 0 ? Color.Default : Color.Success)">
                             Bestand: @r.OnHand

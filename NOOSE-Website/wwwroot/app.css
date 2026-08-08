@@ -1167,6 +1167,17 @@ div.vis-tooltip {
     background: var(--mud-palette-action-default-hover);
 }
 
+/* One line, clipped. A wrapping second chip made the tiles different heights and broke the grid;
+   the category is already shortened and repeated in full by the tooltip, so cutting is no loss. */
+.asservat-kachel-chips {
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+.asservat-kachel-chips > * {
+    flex: 0 0 auto;
+}
+
 /* Inert marker, not a checkbox: the tile owns the click, so this must not be a second target. */
 .asservat-kachel-haken {
     position: absolute;
