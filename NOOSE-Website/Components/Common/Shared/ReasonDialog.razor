@@ -12,7 +12,7 @@
         }
         else
         {
-            <MudTextField @bind-Value="_reason" Label="@Label" Lines="2" Variant="Variant.Outlined"
+            <MudTextField @bind-Value="_reason" Label="@Label" Lines="@Lines" Variant="Variant.Outlined"
                           AutoFocus="true" Immediate="true"
                           Required="@MandatoryReason" RequiredError="Bitte eine Begründung angeben." />
         }
@@ -40,8 +40,17 @@
     /// <summary>Opt-in @-picker; off where the text is shown to the person being acted on (e.g. a block reason).</summary>
     [Parameter] public bool Mentions { get; set; }
 
+    /// <summary>Starting value. What makes this usable for editing something that already has one — renaming with an
+    /// empty box invites overwriting a title the owner only wanted to correct.</summary>
+    [Parameter] public string? Preset { get; set; }
+
+    /// <summary>One line for a name, two for a reason.</summary>
+    [Parameter] public int Lines { get; set; } = 2;
+
     private string _reason = string.Empty;
     private bool _error;
+
+    protected override void OnInitialized() => _reason = Preset ?? string.Empty;
 
     private void Confirm()
     {
@@ -58,7 +67,7 @@
     /// <summary>Shows the dialog; returns the reason or null on cancel.</summary>
     public static async Task<string?> ShowAsync(IDialogService dialog, string title, string? text,
         string confirmText = "Bestätigen", string label = "Begründung", bool mandatoryReason = false,
-        Color colour = Color.Primary, bool mentions = false)
+        Color colour = Color.Primary, bool mentions = false, string? preset = null, int lines = 2)
     {
         var parameters = new DialogParameters<ReasonDialog>
         {
@@ -69,6 +78,8 @@
             { x => x.MandatoryReason, mandatoryReason },
             { x => x.Colour, colour },
             { x => x.Mentions, mentions },
+            { x => x.Preset, preset },
+            { x => x.Lines, lines },
         };
         var reference = await dialog.ShowAsync<ReasonDialog>(title, parameters);
         var result = await reference.Result;

@@ -4,6 +4,7 @@
 @using NOOSE_Website.Models.Llm
 @inject INooseiChatService Chat
 @inject ILlmQuotaService Quota
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @if (!Chat.IsConfigured)
@@ -26,10 +27,24 @@ else
                         <MudListItem T="string" OnClick="() => OpenAsync(row.Id)"
                                      Icon="@Icons.Material.Filled.ChatBubbleOutline"
                                      Class="@(row.Id == _conversationId ? "mud-selected-item" : null)">
-                            <MudText Typo="Typo.body2">@row.Title</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                @row.LastMessageAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                            </MudText>
+                            <div class="d-flex align-center" style="gap:4px;">
+                                <div class="flex-grow-1" style="min-width:0;">
+                                    <MudText Typo="Typo.body2">@row.Title</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @row.LastMessageAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                    </MudText>
+                                </div>
+                                @* without stopPropagation the list item opens the conversation behind the menu *@
+                                <div @onclick:stopPropagation="true">
+                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                                             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                                        <MudMenuItem Icon="@Icons.Material.Filled.DriveFileRenameOutline"
+                                                     OnClick="() => RenameAsync(row)">Umbenennen</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever" IconColor="Color.Error"
+                                                     OnClick="() => DeleteAsync(row)">Endgültig löschen</MudMenuItem>
+                                    </MudMenu>
+                                </div>
+                            </div>
                         </MudListItem>
                     }
                 </MudList>
@@ -71,6 +86,15 @@ else
                     }
                 </MudAlert>
             }
+            else if (_quota?.IsDayBlocked == true)
+            {
+                @* a different state entirely: the week is fine, only today is spent *@
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                    Du hast heute @_quota.ConsumedToday.ToString("N0") von @_quota.DailyLimit.ToString("N0") Token
+                    verbraucht. Die Tagesgrenze schützt dein Wochenkontingent — ab morgen früh geht es weiter.
+                    Diese Woche bleiben dir @_quota.Remaining.ToString("N0") Token.
+                </MudAlert>
+            }
 
             <MudPaper Class="pa-4 mb-3" Elevation="1" Style="min-height:40vh;max-height:60vh;overflow-y:auto;">
                 @if (_messages.Count == 0)
@@ -79,6 +103,15 @@ else
                         Frag nach der Aktenlage — NOOSEI durchsucht die Datenbank selbst.
                         Zum Beispiel: „Was weißt du über die Ballas und wer führt sie?"
                     </MudText>
+                    <div class="d-flex flex-wrap mt-3" style="gap:6px;">
+                        @foreach (var start in StarterQuestions)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                     Icon="@Icons.Material.Filled.NorthEast" OnClick="() => Suggest(start)">
+                                @start
+                            </MudChip>
+                        }
+                    </div>
                 }
                 @foreach (var m in _messages)
                 {
@@ -98,6 +131,27 @@ else
                                 @* the agent's own wording stays verbatim; only NOOSEI answers in Markdown *@
                                 <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
                             }
+                            @if (m.Truncated || m.Degraded || m.UnsupportedNote is { Length: > 0 })
+                            {
+                                @* stored, not a snackbar: a reopened conversation has to show the same caveats *@
+                                <div class="d-flex flex-wrap mt-2" style="gap:4px;">
+                                    @if (m.Truncated)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                                                 Icon="@Icons.Material.Filled.ContentCut">Antwort gekürzt</MudChip>
+                                    }
+                                    @if (m.Degraded)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                                                 Icon="@Icons.Material.Filled.FolderOff">ohne Aktenzugriff</MudChip>
+                                    }
+                                </div>
+                                @if (m.UnsupportedNote is { Length: > 0 } note)
+                                {
+                                    @* says "not evidenced", never "does not exist" — NOOSEI only sees part of the stock *@
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@note</MudAlert>
+                                }
+                            }
                             @if (m.Sources.Count > 0)
                             {
                                 @* what NOOSEI read, not a claim about what every sentence rests on *@
@@ -112,8 +166,42 @@ else
                                     }
                                 </div>
                             }
+                            @if (m.Tools.Count > 0)
+                            {
+                                @* folded away by default: it explains an answer, it is not part of it *@
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="mt-1"
+                                           StartIcon="@(_openTraces.Contains(m.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                           OnClick="() => ToggleTrace(m.Id)">
+                                    NOOSEI hat @ToolCount(m) @(ToolCount(m) == 1 ? "Werkzeug" : "Werkzeuge") benutzt
+                                </MudButton>
+                                <MudCollapse Expanded="@_openTraces.Contains(m.Id)">
+                                    <div class="d-flex flex-wrap mt-1" style="gap:4px;">
+                                        @foreach (var tool in m.Tools)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                                     Icon="@Icons.Material.Filled.Build">
+                                                @tool.Label@(tool.Count > 1 ? $" ×{tool.Count}" : string.Empty)
+                                            </MudChip>
+                                        }
+                                    </div>
+                                </MudCollapse>
+                            }
                         </MudPaper>
                     </MudStack>
+                }
+                @if (!_busy && FollowUps() is { Count: > 0 } followUps)
+                {
+                    @* derived from what the answer read, so a suggestion costs nothing until it is sent *@
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">Weiterfragen:</MudText>
+                    <div class="d-flex flex-wrap" style="gap:6px;">
+                        @foreach (var followUp in followUps)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                     Icon="@Icons.Material.Filled.NorthEast" OnClick="() => Suggest(followUp)">
+                                @followUp
+                            </MudChip>
+                        }
+                    </div>
                 }
                 @if (_busy)
                 {
@@ -134,10 +222,10 @@ else
 
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
                 <MudTextField @bind-Value="_input" Label="Frage an NOOSEI" Lines="3" Immediate="true"
-                              Variant="Variant.Outlined" Class="flex-grow-1" Disabled="@(_busy || _quota?.IsBlocked == true)" />
+                              Variant="Variant.Outlined" Class="flex-grow-1" Disabled="@(_busy || Locked)" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="SendAsync"
-                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_input) || _quota?.IsBlocked == true)">Senden</MudButton>
+                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_input) || Locked)">Senden</MudButton>
             </MudStack>
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
                 NOOSEI sieht nur, was du sehen darfst. Antworten sind KI-generiert und ungeprüft.
@@ -156,10 +244,20 @@ else
     /// because a stray Enter would spend quota.</summary>
     [Parameter] public string? Draft { get; set; }
 
+    /// <summary>Openers in the empty state. Deliberately answerable whatever is in the database, so a first-time
+    /// agent gets a real answer rather than "dazu finde ich nichts".</summary>
+    private static readonly string[] StarterQuestions =
+    [
+        "Was steht diese Woche an?",
+        "Wer ist zur Fahndung ausgeschrieben?",
+        "Was hat sich in den letzten 7 Tagen geändert?",
+    ];
+
     private ClaimsPrincipal? _user;
     private IReadOnlyList<NooseiConversationRow> _conversations = [];
     private readonly List<NooseiChatMessage> _messages = new();
     private readonly List<string> _steps = new();
+    private readonly HashSet<string> _openTraces = new(StringComparer.Ordinal);
     private string? _conversationId;
     private string? _input;
     private string? _lastDraft;
@@ -172,8 +270,43 @@ else
 
     private static Color QuotaColour(LlmQuotaStatus quota)
         => quota.IsBlocked || quota.UsedShare >= 0.9 ? Color.Error
-            : quota.UsedShare >= 0.7 ? Color.Warning
+            : quota.IsDayBlocked || quota.UsedShare >= 0.7 ? Color.Warning
             : Color.Success;
+
+    /// <summary>Either ceiling stops a question; the alert above says which one.</summary>
+    private bool Locked => _quota is { } quota && (quota.IsBlocked || quota.IsDayBlocked);
+
+    private static int ToolCount(NooseiChatMessage message) => message.Tools.Sum(t => t.Count);
+
+    private void ToggleTrace(string messageId)
+    {
+        if (!_openTraces.Add(messageId))
+        {
+            _openTraces.Remove(messageId);
+        }
+    }
+
+    /// <summary>Fills the box instead of sending. A suggestion is a shortcut to a question, not a decision to spend
+    /// quota — the same reason a question carried in from the command palette is only ever pre-filled.</summary>
+    private void Suggest(string question) => _input = question;
+
+    /// <summary>Two or three next questions, read off the records the last answer touched. No model call: the names
+    /// are already in hand, and asking a model what to ask next would cost as much as the answer did.</summary>
+    private List<string> FollowUps()
+    {
+        var last = _messages.Count > 0 && !_messages[^1].FromUser ? _messages[^1] : null;
+        if (last is null || last.Sources.Count == 0)
+        {
+            return [];
+        }
+        var questions = new List<string>();
+        foreach (var source in last.Sources.Take(2))
+        {
+            questions.Add($"Welche Verbindungen hat {source.Name}?");
+            questions.Add($"Was ist bei {source.Name} zuletzt passiert?");
+        }
+        return questions.Take(3).ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -236,6 +369,53 @@ else
     {
         _conversationId = null;
         _messages.Clear();
+        _openTraces.Clear();
+    }
+
+    private async Task RenameAsync(NooseiConversationRow row)
+    {
+        var title = await ReasonDialog.ShowAsync(DialogService, "Unterhaltung umbenennen", null,
+            confirmText: "Umbenennen", label: "Titel", mandatoryReason: true, preset: row.Title, lines: 1);
+        if (string.IsNullOrWhiteSpace(title) || string.Equals(title, row.Title, StringComparison.Ordinal))
+        {
+            return;
+        }
+        try
+        {
+            await Chat.RenameAsync(row.Id, title, _user!);
+            await ReloadConversationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(NooseiConversationRow row)
+    {
+        // conversations are owner-private and deliberately outside the trash, so this really is the last stop
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Unterhaltung endgültig löschen?",
+            $"Die Unterhaltung wird mit allen Nachrichten sofort und unwiderruflich gelöscht: {row.Title}. "
+            + "Unterhaltungen liegen nicht im Papierkorb und lassen sich nicht wiederherstellen.",
+            confirmText: "Endgültig löschen");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Chat.DeleteAsync(row.Id, _user!);
+            if (row.Id == _conversationId)
+            {
+                StartNew();
+            }
+            await ReloadConversationsAsync();
+            Snackbar.Add("Unterhaltung gelöscht.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
+        }
     }
 
     private async Task OpenAsync(string id)
@@ -247,6 +427,7 @@ else
         try
         {
             _messages.Clear();
+            _openTraces.Clear();
             _messages.AddRange(await Chat.GetMessagesAsync(id, _user!));
             _conversationId = id;
         }
@@ -293,6 +474,12 @@ else
             if (turn.Degraded)
             {
                 Snackbar.Add("NOOSEI konnte diesmal nicht auf die Aktendatenbank zugreifen.", Severity.Warning);
+            }
+            if (turn.ScopeChanged)
+            {
+                // otherwise it just looks as if NOOSEI forgot what it had read a minute ago
+                Snackbar.Add("Deine Rechte haben sich geändert. Frühere Werkzeug-Ergebnisse dieser Unterhaltung "
+                    + "wurden verworfen; NOOSEI liest neu.", Severity.Info);
             }
             await ReloadConversationsAsync();
         }

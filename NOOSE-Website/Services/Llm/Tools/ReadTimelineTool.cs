@@ -30,7 +30,7 @@ public sealed class ReadTimelineTool(ITimelineService timeline) : INooseiTool
 
     public async Task<NooseiToolResult> InvokeAsync(JsonElement arguments, NooseiToolContext context, CancellationToken cancellationToken = default)
     {
-        var type = NooseiRecordTypes.Clr(NooseiLimits.Text(arguments, "typ"));
+        var type = NooseiRecordTypes.Clr(NooseiLimits.Text(arguments, "typ"), NooseiUse.Read);
         var id = NooseiLimits.Text(arguments, "id");
         if (type is null || id is null)
         {

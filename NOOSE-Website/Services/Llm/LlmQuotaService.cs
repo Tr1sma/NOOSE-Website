@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
@@ -46,7 +47,9 @@ public interface ILlmQuotaService
 /// <inheritdoc cref="ILlmQuotaService" />
 public class LlmQuotaService(
     IDbContextFactory<AppDbContext> dbFactory,
-    ILlmQuotaConfigService configService) : ILlmQuotaService
+    ILlmQuotaConfigService configService,
+    IOptions<LlmOptions> options,
+    ILogger<LlmQuotaService> logger) : ILlmQuotaService
 {
     public async Task<LlmQuotaStatus> GetStatusAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
@@ -61,7 +64,8 @@ public class LlmQuotaService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Users.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken)
             ?? throw new InvalidOperationException($"Agent '{agentId}' nicht gefunden.");
-        return await BuildStatusAsync(db, agent, config, cancellationToken);
+        var snapshot = await QuotaSnapshot.LoadAsync(db, [agentId], cancellationToken);
+        return await BuildStatusAsync(db, agent, config, snapshot, cancellationToken);
     }
 
     public async Task<IReadOnlyList<LlmQuotaStatus>> GetAllStatusAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -73,10 +77,13 @@ public class LlmQuotaService(
             .OrderBy(a => a.Codename)
             .ToListAsync(cancellationToken);
 
+        // one snapshot for the whole roster: the ledger asked seven questions per agent, which is a synchronous
+        // render waiting on two hundred round trips before it paints a single row
+        var snapshot = await QuotaSnapshot.LoadAsync(db, agents.Select(a => a.Id).ToList(), cancellationToken);
         var list = new List<LlmQuotaStatus>(agents.Count);
         foreach (var agent in agents)
         {
-            list.Add(await BuildStatusAsync(db, agent, config, cancellationToken));
+            list.Add(await BuildStatusAsync(db, agent, config, snapshot, cancellationToken));
         }
         return list;
     }
@@ -119,6 +126,13 @@ public class LlmQuotaService(
             throw new LlmQuotaExceededException(
                 $"Dein NOOSEI-Kontingent für {status.PeriodLabel} ist aufgebraucht. Neues Kontingent ab {reset} Uhr.");
         }
+        // the burn-rate rule reports a runaway agent and stops nothing; this is where it is actually stopped
+        if (status.IsDayBlocked)
+        {
+            throw new LlmQuotaExceededException(
+                $"Du hast heute schon {status.ConsumedToday:N0} von {status.DailyLimit:N0} Token verbraucht. "
+                + "Die Tagesgrenze schützt dein Wochenkontingent — ab morgen früh geht es weiter.");
+        }
         return status;
     }
 
@@ -126,7 +140,10 @@ public class LlmQuotaService(
     {
         // re-read the clock: a long turn can straddle Monday 00:00, and the row belongs in the week it finished in
         var (year, week) = IsoWeekPeriod.Current();
-        var quotaTokens = LlmQuotaMath.FromCost(input.Usage.CostUsd);
+        // token floor under the reported cost: a route that omits usage.cost must not come out free
+        var quotaTokens = LlmQuotaMath.FromCost(
+            input.Usage.CostUsd, input.Usage.PromptTokens, input.Usage.CompletionTokens,
+            options.Value.PriceFor(input.Model));
         var thresholds = (await configService.GetAsync(cancellationToken)).Anomalies;
 
         var row = new LlmRequestLog
@@ -152,6 +169,14 @@ public class LlmQuotaService(
             Answer = input.Answer,
             ContextRefsJson = input.ContextRefs is { Count: > 0 } refs ? JsonSerializer.Serialize(refs) : null,
             PromptFingerprint = Fingerprint(input.Prompt),
+            FinishReason = Clip(input.Trace?.FinishReason, 32),
+            Attempts = input.Trace?.Attempts,
+            ModelLatencyMs = input.Trace?.ModelLatencyMs,
+            ToolCalls = input.Trace?.ToolCalls,
+            ToolFailures = input.Trace?.ToolFailures,
+            Degraded = input.Trace?.Degraded,
+            Withdrawal = input.Trace?.Withdrawal,
+            FailureKind = input.Trace?.FailureKind,
         };
 
         var persisted = false;
@@ -177,7 +202,13 @@ public class LlmQuotaService(
             }
             // a failed log row must never swallow the answer the agent is waiting for
             catch (UnauthorizedAccessException) { /* read-only session; nothing to book */ }
-            catch (DbUpdateException) { /* best effort */ }
+            catch (DbUpdateException ex)
+            {
+                // the call already cost real money; a lost row hides it from quota, anomalies and operations alike
+                logger.LogError(ex,
+                    "NOOSEI-Anfrage von {Agent} nicht protokolliert: {Tokens} Kontingent-Token, Funktion {Feature}",
+                    input.AgentId, quotaTokens, input.Feature);
+            }
         }
 
         var status = await StatusAsync(input.AgentId, cancellationToken);
@@ -303,15 +334,149 @@ public class LlmQuotaService(
     }
 
     private static async Task<LlmQuotaStatus> BuildStatusAsync(
-        AppDbContext db, Agent agent, LlmQuotaConfig config, CancellationToken cancellationToken)
+        AppDbContext db, Agent agent, LlmQuotaConfig config, QuotaSnapshot snapshot, CancellationToken cancellationToken)
     {
         var (year, week) = IsoWeekPeriod.Current();
         var rules = config.For(agent.Rank);
         var baseWeekly = agent.LlmQuotaOverride ?? rules.BaseWeekly;
-        var carryIn = await CloseElapsedAsync(db, agent, baseWeekly, rules.CarryOverPercent, year, week, cancellationToken);
-        var consumed = await ConsumedAsync(db, agent.Id, year, week, cancellationToken);
+        var carryIn = await CloseElapsedAsync(db, agent, snapshot, baseWeekly, rules.CarryOverPercent, year, week, cancellationToken);
         return new LlmQuotaStatus(agent.Id, agent.Codename, agent.Rank, year, week,
-            baseWeekly, carryIn, consumed, rules.CarryOverPercent, agent.LlmQuotaOverride is not null);
+            baseWeekly, carryIn, snapshot.Consumed(agent.Id, year, week), rules.CarryOverPercent,
+            agent.LlmQuotaOverride is not null,
+            // measured against the base, so an individual override moves the daily ceiling with it
+            LlmQuotaMath.DailyLimit(baseWeekly, rules.DailyPercent), snapshot.ConsumedToday(agent.Id));
+    }
+
+    /// <summary>Everything the weekly ledger reads, for one agent or for a whole roster, in four queries either way.</summary>
+    /// <remarks>
+    /// The per-agent path asked seven questions — a hundred-agent roster is seven hundred round trips inside one
+    /// synchronous render, and the same path runs behind every single answer, because a charge closes by reading
+    /// the status back. Grouping is safe here because none of the four reads depends on another.
+    /// </remarks>
+    private sealed class QuotaSnapshot
+    {
+        private static readonly Dictionary<LlmQuotaLedger.WeekKey, long> NoWeeks = new();
+
+        private readonly Dictionary<string, Dictionary<LlmQuotaLedger.WeekKey, long>> _closed = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Dictionary<LlmQuotaLedger.WeekKey, long>> _consumed = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, long> _today = new(StringComparer.Ordinal);
+
+        public static async Task<QuotaSnapshot> LoadAsync(
+            AppDbContext db, IReadOnlyList<string> agentIds, CancellationToken cancellationToken)
+        {
+            var snapshot = new QuotaSnapshot();
+            if (agentIds.Count == 0)
+            {
+                return snapshot;
+            }
+            var ids = agentIds.ToList();
+            // from local midnight: the week already rolls over at local Monday 00:00, and two clocks would let a
+            // day end before or after the week it belongs to
+            var dayStartUtc = DateTime.Now.Date.ToUniversalTime();
+
+            var closed = await db.LlmQuotaPeriods.AsNoTracking()
+                .Where(p => ids.Contains(p.AgentId))
+                .Select(p => new { p.AgentId, p.Year, p.Week, p.CarryOut })
+                .ToListAsync(cancellationToken);
+            foreach (var row in closed)
+            {
+                Slot(snapshot._closed, row.AgentId)[new LlmQuotaLedger.WeekKey(row.Year, row.Week)] = row.CarryOut;
+            }
+
+            var charged = await db.LlmRequests.AsNoTracking()
+                .Where(r => ids.Contains(r.AgentId))
+                .GroupBy(r => new { r.AgentId, r.BudgetYear, r.BudgetWeek })
+                .Select(g => new { g.Key.AgentId, g.Key.BudgetYear, g.Key.BudgetWeek, Sum = g.Sum(x => x.QuotaTokens) })
+                .ToListAsync(cancellationToken);
+            foreach (var row in charged)
+            {
+                Slot(snapshot._consumed, row.AgentId)[new LlmQuotaLedger.WeekKey(row.BudgetYear, row.BudgetWeek)] = row.Sum;
+            }
+
+            var corrected = await db.LlmQuotaAdjustments.AsNoTracking()
+                .Where(a => ids.Contains(a.AgentId))
+                .GroupBy(a => new { a.AgentId, a.Year, a.Week })
+                .Select(g => new { g.Key.AgentId, g.Key.Year, g.Key.Week, Sum = g.Sum(x => x.Tokens) })
+                .ToListAsync(cancellationToken);
+            foreach (var row in corrected)
+            {
+                var weeks = Slot(snapshot._consumed, row.AgentId);
+                var key = new LlmQuotaLedger.WeekKey(row.Year, row.Week);
+                weeks[key] = weeks.GetValueOrDefault(key) - row.Sum;
+            }
+
+            var today = await db.LlmRequests.AsNoTracking()
+                .Where(r => ids.Contains(r.AgentId) && r.CreatedAt >= dayStartUtc)
+                .GroupBy(r => r.AgentId)
+                .Select(g => new { AgentId = g.Key, Sum = g.Sum(x => x.QuotaTokens) })
+                .ToListAsync(cancellationToken);
+            foreach (var row in today)
+            {
+                snapshot._today[row.AgentId] = row.Sum;
+            }
+
+            return snapshot;
+        }
+
+        /// <summary>Latest week the agent has a closed period for, and what it handed on.</summary>
+        public (LlmQuotaLedger.WeekKey Key, long CarryOut)? LatestClosed(string agentId)
+        {
+            if (!_closed.TryGetValue(agentId, out var weeks))
+            {
+                return null;
+            }
+            (LlmQuotaLedger.WeekKey Key, long CarryOut)? best = null;
+            foreach (var (key, carryOut) in weeks)
+            {
+                if (best is not { } current || IsoWeekPeriod.IsBefore(current.Key.Year, current.Key.Week, key.Year, key.Week))
+                {
+                    best = (key, carryOut);
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Carry-over a specific closed week handed on; 0 when that week was never closed.</summary>
+        public long CarryOutOf(string agentId, int year, int week)
+            => _closed.TryGetValue(agentId, out var weeks)
+                && weeks.TryGetValue(new LlmQuotaLedger.WeekKey(year, week), out var carry)
+                    ? carry
+                    : 0L;
+
+        /// <summary>Net consumption per week: what the requests charged, minus what was corrected back.</summary>
+        public IReadOnlyDictionary<LlmQuotaLedger.WeekKey, long> ConsumedByWeek(string agentId)
+            => _consumed.TryGetValue(agentId, out var weeks) ? weeks : NoWeeks;
+
+        public long Consumed(string agentId, int year, int week)
+            => ConsumedByWeek(agentId).TryGetValue(new LlmQuotaLedger.WeekKey(year, week), out var used) ? used : 0L;
+
+        public long ConsumedToday(string agentId) => _today.GetValueOrDefault(agentId);
+
+        /// <summary>Earliest week carrying a charge or a correction; weeks before it had nothing to spend, so they
+        /// must not manufacture carry-over out of an untouched quota.</summary>
+        public LlmQuotaLedger.WeekKey? FirstCharged(string agentId)
+        {
+            LlmQuotaLedger.WeekKey? first = null;
+            foreach (var key in ConsumedByWeek(agentId).Keys)
+            {
+                if (first is not { } current || IsoWeekPeriod.IsBefore(key.Year, key.Week, current.Year, current.Week))
+                {
+                    first = key;
+                }
+            }
+            return first;
+        }
+
+        private static Dictionary<LlmQuotaLedger.WeekKey, long> Slot(
+            Dictionary<string, Dictionary<LlmQuotaLedger.WeekKey, long>> map, string agentId)
+        {
+            if (!map.TryGetValue(agentId, out var weeks))
+            {
+                weeks = new Dictionary<LlmQuotaLedger.WeekKey, long>();
+                map[agentId] = weeks;
+            }
+            return weeks;
+        }
     }
 
     /// <summary>Net consumption of one week: what the requests charged, minus what was corrected back.</summary>
@@ -327,24 +492,18 @@ public class LlmQuotaService(
     }
 
     /// <summary>Writes a period row for every elapsed week and returns the carry-over the running week may use.</summary>
+    /// <remarks>Reads nothing itself — every input comes from the snapshot, including the anomaly branch, so this
+    /// stays free of round trips whether it runs for one agent or for thirty.</remarks>
     private static async Task<long> CloseElapsedAsync(
-        AppDbContext db, Agent agent, long baseWeekly, int carryPercent, int currentYear, int currentWeek, CancellationToken cancellationToken)
+        AppDbContext db, Agent agent, QuotaSnapshot snapshot, long baseWeekly, int carryPercent,
+        int currentYear, int currentWeek, CancellationToken cancellationToken)
     {
-        var latest = await db.LlmQuotaPeriods.AsNoTracking()
-            .Where(p => p.AgentId == agent.Id)
-            .OrderByDescending(p => p.Year).ThenByDescending(p => p.Week)
-            .Select(p => new { p.Year, p.Week, p.CarryOut })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var first = await FirstChargedWeekAsync(db, agent.Id, cancellationToken);
-
-        var consumedByWeek = await ConsumedByWeekAsync(db, agent.Id, cancellationToken);
-
+        var latest = snapshot.LatestClosed(agent.Id);
         var plan = LlmQuotaLedger.Backfill(
-            latest is null ? null : new LlmQuotaLedger.WeekKey(latest.Year, latest.Week),
+            latest?.Key,
             latest?.CarryOut ?? 0L,
-            first,
-            consumedByWeek,
+            snapshot.FirstCharged(agent.Id),
+            snapshot.ConsumedByWeek(agent.Id),
             baseWeekly,
             carryPercent,
             currentYear,
@@ -354,11 +513,8 @@ public class LlmQuotaService(
         {
             // the running week (or later) is already closed — anomaly; read the direct predecessor instead
             var (priorYear, priorWeek) = IsoWeekPeriod.Previous(currentYear, currentWeek);
-            var stored = await db.LlmQuotaPeriods.AsNoTracking()
-                .Where(p => p.AgentId == agent.Id && p.Year == priorYear && p.Week == priorWeek)
-                .Select(p => (long?)p.CarryOut)
-                .FirstOrDefaultAsync(cancellationToken) ?? 0L;
-            return LlmQuotaMath.ClampCarryIn(stored, baseWeekly, carryPercent);
+            return LlmQuotaMath.ClampCarryIn(
+                snapshot.CarryOutOf(agent.Id, priorYear, priorWeek), baseWeekly, carryPercent);
         }
 
         var persist = true;
@@ -371,68 +527,6 @@ public class LlmQuotaService(
             persist = await TryCloseAsync(db, agent, draft, cancellationToken);
         }
         return plan.CarryIn;
-    }
-
-    private static async Task<LlmQuotaLedger.WeekKey?> FirstChargedWeekAsync(AppDbContext db, string agentId, CancellationToken cancellationToken)
-    {
-        // start at the earliest week that actually carries a charge or a correction; weeks before that had
-        // nothing to spend, so they must not manufacture carry-over out of an untouched quota
-        var firstRequest = await db.LlmRequests.AsNoTracking()
-            .Where(r => r.AgentId == agentId)
-            .OrderBy(r => r.BudgetYear).ThenBy(r => r.BudgetWeek)
-            .Select(r => new { r.BudgetYear, r.BudgetWeek })
-            .FirstOrDefaultAsync(cancellationToken);
-        var firstAdjustment = await db.LlmQuotaAdjustments.AsNoTracking()
-            .Where(a => a.AgentId == agentId)
-            .OrderBy(a => a.Year).ThenBy(a => a.Week)
-            .Select(a => new { BudgetYear = a.Year, BudgetWeek = a.Week })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (firstRequest is null && firstAdjustment is null)
-        {
-            return null;
-        }
-        if (firstRequest is null)
-        {
-            return new LlmQuotaLedger.WeekKey(firstAdjustment!.BudgetYear, firstAdjustment.BudgetWeek);
-        }
-        if (firstAdjustment is null)
-        {
-            return new LlmQuotaLedger.WeekKey(firstRequest.BudgetYear, firstRequest.BudgetWeek);
-        }
-        return IsoWeekPeriod.IsBefore(firstAdjustment.BudgetYear, firstAdjustment.BudgetWeek, firstRequest.BudgetYear, firstRequest.BudgetWeek)
-            ? new LlmQuotaLedger.WeekKey(firstAdjustment.BudgetYear, firstAdjustment.BudgetWeek)
-            : new LlmQuotaLedger.WeekKey(firstRequest.BudgetYear, firstRequest.BudgetWeek);
-    }
-
-    /// <summary>Net consumption per week in one grouped pass, so the backfill never queries per week.</summary>
-    private static async Task<Dictionary<LlmQuotaLedger.WeekKey, long>> ConsumedByWeekAsync(
-        AppDbContext db, string agentId, CancellationToken cancellationToken)
-    {
-        var map = new Dictionary<LlmQuotaLedger.WeekKey, long>();
-
-        var charged = await db.LlmRequests.AsNoTracking()
-            .Where(r => r.AgentId == agentId)
-            .GroupBy(r => new { r.BudgetYear, r.BudgetWeek })
-            .Select(g => new { g.Key.BudgetYear, g.Key.BudgetWeek, Sum = g.Sum(x => x.QuotaTokens) })
-            .ToListAsync(cancellationToken);
-        foreach (var row in charged)
-        {
-            map[new LlmQuotaLedger.WeekKey(row.BudgetYear, row.BudgetWeek)] = row.Sum;
-        }
-
-        var corrected = await db.LlmQuotaAdjustments.AsNoTracking()
-            .Where(a => a.AgentId == agentId)
-            .GroupBy(a => new { a.Year, a.Week })
-            .Select(g => new { g.Key.Year, g.Key.Week, Sum = g.Sum(x => x.Tokens) })
-            .ToListAsync(cancellationToken);
-        foreach (var row in corrected)
-        {
-            var key = new LlmQuotaLedger.WeekKey(row.Year, row.Week);
-            map[key] = map.GetValueOrDefault(key) - row.Sum;
-        }
-
-        return map;
     }
 
     private static async Task<bool> TryCloseAsync(

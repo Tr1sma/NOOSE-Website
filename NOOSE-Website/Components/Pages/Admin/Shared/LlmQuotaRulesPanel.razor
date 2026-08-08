@@ -14,6 +14,8 @@
     }
     Der Übertrag ist auf denselben Prozentsatz der Basis gedeckelt — mehr als „Basis + Übertrag" kann niemand
     ansammeln, egal wie viele Wochen ungenutzt bleiben.
+    Die Tagesgrenze zählt vom Grundkontingent, nicht vom Übertrag: eine Woche mit Übertrag soll länger reichen,
+    nicht schneller ausgebbar sein. 0 % schaltet sie ab.
 </MudText>
 
 @if (!_mayEdit)
@@ -35,7 +37,9 @@ else
                 <th>Dienstgrad</th>
                 <th style="width:180px;">Grundkontingent</th>
                 <th style="width:140px;">Übertrag</th>
+                <th style="width:140px;">Tagesgrenze</th>
                 <th style="width:160px;" class="text-right">Max. in der Woche</th>
+                <th style="width:150px;" class="text-right">Max. am Tag</th>
                 @if (_maySeeCost)
                 {
                     <th style="width:160px;" class="text-right">≈ Realkosten/Woche</th>
@@ -58,7 +62,16 @@ else
                                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit"
                                          Adornment="Adornment.End" AdornmentText="%" />
                     </td>
+                    <td>
+                        <MudNumericField T="int" @bind-Value="quota.DailyPercent" Min="0" Max="100"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="!_mayEdit"
+                                         Adornment="Adornment.End" AdornmentText="%" />
+                    </td>
                     <td class="text-right">@LlmQuotaMath.Ceiling(quota.BaseWeekly, quota.CarryOverPercent).ToString("N0")</td>
+                    <td class="text-right mud-text-secondary">
+                        @{ var daily = LlmQuotaMath.DailyLimit(quota.BaseWeekly, quota.DailyPercent); }
+                        @(daily <= 0 ? "ohne Grenze" : daily.ToString("N0"))
+                    </td>
                     @if (_maySeeCost)
                     {
                         <td class="text-right mud-text-secondary">

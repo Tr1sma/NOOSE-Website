@@ -38,7 +38,7 @@ public sealed partial class TextAssistService(INooseiGateway noosei, INooseiSett
     [GeneratedRegex(@"\b(NAME|BEWERBER|DATUM|UHRZEIT|DIENSTGRAD)\b", RegexOptions.Compiled)]
     private static partial Regex RecruitingTokenRegex();
 
-    [GeneratedRegex(@"NOOSE-[A-Z]+-\d{4}-\d{4}|\d+", RegexOptions.Compiled)]
+    [GeneratedRegex(NooseiCitations.CaseNumberPattern + @"|\d+", RegexOptions.Compiled)]
     private static partial Regex FactRegex();
 
     [GeneratedRegex(@"@\{\w+:[0-9a-fA-F-]{36}\}", RegexOptions.Compiled)]

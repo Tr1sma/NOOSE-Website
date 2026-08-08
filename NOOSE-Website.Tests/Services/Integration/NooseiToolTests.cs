@@ -346,7 +346,7 @@ public sealed class NooseiToolTests
                 seen = call.ArgAt<ViewerScope>(1);
                 return Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>());
             });
-        var tool = new SearchRecordsTool(search);
+        var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
         await tool.InvokeAsync(Args("""{"suchtext":"Ballas"}"""), NooseiToolContext.From(Junior()));
 
@@ -366,7 +366,7 @@ public sealed class NooseiToolTests
                 criteria = call.ArgAt<NOOSE_Website.Models.Common.SearchCriteria>(0);
                 return Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>());
             });
-        var tool = new SearchRecordsTool(search);
+        var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
         await tool.InvokeAsync(Args("""{"suchtext":"x","typen":["Fraktion","Vorgang"]}"""), NooseiToolContext.From(Leader()));
 
@@ -376,11 +376,58 @@ public sealed class NooseiToolTests
     [Fact]
     public async Task SearchRecords_RejectsAnEmptyQuery()
     {
-        var tool = new SearchRecordsTool(Substitute.For<ISearchService>());
+        var tool = new SearchRecordsTool(Substitute.For<ISearchService>(), Substitute.For<ITagService>());
 
         var result = await tool.InvokeAsync(Args("""{"suchtext":"   "}"""), NooseiToolContext.From(Leader()));
 
         Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task SearchRecords_WithholdsTheIdOfARecordLiesAkteCannotOpen()
+    {
+        var search = Substitute.For<ISearchService>();
+        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>
+            {
+                new("Faction", "Fraktionen",
+                    [new NOOSE_Website.Models.Common.SearchHit("Faction", "f1", "Ballas", "", "NOOSE-F-2026-0001")]),
+                new("Job", "Aufgaben",
+                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "NOOSE-A-2026-0007")]),
+            }));
+        var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
+
+        var result = await tool.InvokeAsync(Args("""{"suchtext":"Waffen"}"""), NooseiToolContext.From(Leader()));
+
+        // the faction can be opened, so it gets an id
+        Assert.Contains("Fraktion | Ballas", result.Text);
+        Assert.Contains("id=f1", result.Text);
+        // a job cannot: an id here would cost the model a round to discover that lies_akte rejects it
+        Assert.Contains("Aufgabe | Waffenlager prüfen", result.Text);
+        Assert.DoesNotContain("id=j1", result.Text);
+        Assert.Contains("nicht als Akte lesbar", result.Text);
+        // and never the English CLR name
+        Assert.DoesNotContain("Job", result.Text);
+    }
+
+    [Fact]
+    public async Task SearchRecords_KeepsRefsForRecordsItCannotOpen()
+    {
+        var search = Substitute.For<ISearchService>();
+        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>
+            {
+                new("Job", "Aufgaben",
+                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "")]),
+            }));
+        var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
+
+        var result = await tool.InvokeAsync(Args("""{"suchtext":"Waffen"}"""), NooseiToolContext.From(Leader()));
+
+        // withholding the id from the model does not withhold the source chip from the agent
+        var reference = Assert.Single(result.Refs!);
+        Assert.Equal("Job", reference.Kind);
+        Assert.Equal("j1", reference.Id);
     }
 
     // ---- registry ----
@@ -388,7 +435,7 @@ public sealed class NooseiToolTests
     [Fact]
     public void Registry_ExposesEveryToolOnceAndInAStableOrder()
     {
-        var search = new SearchRecordsTool(Substitute.For<ISearchService>());
+        var search = new SearchRecordsTool(Substitute.For<ISearchService>(), Substitute.For<ITagService>());
         var mention = new ResolveMentionTool(Substitute.For<IMentionService>());
         var registry = new NooseiToolRegistry([mention, search]);
 

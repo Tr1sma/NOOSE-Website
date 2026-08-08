@@ -41,6 +41,13 @@ public sealed class LlmRankQuota
 
     /// <summary>Share of the unused rest handed to the next week (0-100), itself capped at that share of the base.</summary>
     public int CarryOverPercent { get; set; }
+
+    /// <summary>Share of the weekly base spendable in one local day (0-100); 0 switches the daily ceiling off.</summary>
+    /// <remarks>The burn-rate rule reports a runaway agent but stops nothing. This is the stop, and it is set high
+    /// on purpose: it must catch a loop, not a busy afternoon.</remarks>
+    public int DailyPercent { get; set; } = DefaultDailyPercent;
+
+    public const int DefaultDailyPercent = 40;
 }
 
 /// <summary>Tunable thresholds of the four anomaly rules.</summary>

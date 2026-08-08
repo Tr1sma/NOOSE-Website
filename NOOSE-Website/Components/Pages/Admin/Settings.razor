@@ -92,6 +92,11 @@
                    Icon="@Icons.Material.Filled.Rule">
         <LlmQuotaRulesPanel />
     </RecordSection>
+    @* aggregates only, no prompt text — so this stays at leadership and needs no counter-intel gate *@
+    <RecordSection Group="KI" Slug="ki-betrieb" Label="Betriebszahlen"
+                   Icon="@Icons.Material.Filled.QueryStats">
+        <NooseiHealthPanel />
+    </RecordSection>
     <RecordSection Group="KI" Slug="ki-kontingente" Label="Kontingente"
                    Icon="@Icons.Material.Filled.Token">
         <LlmQuotaOverviewPanel />

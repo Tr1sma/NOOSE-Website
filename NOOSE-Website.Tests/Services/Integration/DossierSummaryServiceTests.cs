@@ -179,7 +179,7 @@ public sealed class DossierSummaryServiceTests
         await using var db = ctx.NewContext();
         var row = Assert.Single(db.DossierSummaries.ToList());
         Assert.Equal(NooseiSchemas.KurzbriefVersion, row.SchemaVersion);
-        Assert.Equal(NooseiPrompts.PromptVersion, row.PromptVersion);
+        Assert.Equal(NooseiPrompts.BriefPromptVersion, row.PromptVersion);
         Assert.Equal("test-model", row.Model);
         Assert.NotNull(row.BriefJson);
     }

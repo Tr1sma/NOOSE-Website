@@ -21,7 +21,7 @@ public sealed class RecentChangesTool(IGlobalChronikService chronik) : INooseiTo
           "additionalProperties": false,
           "properties": {
             "tage": { "type": "integer", "minimum": 1, "maximum": 30, "description": "Wie weit zurück; Standard 7." },
-            "typen": { "type": "array", "items": { "type": "string", "enum": {{NooseiRecordTypes.EnumJson}} } },
+            "typen": { "type": "array", "items": { "type": "string", "enum": {{NooseiRecordTypes.ChronicleEnumJson}} } },
             "max": { "type": "integer", "minimum": 1, "maximum": 40 }
           }
         }
@@ -32,7 +32,7 @@ public sealed class RecentChangesTool(IGlobalChronikService chronik) : INooseiTo
         var days = NooseiLimits.Count(arguments, "tage", 7, 30);
         var max = NooseiLimits.Count(arguments, "max", 20);
         var types = NooseiLimits.Strings(arguments, "typen")
-            .Select(NooseiRecordTypes.Clr)
+            .Select(t => NooseiRecordTypes.Clr(t, NooseiUse.Chronicle))
             .Where(t => t is not null)
             .Select(t => t!)
             .ToList();

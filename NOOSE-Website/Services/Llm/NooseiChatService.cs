@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Llm;
@@ -14,19 +15,33 @@ namespace NOOSE_Website.Services;
 /// <summary>A record NOOSEI read for an answer, as the chat renders it: type, id and the name it had then.</summary>
 public sealed record NooseiSource(string Type, string Id, string Name);
 
+/// <summary>One tool NOOSEI used for an answer, and how often it ran.</summary>
+public sealed record NooseiToolUse(string Name, int Count)
+{
+    public string Label => NooseiToolLabels.Label(Name);
+}
+
 /// <summary>One entry of a conversation as the chat page renders it.</summary>
 /// <param name="Text">Raw text as stored — the model answers in Markdown.</param>
 /// <param name="Html">Sanitized HTML of <paramref name="Text"/>; null for the agent's own turns, which are
 /// shown verbatim rather than interpreted as Markdown.</param>
 /// <param name="Sources">Records the tools read for this answer; empty on the agent's own turns and on
 /// every answer stored before answers carried sources.</param>
+/// <param name="Tools">Tools this answer rests on, in call order. Read back from the stored tool rows, so a
+/// reopened conversation shows the same list — which also means a call that produced nothing is absent, because
+/// those rows are deliberately not kept.</param>
+/// <param name="Truncated">The token ceiling cut this answer off. Stored, not a snackbar: it stays true when the
+/// conversation is reopened, which is the only place the reader can still see what was missing.</param>
+/// <param name="Degraded">Answered without record access.</param>
+/// <param name="UnsupportedNote">Case numbers the answer cites that no tool result backs, already phrased.</param>
 public sealed record NooseiChatMessage(
     string Id, bool FromUser, string Text, string? Html, DateTime CreatedAt, bool IsError, long? QuotaTokens,
-    IReadOnlyList<NooseiSource> Sources)
+    IReadOnlyList<NooseiSource> Sources, IReadOnlyList<NooseiToolUse> Tools,
+    bool Truncated = false, bool Degraded = false, string? UnsupportedNote = null)
 {
     /// <summary>The agent's own message on its way into the list, before it comes back from storage.</summary>
     public static NooseiChatMessage FromAgent(string text)
-        => new(Guid.NewGuid().ToString(), true, text, null, DateTime.UtcNow, false, null, []);
+        => new(Guid.NewGuid().ToString(), true, text, null, DateTime.UtcNow, false, null, [], []);
 }
 
 /// <summary>A conversation in the owner's sidebar.</summary>
@@ -49,20 +64,30 @@ public sealed record NooseiAnchor(string EntityType, string EntityId)
         {
             return null;
         }
-        var type = NooseiRecordTypes.Clr(token[..cut].Trim()) ?? Known(token[..cut].Trim());
+        var type = Readable(token[..cut].Trim());
         var id = token[(cut + 1)..].Trim();
         return type is null || id.Length == 0 ? null : new NooseiAnchor(type, id);
     }
 
-    /// <summary>Accepts the CLR name too, so a caller can pass <c>nameof(Person)</c> without translating.</summary>
-    private static string? Known(string candidate)
-        => NooseiRecordTypes.Clr(NooseiRecordTypes.German(candidate)) is { } clr ? clr : null;
+    /// <summary>An anchor must be a record NOOSEI can open, because the system line tells it to do exactly that.</summary>
+    /// <remarks>Accepts the CLR name too, so a caller can pass <c>nameof(Person)</c> without translating. The
+    /// capability gate is the point: a type outside it would reach <see cref="Visibility.IsRecordVisibleAsync" />,
+    /// which treats an unknown type as visible to everyone — and a hand-typed query string is the one input that
+    /// arrives here from outside.</remarks>
+    private static string? Readable(string candidate)
+        => NooseiRecordTypes.Clr(candidate, NooseiUse.Read)
+            ?? NooseiRecordTypes.Clr(NooseiRecordTypes.German(candidate), NooseiUse.Read);
 
     public override string ToString() => EntityType + ":" + EntityId;
 }
 
 /// <summary>What one answered turn produced.</summary>
-public sealed record NooseiTurn(string ConversationId, NooseiChatMessage Answer, LlmQuotaStatus Quota, long QuotaTokens, bool Degraded);
+/// <param name="ScopeChanged">The owner's rights changed since the last turn, so the tool results of the
+/// conversation were withheld from the replay. Worth saying: to the reader it looks like NOOSEI forgot what it
+/// had just read.</param>
+public sealed record NooseiTurn(
+    string ConversationId, NooseiChatMessage Answer, LlmQuotaStatus Quota, long QuotaTokens, bool Degraded,
+    bool ScopeChanged = false);
 
 /// <summary>NOOSEI conversations: owner-private threads with real multi-turn history and record-database tools.</summary>
 public interface INooseiChatService
@@ -90,10 +115,14 @@ public sealed class NooseiChatService(
     INooseiGateway noosei,
     INooseiSettingsService settings,
     NooseiToolRegistry tools,
+    IOptions<LlmOptions> options,
     ILogger<NooseiChatService> logger) : INooseiChatService
 {
-    /// <summary>How many stored messages are replayed into a new turn.</summary>
-    private const int ReplayWindow = 20;
+    /// <summary>How many stored rows a replay reads. The token budget is the real limit; this only bounds how much
+    /// longtext the query drags out of the database.</summary>
+    private const int MaxReplayRows = 60;
+
+    private readonly LlmOptions _o = options.Value;
 
     public bool IsConfigured => noosei.IsConfigured;
 
@@ -113,11 +142,52 @@ public sealed class NooseiChatService(
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var conversation = await LoadOwnAsync(db, conversationId, actor, cancellationToken);
+        // tool rows come along: they are where the used-tools list under an answer comes from, and reading them
+        // back beats a second copy of the same names on the assistant row
         var rows = await db.NooseiMessages.AsNoTracking()
-            .Where(m => m.ConversationId == conversation.Id && (m.Role == "user" || m.Role == "assistant"))
+            .Where(m => m.ConversationId == conversation.Id
+                && (m.Role == "user" || m.Role == "assistant" || m.Role == "tool"))
             .OrderBy(m => m.Sequence)
             .ToListAsync(cancellationToken);
-        return rows.Select(Render).ToList();
+
+        var rendered = new List<NooseiChatMessage>(rows.Count);
+        var pending = new List<string>();
+        foreach (var row in rows)
+        {
+            if (row.Role == "tool")
+            {
+                if (row.ToolName is { Length: > 0 } name)
+                {
+                    pending.Add(name);
+                }
+                continue;
+            }
+            rendered.Add(Render(row, Collapse(pending)));
+            pending.Clear();
+        }
+        return rendered;
+    }
+
+    /// <summary>Tool names in call order, repeats folded into a count.</summary>
+    private static List<NooseiToolUse> Collapse(IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return [];
+        }
+        var order = new List<string>();
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            if (counts.TryGetValue(name, out var seen))
+            {
+                counts[name] = seen + 1;
+                continue;
+            }
+            counts[name] = 1;
+            order.Add(name);
+        }
+        return order.Select(n => new NooseiToolUse(n, counts[n])).ToList();
     }
 
     public async Task<NooseiTurn> AskAsync(
@@ -140,11 +210,14 @@ public sealed class NooseiChatService(
             ? Create(db, agentId, trimmed, stamp, await VisibleAnchorAsync(db, anchor, context.Scope, cancellationToken))
             : await LoadOwnAsync(db, conversationId, actor, cancellationToken);
 
-        var history = conversationId is null
-            ? []
-            : await ReplayAsync(db, conversation, stamp, cancellationToken);
+        var history = new List<LlmMessage>();
+        var scopeChanged = false;
+        if (conversationId is not null)
+        {
+            (history, scopeChanged) = await ReplayAsync(db, conversation, stamp, cancellationToken);
+        }
 
-        var messages = new List<LlmMessage>(history.Count + 3)
+        var messages = new List<LlmMessage>(history.Count + 4)
         {
             LlmMessage.System(NooseiPrompts.Combine(NooseiPrompts.Chat, await AddendumAsync(cancellationToken))),
         };
@@ -154,7 +227,14 @@ public sealed class NooseiChatService(
             messages.Add(LlmMessage.System(line));
         }
         messages.AddRange(history);
+        if (scopeChanged)
+        {
+            // without it the model fills the gap from the question-and-answer trail and cites evidence it lost
+            messages.Add(LlmMessage.System(NooseiPrompts.ScopeChanged));
+        }
         messages.Add(LlmMessage.User(trimmed));
+        // the gateway appends its rounds to a copy of this list, so everything past here is this turn's own
+        var sent = messages.Count;
 
         var answer = await noosei.AskAsync(
             new NooseiCall(
@@ -169,11 +249,36 @@ public sealed class NooseiChatService(
             actor,
             cancellationToken);
 
-        var text = string.IsNullOrWhiteSpace(answer.Text) ? "(Keine Antwort erhalten.)" : answer.Text!;
-        var stored = await AppendTurnAsync(db, conversation, trimmed, answer.Transcript, text,
-            answer.Charge.QuotaTokens, Sources(answer.Refs), stamp, cancellationToken);
+        if (!answer.Charge.Persisted)
+        {
+            // quota was spent but left no row: it is missing from the week, the log and the anomaly rules
+            logger.LogWarning("NOOSEI-Antwort für {Agent} wurde nicht protokolliert ({Tokens} Kontingent-Token)",
+                agentId, answer.Charge.QuotaTokens);
+        }
 
-        return new NooseiTurn(conversation.Id, stored, answer.Charge.Status, answer.Charge.QuotaTokens, answer.Degraded);
+        var text = string.IsNullOrWhiteSpace(answer.Text) ? "(Keine Antwort erhalten.)" : answer.Text!;
+        var unsupported = NooseiCitations.Unsupported(text, NooseiCitations.Evidence(answer.Transcript, trimmed));
+        if (unsupported.Count > 0)
+        {
+            // measurable rather than merely forbidden: the prompt asks for citations, this counts the ones it invents
+            logger.LogInformation("NOOSEI-Antwort nennt {Count} unbelegte Aktenzeichen ({Numbers})",
+                unsupported.Count, string.Join(", ", unsupported));
+        }
+
+        var turn = new TurnRecord(
+            trimmed,
+            text,
+            answer.Transcript.Skip(sent).ToList(),
+            answer.BarrenTools ?? [],
+            answer.Charge.QuotaTokens,
+            Sources(answer.Refs),
+            answer.Truncated,
+            answer.Degraded,
+            NooseiCitations.Notice(unsupported));
+        var stored = await AppendTurnAsync(db, conversation, turn, stamp, cancellationToken);
+
+        return new NooseiTurn(conversation.Id, stored, answer.Charge.Status, answer.Charge.QuotaTokens,
+            answer.Degraded, scopeChanged);
     }
 
     public async Task RenameAsync(string conversationId, string title, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -203,7 +308,7 @@ public sealed class NooseiChatService(
         var tool = tools.Find(call.Name);
         if (tool is null)
         {
-            return NooseiToolOutcome.Plain($"Unbekanntes Werkzeug: {call.Name}.");
+            return NooseiToolOutcome.Failed($"Unbekanntes Werkzeug: {call.Name}.");
         }
 
         JsonElement arguments;
@@ -213,16 +318,17 @@ public sealed class NooseiChatService(
         }
         catch (JsonException)
         {
-            return NooseiToolOutcome.Plain("Die Werkzeug-Parameter waren kein gültiges JSON. Bitte erneut versuchen.");
+            return NooseiToolOutcome.Failed("Die Werkzeug-Parameter waren kein gültiges JSON. Bitte erneut versuchen.");
         }
 
-        progress?.Report(Progress(call.Name));
+        progress?.Report(NooseiToolLabels.Progress(call.Name));
         var result = await tool.InvokeAsync(arguments, context, cancellationToken);
         // reported after the call, because only the result knows which record was actually reached
         if (Touched(result.Refs) is { } record)
         {
             progress?.Report($"NOOSEI hat {record} gelesen.");
         }
+        // a tool that answered "not found" answered; that belongs in the conversation, not in the barren list
         return new NooseiToolOutcome(result.Text, result.Refs);
     }
 
@@ -231,21 +337,6 @@ public sealed class NooseiChatService(
         => refs is { Count: 1 } && refs[0].Name is { Length: > 0 } name
             ? $"{NooseiRecordTypes.German(refs[0].Kind)} {name}"
             : null;
-
-    private static string Progress(string toolName) => toolName switch
-    {
-        "suche_akten" => "NOOSEI durchsucht die Akten …",
-        "finde_akten" => "NOOSEI sichtet den Bestand …",
-        "hole_kennzahlen" => "NOOSEI wertet Kennzahlen aus …",
-        "lies_akte" => "NOOSEI liest eine Akte …",
-        "zeige_verbindungen" => "NOOSEI verfolgt Verbindungen …",
-        "finde_verbindungsweg" => "NOOSEI sucht einen Verbindungsweg …",
-        "lies_zeitstrahl" => "NOOSEI prüft den Verlauf …",
-        "letzte_aenderungen" => "NOOSEI sieht die letzten Änderungen durch …",
-        "loese_erwaehnung_auf" => "NOOSEI löst eine Erwähnung auf …",
-        "hole_kurzbrief" => "NOOSEI holt einen Kurzbrief …",
-        _ => "NOOSEI arbeitet …",
-    };
 
     // ---- storage ----
 
@@ -323,40 +414,40 @@ public sealed class NooseiChatService(
 
     /// <summary>Replays the recent history. Tool results are dropped when the owner's scope changed since:
     /// their text was authorised under rights that may since have been taken away.</summary>
-    private static async Task<List<LlmMessage>> ReplayAsync(
+    /// <returns>The wire history, and whether that rights change cost it its tool results.</returns>
+    private async Task<(List<LlmMessage> Messages, bool ScopeChanged)> ReplayAsync(
         AppDbContext db, NooseiConversation conversation, string stamp, CancellationToken cancellationToken)
     {
         var sameScope = string.Equals(conversation.ScopeStamp, stamp, StringComparison.Ordinal);
         var rows = await db.NooseiMessages.AsNoTracking()
             .Where(m => m.ConversationId == conversation.Id)
             .OrderByDescending(m => m.Sequence)
-            .Take(ReplayWindow)
+            .Take(MaxReplayRows)
+            .Select(m => new NooseiHistoryRow(
+                m.Role, m.Content, m.ToolName, m.ToolCallId, m.ToolCallsJson, m.IsError))
             .ToListAsync(cancellationToken);
         rows.Reverse();
 
-        var replay = new List<LlmMessage>(rows.Count);
-        foreach (var row in rows)
-        {
-            if (row.IsError)
-            {
-                continue;
-            }
-            switch (row.Role)
-            {
-                case "user":
-                    replay.Add(LlmMessage.User(row.Content ?? string.Empty));
-                    break;
-                case "assistant" when !string.IsNullOrWhiteSpace(row.Content):
-                    replay.Add(LlmMessage.Assistant(row.Content));
-                    break;
-                case "tool" when sameScope && !string.IsNullOrWhiteSpace(row.Content):
-                    // replayed as plain context, not as a tool result: the matching tool_call ids are long gone
-                    replay.Add(LlmMessage.Assistant($"[Frühere Werkzeug-Antwort · {row.ToolName}]\n{row.Content}"));
-                    break;
-            }
-        }
-        return replay;
+        var window = NooseiHistoryWindow.Build(rows, sameScope, _o.HistoryTokenBudget, _o.HistoryTurns);
+        // only worth reporting when the change actually took evidence away
+        var lost = !sameScope && rows.Any(r => r.Role is "tool" or NooseiHistoryWindow.ToolCallRole);
+        return (window, lost);
     }
+
+    /// <summary>What one answered turn writes into the conversation.</summary>
+    /// <param name="NewMessages">Only the rounds this turn added — the replayed history must not be stored twice.</param>
+    /// <param name="Barren">Tool call ids that produced no record content. Their rows are dropped, and with them
+    /// every call the round made that has no answer left, so the stored turn stays a valid request shape.</param>
+    private sealed record TurnRecord(
+        string Question,
+        string Answer,
+        IReadOnlyList<LlmMessage> NewMessages,
+        IReadOnlyList<string> Barren,
+        long QuotaTokens,
+        IReadOnlyList<NooseiSource> Sources,
+        bool Truncated,
+        bool Degraded,
+        string? Unsupported);
 
     /// <summary>How many records are kept under one answer. A single filter call may touch forty; three of them
     /// would bury the answer under chips and blow up the stored row for no gain.</summary>
@@ -398,8 +489,7 @@ public sealed class NooseiChatService(
     }
 
     private static async Task<NooseiChatMessage> AppendTurnAsync(
-        AppDbContext db, NooseiConversation conversation, string question, IReadOnlyList<LlmMessage> transcript,
-        string answer, long quotaTokens, IReadOnlyList<NooseiSource> sources, string stamp, CancellationToken cancellationToken)
+        AppDbContext db, NooseiConversation conversation, TurnRecord turn, string stamp, CancellationToken cancellationToken)
     {
         var next = await db.NooseiMessages
             .Where(m => m.ConversationId == conversation.Id)
@@ -412,33 +502,67 @@ public sealed class NooseiChatService(
             ConversationId = conversation.Id,
             Sequence = ++next,
             Role = "user",
-            Content = question,
+            Content = turn.Question,
             CreatedAt = now,
         });
 
-        // keep the tool results of this turn, so a follow-up does not have to fetch them again
-        foreach (var toolMessage in transcript.Where(m => m.Role == LlmRole.Tool))
+        var kept = turn.NewMessages
+            .Where(m => m.Role == LlmRole.Tool && m.ToolCallId is { Length: > 0 } id && !turn.Barren.Contains(id))
+            .Select(m => m.ToolCallId!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // keep this turn's tool exchange, so a follow-up need not fetch it again — and so the model reads its own
+        // earlier lookups as tool results with their arguments, not as statements it once made itself
+        foreach (var message in turn.NewMessages)
         {
-            db.NooseiMessages.Add(new NooseiMessage
+            switch (message.Role)
             {
-                ConversationId = conversation.Id,
-                Sequence = ++next,
-                Role = "tool",
-                ToolName = toolMessage.Name,
-                ToolCallId = toolMessage.ToolCallId,
-                Content = toolMessage.Content,
-                CreatedAt = now,
-            });
+                case LlmRole.Assistant when Kept(message.ToolCalls, kept) is { Count: > 0 } calls:
+                    db.NooseiMessages.Add(new NooseiMessage
+                    {
+                        ConversationId = conversation.Id,
+                        Sequence = ++next,
+                        // its own role: the chat renders user|assistant, and this row has nothing to show
+                        Role = NooseiHistoryWindow.ToolCallRole,
+                        Content = message.Content,
+                        ToolCallsJson = NooseiHistoryWindow.Serialize(calls),
+                        CreatedAt = now,
+                    });
+                    break;
+                case LlmRole.Tool when message.ToolCallId is { Length: > 0 } id && kept.Contains(id):
+                    db.NooseiMessages.Add(new NooseiMessage
+                    {
+                        ConversationId = conversation.Id,
+                        Sequence = ++next,
+                        Role = "tool",
+                        ToolName = message.Name,
+                        ToolCallId = id,
+                        Content = message.Content,
+                        CreatedAt = now,
+                    });
+                    break;
+            }
         }
+
+        // built from the rows that were just written, not from the turn's refs: live and reopened must agree, and
+        // only the stored rows know which calls survived the barren filter
+        var used = Collapse(turn.NewMessages
+            .Where(m => m.Role == LlmRole.Tool && m.ToolCallId is { Length: > 0 } id && kept.Contains(id))
+            .Select(m => m.Name ?? string.Empty)
+            .Where(n => n.Length > 0)
+            .ToList());
 
         var stored = new NooseiMessage
         {
             ConversationId = conversation.Id,
             Sequence = ++next,
             Role = "assistant",
-            Content = answer,
-            QuotaTokens = quotaTokens,
-            SourcesJson = sources.Count > 0 ? JsonSerializer.Serialize(sources) : null,
+            Content = turn.Answer,
+            QuotaTokens = turn.QuotaTokens,
+            SourcesJson = turn.Sources.Count > 0 ? JsonSerializer.Serialize(turn.Sources) : null,
+            Truncated = turn.Truncated,
+            Degraded = turn.Degraded,
+            UnsupportedCitations = turn.Unsupported is { Length: > 0 } note ? Shorten(note, 300) : null,
             CreatedAt = now,
         };
         db.NooseiMessages.Add(stored);
@@ -448,8 +572,13 @@ public sealed class NooseiChatService(
         conversation.ScopeStamp = stamp;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Render(stored);
+        return Render(stored, used);
     }
+
+    /// <summary>The calls of a round that still have a stored answer; an unanswered one would make the whole stored
+    /// turn an invalid request shape on the next replay.</summary>
+    private static List<LlmToolCall>? Kept(IReadOnlyList<LlmToolCall>? calls, HashSet<string> kept)
+        => calls?.Where(c => kept.Contains(c.Id)).ToList();
 
     // ---- helpers ----
 
@@ -466,14 +595,15 @@ public sealed class NooseiChatService(
         }
     }
 
-    private static NooseiChatMessage Render(NooseiMessage row)
+    private static NooseiChatMessage Render(NooseiMessage row, IReadOnlyList<NooseiToolUse>? tools = null)
     {
         var fromUser = row.Role == "user";
         var text = row.Content ?? string.Empty;
         // the model answers in Markdown; MarkdownRenderer drops raw HTML and sanitizes what it produces
         var html = fromUser || string.IsNullOrWhiteSpace(text) ? null : MarkdownRenderer.ToSafeHtml(text);
         return new NooseiChatMessage(row.Id, fromUser, text, html, row.CreatedAt, row.IsError, row.QuotaTokens,
-            ReadSources(row.SourcesJson));
+            ReadSources(row.SourcesJson), fromUser ? [] : tools ?? [],
+            row.Truncated, row.Degraded, row.UnsupportedCitations);
     }
 
     /// <summary>Answers stored before sources existed, and a row corrupted by hand, both render without chips.</summary>

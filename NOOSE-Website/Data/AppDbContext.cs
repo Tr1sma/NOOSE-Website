@@ -1030,6 +1030,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(x => x.Provider).HasMaxLength(64);
             b.Property(x => x.ErrorMessage).HasMaxLength(500);
             b.Property(x => x.PromptFingerprint).HasMaxLength(64);
+            b.Property(x => x.FinishReason).HasMaxLength(32);
             b.Property(x => x.CostUsd).HasPrecision(18, 8);
             b.Property(x => x.Prompt).HasColumnType("longtext");
             b.Property(x => x.Answer).HasColumnType("longtext");
@@ -1087,6 +1088,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(x => x.Role).HasMaxLength(16).IsRequired();
             b.Property(x => x.ToolCallId).HasMaxLength(64);
             b.Property(x => x.ToolName).HasMaxLength(64);
+            b.Property(x => x.UnsupportedCitations).HasMaxLength(300);
             b.Property(x => x.Content).HasColumnType("longtext");
             b.Property(x => x.ToolCallsJson).HasColumnType("longtext");
             b.Property(x => x.SourcesJson).HasColumnType("longtext");

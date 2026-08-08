@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NOOSE_Website.Data;
 
@@ -11,9 +12,11 @@ using NOOSE_Website.Data;
 namespace NOOSE_Website.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260808115956_Phase68_NooseiAntwortHinweise")]
+    partial class Phase68_NooseiAntwortHinweise
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -4574,10 +4577,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("longtext")
                         .HasColumnName("Antwort");
 
-                    b.Property<int?>("Attempts")
-                        .HasColumnType("int")
-                        .HasColumnName("Versuche");
-
                     b.Property<int>("BudgetWeek")
                         .HasColumnType("int")
                         .HasColumnName("BudgetWoche");
@@ -4607,10 +4606,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("datetime(6)")
                         .HasColumnName("Zeitpunkt");
 
-                    b.Property<bool?>("Degraded")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("Eingeschraenkt");
-
                     b.Property<int>("DurationMs")
                         .HasColumnType("int")
                         .HasColumnName("DauerMs");
@@ -4620,18 +4615,9 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("varchar(500)")
                         .HasColumnName("Fehler");
 
-                    b.Property<int?>("FailureKind")
-                        .HasColumnType("int")
-                        .HasColumnName("Fehlerart");
-
                     b.Property<int>("Feature")
                         .HasColumnType("int")
                         .HasColumnName("Funktion");
-
-                    b.Property<string>("FinishReason")
-                        .HasMaxLength(32)
-                        .HasColumnType("varchar(32)")
-                        .HasColumnName("Abschlussgrund");
 
                     b.Property<bool>("IsAnomalous")
                         .HasColumnType("tinyint(1)")
@@ -4641,10 +4627,6 @@ namespace NOOSE_Website.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("varchar(128)")
                         .HasColumnName("Modell");
-
-                    b.Property<int?>("ModelLatencyMs")
-                        .HasColumnType("int")
-                        .HasColumnName("ModellDauerMs");
 
                     b.Property<string>("Prompt")
                         .HasColumnType("longtext")
@@ -4676,21 +4658,9 @@ namespace NOOSE_Website.Data.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("Erfolg");
 
-                    b.Property<int?>("ToolCalls")
-                        .HasColumnType("int")
-                        .HasColumnName("Werkzeugaufrufe");
-
-                    b.Property<int?>("ToolFailures")
-                        .HasColumnType("int")
-                        .HasColumnName("Werkzeugfehler");
-
                     b.Property<int>("ToolRounds")
                         .HasColumnType("int")
                         .HasColumnName("Werkzeugrunden");
-
-                    b.Property<int?>("Withdrawal")
-                        .HasColumnType("int")
-                        .HasColumnName("AbbruchGrund");
 
                     b.HasKey("Id");
 

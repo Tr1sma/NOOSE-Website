@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NOOSE_Website.Data.Entities.Llm;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
@@ -24,7 +26,8 @@ public sealed class LlmQuotaServiceTests
     {
         var configService = Substitute.For<ILlmQuotaConfigService>();
         configService.GetAsync(Arg.Any<CancellationToken>()).Returns(config ?? LlmQuotaConfig.Default());
-        return new LlmQuotaService(ctx.Factory, configService);
+        return new LlmQuotaService(ctx.Factory, configService,
+            Options.Create(new LlmOptions()), NullLogger<LlmQuotaService>.Instance);
     }
 
     private static LlmQuotaConfig Config(Rank rank, long baseWeekly, int carryPercent) => new()
@@ -46,13 +49,16 @@ public sealed class LlmQuotaServiceTests
         await db.SaveChangesAsync();
     }
 
-    private static async Task ChargeAsync(SqliteTestContext ctx, int year, int week, long tokens)
+    /// <param name="at">When it was charged. Only the week matters to the ledger, but the daily ceiling counts from
+    /// local midnight — so a week's worth of tokens booked on one day is a different scenario than the same week
+    /// spread over it.</param>
+    private static async Task ChargeAsync(SqliteTestContext ctx, int year, int week, long tokens, DateTime? at = null)
     {
         await using var db = ctx.NewContext();
         db.LlmRequests.Add(new LlmRequestLog
         {
             AgentId = AgentId,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = at ?? DateTime.UtcNow,
             BudgetYear = year,
             BudgetWeek = week,
             Feature = LlmFeature.Chat,
@@ -261,12 +267,78 @@ public sealed class LlmQuotaServiceTests
         using var ctx = new SqliteTestContext();
         await SeedAgentAsync(ctx, Rank.JuniorAgent);
         var (year, week) = Now();
-        await ChargeAsync(ctx, year, week, 19_999);
+        // earlier in the week, not today: almost a full weekly quota inside one day is what the daily ceiling stops
+        await ChargeAsync(ctx, year, week, 19_999, DateTime.UtcNow.AddDays(-2));
 
         var status = await Build(ctx).EnsureAvailableAsync(
             ClaimsPrincipalBuilder.Agent(AgentId).WithRank(Rank.JuniorAgent).Build());
 
         Assert.Equal(1L, status.Remaining);
+    }
+
+    [Fact]
+    public async Task EnsureAvailable_StopsAtTheDailyCeiling_WhileTheWeekStillHasTokens()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.JuniorAgent);
+        var (year, week) = Now();
+        // 40 % of a 20.000 base is 8.000 for the day; the week is barely touched
+        await ChargeAsync(ctx, year, week, 8_000);
+
+        var ex = await Assert.ThrowsAsync<LlmQuotaExceededException>(() => Build(ctx).EnsureAvailableAsync(
+            ClaimsPrincipalBuilder.Agent(AgentId).WithRank(Rank.JuniorAgent).Build()));
+
+        // it must not read as "your week is gone" — 12.000 tokens are still there tomorrow
+        Assert.Contains("heute", ex.Message);
+        Assert.DoesNotContain("aufgebraucht", ex.Message);
+    }
+
+    [Fact]
+    public async Task DailyCeiling_CountsOnlyToday()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.JuniorAgent);
+        var (year, week) = Now();
+        await ChargeAsync(ctx, year, week, 8_000, DateTime.UtcNow.AddDays(-1));
+
+        var status = await Build(ctx).EnsureAvailableAsync(
+            ClaimsPrincipalBuilder.Agent(AgentId).WithRank(Rank.JuniorAgent).Build());
+
+        Assert.Equal(0L, status.ConsumedToday);
+        Assert.False(status.IsDayBlocked);
+        Assert.Equal(12_000L, status.Remaining);
+    }
+
+    [Fact]
+    public async Task DailyCeiling_IsOffAtZeroPercent()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.JuniorAgent);
+        var (year, week) = Now();
+        await ChargeAsync(ctx, year, week, 19_000);
+        var config = Config(Rank.JuniorAgent, 20_000, 0);
+        config.Ranks[LlmQuotaConfig.RankKey(Rank.JuniorAgent)].DailyPercent = 0;
+
+        var status = await Build(ctx, config).EnsureAvailableAsync(
+            ClaimsPrincipalBuilder.Agent(AgentId).WithRank(Rank.JuniorAgent).Build());
+
+        Assert.Equal(0L, status.DailyLimit);
+        Assert.False(status.IsDayBlocked);
+    }
+
+    [Fact]
+    public async Task ExhaustedWeek_OutranksTheDailyCeiling()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentAsync(ctx, Rank.JuniorAgent);
+        var (year, week) = Now();
+        await ChargeAsync(ctx, year, week, 20_000);
+
+        var ex = await Assert.ThrowsAsync<LlmQuotaExceededException>(() => Build(ctx).EnsureAvailableAsync(
+            ClaimsPrincipalBuilder.Agent(AgentId).WithRank(Rank.JuniorAgent).Build()));
+
+        // both ceilings are crossed; "come back tomorrow" would be a lie when the week is gone until Monday
+        Assert.Contains("aufgebraucht", ex.Message);
     }
 
     [Fact]
@@ -513,6 +585,60 @@ public sealed class LlmQuotaServiceTests
         var all = await Build(ctx).GetAllStatusAsync(Leader());
 
         Assert.Equal(["A-Plain", "B-Admin"], all.Select(s => s.Codename ?? string.Empty).ToArray());
+    }
+
+    [Fact]
+    public async Task TheRosterAndTheSingleAgentPath_AgreeOnEveryNumber()
+    {
+        using var ctx = new SqliteTestContext();
+        var (year, week) = Now();
+        var (priorYear, priorWeek) = IsoWeekPeriod.Previous(year, week);
+        await using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a-one", Rank.SeniorSpecialAgent, configure: a =>
+            {
+                a.Rank = Rank.SeniorSpecialAgent;
+                a.Codename = "A-Eins";
+            }));
+            db.Users.Add(Seed.Agent("a-two", Rank.Director, configure: a =>
+            {
+                a.Rank = Rank.Director;
+                a.Codename = "B-Zwei";
+                a.LlmQuotaOverride = 90_000;
+            }));
+            // an unclosed prior week for one of them, so the roster has to replay a carry chain, not just read sums
+            db.LlmRequests.Add(new LlmRequestLog
+            {
+                AgentId = "a-one", CreatedAt = DateTime.UtcNow.AddDays(-9), BudgetYear = priorYear,
+                BudgetWeek = priorWeek, Feature = LlmFeature.Chat, QuotaTokens = 10_000, Success = true,
+            });
+            db.LlmRequests.Add(new LlmRequestLog
+            {
+                AgentId = "a-two", CreatedAt = DateTime.UtcNow, BudgetYear = year, BudgetWeek = week,
+                Feature = LlmFeature.Chat, QuotaTokens = 4_000, Success = true,
+            });
+            db.LlmQuotaAdjustments.Add(new LlmQuotaAdjustment
+            {
+                AgentId = "a-two", Year = year, Week = week, Tokens = 1_000, Reason = "Korrektur",
+                CreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var svc = Build(ctx);
+        var roster = await svc.GetAllStatusAsync(Leader());
+        // the roster reads four grouped queries instead of seven per agent; the numbers may not move because of it
+        foreach (var row in roster)
+        {
+            var single = await svc.GetStatusAsync(row.AgentId, Leader());
+            Assert.Equal(single.BaseWeekly, row.BaseWeekly);
+            Assert.Equal(single.CarryIn, row.CarryIn);
+            Assert.Equal(single.Consumed, row.Consumed);
+            Assert.Equal(single.ConsumedToday, row.ConsumedToday);
+            Assert.Equal(single.DailyLimit, row.DailyLimit);
+        }
+        Assert.Equal(2, roster.Count);
+        Assert.Equal(3_000L, roster.Single(r => r.AgentId == "a-two").Consumed);
     }
 
     // ---- who may read a quota ----

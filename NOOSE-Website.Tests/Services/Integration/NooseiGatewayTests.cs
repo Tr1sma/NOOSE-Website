@@ -53,13 +53,13 @@ public sealed class NooseiGatewayTests
 
         var configService = Substitute.For<ILlmQuotaConfigService>();
         configService.GetAsync(Arg.Any<CancellationToken>()).Returns(LlmQuotaConfig.Default());
-        var quota = new LlmQuotaService(ctx.Factory, configService);
+        var tuning = Options.Create(Tuning(configure));
+        var quota = new LlmQuotaService(ctx.Factory, configService, tuning, NullLogger<LlmQuotaService>.Instance);
 
         var llm = Substitute.For<ILlmService>();
         llm.IsConfigured.Returns(true);
 
-        var gateway = new NooseiGateway(llm, quota, Options.Create(Tuning(configure)),
-            NullLogger<NooseiGateway>.Instance);
+        var gateway = new NooseiGateway(llm, quota, tuning, NullLogger<NooseiGateway>.Instance);
         return (gateway, llm, quota);
     }
 
@@ -251,6 +251,187 @@ public sealed class NooseiGatewayTests
     }
 
     [Fact]
+    public async Task Ask_KeepsTheToolBlockInThePayload_WhenTheChoiceIsWithdrawn()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx, configure: o => o.MaxToolRounds = 1);
+        var shapes = new List<(bool HasTools, bool Offers)>();
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<LlmRequest>();
+                shapes.Add((request.Tools is { Count: > 0 }, request.OffersTools));
+                return request.OffersTools
+                    ? Result(null, 0.001m, new LlmToolCall("c", "suche_akten", "{}"))
+                    : Result("Endlich", 0.001m);
+            });
+
+        await gateway.AskAsync(
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("nichts gefunden"))), Agent());
+
+        // a transcript carrying tool roles without a tool block is an invalid request shape, and dropping the
+        // block would also break the cached prefix on the round with the largest transcript
+        Assert.All(shapes, s => Assert.True(s.HasTools));
+        Assert.Equal([true, false], shapes.Select(s => s.Offers));
+    }
+
+    [Fact]
+    public async Task Ask_TellsTheModelTheToolsAreGone_SoItAnswersInsteadOfAnnouncing()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx, configure: o => o.MaxToolRounds = 1);
+        var lastMessages = new List<LlmMessage>();
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<LlmRequest>();
+                lastMessages = [.. request.Messages];
+                return request.OffersTools
+                    ? Result(null, 0.001m, new LlmToolCall("c", "suche_akten", "{}"))
+                    : Result("Endlich", 0.001m);
+            });
+
+        await gateway.AskAsync(
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("nichts gefunden"))), Agent());
+
+        var notice = Assert.Single(lastMessages.Where(m => m.Content == NooseiPrompts.ToolsGoneRounds));
+        Assert.Equal(LlmRole.System, notice.Role);
+        // at the end, so the stable prompt prefix in front of it stays cacheable
+        Assert.Equal(lastMessages[^1], notice);
+    }
+
+    [Fact]
+    public async Task Ask_RefusesARepeatedToolCall_WithoutRunningItAgain()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx, configure: o => o.MaxToolRounds = 5);
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<LlmRequest>().OffersTools
+                // the same lookup over and over: a weak model's favourite way to burn every round
+                ? Result(null, 0.001m, new LlmToolCall("c", "suche_akten", """{"suchtext":"Ballas"}"""))
+                : Result("Aufgegeben", 0.001m));
+        var runs = 0;
+
+        var answer = await gateway.AskAsync(
+            Call([Tool()], (_, _) =>
+            {
+                runs++;
+                return Task.FromResult(NooseiToolOutcome.Plain("nichts gefunden"));
+            }), Agent());
+
+        Assert.Equal(1, runs);
+        Assert.Equal("Aufgegeben", answer.Text);
+        // round 1 executes, round 2 repeats and is refused, round 3 answers without tools
+        Assert.Equal(3, answer.Rounds);
+        Assert.Contains(answer.Transcript, m => m.Content == NooseiPrompts.RepeatedToolCall);
+        Assert.Contains(answer.Transcript, m => m.Content == NooseiPrompts.ToolsGoneLoop);
+    }
+
+    [Fact]
+    public async Task Ask_MarksARefusedRepeatAsBarren_SoItIsNotStoredAsAResult()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx, configure: o => o.MaxToolRounds = 5);
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<LlmRequest>().OffersTools
+                ? Result(null, 0.001m, new LlmToolCall("c", "suche_akten", "{}"))
+                : Result("Fertig", 0.001m));
+
+        var answer = await gateway.AskAsync(
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("nichts"))), Agent());
+
+        Assert.Equal("c", Assert.Single(answer.BarrenTools!));
+    }
+
+    [Fact]
+    public async Task Ask_MarksADeadToolAsBarren_ButLeavesTheTextForTheModel()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx, configure: o => o.MaxToolRounds = 1);
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<LlmRequest>().OffersTools
+                ? Result(null, 0.001m, new LlmToolCall("c", "lies_akte", "{}"))
+                : Result("Trotzdem geantwortet", 0.001m));
+
+        var answer = await gateway.AskAsync(
+            Call([Tool()], (_, _) => throw new InvalidOperationException("Tool kaputt")), Agent());
+
+        Assert.Equal("c", Assert.Single(answer.BarrenTools!));
+        // the model still has to learn that the lookup failed, it just must not be replayed forever
+        Assert.Contains(answer.Transcript, m => m.Role == LlmRole.Tool && m.Content!.Contains("nicht ausgeführt"));
+    }
+
+    [Fact]
+    public async Task Ask_CapsTheAnswerLength_FromTheFeatureConfiguration()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx,
+            configure: o => o.MaxAnswerTokensByFeature[LlmFeature.Chat] = 900);
+        LlmRequest? sent = null;
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                sent = call.Arg<LlmRequest>();
+                return Result();
+            });
+
+        await gateway.AskAsync(Call(), Agent());
+
+        // without a ceiling the provider default applies and "length" can never be detected at all
+        Assert.Equal(900, sent!.MaxTokens);
+    }
+
+    [Fact]
+    public async Task Ask_KeepsACallersOwnAnswerCeiling()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx,
+            configure: o => o.MaxAnswerTokensByFeature[LlmFeature.Chat] = 900);
+        LlmRequest? sent = null;
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                sent = call.Arg<LlmRequest>();
+                return Result();
+            });
+
+        await gateway.AskAsync(Call() with { MaxTokens = 4_000 }, Agent());
+
+        Assert.Equal(4_000, sent!.MaxTokens);
+    }
+
+    [Fact]
+    public async Task Ask_SaysTheAnswerWasCutOff_WhenTheEndpointStoppedOnLength()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx);
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new LlmResult("Halber Sat", [], new LlmUsage(100, 20, 120, 0, 0, 0.01m),
+                "Baidu", "vendor/model", "length", "gen-1", 1, 42));
+
+        var answer = await gateway.AskAsync(Call(), Agent());
+
+        Assert.True(answer.Truncated);
+    }
+
+    [Fact]
+    public async Task Ask_CountsARepeatedCallOnce_InTheTouchedToolRefs()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx, configure: o => o.MaxToolRounds = 5);
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<LlmRequest>().OffersTools
+                ? Result(null, 0.001m, new LlmToolCall("c", "suche_akten", "{}"))
+                : Result("Fertig", 0.001m));
+
+        var answer = await gateway.AskAsync(
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("nichts"))), Agent());
+
+        // a refused repeat is not a tool invocation, so the request log must not count it as one
+        Assert.Single(answer.Refs!.Where(r => r.Kind == "tool"));
+    }
+
+    [Fact]
     public async Task Ask_AnswersWithoutFileAccess_WhenTheEndpointRefusesTools()
     {
         using var ctx = new SqliteTestContext();
@@ -265,6 +446,41 @@ public sealed class NooseiGatewayTests
 
         Assert.True(answer.Degraded);
         Assert.Equal("Ohne Akten", answer.Text);
+    }
+
+    [Fact]
+    public async Task Ask_DropsToolRolesFromTheDowngrade_SoTheRetryIsAValidShape()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx);
+        var round = 0;
+        IReadOnlyList<LlmMessage> retry = [];
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<LlmRequest>();
+                round++;
+                if (round == 1)
+                {
+                    return Result(null, 0.001m, new LlmToolCall("c", "suche_akten", "{}"));
+                }
+                // the endpoint loses tool support between rounds; the retry must not carry the tool rows
+                if (request.OffersTools)
+                {
+                    throw new LlmCapabilityException(schemaRelated: false, toolsRelated: true);
+                }
+                retry = request.Messages;
+                return Result("Ohne Akten", 0.001m);
+            });
+
+        var answer = await gateway.AskAsync(
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("Ballas gefunden"))), Agent());
+
+        Assert.True(answer.Degraded);
+        Assert.DoesNotContain(retry, m => m.Role == LlmRole.Tool);
+        Assert.DoesNotContain(retry, m => m.ToolCalls is { Count: > 0 });
+        // the text survives as plain context rather than being thrown away
+        Assert.Contains(retry, m => m.Content is { } c && c.Contains("Ballas gefunden"));
     }
 
     // ---- what a turn touched ----

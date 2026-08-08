@@ -27,6 +27,27 @@ public sealed class LlmOptions
             ? model.Trim()
             : Model;
 
+    /// <summary>List price per model, for the token-based cost floor in <see cref="LlmQuotaMath" />. Deploy
+    /// configuration like the model and the key — a price is money and never belongs in the database.</summary>
+    public Dictionary<string, LlmModelPrice> PriceByModel { get; set; } = new();
+
+    /// <summary>Configured price of a model, matched case-insensitively; null when none is set.</summary>
+    public LlmModelPrice? PriceFor(string? model)
+    {
+        if(string.IsNullOrWhiteSpace(model))
+        {
+            return null;
+        }
+        foreach (var (key, price) in PriceByModel)
+        {
+            if (string.Equals(key, model, StringComparison.OrdinalIgnoreCase))
+            {
+                return price;
+            }
+        }
+        return null;
+    }
+
     /// <summary>Deployment-wide egress kill switch for classified/VS content. The per-record decision is made by the
     /// viewer's own scope long before this point; flip it off only when pointing at an endpoint you do not trust.</summary>
     public bool AllowClassifiedEgress { get; set; } = true;
@@ -52,8 +73,11 @@ public sealed class LlmOptions
     /// <summary>Extra attempts after the first on transient upstream failures (429/404/5xx/timeout).</summary>
     public int Retries { get; set; } = 2;
 
-    /// <summary>Delay before a retry.</summary>
+    /// <summary>Delay before the first retry; doubles per attempt. Zero disables waiting entirely.</summary>
     public int RetryDelayMs { get; set; } = 750;
+
+    /// <summary>Ceiling on the backoff, and on an endpoint's own Retry-After hint.</summary>
+    public int RetryMaxDelayMs { get; set; } = 6_000;
 
     /// <summary>Offer the record-database tools to the model at all; off makes NOOSEI answer without file access.</summary>
     public bool ToolsEnabled { get; set; } = true;
@@ -70,8 +94,24 @@ public sealed class LlmOptions
     /// <summary>Ceiling over the whole turn; the HttpClient timeout only bounds one round.</summary>
     public int TurnTimeoutSeconds { get; set; } = 120;
 
-    /// <summary>How many stored conversation messages are replayed into a new turn.</summary>
-    public int HistoryMessages { get; set; } = 20;
+    /// <summary>Token budget of the replayed conversation history. Measured in tokens, not rows: one turn with four
+    /// tool calls fills six rows, so a row count is both too short for a conversation and too expensive per round.</summary>
+    public int HistoryTokenBudget { get; set; } = 12_000;
+
+    /// <summary>Ceiling on how many past turns are replayed, whatever the budget allows.</summary>
+    public int HistoryTurns { get; set; } = 8;
+
+    /// <summary>Ceiling on the answer of a feature, in tokens; anything unset leaves it to the endpoint's default.
+    /// Without one <see cref="LlmResult.FinishReason" /> never says "length" and a cut-off answer is stored as if
+    /// it were whole — the model then reads its own torso back as a finished statement.</summary>
+    public Dictionary<LlmFeature, int> MaxAnswerTokensByFeature { get; set; } = new()
+    {
+        [LlmFeature.Chat] = 1_200,
+    };
+
+    /// <summary>Answer ceiling of a feature, or null when it has none.</summary>
+    public int? MaxAnswerTokensFor(LlmFeature feature)
+        => MaxAnswerTokensByFeature.TryGetValue(feature, out var max) && max > 0 ? max : null;
 
     /// <summary>Beyond this the tools are withdrawn for the rest of the turn.</summary>
     public decimal MaxCostPerTurnUsd { get; set; } = 0.05m;
@@ -90,6 +130,14 @@ public sealed class LlmOptions
 
     /// <summary>True only when enabled AND fully configured.</summary>
     public bool IsConfigured => Enabled && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(Model);
+}
+
+/// <summary>Per-million-token list price of one model.</summary>
+public sealed class LlmModelPrice
+{
+    public decimal InputPerMillionUsd { get; set; }
+
+    public decimal OutputPerMillionUsd { get; set; }
 }
 
 /// <summary>Where the structured-output fallback ladder starts for a deployment.</summary>

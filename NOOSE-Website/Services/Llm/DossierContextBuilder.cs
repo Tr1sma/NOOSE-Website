@@ -37,6 +37,7 @@ public static class DossierContextBuilder
             nameof(Case) => await BuildCaseAsync(db, entityId, scope, cancellationToken),
             nameof(Taskforce) => await BuildTaskforceAsync(db, entityId, scope, cancellationToken),
             nameof(Document) => await BuildDocumentAsync(db, entityId, scope, cancellationToken),
+            nameof(Law) => await BuildLawAsync(db, entityId, scope, cancellationToken),
             _ => null,
         };
 
@@ -584,6 +585,34 @@ public static class DossierContextBuilder
         return new DossierContext(d.Title, sb.ToString(), d.IsRestricted);
     }
 
+    /// <summary>A statute. The only stock with no classification at all, so the viewer scope is only ever used to
+    /// mask the records linked to it.</summary>
+    static async Task<DossierContext?> BuildLawAsync(AppDbContext db, string id, ViewerScope? scope, CancellationToken ct)
+    {
+        var l = await db.Laws.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (l is null)
+        {
+            return null;
+        }
+        var view = scope ?? DossierScope.ForRecord(DocumentClassification.None);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Gesetz");
+        Line(sb, "Gesetzbuch", l.LawBook);
+        Line(sb, "Paragraf", l.Paragraph);
+        Line(sb, "Titel", l.Title);
+        Line(sb, "Strafmaß", l.Sentence);
+        if (Free(l.Text) is { Length: > 0 } text)
+        {
+            sb.AppendLine("— Wortlaut —");
+            sb.AppendLine(text);
+        }
+
+        await AppendAttachmentsAsync(sb, db, nameof(Law), id, includeClassificationHistory: false, view, ct);
+        var title = $"{l.Paragraph} {l.Title}".Trim();
+        return new DossierContext(title.Length == 0 ? "Gesetz" : title, sb.ToString(), false);
+    }
+
     // ---- shared section renderers ----
 
     static async Task AppendMembersAsync(StringBuilder sb, IQueryable<MemberProj> query, string roleLabel, ViewerScope view, CancellationToken ct)
@@ -884,6 +913,7 @@ public static class DossierContextBuilder
         nameof(Case) => "Vorgang",
         nameof(Taskforce) => "Taskforce",
         nameof(Document) => "Dokument",
+        nameof(Law) => "Gesetz",
         _ => "Eintrag",
     };
 

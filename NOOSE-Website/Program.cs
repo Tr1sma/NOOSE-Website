@@ -235,6 +235,9 @@ builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_W
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.RecentChangesTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ResolveMentionTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.GetBriefTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ReadCalendarTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.ExplainThreatScoreTool>();
+builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.INooseiTool, NOOSE_Website.Services.Llm.Tools.MyRecordsTool>();
 builder.Services.AddScoped<NOOSE_Website.Services.Llm.Tools.NooseiToolRegistry>();
 builder.Services.AddScoped<INooseiChatService, NooseiChatService>();
 builder.Services.AddScoped<ITextAssistService, TextAssistService>();

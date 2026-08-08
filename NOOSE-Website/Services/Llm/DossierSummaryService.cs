@@ -113,7 +113,7 @@ public sealed class DossierSummaryService(
         existing.ContentHash = hash;
         existing.BriefJson = JsonSerializer.Serialize(brief, DossierBrief.Json);
         existing.SchemaVersion = NooseiSchemas.KurzbriefVersion;
-        existing.PromptVersion = NooseiPrompts.PromptVersion;
+        existing.PromptVersion = NooseiPrompts.BriefPromptVersion;
         existing.Model = _o.ModelFor(LlmFeature.Brief);
         existing.GeneratedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
@@ -305,7 +305,7 @@ public sealed class DossierSummaryService(
     /// <summary>Content hash incl. prompt and schema version, so a prompt bump invalidates every stored brief.</summary>
     private static string Hash(string text)
     {
-        var seed = $"v{NooseiPrompts.PromptVersion}/{NooseiSchemas.KurzbriefVersion}\n"
+        var seed = $"v{NooseiPrompts.BriefPromptVersion}/{NooseiSchemas.KurzbriefVersion}\n"
             + VolatileHashLines.Replace(text, string.Empty);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(seed)));
     }

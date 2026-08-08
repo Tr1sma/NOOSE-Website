@@ -34,7 +34,8 @@ public sealed class FilterRecordsToolTests
             Substitute.For<IPersonGroupService>(),
             Substitute.For<IPartyService>(),
             Substitute.For<ICaseService>(),
-            Substitute.For<IOperationService>());
+            Substitute.For<IOperationService>(),
+            new LawService(ctx.Factory));
     }
 
     private static void Seed(SqliteTestContext ctx)
@@ -172,6 +173,52 @@ public sealed class FilterRecordsToolTests
             Args("""{"typ":"Person","einstufung":"Prüffall","nur_anzahl":true}"""), NooseiToolContext.From(Leader()));
 
         Assert.StartsWith("1 Person entspricht", result.Text);
+    }
+
+    [Fact]
+    public async Task WantedOnly_FiltersAndCarriesTheReason()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.People.Add(Infrastructure.Seed.Person(id: "p-wanted", name: "Willi Wanted", configure: p =>
+            {
+                p.IsWanted = true;
+                p.WantedReason = "Bewaffneter Raubüberfall";
+            }));
+            db.People.Add(Infrastructure.Seed.Person(id: "p-quiet", name: "Ruhiger Rudi"));
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Tool(ctx).InvokeAsync(
+            Args("""{"typ":"Person","nur_fahndung":true}"""), NooseiToolContext.From(Leader()));
+
+        Assert.Contains("Willi Wanted", result.Text);
+        Assert.Contains("Zur Fahndung: Bewaffneter Raubüberfall", result.Text);
+        Assert.DoesNotContain("Ruhiger Rudi", result.Text);
+        // the applied filter is repeated, so a bare count cannot be read as a different question's answer
+        Assert.Contains("nur zur Fahndung ausgeschrieben", result.Text);
+    }
+
+    [Fact]
+    public async Task WantedOnly_StaysInsideTheAskersScope()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.People.Add(Infrastructure.Seed.Person(id: "p-secret-wanted", name: "Gerd Geheim", configure: p =>
+            {
+                p.IsClassified = true;
+                p.IsWanted = true;
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Tool(ctx).InvokeAsync(
+            Args("""{"typ":"Person","nur_fahndung":true,"nur_anzahl":true}"""), NooseiToolContext.From(Junior()));
+
+        Assert.StartsWith("0 Personen", result.Text);
+        Assert.DoesNotContain("Gerd Geheim", result.Text);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
 using NOOSE_Website.Services;
@@ -19,13 +20,30 @@ public sealed class NooseiChatServiceTests
     private static ClaimsPrincipal Actor(string id = Owner, Rank rank = Rank.SpecialAgent)
         => ClaimsPrincipalBuilder.Agent(id).WithRank(rank).Build();
 
-    private static NooseiAnswer Answer(string text = "Antwort", IReadOnlyList<LlmMessage>? transcript = null)
-        => new(text, LlmUsage.Empty, new LlmQuotaCharge(120, 0.0012m, LlmQuotaStatus.Empty, null, true),
-            1, transcript ?? [], false);
+    /// <summary>An answer whose transcript has the real shape: everything that was sent, then what the turn added.
+    /// The service stores only the tail, so a test that skips the sent part stores nothing.</summary>
+    private static NooseiAnswer Answer(
+        string text = "Antwort", IReadOnlyList<LlmMessage>? added = null, NooseiCall? call = null,
+        bool truncated = false, bool degraded = false, IReadOnlyList<string>? barren = null)
+    {
+        IReadOnlyList<LlmMessage> sent = call?.Messages ?? [];
+        return new NooseiAnswer(text, LlmUsage.Empty,
+            new LlmQuotaCharge(120, 0.0012m, LlmQuotaStatus.Empty, null, true),
+            1, [.. sent, .. added ?? []], degraded, truncated, null, barren);
+    }
+
+    /// <summary>One tool round as the gateway builds it: the call, then its result.</summary>
+    private static List<LlmMessage> Round(string id, string tool, string result) =>
+    [
+        LlmMessage.Assistant(null, [new LlmToolCall(id, tool, """{"suchtext":"Otto"}""")]),
+        LlmMessage.Tool(id, tool, result),
+    ];
 
     private static (NooseiChatService Svc, INooseiGateway Gateway) Build(
-        SqliteTestContext ctx, Func<NooseiCall, NooseiAnswer>? respond = null)
+        SqliteTestContext ctx, Func<NooseiCall, NooseiAnswer>? respond = null, Action<LlmOptions>? tune = null)
     {
+        var options = new LlmOptions();
+        tune?.Invoke(options);
         var gateway = Substitute.For<INooseiGateway>();
         gateway.IsConfigured.Returns(true);
         gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
@@ -36,7 +54,8 @@ public sealed class NooseiChatServiceTests
 
         var registry = new NooseiToolRegistry([new ResolveMentionTool(Substitute.For<IMentionService>())]);
 
-        return (new NooseiChatService(ctx.Factory, gateway, settings, registry, NullLogger<NooseiChatService>.Instance), gateway);
+        return (new NooseiChatService(ctx.Factory, gateway, settings, registry, Options.Create(options),
+            NullLogger<NooseiChatService>.Instance), gateway);
     }
 
     private static async Task SeedAgentsAsync(SqliteTestContext ctx)
@@ -164,12 +183,11 @@ public sealed class NooseiChatServiceTests
     {
         using var ctx = new SqliteTestContext();
         await SeedAgentsAsync(ctx);
-        var transcript = new List<LlmMessage> { LlmMessage.Tool("c1", "suche_akten", "• Person | Otto Offen") };
         var replayed = new List<string>();
         var (svc, _) = Build(ctx, call =>
         {
             replayed.Add(string.Join("\n", call.Messages.Select(m => m.Content)));
-            return Answer(transcript: transcript);
+            return Answer(added: Round("c1", "suche_akten", "• Person | Otto Offen"), call: call);
         });
 
         var first = await svc.AskAsync(null, "Erste Frage", Actor());
@@ -183,12 +201,11 @@ public sealed class NooseiChatServiceTests
     {
         using var ctx = new SqliteTestContext();
         await SeedAgentsAsync(ctx);
-        var transcript = new List<LlmMessage> { LlmMessage.Tool("c1", "lies_akte", "Geheime Akteninhalte") };
         var replayed = new List<string>();
         var (svc, _) = Build(ctx, call =>
         {
             replayed.Add(string.Join("\n", call.Messages.Select(m => m.Content)));
-            return Answer(transcript: transcript);
+            return Answer(added: Round("c1", "lies_akte", "Geheime Akteninhalte"), call: call);
         });
 
         // turn 1 as leadership, turn 2 after losing that right
@@ -199,6 +216,51 @@ public sealed class NooseiChatServiceTests
         Assert.DoesNotContain("Geheime Akteninhalte", replayed[1]);
         // the agent's own turn survives; only the tool result is withheld
         Assert.Contains("Erste Frage", replayed[1]);
+    }
+
+    [Fact]
+    public async Task Answer_CarriesTheToolsItRests_On_LiveAndReopened()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(added:
+            [
+                .. Round("c1", "suche_akten", "• Person | Otto Offen"),
+                .. Round("c2", "lies_akte", "Akte Otto Offen"),
+                .. Round("c3", "suche_akten", "• Person | Erika Muster"),
+            ], call: call));
+
+        var turn = await svc.AskAsync(null, "Wer ist Otto?", Actor());
+
+        // in call order, repeats folded into a count — and the German label, not the identifier
+        Assert.Equal(["suche_akten", "lies_akte"], turn.Answer.Tools.Select(t => t.Name));
+        Assert.Equal(2, turn.Answer.Tools[0].Count);
+        Assert.Equal("Aktensuche", turn.Answer.Tools[0].Label);
+
+        // the same list must come back from storage, or the trace vanishes on reopening
+        var reopened = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+        var answer = Assert.Single(reopened, m => !m.FromUser);
+        Assert.Equal(["suche_akten", "lies_akte"], answer.Tools.Select(t => t.Name));
+        Assert.Equal(2, answer.Tools[0].Count);
+        // the agent's own turn rests on nothing
+        Assert.Empty(reopened.First(m => m.FromUser).Tools);
+    }
+
+    [Fact]
+    public async Task AToolCallThatProducedNothing_LeavesNoTraceEntry()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(added:
+            [
+                .. Round("c1", "suche_akten", "• Person | Otto Offen"),
+                .. Round("c2", "lies_akte", "Werkzeug konnte nicht ausgeführt werden."),
+            ], call: call, barren: ["c2"]));
+
+        var turn = await svc.AskAsync(null, "Wer ist Otto?", Actor());
+
+        // barren rows are deliberately not stored, so the trace shows what the answer actually rests on
+        Assert.Equal(["suche_akten"], turn.Answer.Tools.Select(t => t.Name));
     }
 
     [Fact]
@@ -505,5 +567,170 @@ public sealed class NooseiChatServiceTests
         var answer = Assert.Single(reopened, m => !m.FromUser);
         Assert.Equal("Max Mustermann", Assert.Single(answer.Sources).Name);
         Assert.Empty(reopened.Single(m => m.FromUser).Sources);
+    }
+
+    // ---- the tool exchange in the history ----
+
+    [Fact]
+    public async Task Ask_ReplaysTheToolExchangeAsRealToolRoles_WithTheArgumentsIntact()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var seen = new List<IReadOnlyList<LlmMessage>>();
+        var (svc, _) = Build(ctx, call =>
+        {
+            seen.Add(call.Messages);
+            return Answer(added: Round("c1", "suche_akten", "• Person | Otto Offen"), call: call);
+        });
+
+        var first = await svc.AskAsync(null, "Erste Frage", Actor());
+        await svc.AskAsync(first.ConversationId, "Zweite Frage", Actor());
+
+        var result = Assert.Single(seen[1], m => m.Role == LlmRole.Tool);
+        Assert.Equal("c1", result.ToolCallId);
+        Assert.Equal("suche_akten", result.Name);
+        var asked = Assert.Single(seen[1], m => m.ToolCalls is { Count: > 0 });
+        // the arguments are the point: "Keine Treffer." without what was searched for invites the same call again
+        Assert.Contains("Otto", Assert.Single(asked.ToolCalls!).ArgumentsJson);
+    }
+
+    [Fact]
+    public async Task Ask_StoresEachTurnOnce_NotTheReplayedHistoryAgain()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(added: Round("c1", "suche_akten", "Treffer"), call: call));
+
+        var first = await svc.AskAsync(null, "Eins", Actor());
+        await svc.AskAsync(first.ConversationId, "Zwei", Actor());
+        await svc.AskAsync(first.ConversationId, "Drei", Actor());
+
+        await using var check = ctx.NewContext();
+        var rows = await check.NooseiMessages.Where(m => m.ConversationId == first.ConversationId).ToListAsync();
+        Assert.Equal(3, rows.Count(r => r.Role == "tool"));
+        Assert.Equal(3, rows.Count(r => r.Role == NooseiHistoryWindow.ToolCallRole));
+        Assert.Equal(3, rows.Count(r => r.Role == "user"));
+    }
+
+    [Fact]
+    public async Task Ask_DropsAToolRowThatProducedNothing_TogetherWithTheCallThatAskedForIt()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(
+            added: Round("c1", "lies_akte", "Werkzeug konnte nicht ausgeführt werden."), call: call, barren: ["c1"]));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+
+        await using var check = ctx.NewContext();
+        var rows = await check.NooseiMessages.Where(m => m.ConversationId == turn.ConversationId).ToListAsync();
+        Assert.DoesNotContain(rows, r => r.Role == "tool");
+        // the call row goes with it: a tool_calls message without an answer is the same invalid shape
+        Assert.DoesNotContain(rows, r => r.Role == NooseiHistoryWindow.ToolCallRole);
+    }
+
+    [Fact]
+    public async Task Ask_HidesTheToolCallRowsFromTheChat()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(added: Round("c1", "suche_akten", "Treffer"), call: call));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+        var messages = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+
+        // a round that only carried tool calls has nothing to show; under "assistant" it would be an empty bubble
+        Assert.Equal(2, messages.Count);
+    }
+
+    // ---- caveats that outlive the snackbar ----
+
+    [Fact]
+    public async Task Ask_KeepsTheTruncatedAndDegradedMarks_WhenTheConversationIsReopened()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(call: call, truncated: true, degraded: true));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+        var reopened = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+
+        Assert.True(turn.Answer.Truncated);
+        var answer = Assert.Single(reopened, m => !m.FromUser);
+        Assert.True(answer.Truncated);
+        Assert.True(answer.Degraded);
+        // truncation must not use IsError, which would drop the row from every later replay
+        Assert.False(answer.IsError);
+    }
+
+    [Fact]
+    public async Task Ask_NotesACaseNumberNoToolReturned_AndStillKeepsTheAnswer()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call =>
+            Answer("Die Ballas [Fraktion Ballas · NOOSE-F-2026-0099] sind aktiv.", call: call));
+
+        var turn = await svc.AskAsync(null, "Was ist mit den Ballas?", Actor());
+        var reopened = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+
+        Assert.Contains("NOOSE-F-2026-0099", turn.Answer.UnsupportedNote);
+        Assert.DoesNotContain("existiert", turn.Answer.UnsupportedNote!);
+        // warned, not rejected: unlike proofreading there is no correct alternative to fall back on
+        Assert.Contains("Ballas", turn.Answer.Text);
+        Assert.Equal(turn.Answer.UnsupportedNote, Assert.Single(reopened, m => !m.FromUser).UnsupportedNote);
+    }
+
+    [Fact]
+    public async Task Ask_DoesNotComplain_WhenTheCitedRecordCameOutOfATool()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, _) = Build(ctx, call => Answer(
+            "Die Ballas [Fraktion Ballas · NOOSE-F-2026-0099] sind aktiv.",
+            added: Round("c1", "suche_akten", "• Fraktion | Ballas | Aktenzeichen: NOOSE-F-2026-0099 | id=f1"),
+            call: call));
+
+        var turn = await svc.AskAsync(null, "Was ist mit den Ballas?", Actor());
+
+        Assert.Null(turn.Answer.UnsupportedNote);
+    }
+
+    [Fact]
+    public async Task Ask_ReportsTheRightsChange_AndTellsTheModelAboutIt()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var seen = new List<IReadOnlyList<LlmMessage>>();
+        var (svc, _) = Build(ctx, call =>
+        {
+            seen.Add(call.Messages);
+            return Answer(added: Round("c1", "lies_akte", "Geheime Akteninhalte"), call: call);
+        });
+
+        var first = await svc.AskAsync(null, "Erste Frage", Actor(rank: Rank.Director));
+        var second = await svc.AskAsync(first.ConversationId, "Zweite Frage", Actor(rank: Rank.JuniorAgent));
+
+        Assert.True(second.ScopeChanged);
+        Assert.Contains(seen[1], m => m.Role == LlmRole.System && m.Content == NooseiPrompts.ScopeChanged);
+    }
+
+    [Fact]
+    public async Task Ask_StaysQuiet_WhenTheRightsDidNotChange()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var seen = new List<IReadOnlyList<LlmMessage>>();
+        var (svc, _) = Build(ctx, call =>
+        {
+            seen.Add(call.Messages);
+            return Answer(added: Round("c1", "lies_akte", "Akteninhalt"), call: call);
+        });
+
+        var first = await svc.AskAsync(null, "Erste Frage", Actor());
+        var second = await svc.AskAsync(first.ConversationId, "Zweite Frage", Actor());
+
+        Assert.False(second.ScopeChanged);
+        Assert.DoesNotContain(seen[1], m => m.Content == NooseiPrompts.ScopeChanged);
     }
 }

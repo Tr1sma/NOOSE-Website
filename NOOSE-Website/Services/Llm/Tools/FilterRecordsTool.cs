@@ -17,14 +17,16 @@ public sealed class FilterRecordsTool(
     IPersonGroupService groups,
     IPartyService parties,
     ICaseService cases,
-    IOperationService operations) : INooseiTool
+    IOperationService operations,
+    ILawService laws) : INooseiTool
 {
     public string Name => "finde_akten";
 
     public string Description =>
         "Findet Akten über Merkmale statt über Suchtext und zählt sie. Nutze es für Fragen der Form "
-        + "welche alle und wie viele: alle Personen einer Einstufung, alle Fraktionen über einem "
-        + "Bedrohungs-Score, alle seit X Tagen geänderten Akten. Für die Suche nach einem Namen nimm suche_akten.";
+        + "welche alle und wie viele: alle Personen einer Einstufung, alle zur Fahndung ausgeschriebenen "
+        + "Personen, alle Fraktionen über einem Bedrohungs-Score, alle seit X Tagen geänderten Akten. "
+        + "Für die Suche nach einem Namen nimm suche_akten.";
 
     public JsonElement ParameterSchema { get; } = NooseiLimits.Schema($$"""
         {
@@ -38,6 +40,8 @@ public sealed class FilterRecordsTool(
                             "description": "Nur Akten mit dieser Einstufung." },
             "lebensstatus": { "type": "string", "enum": ["Lebend","Tot","Flüchtig"],
                               "description": "Nur bei typ=Person; berücksichtigt das Respawn-Fenster." },
+            "nur_fahndung": { "type": "boolean",
+                              "description": "Nur bei typ=Person: nur zur Fahndung ausgeschriebene Personen." },
             "score_min": { "type": "integer", "minimum": 0, "maximum": 100,
                            "description": "Nur Akten mit Bedrohungs-Score ab diesem Wert (Person und Fraktion)." },
             "score_max": { "type": "integer", "minimum": 0, "maximum": 100 },
@@ -53,10 +57,12 @@ public sealed class FilterRecordsTool(
     public async Task<NooseiToolResult> InvokeAsync(JsonElement arguments, NooseiToolContext context, CancellationToken cancellationToken = default)
     {
         var german = NooseiLimits.Text(arguments, "typ");
-        var clr = NooseiRecordTypes.Clr(german);
+        var clr = NooseiRecordTypes.Clr(german, NooseiUse.List);
         if (clr is null)
         {
-            return new NooseiToolResult("Bitte einen gültigen Aktentyp angeben.", null, true);
+            return new NooseiToolResult(
+                "Über Merkmale durchsehen lassen sich nur: "
+                + string.Join(", ", NooseiRecordTypes.Names(NooseiUse.List)) + ".", null, true);
         }
 
         var rows = await LoadAsync(clr, context.Scope, cancellationToken);
@@ -92,8 +98,12 @@ public sealed class FilterRecordsTool(
         foreach (var row in shown)
         {
             sb.Append("• ").Append(row.Title)
-                .Append(" | Aktenzeichen: ").Append(string.IsNullOrWhiteSpace(row.CaseNumber) ? "—" : row.CaseNumber)
-                .Append(" | Einstufung: ").Append(ClassificationDisplay.Name(row.Classification));
+                .Append(" | Aktenzeichen: ").Append(string.IsNullOrWhiteSpace(row.CaseNumber) ? "—" : row.CaseNumber);
+            // a law has no classification at all; printing "Unbekannt" would read as one that was never set
+            if (row.Classification is { } classification)
+            {
+                sb.Append(" | Einstufung: ").Append(ClassificationDisplay.Name(classification));
+            }
             if (row.Score is { } score)
             {
                 sb.Append(" | Bedrohungs-Score: ").Append(score);
@@ -122,8 +132,7 @@ public sealed class FilterRecordsTool(
     {
         nameof(Data.Entities.People.Person) => (await people.GetListAsync(scope, cancellationToken))
             .Select(p => new Row(p.Id, p.Name, p.CaseNumber, p.Classification, p.SecrecyLevel, p.ThreatScore,
-                p.ModifiedAt, p.CreatedAt, "Lebensstatus: " + LifeStatusDisplay.Name(p.EffectiveLifeStatus),
-                p.EffectiveLifeStatus))
+                p.ModifiedAt, p.CreatedAt, Wanted(p), p.EffectiveLifeStatus, p.IsWanted))
             .ToList(),
         nameof(Data.Entities.Factions.Faction) => (await factions.GetListAsync(scope, cancellationToken))
             .Select(f => new Row(f.Id, f.Name, f.CaseNumber, f.Classification, f.SecrecyLevel, f.ThreatScore,
@@ -145,13 +154,27 @@ public sealed class FilterRecordsTool(
             .Select(o => new Row(o.Id, o.Title, o.CaseNumber, o.Classification, o.SecrecyLevel, null,
                 o.ModifiedAt, o.CreatedAt, "Status: " + OperationStatusDisplay.Name(o.Status)))
             .ToList(),
+        // the one stock without any classification: no case number, no secrecy, so both stay empty rather than
+        // being filled with a default that reads like a value somebody set
+        nameof(Data.Entities.Common.Law) => (await laws.GetListAsync(cancellationToken, scope.PartnerAgency, scope.MeId))
+            .Select(l => new Row(l.Id, $"{l.Paragraph} {l.Title}".Trim(), string.Empty, null,
+                DocumentClassification.None, null, l.ModifiedAt, l.CreatedAt,
+                string.IsNullOrWhiteSpace(l.LawBook) ? null : "Gesetzbuch: " + l.LawBook))
+            .ToList(),
         _ => null,
     };
 
+    /// <summary>The wanted note of a person, else their life status — one extra column, whichever says more.</summary>
+    private static string Wanted(Data.Entities.People.Person person)
+        => person.IsWanted
+            ? "Zur Fahndung" + (string.IsNullOrWhiteSpace(person.WantedReason) ? string.Empty : ": " + person.WantedReason)
+            : "Lebensstatus: " + LifeStatusDisplay.Name(person.EffectiveLifeStatus);
+
     /// <summary>One record reduced to what can be filtered on, whatever type it came from.</summary>
     private sealed record Row(
-        string Id, string Title, string CaseNumber, Classification Classification, DocumentClassification Secrecy,
-        int? Score, DateTime? ModifiedAt, DateTime CreatedAt, string? Extra = null, LifeStatus? LifeStatus = null)
+        string Id, string Title, string CaseNumber, Classification? Classification, DocumentClassification Secrecy,
+        int? Score, DateTime? ModifiedAt, DateTime CreatedAt, string? Extra = null, LifeStatus? LifeStatus = null,
+        bool IsWanted = false)
     {
         /// <summary>When the record was last touched. The audit interceptor stamps <c>ModifiedAt</c> only on an
         /// update, so a record created yesterday and never edited still has none — falling through to
@@ -161,7 +184,7 @@ public sealed class FilterRecordsTool(
 
     private sealed record Filter(
         Classification? Classification, LifeStatus? LifeStatus, int? ScoreMin, int? ScoreMax,
-        int? ChangedWithinDays, bool ClassifiedOnly)
+        int? ChangedWithinDays, bool ClassifiedOnly, bool WantedOnly)
     {
         public static Filter From(JsonElement args) => new(
             ParseLabel(NooseiLimits.Text(args, "einstufung"), ClassificationDisplay.All,
@@ -171,8 +194,8 @@ public sealed class FilterRecordsTool(
             Number(args, "score_min"),
             Number(args, "score_max"),
             Number(args, "geaendert_seit_tagen"),
-            args.ValueKind == JsonValueKind.Object
-                && args.TryGetProperty("nur_verschlusssache", out var vs) && vs.ValueKind == JsonValueKind.True);
+            Flag(args, "nur_verschlusssache"),
+            Flag(args, "nur_fahndung"));
 
         public bool Matches(Row row)
             => (Classification is not { } c || row.Classification == c)
@@ -180,7 +203,8 @@ public sealed class FilterRecordsTool(
                 && (ScoreMin is not { } min || row.Score >= min)
                 && (ScoreMax is not { } max || row.Score <= max)
                 && (ChangedWithinDays is not { } days || row.TouchedAt >= DateTime.UtcNow.AddDays(-days))
-                && (!ClassifiedOnly || row.Secrecy != DocumentClassification.None);
+                && (!ClassifiedOnly || row.Secrecy != DocumentClassification.None)
+                && (!WantedOnly || row.IsWanted);
 
         /// <summary>Repeats the applied filters, so a bare count cannot be read as a different question's answer.</summary>
         public string Describe()
@@ -192,8 +216,14 @@ public sealed class FilterRecordsTool(
             if (ScoreMax is { } max) { parts.Add($"Score bis {max}"); }
             if (ChangedWithinDays is { } days) { parts.Add($"in den letzten {days} Tagen angelegt oder geändert"); }
             if (ClassifiedOnly) { parts.Add("nur Verschlusssachen"); }
+            if (WantedOnly) { parts.Add("nur zur Fahndung ausgeschrieben"); }
             return parts.Count == 0 ? " (ohne Einschränkung)" : " (" + string.Join(", ", parts) + ")";
         }
+
+        private static bool Flag(JsonElement args, string name)
+            => args.ValueKind == JsonValueKind.Object
+                && args.TryGetProperty(name, out var value)
+                && value.ValueKind == JsonValueKind.True;
 
         private static int? Number(JsonElement args, string name)
             => args.ValueKind == JsonValueKind.Object

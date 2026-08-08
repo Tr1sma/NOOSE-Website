@@ -103,48 +103,123 @@ public sealed class NooseiToolRegistry
     public INooseiTool? Find(string name) => _byName.GetValueOrDefault(name);
 }
 
-/// <summary>Maps the German record type names the model sees to the CLR names the services expect.</summary>
+/// <summary>What NOOSEI may do with a record type.</summary>
+/// <remarks>Four axes, not one flag, because the tools genuinely differ in reach. With a single list of "known
+/// types" the narrowest tool decided for all of them, so the offering stood at eight kinds while the search, the
+/// chronicle and the law module already carried more.</remarks>
+[Flags]
+public enum NooseiUse
+{
+    /// <summary>Nameable in a result, nothing else.</summary>
+    None = 0,
+
+    /// <summary>Openable as a record — <c>lies_akte</c>, <c>hole_kurzbrief</c>, <c>lies_zeitstrahl</c> and both
+    /// graph tools. Requires a branch in <see cref="DossierContextBuilder" />.</summary>
+    Read = 1,
+
+    /// <summary>Enumerable by attribute in <c>finde_akten</c>. Requires a scope-filtered list service.</summary>
+    List = 2,
+
+    /// <summary>A category <c>suche_akten</c> may narrow to; <see cref="ISearchService" /> emits a group for it.</summary>
+    Search = 4,
+
+    /// <summary>A type <c>letzte_aenderungen</c> may filter on; the chronicle collects it.</summary>
+    Chronicle = 8,
+}
+
+/// <summary>One record type as the model names it, and what the tools may do with it.</summary>
+public sealed record NooseiRecordType(string German, string Clr, string Plural, NooseiUse Use = NooseiUse.None);
+
+/// <summary>Maps the German record type names the model sees to the CLR names the services expect, and decides
+/// which tool accepts which type.</summary>
 public static class NooseiRecordTypes
 {
-    private static readonly Dictionary<string, string> ToClr = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Person"] = "Person",
-        ["Fraktion"] = "Faction",
-        ["Personengruppe"] = "PersonGroup",
-        ["Partei"] = "Party",
-        ["Operation"] = "Operation",
-        ["Vorgang"] = "Case",
-        ["Taskforce"] = "Taskforce",
-        ["Dokument"] = "Document",
-    };
+    /// <summary>Order is load-bearing: it decides the order inside every schema enum, and the tool block is the
+    /// cached prompt prefix. Append, never reorder.</summary>
+    private static readonly NooseiRecordType[] All =
+    [
+        // record kinds proper: everything a tool may open
+        new("Person", "Person", "Personen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+        new("Fraktion", "Faction", "Fraktionen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+        new("Personengruppe", "PersonGroup", "Personengruppen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+        new("Partei", "Party", "Parteien", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+        new("Operation", "Operation", "Operationen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+        new("Vorgang", "Case", "Vorgänge", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+        // no plain list service: membership decides who sees a taskforce, release who sees a document
+        new("Taskforce", "Taskforce", "Taskforces", NooseiUse.Read | NooseiUse.Search | NooseiUse.Chronicle),
+        // the search emits no document group at all, so offering it as a filter would answer every question with zero hits
+        new("Dokument", "Document", "Dokumente", NooseiUse.Read | NooseiUse.Chronicle),
+        new("Gesetz", "Law", "Gesetze", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
 
-    private static readonly Dictionary<string, string> ToGerman =
-        ToClr.ToDictionary(p => p.Value, p => p.Key, StringComparer.Ordinal);
+        // nameable and filterable, but no dossier: reading one would have to go through its own visibility helper
+        new("Aufgabe", "Job", "Aufgaben", NooseiUse.Search | NooseiUse.Chronicle),
+        new("Aktivität", "AgentActivity", "Aktivitäten", NooseiUse.Search),
+        new("Personen-Dok", "PersonDoc", "Doks", NooseiUse.Search),
 
-    /// <summary>The enum values offered in every tool schema.</summary>
-    public const string EnumJson = """["Person","Fraktion","Personengruppe","Partei","Operation","Vorgang","Taskforce","Dokument"]""";
+        // label only. Search, chronicle and the graph all emit these; without a German name the model reads an
+        // English CLR name, takes it for a record kind and spends a round asking lies_akte for a rejected id
+        new("Termin", "Appointment", "Termine"),
+        new("Besprechung", "Meeting", "Besprechungen"),
+        new("Observation", "Observation", "Observationen"),
+        new("Asservat", "EvidenceItem", "Asservate"),
+        new("Asservat-Eintrag", "EvidenceEntry", "Asservat-Einträge"),
+        new("Kassenbuchung", "KassenBuchung", "Kassenbuchungen"),
+        new("Finanzierungsantrag", "FinancingRequest", "Finanzierungsanträge"),
+        new("Entführung", "AgentAbduction", "Entführungen"),
+        new("Bewerbung", "Bewerbung", "Bewerbungen"),
+        new("Quelle", "Source", "Quellen"),
+        new("Kommentar", "Comment", "Kommentare"),
+    ];
 
-    /// <summary>Types that can be listed wholesale by attribute. Taskforce and Dokument are missing on purpose:
-    /// neither has a plain scope-filtered list service, and both are gated by membership or release instead.</summary>
-    public const string ListableEnumJson = """["Person","Fraktion","Personengruppe","Partei","Operation","Vorgang"]""";
+    private static readonly Dictionary<string, NooseiRecordType> ByGerman =
+        All.ToDictionary(t => t.German, StringComparer.OrdinalIgnoreCase);
 
-    private static readonly Dictionary<string, string> Plurals = new(StringComparer.Ordinal)
-    {
-        ["Person"] = "Personen",
-        ["Faction"] = "Fraktionen",
-        ["PersonGroup"] = "Personengruppen",
-        ["Party"] = "Parteien",
-        ["Operation"] = "Operationen",
-        ["Case"] = "Vorgänge",
-        ["Taskforce"] = "Taskforces",
-        ["Document"] = "Dokumente",
-    };
+    private static readonly Dictionary<string, NooseiRecordType> ByClr =
+        All.ToDictionary(t => t.Clr, StringComparer.Ordinal);
 
-    public static string? Clr(string? german)
-        => german is not null && ToClr.TryGetValue(german, out var clr) ? clr : null;
+    /// <summary>The enum values offered where a type must be openable as a record.</summary>
+    public static readonly string EnumJson = Json(NooseiUse.Read);
 
-    public static string German(string clr) => ToGerman.GetValueOrDefault(clr, clr);
+    /// <summary>Types <c>finde_akten</c> can enumerate by attribute.</summary>
+    public static readonly string ListableEnumJson = Json(NooseiUse.List);
+
+    /// <summary>Categories <c>suche_akten</c> can narrow to.</summary>
+    public static readonly string SearchableEnumJson = Json(NooseiUse.Search);
+
+    /// <summary>Types <c>letzte_aenderungen</c> can filter on.</summary>
+    public static readonly string ChronicleEnumJson = Json(NooseiUse.Chronicle);
+
+    /// <summary>CLR name for a German type name; null when the name is unknown.</summary>
+    public static string? Clr(string? german) => Find(german)?.Clr;
+
+    /// <summary>CLR name only when the type also carries <paramref name="required" />.</summary>
+    /// <remarks>Every tool that takes a type argument goes through this overload. A schema enum is a hint, not a
+    /// guarantee — and a type that slips past it reaches a service that never gated it:
+    /// <see cref="Visibility.IsRecordVisibleAsync" /> answers "visible" for every type it does not know.</remarks>
+    public static string? Clr(string? german, NooseiUse required)
+        => Find(german) is { } type && type.Use.HasFlag(required) ? type.Clr : null;
+
+    /// <summary>German name of a type; never the CLR name, so no English label ever reaches the model.</summary>
+    public static string German(string clr)
+        => ByClr.TryGetValue(clr, out var type) ? type.German : "Eintrag";
 
     /// <summary>German plural of a record type, for count sentences.</summary>
-    public static string Plural(string clr) => Plurals.GetValueOrDefault(clr, German(clr));
+    public static string Plural(string clr)
+        => ByClr.TryGetValue(clr, out var type) ? type.Plural : German(clr);
+
+    /// <summary>True when <c>lies_akte</c> accepts this type. A hit of any other type must not carry an id.</summary>
+    public static bool IsReadable(string clr) => Can(clr, NooseiUse.Read);
+
+    public static bool Can(string? clr, NooseiUse use)
+        => clr is not null && ByClr.TryGetValue(clr, out var type) && type.Use.HasFlag(use);
+
+    /// <summary>German names carrying a capability, for schema enums and for saying what a tool does accept.</summary>
+    public static IReadOnlyList<string> Names(NooseiUse use)
+        => All.Where(t => t.Use.HasFlag(use)).Select(t => t.German).ToList();
+
+    private static NooseiRecordType? Find(string? german)
+        => german is not null && ByGerman.TryGetValue(german, out var type) ? type : null;
+
+    private static string Json(NooseiUse use)
+        => "[" + string.Join(",", Names(use).Select(n => "\"" + n + "\"")) + "]";
 }

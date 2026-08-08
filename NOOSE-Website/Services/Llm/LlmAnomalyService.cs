@@ -20,6 +20,10 @@ public sealed class LlmAnomalyService(
     IMemoryCache cache) : ILlmAnomalyService
 {
     private const string CacheKey = "ki:anomalien";
+
+    /// <summary>Upper bound on the rows one evaluation reads; the duplicate check is quadratic in them.</summary>
+    private const int MaxRows = 5_000;
+
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(60);
 
     public async Task<IReadOnlyList<LlmAnomalyFlag>> GetFlagsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -38,11 +42,22 @@ public sealed class LlmAnomalyService(
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
+        // newest first, then reversed: the rules walk the week in order, and a runaway week must not push its
+        // own burst out of the window. Prompt is longtext and only compared by its prefix — clip it in SQL.
         var rows = await db.LlmRequests.AsNoTracking()
             .Where(r => r.CreatedAt >= weekStartUtc && r.Success)
-            .OrderBy(r => r.CreatedAt)
-            .Select(r => new { r.AgentId, r.CreatedAt, r.QuotaTokens, r.PromptFingerprint, r.Prompt })
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(MaxRows)
+            .Select(r => new
+            {
+                r.AgentId,
+                r.CreatedAt,
+                r.QuotaTokens,
+                r.PromptFingerprint,
+                Prompt = r.Prompt!.Substring(0, LlmAnomalyEvaluator.MaxPromptCompareChars),
+            })
             .ToListAsync(cancellationToken);
+        rows.Reverse();
 
         var usage = rows
             .Select(r => new LlmUsageRow(r.AgentId, null, r.CreatedAt.ToLocalTime(), r.QuotaTokens,

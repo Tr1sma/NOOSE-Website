@@ -27,7 +27,9 @@ public static class LlmAnomalyEvaluator
     /// <summary>Pairs compared for near-identical prompts inside one window; a hard cap on the O(n²) part.</summary>
     private const int MaxBurstRows = 50;
 
-    private const int MaxPromptCompareChars = 512;
+    /// <summary>Prompt prefix the duplicate check compares. Public so the query can clip server-side instead of
+    /// shipping whole longtext columns only to throw the tail away here.</summary>
+    public const int MaxPromptCompareChars = 512;
 
     /// <summary>R1: one request costing a multiple of the rolling average. Judged at charge time, per row.</summary>
     public static bool IsCostSpike(long tokens, double baselineMean, int baselineCount, LlmAnomalyThresholds t)
@@ -153,6 +155,28 @@ public static class LlmAnomalyEvaluator
     private static int CountDuplicates(List<LlmUsageRow> window, int similarityPercent)
     {
         var flagged = new bool[window.Count];
+
+        // exact repeats first: a fingerprint match is a dictionary lookup, and the pair loop below skips any pair
+        // already flagged on both sides. For the realistic misuse case — the same question pasted again — that
+        // leaves no edit distance to compute at all.
+        var firstSeen = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < window.Count; i++)
+        {
+            if (window[i].PromptFingerprint is not { Length: > 0 } print)
+            {
+                continue;
+            }
+            if (firstSeen.TryGetValue(print, out var first))
+            {
+                flagged[first] = true;
+                flagged[i] = true;
+            }
+            else
+            {
+                firstSeen[print] = i;
+            }
+        }
+
         for (var i = 0; i < window.Count; i++)
         {
             for (var j = i + 1; j < window.Count; j++)
@@ -190,8 +214,11 @@ public static class LlmAnomalyEvaluator
         {
             return true;
         }
-        // edit distance, in memory: MySQL cannot translate it, which is why TextSimilarity exists at all
-        var distance = TextSimilarity.Distance(left, right);
+        // edit distance, in memory: MySQL cannot translate it, which is why TextSimilarity exists at all.
+        // Bounded on purpose: beyond this the pair is already too far apart to matter, and the row loop bails
+        // out after ~50 rows instead of all 512 — same verdict, an order of magnitude less work.
+        var budget = (int)Math.Floor(longest * (100d - similarityPercent) / 100d);
+        var distance = TextSimilarity.Distance(left, right, budget);
         return (1d - (double)distance / longest) * 100 >= similarityPercent;
     }
 

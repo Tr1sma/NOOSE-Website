@@ -76,7 +76,7 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                     {
                         logger.LogWarning("KI-Aufruf {Attempt}/{Attempts} verworfen: HTTP {Status} {Detail}",
                             attempt, attempts, status, detail);
-                        await DelayAsync(cancellationToken);
+                        await DelayAsync(attempt, response, cancellationToken);
                         continue;
                     }
 
@@ -115,7 +115,7 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                 {
                     logger.LogWarning("KI-Aufruf {Attempt}/{Attempts} nach {Seconds} s ohne Antwort abgebrochen",
                         attempt, attempts, _o.AttemptTimeoutSeconds);
-                    await DelayAsync(cancellationToken);
+                    await DelayAsync(attempt, null, cancellationToken);
                     continue;
                 }
                 logger.LogError("KI-Endpunkt hat in {Attempts} Versuchen nicht geantwortet (Modell {Model}, {Elapsed} ms)",
@@ -128,7 +128,7 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
                 if (!last)
                 {
                     logger.LogWarning(ex, "KI-Aufruf {Attempt}/{Attempts} auf Transportebene fehlgeschlagen", attempt, attempts);
-                    await DelayAsync(cancellationToken);
+                    await DelayAsync(attempt, null, cancellationToken);
                     continue;
                 }
                 logger.LogError(ex, "KI-Endpunkt nicht erreichbar (Modell {Model})", _o.Model);
@@ -137,8 +137,39 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
         }
     }
 
-    private Task DelayAsync(CancellationToken cancellationToken)
-        => _o.RetryDelayMs <= 0 ? Task.CompletedTask : Task.Delay(_o.RetryDelayMs, cancellationToken);
+    /// <summary>Wait before the next attempt: the endpoint's own hint when it sent one, otherwise exponential
+    /// with jitter so simultaneous circuits do not retry in lockstep.</summary>
+    /// <remarks>Zero keeps meaning "do not wait at all" — the tests rely on it to stay fast.</remarks>
+    private Task DelayAsync(int attempt, HttpResponseMessage? response, CancellationToken cancellationToken)
+    {
+        if (_o.RetryDelayMs <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var ceiling = TimeSpan.FromMilliseconds(Math.Max(_o.RetryDelayMs, _o.RetryMaxDelayMs));
+        if (RetryAfter(response) is { } hinted)
+        {
+            return Task.Delay(hinted < ceiling ? hinted : ceiling, cancellationToken);
+        }
+
+        var backoff = _o.RetryDelayMs * Math.Pow(2, Math.Max(0, attempt - 1));
+        var capped = Math.Min(backoff, ceiling.TotalMilliseconds);
+        // ±25 %, so three clients that failed together do not come back together
+        var jittered = capped * (0.75 + Random.Shared.NextDouble() * 0.5);
+        return Task.Delay(TimeSpan.FromMilliseconds(jittered), cancellationToken);
+    }
+
+    /// <summary>The endpoint's own retry hint, as delta or absolute date; null when it sent none or it has passed.</summary>
+    private static TimeSpan? RetryAfter(HttpResponseMessage? response)
+    {
+        if (response?.Headers.RetryAfter is not { } after)
+        {
+            return null;
+        }
+        var wait = after.Delta ?? (after.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        return wait is { TotalMilliseconds: > 0 } ? wait : null;
+    }
 
     /// <summary>Message an agent may see; upstream detail can name the model, so it is opt-in.</summary>
     private string Public(string message, string? detail)

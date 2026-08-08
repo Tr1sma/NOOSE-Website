@@ -43,6 +43,20 @@ public class NooseiMessage
     [Column("IstFehler")]
     public bool IsError { get; set; }
 
+    /// <summary>The token ceiling cut this answer off. Its own flag, not <see cref="IsError" />, which excludes a
+    /// row from the replay — a torso is still the best evidence of what was already said.</summary>
+    [Column("Gekuerzt")]
+    public bool Truncated { get; set; }
+
+    /// <summary>Answered without record access, because the endpoint could not take the tool block.</summary>
+    [Column("OhneAktenzugriff")]
+    public bool Degraded { get; set; }
+
+    /// <summary>Case numbers the answer cited that no tool result of the conversation mentions, comma-separated.
+    /// A note under the answer, never a rejection — and never phrased as "does not exist".</summary>
+    [Column("NichtBelegt")]
+    public string? UnsupportedCitations { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
 }

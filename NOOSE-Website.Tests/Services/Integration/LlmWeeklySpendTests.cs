@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NOOSE_Website.Data.Entities.Llm;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
@@ -21,7 +23,8 @@ public sealed class LlmWeeklySpendTests
     {
         var config = Substitute.For<ILlmQuotaConfigService>();
         config.GetAsync(Arg.Any<CancellationToken>()).Returns(LlmQuotaConfig.Default());
-        return new LlmRequestLogService(ctx.Factory, new LlmQuotaService(ctx.Factory, config));
+        return new LlmRequestLogService(ctx.Factory, new LlmQuotaService(
+            ctx.Factory, config, Options.Create(new LlmOptions()), NullLogger<LlmQuotaService>.Instance));
     }
 
     private static LlmRequestLog Row(string agentId, int year, int week, long tokens, decimal cost)

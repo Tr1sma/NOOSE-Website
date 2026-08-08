@@ -85,4 +85,38 @@ public class LlmRequestLog
 
     [Column("Auffaelligkeit")]
     public LlmAnomalyKind? AnomalyKind { get; set; }
+
+    // ---- operations telemetry ----
+    // All nullable, and read as "not recorded" rather than zero: rows written before these columns existed would
+    // otherwise show up as a turn that made no tool calls and lost no time, which is a claim nobody measured.
+
+    /// <summary>Why the endpoint stopped generating — "stop", "length", "tool_calls".</summary>
+    [Column("Abschlussgrund")]
+    public string? FinishReason { get; set; }
+
+    /// <summary>HTTP attempts the last round needed; more than one means the endpoint was retried.</summary>
+    [Column("Versuche")]
+    public int? Attempts { get; set; }
+
+    /// <summary>Time spent inside the endpoint, summed over the rounds. <see cref="DurationMs" /> minus this is
+    /// what the tools took — the only way to tell a slow model from a slow record database.</summary>
+    [Column("ModellDauerMs")]
+    public int? ModelLatencyMs { get; set; }
+
+    [Column("Werkzeugaufrufe")]
+    public int? ToolCalls { get; set; }
+
+    /// <summary>Calls that produced nothing: a dead tool, a timeout, or a repeat answered from the transcript.</summary>
+    [Column("Werkzeugfehler")]
+    public int? ToolFailures { get; set; }
+
+    /// <summary>Answered without record access, because the endpoint could not serve tools at all.</summary>
+    [Column("Eingeschraenkt")]
+    public bool? Degraded { get; set; }
+
+    [Column("AbbruchGrund")]
+    public LlmToolWithdrawal? Withdrawal { get; set; }
+
+    [Column("Fehlerart")]
+    public LlmFailureKind? FailureKind { get; set; }
 }

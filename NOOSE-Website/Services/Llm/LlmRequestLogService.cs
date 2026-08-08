@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
 
 namespace NOOSE_Website.Services;
@@ -25,6 +26,9 @@ public interface ILlmRequestLogService
 
     /// <summary>Real weekly spend across every agent, oldest first. Carries money, so it is the AI owner's alone.</summary>
     Task<IReadOnlyList<LlmWeekSpend>> GetWeeklySpendAsync(ClaimsPrincipal actor, int weeks = 12, CancellationToken cancellationToken = default);
+
+    /// <summary>Operating figures over the last <paramref name="days" /> days; aggregates only, no prompt text.</summary>
+    Task<LlmOperationsReport> GetOperationsAsync(int days, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="ILlmRequestLogService" />
@@ -197,6 +201,131 @@ public sealed class LlmRequestLogService(
             .OrderBy(r => r.StartLocal)
             .ToList();
     }
+
+    /// <summary>Rows the tool ranking is sampled from. Their names live in a JSON column no index reaches, so the
+    /// ranking reads the newest rows rather than every one — and the report says how many that was.</summary>
+    private const int ToolSampleRows = 2_000;
+
+    public async Task<LlmOperationsReport> GetOperationsAsync(
+        int days, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        // same gate as the rest of this service; the figures are aggregates, but the door stays one door
+        Permission.RequireLeadershipNoReader(actor);
+        var window = Math.Clamp(days, 1, 365);
+        var since = DateTime.UtcNow.AddDays(-window);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.LlmRequests.AsNoTracking()
+            .Where(x => x.CreatedAt >= since)
+            .Select(x => new OperationsRow(
+                x.Feature, x.Success, x.QuotaTokens, x.PromptTokens, x.CachedTokens, x.DurationMs,
+                x.ModelLatencyMs, x.ToolRounds, x.ToolCalls, x.ToolFailures,
+                x.FinishReason, x.Withdrawal, x.FailureKind))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return LlmOperationsReport.Empty with { Days = window };
+        }
+
+        var byFeature = rows
+            .GroupBy(r => r.Feature)
+            .Select(g => new LlmFeatureStat(
+                g.Key,
+                g.Count(),
+                g.Count(r => !r.Success),
+                g.Sum(r => r.QuotaTokens),
+                Percentile(g.Select(r => r.DurationMs), 0.5),
+                Percentile(g.Select(r => r.DurationMs), 0.95),
+                // only rows that recorded a model latency; on the rest the difference would be the whole duration
+                Percentile(g.Where(r => r.ModelLatencyMs is not null)
+                    .Select(r => Math.Max(0, r.DurationMs - r.ModelLatencyMs!.Value)), 0.5)))
+            .OrderByDescending(s => s.Total)
+            .ToList();
+
+        var rounds = rows
+            .GroupBy(r => r.ToolRounds)
+            .OrderBy(g => g.Key)
+            .Select(g => new LlmCountStat(g.Key == 0 ? "ohne Werkzeuge" : $"{g.Key} Runden", g.Count()))
+            .ToList();
+
+        var finishReasons = Distribution(rows
+            .Select(r => string.IsNullOrWhiteSpace(r.FinishReason) ? null : r.FinishReason!));
+        var withdrawals = Distribution(rows
+            .Select(r => r.Withdrawal is { } w ? LlmOperationsDisplay.Name(w) : null));
+        var failures = Distribution(rows
+            .Where(r => !r.Success)
+            .Select(r => LlmOperationsDisplay.Name(r.FailureKind ?? LlmFailureKind.Unknown)));
+
+        return new LlmOperationsReport(
+            window,
+            rows.Count,
+            rows.Count(r => !r.Success),
+            rows.Sum(r => r.QuotaTokens),
+            rows.Sum(r => (long)r.PromptTokens),
+            rows.Sum(r => (long)r.CachedTokens),
+            rows.Sum(r => r.ToolCalls ?? 0),
+            rows.Sum(r => r.ToolFailures ?? 0),
+            Math.Min(rows.Count, ToolSampleRows),
+            byFeature,
+            await ToolRankingAsync(db, since, cancellationToken),
+            rounds,
+            finishReasons,
+            withdrawals,
+            failures);
+    }
+
+    /// <summary>How often each tool ran, read out of the stored reference list.</summary>
+    private static async Task<IReadOnlyList<LlmCountStat>> ToolRankingAsync(
+        AppDbContext db, DateTime since, CancellationToken cancellationToken)
+    {
+        var payloads = await db.LlmRequests.AsNoTracking()
+            .Where(x => x.CreatedAt >= since && x.ContextRefsJson != null)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(ToolSampleRows)
+            .Select(x => x.ContextRefsJson!)
+            .ToListAsync(cancellationToken);
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var payload in payloads)
+        {
+            foreach (var reference in Refs(payload))
+            {
+                // only the gateway's own tool entries; a record reference carries a name that has no place in a chart
+                if (reference.Kind == "tool" && reference.Name is { Length: > 0 } name)
+                {
+                    counts[name] = counts.GetValueOrDefault(name) + 1;
+                }
+            }
+        }
+        return counts
+            .OrderByDescending(kv => kv.Value)
+            .Select(kv => new LlmCountStat(NooseiToolLabels.Label(kv.Key), kv.Value))
+            .ToList();
+    }
+
+    private static List<LlmCountStat> Distribution(IEnumerable<string?> labels)
+        => labels.Where(l => l is not null)
+            .GroupBy(l => l!, StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count())
+            .Select(g => new LlmCountStat(g.Key, g.Count()))
+            .ToList();
+
+    /// <summary>Nearest-rank percentile; 0 when nothing was measured.</summary>
+    private static int Percentile(IEnumerable<int> values, double share)
+    {
+        var sorted = values.Order().ToList();
+        if (sorted.Count == 0)
+        {
+            return 0;
+        }
+        var index = (int)Math.Ceiling(share * sorted.Count) - 1;
+        return sorted[Math.Clamp(index, 0, sorted.Count - 1)];
+    }
+
+    private sealed record OperationsRow(
+        LlmFeature Feature, bool Success, long QuotaTokens, int PromptTokens, int CachedTokens, int DurationMs,
+        int? ModelLatencyMs, int ToolRounds, int? ToolCalls, int? ToolFailures,
+        string? FinishReason, LlmToolWithdrawal? Withdrawal, LlmFailureKind? FailureKind);
 
     private static IReadOnlyList<LlmContextRef> Refs(string? json)
     {

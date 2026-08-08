@@ -591,8 +591,9 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
                 where (isLeadership || !p.IsClassified)
                     && (!hasTags || db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)))
                 orderby d.Timestamp descending
+                // TargetId is the person's, so the target type must say so: the doc itself has no page
                 select new SearchHit(nameof(PersonDoc), p.Id, p.Name,
-                    (d.Reason ?? d.ReceivedInformation) ?? string.Empty, p.CaseNumber))
+                    (d.Reason ?? d.ReceivedInformation) ?? string.Empty, p.CaseNumber, nameof(Person)))
                 .Take(MaxPerCategory)
                 .ToListAsync(cancellationToken);
             if (hit.Count > 0)

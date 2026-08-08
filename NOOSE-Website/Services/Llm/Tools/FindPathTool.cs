@@ -37,9 +37,9 @@ public sealed class FindPathTool(IGraphService graph) : INooseiTool
 
     public async Task<NooseiToolResult> InvokeAsync(JsonElement arguments, NooseiToolContext context, CancellationToken cancellationToken = default)
     {
-        var fromType = NooseiRecordTypes.Clr(NooseiLimits.Text(arguments, "von_typ"));
+        var fromType = NooseiRecordTypes.Clr(NooseiLimits.Text(arguments, "von_typ"), NooseiUse.Read);
         var fromId = NooseiLimits.Text(arguments, "von_id");
-        var toType = NooseiRecordTypes.Clr(NooseiLimits.Text(arguments, "nach_typ"));
+        var toType = NooseiRecordTypes.Clr(NooseiLimits.Text(arguments, "nach_typ"), NooseiUse.Read);
         var toId = NooseiLimits.Text(arguments, "nach_id");
         if (fromType is null || fromId is null || toType is null || toId is null)
         {
@@ -89,12 +89,7 @@ public sealed class FindPathTool(IGraphService graph) : INooseiTool
             ? MentionParser.Strip(edge.Label).Trim()
             : LinkKindDisplay.Name(edge.Kind);
 
-    /// <summary>The graph reaches types the tool schema does not offer; name those too.</summary>
-    private static string TypeName(string clr) => clr switch
-    {
-        "Job" => "Aufgabe",
-        "Law" => "Gesetz",
-        "Appointment" => "Termin",
-        _ => NooseiRecordTypes.German(clr),
-    };
+    /// <summary>The graph reaches types the tool schema does not offer; <see cref="NooseiRecordTypes.German" />
+    /// names those too, so there is nothing left to special-case here.</summary>
+    private static string TypeName(string clr) => NooseiRecordTypes.German(clr);
 }
