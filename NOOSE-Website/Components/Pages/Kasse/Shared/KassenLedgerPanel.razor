@@ -17,7 +17,7 @@
                 }
             </MudSelect>
         }
-        <AuthorizeView Policy="@Policies.Leadership">
+        <AuthorizeView Policy="@Policies.WriteAccess">
             <MudButton Href="@($"/kasse/buchung/neu?konto={(int)Account}")" Variant="Variant.Filled" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Add">Neue Buchung</MudButton>
         </AuthorizeView>

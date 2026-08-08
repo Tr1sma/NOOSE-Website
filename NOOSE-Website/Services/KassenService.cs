@@ -106,7 +106,7 @@ public class KassenService(
     public async Task<KassenBuchung> BookAsync(AppDbContext db, KassenBuchungInput input, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        RequireManage(actor);
+        Permission.RequireKassenBookingWrite(actor, input.Kind);
         Validate(input);
         await EnsureNonNegativeAsync(db, input, null, cancellationToken);
 

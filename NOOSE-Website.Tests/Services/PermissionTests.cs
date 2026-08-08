@@ -7,7 +7,7 @@ using Xunit;
 
 namespace NOOSE_Website.Tests.Services;
 
-/// <summary>Covers all 12 Permission.Require* server-side guards: pass paths, throw paths, ladders and boundaries.</summary>
+/// <summary>Covers the Permission.Require* server-side guards: pass paths, throw paths, ladders and boundaries.</summary>
 public sealed class PermissionTests
 {
     private static void AssertAllowed(Action guard)
@@ -387,6 +387,200 @@ public sealed class PermissionTests
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SeniorSpecialAgent).AsTeamLead();
         AssertDenied(() => Permission.RequireMeetingWrite(actor));
     }
+
+    // ---------------------------------------------------------------- RequireEvidenceEntryWrite
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_deposit_plainAgent_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.JuniorAgent);
+        AssertAllowed(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Deposit));
+    }
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_deposit_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Deposit));
+    }
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_deposit_onlyReader_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead();
+        AssertDenied(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Deposit));
+    }
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_deposit_partner_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.DoJ, PartnerRank.Chief);
+        AssertDenied(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Deposit));
+    }
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_deposit_demoVisitor_throws()
+    {
+        // Demo carries Director rank, so only the MayWrite half can stop it.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director).AsDemo();
+        AssertDenied(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Deposit));
+    }
+
+    [Theory]
+    [InlineData(Rank.JuniorAgent, false)]
+    [InlineData(Rank.SpecialAgent, false)]
+    [InlineData(Rank.SeniorSpecialAgent, false)]
+    [InlineData(Rank.SupervisorySpecialAgent, true)]
+    [InlineData(Rank.DeputyDirector, true)]
+    [InlineData(Rank.Director, true)]
+    public void RequireEvidenceEntryWrite_withdrawal_byRank_gatesAtSupervisory(Rank rank, bool allowed)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(rank);
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Withdrawal));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Withdrawal));
+        }
+    }
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_withdrawal_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Withdrawal));
+    }
+
+    [Fact]
+    public void RequireEvidenceEntryWrite_withdrawal_onlyReaderWithHighRank_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director).AsTeamLead();
+        AssertDenied(() => Permission.RequireEvidenceEntryWrite(actor, EvidenceEntryType.Withdrawal));
+    }
+
+    // Anonymous has no rank, so only the leadership arm stops it; the deposit arm is MayWrite-only,
+    // exactly like RequireWriteAccess. Anonymous never reaches the service — every page is ActiveAgent.
+    [Fact]
+    public void RequireEvidenceEntryWrite_withdrawal_anonymous_throws()
+        => AssertDenied(() => Permission.RequireEvidenceEntryWrite(
+            ClaimsPrincipalBuilder.Anonymous(), EvidenceEntryType.Withdrawal));
+
+    // ---------------------------------------------------------------- RequireEvidenceImageWrite
+
+    [Fact]
+    public void RequireEvidenceImageWrite_firstPicture_plainAgent_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.JuniorAgent);
+        AssertAllowed(() => Permission.RequireEvidenceImageWrite(actor, itemHasImage: false));
+    }
+
+    [Fact]
+    public void RequireEvidenceImageWrite_replacement_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.JuniorAgent);
+        AssertDenied(() => Permission.RequireEvidenceImageWrite(actor, itemHasImage: true));
+    }
+
+    [Fact]
+    public void RequireEvidenceImageWrite_replacement_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireEvidenceImageWrite(actor, itemHasImage: true));
+    }
+
+    [Fact]
+    public void RequireEvidenceImageWrite_firstPicture_onlyReader_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead();
+        AssertDenied(() => Permission.RequireEvidenceImageWrite(actor, itemHasImage: false));
+    }
+
+    // ---------------------------------------------------------------- RequireKassenBookingWrite
+
+    [Fact]
+    public void RequireKassenBookingWrite_einzahlung_plainAgent_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.JuniorAgent);
+        AssertAllowed(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Einzahlung));
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_einzahlung_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Einzahlung));
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_einzahlung_onlyReader_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsTeamLead();
+        AssertDenied(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Einzahlung));
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_einzahlung_partner_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.DoJ, PartnerRank.Chief);
+        AssertDenied(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Einzahlung));
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_einzahlung_demoVisitor_throws()
+    {
+        // Demo carries Director rank, so only the MayWrite half can stop it.
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director).AsDemo();
+        AssertDenied(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Einzahlung));
+    }
+
+    [Theory]
+    [InlineData(Rank.JuniorAgent, false)]
+    [InlineData(Rank.SpecialAgent, false)]
+    [InlineData(Rank.SeniorSpecialAgent, false)]
+    [InlineData(Rank.SupervisorySpecialAgent, true)]
+    [InlineData(Rank.DeputyDirector, true)]
+    [InlineData(Rank.Director, true)]
+    public void RequireKassenBookingWrite_auszahlung_byRank_gatesAtSupervisory(Rank rank, bool allowed)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(rank);
+        if (allowed)
+        {
+            AssertAllowed(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Auszahlung));
+        }
+        else
+        {
+            AssertDenied(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Auszahlung));
+        }
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_korrektur_plainAgent_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.SeniorSpecialAgent);
+        AssertDenied(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Korrektur));
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_korrektur_admin_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin();
+        AssertAllowed(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Korrektur));
+    }
+
+    [Fact]
+    public void RequireKassenBookingWrite_auszahlung_onlyReaderWithHighRank_throws()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithRank(Rank.Director).AsTeamLead();
+        AssertDenied(() => Permission.RequireKassenBookingWrite(actor, KassenBuchungArt.Auszahlung));
+    }
+
+    // See the note on RequireEvidenceEntryWrite: the deposit arm is MayWrite-only by design.
+    [Fact]
+    public void RequireKassenBookingWrite_auszahlung_anonymous_throws()
+        => AssertDenied(() => Permission.RequireKassenBookingWrite(
+            ClaimsPrincipalBuilder.Anonymous(), KassenBuchungArt.Auszahlung));
 
     // ---------------------------------------------------------------- RequireHrbOrLeadership
 

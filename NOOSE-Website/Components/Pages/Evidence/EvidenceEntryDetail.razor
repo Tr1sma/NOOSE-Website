@@ -1,4 +1,5 @@
 @page "/asservatenkammer/eintrag/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IEvidenceService Evidence
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -79,7 +80,7 @@ else
                                 @if (l.HasImage)
                                 {
                                     <MudImage Src="@($"/dateien/asservate/{l.ItemId}")" Height="48" Width="48"
-                                              ObjectFit="ObjectFit.Cover" Class="rounded" loading="lazy" />
+                                              ObjectFit="ObjectFit.Contain" Class="rounded" loading="lazy" />
                                 }
                                 else
                                 {

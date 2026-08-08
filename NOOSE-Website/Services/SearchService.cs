@@ -359,8 +359,8 @@ public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchS
             }
         }
 
-        // ---- cash bookings (leadership only, no tags) ----
-        if (isLeadership && Active(nameof(KassenBuchung)) && !hasTags)
+        // ---- cash bookings (internal, no VS, no tags) ----
+        if (Active(nameof(KassenBuchung)) && !hasTags)
         {
             var q = db.KassenBuchungen.AsQueryable();
             if (hasText)

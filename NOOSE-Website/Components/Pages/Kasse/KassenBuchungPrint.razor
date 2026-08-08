@@ -1,6 +1,6 @@
 @* Print view of a cash booking (Kassenbuchung announcement). *@
 @page "/kasse/buchung/{Id}/druck"
-@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @layout PrintLayout
 @inject IKassenService Kasse
 

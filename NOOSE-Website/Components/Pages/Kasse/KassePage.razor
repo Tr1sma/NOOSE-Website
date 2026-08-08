@@ -1,5 +1,5 @@
 @page "/kasse"
-@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IKassenService Kasse
 @inject IKassenTemplateService Templates
 
@@ -35,17 +35,25 @@ else
         <RecordSection Slug="gruengeld" Label="Grüngeld" Icon="@Icons.Material.Filled.Payments">
             <KassenLedgerPanel Account="KassenKonto.Gruengeld" Refresh="_refresh" />
         </RecordSection>
-        <RecordSection Slug="vorlagen" Label="Vorlagen" Icon="@Icons.Material.Filled.Bookmarks">
-            <KassenTemplatesPanel OnChanged="ReloadAsync" />
-        </RecordSection>
-        <RecordSection Slug="statistik" Label="Statistik" Icon="@Icons.Material.Filled.QueryStats">
-            <CascadingValue Value="_statsScope">
-                <KasseStatisticsPanel />
-            </CascadingValue>
-        </RecordSection>
-        <RecordSection Slug="papierkorb" Label="Papierkorb" Icon="@Icons.Material.Filled.Delete">
-            <TrashPanel Kind="kasse-buchungen" />
-        </RecordSection>
+        @* an unrendered section never registers, so the rail button is absent and a hand-edited ?tab= falls back *@
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="templatesSection">
+            <RecordSection Slug="vorlagen" Label="Vorlagen" Icon="@Icons.Material.Filled.Bookmarks">
+                <KassenTemplatesPanel OnChanged="ReloadAsync" />
+            </RecordSection>
+        </AuthorizeView>
+        @* the statistics service has no guard of its own, so this wrapper is load-bearing *@
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="statsSection">
+            <RecordSection Slug="statistik" Label="Statistik" Icon="@Icons.Material.Filled.QueryStats">
+                <CascadingValue Value="_statsScope">
+                    <KasseStatisticsPanel />
+                </CascadingValue>
+            </RecordSection>
+        </AuthorizeView>
+        <AuthorizeView Policy="@Policies.LeadershipPage" Context="trashSection">
+            <RecordSection Slug="papierkorb" Label="Papierkorb" Icon="@Icons.Material.Filled.Delete">
+                <TrashPanel Kind="kasse-buchungen" />
+            </RecordSection>
+        </AuthorizeView>
     </RecordSectionRail>
 }
 

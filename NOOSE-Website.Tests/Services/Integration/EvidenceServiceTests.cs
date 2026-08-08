@@ -42,6 +42,23 @@ public sealed class EvidenceServiceTests
             new ProfileSuggestionService(ctx.Factory));
     }
 
+    /// <summary>Like <see cref="Build(SqliteTestContext)"/> but with a storage stub that accepts uploads, so image paths run through.</summary>
+    private static EvidenceService BuildWithImages(SqliteTestContext ctx)
+    {
+        var caseNo = Substitute.For<ICaseNumberService>();
+        var seq = 0;
+        caseNo.NextAsync(Arg.Any<AppDbContext>(), "ASS", Arg.Any<CancellationToken>())
+            .Returns(_ => $"NOOSE-ASS-2026-{++seq:0000}");
+
+        var storage = Substitute.For<IEvidenceImageStorageService>();
+        storage.IsAllowedType(Arg.Any<string>()).Returns(true);
+        var files = 0;
+        storage.SaveAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"bild-{++files}.png"));
+
+        return new EvidenceService(ctx.Factory, caseNo, storage, new ProfileSuggestionService(ctx.Factory));
+    }
+
     /// <summary>Like <see cref="Build(SqliteTestContext)"/> but rejects allocation outside a transaction, as the real service does.</summary>
     private static EvidenceService BuildStrict(SqliteTestContext ctx, out ICaseNumberService caseNumber)
     {
@@ -427,6 +444,144 @@ public sealed class EvidenceServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
                 i => i.Lines.Add(new EvidenceLineInput { ItemName = "X", Quantity = 1 })), OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.CreateEntryAsync(Entry(EvidenceEntryType.Withdrawal,
+                i => i.Lines.Add(new EvidenceLineInput { ItemName = "X", Quantity = 1 })), Junior()));
+    }
+
+    // ---- deposit is open, withdrawal is not ----
+
+    [Fact]
+    public async Task CreateEntry_Deposit_NonLeadership_IsBooked()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 3 })), Junior());
+
+        var item = await svc.GetItemByNameAsync("Pistole");
+        Assert.Equal(3, await svc.GetOnHandAsync(item!.Id));
+    }
+
+    [Fact]
+    public async Task CreateEntry_Deposit_NonLeadership_AutoCreatesUnknownItem()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        // depositing an unknown name creates the catalog item, even though CreateItemAsync stays leadership
+        await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Fundstück", Quantity = 1 })), Junior());
+
+        Assert.NotNull(await svc.GetItemByNameAsync("Fundstück"));
+    }
+
+    [Fact]
+    public async Task CreateEntry_Withdrawal_NonLeadership_Throws_AndWritesNothing()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        await DepositAsync(svc, "Pistole", 10);
+
+        int entriesBefore, itemsBefore;
+        using (var db = ctx.NewContext())
+        {
+            entriesBefore = db.EvidenceEntries.Count();
+            itemsBefore = db.EvidenceItems.Count();
+        }
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.CreateEntryAsync(Entry(EvidenceEntryType.Withdrawal,
+                i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 1 })), Junior()));
+
+        // the guard runs before the stock check and before the transaction, so no case number is burned
+        using var after = ctx.NewContext();
+        Assert.Equal(entriesBefore, after.EvidenceEntries.Count());
+        Assert.Equal(itemsBefore, after.EvidenceItems.Count());
+    }
+
+    [Fact]
+    public async Task CreateEntry_Deposit_Demo_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        // demo carries Director rank; without interceptors here, only the Permission guard can stop it
+        ClaimsPrincipal demo = ClaimsPrincipalBuilder.Agent("demo").WithRank(Rank.Director).AsDemo().Build();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+                i => i.Lines.Add(new EvidenceLineInput { ItemName = "X", Quantity = 1 })), demo));
+    }
+
+    [Fact]
+    public async Task UpdateEntry_NonLeadership_Throws_EvenWhenFlippingDepositToWithdrawal()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var own = await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 10 })), Junior());
+        var itemId = (await svc.GetItemByNameAsync("Pistole"))!.Id;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.UpdateEntryAsync(own.Id, Entry(EvidenceEntryType.Withdrawal,
+                i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 10 })), Junior()));
+
+        Assert.Equal(10, await svc.GetOnHandAsync(itemId));
+    }
+
+    [Fact]
+    public async Task DeleteEntry_NonLeadership_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var own = await svc.CreateEntryAsync(Entry(EvidenceEntryType.Deposit,
+            i => i.Lines.Add(new EvidenceLineInput { ItemName = "Pistole", Quantity = 10 })), Junior());
+        var itemId = (await svc.GetItemByNameAsync("Pistole"))!.Id;
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.DeleteEntryAsync(own.Id, Junior()));
+        Assert.Equal(10, await svc.GetOnHandAsync(itemId));
+    }
+
+    [Fact]
+    public async Task RestoreEntry_NonLeadership_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.RestoreEntryAsync("any", Junior()));
+    }
+
+    [Fact]
+    public async Task SetItemImage_FirstPicture_NonLeadership_Succeeds()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = BuildWithImages(ctx);
+        await DepositAsync(svc, "Pistole", 1);
+        var itemId = (await svc.GetItemByNameAsync("Pistole"))!.Id;
+
+        using var image = new MemoryStream(new byte[] { 1, 2, 3 });
+        await svc.SetItemImageAsync(itemId, image, "image/png", Junior());
+
+        using var db = ctx.NewContext();
+        Assert.False(string.IsNullOrEmpty(db.EvidenceItems.Single(i => i.Id == itemId).ImageFileName));
+    }
+
+    [Fact]
+    public async Task SetItemImage_Replacement_NonLeadership_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = BuildWithImages(ctx);
+        await DepositAsync(svc, "Pistole", 1);
+        var itemId = (await svc.GetItemByNameAsync("Pistole"))!.Id;
+        using (var first = new MemoryStream(new byte[] { 1, 2, 3 }))
+        {
+            await svc.SetItemImageAsync(itemId, first, "image/png", Leader());
+        }
+
+        using var second = new MemoryStream(new byte[] { 4, 5, 6 });
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.SetItemImageAsync(itemId, second, "image/png", Junior()));
     }
 
     // ---- clearing ----

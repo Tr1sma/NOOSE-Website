@@ -178,15 +178,90 @@ public sealed class KassenServiceTests
     }
 
     [Fact]
-    public async Task NonLeadership_CannotBook()
+    public async Task NonLeadership_CanBook_Einzahlung()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 10, T0), Junior());
+
+        Assert.Equal(10m, await svc.GetBalanceAsync(KassenKonto.Schwarzgeld));
+        Assert.Single(await svc.GetLedgerAsync(KassenKonto.Schwarzgeld));
+    }
+
+    [Fact]
+    public async Task NonLeadership_CannotBook_Auszahlung_OrKorrektur()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        // funded first, so a rejection proves the guard fired and not the non-negative check
+        await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 100, T0), Leader());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Auszahlung, 10, T0.AddMinutes(1)), Junior()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Korrektur, 50, T0.AddMinutes(2)), Junior()));
+
+        Assert.Equal(100m, await svc.GetBalanceAsync(KassenKonto.Schwarzgeld));
+    }
+
+    [Fact]
+    public async Task OnlyReader_CannotBook_AnyKind()
     {
         using var ctx = new SqliteTestContext();
         var svc = Build(ctx);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 10, T0), Junior()));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 10, T0), OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Auszahlung, 10, T0), OnlyReader()));
+    }
+
+    [Fact]
+    public async Task Demo_CannotBook_Einzahlung()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        // demo carries Director rank; without interceptors here, only the Permission guard can stop it
+        ClaimsPrincipal demo = ClaimsPrincipalBuilder.Agent("demo").WithRank(Rank.Director).AsDemo().Build();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 10, T0), demo));
+    }
+
+    [Fact]
+    public async Task NonLeadership_CannotUpdate_EvenTheirOwnEinzahlung()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var own = await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 100, T0), Junior());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.UpdateAsync(own.Id, Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Auszahlung, 100, T0), Junior()));
+
+        var after = await svc.GetAsync(own.Id);
+        Assert.Equal(KassenBuchungArt.Einzahlung, after!.Kind);
+        Assert.Equal(100m, await svc.GetBalanceAsync(KassenKonto.Schwarzgeld));
+    }
+
+    [Fact]
+    public async Task NonLeadership_CannotDelete()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+        var own = await svc.BookAsync(Input(KassenKonto.Schwarzgeld, KassenBuchungArt.Einzahlung, 100, T0), Junior());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.DeleteAsync(own.Id, Junior()));
+        Assert.Equal(100m, await svc.GetBalanceAsync(KassenKonto.Schwarzgeld));
+    }
+
+    [Fact]
+    public async Task NonLeadership_CannotRestore()
+    {
+        using var ctx = new SqliteTestContext();
+        var svc = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.RestoreAsync("any", Junior()));
     }
 
     [Fact]

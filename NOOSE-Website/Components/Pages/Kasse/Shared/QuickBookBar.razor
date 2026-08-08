@@ -1,12 +1,12 @@
 @* Active templates as one-confirm buttons (2-click booking). *@
 @inject IDialogService DialogService
 
-@if (Templates.Count > 0)
+@if (Visible.Count > 0)
 {
     <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mr-2">Schnellbuchung:</MudText>
-            @foreach (var t in Templates)
+            @foreach (var t in Visible)
             {
                 <MudButton Variant="Variant.Outlined" Size="Size.Small"
                            Color="@KassenBuchungArtDisplay.ChipColor(t.Kind)"
@@ -24,6 +24,12 @@
     [Parameter] public IReadOnlyList<KassenKontoSummary> Summaries { get; set; } = [];
     [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
     [Parameter] public EventCallback OnBooked { get; set; }
+
+    /// <summary>Templates this agent may actually book: everyone deposits, only leadership pays out.</summary>
+    private IReadOnlyList<KassenBuchungVorlage> Visible
+        => !User.MayWrite() ? []
+            : User.IsLeadership() ? Templates
+            : Templates.Where(t => t.Kind == KassenBuchungArt.Einzahlung).ToList();
 
     private async Task BookAsync(KassenBuchungVorlage template)
     {

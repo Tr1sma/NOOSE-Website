@@ -180,6 +180,53 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to file an evidence-room entry: depositing is open to every writing agent, taking something out stays with leadership.</summary>
+    public static void RequireEvidenceEntryWrite(ClaimsPrincipal actor, EvidenceEntryType type)
+    {
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        // fail closed: anything that is not a deposit needs leadership
+        if (type != EvidenceEntryType.Deposit && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Herausnahmen aus der Asservatenkammer bucht nur die Führung; einlagern darf jeder Agent.");
+        }
+    }
+
+    /// <summary>Require the right to picture an evidence item: a first picture is additive, replacing an existing one stays with leadership.</summary>
+    public static void RequireEvidenceImageWrite(ClaimsPrincipal actor, bool itemHasImage)
+    {
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        if (itemHasImage && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Ein vorhandenes Bild ersetzt nur die Führung.");
+        }
+    }
+
+    /// <summary>Require the right to file a treasury booking: paying in is open to every writing agent, paying out and setting the balance stay with leadership.</summary>
+    public static void RequireKassenBookingWrite(ClaimsPrincipal actor, KassenBuchungArt kind)
+    {
+        if (!actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.");
+        }
+        // fail closed: anything that is not a deposit needs leadership
+        if (kind != KassenBuchungArt.Einzahlung && !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException(
+                "Auszahlungen und Korrekturen bucht nur die Führung; einzahlen darf jeder Agent.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

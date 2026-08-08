@@ -1,5 +1,6 @@
 @* Print view of an evidence-room entry (Asservatenkammer card). *@
 @page "/asservatenkammer/eintrag/{Id}/druck"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @layout PrintLayout
 @inject IEvidenceService Evidence
 

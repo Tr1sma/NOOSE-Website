@@ -1,6 +1,6 @@
 @page "/asservatenkammer/eintrag/neu"
 @page "/asservatenkammer/eintrag/{Id}/bearbeiten"
-@attribute [Authorize(Policy = Policies.Leadership)]
+@attribute [Authorize(Policy = Policies.WriteAccess)]
 @inject IEvidenceService Evidence
 @inject IEvidenceImageStorageService Storage
 @inject IAgentManagementService Agents
@@ -20,6 +20,12 @@
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
+else if (IsEdit && !_isLeadership)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Einträge nachträglich ändern darf nur die Führung. Neue Einlagerungen kannst du jederzeit erfassen.
+    </MudAlert>
+}
 else
 {
     <MudPaper Class="pa-4" Elevation="1">
@@ -27,14 +33,28 @@ else
             <MudStack Spacing="4">
                 <div>
                     <MudText Typo="Typo.subtitle2" Class="mb-1">Art</MudText>
-                    <MudRadioGroup T="EvidenceEntryType" @bind-Value="_input.Type">
-                        @foreach (var t in EvidenceEntryTypeDisplay.All)
-                        {
-                            <MudRadio T="EvidenceEntryType" Value="@t" Color="Color.Primary" Dense="true">
-                                @EvidenceEntryTypeDisplay.Name(t)
-                            </MudRadio>
-                        }
-                    </MudRadioGroup>
+                    @if (_isLeadership)
+                    {
+                        <MudRadioGroup T="EvidenceEntryType" @bind-Value="_input.Type">
+                            @foreach (var t in EvidenceEntryTypeDisplay.All)
+                            {
+                                <MudRadio T="EvidenceEntryType" Value="@t" Color="Color.Primary" Dense="true">
+                                    @EvidenceEntryTypeDisplay.Name(t)
+                                </MudRadio>
+                            }
+                        </MudRadioGroup>
+                    }
+                    else
+                    {
+                        @* only leadership takes something out; the server enforces the same *@
+                        <MudChip T="string" Size="Size.Small" Color="@EvidenceEntryTypeDisplay.ChipColor(EvidenceEntryType.Deposit)"
+                                 Icon="@EvidenceEntryTypeDisplay.Icon(EvidenceEntryType.Deposit)">
+                            @EvidenceEntryTypeDisplay.Name(EvidenceEntryType.Deposit)
+                        </MudChip>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            Herausnahmen bucht die Führung.
+                        </MudText>
+                    }
                 </div>
 
                 <MudDivider />

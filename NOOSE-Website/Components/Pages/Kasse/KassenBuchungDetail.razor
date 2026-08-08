@@ -1,5 +1,5 @@
 @page "/kasse/buchung/{Id}"
-@attribute [Authorize(Policy = Policies.LeadershipPage)]
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject IKassenService Kasse
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar

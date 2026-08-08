@@ -1,6 +1,6 @@
 @page "/kasse/buchung/neu"
 @page "/kasse/buchung/{Id}/bearbeiten"
-@attribute [Authorize(Policy = Policies.Leadership)]
+@attribute [Authorize(Policy = Policies.WriteAccess)]
 @inject IKassenService Kasse
 @inject IAgentManagementService Agents
 @inject NavigationManager Nav
@@ -16,6 +16,12 @@
 @if (_load)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (IsEdit && !_isLeadership)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        Buchungen nachträglich ändern darf nur die Führung. Neue Einzahlungen kannst du jederzeit erfassen.
+    </MudAlert>
 }
 else
 {
@@ -36,18 +42,32 @@ else
 
                 <div>
                     <MudText Typo="Typo.subtitle2" Class="mb-1">Art</MudText>
-                    <MudRadioGroup T="KassenBuchungArt" @bind-Value="_input.Kind">
-                        @foreach (var a in KassenBuchungArtDisplay.All)
-                        {
-                            <MudRadio T="KassenBuchungArt" Value="@a" Color="Color.Primary" Dense="true">
-                                @KassenBuchungArtDisplay.Name(a)
-                            </MudRadio>
-                        }
-                    </MudRadioGroup>
-                    @if (_input.Kind == KassenBuchungArt.Korrektur)
+                    @if (_isLeadership)
                     {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            „Stand setzen" korrigiert den Kontostand direkt auf den eingegebenen Betrag (Abgleich mit Ingame).
+                        <MudRadioGroup T="KassenBuchungArt" @bind-Value="_input.Kind">
+                            @foreach (var a in KassenBuchungArtDisplay.All)
+                            {
+                                <MudRadio T="KassenBuchungArt" Value="@a" Color="Color.Primary" Dense="true">
+                                    @KassenBuchungArtDisplay.Name(a)
+                                </MudRadio>
+                            }
+                        </MudRadioGroup>
+                        @if (_input.Kind == KassenBuchungArt.Korrektur)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                „Stand setzen" korrigiert den Kontostand direkt auf den eingegebenen Betrag (Abgleich mit Ingame).
+                            </MudText>
+                        }
+                    }
+                    else
+                    {
+                        @* only leadership pays out or corrects; the server enforces the same *@
+                        <MudChip T="string" Size="Size.Small" Color="@KassenBuchungArtDisplay.ChipColor(KassenBuchungArt.Einzahlung)"
+                                 Icon="@KassenBuchungArtDisplay.Icon(KassenBuchungArt.Einzahlung)">
+                            @KassenBuchungArtDisplay.Name(KassenBuchungArt.Einzahlung)
+                        </MudChip>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            Auszahlungen und Korrekturen bucht die Führung.
                         </MudText>
                     }
                 </div>
@@ -108,6 +128,7 @@ else
     private KassenBuchungInput _input = new();
     private List<Agent> _agents = new();
     private ClaimsPrincipal _user = default!;
+    private bool _isLeadership;
 
     // per-account balance with THIS booking excluded, so the preview is correct while editing
     private readonly Dictionary<KassenKonto, decimal> _baseBalances = new();
@@ -146,6 +167,7 @@ else
         _time = DateTime.Now.TimeOfDay;
 
         _user = (await AuthStateTask).User;
+        _isLeadership = _user.IsLeadership();
         _agents = await Agents.GetSelectableAsync();
         _input.BookedById = _user.GetAgentId() ?? _agents.FirstOrDefault()?.Id;
 

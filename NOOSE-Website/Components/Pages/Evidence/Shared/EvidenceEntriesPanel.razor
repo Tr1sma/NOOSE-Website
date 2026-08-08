@@ -23,7 +23,7 @@
             }
             <MudSelectItem T="string" Value="@EvidenceCategories.None">Ohne Kategorie</MudSelectItem>
         </MudSelect>
-        <AuthorizeView Policy="@Policies.Leadership">
+        <AuthorizeView Policy="@Policies.WriteAccess">
             <MudButton Href="/asservatenkammer/eintrag/neu" Variant="Variant.Filled" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Add">Neuer Eintrag</MudButton>
         </AuthorizeView>

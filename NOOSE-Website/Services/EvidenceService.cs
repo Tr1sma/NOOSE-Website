@@ -140,12 +140,13 @@ public class EvidenceService(
 
     public async Task SetItemImageAsync(string id, Stream image, string imageContentType, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        RequireManage(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var item = await db.EvidenceItems.FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
             ?? throw new InvalidOperationException($"Item '{id}' nicht gefunden.");
 
         var old = item.ImageFileName;
+        // guard needs the item's state, so it runs after the load
+        Permission.RequireEvidenceImageWrite(actor, itemHasImage: !string.IsNullOrEmpty(old));
         await ApplyImageAsync(item, image, imageContentType, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (!string.IsNullOrEmpty(old))
@@ -399,7 +400,7 @@ public class EvidenceService(
 
     public async Task<EvidenceEntry> CreateEntryAsync(EvidenceEntryInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        RequireManage(actor);
+        Permission.RequireEvidenceEntryWrite(actor, input.Type);
         ValidateEntry(input);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

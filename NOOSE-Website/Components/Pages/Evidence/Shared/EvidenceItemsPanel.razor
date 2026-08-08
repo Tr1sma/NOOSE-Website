@@ -67,8 +67,11 @@
             <EmptyState Icon="@Icons.Material.Filled.Inventory2" Title="Kammer ist leer"
                         Text="@($"Alle {_zeroCount} Items stehen auf Bestand 0. Sie bleiben im Katalog und tauchen wieder auf, sobald etwas eingelagert wird.")">
                 <Actions>
-                    <MudButton Href="/asservatenkammer/eintrag/neu" Variant="Variant.Filled" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Add">Neuer Eintrag</MudButton>
+                    @if (_mayCreate)
+                    {
+                        <MudButton Href="/asservatenkammer/eintrag/neu" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add">Neuer Eintrag</MudButton>
+                    }
                 </Actions>
             </EmptyState>
         }
@@ -101,8 +104,10 @@
                     }
                     @if (r.HasImage)
                     {
+                        @* contain, not cover: these are item icons with their own margins, and cropping
+                           them to fill the tile cuts the barrel off a rifle *@
                         <MudImage Src="@($"/dateien/asservate/{r.Item.Id}")" Alt="@r.Item.Name"
-                                  Height="120" Width="168" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                                  Height="120" Width="168" ObjectFit="ObjectFit.Contain" Class="rounded" />
                     }
                     else
                     {
@@ -162,6 +167,7 @@
 
     private bool _load = true;
     private bool _mayClear;
+    private bool _mayCreate;
     private bool _selectMode;
     private bool _showZero;
     private string? _search;
@@ -202,6 +208,7 @@
     {
         _user = (await AuthStateTask).User;
         _mayClear = _user.IsLeadership() && _user.MayWrite();
+        _mayCreate = _user.MayWrite();
         _categories = await SuggestionService.GetAsync(SuggestionType.EvidenceCategory);
         await ReloadAsync();
     }
@@ -290,8 +297,8 @@
 
     private async Task ClearAsync(IReadOnlyCollection<string>? preselected)
     {
-        // "Kammer räumen" inherits the active category; an explicit pick must not be narrowed by it,
-        // because _picked deliberately survives a filter change and would then book unseen rows
+        // "Kammer räumen" inherits the active category as a preselection; an explicit pick must not be
+        // narrowed by it, because _picked deliberately survives a filter change
         var outcome = await EvidenceClearingDialog.ShowAsync(DialogService, _user, preselected,
             preselected is null ? _category : null);
         if (outcome is null)
@@ -323,9 +330,6 @@
             parts.Add($"{result.SkippedItems} übersprungen");
         }
         // scope comes from the dialog, not from this panel's filter — the two can disagree
-        var scope = outcome.Category is null
-            ? "Kammer geräumt"
-            : $"„{EvidenceCategories.Label(outcome.Category)}“ geräumt";
-        Snackbar.Add($"{scope}: {string.Join(", ", parts)}.", Severity.Success);
+        Snackbar.Add($"{outcome.Scope}: {string.Join(", ", parts)}.", Severity.Success);
     }
 }
