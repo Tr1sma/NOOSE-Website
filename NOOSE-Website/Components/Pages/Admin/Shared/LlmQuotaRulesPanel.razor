@@ -6,7 +6,12 @@
 @inject ISnackbar Snackbar
 
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-    Wöchentliches NOOSEI-Kontingent je Dienstgrad. <b>1.000 Token entsprechen einem Cent</b> echter API-Kosten.
+    Wöchentliches NOOSEI-Kontingent je Dienstgrad.
+    @if (_maySeeCost)
+    {
+        @* the exchange rate is a real price too: it turns every token figure on the page into money *@
+        <text><b>1.000 Token entsprechen einem Cent</b> echter API-Kosten.</text>
+    }
     Der Übertrag ist auf denselben Prozentsatz der Basis gedeckelt — mehr als „Basis + Übertrag" kann niemand
     ansammeln, egal wie viele Wochen ungenutzt bleiben.
 </MudText>
@@ -31,7 +36,10 @@ else
                 <th style="width:180px;">Grundkontingent</th>
                 <th style="width:140px;">Übertrag</th>
                 <th style="width:160px;" class="text-right">Max. in der Woche</th>
-                <th style="width:160px;" class="text-right">≈ Realkosten/Woche</th>
+                @if (_maySeeCost)
+                {
+                    <th style="width:160px;" class="text-right">≈ Realkosten/Woche</th>
+                }
             </tr>
         </thead>
         <tbody>
@@ -51,9 +59,12 @@ else
                                          Adornment="Adornment.End" AdornmentText="%" />
                     </td>
                     <td class="text-right">@LlmQuotaMath.Ceiling(quota.BaseWeekly, quota.CarryOverPercent).ToString("N0")</td>
-                    <td class="text-right mud-text-secondary">
-                        @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(quota.BaseWeekly, quota.CarryOverPercent)).ToString("0.00") $
-                    </td>
+                    @if (_maySeeCost)
+                    {
+                        <td class="text-right mud-text-secondary">
+                            @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(quota.BaseWeekly, quota.CarryOverPercent)).ToString("0.00") $
+                        </td>
+                    }
                 </tr>
             }
         </tbody>
@@ -143,6 +154,11 @@ else
     private LlmQuotaConfig? _config;
     private string? _addendum;
     private bool _mayEdit;
+
+    /// <summary>Real money is the AI owner's alone — they pay the bill. Leadership and other admins run the
+    /// quota in tokens, which is the unit every other surface of the site uses anyway.</summary>
+    private bool _maySeeCost;
+
     private bool _busy;
 
     private LlmRankQuota Rules(Rank rank)
@@ -159,7 +175,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        _mayEdit = _user.IsAiOwner() && _user.MayWrite();
+        _maySeeCost = _user.IsAiOwner();
+        _mayEdit = _maySeeCost && _user.MayWrite();
         await LoadAsync();
     }
 

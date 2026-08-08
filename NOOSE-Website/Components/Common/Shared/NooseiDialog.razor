@@ -56,9 +56,9 @@
                 <div class="dokument-html">@((MarkupString)result.Html)</div>
             }
 
+            @* tokens only: an agent budgets in quota, never in money *@
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3">
                 NOOSEI · @result.QuotaTokens.ToString("N0") Token
-                (@LlmQuotaMath.ToCents(result.QuotaTokens).ToString("0.##") ¢)
                 · Restkontingent: @result.Quota.Remaining.ToString("N0")
             </MudText>
         }
@@ -85,6 +85,12 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
     [Parameter, EditorRequired] public NooseiRequest Request { get; set; } = default!;
+
+    /// <summary>Fires the moment a generation returns, before the agent decides anything.</summary>
+    /// <remarks>The quota is spent at that point. Reporting the cost through the dialog's *result* instead would
+    /// lose it on every path but "übernehmen" — discard, Escape, a second attempt — and the editor would keep
+    /// showing the numbers of an older, accepted turn.</remarks>
+    [Parameter] public EventCallback<TextAssistResult> OnGenerated { get; set; }
 
     private enum Step { Auftrag, Laeuft, Vorschau, Fehler }
 
@@ -118,6 +124,10 @@
                 : await TextAssist.ComposeAsync(_instruction ?? string.Empty, Request.SurroundingText,
                     Request.Context, Request.Subject, Request.User);
             _step = Step.Vorschau;
+            if (OnGenerated.HasDelegate)
+            {
+                await OnGenerated.InvokeAsync(_result);
+            }
         }
         catch (Exception ex)
         {
@@ -133,7 +143,9 @@
     private void Cancel() => Dialog.Cancel();
 
     /// <summary>Opens the dialog and returns the agent's choice, or null when they discarded it.</summary>
-    public static async Task<NooseiChoice?> ShowAsync(IDialogService dialogs, NooseiRequest request)
+    /// <param name="onGenerated">Called as soon as a generation returns, regardless of what the agent then does.</param>
+    public static async Task<NooseiChoice?> ShowAsync(IDialogService dialogs, NooseiRequest request,
+        EventCallback<TextAssistResult> onGenerated = default)
     {
         var options = new DialogOptions
         {
@@ -143,7 +155,11 @@
             BackdropClick = false,
         };
         var title = request.Mode == NooseiMode.Correct ? "NOOSEI · Text korrigieren" : "NOOSEI · Text schreiben lassen";
-        var parameters = new DialogParameters<NooseiDialog> { { x => x.Request, request } };
+        var parameters = new DialogParameters<NooseiDialog>
+        {
+            { x => x.Request, request },
+            { x => x.OnGenerated, onGenerated },
+        };
         var reference = await dialogs.ShowAsync<NooseiDialog>(title, parameters, options);
         var result = await reference.Result;
         return result is { Canceled: false, Data: NooseiChoice choice } ? choice : null;

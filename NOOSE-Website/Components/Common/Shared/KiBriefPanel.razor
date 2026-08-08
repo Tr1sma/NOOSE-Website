@@ -5,6 +5,17 @@
 @inject IDossierSummaryService Dossier
 @inject ISnackbar Snackbar
 
+@if (_canGenerate)
+{
+    @* one place for all eight detail pages; the chat resolves the record against the asker's own scope again *@
+    <div class="d-flex justify-end mb-2">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Forum" Href="@ChatHref">
+            NOOSEI zu dieser Akte fragen
+        </MudButton>
+    </div>
+}
+
 @if (!_loaded)
 {
     <div class="d-flex justify-center pa-6">
@@ -187,6 +198,8 @@ else if (_view.Brief is { } brief)
 
     private bool _canGenerate =>
         _view?.Configured == true && User is { } u && !u.IsPartner() && !u.IsDemo() && !u.IsOnlyReader();
+
+    private string ChatHref => $"/ki-assistent?akte={Uri.EscapeDataString($"{EntityType}:{EntityId}")}";
 
     private static Color RiskColour(BriefRiskLevel level) => level switch
     {

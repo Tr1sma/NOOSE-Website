@@ -40,8 +40,15 @@ else
         {
             <text>Nächste Zurücksetzung: @reset.ToString("dddd, dd.MM.yyyy HH:mm") Uhr. </text>
         }
-        1.000 Token entsprechen einem Cent echter Kosten.
+        @* the token/cent rate stays in the settings; an agent's page names no money at all *@
+        Lange Antworten mit vielen Aktenzugriffen kosten mehr Kontingent als eine kurze Rückfrage.
     </MudText>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mt-2"
+              Icon="@Icons.Material.Filled.AddCircleOutline">
+        Reicht dein Kontingent für einen bestimmten Einsatz nicht aus, kannst du im Einzelfall bei
+        <b>Atze</b> mehr anfragen.
+    </MudAlert>
 
     @if (_trend.Count > 1)
     {
@@ -57,14 +64,12 @@ else
             <MudTh>Zeitpunkt</MudTh>
             <MudTh>Funktion</MudTh>
             <MudTh Style="text-align:right">Kontingent</MudTh>
-            <MudTh Style="text-align:right">Kosten</MudTh>
             <MudTh>Status</MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Zeitpunkt">@context.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
             <MudTd DataLabel="Funktion">@LlmFeatureDisplay.Name(context.Feature)</MudTd>
             <MudTd DataLabel="Kontingent" Style="text-align:right">@context.QuotaTokens.ToString("N0")</MudTd>
-            <MudTd DataLabel="Kosten" Style="text-align:right">@LlmQuotaMath.ToCents(context.QuotaTokens).ToString("0.##") ¢</MudTd>
             <MudTd DataLabel="Status">
                 @if (!context.Success)
                 {

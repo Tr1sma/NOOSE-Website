@@ -1,3 +1,4 @@
+@implements IDisposable
 @using System.Security.Claims
 @using NOOSE_Website.Authorization
 @using NOOSE_Website.Models.Llm
@@ -50,9 +51,10 @@ else
                         @quota.Remaining.ToString("N0") Token
                     </MudChip>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @* tokens only: an agent budgets in quota, never in money *@
                         @if (_lastCost is { } cost)
                         {
-                            <text>letzte Antwort: @cost.ToString("N0") Token · @LlmQuotaMath.ToCents(cost).ToString("0.##") ¢ · </text>
+                            <text>letzte Antwort: @cost.ToString("N0") Token · </text>
                         }
                         @quota.PeriodLabel
                     </MudText>
@@ -96,13 +98,37 @@ else
                                 @* the agent's own wording stays verbatim; only NOOSEI answers in Markdown *@
                                 <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
                             }
+                            @if (m.Sources.Count > 0)
+                            {
+                                @* what NOOSEI read, not a claim about what every sentence rests on *@
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">Gelesen:</MudText>
+                                <div class="d-flex flex-wrap" style="gap:4px;">
+                                    @foreach (var source in m.Sources)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 Color="Color.Default" Href="@SearchNavigation.Route(source.Type, source.Id)">
+                                            @source.Name
+                                        </MudChip>
+                                    }
+                                </div>
+                            }
                         </MudPaper>
                     </MudStack>
                 }
                 @if (_busy)
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@_progress</MudText>
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-1" />
+                    <div class="mt-2">
+                        @foreach (var step in _steps)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@step</MudText>
+                        }
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-1" />
+                        <div class="d-flex align-center mt-1" style="gap:8px;">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@_elapsed s</MudText>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                       StartIcon="@Icons.Material.Filled.Stop" OnClick="Cancel">Abbrechen</MudButton>
+                        </div>
+                    </div>
                 }
             </MudPaper>
 
@@ -123,14 +149,24 @@ else
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
+    /// <summary>Record the chat was opened from, as <c>Typ:Id</c>; only used when a new conversation starts.</summary>
+    [Parameter] public string? Anchor { get; set; }
+
+    /// <summary>Question carried in from elsewhere. Pre-filled only — sending stays a deliberate act,
+    /// because a stray Enter would spend quota.</summary>
+    [Parameter] public string? Draft { get; set; }
+
     private ClaimsPrincipal? _user;
     private IReadOnlyList<NooseiConversationRow> _conversations = [];
     private readonly List<NooseiChatMessage> _messages = new();
+    private readonly List<string> _steps = new();
     private string? _conversationId;
     private string? _input;
+    private string? _lastDraft;
     private bool _busy;
     private bool _loaded;
-    private string _progress = "NOOSEI arbeitet …";
+    private int _elapsed;
+    private CancellationTokenSource? _cts;
     private LlmQuotaStatus? _quota;
     private long? _lastCost;
 
@@ -153,6 +189,17 @@ else
         }
         await ReloadQuotaAsync();
         await ReloadConversationsAsync();
+    }
+
+    /// <summary>Picks up a new question from the command palette. The page stays alive across those navigations,
+    /// so a second Strg+K only ever changes the parameter — <c>OnInitialized</c> would never see it.</summary>
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(Draft) && !string.Equals(Draft, _lastDraft, StringComparison.Ordinal))
+        {
+            _lastDraft = Draft;
+            _input = Draft;
+        }
     }
 
     /// <summary>Without this the counter and the block only appear after the first answer — which is exactly
@@ -219,17 +266,26 @@ else
         _messages.Add(NooseiChatMessage.FromAgent(question));
         _input = string.Empty;
         _busy = true;
-        _progress = "NOOSEI arbeitet …";
+        _elapsed = 0;
+        _steps.Clear();
+        _steps.Add("NOOSEI arbeitet …");
 
+        // every step is kept: the trace is what a 60-second answer has to show instead of a bare spinner
         var progress = new Progress<string>(step =>
         {
-            _progress = step;
-            InvokeAsync(StateHasChanged);
+            if (_steps.Count == 0 || !string.Equals(_steps[^1], step, StringComparison.Ordinal))
+            {
+                _steps.Add(step);
+                InvokeAsync(StateHasChanged);
+            }
         });
 
+        _cts = new CancellationTokenSource();
+        var ticker = TickAsync(_cts.Token);
         try
         {
-            var turn = await Chat.AskAsync(_conversationId, question, _user, progress);
+            var anchor = _conversationId is null ? NooseiAnchor.Parse(Anchor) : null;
+            var turn = await Chat.AskAsync(_conversationId, question, _user, progress, anchor, _cts.Token);
             _conversationId = turn.ConversationId;
             _messages.Add(turn.Answer);
             _quota = turn.Quota;
@@ -240,6 +296,12 @@ else
             }
             await ReloadConversationsAsync();
         }
+        catch (OperationCanceledException)
+        {
+            // the gateway still books what was burned, so say so rather than implying it was free
+            Snackbar.Add("Anfrage abgebrochen. Bereits verbrauchte Token wurden abgerechnet.", Severity.Info);
+            await ReloadQuotaAsync();
+        }
         catch (Exception ex)
         {
             Snackbar.Add(NooseiErrors.Describe(ex), Severity.Error);
@@ -247,6 +309,36 @@ else
         finally
         {
             _busy = false;
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _cts = null;
+            try { await ticker; } catch (Exception) { /* the ticker only ever ends by cancellation */ }
         }
+    }
+
+    private void Cancel() => _cts?.Cancel();
+
+    /// <summary>Counts the seconds while an answer is being built; ends with the turn.</summary>
+    private async Task TickAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _elapsed++;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { /* expected */ }
+        catch (ObjectDisposedException) { /* circuit gone */ }
+    }
+
+    public void Dispose()
+    {
+        // a torn-down circuit must not leave the ticker running
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
     }
 }

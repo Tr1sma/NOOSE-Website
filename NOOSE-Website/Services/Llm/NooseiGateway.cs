@@ -7,8 +7,16 @@ using NOOSE_Website.Models.Llm;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Executes one tool call the model asked for and returns the German plain-text result.</summary>
-public delegate Task<string> NooseiToolExecutor(LlmToolCall call, CancellationToken cancellationToken);
+/// <summary>What one tool call produced: the German plain text the model reads, plus the records it touched.</summary>
+/// <remarks>The refs are the reason this is not a bare string — they carry the source chips of an answer and the
+/// record list of a log row, and a tool that returns only text loses both.</remarks>
+public sealed record NooseiToolOutcome(string Text, IReadOnlyList<LlmContextRef>? Refs = null)
+{
+    public static NooseiToolOutcome Plain(string text) => new(text);
+}
+
+/// <summary>Executes one tool call the model asked for.</summary>
+public delegate Task<NooseiToolOutcome> NooseiToolExecutor(LlmToolCall call, CancellationToken cancellationToken);
 
 /// <summary>One user-visible NOOSEI request. May cost several rounds; it is billed exactly once.</summary>
 public sealed record NooseiCall(
@@ -24,8 +32,7 @@ public sealed record NooseiCall(
     string? EntityId = null,
     string? ConversationId = null,
     IReadOnlyList<LlmContextRef>? ContextRefs = null,
-    bool RequireCapableProviders = false,
-    IProgress<string>? Progress = null);
+    bool RequireCapableProviders = false);
 
 /// <summary>What one request produced, plus what it cost the agent's weekly quota.</summary>
 /// <remarks><paramref name="Truncated" /> means the token cap cut the answer off; callers that parse a fixed
@@ -37,7 +44,8 @@ public sealed record NooseiAnswer(
     int Rounds,
     IReadOnlyList<LlmMessage> Transcript,
     bool Degraded,
-    bool Truncated = false);
+    bool Truncated = false,
+    IReadOnlyList<LlmContextRef>? Refs = null);
 
 /// <summary>The only way to reach the model. Enforces use permission, the weekly quota and the request log,
 /// so a new feature cannot get free tokens by calling the transport directly.</summary>
@@ -106,10 +114,14 @@ public class NooseiGateway(
                 messages.Add(LlmMessage.Assistant(result.Text, result.ToolCalls));
                 foreach (var toolCall in result.ToolCalls.Take(Math.Max(1, _o.MaxToolCallsPerRound)))
                 {
-                    call.Progress?.Report($"NOOSEI nutzt {toolCall.Name} …");
-                    messages.Add(LlmMessage.Tool(toolCall.Id, toolCall.Name,
-                        await RunToolAsync(call.ToolExecutor, toolCall, turnCts.Token)));
+                    var outcome = await RunToolAsync(call.ToolExecutor, toolCall, turnCts.Token);
+                    messages.Add(LlmMessage.Tool(toolCall.Id, toolCall.Name, outcome.Text));
+                    // the tool entry carries the per-tool statistics, the record refs carry the sources
                     refs.Add(new LlmContextRef("tool", null, toolCall.Name));
+                    if (outcome.Refs is { Count: > 0 } touched)
+                    {
+                        refs.AddRange(touched);
+                    }
                 }
                 foreach (var dropped in result.ToolCalls.Skip(Math.Max(1, _o.MaxToolCallsPerRound)))
                 {
@@ -121,7 +133,8 @@ public class NooseiGateway(
             watch.Stop();
             var charge = await ChargeAsync(agentId, call, total, last, refs, rounds, watch, success: true, error: null);
             return new NooseiAnswer(last?.Text, total, charge, rounds, messages, degraded,
-                string.Equals(last?.FinishReason, "length", StringComparison.OrdinalIgnoreCase));
+                string.Equals(last?.FinishReason, "length", StringComparison.OrdinalIgnoreCase),
+                refs);
         }
         catch (Exception ex)
         {
@@ -156,7 +169,7 @@ public class NooseiGateway(
         offerTools ? LlmToolChoice.Auto : LlmToolChoice.None,
         call.RequireCapableProviders);
 
-    private async Task<string> RunToolAsync(NooseiToolExecutor executor, LlmToolCall call, CancellationToken turnToken)
+    private async Task<NooseiToolOutcome> RunToolAsync(NooseiToolExecutor executor, LlmToolCall call, CancellationToken turnToken)
     {
         using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(turnToken);
         toolCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _o.ToolTimeoutSeconds)));
@@ -167,12 +180,12 @@ public class NooseiGateway(
         // a dead tool must not kill the turn: hand the model a German error it can recover from
         catch (OperationCanceledException) when (!turnToken.IsCancellationRequested)
         {
-            return "Werkzeug hat nicht rechtzeitig geantwortet.";
+            return NooseiToolOutcome.Plain("Werkzeug hat nicht rechtzeitig geantwortet.");
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "NOOSEI-Werkzeug {Tool} fehlgeschlagen", call.Name);
-            return "Werkzeug konnte nicht ausgeführt werden.";
+            return NooseiToolOutcome.Plain("Werkzeug konnte nicht ausgeführt werden.");
         }
     }
 
@@ -184,7 +197,7 @@ public class NooseiGateway(
             agentId,
             call.Feature,
             total,
-            last?.Model ?? _o.Model,
+            last?.Model ?? _o.ModelFor(call.Feature),
             last?.Provider,
             (int)Math.Min(watch.ElapsedMilliseconds, int.MaxValue),
             Math.Max(0, rounds - 1),

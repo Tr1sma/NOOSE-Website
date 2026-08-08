@@ -1,3 +1,5 @@
+using NOOSE_Website.Models.Enums;
+
 namespace NOOSE_Website.Models.Llm;
 
 /// <summary>LLM endpoint configuration. Secrets (ApiKey) come from user-secrets / env, never the repo.</summary>
@@ -14,6 +16,16 @@ public sealed class LlmOptions
     public string ApiKey { get; set; } = string.Empty;
 
     public string Model { get; set; } = string.Empty;
+
+    /// <summary>Per-feature model override; anything unset falls back to <see cref="Model"/>. Proofreading a few
+    /// paragraphs and a six-round analysis are very different jobs and do not need the same model.</summary>
+    public Dictionary<LlmFeature, string> ModelByFeature { get; set; } = new();
+
+    /// <summary>The model a feature runs on: its override when configured, otherwise the default.</summary>
+    public string ModelFor(LlmFeature feature)
+        => ModelByFeature.TryGetValue(feature, out var model) && !string.IsNullOrWhiteSpace(model)
+            ? model.Trim()
+            : Model;
 
     /// <summary>Deployment-wide egress kill switch for classified/VS content. The per-record decision is made by the
     /// viewer's own scope long before this point; flip it off only when pointing at an endpoint you do not trust.</summary>

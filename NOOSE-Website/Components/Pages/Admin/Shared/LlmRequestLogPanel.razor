@@ -57,8 +57,11 @@
 
 <div class="d-flex align-center justify-space-between mb-1">
     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-        @_page.TotalCount Anfragen · @_page.TotalQuotaTokens.ToString("N0") Kontingent-Token ·
-        @_page.TotalCostUsd.ToString("0.0000") $ echte Kosten
+        @_page.TotalCount Anfragen · @_page.TotalQuotaTokens.ToString("N0") Kontingent-Token
+        @if (_maySeeCost)
+        {
+            <text> · @_page.TotalCostUsd.ToString("0.0000") $ echte Kosten</text>
+        }
     </MudText>
 </div>
 
@@ -78,7 +81,10 @@
         <MudTh>Funktion</MudTh>
         <MudTh Style="text-align:right">Tokens</MudTh>
         <MudTh Style="text-align:right">Kontingent</MudTh>
-        <MudTh Style="text-align:right">Kosten</MudTh>
+        @if (_maySeeCost)
+        {
+            <MudTh Style="text-align:right">Kosten</MudTh>
+        }
         <MudTh Style="text-align:right">Dauer</MudTh>
         <MudTh>Status</MudTh>
     </HeaderContent>
@@ -94,7 +100,10 @@
             @context.PromptTokens.ToString("N0") / @context.CompletionTokens.ToString("N0")
         </MudTd>
         <MudTd DataLabel="Kontingent" Style="text-align:right">@context.QuotaTokens.ToString("N0")</MudTd>
-        <MudTd DataLabel="Kosten" Style="text-align:right">@context.CostUsd.ToString("0.0000") $</MudTd>
+        @if (_maySeeCost)
+        {
+            <MudTd DataLabel="Kosten" Style="text-align:right">@context.CostUsd.ToString("0.0000") $</MudTd>
+        }
         <MudTd DataLabel="Dauer" Style="text-align:right">@(context.DurationMs / 1000.0).ToString("0.0") s</MudTd>
         <MudTd DataLabel="Status">
             @if (!context.Success)
@@ -127,9 +136,14 @@
     private DateTime? _to;
     private bool _busy = true;
 
+    /// <summary>Real money is the AI owner's alone. Counter-intelligence reads this log for behaviour, and
+    /// behaviour is fully described by tokens.</summary>
+    private bool _maySeeCost;
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _maySeeCost = _user.IsAiOwner();
         // the rail recreates this panel on every section switch, so the filter lives in the URL
         ReadUrlState();
         try
@@ -185,7 +199,7 @@
             var detail = await Log.GetAsync(row.Id, _user);
             if (detail is not null)
             {
-                await LlmRequestDetailDialog.ShowAsync(Dialogs, detail);
+                await LlmRequestDetailDialog.ShowAsync(Dialogs, detail, _maySeeCost);
             }
         }
         catch (Exception ex)

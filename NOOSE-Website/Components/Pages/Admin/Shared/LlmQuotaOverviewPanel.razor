@@ -2,6 +2,7 @@
 @using NOOSE_Website.Authorization
 @using NOOSE_Website.Models.Llm
 @inject ILlmQuotaService Quota
+@inject ILlmRequestLogService Log
 @inject ILlmAnomalyService Anomalies
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
@@ -9,6 +10,25 @@
 @if (_busy)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+@if (_maySeeCost)
+{
+    @* the bill: what the week can cost at worst, and what it is actually trending at *@
+    <MudGrid Spacing="2" Class="mb-3">
+        <MudItem xs="12" sm="6">
+            <StatTile Icon="@Icons.Material.Filled.Savings" Label="Maximalkosten pro Woche" Colour="Color.Warning"
+                      Value="@($"{LlmQuotaMath.ToCost(_maxTokens):0.00} $")"
+                      Hint="@($"{_maxTokens:N0} Token über {_rows.Count} Agenten, restlos verbraucht")" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <StatTile Icon="@Icons.Material.Filled.TrendingUp" Label="Erwartete Kosten pro Woche" Colour="Color.Info"
+                      Value="@(_expected is { } e ? $"{e.CostUsd:0.00} $" : "—")"
+                      Hint="@(_expected is { } h
+                          ? $"Schnitt aus {h.Weeks} abgeschlossenen Wochen · {h.Tokens:N0} Token"
+                          : "Noch keine abgeschlossene Woche")" />
+        </MudItem>
+    </MudGrid>
 }
 
 @if (_flags.Count > 0)
@@ -103,14 +123,40 @@
     private string _periodLabel = string.Empty;
     private DateTime? _nextReset;
     private bool _mayManage;
+
+    /// <summary>Real money is the AI owner's alone — everyone else runs this page in tokens.</summary>
+    private bool _maySeeCost;
+
+    private long _maxTokens;
+    private (long Tokens, decimal CostUsd, int Weeks)? _expected;
     private bool _busy = true;
 
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
+        _maySeeCost = _user.IsAiOwner();
         // only the AI owner may change budgets; a control that always fails is worse than none
-        _mayManage = _user.IsAiOwner() && _user.MayWrite();
+        _mayManage = _maySeeCost && _user.MayWrite();
         await ReloadAsync();
+    }
+
+    /// <summary>Worst case from the live roster, forecast from the closed weeks. Only for the AI owner: the
+    /// figures are money, and the history query refuses anyone else anyway.</summary>
+    private async Task LoadForecastAsync()
+    {
+        if (!_maySeeCost)
+        {
+            return;
+        }
+        _maxTokens = LlmCostForecast.MaxTokens(_rows);
+        try
+        {
+            _expected = LlmCostForecast.Expected(await Log.GetWeeklySpendAsync(_user));
+        }
+        catch (Exception)
+        {
+            /* the roster stays usable without the forecast */
+        }
     }
 
     private async Task ReloadAsync()
@@ -121,6 +167,7 @@
             _rows = await Quota.GetAllStatusAsync(_user);
             _periodLabel = _rows.FirstOrDefault()?.PeriodLabel ?? IsoWeekPeriod.Label(IsoWeekPeriod.Current().Year, IsoWeekPeriod.Current().Week);
             _nextReset = _rows.FirstOrDefault()?.NextResetLocal;
+            await LoadForecastAsync();
             try
             {
                 _flags = await Anomalies.GetFlagsAsync(_user);
@@ -142,7 +189,7 @@
 
     private async Task OverrideAsync(LlmQuotaStatus row)
     {
-        var result = await LlmQuotaOverrideDialog.ShowAsync(Dialogs, row);
+        var result = await LlmQuotaOverrideDialog.ShowAsync(Dialogs, row, _user.IsAiOwner());
         if (result is null)
         {
             return;

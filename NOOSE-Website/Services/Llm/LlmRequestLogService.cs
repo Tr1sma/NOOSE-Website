@@ -22,6 +22,9 @@ public interface ILlmRequestLogService
 
     /// <summary>Closed weeks plus the running one, oldest first, for the trend chart.</summary>
     Task<IReadOnlyList<LlmWeekPoint>> GetWeeklyTrendAsync(string agentId, ClaimsPrincipal actor, int weeks = 12, CancellationToken cancellationToken = default);
+
+    /// <summary>Real weekly spend across every agent, oldest first. Carries money, so it is the AI owner's alone.</summary>
+    Task<IReadOnlyList<LlmWeekSpend>> GetWeeklySpendAsync(ClaimsPrincipal actor, int weeks = 12, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc cref="ILlmRequestLogService" />
@@ -163,6 +166,36 @@ public sealed class LlmRequestLogService(
                 IsoWeekPeriod.Start(status.Year, status.Week), status.Consumed, status.Available));
         }
         return points;
+    }
+
+    public async Task<IReadOnlyList<LlmWeekSpend>> GetWeeklySpendAsync(
+        ClaimsPrincipal actor, int weeks = 12, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireAiOwner(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // the budget week is stored on the row: Pomelo cannot translate a UTC-to-local week, and deriving it
+        // would pull every request into memory just to sum it
+        var rows = await db.LlmRequests.AsNoTracking()
+            .GroupBy(x => new { x.BudgetYear, x.BudgetWeek })
+            .Select(g => new
+            {
+                g.Key.BudgetYear,
+                g.Key.BudgetWeek,
+                Tokens = g.Sum(x => x.QuotaTokens),
+                Cost = g.Sum(x => x.CostUsd),
+            })
+            .OrderByDescending(g => g.BudgetYear).ThenByDescending(g => g.BudgetWeek)
+            .Take(Math.Clamp(weeks, 1, 104))
+            .ToListAsync(cancellationToken);
+
+        var (year, week) = IsoWeekPeriod.Current();
+        return rows
+            .Select(r => new LlmWeekSpend(r.BudgetYear, r.BudgetWeek,
+                IsoWeekPeriod.Start(r.BudgetYear, r.BudgetWeek), r.Tokens, r.Cost,
+                r.BudgetYear == year && r.BudgetWeek == week))
+            .OrderBy(r => r.StartLocal)
+            .ToList();
     }
 
     private static IReadOnlyList<LlmContextRef> Refs(string? json)

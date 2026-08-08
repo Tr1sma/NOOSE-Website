@@ -14,7 +14,10 @@
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 Höchstbestand mit @Status.CarryPercent % Übertrag:
                 @LlmQuotaMath.Ceiling(_amount, Status.CarryPercent).ToString("N0") Token
-                (≈ @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(_amount, Status.CarryPercent)).ToString("0.00") $ pro Woche)
+                @if (MaySeeCost)
+                {
+                    <text>(≈ @LlmQuotaMath.ToCost(LlmQuotaMath.Ceiling(_amount, Status.CarryPercent)).ToString("0.00") $ pro Woche)</text>
+                }
             </MudText>
         }
     </DialogContent>
@@ -28,6 +31,10 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     [Parameter, EditorRequired] public LlmQuotaStatus Status { get; set; } = default!;
+
+    /// <summary>Whether to show real money. Only the AI owner can open this dialog today, but the flag is passed
+    /// in rather than assumed — default off, so the gate survives the opener being relaxed later.</summary>
+    [Parameter] public bool MaySeeCost { get; set; }
 
     public readonly record struct Choice(long? Amount);
 
@@ -44,9 +51,13 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    public static async Task<Choice?> ShowAsync(IDialogService dialogs, LlmQuotaStatus status)
+    public static async Task<Choice?> ShowAsync(IDialogService dialogs, LlmQuotaStatus status, bool maySeeCost = false)
     {
-        var parameters = new DialogParameters<LlmQuotaOverrideDialog> { { x => x.Status, status } };
+        var parameters = new DialogParameters<LlmQuotaOverrideDialog>
+        {
+            { x => x.Status, status },
+            { x => x.MaySeeCost, maySeeCost },
+        };
         var reference = await dialogs.ShowAsync<LlmQuotaOverrideDialog>("KI-Kontingent anpassen", parameters);
         var result = await reference.Result;
         return result is { Canceled: false, Data: Choice choice } ? choice : null;

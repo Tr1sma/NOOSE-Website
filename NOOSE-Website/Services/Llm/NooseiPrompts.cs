@@ -56,10 +56,24 @@ public static class NooseiPrompts
         „keine Verbindung" sagst. Benenne jede Verbindung mit ihrer Art, nicht nur als „verbunden".
         """;
 
+    /// <summary>Which tool answers which shape of question. Without it the model reaches for the full-text search
+    /// every time and answers a question about the whole stock with a handful of hits.</summary>
+    private const string ToolChoice = """
+        Wähle das Werkzeug nach der Frage, nicht nach Gewohnheit:
+        • Nach einem Namen, Alias oder Aktenzeichen gesucht → „suche_akten".
+        • „Welche alle …", „wie viele …", nach Merkmalen gefiltert (Einstufung, Lebensstatus,
+          Bedrohungs-Score, Änderungszeitraum, Verschlusssache) → „finde_akten". Es liefert die
+          vollständige Anzahl; „suche_akten" liefert nur eine Auswahl und taugt nicht zum Zählen.
+        • Nach der Lage, nach Verteilungen, Durchschnitten oder Entwicklungen → „hole_kennzahlen".
+        Zähle niemals selbst Treffer aus einer Suchliste zusammen — nenne die Anzahl aus „finde_akten".
+        """;
+
     public const string Chat = $"""
         {Identity}
 
         {ToolContract}
+
+        {ToolChoice}
 
         {ConnectionModel}
         """;

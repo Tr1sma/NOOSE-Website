@@ -310,4 +310,200 @@ public sealed class NooseiChatServiceTests
         Assert.NotEmpty(seen!.Tools!);
         Assert.NotNull(seen.ToolExecutor);
     }
+
+    // ---- record anchor ----
+
+    private static async Task SeedRecordsAsync(SqliteTestContext ctx)
+    {
+        await using var db = ctx.NewContext();
+        db.People.Add(Seed.Person(id: "p-open", name: "Otto Offen"));
+        db.People.Add(Seed.Person(id: "p-secret", name: "Gerd Geheim", configure: p => p.IsClassified = true));
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Ask_StoresAVisibleAnchor_AndNamesItToTheModel()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        await SeedRecordsAsync(ctx);
+        NooseiCall? seen = null;
+        var (svc, _) = Build(ctx, call => { seen = call; return Answer(); });
+
+        var turn = await svc.AskAsync(null, "Was ist hier los?", Actor(), null, new NooseiAnchor("Person", "p-open"));
+
+        await using var db = ctx.NewContext();
+        var conversation = await db.NooseiConversations.SingleAsync(c => c.Id == turn.ConversationId);
+        Assert.Equal("Person", conversation.AnchorEntityType);
+        Assert.Equal("p-open", conversation.AnchorEntityId);
+        Assert.Contains(seen!.Messages, m => m.Content is not null && m.Content.Contains("Otto Offen"));
+    }
+
+    [Fact]
+    public async Task Ask_DropsAnAnchorTheAskerMayNotSee()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        await SeedRecordsAsync(ctx);
+        NooseiCall? seen = null;
+        var (svc, _) = Build(ctx, call => { seen = call; return Answer(); });
+
+        // a hand-typed ?akte= must not confirm a classified record by naming it back
+        var turn = await svc.AskAsync(null, "Was ist hier los?", Actor(), null, new NooseiAnchor("Person", "p-secret"));
+
+        await using var db = ctx.NewContext();
+        var conversation = await db.NooseiConversations.SingleAsync(c => c.Id == turn.ConversationId);
+        Assert.Null(conversation.AnchorEntityType);
+        Assert.Null(conversation.AnchorEntityId);
+        Assert.DoesNotContain(seen!.Messages, m => m.Content is not null && m.Content.Contains("Gerd Geheim"));
+    }
+
+    [Fact]
+    public async Task Ask_KeepsTheAnchorOnFollowUps()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        await SeedRecordsAsync(ctx);
+        NooseiCall? seen = null;
+        var (svc, _) = Build(ctx, call => { seen = call; return Answer(); });
+
+        var first = await svc.AskAsync(null, "Erste Frage", Actor(), null, new NooseiAnchor("Person", "p-open"));
+        await svc.AskAsync(first.ConversationId, "Und weiter?", Actor());
+
+        Assert.Contains(seen!.Messages, m => m.Content is not null && m.Content.Contains("Otto Offen"));
+        Assert.Equal("Person", seen.EntityType);
+    }
+
+    [Fact]
+    public async Task Ask_DropsATaskforceAnchor_ForANonMember()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        await using (var db = ctx.NewContext())
+        {
+            db.Taskforces.Add(new NOOSE_Website.Data.Entities.Taskforces.Taskforce
+            {
+                Id = "tf1",
+                Name = "Operation Nachtfalke",
+                CaseNumber = "NOOSE-TF-2026-0001",
+                Scope = TaskforceScope.InternalAgency,
+                Status = TaskforceStatus.Approved,
+            });
+            await db.SaveChangesAsync();
+        }
+        NooseiCall? seen = null;
+        var (svc, _) = Build(ctx, call => { seen = call; return Answer(); });
+
+        // Visibility.IsRecordVisibleAsync does not know Taskforce and answers true for unknown types,
+        // so the second gate is the one doing the work here
+        var turn = await svc.AskAsync(null, "Was läuft da?", Actor(), null, new NooseiAnchor("Taskforce", "tf1"));
+
+        await using var check = ctx.NewContext();
+        var conversation = await check.NooseiConversations.SingleAsync(c => c.Id == turn.ConversationId);
+        Assert.Null(conversation.AnchorEntityId);
+        Assert.DoesNotContain(seen!.Messages, m => m.Content is not null && m.Content.Contains("Nachtfalke"));
+    }
+
+    [Theory]
+    [InlineData("Person:p1", "Person", "p1")]
+    [InlineData("Fraktion:f1", "Faction", "f1")]
+    [InlineData("Faction:f1", "Faction", "f1")]
+    public void Anchor_ParsesBothTheGermanAndTheClrTypeName(string token, string type, string id)
+    {
+        var anchor = NooseiAnchor.Parse(token);
+
+        Assert.NotNull(anchor);
+        Assert.Equal(type, anchor!.EntityType);
+        Assert.Equal(id, anchor.EntityId);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Person")]
+    [InlineData(":p1")]
+    [InlineData("Person:")]
+    [InlineData("Hausmeister:p1")]
+    public void Anchor_RejectsAnythingItCannotUse(string? token) => Assert.Null(NooseiAnchor.Parse(token));
+
+    // ---- sources under an answer ----
+
+    [Fact]
+    public async Task Ask_StoresTheRecordsRead_OnceEach_AndWithoutTheToolEntries()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, gateway) = Build(ctx);
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new NooseiAnswer("Antwort", LlmUsage.Empty,
+                new LlmQuotaCharge(120, 0.0012m, LlmQuotaStatus.Empty, null, true), 2, [], false, false,
+                [
+                    new LlmContextRef("tool", null, "lies_akte"),
+                    new LlmContextRef("Person", "p1", "Max Mustermann"),
+                    new LlmContextRef("Person", "p1", "Max Mustermann"),
+                    new LlmContextRef("Faction", "f1", "Ballas"),
+                ]));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+
+        Assert.Equal(2, turn.Answer.Sources.Count);
+        Assert.Contains(turn.Answer.Sources, s => s.Id == "p1" && s.Name == "Max Mustermann");
+        Assert.Contains(turn.Answer.Sources, s => s.Id == "f1");
+        Assert.DoesNotContain(turn.Answer.Sources, s => s.Type == "tool");
+    }
+
+    [Fact]
+    public async Task Ask_DropsARecordTypeThatHasNoRouteOfItsOwn()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, gateway) = Build(ctx);
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new NooseiAnswer("Antwort", LlmUsage.Empty,
+                new LlmQuotaCharge(120, 0.0012m, LlmQuotaStatus.Empty, null, true), 2, [], false, false,
+                [
+                    new LlmContextRef("Meeting", "m1", "Wochenbesprechung"),
+                    new LlmContextRef("Hausmeister", "h1", "Hans Hausmeister"),
+                ]));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+
+        // an unknown type would fall through to the person route and link into the wrong record
+        Assert.Equal("Meeting", Assert.Single(turn.Answer.Sources).Type);
+    }
+
+    [Fact]
+    public async Task Ask_CapsTheSources_SoOneFilterCallCannotBuryTheAnswer()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, gateway) = Build(ctx);
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new NooseiAnswer("Antwort", LlmUsage.Empty,
+                new LlmQuotaCharge(120, 0.0012m, LlmQuotaStatus.Empty, null, true), 2, [], false, false,
+                Enumerable.Range(0, 120).Select(i => new LlmContextRef("Person", $"p{i}", $"Person {i}")).ToList()));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+
+        Assert.Equal(24, turn.Answer.Sources.Count);
+    }
+
+    [Fact]
+    public async Task Messages_KeepTheirSources_WhenTheConversationIsReopened()
+    {
+        using var ctx = new SqliteTestContext();
+        await SeedAgentsAsync(ctx);
+        var (svc, gateway) = Build(ctx);
+        gateway.AskAsync(Arg.Any<NooseiCall>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(new NooseiAnswer("Antwort", LlmUsage.Empty,
+                new LlmQuotaCharge(120, 0.0012m, LlmQuotaStatus.Empty, null, true), 2, [], false, false,
+                [new LlmContextRef("Person", "p1", "Max Mustermann")]));
+
+        var turn = await svc.AskAsync(null, "Frage", Actor());
+        var reopened = await svc.GetMessagesAsync(turn.ConversationId, Actor());
+
+        var answer = Assert.Single(reopened, m => !m.FromUser);
+        Assert.Equal("Max Mustermann", Assert.Single(answer.Sources).Name);
+        Assert.Empty(reopened.Single(m => m.FromUser).Sources);
+    }
 }

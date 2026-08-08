@@ -32,6 +32,11 @@ public class NooseiMessage
     [Column("WerkzeugName")]
     public string? ToolName { get; set; }
 
+    /// <summary>Records the tools read for this answer, as the chat renders them under it. Only on assistant
+    /// rows, and only records the asker was allowed to see — a tool cannot return anything else.</summary>
+    [Column("Quellen")]
+    public string? SourcesJson { get; set; }
+
     [Column("KontingentTokens")]
     public long? QuotaTokens { get; set; }
 

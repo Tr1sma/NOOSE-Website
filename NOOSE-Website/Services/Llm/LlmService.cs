@@ -150,7 +150,8 @@ public class LlmService(IHttpClientFactory httpFactory, IOptions<LlmOptions> opt
     {
         var payload = new Dictionary<string, object?>
         {
-            ["model"] = _o.Model,
+            // the feature decides the model, so proofreading need not run on the analysis model
+            ["model"] = _o.ModelFor(request.Context.Feature),
             ["temperature"] = request.Temperature,
             ["messages"] = request.Messages.Select(Wire).ToArray(),
             // cost accounting for the quota subsystem

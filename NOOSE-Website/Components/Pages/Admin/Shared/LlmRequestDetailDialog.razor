@@ -25,12 +25,21 @@
                 </tr>
                 <tr>
                     <td>Kontingent</td>
-                    <td>@Detail.Row.QuotaTokens.ToString("N0") Token (@LlmQuotaMath.ToCents(Detail.Row.QuotaTokens).ToString("0.##") ¢)</td>
+                    <td>
+                        @Detail.Row.QuotaTokens.ToString("N0") Token
+                        @if (MaySeeCost)
+                        {
+                            <text> (@LlmQuotaMath.ToCents(Detail.Row.QuotaTokens).ToString("0.##") ¢)</text>
+                        }
+                    </td>
                 </tr>
-                <tr>
-                    <td>Echte Kosten</td>
-                    <td>@Detail.Row.CostUsd.ToString("0.000000") $</td>
-                </tr>
+                @if (MaySeeCost)
+                {
+                    <tr>
+                        <td>Echte Kosten</td>
+                        <td>@Detail.Row.CostUsd.ToString("0.000000") $</td>
+                    </tr>
+                }
                 <tr>
                     <td>Modell / Anbieter</td>
                     <td class="mud-text-secondary">@(Detail.Row.Model ?? "—") / @(Detail.Row.Provider ?? "—")</td>
@@ -80,6 +89,10 @@
 
     [Parameter, EditorRequired] public LlmRequestDetail Detail { get; set; } = default!;
 
+    /// <summary>Whether to show real money. Handed down by the opener, which already resolved the AI owner —
+    /// the default is off, so a new call site cannot leak a price by forgetting the flag.</summary>
+    [Parameter] public bool MaySeeCost { get; set; }
+
     private static string? Route(LlmContextRef reference)
         => reference.Kind == "tool" || string.IsNullOrEmpty(reference.Id)
             ? null
@@ -87,10 +100,14 @@
 
     private void Close() => MudDialog.Close();
 
-    public static async Task ShowAsync(IDialogService dialogs, LlmRequestDetail detail)
+    public static async Task ShowAsync(IDialogService dialogs, LlmRequestDetail detail, bool maySeeCost = false)
     {
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
-        var parameters = new DialogParameters<LlmRequestDetailDialog> { { x => x.Detail, detail } };
+        var parameters = new DialogParameters<LlmRequestDetailDialog>
+        {
+            { x => x.Detail, detail },
+            { x => x.MaySeeCost, maySeeCost },
+        };
         await dialogs.ShowAsync<LlmRequestDetailDialog>("NOOSEI-Anfrage", parameters, options);
     }
 }

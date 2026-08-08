@@ -432,6 +432,43 @@ public class LlmServiceTests
         Assert.IsNotType<LlmCapabilityException>(ex);
     }
 
+    // ---- model per feature ----
+
+    [Fact]
+    public async Task Complete_UsesTheModelConfiguredForTheFeature()
+    {
+        var options = Options(o => o.ModelByFeature[LlmFeature.Proofread] = "vendor/klein");
+        var (svc, handler) = Build(options, Ok());
+
+        await svc.CompleteAsync(
+            new LlmRequest([LlmMessage.User("text")], new LlmCallContext(LlmFeature.Proofread)), Agent());
+
+        Assert.Equal("vendor/klein", handler.LastBody!.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public async Task Complete_FallsBackToTheDefaultModel_ForAFeatureWithoutAnOverride()
+    {
+        var options = Options(o => o.ModelByFeature[LlmFeature.Proofread] = "vendor/klein");
+        var (svc, handler) = Build(options, Ok());
+
+        await svc.CompleteAsync(Req(), Agent());
+
+        Assert.Equal("vendor/model", handler.LastBody!.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public async Task Complete_IgnoresABlankOverride()
+    {
+        // an env var set to nothing must not send an empty model name upstream
+        var options = Options(o => o.ModelByFeature[LlmFeature.Chat] = "   ");
+        var (svc, handler) = Build(options, Ok());
+
+        await svc.CompleteAsync(Req(), Agent());
+
+        Assert.Equal("vendor/model", handler.LastBody!.RootElement.GetProperty("model").GetString());
+    }
+
     /// <summary>Replays queued responses in order; <see cref="Hang"/> blocks until the attempt's token fires.</summary>
     private sealed class StubHandler(params HttpResponseMessage?[] responses) : HttpMessageHandler
     {

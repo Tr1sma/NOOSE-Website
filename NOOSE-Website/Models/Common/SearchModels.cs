@@ -72,6 +72,21 @@ public static class SearchNavigation
         _ => $"/personen/{targetId}",
     };
 
+    /// <summary>Types <see cref="Route"/> maps explicitly. Everything else falls through to the person route,
+    /// which is right for a search hit (its category is always one of these or a person) but wrong for a caller
+    /// that must not produce a link into the wrong record — that caller asks here first.</summary>
+    private static readonly HashSet<string> Routed = new(StringComparer.Ordinal)
+    {
+        "Person", nameof(Faction), nameof(PersonGroup), nameof(Party), nameof(Operation),
+        nameof(AgentActivity), nameof(Taskforce), nameof(Case), nameof(Job), nameof(Appointment),
+        nameof(Meeting), nameof(Document), nameof(Law), nameof(Agent), nameof(AgentAbduction),
+        nameof(EvidenceItem), nameof(EvidenceEntry), nameof(KassenBuchung), nameof(Bewerbung),
+        nameof(FinancingRequest),
+    };
+
+    /// <summary>Whether <see cref="Route"/> has a real route for this type rather than the person fallback.</summary>
+    public static bool Knows(string? recordsType) => recordsType is not null && Routed.Contains(recordsType);
+
     /// <summary>Route of a hit: explicit target type, else category.</summary>
     public static string Route(SearchHit hit) => Route(hit.TargetType ?? hit.Category, hit.TargetId);
 }

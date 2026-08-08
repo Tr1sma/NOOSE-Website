@@ -26,7 +26,19 @@ else
 <MudSimpleTable Dense="true" Elevation="0">
     <tbody>
         <tr><td style="width:260px;">Aktiv</td><td>@(o.Enabled ? "Ja" : "Nein")</td></tr>
-        <tr><td>Modell</td><td><code>@(string.IsNullOrWhiteSpace(o.Model) ? "—" : o.Model)</code></td></tr>
+        <tr><td>Modell (Standard)</td><td><code>@(string.IsNullOrWhiteSpace(o.Model) ? "—" : o.Model)</code></td></tr>
+        @foreach (var feature in LlmFeatureDisplay.All)
+        {
+            var model = o.ModelFor(feature);
+            @* only the overrides are worth a row; the rest is the default above *@
+            if (!string.Equals(model, o.Model, StringComparison.Ordinal))
+            {
+                <tr>
+                    <td>Modell · @LlmFeatureDisplay.Name(feature)</td>
+                    <td><code>@model</code></td>
+                </tr>
+            }
+        }
         <tr><td>Endpoint</td><td class="mud-text-secondary">@Host(o.BaseUrl)</td></tr>
         <tr><td>Schlüssel hinterlegt</td><td>@(string.IsNullOrWhiteSpace(o.ApiKey) ? "Nein" : "Ja")</td></tr>
         <tr>

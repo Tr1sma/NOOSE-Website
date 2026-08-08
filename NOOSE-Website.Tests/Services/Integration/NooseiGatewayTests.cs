@@ -186,7 +186,7 @@ public sealed class NooseiGatewayTests
                 : Result("Fertig", 0.01m));
 
         var answer = await gateway.AskAsync(
-            Call([Tool()], (_, _) => Task.FromResult("• Person | Max Mustermann")), Agent());
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("• Person | Max Mustermann"))), Agent());
 
         Assert.Equal("Fertig", answer.Text);
         Assert.Equal(2, answer.Rounds);
@@ -217,7 +217,7 @@ public sealed class NooseiGatewayTests
             });
 
         var answer = await gateway.AskAsync(
-            Call([Tool()], (_, _) => Task.FromResult("nichts gefunden")), Agent());
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("nichts gefunden"))), Agent());
 
         Assert.True(seenWithoutTools);
         Assert.Equal("Endlich", answer.Text);
@@ -261,9 +261,50 @@ public sealed class NooseiGatewayTests
                 : Result("Ohne Akten", 0.001m));
 
         var answer = await gateway.AskAsync(
-            Call([Tool()], (_, _) => Task.FromResult("nie erreicht")), Agent());
+            Call([Tool()], (_, _) => Task.FromResult(NooseiToolOutcome.Plain("nie erreicht"))), Agent());
 
         Assert.True(answer.Degraded);
         Assert.Equal("Ohne Akten", answer.Text);
+    }
+
+    // ---- what a turn touched ----
+
+    [Fact]
+    public async Task Ask_CarriesTheRecordsATooltouched_IntoTheAnswerAndTheLog()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx);
+        var round = 0;
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ++round == 1
+                ? Result(null, 0.01m, new LlmToolCall("c1", "lies_akte", "{}"))
+                : Result("Fertig", 0.01m));
+
+        var answer = await gateway.AskAsync(
+            Call([Tool("lies_akte")], (_, _) => Task.FromResult(
+                new NooseiToolOutcome("Akte …", [new LlmContextRef("Person", "p1", "Max Mustermann")]))),
+            Agent());
+
+        // without this the source chips have nothing to render and the log names only the tool
+        var record = Assert.Single(answer.Refs!, r => r.Id is not null);
+        Assert.Equal("Max Mustermann", record.Name);
+
+        await using var db = ctx.NewContext();
+        var row = Assert.Single(await db.LlmRequests.ToListAsync());
+        Assert.Contains("Max Mustermann", row.ContextRefsJson);
+        Assert.Contains("lies_akte", row.ContextRefsJson);
+    }
+
+    [Fact]
+    public async Task Ask_ReportsNoRecords_WhenNoToolWasCalled()
+    {
+        using var ctx = new SqliteTestContext();
+        var (gateway, llm, _) = await BuildAsync(ctx);
+        llm.CompleteAsync(Arg.Any<LlmRequest>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(Result("Direkt"));
+
+        var answer = await gateway.AskAsync(Call(), Agent());
+
+        Assert.Empty(answer.Refs!);
     }
 }

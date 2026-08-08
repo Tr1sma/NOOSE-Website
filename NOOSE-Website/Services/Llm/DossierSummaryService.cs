@@ -114,7 +114,7 @@ public sealed class DossierSummaryService(
         existing.BriefJson = JsonSerializer.Serialize(brief, DossierBrief.Json);
         existing.SchemaVersion = NooseiSchemas.KurzbriefVersion;
         existing.PromptVersion = NooseiPrompts.PromptVersion;
-        existing.Model = _o.Model;
+        existing.Model = _o.ModelFor(LlmFeature.Brief);
         existing.GeneratedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 

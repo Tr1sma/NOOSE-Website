@@ -124,8 +124,27 @@ public static class NooseiRecordTypes
     /// <summary>The enum values offered in every tool schema.</summary>
     public const string EnumJson = """["Person","Fraktion","Personengruppe","Partei","Operation","Vorgang","Taskforce","Dokument"]""";
 
+    /// <summary>Types that can be listed wholesale by attribute. Taskforce and Dokument are missing on purpose:
+    /// neither has a plain scope-filtered list service, and both are gated by membership or release instead.</summary>
+    public const string ListableEnumJson = """["Person","Fraktion","Personengruppe","Partei","Operation","Vorgang"]""";
+
+    private static readonly Dictionary<string, string> Plurals = new(StringComparer.Ordinal)
+    {
+        ["Person"] = "Personen",
+        ["Faction"] = "Fraktionen",
+        ["PersonGroup"] = "Personengruppen",
+        ["Party"] = "Parteien",
+        ["Operation"] = "Operationen",
+        ["Case"] = "Vorgänge",
+        ["Taskforce"] = "Taskforces",
+        ["Document"] = "Dokumente",
+    };
+
     public static string? Clr(string? german)
         => german is not null && ToClr.TryGetValue(german, out var clr) ? clr : null;
 
     public static string German(string clr) => ToGerman.GetValueOrDefault(clr, clr);
+
+    /// <summary>German plural of a record type, for count sentences.</summary>
+    public static string Plural(string clr) => Plurals.GetValueOrDefault(clr, German(clr));
 }

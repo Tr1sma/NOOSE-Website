@@ -65,3 +65,9 @@ public sealed record LlmRequestAgentOption(string Id, string Codename);
 
 /// <summary>One point of an agent's weekly consumption trend.</summary>
 public sealed record LlmWeekPoint(int Year, int Week, DateTime StartLocal, long Consumed, long Available);
+
+/// <summary>What one ISO week actually cost across every agent.</summary>
+/// <param name="Running">The week still in progress. It is real but incomplete, so a forecast must leave it out —
+/// a week that is two days old would otherwise pull the average down by whatever is left of it.</param>
+public sealed record LlmWeekSpend(
+    int Year, int Week, DateTime StartLocal, long QuotaTokens, decimal CostUsd, bool Running);
