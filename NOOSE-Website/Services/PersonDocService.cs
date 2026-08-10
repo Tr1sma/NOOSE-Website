@@ -50,11 +50,13 @@ public class PersonDocService(
         {
             return new();
         }
+        // subquery rather than a predicate on the navigation: the one gate is an IQueryable extension
+        var visiblePeople = db.People.OnlyVisible(scope).Select(p => p.Id);
         var docs = await db.PersonDocs
             .Include(d => d.Person)
-            // null person trashed; classified leadership-only
+            // null person trashed; the rest gate on the person's secrecy level
             .Where(d => d.OrgType == orgType && d.OrgId == orgId
-                && d.Person != null && (scope.MayClassifiedRead || !d.Person.IsClassified))
+                && d.Person != null && visiblePeople.Contains(d.PersonId))
             .OrderByDescending(d => d.Timestamp)
             .ToListAsync(cancellationToken);
         if (scope.PartnerAgency is { } agency)

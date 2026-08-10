@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Cases;
@@ -18,25 +19,25 @@ namespace NOOSE_Website.Tests.Services.Integration;
 /// <summary>Integration tests for <see cref="SearchService"/> against in-memory SQLite.</summary>
 public sealed class SearchServiceTests
 {
-    private static SearchService NewService(SqliteTestContext ctx) => new(ctx.Factory);
+    private static SearchService NewService(SqliteTestContext ctx) => SearchTestHost.NewService(ctx);
 
     // internal viewer that may read classified and all taskforces.
-    private static ViewerScope Leadership(string meId = "lead")
-        => new(MayClassifiedRead: true, MayAllTaskforces: true, MeId: meId, PartnerAgency: null, IsLeadership: true);
+    private static ClaimsPrincipal Leadership(string meId = "lead")
+        => ClaimsPrincipalBuilder.Agent(meId).WithRank(Rank.Director).Build();
 
     // internal viewer without classified read; sees only own/assigned restricted records.
-    private static ViewerScope Plain(string meId = "agent-1")
-        => new(MayClassifiedRead: false, MayAllTaskforces: false, MeId: meId, PartnerAgency: null);
+    private static ClaimsPrincipal Plain(string meId = "agent-1")
+        => ClaimsPrincipalBuilder.Agent(meId).WithRank(Rank.JuniorAgent).Build();
 
     // external partner viewer: only released, non-classified records.
-    private static ViewerScope Partner(PartnerAgency agency = PartnerAgency.DoJ, string? partnerAgentId = "pa1")
-        => new(MayClassifiedRead: false, MayAllTaskforces: false, MeId: partnerAgentId, PartnerAgency: agency);
+    private static ClaimsPrincipal Partner(PartnerAgency agency = PartnerAgency.DoJ, string partnerAgentId = "pa1")
+        => ClaimsPrincipalBuilder.Agent(partnerAgentId).AsPartner(agency, PartnerRank.Chief).Build();
 
     private static SearchCriteria Text(string? text, bool fuzzy = false, bool max = false)
         => new() { Text = text, Fuzzy = fuzzy, MaxMode = max };
 
-    private static SearchResultGroup? Group(List<SearchResultGroup> groups, string category)
-        => groups.FirstOrDefault(g => g.Category == category);
+    private static SearchResultGroup? Group(SearchResults results, string category)
+        => results.Groups.FirstOrDefault(g => g.Category == category);
 
     private static PartnerShare Share(string type, string id, PartnerAgency agency = PartnerAgency.DoJ)
         => new() { EntityType = type, EntityId = id, Agency = agency, PartnerAgentId = null };

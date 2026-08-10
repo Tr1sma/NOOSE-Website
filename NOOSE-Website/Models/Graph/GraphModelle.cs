@@ -12,6 +12,7 @@ namespace NOOSE_Website.Models.Graph;
 /// <param name="IsClassified">Classified record badge.</param>
 /// <param name="PhotoUrl">Optional photo thumbnail.</param>
 /// <param name="Degree">Node degree; controls node size.</param>
+/// <param name="IsFocus">The record the viewer picked; rendered highlighted.</param>
 public record GraphNode(
     string Id,
     string Type,
@@ -26,7 +27,8 @@ public record GraphNode(
     int? ThreatScore = null,
     double Betweenness = 0,
     int CommunityId = 0,
-    bool IsKeyFigure = false);
+    bool IsKeyFigure = false,
+    bool IsFocus = false);
 
 /// <summary>Undirected graph edge between two nodes.</summary>
 public record GraphEdge(
@@ -48,6 +50,8 @@ public record GraphData(
 /// <param name="Depth">Hop count around focus node (1–3).</param>
 /// <param name="TypeFilter">Filter by node types if set.</param>
 /// <param name="KindFilter">Filter by edge kind if set.</param>
+/// <param name="MarkType">Record to mark visually; independent of the focus radius.</param>
+/// <param name="MarkId">Id of the record to mark visually.</param>
 public record GraphQuery(
     string? FocusType = null,
     string? FocusId = null,
@@ -55,7 +59,9 @@ public record GraphQuery(
     IReadOnlyCollection<string>? TypeFilter = null,
     LinkKind? KindFilter = null,
     bool ComputeCentrality = false,
-    bool ComputeCommunities = false);
+    bool ComputeCommunities = false,
+    string? MarkType = null,
+    string? MarkId = null);
 
 /// <summary>Path search result between two records.</summary>
 public record PathResult(

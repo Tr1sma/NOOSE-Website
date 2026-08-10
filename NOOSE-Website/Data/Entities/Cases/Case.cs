@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Cases;
 
 /// <summary>Umbrella case file bundling multiple records into one investigation via the generic link engine; assigned agents live in CaseAgent.</summary>
 [Table("Vorgaenge")]
-public class Case : IAuditable, ISoftDelete
+public class Case : IAuditable, ISoftDelete, IClassifiableRecord
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

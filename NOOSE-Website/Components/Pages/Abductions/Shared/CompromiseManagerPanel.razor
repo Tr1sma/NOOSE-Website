@@ -119,7 +119,7 @@
     {
         var term = value ?? string.Empty;
         var user = (await AuthStateTask).User;
-        var records = await SearchService.QuickSearchAsync(term, ViewerScope.From(user), 10, token);
+        var records = await SearchService.QuickSearchAsync(term, user, 10, token);
         if (string.IsNullOrWhiteSpace(term))
         {
             return records;

@@ -22,24 +22,10 @@ public class AnnouncementService(
 
         var meId = actor.GetAgentId();
         var isLeadership = actor.IsLeadership();
-        var isTRU = actor.IsTRU();
-        var isHRB = actor.IsHRB();
-        var myRank = actor.GetRank();
-
-        var myTaskforces = string.IsNullOrEmpty(meId)
-            ? new List<string>()
-            : await db.TaskforceAgents.Where(ta => ta.AgentId == meId)
-                .Select(ta => ta.TaskforceId).Distinct().ToListAsync(cancellationToken);
+        var myTaskforces = await AnnouncementVisibility.MyTaskforceIdsAsync(db, meId, cancellationToken);
 
         var rows = await db.Announcements
-            .Where(a => isLeadership
-                || a.CreatedById == meId
-                || a.Audience == AnnouncementAudience.AllActive
-                || (a.Audience == AnnouncementAudience.Taskforce && a.TargetId != null && myTaskforces.Contains(a.TargetId))
-                || (a.Audience == AnnouncementAudience.TruUnit && isTRU)
-                || (a.Audience == AnnouncementAudience.HrbUnit && isHRB)
-                || (a.Audience == AnnouncementAudience.FromRank && myRank != null
-                    && a.MinRank != null && myRank >= a.MinRank))
+            .OnlyVisible(actor, myTaskforces)
             .OrderByDescending(a => a.Important)
             .ThenByDescending(a => a.CreatedAt)
             .Select(a => new
@@ -116,7 +102,7 @@ public class AnnouncementService(
         var mayManage = isLeadership || a.CreatedById == meId;
 
         if (!mayManage
-            && !await IsRecipientAsync(db, a, meId, actor.IsTRU(), actor.IsHRB(), actor.GetRank(), cancellationToken))
+            && !await AnnouncementVisibility.IsRecipientAsync(db, a, meId, actor.IsTRU(), actor.IsHRB(), actor.GetRank(), cancellationToken))
         {
             return null;
         }
@@ -359,28 +345,6 @@ public class AnnouncementService(
             _ => query,
         };
         return await query.Select(u => u.Id).ToListAsync(cancellationToken);
-    }
-
-    /// <summary>Whether the caller is in an announcement's audience.</summary>
-    private static async Task<bool> IsRecipientAsync(AppDbContext db, Announcement a, string? meId, bool isTRU,
-        bool isHRB, Rank? myRank, CancellationToken cancellationToken)
-    {
-        switch (a.Audience)
-        {
-            case AnnouncementAudience.AllActive:
-                return true;
-            case AnnouncementAudience.TruUnit:
-                return isTRU;
-            case AnnouncementAudience.HrbUnit:
-                return isHRB;
-            case AnnouncementAudience.FromRank:
-                return myRank != null && a.MinRank != null && myRank >= a.MinRank;
-            case AnnouncementAudience.Taskforce:
-                return a.TargetId != null && !string.IsNullOrEmpty(meId)
-                    && await db.TaskforceAgents.AnyAsync(ta => ta.TaskforceId == a.TargetId && ta.AgentId == meId, cancellationToken);
-            default:
-                return false;
-        }
     }
 
     private static string TargetDisplay(AnnouncementAudience audience, string? targetId, Rank? minRank,

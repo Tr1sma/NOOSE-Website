@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using NOOSE_Website.Services.Llm.Tools;
+using NOOSE_Website.Services.Search;
 
 namespace NOOSE_Website.Tests.Services;
 
@@ -93,18 +94,36 @@ public class NooseiRecordTypesTests
         Assert.Null(NooseiRecordTypes.Clr("Taskforce", NooseiUse.List));
         Assert.Equal("Taskforce", NooseiRecordTypes.Clr("Taskforce", NooseiUse.Read));
 
-        // named in a result, accepted by nothing
+        // a cash booking is a search category, but nothing can open it as a record
+        Assert.Equal("KassenBuchung", NooseiRecordTypes.Clr("Kassenbuchung", NooseiUse.Search));
         Assert.Null(NooseiRecordTypes.Clr("Kassenbuchung", NooseiUse.Read));
-        Assert.Null(NooseiRecordTypes.Clr("Kassenbuchung", NooseiUse.Search));
+
+        // named in a result, accepted by nothing: the search emits no category for an application
+        Assert.Null(NooseiRecordTypes.Clr("Bewerbung", NooseiUse.Read));
+        Assert.Null(NooseiRecordTypes.Clr("Bewerbung", NooseiUse.Search));
     }
 
     [Fact]
-    public void Document_IsReadableButNotSearchable_BecauseTheSearchEmitsNoDocumentGroup()
+    public void Document_IsNowBothReadableAndSearchable()
     {
-        // offering it as a search filter answered every such question with zero hits
+        // inverted deliberately: the search emitted no document category at all, so offering it as a filter
+        // answered every such question with a false "no hits". There is a document provider now.
         Assert.True(NooseiRecordTypes.Can("Document", NooseiUse.Read));
-        Assert.False(NooseiRecordTypes.Can("Document", NooseiUse.Search));
-        Assert.DoesNotContain("Dokument", NooseiRecordTypes.SearchableEnumJson);
+        Assert.True(NooseiRecordTypes.Can("Document", NooseiUse.Search));
+        Assert.Contains("Dokument", NooseiRecordTypes.SearchableEnumJson);
+    }
+
+    [Fact]
+    public void ACategoryTheAssistantMayNarrowTo_IsOneTheSearchCanFill()
+    {
+        // the inverse of the old document trap, asserted for every type at once
+        var searchable = NooseiRecordTypes.Names(NooseiUse.Search)
+            .Select(n => NooseiRecordTypes.Clr(n)!)
+            .ToArray();
+
+        Assert.All(searchable, clr => Assert.True(
+            SearchCatalog.Has(clr, SearchTraits.Assistant),
+            $"{clr} is offered to suche_akten but the catalog does not mark it as an assistant category"));
     }
 
     [Theory]
@@ -160,15 +179,15 @@ public class NooseiRecordTypesTests
         Assert.Empty(missing);
     }
 
-    /// <summary>Drift guard: a searchable type the search emits no group for turns every restricted query into a
-    /// false "no hits".</summary>
+    /// <summary>Drift guard: a searchable type the search emits no category for turns every restricted query into
+    /// a false "no hits".</summary>
+    /// <remarks>Asserted against <see cref="SearchCatalog"/> rather than by scraping the service source. The
+    /// categories used to be inline blocks in one file; they are rows in the catalog now, and an object-level
+    /// assertion is both stronger and immune to how the providers happen to be written.</remarks>
     [Fact]
     public void EverySearchableType_IsACategoryTheSearchEmits()
     {
-        var emitted = Regex
-            .Matches(Source("Services", "SearchService.cs"), @"new SearchResultGroup\(nameof\((\w+)\)")
-            .Select(m => m.Groups[1].Value)
-            .ToHashSet(StringComparer.Ordinal);
+        var emitted = SearchCatalog.Categories.Select(c => c.Clr).ToHashSet(StringComparer.Ordinal);
         Assert.NotEmpty(emitted);
 
         var missing = NooseiRecordTypes.Names(NooseiUse.Search)
@@ -179,21 +198,36 @@ public class NooseiRecordTypesTests
         Assert.Empty(missing);
     }
 
-    /// <summary>Drift guard the other way round: every type the global search can emit must have a German label,
-    /// or the next new category reaches the model under its English CLR name.</summary>
+    /// <summary>Drift guard the other way round: every category the global search can emit must have a German
+    /// label on both tables, or the next new one reaches the model under its English CLR name.</summary>
     [Fact]
     public void EveryTypeTheSearchEmits_HasAGermanLabel()
     {
-        var emitted = Regex
-            .Matches(Source("Services", "SearchService.cs"), @"new Search(?:Hit|ResultGroup)\(nameof\((\w+)\)")
-            .Select(m => m.Groups[1].Value)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        Assert.NotEmpty(SearchCatalog.Categories);
 
-        Assert.NotEmpty(emitted);
-        var unlabelled = emitted.Where(t => NooseiRecordTypes.German(t) == "Eintrag").ToArray();
+        var unlabelled = SearchCatalog.Categories
+            .Where(c => c.German == "Eintrag" || string.IsNullOrWhiteSpace(c.German))
+            .Select(c => c.Clr)
+            .ToArray();
         Assert.Empty(unlabelled);
+
+        // the assistant reads NooseiRecordTypes, so a category it may narrow to needs a label there too
+        var unknownToTheModel = SearchCatalog.Clrs(SearchTraits.Assistant)
+            .Where(clr => NooseiRecordTypes.German(clr) == "Eintrag")
+            .ToArray();
+        Assert.Empty(unknownToTheModel);
+    }
+
+    /// <summary>The assistant's searchable set and the catalog's must not drift apart.</summary>
+    [Fact]
+    public void NooseiSearchFlag_AndTheCatalogAssistantTrait_AgreeExactly()
+    {
+        var catalog = SearchCatalog.Clrs(SearchTraits.Assistant).ToHashSet(StringComparer.Ordinal);
+        var noosei = NooseiRecordTypes.Names(NooseiUse.Search)
+            .Select(n => NooseiRecordTypes.Clr(n)!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(catalog, noosei);
     }
 
     /// <summary>Drift guard: a chronicle filter the chronicle never fills reports "no changes" for a type that

@@ -252,11 +252,7 @@ public class PartyService(
     private static IQueryable<Party> VisibleParties(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Parties.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Parties.Where(p =>
-                !p.IsClassified
-                || scope.MayClassifiedRead
-                || (p.IsTRUClassified && scope.IsTru)
-                || (p.IsHRBClassified && scope.IsHrb));
+            : db.Parties.OnlyVisible(scope);
 
     public async Task<List<PartyMember>> GetMembersAsync(string partyId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
@@ -268,7 +264,8 @@ public class PartyService(
 
         // Person == null → trashed; hide. Classified persons only for leadership.
         var visible = members
-            .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
+            .Where(m => m.Person is not null && RecordVisibility.IsVisible(scope,
+                m.Person.IsClassified, m.Person.IsTRUClassified, m.Person.IsHRBClassified))
             .ToList();
         if (scope.PartnerAgency is { } agency)
         {

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Llm;
+using NOOSE_Website.Services.Search;
 
 namespace NOOSE_Website.Services.Llm.Tools;
 
@@ -63,11 +64,14 @@ public sealed class SearchRecordsTool(ISearchService search, ITagService tags) :
         };
         var max = NooseiLimits.Count(arguments, "max", 10, 25);
 
-        var groups = await search.SearchAsync(criteria, context.Scope, cancellationToken);
-        var hits = groups.SelectMany(g => g.Hit).Take(max).ToList();
+        var results = await search.SearchAsync(criteria, context.Actor, cancellationToken);
+        // round-robin, not the flat list: taking the first N end to end returns "the first N people"
+        var hits = SearchProviderKit
+            .Interleave(results.Groups.Select(g => (IReadOnlyList<SearchHit>)g.Hit).ToList())
+            .Take(max).ToList();
         if (hits.Count == 0)
         {
-            return new NooseiToolResult(Note("Keine Treffer gefunden.", unknownTags, droppedTypes));
+            return new NooseiToolResult(Note("Keine Treffer gefunden.", unknownTags, droppedTypes, results));
         }
 
         var sb = new StringBuilder();
@@ -75,9 +79,15 @@ public sealed class SearchRecordsTool(ISearchService search, ITagService tags) :
         sb.Append("Treffer (").Append(hits.Count).AppendLine("):");
         foreach (var hit in hits)
         {
-            var type = hit.TargetType ?? hit.Category;
-            sb.Append("• ").Append(NooseiRecordTypes.German(type))
-                .Append(" | ").Append(hit.Title)
+            var type = string.IsNullOrEmpty(hit.TargetType) ? hit.Category : hit.TargetType;
+            // name the category, not only the target: otherwise a comment hit prints as "Person | Max Mustermann"
+            // and the model cannot tell it found a comment
+            sb.Append("• ").Append(SearchCatalog.German(hit.Category));
+            if (!string.Equals(type, hit.Category, StringComparison.Ordinal))
+            {
+                sb.Append(" (in ").Append(SearchCatalog.German(type)).Append(')');
+            }
+            sb.Append(" | ").Append(hit.Title)
                 .Append(" | Aktenzeichen: ").Append(string.IsNullOrWhiteSpace(hit.CaseNumber) ? "—" : hit.CaseNumber);
             // an id lies_akte would reject costs the model a round to find out; say so instead of handing one over
             sb.Append(NooseiRecordTypes.IsReadable(type)
@@ -94,7 +104,7 @@ public sealed class SearchRecordsTool(ISearchService search, ITagService tags) :
             refs.Add(new LlmContextRef(type, hit.TargetId, hit.Title));
         }
 
-        return new NooseiToolResult(NooseiLimits.Clip(Note(sb.ToString(), unknownTags, droppedTypes)), refs);
+        return new NooseiToolResult(NooseiLimits.Clip(Note(sb.ToString(), unknownTags, droppedTypes, results)), refs);
     }
 
     /// <summary>Resolves tag names to ids, and reports the ones that do not exist.</summary>
@@ -127,9 +137,9 @@ public sealed class SearchRecordsTool(ISearchService search, ITagService tags) :
 
     /// <summary>Appends what was asked for but not applied. Both cases are the same failure if left out: the model
     /// reads the result as an answer about something the search never looked at.</summary>
-    private static string Note(string text, List<string> unknownTags, int droppedTypes)
+    private static string Note(string text, List<string> unknownTags, int droppedTypes, SearchResults results)
     {
-        var notes = new List<string>(2);
+        var notes = new List<string>(3);
         if (unknownTags.Count > 0)
         {
             notes.Add("Diese Stichworte gibt es nicht und sie wurden nicht angewendet: "
@@ -139,6 +149,12 @@ public sealed class SearchRecordsTool(ISearchService search, ITagService tags) :
         {
             notes.Add($"{droppedTypes} der angegebenen Aktentypen sind nicht durchsuchbar und wurden weggelassen. "
                 + Searchable());
+        }
+        if (results.Incomplete.Count > 0)
+        {
+            notes.Add("Das Zeitbudget der Suche war erschöpft. Diese Kategorien wurden nicht zu Ende durchsucht: "
+                + string.Join(", ", results.Incomplete.Select(SearchCatalog.Plural))
+                + ". Aus 0 Treffern folgt dort nichts.");
         }
         return notes.Count == 0 ? text : text.TrimEnd() + "\nHinweis: " + string.Join(" ", notes);
     }

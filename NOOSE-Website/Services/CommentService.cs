@@ -61,7 +61,7 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
             await notifications.NotifyMentionedAsync(text, $"{who} hat dich in einem Vermerk erwähnt.",
-                SearchNavigation.Route(entityType, entityId), entityType, entityId, actor, cancellationToken);
+                SearchNavigation.For(entityType, entityId), entityType, entityId, actor, cancellationToken);
         }
         catch { /* best effort */ }
 

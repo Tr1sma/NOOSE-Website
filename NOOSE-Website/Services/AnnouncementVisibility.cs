@@ -1,0 +1,64 @@
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.Announcements;
+using NOOSE_Website.Models.Enums;
+
+namespace NOOSE_Website.Services;
+
+/// <summary>Who an announcement reaches: its audience, its author, and leadership.</summary>
+/// <remarks>
+/// The gate is <c>IsLeadership()</c>, not <c>MayClassifiedRead()</c> — deliberately, so the read-only supervision
+/// sees only announcements actually addressed to it. Partners are never in an audience.
+/// </remarks>
+public static class AnnouncementVisibility
+{
+    /// <summary>The viewer's own taskforce ids, which the Taskforce audience is matched against.</summary>
+    public static async Task<List<string>> MyTaskforceIdsAsync(
+        AppDbContext db, string? meId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(meId))
+        {
+            return new List<string>();
+        }
+        return await db.TaskforceAgents
+            .Where(ta => ta.AgentId == meId)
+            .Select(ta => ta.TaskforceId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Announcements the viewer may read.</summary>
+    public static IQueryable<Announcement> OnlyVisible(this IQueryable<Announcement> query,
+        ClaimsPrincipal actor, IReadOnlyCollection<string> myTaskforceIds)
+    {
+        var meId = actor.GetAgentId();
+        var isLeadership = actor.IsLeadership();
+        var isTru = actor.IsTRU();
+        var isHrb = actor.IsHRB();
+        var myRank = actor.GetRank();
+        return query.Where(a => isLeadership
+            || a.CreatedById == meId
+            || a.Audience == AnnouncementAudience.AllActive
+            || (a.Audience == AnnouncementAudience.Taskforce && a.TargetId != null && myTaskforceIds.Contains(a.TargetId))
+            || (a.Audience == AnnouncementAudience.TruUnit && isTru)
+            || (a.Audience == AnnouncementAudience.HrbUnit && isHrb)
+            || (a.Audience == AnnouncementAudience.FromRank && myRank != null
+                && a.MinRank != null && myRank >= a.MinRank));
+    }
+
+    /// <summary>Whether the viewer is in an announcement's audience; the author and leadership are handled by the caller.</summary>
+    public static async Task<bool> IsRecipientAsync(AppDbContext db, Announcement a, string? meId, bool isTru,
+        bool isHrb, Rank? myRank, CancellationToken cancellationToken = default)
+        => a.Audience switch
+        {
+            AnnouncementAudience.AllActive => true,
+            AnnouncementAudience.TruUnit => isTru,
+            AnnouncementAudience.HrbUnit => isHrb,
+            AnnouncementAudience.FromRank => myRank != null && a.MinRank != null && myRank >= a.MinRank,
+            AnnouncementAudience.Taskforce => a.TargetId != null && !string.IsNullOrEmpty(meId)
+                && await db.TaskforceAgents.AnyAsync(ta => ta.TaskforceId == a.TargetId && ta.AgentId == meId, cancellationToken),
+            _ => false,
+        };
+}

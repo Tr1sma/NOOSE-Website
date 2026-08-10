@@ -16,13 +16,8 @@ public class LibraryService(
     public async Task<List<LibraryFile>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // local vars so EF parameterizes the classification filters
-        bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
         return await db.LibraryFiles
-            .Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
-                || mayClassified
-                || (d.IsTRUClassified && isTru)
-                || (d.IsHRBClassified && isHrb))
+            .OnlyVisible(scope)
             .OrderByDescending(d => d.ModifiedAt ?? d.CreatedAt)
             .ToListAsync(cancellationToken);
     }

@@ -33,7 +33,9 @@ using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Infrastructure.Meetings;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Search;
 using NOOSE_Website.Services.Statistics;
 
 var germanCulture = new CultureInfo("de-DE");
@@ -259,7 +261,10 @@ builder.Services.AddScoped<IGamificationService, GamificationService>();
 builder.Services.AddHostedService<GamificationSweepWorker>();
 builder.Services.AddScoped<ITopAgentAwardService, TopAgentAwardService>();
 builder.Services.AddHostedService<TopAgentAwardWorker>();
+// ---- global search: one provider per SearchCatalog category, coverage-tested against the catalog ----
+builder.Services.Configure<SearchOptions>(builder.Configuration.GetSection(SearchOptions.SectionName));
 builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddSearchProviders();
 builder.Services.AddHostedService<SearchIndexBackfillWorker>();
 builder.Services.AddScoped<ISavedSearchService, SavedSearchService>();
 builder.Services.AddScoped<IFactionService, FactionService>();

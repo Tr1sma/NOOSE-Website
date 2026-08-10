@@ -7,10 +7,11 @@ namespace NOOSE_Website.Tests.Models;
 public class ModelMapsTests
 {
     // ---------------------------------------------------------------
-    // SearchNavigation.Route(recordsType, targetId) — every switch arm
+    // SearchNavigation.For(recordsType, targetId) — routes from the catalog
     // ---------------------------------------------------------------
 
     [Theory]
+    [InlineData("Person", "/personen/")]
     [InlineData("Faction", "/fraktionen/")]
     [InlineData("PersonGroup", "/personengruppen/")]
     [InlineData("Party", "/parteien/")]
@@ -23,70 +24,88 @@ public class ModelMapsTests
     [InlineData("Meeting", "/besprechungen/")]
     [InlineData("Document", "/dokumente/")]
     [InlineData("Law", "/gesetze/")]
-    public void Route_knownRecordType_buildsFeatureRoute(string recordsType, string expectedPrefix)
+    [InlineData("Agent", "/personal/")]
+    [InlineData("AgentAbduction", "/entfuehrungen/")]
+    [InlineData("KassenBuchung", "/kasse/buchung/")]
+    [InlineData("FinancingRequest", "/finanzierungen/")]
+    [InlineData("Bewerbung", "/bewerbungen/")]
+    public void For_knownRecordType_buildsFeatureRoute(string recordsType, string expectedPrefix)
     {
-        var result = SearchNavigation.Route(recordsType, "abc-123");
+        var result = SearchNavigation.For(recordsType, "abc-123");
 
         Assert.Equal($"{expectedPrefix}abc-123", result);
     }
 
+    // Inverted deliberately: these used to answer "/personen/{id}", which opened a person file with another
+    // record's id. A type without a page now yields null, and the caller renders an unclickable row.
     [Theory]
-    [InlineData("Person")]
     [InlineData("Unknown")]
     [InlineData("")]
-    [InlineData("faction")] // case-sensitive: lowercase is NOT the Faction arm
-    [InlineData("Comment")]
-    public void Route_unknownRecordType_fallsBackToPeople(string recordsType)
+    [InlineData(null)]
+    [InlineData("faction")] // case-sensitive: lowercase is not the Faction row
+    [InlineData("Comment")] // content: routed through its parent, never on its own
+    [InlineData("Source")]
+    [InlineData("PersonDoc")]
+    public void For_typeWithoutAPage_isNull_ratherThanTheWrongRecord(string? recordsType)
     {
-        var result = SearchNavigation.Route(recordsType, "id-9");
-
-        Assert.Equal("/personen/id-9", result);
+        Assert.Null(SearchNavigation.For(recordsType, "id-9"));
     }
 
     [Fact]
-    public void Route_embedsTargetIdVerbatim()
+    public void For_embedsTargetIdVerbatim()
     {
-        var result = SearchNavigation.Route(nameof(NOOSE_Website.Data.Entities.Cases.Case), "GUID-WITH-Weird_Chars.1");
+        var result = SearchNavigation.For(nameof(NOOSE_Website.Data.Entities.Cases.Case), "GUID-WITH-Weird_Chars.1");
 
         Assert.Equal("/vorgaenge/GUID-WITH-Weird_Chars.1", result);
     }
 
     // ---------------------------------------------------------------
-    // SearchNavigation.Route(SearchHit) — TargetType overrides Category
+    // SearchNavigation.For(SearchHit) — TargetType overrides Category
     // ---------------------------------------------------------------
 
     [Fact]
-    public void Route_hit_usesCategory_whenTargetTypeNull()
+    public void For_hit_usesCategory_whenTargetTypeNull()
     {
         var hit = new SearchHit("Faction", "f-1", "Title", "Snippet", "NOOSE-F-1", TargetType: null);
 
-        Assert.Equal("/fraktionen/f-1", SearchNavigation.Route(hit));
+        Assert.Equal("/fraktionen/f-1", SearchNavigation.For(hit));
     }
 
     [Fact]
-    public void Route_hit_prefersTargetType_overCategory()
+    public void For_hit_prefersTargetType_overCategory_andAppendsTheSection()
     {
-        // A comment (Category) that belongs to a Party (TargetType) resolves to the party route.
+        // A comment (Category) that belongs to a Party (TargetType) resolves to the party's Kommentare tab.
         var hit = new SearchHit("Comment", "p-7", "Title", "Snippet", "NOOSE-PA-7", TargetType: "Party");
 
-        Assert.Equal("/parteien/p-7", SearchNavigation.Route(hit));
+        Assert.Equal("/parteien/p-7?tab=kommentare", SearchNavigation.For(hit));
     }
 
     [Fact]
-    public void Route_hit_unknownTargetType_fallsBackToPeople()
+    public void For_hit_emptyTargetType_fallsBackToTheCategory()
     {
-        var hit = new SearchHit("Person", "x-2", "Title", "Snippet", "NOOSE-P-2", TargetType: "Person");
-
-        Assert.Equal("/personen/x-2", SearchNavigation.Route(hit));
-    }
-
-    [Fact]
-    public void Route_hit_emptyTargetType_isTreatedAsExplicitEmpty_fallsBackToPeople()
-    {
-        // "" is non-null, so ?? does NOT fall through to Category; empty type hits the default arm.
+        // "" used to be non-null and skipped the ?? fallthrough, routing the hit to "/personen/".
         var hit = new SearchHit("Faction", "z-3", "Title", "Snippet", "NOOSE-F-3", TargetType: "");
 
-        Assert.Equal("/personen/z-3", SearchNavigation.Route(hit));
+        Assert.Equal("/fraktionen/z-3", SearchNavigation.For(hit));
+    }
+
+    [Fact]
+    public void For_hit_unroutableTargetType_isNull()
+    {
+        var hit = new SearchHit("Comment", "x-2", "Title", "Snippet", "", TargetType: "Notification");
+
+        Assert.Null(SearchNavigation.For(hit));
+    }
+
+    [Fact]
+    public void For_hit_prefersAnExplicitHref()
+    {
+        var hit = new SearchHit("Comment", "x-2", "Title", "Snippet", "", TargetType: "Party")
+        {
+            Href = "/einstellungen?tab=tags",
+        };
+
+        Assert.Equal("/einstellungen?tab=tags", SearchNavigation.For(hit));
     }
 
     // ---------------------------------------------------------------

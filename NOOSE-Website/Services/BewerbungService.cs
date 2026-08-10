@@ -344,10 +344,37 @@ public class BewerbungService(
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
             await notifications.NotifyMentionedAsync(content, $"{who} hat dich in einer Bewerbung erwähnt.",
-                SearchNavigation.Route(nameof(Bewerbung), id), nameof(Bewerbung), id, actor, cancellationToken);
+                SearchNavigation.For(nameof(Bewerbung), id), nameof(Bewerbung), id, actor, cancellationToken);
         }
         catch { /* best effort */ }
 
+        return message;
+    }
+
+    public async Task<BewerbungMessage> EditInternalMessageAsync(string messageId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireHrbOrLeadership(actor);
+        var content = (text ?? string.Empty).Trim();
+        if (content.Length == 0)
+        {
+            throw new InvalidOperationException("Die Nachricht darf nicht leer sein.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var message = await db.BewerbungMessages
+            .FirstOrDefaultAsync(m => m.Id == messageId && m.Audience == BewerbungMessageAudience.Intern, cancellationToken);
+        if (message is null)
+        {
+            throw new InvalidOperationException("Die Nachricht wurde nicht gefunden.");
+        }
+        if (message.CreatedById != actor.GetAgentId())
+        {
+            throw new InvalidOperationException("Nur eigene Nachrichten können bearbeitet werden.");
+        }
+
+        message.Text = content;
+        await db.SaveChangesAsync(cancellationToken);
+        broadcaster.Report(message.BewerbungId);
         return message;
     }
 

@@ -1,0 +1,59 @@
+@using NOOSE_Website.Services.Search
+
+@* Result facets: a pure display filter over the already-fetched groups, never a second query. That is correct
+   BECAUSE of the per-category cap — re-querying one category returns the same first 50 hits in the same order. *@
+<MudPaper Class="pa-3 mb-4" Elevation="1">
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ma-0"
+                 Variant="@(Active is null ? Variant.Filled : Variant.Outlined)"
+                 Icon="@Icons.Material.Filled.SelectAll"
+                 OnClick="@(() => ActiveChanged.InvokeAsync(null))">Alle (@Results.Total)</MudChip>
+
+        @foreach (var group in Shown())
+        {
+            <MudChip T="string" Size="Size.Small" Class="ma-0" Icon="@SearchCatalog.Icon(group.Category)"
+                     Variant="@(Active == group.Category ? Variant.Filled : Variant.Outlined)"
+                     Color="@(Active == group.Category ? Color.Primary : Color.Default)"
+                     OnClick="@(() => ActiveChanged.InvokeAsync(group.Category))">
+                @group.Display (@group.Hit.Count@(group.Capped ? "+" : ""))
+            </MudChip>
+        }
+
+        @if (_hidden > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
+                     Icon="@Icons.Material.Filled.ExpandMore"
+                     OnClick="@(() => _expanded = true)">+@_hidden weitere</MudChip>
+        }
+        else if (_expanded && Results.Groups.Count > MaxChips)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
+                     Icon="@Icons.Material.Filled.ExpandLess"
+                     OnClick="@(() => _expanded = false)">weniger</MudChip>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public SearchResults Results { get; set; } = SearchResults.None;
+    [Parameter] public string? Active { get; set; }
+    [Parameter] public EventCallback<string?> ActiveChanged { get; set; }
+
+    /// <summary>Chips beyond this collapse behind "+N weitere": a wrapping row of thirty chips is a wall, and its
+    /// tail is mostly single-hit noise.</summary>
+    private const int MaxChips = 14;
+
+    private bool _expanded;
+    private int _hidden;
+
+    // most hits first; the active facet is never the one cut away
+    private IEnumerable<SearchResultGroup> Shown()
+    {
+        var ordered = Results.Groups.OrderByDescending(g => g.Hit.Count).ToList();
+        var keep = _expanded || ordered.Count <= MaxChips
+            ? ordered
+            : ordered.Take(MaxChips).Concat(ordered.Where(g => g.Category == Active)).Distinct().ToList();
+        _hidden = ordered.Count - keep.Count;
+        return keep;
+    }
+}

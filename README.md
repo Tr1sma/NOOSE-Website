@@ -57,9 +57,16 @@ Alles ist auditiert (Created/Modified/Deleted), Soft-Delete-fähig und rang-/rol
 - **Papierkorb (Soft-Delete)** - 13 Akten-Typen, Wiederherstellung durch Führung.
 
 **Suche & Navigation**
-- **Globale Volltextsuche** `/suche` über alle Aktenarten inkl. Doks, Quellen und Kommentare.
-- **Smart-Suche** (tippfehlertolerant) und **Deep-Scan** (alle Nebenfelder inkl. Steckbrief).
-- **Gespeicherte Suchen** als wiederaufrufbare Chips; Tag-/Kategorie-Filter.
+- **Globale Volltextsuche** `/suche` über **~58 Kategorien** — Akten, Inhalte (Doks, Quellen, Kommentare,
+  Wiedervorlagen, Verknüpfungen, Zusatzfelder, Vermerke, Taskforce-Chat, Besprechungsprotokolle, Observationen,
+  Informanten-Treffen …), Verwaltung/Kataloge/Vorlagen, Protokolle und persönliche Einträge. Immer nur, was der
+  Suchende ohnehin sehen darf.
+- **Keine Vorfilter:** es wird immer alles Sichtbare durchsucht; Kategorien filtern als **Facetten mit
+  Trefferzahlen** das Ergebnis, damit man sich keine Treffer wegklicken kann.
+- **Zeitbudget mit ehrlichem Teilergebnis** — reißt es, kommt zurück was fertig ist, plus Hinweis welche Kategorien
+  unvollständig sind (und ein „Rest nachladen"-Knopf). Nie stilles Weglassen.
+- **Smart-Suche** (tippfehlertolerant, inkl. phonetischem Index) und **Deep-Scan** (alle Nebenfelder inkl. Steckbrief).
+- **Gespeicherte Suchen** als wiederaufrufbare Chips; Tag-Filter.
 - **Befehlspalette (Strg+K)** und Schnellsuche in der Topbar.
 - **Quick-Add** - Schnellerfassung beliebiger Akten per Plus-Button.
 - **Personalisierbare Navigation** - Favoriten, Reihenfolge, Ausblenden, individuelle Startseite, „Zuletzt besucht".

@@ -160,7 +160,7 @@ else
                                     @foreach (var source in m.Sources)
                                     {
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                                 Color="Color.Default" Href="@SearchNavigation.Route(source.Type, source.Id)">
+                                                 Color="Color.Default" Href="@SearchNavigation.For(source.Type, source.Id)">
                                             @source.Name
                                         </MudChip>
                                     }

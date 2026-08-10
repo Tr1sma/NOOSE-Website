@@ -318,11 +318,7 @@ public class FactionService(
     private static IQueryable<Faction> VisibleFactions(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Factions.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Factions.Where(f =>
-                !f.IsClassified
-                || scope.MayClassifiedRead
-                || (f.IsTRUClassified && scope.IsTru)
-                || (f.IsHRBClassified && scope.IsHrb));
+            : db.Factions.OnlyVisible(scope);
 
     public async Task<List<FactionMember>> GetMembersAsync(string factionId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
@@ -334,7 +330,8 @@ public class FactionService(
 
         // Person == null means the record is trashed; classified people are leadership-only.
         var visible = members
-            .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
+            .Where(m => m.Person is not null && RecordVisibility.IsVisible(scope,
+                m.Person.IsClassified, m.Person.IsTRUClassified, m.Person.IsHRBClassified))
             .ToList();
         if (scope.PartnerAgency is { } agency)
         {

@@ -223,11 +223,7 @@ public class CaseService(
     private static IQueryable<Case> VisibleCases(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Cases.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Cases.Where(v =>
-                (!v.IsClassified && !v.IsTRUClassified && !v.IsHRBClassified)
-                || scope.MayClassifiedRead
-                || (v.IsTRUClassified && scope.IsTru)
-                || (v.IsHRBClassified && scope.IsHrb));
+            : db.Cases.OnlyVisible(scope);
 
     public async Task<List<CaseAgent>> GetAgentsAsync(string caseId, CancellationToken cancellationToken = default)
     {

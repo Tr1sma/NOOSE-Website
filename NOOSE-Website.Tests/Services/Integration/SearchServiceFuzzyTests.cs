@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Search;
 using NOOSE_Website.Models.Common;
@@ -11,9 +12,9 @@ namespace NOOSE_Website.Tests.Services.Integration;
 /// Uses „Mayr" vs query „Meier" — edit distance 3 (Levenshtein misses it), same Cologne code (side-index catches it).</summary>
 public sealed class SearchServiceFuzzyTests
 {
-    private static SearchService Svc(SqliteTestContext ctx) => new(ctx.Factory);
-    private static ViewerScope Junior() => ViewerScope.From(ClaimsPrincipalBuilder.Agent("j").WithRank(Rank.JuniorAgent).Build());
-    private static ViewerScope Leader() => ViewerScope.From(ClaimsPrincipalBuilder.Agent("l").WithRank(Rank.Director).Build());
+    private static SearchService Svc(SqliteTestContext ctx) => SearchTestHost.NewService(ctx);
+    private static ClaimsPrincipal Junior() => ClaimsPrincipalBuilder.Agent("j").WithRank(Rank.JuniorAgent).Build();
+    private static ClaimsPrincipal Leader() => ClaimsPrincipalBuilder.Agent("l").WithRank(Rank.Director).Build();
 
     private static SearchCriteria Fuzzy(string text) => new() { Text = text, Fuzzy = true };
 
@@ -33,7 +34,7 @@ public sealed class SearchServiceFuzzyTests
 
         var groups = await Svc(ctx).SearchAsync(Fuzzy("Meier"), Junior());
 
-        var people = groups.FirstOrDefault(g => g.Category == nameof(Person));
+        var people = groups.Groups.FirstOrDefault(g => g.Category == nameof(Person));
         Assert.NotNull(people);
         Assert.Contains(people!.Hit, h => h.TargetId == "p1");
     }
@@ -53,9 +54,9 @@ public sealed class SearchServiceFuzzyTests
         }
 
         var asJunior = await Svc(ctx).SearchAsync(Fuzzy("Meier"), Junior());
-        Assert.DoesNotContain(asJunior.SelectMany(g => g.Hit), h => h.TargetId == "p1");
+        Assert.DoesNotContain(asJunior.Groups.SelectMany(g => g.Hit), h => h.TargetId == "p1");
 
         var asLeader = await Svc(ctx).SearchAsync(Fuzzy("Meier"), Leader());
-        Assert.Contains(asLeader.SelectMany(g => g.Hit), h => h.TargetId == "p1");
+        Assert.Contains(asLeader.Groups.SelectMany(g => g.Hit), h => h.TargetId == "p1");
     }
 }

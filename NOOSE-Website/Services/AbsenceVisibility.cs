@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Models.Enums;
@@ -42,4 +44,20 @@ public static class AbsenceVisibility
     /// <summary>Absences covering a calendar day; both bounds are inclusive.</summary>
     public static IQueryable<Absence> Covering(this IQueryable<Absence> query, DateOnly day)
         => query.Where(a => a.FromDate <= day && a.ToDate >= day);
+
+    /// <summary>The tier a viewer actually gets: only leadership and oversight ever reach <see cref="AbsenceViewScope.All"/>.</summary>
+    /// <remarks>The page asks, the principal decides. Lives here rather than in the service because the search needs
+    /// the same answer, and a second copy of this ternary is a second chance to widen it by accident.</remarks>
+    public static AbsenceViewScope Granted(ClaimsPrincipal viewer, AbsenceViewScope requested)
+        => requested == AbsenceViewScope.All && !viewer.MayClassifiedRead()
+            ? AbsenceViewScope.Team
+            : requested;
+
+    /// <summary>Whether the viewer may read an absence's owner-only fields: the free-text reason and the
+    /// acknowledgement signal.</summary>
+    /// <remarks>Named because it is easy to miss: <see cref="AbsenceViewScope.Team"/> grants the row but not these
+    /// fields — the roster tier is "who is away", not "why". A reader that matches on the reason without asking here
+    /// hands peers free text they were never shown on the page.</remarks>
+    public static bool MayReadPrivateFields(AbsenceViewScope granted, bool isOwnRow)
+        => granted == AbsenceViewScope.All || isOwnRow;
 }

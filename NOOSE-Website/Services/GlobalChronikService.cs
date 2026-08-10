@@ -502,10 +502,9 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
         var result = new Dictionary<(string, string), RecordRef>();
         List<string> Ids(string type) => byType.TryGetValue(type, out var s) ? s.ToList() : new List<string>();
 
-        bool VisRestricted(bool c, bool tru, bool hrb) => scope.CanSee(
-            !c ? DocumentClassification.None : tru ? DocumentClassification.Tru : hrb ? DocumentClassification.Hrb : DocumentClassification.Leadership);
-        bool VisDocument(bool c, bool tru, bool hrb) => scope.CanSee(
-            c ? DocumentClassification.Leadership : tru ? DocumentClassification.Tru : hrb ? DocumentClassification.Hrb : DocumentClassification.None);
+        // in-memory because the delete filter is off here; the secrecy rules themselves stay the canonical ones
+        bool VisRestricted(bool c, bool tru, bool hrb) => RecordVisibility.IsVisible(scope, c, tru, hrb);
+        bool VisDocument(bool c, bool tru, bool hrb) => scope.CanSee(DocumentVisibility.LevelOf(c, tru, hrb));
 
         var personIds = Ids(nameof(Person));
         if (personIds.Count > 0)

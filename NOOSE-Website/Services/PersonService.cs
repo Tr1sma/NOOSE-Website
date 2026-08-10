@@ -684,5 +684,5 @@ public class PersonService(
     private static IQueryable<Person> VisiblePeople(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.People.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.People.Where(p => scope.MayClassifiedRead || !p.IsClassified);
+            : db.People.OnlyVisible(scope);
 }

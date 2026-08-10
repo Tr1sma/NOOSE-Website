@@ -33,7 +33,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                 <MudIcon Icon="@s.Icon" Color="s.Colour" Size="Size.Small" />
-                                <MudLink Href="@SearchNavigation.Route(v.OtherType, v.OtherId)" Typo="Typo.body2"><b>@v.OtherDesignation</b></MudLink>
+                                <MudLink Href="@SearchNavigation.For(v.OtherType, v.OtherId)" Typo="Typo.body2"><b>@v.OtherDesignation</b></MudLink>
                                 @if (!string.IsNullOrWhiteSpace(v.Label))
                                 {
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@v.Label</MudChip>

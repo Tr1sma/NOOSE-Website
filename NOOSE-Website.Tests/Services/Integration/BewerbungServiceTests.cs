@@ -802,6 +802,86 @@ public sealed class BewerbungServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.PostInternalAsync("b1", "text", Junior("me")));
     }
 
+    // ---------- EditInternalMessageAsync ----------
+
+    [Fact]
+    public async Task EditInternalMessageAsync_OwnMessage_Updates_AndReports()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, reported) = Build(ctx);
+
+        // CreatedById mirrors what the (absent) audit interceptor would stamp.
+        var msg = Msg("b1", BewerbungMessageAudience.Intern, "alter Text", T0);
+        msg.Id = "m1";
+        msg.CreatedById = "hrb";
+        using (var db = ctx.NewContext())
+        {
+            db.BewerbungMessages.Add(msg);
+            db.SaveChanges();
+        }
+
+        var edited = await svc.EditInternalMessageAsync("m1", "  neuer Text  ", Hrb("hrb"));
+
+        Assert.Equal("neuer Text", edited.Text);
+        using var check = ctx.NewContext();
+        Assert.Equal("neuer Text", check.BewerbungMessages.Single(m => m.Id == "m1").Text);
+        Assert.Equal(new[] { "b1" }, reported);
+    }
+
+    [Fact]
+    public async Task EditInternalMessageAsync_OtherAuthor_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        var msg = Msg("b1", BewerbungMessageAudience.Intern, "alter Text", T0);
+        msg.Id = "m1";
+        msg.CreatedById = "other";
+        using (var db = ctx.NewContext())
+        {
+            db.BewerbungMessages.Add(msg);
+            db.SaveChanges();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.EditInternalMessageAsync("m1", "text", Hrb("hrb")));
+    }
+
+    [Fact]
+    public async Task EditInternalMessageAsync_BewerberAudience_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        var msg = Msg("b1", BewerbungMessageAudience.Bewerber, "alter Text", T0);
+        msg.Id = "m1";
+        msg.CreatedById = "hrb";
+        using (var db = ctx.NewContext())
+        {
+            db.BewerbungMessages.Add(msg);
+            db.SaveChanges();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.EditInternalMessageAsync("m1", "text", Hrb("hrb")));
+    }
+
+    [Fact]
+    public async Task EditInternalMessageAsync_NonHrb_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.EditInternalMessageAsync("m1", "text", Junior("me")));
+    }
+
+    [Fact]
+    public async Task EditInternalMessageAsync_Empty_Throws()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _, _, _, _, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.EditInternalMessageAsync("m1", "   ", Hrb()));
+    }
+
     // ---------- PostToApplicantAsync ----------
 
     [Fact]

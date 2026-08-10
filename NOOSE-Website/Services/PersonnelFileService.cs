@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -154,14 +153,9 @@ public class PersonnelFileService(IDbContextFactory<AppDbContext> dbFactory, IDi
     private static string NormalizeHtml(string? html)
     {
         var clean = HtmlCleanup.Clean(html);
-        var textOnly = Regex.Replace(clean, "<.*?>", string.Empty).Replace("&nbsp;", " ");
-        return string.IsNullOrWhiteSpace(textOnly) ? string.Empty : clean;
+        return HtmlCleanup.PlainText(clean).Length == 0 ? string.Empty : clean;
     }
 
     // Strip tags to plain text for the Discord embed (HTML has no place in an embed field).
-    private static string PlainText(string? html)
-    {
-        var textOnly = Regex.Replace(HtmlCleanup.Clean(html), "<.*?>", string.Empty).Replace("&nbsp;", " ");
-        return Regex.Replace(textOnly, @"\s+", " ").Trim();
-    }
+    private static string PlainText(string? html) => HtmlCleanup.PlainText(HtmlCleanup.Clean(html));
 }

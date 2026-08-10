@@ -24,20 +24,6 @@ public static class Visibility
     /// <summary>The three secrecy bool columns of a classifiable record.</summary>
     private sealed record SecrecyRow(bool Classified, bool Tru, bool Hrb);
 
-    /// <summary>Level for records where IsClassified means "restricted at all" (Person/Faction/…/Case).</summary>
-    private static DocumentClassification LevelRestricted(SecrecyRow r)
-        => !r.Classified ? DocumentClassification.None
-            : r.Tru ? DocumentClassification.Tru
-            : r.Hrb ? DocumentClassification.Hrb
-            : DocumentClassification.Leadership;
-
-    /// <summary>Level for documents where IsClassified is leadership-exclusive.</summary>
-    private static DocumentClassification LevelDocument(SecrecyRow r)
-        => r.Classified ? DocumentClassification.Leadership
-            : r.Tru ? DocumentClassification.Tru
-            : r.Hrb ? DocumentClassification.Hrb
-            : DocumentClassification.None;
-
     /// <summary>True if record is visible to the viewer; partners see only released, non-classified records.</summary>
     public static async Task<bool> IsRecordVisibleAsync(
         AppDbContext db, string entityType, string entityId, ViewerScope scope, CancellationToken cancellationToken = default)
@@ -69,6 +55,11 @@ public static class Visibility
         {
             return await FinancingVisibility.IsVisibleAsync(db, entityId, scope.MayClassifiedRead, scope.MeId, cancellationToken);
         }
+        // documents: secrecy level alone is not the gate — the owning taskforce and per-agent revocation count too
+        if (entityType == nameof(Document))
+        {
+            return await DocumentVisibility.IsVisibleAsync(db, entityId, scope.AsDocumentScope(), cancellationToken);
+        }
 
         SecrecyRow? row = entityType switch
         {
@@ -96,10 +87,6 @@ public static class Visibility
                 .Where(v => v.Id == entityId)
                 .Select(v => new SecrecyRow(v.IsClassified, v.IsTRUClassified, v.IsHRBClassified))
                 .FirstOrDefaultAsync(cancellationToken),
-            nameof(Document) => await db.Documents
-                .Where(d => d.Id == entityId)
-                .Select(d => new SecrecyRow(d.IsClassified, d.IsTRUClassified, d.IsHRBClassified))
-                .FirstOrDefaultAsync(cancellationToken),
             _ => null,
         };
 
@@ -107,11 +94,7 @@ public static class Visibility
         if (entityType is nameof(Person) or nameof(Faction) or nameof(PersonGroup)
             or nameof(Party) or nameof(Operation) or nameof(Case))
         {
-            return row is not null && scope.CanSee(LevelRestricted(row));
-        }
-        if (entityType == nameof(Document))
-        {
-            return row is not null && scope.CanSee(LevelDocument(row));
+            return row is not null && RecordVisibility.IsVisible(scope, row.Classified, row.Tru, row.Hrb);
         }
 
         // always visible, but the record must exist

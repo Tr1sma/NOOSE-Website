@@ -25,6 +25,11 @@ public sealed class NooseiCoverageToolTests
 
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
+    /// <summary>A complete search envelope around the given groups.</summary>
+    private static SearchResults Results(params SearchResultGroup[] groups)
+        => new(groups, groups.Sum(g => g.Hit.Count), groups.Select(g => g.Category).ToList(), [],
+            groups.Length, TimeSpan.Zero);
+
     // ---- lies_kalender ----
 
     private static CalendarEntry Entry(
@@ -380,11 +385,11 @@ public sealed class NooseiCoverageToolTests
     {
         SearchCriteria? criteria = null;
         var search = Substitute.For<ISearchService>();
-        search.SearchAsync(Arg.Any<SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+        search.SearchAsync(Arg.Any<SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 criteria = call.ArgAt<SearchCriteria>(0);
-                return Task.FromResult(new List<SearchResultGroup>());
+                return Task.FromResult(SearchResults.None);
             });
         var tags = Substitute.For<ITagService>();
         tags.GetAllAsync(Arg.Any<CancellationToken>())
@@ -405,29 +410,29 @@ public sealed class NooseiCoverageToolTests
         var search = Substitute.For<ISearchService>();
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
+        // a Bewerbung is named in results but has no search category, so narrowing to it would answer zero
         var result = await tool.InvokeAsync(
-            Args("""{"suchtext":"x","typen":["Dokument"]}"""), NooseiToolContext.From(Leader()));
+            Args("""{"suchtext":"x","typen":["Bewerbung"]}"""), NooseiToolContext.From(Leader()));
 
         Assert.True(result.IsError);
         Assert.Contains("nicht durchsuchbar", result.Text);
         await search.DidNotReceive().SearchAsync(
-            Arg.Any<SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>());
+            Arg.Any<SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task SearchRecords_SaysSoWhenOnlySomeOfTheTypesWereApplied()
     {
         var search = Substitute.For<ISearchService>();
-        search.SearchAsync(Arg.Any<SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new List<SearchResultGroup>
-            {
-                new("Person", "Personen", [new SearchHit("Person", "p1", "Otto Offen", "", "NOOSE-P-2026-0001")]),
-            }));
+        search.SearchAsync(Arg.Any<SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Results(
+                new SearchResultGroup("Person", "Personen",
+                    [new SearchHit("Person", "p1", "Otto Offen", "", "NOOSE-P-2026-0001")]))));
 
         var result = await new SearchRecordsTool(search, Substitute.For<ITagService>()).InvokeAsync(
-            Args("""{"suchtext":"Otto","typen":["Person","Dokument"]}"""), NooseiToolContext.From(Leader()));
+            Args("""{"suchtext":"Otto","typen":["Person","Bewerbung"]}"""), NooseiToolContext.From(Leader()));
 
-        // without the note the model reads "one person, no documents" out of a search that never looked at documents
+        // without the note the model reads "one person, no applications" out of a search that never looked at them
         Assert.Contains("Otto Offen", result.Text);
         Assert.Contains("nicht durchsuchbar und wurden weggelassen", result.Text);
     }

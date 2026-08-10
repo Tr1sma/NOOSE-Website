@@ -618,6 +618,15 @@ html, body {
     box-shadow: 0 0 8px rgba(255, 200, 87, 0.9);
 }
 
+/* Legenden-Punkt für die Fokus-Akte: magenta Ring + Glühen wie auf dem Canvas. */
+.noose-graph-fokus {
+    width: 16px;
+    height: 16px;
+    background: #161B22;
+    border: 3px solid #F778BA;
+    box-shadow: 0 0 8px rgba(247, 120, 186, 0.9);
+}
+
 /* vis-network Tooltip an das dunkle Theme angleichen. */
 div.vis-tooltip {
     background: #11161D !important;
@@ -1217,4 +1226,12 @@ div.vis-tooltip {
     margin-bottom: -1rem;
     padding: 0.5rem 0.5rem 1.5rem;
     border-top: 1px solid var(--mud-palette-divider);
+}
+
+/* search result snippet: two lines, so a content hit shows the context around the match */
+.suche-snippet {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }

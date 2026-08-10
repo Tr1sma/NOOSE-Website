@@ -23,11 +23,8 @@ public class AbsenceService(
         => MentionNotify.DeltaAsync(notifications, oldReason, newReason, "einer Abmeldung", nameof(Agent), agentId,
             actor, cancellationToken, href: "/abmeldungen/uebersicht");
 
-    /// <summary>The page asks, the principal decides: only leadership and oversight ever reach All.</summary>
     private static AbsenceViewScope Granted(ClaimsPrincipal viewer, AbsenceViewScope requested)
-        => requested == AbsenceViewScope.All && !viewer.MayClassifiedRead()
-            ? AbsenceViewScope.Team
-            : requested;
+        => AbsenceVisibility.Granted(viewer, requested);
 
     public async Task<List<AbsenceRow>> GetListAsync(ClaimsPrincipal viewer, AbsenceViewScope requested,
         DateOnly? from = null, DateOnly? to = null, CancellationToken cancellationToken = default)
@@ -71,13 +68,13 @@ public class AbsenceService(
         return rows.Select(a =>
         {
             var mine = a.AgentId == meId;
+            // free text and the acknowledgement signal never leave the server for viewers who may not read them
+            var privateFields = AbsenceVisibility.MayReadPrivateFields(scope, mine);
             return new AbsenceRow(
                 a.Id, a.AgentId, a.Codename, a.FromDate, a.ToDate, a.Days, a.Category,
-                // free text never leaves the server for viewers who may not read it
-                full || mine ? a.Reason : null,
-                // acknowledgement is a leadership workflow signal, not peer information
-                full || mine ? a.AcknowledgedAt : null,
-                full || mine ? a.AcknowledgedByName : null,
+                privateFields ? a.Reason : null,
+                privateFields ? a.AcknowledgedAt : null,
+                privateFields ? a.AcknowledgedByName : null,
                 full || (mine && a.ToDate >= today));
         }).ToList();
     }

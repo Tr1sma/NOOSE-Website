@@ -253,11 +253,7 @@ public class PersonGroupService(
     private static IQueryable<PersonGroup> VisiblePersonGroups(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.PersonGroups.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.PersonGroups.Where(g =>
-                !g.IsClassified
-                || scope.MayClassifiedRead
-                || (g.IsTRUClassified && scope.IsTru)
-                || (g.IsHRBClassified && scope.IsHrb));
+            : db.PersonGroups.OnlyVisible(scope);
 
     public async Task<List<PersonGroupMember>> GetMembersAsync(string groupId, ViewerScope scope, CancellationToken cancellationToken = default)
     {
@@ -269,7 +265,8 @@ public class PersonGroupService(
 
         // null person = trashed; classified persons leadership-only
         var visible = members
-            .Where(m => m.Person is not null && (scope.MayClassifiedRead || !m.Person.IsClassified))
+            .Where(m => m.Person is not null && RecordVisibility.IsVisible(scope,
+                m.Person.IsClassified, m.Person.IsTRUClassified, m.Person.IsHRBClassified))
             .ToList();
         if (scope.PartnerAgency is { } agency)
         {

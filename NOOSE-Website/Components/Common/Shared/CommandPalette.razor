@@ -45,7 +45,7 @@
 
     private bool _open;
     private bool _mayUseNoosei;
-    private ViewerScope _scope;
+    private ClaimsPrincipal? _user;
     private string? _agentId;
     private MudAutocomplete<PaletteItem> _auto = default!;
     private IJSObjectReference? _module;
@@ -58,7 +58,7 @@
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        _scope = ViewerScope.From(user);
+        _user = user;
         _agentId = user.GetAgentId();
         // same three exclusions Permission.RequireLlmUse enforces; no point offering an entry that would refuse
         _mayUseNoosei = !user.IsPartner() && !user.IsDemo() && !user.IsOnlyReader();
@@ -182,12 +182,16 @@
             result.AddRange(_commands.Where(b => b.Label.Contains(v, StringComparison.OrdinalIgnoreCase)));
         }
 
-        if (!string.IsNullOrEmpty(v))
+        if (!string.IsNullOrEmpty(v) && _user is not null)
         {
             try
             {
-                var hit = await SearchService.QuickSearchAsync(v, _scope, 8, token);
-                result.AddRange(hit.Select(t => new PaletteItem(t.Name, t.CaseNumber, PaletteIcon(t.Category), SearchNavigation.Route(t.Category, t.TargetId))));
+                var hit = await SearchService.QuickSearchAsync(v, _user, 8, token);
+                // a category without a route cannot be a palette entry; dropping beats guessing a wrong record
+                result.AddRange(hit
+                    .Select(t => new { t.Name, t.CaseNumber, t.Category, Url = SearchNavigation.For(t.Category, t.TargetId) })
+                    .Where(t => t.Url is not null)
+                    .Select(t => new PaletteItem(t.Name, t.CaseNumber, PaletteIcon(t.Category), t.Url!)));
             }
             catch (Exception ex)
             {

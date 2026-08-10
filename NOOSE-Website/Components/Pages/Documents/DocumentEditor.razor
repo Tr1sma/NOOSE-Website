@@ -245,9 +245,9 @@ else
 
     private void Cancel()
     {
-        if (HasRecordsContext())
+        if (HasRecordsContext() && SourcesTab() is { } back)
         {
-            Nav.NavigateTo($"{SearchNavigation.Route(_entityType!, _entityId!)}?tab=quellen");
+            Nav.NavigateTo(back);
         }
         else if (_edit)
         {
@@ -264,7 +264,11 @@ else
 
     private string TargetBySave(string id)
         // partners don't see document sources on a record's Quellen tab, so open the created doc directly
-        => HasRecordsContext() && !_user.IsPartner()
-            ? $"{SearchNavigation.Route(_entityType!, _entityId!)}?tab=quellen"
+        => HasRecordsContext() && !_user.IsPartner() && SourcesTab() is { } tab
+            ? tab
             : $"/dokumente/{id}";
+
+    // the parent record's Quellen tab, or null when its type has no page of its own
+    private string? SourcesTab()
+        => SearchNavigation.For(_entityType, _entityId!) is { } route ? $"{route}?tab=quellen" : null;
 }

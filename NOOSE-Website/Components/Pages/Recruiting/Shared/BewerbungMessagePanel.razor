@@ -22,8 +22,32 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudText Typo="Typo.caption"><b>@AuthorLabel(m)</b></MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">· @m.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                            @if (m.ModifiedAt is not null)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">· bearbeitet</MudText>
+                            }
+                            @if (CanEdit(m, own))
+                            {
+                                <MudTooltip Text="Bearbeiten">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default"
+                                                   aria-label="Bearbeiten" OnClick="@(() => BeginEdit(m))" />
+                                </MudTooltip>
+                            }
                         </MudStack>
-                        @if (_richMode)
+                        @if (_editingId == m.Id)
+                        {
+                            <MentionInput @bind-Text="_editText" Lines="3" AutoFocus="true"
+                                          Placeholder="@PlaceholderEdit"
+                                          OnSubmit="SaveEditAsync" />
+                            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-1">
+                                <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                           OnClick="CancelEdit">Abbrechen</MudButton>
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Check" OnClick="SaveEditAsync"
+                                           Disabled="@(_editSaving || string.IsNullOrWhiteSpace(_editText))">Speichern</MudButton>
+                            </MudStack>
+                        }
+                        else if (_richMode)
                         {
                             <div class="dokument-html bewerbung-chat-html mud-typography-body2">@((MarkupString)m.Text)</div>
                         }
@@ -131,6 +155,7 @@
     [Parameter] public bool CollapsibleComposer { get; set; }
 
     private const string Placeholder = "Nachricht verfassen … (Verlinken per @, Strg+Enter sendet)";
+    private const string PlaceholderEdit = "Nachricht bearbeiten … (Verlinken per @, Strg+Enter speichert)";
     private bool _load = true;
     private bool _sends;
     private string _text = string.Empty;
@@ -145,6 +170,9 @@
     private bool _mayClassifiedRead;
     private bool _mayRealName;
     private bool _composerOpen;
+    private string? _editingId;
+    private string _editText = string.Empty;
+    private bool _editSaving;
     private List<BewerbungMessage> _messages = new();
     private Dictionary<string, IReadOnlyList<MentionSegment>> _segments = new();
     private List<DocumentTemplate> _templates = new();
@@ -225,6 +253,41 @@
             return "NOOSE";
         }
         return m.AuthorName!;
+    }
+
+    private bool CanEdit(BewerbungMessage m, bool own)
+        => Audience == BewerbungMessageAudience.Intern && own && _editingId != m.Id;
+
+    private void BeginEdit(BewerbungMessage m)
+    {
+        _editingId = m.Id; // one edit at a time
+        _editText = m.Text;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _editText = string.Empty;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editSaving || _editingId is null || string.IsNullOrWhiteSpace(_editText))
+        {
+            return;
+        }
+        _editSaving = true;
+        try
+        {
+            await BewerbungService.EditInternalMessageAsync(_editingId, _editText, User);
+            _editingId = null;
+            _editText = string.Empty; // broadcaster refreshes the thread
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _editSaving = false;
     }
 
     private async Task InsertTemplate(DocumentTemplate t)

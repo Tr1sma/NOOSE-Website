@@ -147,8 +147,7 @@ public static class NooseiRecordTypes
         new("Vorgang", "Case", "Vorgänge", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
         // no plain list service: membership decides who sees a taskforce, release who sees a document
         new("Taskforce", "Taskforce", "Taskforces", NooseiUse.Read | NooseiUse.Search | NooseiUse.Chronicle),
-        // the search emits no document group at all, so offering it as a filter would answer every question with zero hits
-        new("Dokument", "Document", "Dokumente", NooseiUse.Read | NooseiUse.Chronicle),
+        new("Dokument", "Document", "Dokumente", NooseiUse.Read | NooseiUse.Search | NooseiUse.Chronicle),
         new("Gesetz", "Law", "Gesetze", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
 
         // nameable and filterable, but no dossier: reading one would have to go through its own visibility helper
@@ -156,19 +155,23 @@ public static class NooseiRecordTypes
         new("Aktivität", "AgentActivity", "Aktivitäten", NooseiUse.Search),
         new("Personen-Dok", "PersonDoc", "Doks", NooseiUse.Search),
 
-        // label only. Search, chronicle and the graph all emit these; without a German name the model reads an
-        // English CLR name, takes it for a record kind and spends a round asking lies_akte for a rejected id
-        new("Termin", "Appointment", "Termine"),
-        new("Besprechung", "Meeting", "Besprechungen"),
-        new("Observation", "Observation", "Observationen"),
-        new("Asservat", "EvidenceItem", "Asservate"),
-        new("Asservat-Eintrag", "EvidenceEntry", "Asservat-Einträge"),
-        new("Kassenbuchung", "KassenBuchung", "Kassenbuchungen"),
-        new("Finanzierungsantrag", "FinancingRequest", "Finanzierungsanträge"),
-        new("Entführung", "AgentAbduction", "Entführungen"),
+        // searchable but not openable: the global search emits these categories, so the model may narrow to them.
+        // It could not before, although the hits arrived anyway — narrowing simply answered zero.
+        new("Asservat", "EvidenceItem", "Asservate", NooseiUse.Search),
+        new("Asservat-Eintrag", "EvidenceEntry", "Asservat-Einträge", NooseiUse.Search),
+        new("Kassenbuchung", "KassenBuchung", "Kassenbuchungen", NooseiUse.Search),
+        new("Finanzierungsantrag", "FinancingRequest", "Finanzierungsanträge", NooseiUse.Search),
+        new("Entführung", "AgentAbduction", "Entführungen", NooseiUse.Search),
+        new("Quelle", "Source", "Quellen", NooseiUse.Search),
+        new("Kommentar", "Comment", "Kommentare", NooseiUse.Search),
+
+        new("Termin", "Appointment", "Termine", NooseiUse.Search),
+        new("Besprechung", "Meeting", "Besprechungen", NooseiUse.Search),
+        new("Observation", "Observation", "Observationen", NooseiUse.Search),
+
+        // label only. The chronicle and the graph emit these; without a German name the model reads an English
+        // CLR name, takes it for a record kind and spends a round asking lies_akte for a rejected id
         new("Bewerbung", "Bewerbung", "Bewerbungen"),
-        new("Quelle", "Source", "Quellen"),
-        new("Kommentar", "Comment", "Kommentare"),
     ];
 
     private static readonly Dictionary<string, NooseiRecordType> ByGerman =

@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.People;
 
 /// <summary>Central person record; fully audited and soft-deletable.</summary>
 [Table("Personen")]
-public class Person : IAuditable, ISoftDelete
+public class Person : IAuditable, ISoftDelete, IClassifiableRecord
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

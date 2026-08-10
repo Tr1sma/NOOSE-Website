@@ -116,6 +116,48 @@ public static class PartnerVisibility
         return items.Where(i => released.Contains(idSelector(i))).ToList();
     }
 
+    /// <summary>Batched twin of <see cref="FilterChildrenAsync"/> for a hit list spanning many parents: the child ids
+    /// a partner may see, in two queries regardless of how many distinct parents are involved.</summary>
+    /// <remarks>The per-record helper is O(parents) round trips, which a search result set cannot afford. Semantics
+    /// are identical: a parent released whole covers all its children, otherwise only individually released ones.</remarks>
+    public static async Task<HashSet<string>> VisibleChildIdsAsync(
+        AppDbContext db, string childType,
+        IReadOnlyCollection<(string ParentType, string ParentId, string ChildId)> candidates,
+        PartnerAgency agency, string? partnerAgentId, CancellationToken cancellationToken = default)
+    {
+        var visible = new HashSet<string>(StringComparer.Ordinal);
+        if (candidates.Count == 0)
+        {
+            return visible;
+        }
+
+        var parentIds = candidates.Select(c => c.ParentId).Distinct().ToList();
+        // one pass over the parents: which of them are released whole, per (type, id)
+        var whole = (await db.PartnerShares
+                .Where(s => s.Agency == agency && s.IncludesChildren && parentIds.Contains(s.EntityId)
+                    && (s.PartnerAgentId == null || s.PartnerAgentId == partnerAgentId))
+                .Select(s => new { s.EntityType, s.EntityId })
+                .ToListAsync(cancellationToken))
+            .Select(s => (s.EntityType, s.EntityId))
+            .ToHashSet();
+
+        var rest = candidates.Where(c => !whole.Contains((c.ParentType, c.ParentId))).ToList();
+        foreach (var candidate in candidates.Where(c => whole.Contains((c.ParentType, c.ParentId))))
+        {
+            visible.Add(candidate.ChildId);
+        }
+        if (rest.Count == 0)
+        {
+            return visible;
+        }
+
+        // second pass: children released on their own, for the parents not released whole
+        var released = await ReleasedChildIdsAsync(
+            db, childType, rest.Select(c => c.ChildId).Distinct().ToList(), agency, partnerAgentId, cancellationToken);
+        visible.UnionWith(released);
+        return visible;
+    }
+
     /// <summary>Of a candidate parent-id set, those released to the agency or the viewer's account. Caller still applies the classified check.</summary>
     public static async Task<HashSet<string>> ReleasedParentIdsAsync(
         AppDbContext db, string entityType, IReadOnlyCollection<string> candidateIds, PartnerAgency agency, string? partnerAgentId, CancellationToken cancellationToken = default)

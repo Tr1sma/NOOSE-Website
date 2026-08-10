@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Factions;
 
 /// <summary>A faction (gang/mafia/corporation) as a full case. Bundles master data, stocks, ranks and members; audited and soft-deletable. Conflicts to other factions/parties run through the generic linking engine.</summary>
 [Table("Fraktionen")]
-public class Faction : IAuditable, ISoftDelete
+public class Faction : IAuditable, ISoftDelete, IClassifiableRecord
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

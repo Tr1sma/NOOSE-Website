@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 
@@ -13,5 +14,7 @@ public interface IMentionService
     Task<IReadOnlyList<IReadOnlyList<MentionSegment>>> ResolveManyAsync(IReadOnlyList<string?> texts, bool isLeadership, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null);
 
     /// <summary>Candidates for @-picker autocomplete.</summary>
-    Task<List<MentionHit>> CandidatesAsync(string? text, bool mayClassifiedRead, bool mayRealName, string? meId, CancellationToken cancellationToken = default);
+    /// <remarks>Takes the principal because the record half runs through the global search, whose gates are
+    /// principal-shaped. The real-name half still reads <c>MayRealNameSee</c> separately from the classified flag.</remarks>
+    Task<List<MentionHit>> CandidatesAsync(string? text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 }

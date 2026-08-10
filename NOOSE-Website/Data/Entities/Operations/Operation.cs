@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Operations;
 
 /// <summary>An operation / mission report as a standalone event case file with assigned agents and classification.</summary>
 [Table("Operationen")]
-public class Operation : IAuditable, ISoftDelete
+public class Operation : IAuditable, ISoftDelete, IClassifiableRecord
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

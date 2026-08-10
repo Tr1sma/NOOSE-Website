@@ -13,22 +13,9 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     public async Task<List<DocumentListItem>> GetListAsync(DocumentViewerScope scope, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, string? partnerAgentId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
-        bool isLeadership = scope.IsLeadership, isAdmin = scope.IsAdmin;
-        string? meId = scope.MeId;
         var baseQuery = partnerAgency is { } agency
             ? db.Documents.OnlyPartnerVisible(db, agency, partnerAgentId)
-            : db.Documents.Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
-                    || mayClassified
-                    || (d.IsTRUClassified && isTru)
-                    || (d.IsHRBClassified && isHrb))
-                // taskforce-internal: members and leadership/admin only
-                .Where(d => d.OwnerTaskforceId == null
-                    || isLeadership
-                    || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)))
-                // per-agent revocation (admins always retain access)
-                .Where(d => isAdmin || meId == null
-                    || !db.DocumentAccessExclusions.Any(x => x.DocumentId == d.Id && x.AgentId == meId));
+            : db.Documents.OnlyVisible(db, scope);
         var rows = await baseQuery
             .OrderByDescending(d => d.Pinned)
             .ThenByDescending(d => d.ModifiedAt ?? d.CreatedAt)
@@ -41,20 +28,7 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
     public async Task<List<DocumentListItem>> SearchAsync(string? searchText, DocumentViewerScope scope, int max = 20, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        bool mayClassified = scope.MayClassified, isTru = scope.IsTru, isHrb = scope.IsHrb;
-        bool isLeadership = scope.IsLeadership, isAdmin = scope.IsAdmin;
-        string? meId = scope.MeId;
-        var query = db.Documents.Where(d => (!d.IsClassified && !d.IsTRUClassified && !d.IsHRBClassified)
-                || mayClassified
-                || (d.IsTRUClassified && isTru)
-                || (d.IsHRBClassified && isHrb))
-            // taskforce-internal: members and leadership/admin only
-            .Where(d => d.OwnerTaskforceId == null
-                || isLeadership
-                || (meId != null && db.TaskforceAgents.Any(ta => ta.TaskforceId == d.OwnerTaskforceId && ta.AgentId == meId)))
-            // per-agent revocation (admins always retain access)
-            .Where(d => isAdmin || meId == null
-                || !db.DocumentAccessExclusions.Any(x => x.DocumentId == d.Id && x.AgentId == meId));
+        var query = db.Documents.OnlyVisible(db, scope);
 
         var s = searchText?.Trim();
         if (!string.IsNullOrWhiteSpace(s))
@@ -92,24 +66,8 @@ public class DocumentService(IDbContextFactory<AppDbContext> dbFactory) : IDocum
                 ? await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken)
                 : null;
         }
-        var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
-        if (document is null || !scope.CanSee(document.Classification))
-        {
-            return null; // hide existence
-        }
-        // taskforce-internal: members and leadership/admin only
-        if (document.OwnerTaskforceId is not null && !scope.IsLeadership
-            && !(scope.MeId is not null && await db.TaskforceAgents.AnyAsync(ta => ta.TaskforceId == document.OwnerTaskforceId && ta.AgentId == scope.MeId, cancellationToken)))
-        {
-            return null; // hide existence
-        }
-        // per-agent revocation (admins always retain access)
-        if (!scope.IsAdmin && scope.MeId is not null
-            && await db.DocumentAccessExclusions.AnyAsync(x => x.DocumentId == document.Id && x.AgentId == scope.MeId, cancellationToken))
-        {
-            return null; // hide existence
-        }
-        return document;
+        // one gate: secrecy level, owning taskforce and per-agent revocation. Null hides existence either way.
+        return await db.Documents.OnlyVisible(db, scope).FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
     }
 
     public async Task<Document> CreateAsync(DocumentInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)

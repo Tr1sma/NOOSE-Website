@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Groups;
 
 /// <summary>A person group (loose collection of people) as a case file with members, assigned agents and classification.</summary>
 [Table("Personengruppen")]
-public class PersonGroup : IAuditable, ISoftDelete
+public class PersonGroup : IAuditable, ISoftDelete, IClassifiableRecord
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

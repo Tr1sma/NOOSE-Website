@@ -128,7 +128,32 @@ Schichten innerhalb von `NOOSE-Website/`:
   Signatur (`GetTrashAsync(ct)` / `RestoreAsync(id, actor, ct)`), also bindet Restore als **Methodengruppe** —
   kein generischer EF-Pfad, kein Bulk-SQL, Permission-Guard und Audit-Interceptor laufen weiter mit.
   Ein neuer löschbarer Typ wird in `TrashService` als eine Zeile registriert + eine `TrashProjection`-Methode.
-- **Globale Suche** (`SearchService`) deckt alle Record-Typen + Inhalte ab; nutzt In-Memory-Levenshtein (`TextSimilarity`), weil MySQL/Pomelo keine Edit-Distance übersetzt.
+- **Globale Suche:** `SearchService` ist nur noch **Orchestrator**. Je Kategorie ein `ISearchProvider`
+  (`Services/Search/Providers/`, ~58), registriert über `AddSearchProviders()`. Der **`SearchCatalog`
+  (`Services/Search/SearchCatalog.cs`) ist die einzige Wahrheit** für Label, Icon, Route, Trefferform, Traits,
+  Facetten-Reihenfolge und das `suche_akten`-Enum — eine neue Kategorie ist **eine Zeile dort + ein Provider**.
+  In-Memory-Levenshtein (`TextSimilarity`) bleibt, weil MySQL/Pomelo keine Edit-Distance übersetzt.
+  - **Ein Provider schreibt nie ein Sichtbarkeits-Prädikat, er benennt eines** (`RecordVisibility.OnlyVisible`,
+    `DocumentVisibility`, `TaskforceVisibility`, `InformantVisibility`, `MeetingVisibility.OpenIdsAsync`, …).
+    Jede eigene Kopie driftet — genau so hat der alte Seitenindex-Pfad Partner- und Tag-Filter verloren.
+  - **Zwei Wellen unter einem Wanduhr-Budget** (`SearchOptions`, Standard 8 s): erst die billigen Kategorien, dann
+    die `Heavy`-Volltextscans. Läuft die Zeit ab, kommt zurück was fertig ist, und `SearchResults.Incomplete`
+    **nennt die Lücke**. Disziplin wie `NooseiGateway`: ein Provider wirft nie, eine Welle wird immer zu Ende
+    awaited, der Abbruch durch den Nutzer fällt durch.
+  - **Trefferzahlen sind immer „so viele sichtbare Zeilen zeige ich", nie eine Aussage über den Bestand** —
+    es gibt keine separate `CountAsync`. Volle Kategorie ⇒ `Capped` ⇒ „50+".
+  - **Keine Vorfilter auf `/suche`.** Kategorien sind Ergebnis-Facetten (`SearchFacetBar`), rein clientseitig über
+    die schon geholten Gruppen. `SearchCriteria.Categories` schränkt nur *server*-seitig ein und wird ausschließlich
+    von `suche_akten` und „Rest nachladen" gesetzt; `SearchCriteria.Facet` ist die Anzeige.
+  - **`SearchParentResolver`** löst polymorphe Kinder (Kommentar/Quelle/Wiedervorlage/Verknüpfung/Zusatzfeld/…) auf
+    einen *sichtbaren* Elternteil auf. **Kein Default-Arm:** ein unbekannter Elterntyp versteckt das Kind — die
+    Umkehrung von `Visibility.IsRecordVisibleAsync`, das einen unbekannten Typ als sichtbar beantwortet.
+  - **Partner: zwei unabhängige Deckel**, beide im Orchestrator erneut behauptet — die 9-Typen-Grenze
+    (`PartnerVisibility.IsReleasableType`) und die Rang-Allowlist (`IPartnerVisibilityPolicyService`, die vorher
+    nur die Navigation gated hat). Es gibt **keinen** separaten Partner-Suchpfad mehr.
+  - **`SearchCoverageTests` reflektiert über alle `DbSet`s:** jede Entität braucht einen Provider oder einen Eintrag
+    in `SearchCatalog.NotSearchable` **mit Begründung**. Eine neue Tabelle macht den Build rot, bis jemand
+    entschieden hat — das ist die eigentliche Garantie, nicht der Katalog.
 - **Maintenance/Banner/Theme/Logo:** `SystemSettingService` über Key/Value-Tabelle, 10s `IMemoryCache`. Logo/Uploads liegen **außerhalb wwwroot** unter `App_Data/uploads`, ausgeliefert über autorisierte Minimal-API-Endpoints.
 - **Drei getrennte Token-Systeme, nie vermischen:** `PlaceholderService` (`{{Name}}`, `{{Aktenzeichen}}`, `{{Datum}}`, `{{Uhrzeit}}`, `{{Agent}}`, `{{Dienstgrad}}` — Dokument-/Aktivitäts-/Personal-Vorlagen) · `BewerbungTemplateRenderer` (bare `NAME`/`BEWERBER`/`DATUM`/`UHRZEIT`/`DIENSTGRAD`, nur Bewerbungs-Anschreiben) · `MentionParser` (`@{Typ:GUID}`, aufgelöst über `MentionService.ResolveManyAsync` → `<MentionText>`).
 - **Platzhalter werden NUR beim Anwenden einer Vorlage expandiert**, nicht beim Speichern: Vorlagen-*Editoren* und der Edit-Modus gespeicherter Records lassen Tokens bewusst roh stehen (dort sind sie der Payload).
@@ -258,6 +283,17 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 - **Nachvollziehbarkeit:** Ein Schreibpfad, der den Interceptor umgeht (`ExecuteUpdate/Delete`/Raw-SQL) **oder** eine nicht-`IAuditable`-Zuordnung ändert (z. B. `TagMapping`), muss selbst eine Zeile via `ManualAudit.Row(entityType, entityId, …)` schreiben — gegen die **Akte** geloggt (⇒ Zeitstrahl + Chronik + Protokoll), bei reinen Config-Aktionen gegen einen Config-Typ (nur Protokoll). `ChangesJson` folgt der `{Feld:[alt,neu]}`-Form (`ManualAudit.Change`), sonst rendert `AuditDisplay.Parse` nichts.
 - **Neue Kind-/Anhang-Tabelle einer Akte** (auditiert, aber unsichtbar auf dem Zeitstrahl) → Fall in `TimelineService.AuditSourceAsync` (Fan-out per FK bzw. polymorph über `EntityType/EntityId`) **und** einen Titel in `TimelineDisplay.MapAudit` ergänzen — sonst erscheint sie generisch als „Akte geändert" oder gar nicht.
 - **Bewerbungs-Anschreiben nie auf `{{...}}` „normalisieren"** — `BewerbungTemplateRenderer` schwärzt `\bNAME\b` zu `███████`, damit der Agent gegenüber Bewerbern anonym bleibt; `{{Agent}}` würde stattdessen den Codename ausliefern. `DocumentTemplates` ist dieselbe Tabelle für Bibliothek **und** Bewerbung → Consumer müssen nach `Category` (`RecruitingSeeder.TemplateCategory`) filtern.
+- **`SearchNavigation.For` gibt `null` statt zu raten.** Der alte `_ => "/personen/{id}"`-Fallback öffnete für einen
+  Kommentar an einer Fraktion eine *Personenakte mit der Fraktions-Id* — eine falsche Akte, lautlos. Ein Treffer ohne
+  Route ist nicht klickbar; wer eine Route braucht, prüft `SearchCatalog.IsRoutable`.
+- **Neue Suchkategorie = eine `SearchCatalog`-Zeile + ein `ISearchProvider` + eine Registrierungszeile.** Fehlt eins,
+  schlägt `SearchCatalogTests`/`SearchCoverageTests` fehl. Der `Assistant`-Trait wird **zusammen mit dem Provider**
+  gesetzt und muss mit `NooseiUse.Search` in `NooseiRecordTypes` übereinstimmen (bidirektionaler Drift-Test) — sonst
+  sagt man dem Modell, es dürfe auf eine Kategorie eingrenzen, die immer null Treffer hat.
+- **`SearchIndexBackfillWorker.Version` hochzählen**, wenn `SearchIndexProjection` einen Typ dazubekommt. Sonst
+  bekommen Bestandsinstallationen **null** Index-Zeilen für den neuen Typ, und die phonetische Suche wirkt „flaky".
+- **Suchtests konstruieren mit `MaxConcurrency = 1`** (`SearchTestHost`): `SqliteTestContext` gibt jedem Context
+  dieselbe offene `SqliteConnection`, und zwei gleichzeitige Kommandos darauf sind undefiniert.
 - **Stale Docs:** `Authorization/README.md` und `Infrastructure/README.md` sind veraltete „Phase 0"-Stubs; viele `<see cref>`-Tags zeigen auf alte deutsche Typnamen. Quelle ist der Code, nicht die READMEs.
 
 ## NOOSEI (KI-Integration)

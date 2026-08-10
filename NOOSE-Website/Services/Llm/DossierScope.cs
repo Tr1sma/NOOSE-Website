@@ -21,10 +21,7 @@ public static class DossierScope
             IsTru: rootLevel == DocumentClassification.Tru,
             IsHrb: rootLevel == DocumentClassification.Hrb);
 
-    /// <summary>Secrecy level of a linked record from its three flags; mirrors the gate in <see cref="Visibility"/>.</summary>
+    /// <summary>Secrecy level of a linked record from its three flags.</summary>
     public static DocumentClassification LevelOf(bool classified, bool tru, bool hrb)
-        => !classified ? DocumentClassification.None
-            : tru ? DocumentClassification.Tru
-            : hrb ? DocumentClassification.Hrb
-            : DocumentClassification.Leadership;
+        => RecordVisibility.LevelOf(classified, tru, hrb);
 }

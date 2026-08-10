@@ -1,10 +1,12 @@
+using System.Net;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using Ganss.Xss;
 
 namespace NOOSE_Website.Services;
 
 /// <summary>Server-side HTML sanitizer for WYSIWYG content.</summary>
-public static class HtmlCleanup
+public static partial class HtmlCleanup
 {
     /// <summary>Marker the editor leaves behind where an image was, while NOOSEI works on the text.</summary>
     public const string AiImagePlaceholderAttribute = "data-noosei-bild";
@@ -43,6 +45,32 @@ public static class HtmlCleanup
         }
         return Generate(allowImagePlaceholder: true).Sanitize(html);
     }
+
+    /// <summary>Tags out, entities decoded, whitespace collapsed to single spaces. For search snippets, Discord
+    /// embeds, LLM context and emptiness probes.</summary>
+    /// <remarks>
+    /// NOT a sanitizer — the result is meant to be rendered as TEXT; use <see cref="Clean"/> for anything that
+    /// stays markup. Regex rather than a <see cref="Clean"/>-then-strip round trip because that is a full AngleSharp
+    /// parse, and the search path runs this over dozens of rows per category.
+    /// Block structure is deliberately lost: a caller that needs paragraph breaks (the applicant letter) keeps its
+    /// own converter, because collapsing its newlines would run the whole letter together.
+    /// </remarks>
+    public static string PlainText(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return string.Empty;
+        }
+        // space, not empty: stripping <b>a</b><b>b</b> to "ab" glues neighbouring words together
+        var text = WebUtility.HtmlDecode(TagStrip().Replace(html, " "));
+        return Whitespace().Replace(text, " ").Trim();
+    }
+
+    [GeneratedRegex("<[^>]+>")]
+    private static partial Regex TagStrip();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     private static HtmlSanitizer Generate(bool allowDiffMarks = false, bool allowImagePlaceholder = false)
     {

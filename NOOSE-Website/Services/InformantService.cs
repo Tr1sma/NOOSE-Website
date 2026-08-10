@@ -198,7 +198,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             .Select(u => new { u.Id, u.Codename, u.RealName })
             .ToListAsync(cancellationToken);
         return rows
-            .Select(u => new InformantHandlerOption(u.Id, PickName(u.Codename, u.RealName, actor.MayRealNameSee())))
+            .Select(u => new InformantHandlerOption(u.Id, AgentNameDisplay.Pick(u.Codename, u.RealName, actor.MayRealNameSee())))
             .OrderBy(o => o.Name)
             .ToList();
     }
@@ -358,11 +358,6 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         var rows = await db.Users.Where(u => list.Contains(u.Id))
             .Select(u => new { u.Id, u.Codename, u.RealName })
             .ToListAsync(ct);
-        return rows.ToDictionary(u => u.Id, u => PickName(u.Codename, u.RealName, mayRealName));
+        return rows.ToDictionary(u => u.Id, u => AgentNameDisplay.Pick(u.Codename, u.RealName, mayRealName));
     }
-
-    private static string PickName(string? codename, string? realName, bool mayRealName)
-        => !string.IsNullOrWhiteSpace(codename) ? codename!
-            : mayRealName && !string.IsNullOrWhiteSpace(realName) ? realName!
-            : "(unbenannt)";
 }

@@ -205,11 +205,7 @@ public class OperationService(
     private static IQueryable<Operation> VisibleOperations(AppDbContext db, ViewerScope scope)
         => scope.PartnerAgency is { } agency
             ? db.Operations.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Operations.Where(o =>
-                !o.IsClassified
-                || scope.MayClassifiedRead
-                || (o.IsTRUClassified && scope.IsTru)
-                || (o.IsHRBClassified && scope.IsHrb));
+            : db.Operations.OnlyVisible(scope);
 
     public async Task<List<OperationAgent>> GetAgentsAsync(string operationId, CancellationToken cancellationToken = default)
     {

@@ -1,22 +1,25 @@
 @page "/suche"
 @using System.Text.Json
+@using NOOSE_Website.Services.Search
 @inject ISearchService SearchService
 @inject ISavedSearchService SavedSearchService
 @inject ITagService TagService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Suche · NOOSE</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
-    <MudIcon Icon="@Icons.Material.Filled.Search" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Globale Suche</MudText>
-</MudStack>
-<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-    Durchsucht Personen, Fraktionen, Personengruppen, Parteien, Operationen, Doks, Quellen und Kommentare. Verschlusssachen erscheinen nur für die Führung.
-    Die <b>Smart-Suche</b> toleriert Tippfehler; der <b>Deep-Scan</b> durchsucht zusätzlich alle Nebenfelder (inkl. Person-Steckbrief) und bezieht Doks/Quellen/Kommentare immer mit ein.
-</MudText>
+<PageHeader Icon="@Icons.Material.Filled.Search" Title="Globale Suche">
+    <SubtitleContent>
+        Durchsucht <b>alles, was du sehen darfst</b> — Akten, Inhalte und persönliche Einträge.
+        <b>Es gibt keine Vorfilter:</b> Kategorien erscheinen unten als Filter <i>auf das Ergebnis</i>, damit man
+        sich keine Treffer wegklicken kann. Die <b>Smart-Suche</b> toleriert Tippfehler; der <b>Deep-Scan</b> nimmt
+        alle Nebenfelder dazu (Steckbrief, Telefonnummern, Fahrzeuge, Orte, Waffen).
+        Verschlusssachen erscheinen nur für die Führung.
+    </SubtitleContent>
+</PageHeader>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
     <MudStack Spacing="3">
@@ -29,40 +32,26 @@
         </MudStack>
 
         <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Kategorien:</MudText>
-            <MudCheckBox T="bool" @bind-Value="_katPerson" Label="Personen" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katFaction" Label="Fraktionen" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katGroup" Label="Personengruppen" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katParty" Label="Parteien" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katOperation" Label="Operationen" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katActivity" Label="Aktivitäten" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katTaskforce" Label="Taskforces" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katCase" Label="Vorgänge" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katLaw" Label="Gesetze" Dense="true" />
-            <MudCheckBox T="bool" @bind-Value="_katDoc" Label="Doks" Dense="true" Disabled="_maxMode" />
-            <MudCheckBox T="bool" @bind-Value="_katSource" Label="Quellen" Dense="true" Disabled="_maxMode" />
-            <MudCheckBox T="bool" @bind-Value="_katComment" Label="Kommentare" Dense="true" Disabled="_maxMode" />
-            <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_tagSelection" Label="Tags" Dense="true"
-                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:220px;"
-                       MultiSelectionTextFunc="@(items => $"{items.Count} Tag(s)")">
-                @foreach (var t in _tags)
-                {
-                    <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </MudStack>
-
-        <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
             <MudText Typo="Typo.body2" Class="mud-text-secondary">Modus:</MudText>
-            <MudTooltip Text="Findet Treffer auch bei Tippfehlern (Levenshtein-Algorithmus).">
+            <MudTooltip Text="Findet Treffer auch bei Tippfehlern (Levenshtein + phonetischer Index).">
                 <MudCheckBox T="bool" @bind-Value="_fuzzy" Label="Smart-Suche" Dense="true" Color="Color.Primary" />
             </MudTooltip>
-            <MudTooltip Text="Durchsucht alle Felder inkl. Person-Steckbrief sowie Doks/Quellen/Kommentare – toleranter, aber langsamer.">
-                <MudCheckBox T="bool" @bind-Value="_maxMode" @bind-Value:after="MaxAddendum" Label="Deep-Scan" Dense="true" Color="Color.Secondary" />
+            <MudTooltip Text="Nimmt alle Nebenfelder dazu (Steckbrief, Telefon, Fahrzeuge, Orte, Waffen) – toleranter, aber langsamer.">
+                <MudCheckBox T="bool" @bind-Value="_maxMode" Label="Deep-Scan" Dense="true" Color="Color.Secondary" />
             </MudTooltip>
-            @if (_maxMode)
+            @if (_tags.Count > 0)
             {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Doks/Quellen/Kommentare sind im Deep-Scan immer aktiv.</MudText>
+                <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_tagSelection" Label="Tags" Dense="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:220px;"
+                           MultiSelectionTextFunc="@(items => $"{items.Count} Tag(s)")">
+                    @foreach (var t in _tags)
+                    {
+                        <MudSelectItem T="string" Value="@t.Id">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTooltip Text="@TagScopeHint">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="mud-text-secondary" />
+                </MudTooltip>
             }
         </MudStack>
 
@@ -90,58 +79,117 @@
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
-else if (_searched && _groups.Count == 0)
-{
-    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine Treffer.</MudAlert>
-}
 else if (!_searched)
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary">Suchbegriff eingeben oder Tags wählen und „Suchen" klicken.</MudText>
 }
 else
 {
-    <MudStack Spacing="4">
-        @foreach (var group in _groups)
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2 flex-wrap">
+        <MudText Typo="Typo.subtitle1">
+            @if (_facet is null)
+            {
+                <text>@_results.Total Treffer in @_results.Groups.Count Kategorien</text>
+            }
+            else
+            {
+                <text>@ShownCount Treffer · @SearchCatalog.Plural(_facet)</text>
+            }
+        </MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            @_results.Searched.Count von @_results.VisibleCategories Kategorien durchsucht ·
+            @_results.Elapsed.TotalSeconds.ToString("0.0") s
+        </MudText>
+        <MudSpacer />
+        @if (_facet is not null)
         {
-            <div>
-                <MudText Typo="Typo.subtitle1" Class="mb-2">
-                    <MudIcon Icon="@CategoryIcon(group.Category)" Size="Size.Small" Class="mr-1" />@group.Display (@group.Hit.Count)
-                </MudText>
-                <MudStack Spacing="2">
-                    @foreach (var t in group.Hit)
-                    {
-                        <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => Open(t))">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body2"><b>@t.Title</b></MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@t.CaseNumber</MudText>
-                            </MudStack>
-                            @if (!string.IsNullOrWhiteSpace(t.Snippet))
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary"
-                                         Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:720px;">
-                                    @t.Snippet
-                                </MudText>
-                            }
-                        </MudPaper>
-                    }
-                </MudStack>
-            </div>
+            <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Clear"
+                       OnClick="@(() => FacetAsync(null))">Filter aufheben</MudButton>
         }
     </MudStack>
+
+    @if (_results.Incomplete.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                  Icon="@Icons.Material.Filled.HourglassBottom">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                <MudText Typo="Typo.body2">
+                    <b>Unvollständig.</b> Das Zeitbudget war erschöpft. Diese Kategorien wurden nicht zu Ende
+                    durchsucht — <b>0 Treffer heißt hier nicht „nichts da"</b>:
+                    @string.Join(", ", _results.Incomplete.Select(SearchCatalog.Plural)).
+                </MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning"
+                           StartIcon="@Icons.Material.Filled.Bolt" OnClick="SearchRestAsync">Rest nachladen</MudButton>
+            </MudStack>
+        </MudAlert>
+    }
+
+    @if (_results.Total == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Keine Treffer."
+                    Text="@($"Durchsucht wurden {_results.Searched.Count} Kategorien — alles, was du sehen darfst.")">
+            <Actions>
+                @if (!_fuzzy)
+                {
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Spellcheck"
+                               OnClick="@(async () => { _fuzzy = true; await SearchAsync(); })">Smart-Suche einschalten</MudButton>
+                }
+                @if (!_maxMode)
+                {
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ZoomIn"
+                               OnClick="@(async () => { _maxMode = true; await SearchAsync(); })">Deep-Scan</MudButton>
+                }
+            </Actions>
+        </EmptyState>
+    }
+    else
+    {
+        @if (_results.Groups.Count > 1)
+        {
+            <SearchFacetBar Results="_results" Active="_facet" ActiveChanged="FacetAsync" />
+        }
+
+        <MudStack Spacing="4">
+            @foreach (var group in Shown())
+            {
+                <div>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                        <MudIcon Icon="@SearchCatalog.Icon(group.Category)" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1">@group.Display</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @group.Hit.Count@(group.Capped ? "+" : "")
+                        </MudText>
+                        @if (group.Capped)
+                        {
+                            <MudTooltip Text="Nur die ersten Treffer dieser Kategorie – Suche eingrenzen.">
+                                <MudIcon Icon="@Icons.Material.Filled.MoreHoriz" Size="Size.Small" Class="mud-text-secondary" />
+                            </MudTooltip>
+                        }
+                    </MudStack>
+                    <MudStack Spacing="2">
+                        @foreach (var t in group.Hit)
+                        {
+                            <SearchHitRow Hit="t" />
+                        }
+                    </MudStack>
+                </div>
+            }
+        </MudStack>
+    }
 }
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
     [SupplyParameterFromQuery(Name = "q")] private string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "kat")] private string? Kat { get; set; }
 
     private ClaimsPrincipal _user = default!;
     private string? _agentId;
-    private bool _mayClassifiedRead;
 
     private string _text = string.Empty;
-    private bool _katPerson = true, _katFaction = true, _katGroup = true, _katParty = true, _katOperation = true, _katActivity = true, _katTaskforce = true, _katCase = true, _katLaw = true, _katDoc = true, _katSource = true, _katComment = true;
     private bool _fuzzy;
     private bool _maxMode;
+    private string? _facet;
     private IReadOnlyCollection<string> _tagSelection = new HashSet<string>();
     private string _saveName = string.Empty;
 
@@ -149,17 +197,27 @@ else
     private bool _searchingNow;
     private bool _againSearch;
     private bool _searched;
-    private List<SearchResultGroup> _groups = new();
+    private SearchResults _results = SearchResults.None;
     private List<Tag> _tags = new();
     private List<SavedSearch> _saved = new();
 
     private string? _appliedQ;
 
+    /// <summary>Derived, not hand-written: a hardcoded list of tagless categories goes stale on the next one.</summary>
+    private static readonly string TagScopeHint =
+        "Ein Tag-Filter wirkt nur auf Kategorien mit Stichwort-Zuordnung. Ohne Zuordnung und damit ausgelassen: "
+        + string.Join(", ", SearchCatalog.Categories
+            .Where(c => !c.Has(SearchTraits.Tagged)).Select(c => c.Plural)) + ".";
+
+    private IEnumerable<SearchResultGroup> Shown()
+        => _facet is null ? _results.Groups : _results.Groups.Where(g => g.Category == _facet);
+
+    private int ShownCount => Shown().Sum(g => g.Hit.Count);
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
         _agentId = _user.GetAgentId();
-        _mayClassifiedRead = _user.MayClassifiedRead();
         // partners: no internal tag vocabulary
         if (!_user.IsPartner())
         {
@@ -170,15 +228,17 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        // Adopt ?q= and search immediately
-        if (Q != _appliedQ)
+        // real navigations only: QueryState.WriteAsync goes through replaceState, which raises no LocationChanged
+        if (Q == _appliedQ)
         {
-            _appliedQ = Q;
-            if (!string.IsNullOrWhiteSpace(Q))
-            {
-                _text = Q;
-                await SearchAsync();
-            }
+            return;
+        }
+        _appliedQ = Q;
+        _facet = Kat is { Length: > 0 } && SearchCatalog.Find(Kat) is not null ? Kat : null;
+        if (!string.IsNullOrWhiteSpace(Q))
+        {
+            _text = Q;
+            await SearchAsync();
         }
     }
 
@@ -198,52 +258,19 @@ else
         }
     }
 
-    private SearchCriteria BuildCriteria()
+    private SearchCriteria BuildCriteria() => new()
     {
-        var categories = new List<string>();
-        if (_katPerson) categories.Add(nameof(Person));
-        if (_katFaction) categories.Add(nameof(Faction));
-        if (_katGroup) categories.Add(nameof(PersonGroup));
-        if (_katParty) categories.Add(nameof(Party));
-        if (_katOperation) categories.Add(nameof(Operation));
-        if (_katActivity) categories.Add(nameof(AgentActivity));
-        if (_katTaskforce) categories.Add(nameof(Taskforce));
-        if (_katCase) categories.Add(nameof(Case));
-        if (_katLaw) categories.Add(nameof(Law));
-        if (_katDoc) categories.Add(nameof(PersonDoc));
-        if (_katSource) categories.Add(nameof(Source));
-        if (_katComment) categories.Add(nameof(Comment));
-
-        return new SearchCriteria
-        {
-            Text = _text,
-            // All active means empty list (= all), else the chosen subset
-            Categories = categories.Count == 12 ? new() : categories,
-            TagIds = _tagSelection.ToList(),
-            Fuzzy = _fuzzy,
-            MaxMode = _maxMode,
-        };
-    }
-
-    // Keep the checkboxes in sync with what deep-scan actually searches
-    private void MaxAddendum()
-    {
-        if (_maxMode)
-        {
-            _katDoc = true;
-            _katSource = true;
-            _katComment = true;
-        }
-    }
+        Text = _text,
+        Facet = _facet,
+        TagIds = _tagSelection.ToList(),
+        Fuzzy = _fuzzy,
+        MaxMode = _maxMode,
+        // Categories stays empty: the page never pre-filters, so nothing can be hidden from the reader
+    };
 
     private async Task SearchAsync()
     {
-        if (!_katPerson && !_katFaction && !_katGroup && !_katParty && !_katOperation && !_katActivity && !_katTaskforce && !_katCase && !_katLaw && !_katDoc && !_katSource && !_katComment && !_maxMode)
-        {
-            Snackbar.Add("Bitte mindestens eine Kategorie auswählen.", Severity.Warning);
-            return;
-        }
-        // A search is already running; queue a rerun instead of overlapping
+        // a search already runs; queue a rerun instead of overlapping
         if (_searchingNow)
         {
             _againSearch = true;
@@ -258,15 +285,16 @@ else
             do
             {
                 _againSearch = false;
-                _groups = await SearchService.SearchAsync(BuildCriteria(), ViewerScope.From(_user));
+                _results = await SearchService.SearchAsync(BuildCriteria(), _user);
                 _searched = true;
             }
             while (_againSearch);
+            await UrlAsync();
         }
         catch (Exception ex)
         {
-            // Surface the error instead of hanging the spinner
-            _groups = new();
+            // surface the error instead of hanging the spinner
+            _results = SearchResults.None;
             _searched = true;
             Snackbar.Add($"Suche fehlgeschlagen: {ex.Message}", Severity.Error);
         }
@@ -275,6 +303,56 @@ else
             _load = false;
             _searchingNow = false;
         }
+    }
+
+    /// <summary>Re-runs only the categories the budget cut off and merges them in.</summary>
+    /// <remarks>The one place the page restricts categories server-side — and it says so on a button rather than
+    /// doing it silently.</remarks>
+    private async Task SearchRestAsync()
+    {
+        if (_results.Incomplete.Count == 0)
+        {
+            return;
+        }
+        _load = true;
+        StateHasChanged();
+        try
+        {
+            var criteria = BuildCriteria();
+            criteria.Categories = _results.Incomplete.ToList();
+            var rest = await SearchService.SearchAsync(criteria, _user);
+            var groups = _results.Groups
+                .Where(g => !_results.Incomplete.Contains(g.Category))
+                .Concat(rest.Groups)
+                .OrderBy(g => SearchCatalog.Index(g.Category))
+                .ToList();
+            _results = new SearchResults(groups, groups.Sum(g => g.Hit.Count),
+                _results.Searched.Concat(rest.Searched).Distinct().ToList(),
+                rest.Incomplete, _results.VisibleCategories, _results.Elapsed + rest.Elapsed);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Nachladen fehlgeschlagen: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private Task FacetAsync(string? category)
+    {
+        // no re-query: Shown() filters the groups already fetched
+        _facet = category;
+        return UrlAsync();
+    }
+
+    private async Task UrlAsync()
+    {
+        await QueryState.WriteAsync(JS, Nav, ("q", _text), ("kat", _facet));
+        // replaceState raises no LocationChanged, so Q still holds the old value. Without this the guard in
+        // OnParametersSetAsync swallows the next real navigation from the header search box.
+        _appliedQ = string.IsNullOrWhiteSpace(_text) ? null : _text;
     }
 
     private async Task SaveAsync()
@@ -307,22 +385,21 @@ else
         }
 
         _text = k.Text ?? string.Empty;
-        var katSet = k.Categories is { Count: > 0 } ? k.Categories.ToHashSet() : null;
-        _katPerson = katSet is null || katSet.Contains(nameof(Person));
-        _katFaction = katSet is null || katSet.Contains(nameof(Faction));
-        _katGroup = katSet is null || katSet.Contains(nameof(PersonGroup));
-        _katParty = katSet is null || katSet.Contains(nameof(Party));
-        _katOperation = katSet is null || katSet.Contains(nameof(Operation));
-        _katActivity = katSet is null || katSet.Contains(nameof(AgentActivity));
-        _katTaskforce = katSet is null || katSet.Contains(nameof(Taskforce));
-        _katCase = katSet is null || katSet.Contains(nameof(Case));
-        _katLaw = katSet is null || katSet.Contains(nameof(Law));
-        _katDoc = katSet is null || katSet.Contains(nameof(PersonDoc));
-        _katSource = katSet is null || katSet.Contains(nameof(Source));
-        _katComment = katSet is null || katSet.Contains(nameof(Comment));
         _tagSelection = new HashSet<string>(k.TagIds ?? new());
         _fuzzy = k.Fuzzy;
         _maxMode = k.MaxMode;
+
+        // rows saved with the old checkbox filter carry Categories as a PRE-filter. Deliberately not honoured:
+        // it hid categories from the reader. A single saved category survives as the result facet.
+        _facet = k.Facet is { Length: > 0 } f && SearchCatalog.Find(f) is not null ? f
+            : k.Categories is [var only] && SearchCatalog.Find(only) is not null ? only
+            : null;
+
+        if (k.Facet is null && k.Categories is { Count: > 1 })
+        {
+            Snackbar.Add("Diese gespeicherte Suche stammt aus der alten Kategorie-Auswahl. Es wird jetzt immer "
+                + "alles Sichtbare durchsucht; Kategorien filtern nur das Ergebnis.", Severity.Info);
+        }
 
         await SearchAsync();
     }
@@ -333,7 +410,6 @@ else
         {
             return;
         }
-        // Confirm before delete; the X sits next to "apply"
         var ok = await ConfirmDialog.ShowAsync(DialogService, "Gespeicherte Suche löschen?",
             $"„{g.Name}“ wird dauerhaft entfernt.");
         if (!ok)
@@ -344,23 +420,4 @@ else
         Snackbar.Add($"Suche „{g.Name}“ gelöscht.", Severity.Success);
         await SavedLoadAsync();
     }
-
-    private void Open(SearchHit t) => Nav.NavigateTo(SearchNavigation.Route(t));
-
-    private static string CategoryIcon(string category) => category switch
-    {
-        nameof(Person) => Icons.Material.Filled.Badge,
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        nameof(AgentActivity) => Icons.Material.Filled.Bolt,
-        nameof(Taskforce) => Icons.Material.Filled.Groups2,
-        nameof(Case) => Icons.Material.Filled.FolderSpecial,
-        nameof(Law) => Icons.Material.Filled.Gavel,
-        nameof(PersonDoc) => Icons.Material.Filled.Description,
-        nameof(Source) => Icons.Material.Filled.AttachFile,
-        nameof(Comment) => Icons.Material.Filled.Comment,
-        _ => Icons.Material.Filled.Article,
-    };
 }

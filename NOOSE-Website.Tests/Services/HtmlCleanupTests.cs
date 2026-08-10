@@ -47,6 +47,52 @@ public class HtmlCleanupTests
         Assert.DoesNotContain("javascript", HtmlCleanup.CleanAiPayload("<p><a href=\"javascript:alert(1)\">x</a></p>"));
     }
 
+    // ---- PlainText: markup out, readable text in ----
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   \r\n ")]
+    public void PlainText_NullEmptyOrWhitespace_ReturnsEmptyString(string? input)
+    {
+        Assert.Equal(string.Empty, HtmlCleanup.PlainText(input));
+    }
+
+    [Fact]
+    public void PlainText_StripsTagsAndCollapsesWhitespace()
+    {
+        Assert.Equal("Hallo Welt", HtmlCleanup.PlainText("<p>Hallo</p>\n\n<p>  Welt  </p>"));
+    }
+
+    [Fact]
+    public void PlainText_SeparatesAdjacentInlineElements()
+    {
+        // replacing a tag with "" glues neighbouring words: "abc" instead of "ab c"
+        Assert.Equal("ab c", HtmlCleanup.PlainText("<b>ab</b> <i>c</i>"));
+        Assert.Equal("ab c", HtmlCleanup.PlainText("<b>ab</b><i>c</i>"));
+    }
+
+    [Fact]
+    public void PlainText_DecodesEntities()
+    {
+        Assert.Equal("Müller & Sohn", HtmlCleanup.PlainText("<p>M&uuml;ller &amp; Sohn</p>"));
+        Assert.Equal("a b", HtmlCleanup.PlainText("<p>a&nbsp;b</p>"));
+    }
+
+    [Fact]
+    public void PlainText_OfAnEmptyQuillDocument_IsEmpty()
+    {
+        // the emptiness probe the personnel notes rely on
+        Assert.Equal(string.Empty, HtmlCleanup.PlainText("<p><br></p>"));
+    }
+
+    [Fact]
+    public void PlainText_DropsAttributeValues()
+    {
+        // a term that only matched inside an attribute is not in the snippet — SearchSnippet falls back for it
+        Assert.Equal("Text", HtmlCleanup.PlainText("<p style=\"color:red\" title=\"geheim\">Text</p>"));
+    }
+
     // ---- plain text passthrough ----
 
     [Fact]

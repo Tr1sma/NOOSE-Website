@@ -1,0 +1,85 @@
+@using NOOSE_Website.Services.Search
+@inject NavigationManager Nav
+
+@{
+    var row = SearchCatalog.Find(Hit.Category);
+    var href = SearchNavigation.For(Hit);
+}
+
+<MudPaper Class="@(href is null ? "pa-3" : "pa-3 cursor-pointer")" Elevation="1"
+          @onclick="@(() => Open(href))">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+        @* the type chip is what keeps three dozen categories legible at a glance *@
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
+                 Icon="@SearchCatalog.Icon(Hit.Category)">@SearchCatalog.German(Hit.Category)</MudChip>
+
+        @switch (row?.Shape ?? SearchHitShape.Record)
+        {
+            case SearchHitShape.Content:
+                @* the title is the PARENT record's name: the content itself has no page *@
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">in</MudText>
+                <MudText Typo="Typo.body2"><b>@Hit.Title</b></MudText>
+                @if (!string.IsNullOrWhiteSpace(Hit.CaseNumber))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Hit.CaseNumber</MudText>
+                }
+                @if (!string.IsNullOrEmpty(Hit.TargetType))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">(@SearchCatalog.German(Hit.TargetType))</MudText>
+                }
+                break;
+
+            case SearchHitShape.Log:
+                <MudText Typo="Typo.body2"><b>@Hit.Title</b></MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @When()@(Hit.Actor is null ? null : " · " + Hit.Actor)
+                </MudText>
+                break;
+
+            case SearchHitShape.Personal:
+                <MudText Typo="Typo.body2"><b>@Hit.Title</b></MudText>
+                @if (Hit.Timestamp is not null)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@When()</MudText>
+                }
+                break;
+
+            default:
+                <MudText Typo="Typo.body2"><b>@Hit.Title</b></MudText>
+                @if (!string.IsNullOrWhiteSpace(Hit.CaseNumber))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Hit.CaseNumber</MudText>
+                }
+                break;
+        }
+
+        @if (href is null)
+        {
+            <MudSpacer />
+            <MudTooltip Text="Dieser Eintrag hat keine eigene Seite.">
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Class="mud-text-secondary" />
+            </MudTooltip>
+        }
+    </MudStack>
+
+    @if (!string.IsNullOrWhiteSpace(Hit.Snippet))
+    {
+        @* two lines, not one: a content hit needs the context around the match to be recognisable *@
+        <MudText Typo="Typo.body2" Class="mud-text-secondary suche-snippet mt-1">@Hit.Snippet</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public SearchHit Hit { get; set; } = default!;
+
+    private string? When() => Hit.Timestamp?.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+
+    private void Open(string? href)
+    {
+        // a hit whose category has no page is not clickable; never guess a route
+        if (href is not null)
+        {
+            Nav.NavigateTo(href);
+        }
+    }
+}

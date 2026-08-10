@@ -48,6 +48,14 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
         {
             keys.Add($"{query.FocusType}:{query.FocusId}");
         }
+        var markKey = query.MarkType is not null && query.MarkId is not null
+            ? $"{query.MarkType}:{query.MarkId}"
+            : null;
+        if (markKey is not null)
+        {
+            // an isolated record still shows up marked
+            keys.Add(markKey);
+        }
 
         var node = await ResolveNodeAsync(db, keys, isLeadership, meId, cancellationToken);
 
@@ -90,6 +98,11 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
                     .Take(MaxNode)
                     .ToHashSet();
                 truncated = true;
+                if (markKey is not null && node.ContainsKey(markKey))
+                {
+                    // the marking must not lose to the degree cut
+                    keep.Add(markKey);
+                }
             }
         }
 
@@ -100,7 +113,11 @@ public class GraphService(IDbContextFactory<AppDbContext> dbFactory) : IGraphSer
 
         var nodeList = keep
             .Where(node.ContainsKey)
-            .Select(k => node[k] with { Degree = degreeFinal.TryGetValue(k, out var g) ? g : 0 })
+            .Select(k => node[k] with
+            {
+                Degree = degreeFinal.TryGetValue(k, out var g) ? g : 0,
+                IsFocus = k == markKey,
+            })
             .ToList();
         var edgesList = finalEdges
             .Select(k => new GraphEdge(k.Source, k.Target, k.Label, k.Kind, k.Automatic))

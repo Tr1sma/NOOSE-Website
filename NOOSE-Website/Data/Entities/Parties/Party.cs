@@ -6,7 +6,7 @@ namespace NOOSE_Website.Data.Entities.Parties;
 
 /// <summary>A party (political organisation) as a full case file with members, assigned agents and classification.</summary>
 [Table("Parteien")]
-public class Party : IAuditable, ISoftDelete
+public class Party : IAuditable, ISoftDelete, IClassifiableRecord
 {
     public string Id { get; set; } = Guid.NewGuid().ToString();
 

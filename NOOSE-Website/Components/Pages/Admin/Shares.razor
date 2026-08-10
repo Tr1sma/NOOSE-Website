@@ -48,7 +48,7 @@ else
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Ziel-Akte">
-                    <MudLink Href="@SearchNavigation.Route(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
+                    <MudLink Href="@SearchNavigation.For(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
                 </MudTd>
                 <MudTd DataLabel="Gewünscht"><ClassificationBadge Value="context.TargetClassification" /></MudTd>
                 <MudTd DataLabel="Begründung">
@@ -320,7 +320,7 @@ else
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Akte">
-                    <MudLink Href="@SearchNavigation.Route(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
+                    <MudLink Href="@SearchNavigation.For(context.TargetType, context.TargetId)" Typo="Typo.body2">@context.TargetDesignation</MudLink>
                 </MudTd>
                 <MudTd DataLabel="Behörde">
                     @if (context.FreigabePartnerAgentId is not null)

@@ -45,6 +45,9 @@ public interface IBewerbungService
     /// <summary>Post into the HRB-internal thread. HRB/leadership only.</summary>
     Task<BewerbungMessage> PostInternalAsync(string id, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Edit an own message in the HRB-internal thread. Author only, HRB/leadership only.</summary>
+    Task<BewerbungMessage> EditInternalMessageAsync(string messageId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     /// <summary>Post a message to the applicant; the real name is redacted before persisting. HRB/leadership only.</summary>
     Task<BewerbungMessage> PostToApplicantAsync(string id, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 

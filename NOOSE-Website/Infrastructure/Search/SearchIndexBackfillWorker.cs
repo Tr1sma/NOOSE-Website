@@ -12,6 +12,11 @@ namespace NOOSE_Website.Infrastructure.Search;
 public sealed class SearchIndexBackfillWorker(IServiceScopeFactory scopeFactory, ILogger<SearchIndexBackfillWorker> logger)
     : BackgroundService
 {
+    /// <summary>Bump whenever <see cref="SearchIndexProjection"/> gains or changes a type. A stored version below this
+    /// re-runs the whole pass; the pass wipes both tables first, so re-running is idempotent. Without this an existing
+    /// installation would index zero rows of a newly added type — phonetic recall would just look flaky for months.</summary>
+    public const int Version = 1;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
@@ -31,9 +36,12 @@ public sealed class SearchIndexBackfillWorker(IServiceScopeFactory scopeFactory,
 
             // guard on a completion marker, not table emptiness: a mid-backfill crash or a concurrent live edit in the
             // startup window would otherwise leave a non-empty table that permanently skips the rest of the corpus
-            if (await db.SystemSettings.AnyAsync(s => s.Key == SystemSettingKeys.SearchIndexBackfillDone, stoppingToken))
+            var marker = await db.SystemSettings
+                .FirstOrDefaultAsync(s => s.Key == SystemSettingKeys.SearchIndexBackfillDone, stoppingToken);
+            // legacy rows store "true", which never parses -> they re-run once against the current version
+            if (marker is not null && int.TryParse(marker.Value, out var stored) && stored >= Version)
             {
-                return; // already completed — never re-scan on later starts
+                return; // this version already completed — never re-scan on later starts
             }
 
             // wipe any partial rows (from a prior aborted run or interceptor writes during the delay) and rebuild
@@ -53,7 +61,18 @@ public sealed class SearchIndexBackfillWorker(IServiceScopeFactory scopeFactory,
             total += await IndexAllAsync(db, db.Jobs, stoppingToken);
 
             // mark done only after every type is indexed, so an abort before here re-runs the whole pass next start
-            db.SystemSettings.Add(new SystemSetting { Key = SystemSettingKeys.SearchIndexBackfillDone, Value = "true" });
+            if (marker is null)
+            {
+                db.SystemSettings.Add(new SystemSetting
+                {
+                    Key = SystemSettingKeys.SearchIndexBackfillDone, Value = Version.ToString(),
+                });
+            }
+            else
+            {
+                // update, never Add: a re-run reaches this line with the row already present
+                marker.Value = Version.ToString();
+            }
             await db.SaveChangesAsync(stoppingToken);
 
             if (total > 0)

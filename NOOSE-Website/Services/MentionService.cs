@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Cases;
@@ -154,7 +156,7 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         return segments;
     }
 
-    public async Task<List<MentionHit>> CandidatesAsync(string? text, bool mayClassifiedRead, bool mayRealName, string? meId, CancellationToken cancellationToken = default)
+    public async Task<List<MentionHit>> CandidatesAsync(string? text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         var s = text?.Trim();
         if (string.IsNullOrEmpty(s))
@@ -162,10 +164,13 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             return new();
         }
 
+        var mayClassifiedRead = actor.MayClassifiedRead();
+        var mayRealName = actor.MayRealNameSee();
+        var meId = actor.GetAgentId();
         var hit = new List<MentionHit>();
 
         // records via quick search, classification- and taskforce-membership-filtered
-        var records = await search.QuickSearchAsync(s, new ViewerScope(mayClassifiedRead, mayClassifiedRead, meId, null), 8, cancellationToken);
+        var records = await search.QuickSearchAsync(s, actor, 8, cancellationToken);
         hit.AddRange(records.Select(a => new MentionHit(a.Category, a.TargetId, a.Name, a.CaseNumber)));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

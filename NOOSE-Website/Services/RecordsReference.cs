@@ -75,7 +75,7 @@ public static class RecordsReference
             foreach (var x in await db.People.Where(p => personIds.Contains(p.Id))
                 .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(ct))
             {
-                map[(nameof(Person), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.Route(nameof(Person), x.Id));
+                map[(nameof(Person), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.For(nameof(Person), x.Id));
             }
         }
 
@@ -85,7 +85,7 @@ public static class RecordsReference
             foreach (var x in await db.Factions.Where(f => factionIds.Contains(f.Id))
                 .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified }).ToListAsync(ct))
             {
-                map[(nameof(Faction), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.Route(nameof(Faction), x.Id));
+                map[(nameof(Faction), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.For(nameof(Faction), x.Id));
             }
         }
 
@@ -95,7 +95,7 @@ public static class RecordsReference
             foreach (var x in await db.PersonGroups.Where(g => groupsIds.Contains(g.Id))
                 .Select(g => new { g.Id, g.Name, g.CaseNumber, g.IsClassified }).ToListAsync(ct))
             {
-                map[(nameof(PersonGroup), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.Route(nameof(PersonGroup), x.Id));
+                map[(nameof(PersonGroup), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.For(nameof(PersonGroup), x.Id));
             }
         }
 
@@ -105,7 +105,7 @@ public static class RecordsReference
             foreach (var x in await db.Parties.Where(p => partyIds.Contains(p.Id))
                 .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(ct))
             {
-                map[(nameof(Party), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.Route(nameof(Party), x.Id));
+                map[(nameof(Party), x.Id)] = new($"{x.Name} ({x.CaseNumber})", x.IsClassified, SearchNavigation.For(nameof(Party), x.Id));
             }
         }
 
@@ -115,7 +115,7 @@ public static class RecordsReference
             foreach (var x in await db.Operations.Where(o => operationIds.Contains(o.Id))
                 .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified }).ToListAsync(ct))
             {
-                map[(nameof(Operation), x.Id)] = new($"{x.Title} ({x.CaseNumber})", x.IsClassified, SearchNavigation.Route(nameof(Operation), x.Id));
+                map[(nameof(Operation), x.Id)] = new($"{x.Title} ({x.CaseNumber})", x.IsClassified, SearchNavigation.For(nameof(Operation), x.Id));
             }
         }
 
@@ -128,7 +128,7 @@ public static class RecordsReference
                 foreach (var x in await db.Taskforces.Where(t => visible.Contains(t.Id))
                     .Select(t => new { t.Id, t.Name, t.CaseNumber }).ToListAsync(ct))
                 {
-                    map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Taskforce), x.Id));
+                    map[(nameof(Taskforce), x.Id)] = new($"{x.Name} ({x.CaseNumber})", false, SearchNavigation.For(nameof(Taskforce), x.Id));
                 }
             }
         }
@@ -139,7 +139,7 @@ public static class RecordsReference
             foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
                 .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified }).ToListAsync(ct))
             {
-                map[(nameof(Case), x.Id)] = new($"{x.Title} ({x.CaseNumber})", x.IsClassified, SearchNavigation.Route(nameof(Case), x.Id));
+                map[(nameof(Case), x.Id)] = new($"{x.Title} ({x.CaseNumber})", x.IsClassified, SearchNavigation.For(nameof(Case), x.Id));
             }
         }
 
@@ -152,7 +152,7 @@ public static class RecordsReference
                 foreach (var x in await db.Jobs.Where(a => visible.Contains(a.Id))
                     .Select(a => new { a.Id, a.Title, a.CaseNumber }).ToListAsync(ct))
                 {
-                    map[(nameof(Job), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Job), x.Id));
+                    map[(nameof(Job), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.For(nameof(Job), x.Id));
                 }
             }
         }
@@ -166,7 +166,7 @@ public static class RecordsReference
                 foreach (var x in await db.Appointments.Where(t => visible.Contains(t.Id))
                     .Select(t => new { t.Id, t.Title, t.CaseNumber }).ToListAsync(ct))
                 {
-                    map[(nameof(Appointment), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Appointment), x.Id));
+                    map[(nameof(Appointment), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.For(nameof(Appointment), x.Id));
                 }
             }
         }
@@ -178,7 +178,7 @@ public static class RecordsReference
             foreach (var x in await db.Meetings.Where(m => meetingIds.Contains(m.Id))
                 .Select(m => new { m.Id, m.Title, m.CaseNumber }).ToListAsync(ct))
             {
-                map[(nameof(Meeting), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.Route(nameof(Meeting), x.Id));
+                map[(nameof(Meeting), x.Id)] = new($"{x.Title} ({x.CaseNumber})", false, SearchNavigation.For(nameof(Meeting), x.Id));
             }
         }
 
@@ -190,7 +190,7 @@ public static class RecordsReference
             {
                 map[(nameof(Document), x.Id)] = new(
                     string.IsNullOrWhiteSpace(x.Title) ? "Dokument" : x.Title,
-                    x.Classified, SearchNavigation.Route(nameof(Document), x.Id));
+                    x.Classified, SearchNavigation.For(nameof(Document), x.Id));
             }
         }
 
@@ -202,7 +202,7 @@ public static class RecordsReference
                 .Select(u => new { u.Id, u.Codename }).ToListAsync(ct))
             {
                 map[(nameof(Agent), x.Id)] = new(string.IsNullOrWhiteSpace(x.Codename) ? "(unbenannter Agent)" : x.Codename,
-                    false, SearchNavigation.Route(nameof(Agent), x.Id));
+                    false, SearchNavigation.For(nameof(Agent), x.Id));
             }
         }
     }

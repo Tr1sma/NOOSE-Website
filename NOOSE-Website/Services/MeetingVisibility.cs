@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
+using NOOSE_Website.Data;
 
 namespace NOOSE_Website.Services;
 
@@ -22,4 +24,39 @@ public static class MeetingVisibility
     public static bool MayReadAgenda(ViewerScope scope, DateTime start, DateTime? end, DateTime nowUtc)
         => scope.MayAgenda
         || (!scope.IsPartner && nowUtc >= PublicFrom(start, end));
+
+    /// <summary>Of the given meetings, those whose agenda and minutes are open to the viewer right now.</summary>
+    /// <remarks>Batched twin of <see cref="MayReadAgenda(ViewerScope, DateTime, DateTime?, DateTime)"/>, for callers
+    /// holding many meetings at once. Absent id = closed, so a caller that forgets to look it up hides rather than
+    /// shows. The times are read here rather than taken from the caller: a caller could otherwise widen the gate.</remarks>
+    public static async Task<HashSet<string>> OpenIdsAsync(
+        AppDbContext db, IReadOnlyCollection<string> meetingIds, ViewerScope scope, DateTime nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (meetingIds.Count == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+        // rank/supervision reads every agenda the moment it exists — no times needed
+        if (scope.MayAgenda)
+        {
+            var all = await db.Meetings.AsNoTracking()
+                .Where(m => meetingIds.Contains(m.Id))
+                .Select(m => m.Id)
+                .ToListAsync(cancellationToken);
+            return all.ToHashSet(StringComparer.Ordinal);
+        }
+        if (scope.IsPartner)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+        var rows = await db.Meetings.AsNoTracking()
+            .Where(m => meetingIds.Contains(m.Id))
+            .Select(m => new { m.Id, m.Start, m.End })
+            .ToListAsync(cancellationToken);
+        return rows
+            .Where(m => nowUtc >= PublicFrom(m.Start, m.End))
+            .Select(m => m.Id)
+            .ToHashSet(StringComparer.Ordinal);
+    }
 }

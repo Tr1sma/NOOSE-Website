@@ -19,7 +19,7 @@ public static class MentionNotify
         {
             var who = string.IsNullOrWhiteSpace(actor.GetCodename()) ? "Ein Agent" : actor.GetCodename();
             await notifications.NotifyMentionedDeltaAsync(oldText, newText, $"{who} hat dich in {what} erwähnt.",
-                href ?? SearchNavigation.Route(entityType, entityId), entityType, entityId, actor, cancellationToken);
+                href ?? SearchNavigation.For(entityType, entityId), entityType, entityId, actor, cancellationToken);
         }
         catch { /* best effort */ }
     }

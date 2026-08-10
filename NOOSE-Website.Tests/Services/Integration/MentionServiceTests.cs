@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Common;
@@ -18,10 +19,17 @@ public sealed class MentionServiceTests
     {
         var search = Substitute.For<ISearchService>();
         // never let the substitute hand back a null list (would NRE inside CandidatesAsync)
-        search.QuickSearchAsync(Arg.Any<string>(), Arg.Any<ViewerScope>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        search.QuickSearchAsync(Arg.Any<string>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(quickHits ?? new List<QuickHit>());
         return (new MentionService(ctx.Factory, search), search);
     }
+
+    /// <summary>Real-name access implies leadership, so the two flags cannot be varied independently any more —
+    /// the picker takes the principal now, and MayRealNameSee is derived from it.</summary>
+    private static ClaimsPrincipal Viewer(bool mayRealName)
+        => mayRealName
+            ? ClaimsPrincipalBuilder.Agent("viewer").WithRank(Rank.Director).Build()
+            : ClaimsPrincipalBuilder.Agent("viewer").WithRank(Rank.JuniorAgent).Build();
 
     // ---- ResolveAsync ------------------------------------------------------
 
@@ -247,7 +255,7 @@ public sealed class MentionServiceTests
         using var ctx = new SqliteTestContext();
         var (svc, _) = NewService(ctx);
 
-        var result = await svc.CandidatesAsync("   ", mayClassifiedRead: true, mayRealName: true, meId: null);
+        var result = await svc.CandidatesAsync("   ", Viewer(mayRealName: true));
 
         Assert.Empty(result);
     }
@@ -259,7 +267,7 @@ public sealed class MentionServiceTests
         var hits = new List<QuickHit> { new("Person", "pid", "Max Mustermann", "NOOSE-P-2026-0001") };
         var (svc, _) = NewService(ctx, hits);
 
-        var result = await svc.CandidatesAsync("Max", mayClassifiedRead: false, mayRealName: false, meId: null);
+        var result = await svc.CandidatesAsync("Max", Viewer(mayRealName: false));
 
         var hit = Assert.Single(result);
         Assert.Equal("Person", hit.Type);
@@ -281,7 +289,7 @@ public sealed class MentionServiceTests
         }
         var (svc, _) = NewService(ctx);
 
-        var result = await svc.CandidatesAsync("Falcon", mayClassifiedRead: false, mayRealName: false, meId: null);
+        var result = await svc.CandidatesAsync("Falcon", Viewer(mayRealName: false));
 
         // only the active, non-team-lead agent survives the filter
         var agents = result.Where(h => h.Type == "Agent").ToList();
@@ -307,10 +315,10 @@ public sealed class MentionServiceTests
         var (svc, _) = NewService(ctx);
 
         // codename "Zephyr" does not contain "Cash"; without mayRealName the real-name branch is disabled
-        var denied = await svc.CandidatesAsync("Cash", mayClassifiedRead: false, mayRealName: false, meId: null);
+        var denied = await svc.CandidatesAsync("Cash", Viewer(mayRealName: false));
         Assert.Empty(denied.Where(h => h.Type == "Agent"));
 
-        var allowed = await svc.CandidatesAsync("Cash", mayClassifiedRead: false, mayRealName: true, meId: null);
+        var allowed = await svc.CandidatesAsync("Cash", Viewer(mayRealName: true));
         var agent = Assert.Single(allowed.Where(h => h.Type == "Agent"));
         Assert.Equal("a-real", agent.Id);
         Assert.Equal("Zephyr", agent.Display);
@@ -336,7 +344,7 @@ public sealed class MentionServiceTests
         }
         var (svc, _) = NewService(ctx);
 
-        var result = await svc.CandidatesAsync("Beweis", mayClassifiedRead: false, mayRealName: false, meId: null);
+        var result = await svc.CandidatesAsync("Beweis", Viewer(mayRealName: false));
 
         var source = Assert.Single(result.Where(h => h.Type == "Source"));
         Assert.Equal("src1", source.Id);

@@ -303,6 +303,118 @@ public sealed class GraphServiceTests
     }
 
     [Fact]
+    public async Task GetGraphAsync_FocusMode_MarksTheFocusNode()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.Links.Add(new Link { SourceType = "Person", SourceId = "p1", TargetType = "Person", TargetId = "p2" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetGraphAsync(
+            new GraphQuery(FocusType: "Person", FocusId: "p1", Depth: 1, MarkType: "Person", MarkId: "p1"),
+            Leader());
+
+        Assert.True(Assert.Single(result.Node, n => n.Id == "Person:p1").IsFocus);
+        Assert.False(Assert.Single(result.Node, n => n.Id == "Person:p2").IsFocus);
+    }
+
+    [Fact]
+    public async Task GetGraphAsync_FullNetwork_MarksRecord_WithoutRestrictingTheGraph()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.People.Add(Seed.Person("p3", "Anna"));
+            // chain p1 - p2 - p3
+            db.Links.Add(new Link { SourceType = "Person", SourceId = "p1", TargetType = "Person", TargetId = "p2" });
+            db.Links.Add(new Link { SourceType = "Person", SourceId = "p2", TargetType = "Person", TargetId = "p3" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        // no focus -> no radius cut, but the pick stays marked.
+        var result = await svc.GetGraphAsync(new GraphQuery(MarkType: "Person", MarkId: "p1"), Leader());
+
+        Assert.Equal(3, result.Node.Count);
+        Assert.True(Assert.Single(result.Node, n => n.Id == "Person:p1").IsFocus);
+        Assert.Equal(1, result.Node.Count(n => n.IsFocus));
+    }
+
+    [Fact]
+    public async Task GetGraphAsync_MarksNothing_WithoutMarkQuery()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.Links.Add(new Link { SourceType = "Person", SourceId = "p1", TargetType = "Person", TargetId = "p2" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetGraphAsync(new GraphQuery(), Leader());
+
+        Assert.NotEmpty(result.Node);
+        Assert.DoesNotContain(result.Node, n => n.IsFocus);
+    }
+
+    [Fact]
+    public async Task GetGraphAsync_MarkedRecordWithoutEdges_StillAppears()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.People.Add(Seed.Person("p2", "Moritz"));
+            db.People.Add(Seed.Person("solo", "Einzelgänger"));
+            db.Links.Add(new Link { SourceType = "Person", SourceId = "p1", TargetType = "Person", TargetId = "p2" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetGraphAsync(new GraphQuery(MarkType: "Person", MarkId: "solo"), Leader());
+
+        Assert.True(Assert.Single(result.Node, n => n.Id == "Person:solo").IsFocus);
+    }
+
+    [Fact]
+    public async Task GetGraphAsync_MarkedRecord_SurvivesTruncation()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            // the marked record has no edges at all -> strictly the lowest degree -> first to be cut.
+            var people = new List<Person> { Seed.Person("hub", "Hub"), Seed.Person("solo", "Einzelgänger") };
+            var links = new List<Link>();
+            const int spokes = MaxNode + 10; // hub + spokes > MaxNode
+            for (var i = 0; i < spokes; i++)
+            {
+                var id = $"s{i}";
+                people.Add(Seed.Person(id, id));
+                links.Add(new Link { SourceType = "Person", SourceId = "hub", TargetType = "Person", TargetId = id });
+            }
+            db.People.AddRange(people);
+            db.Links.AddRange(links);
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetGraphAsync(new GraphQuery(MarkType: "Person", MarkId: "solo"), Leader());
+
+        Assert.True(result.Truncated);
+        Assert.Equal(MaxNode + 1, result.Node.Count);
+        Assert.True(Assert.Single(result.Node, n => n.Id == "Person:solo").IsFocus);
+    }
+
+    [Fact]
     public async Task GetGraphAsync_SetsPhotoUrl_WhenPersonHasPhoto()
     {
         using var ctx = new SqliteTestContext();

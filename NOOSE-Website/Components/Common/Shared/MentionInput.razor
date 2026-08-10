@@ -125,7 +125,11 @@
             _candidates = new();
             return;
         }
-        _candidates = await MentionService.CandidatesAsync(m.Groups[1].Value, _mayClassifiedRead, _mayRealName, _meId);
+        if (AuthStateTask is null)
+        {
+            return;
+        }
+        _candidates = await MentionService.CandidatesAsync(m.Groups[1].Value, (await AuthStateTask).User);
         _pickerOpen = _candidates.Count > 0;
     }
 

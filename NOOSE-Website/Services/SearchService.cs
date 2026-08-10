@@ -1,1308 +1,220 @@
+using System.Diagnostics;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NOOSE_Website.Data;
-using NOOSE_Website.Data.Entities.Abductions;
-using NOOSE_Website.Data.Entities.Jobs;
-using NOOSE_Website.Data.Entities.Factions;
-using NOOSE_Website.Data.Entities.Groups;
-using NOOSE_Website.Data.Entities.Operations;
-using NOOSE_Website.Data.Entities.Activities;
-using NOOSE_Website.Data.Entities.Parties;
-using NOOSE_Website.Data.Entities.People;
-using NOOSE_Website.Data.Entities.Common;
-using NOOSE_Website.Data.Entities.Taskforces;
-using NOOSE_Website.Data.Entities.Cases;
-using NOOSE_Website.Data.Entities.Evidence;
-using NOOSE_Website.Data.Entities.Financing;
-using NOOSE_Website.Data.Entities.Kasse;
-using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Services.Search;
 
 namespace NOOSE_Website.Services;
 
 /// <inheritdoc cref="ISearchService" />
-public class SearchService(IDbContextFactory<AppDbContext> dbFactory) : ISearchService
+/// <remarks>
+/// An orchestrator, not a query. Every category lives in its own <see cref="ISearchProvider"/>; this decides which
+/// of them the viewer may use, runs them under a wall-clock budget, ranks what came back and reports what did not.
+/// </remarks>
+public class SearchService(
+    IEnumerable<ISearchProvider> providers,
+    IDbContextFactory<AppDbContext> dbFactory,
+    IPartnerVisibilityPolicyService partnerPolicy,
+    IOptions<SearchOptions> options,
+    ILogger<SearchService> logger) : ISearchService
 {
-    private const int MaxPerCategory = 50;
+    private readonly SearchOptions _options = options.Value;
 
-    /// <summary>Cap on in-memory fuzzy candidates per category, to bound load.</summary>
-    private const int FuzzyCandidatesMax = 2000;
+    // catalog order, not registration order: the facet bar, the result list and a saved facet read one sequence
+    private readonly IReadOnlyList<ISearchProvider> _providers = providers
+        .OrderBy(p => SearchCatalog.Index(p.Category))
+        .ToList();
 
-    public async Task<List<SearchResultGroup>> SearchAsync(SearchCriteria criteria, ViewerScope scope, CancellationToken cancellationToken = default)
+    public async Task<SearchResults> SearchAsync(
+        SearchCriteria criteria, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var started = Stopwatch.StartNew();
+        var viewer = await SearchViewer.FromAsync(actor, partnerPolicy, cancellationToken);
+        var query = SearchQuery.From(criteria, viewer, _options);
 
-        if (scope.PartnerAgency is { } agency)
+        var allowed = Allowed(viewer).ToList();
+        var runnable = allowed.Where(p => Selected(query, p) && Answers(query, p)).ToList();
+        if (runnable.Count == 0)
         {
-            return await SearchPartnerAsync(db, criteria, agency, scope.MeId, cancellationToken);
-        }
-        var isLeadership = scope.MayClassifiedRead;
-        var meId = scope.MeId;
-
-        var s = criteria.Text?.Trim();
-        var hasText = !string.IsNullOrEmpty(s);
-        var tagIds = criteria.TagIds ?? new();
-        var hasTags = tagIds.Count > 0;
-        var max = criteria.MaxMode;
-
-        // no early exit on empty text/tags: unfiltered should list all visible persons for browsing
-        var categories = criteria.Categories is { Count: > 0 } ? criteria.Categories.ToHashSet() : null;
-        bool Active(string kat) => categories is null || categories.Contains(kat);
-
-        // max mode always searches content categories regardless of their checkbox
-        bool ContentActive(string kat) => max || Active(kat);
-
-        var searchWords = criteria.Fuzzy && hasText
-            ? TextSimilarity.Tokens(s)
-            : (IReadOnlyList<string>)Array.Empty<string>();
-        bool FuzzyActive(int substringHit) => criteria.Fuzzy && hasText && substringHit < MaxPerCategory;
-
-        var groups = new List<SearchResultGroup>();
-
-        // ---- people ----
-        if (Active(nameof(Person)))
-        {
-            var q = db.People.Where(p => isLeadership || !p.IsClassified);
-            if (hasText)
-            {
-                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
-                    || (p.Description != null && p.Description.Contains(s!))
-                    || p.Aliases.Any(a => a.AliasName.Contains(s!))
-                    || (max && (
-                           p.PhoneNumbers.Any(t => t.Number.Contains(s!) || (t.Designation != null && t.Designation.Contains(s!)))
-                        || p.Vehicles.Any(f => f.Designation.Contains(s!) || (f.LicensePlate != null && f.LicensePlate.Contains(s!)))
-                        || p.Locations.Any(o => o.Text.Contains(s!) || (o.Note != null && o.Note.Contains(s!)))
-                        || p.Weapons.Any(w => w.Text.Contains(s!)))));
-            }
-            if (hasTags)
-            {
-                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
-                .Select(p => new SearchHit(nameof(Person), p.Id, p.Name,
-                    p.Description ?? string.Empty, p.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.People.Where(p => isLeadership || !p.IsClassified);
-                if (hasTags)
-                {
-                    @base = @base.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(p => new { p.Id, p.Name, p.CaseNumber, p.Description })
-                    .ToListAsync(cancellationToken);
-                // load aliases via flat WHERE PersonId IN; SelectMany/collection projection becomes untranslatable CROSS APPLY on MySQL
-                var ids = raw.Select(x => x.Id).ToList();
-                var aliasByPerson = (await db.PersonAliases
-                        .Where(a => ids.Contains(a.PersonId))
-                        .Select(a => new { a.PersonId, a.AliasName })
-                        .ToListAsync(cancellationToken))
-                    .GroupBy(a => a.PersonId)
-                    .ToDictionary(g => g.Key, g => g.Select(a => a.AliasName).ToList());
-                var candidates = raw.Select(x =>
-                {
-                    var aliases = aliasByPerson.TryGetValue(x.Id, out var list) ? list : new List<string>();
-                    return new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Description ?? string.Empty,
-                        max
-                            ? TextSimilarity.Tokens(new[] { x.Name, x.CaseNumber, x.Description }.Concat(aliases).ToArray())
-                            : TextSimilarity.Tokens(new[] { x.Name, x.CaseNumber }.Concat(aliases).ToArray()));
-                });
-                hit = FuzzySupplement(nameof(Person), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Person), "Personen", hit));
-            }
+            return SearchResults.None with { VisibleCategories = allowed.Count, Elapsed = started.Elapsed };
         }
 
-        // ---- factions ----
-        if (Active(nameof(Faction)))
+        // one budget for the whole search; a per-provider ceiling sits inside it
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1_000, _options.BudgetMs)));
+
+        var found = new IReadOnlyList<SearchHit>?[runnable.Count];
+        // cheap categories first, longtext scans second: when the clock runs out the gap must be the heavy wave,
+        // never the record types the agent was actually looking for
+        await WaveAsync(runnable, found, query, heavy: false, budget.Token);
+        await WaveAsync(runnable, found, query, heavy: true, budget.Token);
+
+        // a viewer who navigated away gets an exception, not a bogus partial — same rule as the assistant's turn
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var groups = new List<SearchResultGroup>(runnable.Count);
+        var searched = new List<string>(runnable.Count);
+        var incomplete = new List<string>();
+        for (var index = 0; index < runnable.Count; index++)
         {
-            var q = db.Factions.Where(f => isLeadership || !f.IsClassified);
-            if (hasText)
+            var category = runnable[index].Category;
+            if (found[index] is not { } hits)
             {
-                q = q.Where(f => f.Name.Contains(s!) || f.CaseNumber.Contains(s!)
-                    || (f.Kind != null && f.Kind.Contains(s!))
-                    || (f.Description != null && f.Description.Contains(s!))
-                    || (f.Targets != null && f.Targets.Contains(s!))
-                    || (max && (
-                           (f.Estate != null && f.Estate.Contains(s!))
-                        || (f.Radio != null && f.Radio.Contains(s!))
-                        || (f.Darkchat != null && f.Darkchat.Contains(s!))
-                        || (f.IssuingTimes != null && f.IssuingTimes.Contains(s!)))));
+                incomplete.Add(category);
+                continue;
             }
-            if (hasTags)
-            {
-                q = q.Where(f => db.TagMappings.Any(z => z.EntityType == nameof(Faction) && z.EntityId == f.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(f => f.Name).Take(MaxPerCategory)
-                .Select(f => new SearchHit(nameof(Faction), f.Id, f.Name, f.Kind ?? string.Empty, f.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.Factions.Where(f => isLeadership || !f.IsClassified);
-                if (hasTags)
-                {
-                    @base = @base.Where(f => db.TagMappings.Any(z => z.EntityType == nameof(Faction) && z.EntityId == f.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(f => f.ModifiedAt ?? f.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(f => new { f.Id, f.Name, f.CaseNumber, f.Kind, f.Description, f.Targets, f.Estate, f.Radio, f.Darkchat, f.IssuingTimes })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Kind ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Kind, x.Description, x.Targets, x.Estate, x.Radio, x.Darkchat, x.IssuingTimes)
-                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(Faction), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Faction), "Fraktionen", hit));
-            }
-        }
-
-        // ---- person groups ----
-        if (Active(nameof(PersonGroup)))
-        {
-            var q = db.PersonGroups.Where(g => isLeadership || !g.IsClassified);
-            if (hasText)
-            {
-                // also searchable by category display name
-                var matchingKinds = GroupsKindDisplay.All
-                    .Where(a => GroupsKindDisplay.Name(a).Contains(s!, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                q = q.Where(g => g.Name.Contains(s!) || g.CaseNumber.Contains(s!)
-                    || (g.Description != null && g.Description.Contains(s!))
-                    || (g.Targets != null && g.Targets.Contains(s!))
-                    || matchingKinds.Contains(g.Kind));
-            }
-            if (hasTags)
-            {
-                q = q.Where(g => db.TagMappings.Any(z => z.EntityType == nameof(PersonGroup) && z.EntityId == g.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(g => g.Name).Take(MaxPerCategory)
-                .Select(g => new SearchHit(nameof(PersonGroup), g.Id, g.Name, g.Description ?? string.Empty, g.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.PersonGroups.Where(g => isLeadership || !g.IsClassified);
-                if (hasTags)
-                {
-                    @base = @base.Where(g => db.TagMappings.Any(z => z.EntityType == nameof(PersonGroup) && z.EntityId == g.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(g => g.ModifiedAt ?? g.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(g => new { g.Id, g.Name, g.CaseNumber, g.Description, g.Targets })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Description ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Description, x.Targets)
-                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(PersonGroup), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(PersonGroup), "Personengruppen", hit));
-            }
-        }
-
-        // ---- parties ----
-        if (Active(nameof(Party)))
-        {
-            var q = db.Parties.Where(p => isLeadership || !p.IsClassified);
-            if (hasText)
-            {
-                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
-                    || (p.Description != null && p.Description.Contains(s!))
-                    || (p.Targets != null && p.Targets.Contains(s!))
-                    || (p.Remarks != null && p.Remarks.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Party) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
-                .Select(p => new SearchHit(nameof(Party), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.Parties.Where(p => isLeadership || !p.IsClassified);
-                if (hasTags)
-                {
-                    @base = @base.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Party) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(p => p.ModifiedAt ?? p.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(p => new { p.Id, p.Name, p.CaseNumber, p.Description, p.Targets, p.Remarks })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Description ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Description, x.Targets, x.Remarks)
-                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(Party), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Party), "Parteien", hit));
-            }
-        }
-
-        // ---- operations ----
-        if (Active(nameof(Operation)))
-        {
-            var q = db.Operations.Where(o => isLeadership || !o.IsClassified);
-            if (hasText)
-            {
-                q = q.Where(o => o.Title.Contains(s!) || o.CaseNumber.Contains(s!)
-                    || (o.Expiry != null && o.Expiry.Contains(s!))
-                    || (o.Result != null && o.Result.Contains(s!))
-                    || (o.Location != null && o.Location.Contains(s!))
-                    || (o.Type != null && o.Type.Contains(s!))
-                    || (o.Remarks != null && o.Remarks.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(o => db.TagMappings.Any(z => z.EntityType == nameof(Operation) && z.EntityId == o.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(o => o.Title).Take(MaxPerCategory)
-                .Select(o => new SearchHit(nameof(Operation), o.Id, o.Title, o.Expiry ?? o.Type ?? string.Empty, o.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.Operations.Where(o => isLeadership || !o.IsClassified);
-                if (hasTags)
-                {
-                    @base = @base.Where(o => db.TagMappings.Any(z => z.EntityType == nameof(Operation) && z.EntityId == o.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(o => o.ModifiedAt ?? o.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(o => new { o.Id, o.Title, o.CaseNumber, o.Type, o.Location, o.Expiry, o.Result, o.Remarks })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, x.CaseNumber, x.Expiry ?? x.Type ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Title, x.CaseNumber, x.Type, x.Location, x.Expiry, x.Result, x.Remarks)
-                        : TextSimilarity.Tokens(x.Title, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(Operation), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
-            }
-        }
-
-        // ---- agent abductions (internal, no VS) ----
-        // abductions carry no tags, so a tag-scoped search must exclude them entirely
-        if (Active(nameof(AgentAbduction)) && !hasTags)
-        {
-            var q = db.AgentAbductions.AsQueryable();
-            if (hasText)
-            {
-                q = q.Where(a => a.CaseNumber.Contains(s!)
-                    || (a.Location != null && a.Location.Contains(s!))
-                    || (a.Notes != null && a.Notes.Contains(s!)));
-            }
-            var hit = await q.OrderByDescending(a => a.Timestamp).Take(MaxPerCategory)
-                .Select(a => new SearchHit(nameof(AgentAbduction), a.Id,
-                    db.Users.Where(u => u.Id == a.VictimAgentId).Select(u => u.Codename).FirstOrDefault() ?? "Entführung",
-                    a.Location ?? string.Empty, a.CaseNumber))
-                .ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(AgentAbduction), "Entführungen", hit));
-            }
-        }
-
-        // ---- evidence items (internal, no VS, no tags) ----
-        if (Active(nameof(EvidenceItem)) && !hasTags)
-        {
-            var q = db.EvidenceItems.AsQueryable();
-            if (hasText)
-            {
-                q = q.Where(i => i.Name.Contains(s!)
-                    || (i.Description != null && i.Description.Contains(s!))
-                    || (i.Category != null && i.Category.Contains(s!)));
-            }
-            var rows = await q.OrderBy(i => i.Name).Take(MaxPerCategory)
-                .Select(i => new { i.Id, i.Name, i.Description, i.Category })
-                .ToListAsync(cancellationToken);
-            // category leads the snippet so a category match is visibly the reason for the hit
-            var hit = rows.Select(i => new SearchHit(nameof(EvidenceItem), i.Id, i.Name,
-                    string.Join(" · ", new[] { i.Category, i.Description }.Where(p => !string.IsNullOrWhiteSpace(p))),
-                    string.Empty))
-                .ToList();
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(EvidenceItem), "Asservate", hit));
-            }
-        }
-
-        // ---- evidence entries (internal, no VS, no tags) ----
-        if (Active(nameof(EvidenceEntry)) && !hasTags)
-        {
-            var q = db.EvidenceEntries.AsQueryable();
-            if (hasText)
-            {
-                q = q.Where(e => e.CaseNumber.Contains(s!) || (e.Notes != null && e.Notes.Contains(s!)));
-            }
-            var rows = await q.OrderByDescending(e => e.Timestamp).Take(MaxPerCategory).ToListAsync(cancellationToken);
-            var hit = rows.Select(e => new SearchHit(nameof(EvidenceEntry), e.Id,
-                EvidenceEntryTypeDisplay.Name(e.Type), e.Notes ?? string.Empty, e.CaseNumber)).ToList();
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(EvidenceEntry), "Asservat-Einträge", hit));
-            }
-        }
-
-        // ---- cash bookings (internal, no VS, no tags) ----
-        if (Active(nameof(KassenBuchung)) && !hasTags)
-        {
-            var q = db.KassenBuchungen.AsQueryable();
-            if (hasText)
-            {
-                q = q.Where(k => k.CaseNumber.Contains(s!) || (k.Reason != null && k.Reason.Contains(s!)));
-            }
-            var rows = await q.OrderByDescending(k => k.Timestamp).Take(MaxPerCategory).ToListAsync(cancellationToken);
-            var hit = rows.Select(k => new SearchHit(nameof(KassenBuchung), k.Id,
-                $"{KassenKontoDisplay.Name(k.Account)} · {KassenBuchungArtDisplay.Name(k.Kind)}",
-                k.Reason ?? string.Empty, k.CaseNumber)).ToList();
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(KassenBuchung), "Kassenbuchungen", hit));
-            }
-        }
-
-        // ---- funding requests (own ones, or all for leadership/supervision; no tags) ----
-        if (Active(nameof(FinancingRequest)) && !hasTags)
-        {
-            var q = db.FinancingRequests.OnlyVisible(isLeadership, meId);
-            if (hasText)
-            {
-                q = q.Where(f => f.CaseNumber.Contains(s!) || f.Justification.Contains(s!));
-            }
-            var rows = await q.OrderByDescending(f => f.CreatedAt).Take(MaxPerCategory).ToListAsync(cancellationToken);
-            var hit = rows.Select(f => new SearchHit(nameof(FinancingRequest), f.Id,
-                $"Finanzierung · {FinancingStatusDisplay.Name(f.Status)}",
-                f.Justification, f.CaseNumber)).ToList();
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(FinancingRequest), "Finanzierungsanträge", hit));
-            }
-        }
-
-        // ---- agent activities (unclassified: visible to all) ----
-        if (Active(nameof(AgentActivity)))
-        {
-            var q = db.AgentActivities.AsQueryable();
-            if (hasText)
-            {
-                q = q.Where(a => a.Title.Contains(s!)
-                    || (a.Kind != null && a.Kind.Contains(s!))
-                    || a.ContentHtml.Contains(s!));
-            }
-            if (hasTags)
-            {
-                q = q.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(AgentActivity) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderByDescending(a => a.ActivityDate).Take(MaxPerCategory)
-                .Select(a => new SearchHit(nameof(AgentActivity), a.Id, a.Title, a.Kind ?? string.Empty, string.Empty))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.AgentActivities.AsQueryable();
-                if (hasTags)
-                {
-                    @base = @base.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(AgentActivity) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(a => new { a.Id, a.Title, a.Kind })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, string.Empty, x.Kind ?? string.Empty,
-                    TextSimilarity.Tokens(x.Title, x.Kind)));
-                hit = FuzzySupplement(nameof(AgentActivity), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(AgentActivity), "Aktivitäten", hit));
-            }
-        }
-
-        // ---- taskforces ----
-        if (Active(nameof(Taskforce)))
-        {
-            var q = db.Taskforces.OnlyVisible(db, isLeadership, meId);
-            if (hasText)
-            {
-                q = q.Where(t => t.Name.Contains(s!) || t.CaseNumber.Contains(s!)
-                    || (t.Purpose != null && t.Purpose.Contains(s!))
-                    || (t.Remarks != null && t.Remarks.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(t => db.TagMappings.Any(z => z.EntityType == nameof(Taskforce) && z.EntityId == t.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(t => t.Name).Take(MaxPerCategory)
-                .Select(t => new SearchHit(nameof(Taskforce), t.Id, t.Name, t.Purpose ?? string.Empty, t.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.Taskforces.OnlyVisible(db, isLeadership, meId);
-                if (hasTags)
-                {
-                    @base = @base.Where(t => db.TagMappings.Any(z => z.EntityType == nameof(Taskforce) && z.EntityId == t.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(t => t.ModifiedAt ?? t.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(t => new { t.Id, t.Name, t.CaseNumber, t.Purpose, t.Remarks })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Name, x.CaseNumber, x.Purpose ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Name, x.CaseNumber, x.Purpose, x.Remarks)
-                        : TextSimilarity.Tokens(x.Name, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(Taskforce), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Taskforce), "Taskforces", hit));
-            }
-        }
-
-        // ---- cases ----
-        if (Active(nameof(Case)))
-        {
-            var q = db.Cases.Where(v => isLeadership || !v.IsClassified);
-            if (hasText)
-            {
-                q = q.Where(v => v.Title.Contains(s!) || v.CaseNumber.Contains(s!)
-                    || (v.Type != null && v.Type.Contains(s!))
-                    || (v.Description != null && v.Description.Contains(s!))
-                    || (v.Summary != null && v.Summary.Contains(s!))
-                    || (v.ClosingNote != null && v.ClosingNote.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(v => db.TagMappings.Any(z => z.EntityType == nameof(Case) && z.EntityId == v.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(v => v.Title).Take(MaxPerCategory)
-                .Select(v => new SearchHit(nameof(Case), v.Id, v.Title, v.Description ?? v.Type ?? string.Empty, v.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.Cases.Where(v => isLeadership || !v.IsClassified);
-                if (hasTags)
-                {
-                    @base = @base.Where(v => db.TagMappings.Any(z => z.EntityType == nameof(Case) && z.EntityId == v.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(v => v.ModifiedAt ?? v.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(v => new { v.Id, v.Title, v.CaseNumber, v.Type, v.Description, v.Summary, v.ClosingNote })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, x.CaseNumber, x.Description ?? x.Type ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Title, x.CaseNumber, x.Type, x.Description, x.Summary, x.ClosingNote)
-                        : TextSimilarity.Tokens(x.Title, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(Case), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Case), "Vorgänge", hit));
-            }
-        }
-
-        // ---- laws (no classification, no tag filter) ----
-        if (Active(nameof(Law)) && !hasTags)
-        {
-            var q = db.Laws.AsQueryable();
-            if (hasText)
-            {
-                q = q.Where(g => g.Title.Contains(s!) || g.Paragraph.Contains(s!)
-                    || g.LawBook.Contains(s!) || g.Text.Contains(s!)
-                    || (g.Sentence != null && g.Sentence.Contains(s!)));
-            }
-            var rawLaws = await q.OrderBy(g => g.LawBook).ThenBy(g => g.Paragraph).Take(MaxPerCategory)
-                .Select(g => new { g.Id, g.Paragraph, g.Title, g.LawBook })
-                .ToListAsync(cancellationToken);
-            if (rawLaws.Count > 0)
-            {
-                var hit = rawLaws
-                    .Select(g => new SearchHit(nameof(Law), g.Id, $"{g.Paragraph} {g.Title}", g.LawBook, g.Paragraph))
-                    .ToList();
-                groups.Add(new SearchResultGroup(nameof(Law), "Gesetze", hit));
-            }
-        }
-
-        // ---- jobs ----
-        if (Active(nameof(Job)))
-        {
-            var q = db.Jobs.OnlyVisible(db, isLeadership, meId);
-            if (hasText)
-            {
-                q = q.Where(a => a.Title.Contains(s!) || a.CaseNumber.Contains(s!)
-                    || (a.Description != null && a.Description.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(Job) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(a => a.Title).Take(MaxPerCategory)
-                .Select(a => new SearchHit(nameof(Job), a.Id, a.Title, a.Description ?? string.Empty, a.CaseNumber))
-                .ToListAsync(cancellationToken);
-
-            if (FuzzyActive(hit.Count))
-            {
-                var @base = db.Jobs.OnlyVisible(db, isLeadership, meId);
-                if (hasTags)
-                {
-                    @base = @base.Where(a => db.TagMappings.Any(z => z.EntityType == nameof(Job) && z.EntityId == a.Id && tagIds.Contains(z.TagId)));
-                }
-                var raw = await @base.OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt).Take(FuzzyCandidatesMax)
-                    .Select(a => new { a.Id, a.Title, a.CaseNumber, a.Description })
-                    .ToListAsync(cancellationToken);
-                var candidates = raw.Select(x => new FuzzyCandidate(x.Id, x.Title, x.CaseNumber, x.Description ?? string.Empty,
-                    max
-                        ? TextSimilarity.Tokens(x.Title, x.CaseNumber, x.Description)
-                        : TextSimilarity.Tokens(x.Title, x.CaseNumber)));
-                hit = FuzzySupplement(nameof(Job), hit, searchWords, candidates);
-            }
-
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Job), "Aufgaben", hit));
-            }
-        }
-
-        // content categories: text only. Explicit join on People, not Include over the soft-delete-filtered required navigation
-        if (hasText && ContentActive(nameof(PersonDoc)))
-        {
-            var hit = await (
-                from d in db.PersonDocs
-                where (d.Reason != null && d.Reason.Contains(s!)) || (d.ReceivedInformation != null && d.ReceivedInformation.Contains(s!))
-                    || (max && d.Faction != null && d.Faction.Contains(s!))
-                join p in db.People on d.PersonId equals p.Id
-                where (isLeadership || !p.IsClassified)
-                    && (!hasTags || db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)))
-                orderby d.Timestamp descending
-                // TargetId is the person's, so the target type must say so: the doc itself has no page
-                select new SearchHit(nameof(PersonDoc), p.Id, p.Name,
-                    (d.Reason ?? d.ReceivedInformation) ?? string.Empty, p.CaseNumber, nameof(Person)))
-                .Take(MaxPerCategory)
-                .ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(PersonDoc), "Doks", hit));
-            }
-        }
-
-        if (hasText && ContentActive(nameof(Source)))
-        {
-            // resolve parents + visibility/tags centrally so the hit links to the right record
-            var raw = await db.Sources
-                .Where(source => source.Title.Contains(s!) || (source.Description != null && source.Description.Contains(s!)))
-                .OrderByDescending(source => source.CreatedAt)
-                .Select(source => new RawHit(source.EntityType, source.EntityId, source.Title))
-                .Take(MaxPerCategory * 4)
-                .ToListAsync(cancellationToken);
-            var hit = await RecordParentsHitAsync(db, nameof(Source), raw, isLeadership, meId, hasTags, tagIds, cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Source), "Quellen", hit));
-            }
-        }
-
-        if (hasText && ContentActive(nameof(Comment)))
-        {
-            var raw = await db.Comments
-                .Where(comment => comment.Text.Contains(s!))
-                .OrderByDescending(comment => comment.CreatedAt)
-                .Select(comment => new RawHit(comment.EntityType, comment.EntityId, comment.Text))
-                .Take(MaxPerCategory * 4)
-                .ToListAsync(cancellationToken);
-            var hit = await RecordParentsHitAsync(db, nameof(Comment), raw, isLeadership, meId, hasTags, tagIds, cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Comment), "Kommentare", hit));
-            }
-        }
-
-        // relevance-rank each category (recall is LIKE; ordering happens here)
-        if (hasText)
-        {
-            for (var i = 0; i < groups.Count; i++)
-            {
-                groups[i] = groups[i] with { Hit = SearchRelevance.Rank(s!, groups[i].Hit) };
-            }
-        }
-
-        // phonetic/stem side-index recall (deck-free, catches Maier↔Meyer); appended AFTER ranking so these
-        // weakest matches sit last, and resolved against the live VS-/visibility-filtered tables
-        if (criteria.Fuzzy && hasText)
-        {
-            await AppendSideIndexAsync(db, groups, s!, isLeadership, meId, Active, cancellationToken);
-        }
-        return groups;
-    }
-
-    public async Task<List<QuickHit>> QuickSearchAsync(string text, ViewerScope scope, int max = 8, CancellationToken cancellationToken = default)
-    {
-        var s = text?.Trim();
-        if (string.IsNullOrEmpty(s))
-        {
-            return new List<QuickHit>();
-        }
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-
-        if (scope.PartnerAgency is { } agency)
-        {
-            return await QuickSearchPartnerAsync(db, s, agency, scope.MeId, max, cancellationToken);
-        }
-        var isLeadership = scope.MayClassifiedRead;
-        var meId = scope.MeId;
-
-        var people = await db.People
-            .Where(p => (isLeadership || !p.IsClassified) && (p.Name.Contains(s) || p.CaseNumber.Contains(s)))
-            .OrderBy(p => p.Name).Take(max)
-            .Select(p => new QuickHit(nameof(Person), p.Id, p.Name, p.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var factions = await db.Factions
-            .Where(f => (isLeadership || !f.IsClassified) && (f.Name.Contains(s) || f.CaseNumber.Contains(s)))
-            .OrderBy(f => f.Name).Take(max)
-            .Select(f => new QuickHit(nameof(Faction), f.Id, f.Name, f.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var groups = await db.PersonGroups
-            .Where(g => (isLeadership || !g.IsClassified) && (g.Name.Contains(s) || g.CaseNumber.Contains(s)))
-            .OrderBy(g => g.Name).Take(max)
-            .Select(g => new QuickHit(nameof(PersonGroup), g.Id, g.Name, g.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var parties = await db.Parties
-            .Where(p => (isLeadership || !p.IsClassified) && (p.Name.Contains(s) || p.CaseNumber.Contains(s)))
-            .OrderBy(p => p.Name).Take(max)
-            .Select(p => new QuickHit(nameof(Party), p.Id, p.Name, p.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var operations = await db.Operations
-            .Where(o => (isLeadership || !o.IsClassified) && (o.Title.Contains(s) || o.CaseNumber.Contains(s)))
-            .OrderBy(o => o.Title).Take(max)
-            .Select(o => new QuickHit(nameof(Operation), o.Id, o.Title, o.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var taskforces = await db.Taskforces.OnlyVisible(db, isLeadership, meId)
-            .Where(t => t.Name.Contains(s) || t.CaseNumber.Contains(s))
-            .OrderBy(t => t.Name).Take(max)
-            .Select(t => new QuickHit(nameof(Taskforce), t.Id, t.Name, t.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var cases = await db.Cases
-            .Where(v => (isLeadership || !v.IsClassified) && (v.Title.Contains(s) || v.CaseNumber.Contains(s)))
-            .OrderBy(v => v.Title).Take(max)
-            .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber))
-            .ToListAsync(cancellationToken);
-        var jobs = await db.Jobs.OnlyVisible(db, isLeadership, meId)
-            .Where(a => a.Title.Contains(s) || a.CaseNumber.Contains(s))
-            .OrderBy(a => a.Title).Take(max)
-            .Select(a => new QuickHit(nameof(Job), a.Id, a.Title, a.CaseNumber))
-            .ToListAsync(cancellationToken);
-
-        // light fuzzy on identifiers, only per category when the term is long enough and space remains
-        var searchWords = TextSimilarity.Tokens(s);
-        if (searchWords.Any(w => w.Length >= TextSimilarity.MinWordLength))
-        {
-            if (people.Count < max)
-            {
-                var k = await db.People.Where(p => isLeadership || !p.IsClassified)
-                    .OrderBy(p => p.Name).Take(FuzzyCandidatesMax)
-                    .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken);
-                people = QuickFuzzy(nameof(Person), people, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (factions.Count < max)
-            {
-                var k = await db.Factions.Where(f => isLeadership || !f.IsClassified)
-                    .OrderBy(f => f.Name).Take(FuzzyCandidatesMax)
-                    .Select(f => new { f.Id, f.Name, f.CaseNumber }).ToListAsync(cancellationToken);
-                factions = QuickFuzzy(nameof(Faction), factions, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (groups.Count < max)
-            {
-                var k = await db.PersonGroups.Where(g => isLeadership || !g.IsClassified)
-                    .OrderBy(g => g.Name).Take(FuzzyCandidatesMax)
-                    .Select(g => new { g.Id, g.Name, g.CaseNumber }).ToListAsync(cancellationToken);
-                groups = QuickFuzzy(nameof(PersonGroup), groups, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (parties.Count < max)
-            {
-                var k = await db.Parties.Where(p => isLeadership || !p.IsClassified)
-                    .OrderBy(p => p.Name).Take(FuzzyCandidatesMax)
-                    .Select(p => new { p.Id, p.Name, p.CaseNumber }).ToListAsync(cancellationToken);
-                parties = QuickFuzzy(nameof(Party), parties, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (operations.Count < max)
-            {
-                var k = await db.Operations.Where(o => isLeadership || !o.IsClassified)
-                    .OrderBy(o => o.Title).Take(FuzzyCandidatesMax)
-                    .Select(o => new { o.Id, Name = o.Title, o.CaseNumber }).ToListAsync(cancellationToken);
-                operations = QuickFuzzy(nameof(Operation), operations, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (taskforces.Count < max)
-            {
-                var k = await db.Taskforces.OnlyVisible(db, isLeadership, meId)
-                    .OrderBy(t => t.Name).Take(FuzzyCandidatesMax)
-                    .Select(t => new { t.Id, Name = t.Name, t.CaseNumber }).ToListAsync(cancellationToken);
-                taskforces = QuickFuzzy(nameof(Taskforce), taskforces, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (cases.Count < max)
-            {
-                var k = await db.Cases.Where(v => isLeadership || !v.IsClassified)
-                    .OrderBy(v => v.Title).Take(FuzzyCandidatesMax)
-                    .Select(v => new { v.Id, Name = v.Title, v.CaseNumber }).ToListAsync(cancellationToken);
-                cases = QuickFuzzy(nameof(Case), cases, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-            if (jobs.Count < max)
-            {
-                var k = await db.Jobs.OnlyVisible(db, isLeadership, meId)
-                    .OrderBy(a => a.Title).Take(FuzzyCandidatesMax)
-                    .Select(a => new { a.Id, Name = a.Title, a.CaseNumber }).ToListAsync(cancellationToken);
-                jobs = QuickFuzzy(nameof(Job), jobs, searchWords, k.Select(x => (x.Id, x.Name, x.CaseNumber)), max);
-            }
-        }
-
-        // relevance-rank within each category, then round-robin so people do not crowd out other categories
-        return Shuffle(
-            SearchRelevance.RankQuick(s, people), SearchRelevance.RankQuick(s, factions),
-            SearchRelevance.RankQuick(s, groups), SearchRelevance.RankQuick(s, parties),
-            SearchRelevance.RankQuick(s, operations), SearchRelevance.RankQuick(s, taskforces),
-            SearchRelevance.RankQuick(s, cases), SearchRelevance.RankQuick(s, jobs)).Take(max).ToList();
-    }
-
-    // ---- partner search: only released, non-classified releasable records ----
-
-    /// <summary>Quick lookup for partners: released, non-classified records of releasable types only.</summary>
-    private async Task<List<QuickHit>> QuickSearchPartnerAsync(AppDbContext db, string s, PartnerAgency agency, string? partnerAgentId, int max, CancellationToken cancellationToken)
-    {
-        var people = await db.People.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s))
-            .OrderBy(p => p.Name).Take(max)
-            .Select(p => new QuickHit(nameof(Person), p.Id, p.Name, p.CaseNumber)).ToListAsync(cancellationToken);
-        var factions = await db.Factions.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(f => f.Name.Contains(s) || f.CaseNumber.Contains(s))
-            .OrderBy(f => f.Name).Take(max)
-            .Select(f => new QuickHit(nameof(Faction), f.Id, f.Name, f.CaseNumber)).ToListAsync(cancellationToken);
-        var groups = await db.PersonGroups.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(g => g.Name.Contains(s) || g.CaseNumber.Contains(s))
-            .OrderBy(g => g.Name).Take(max)
-            .Select(g => new QuickHit(nameof(PersonGroup), g.Id, g.Name, g.CaseNumber)).ToListAsync(cancellationToken);
-        var parties = await db.Parties.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(p => p.Name.Contains(s) || p.CaseNumber.Contains(s))
-            .OrderBy(p => p.Name).Take(max)
-            .Select(p => new QuickHit(nameof(Party), p.Id, p.Name, p.CaseNumber)).ToListAsync(cancellationToken);
-        var operations = await db.Operations.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(o => o.Title.Contains(s) || o.CaseNumber.Contains(s))
-            .OrderBy(o => o.Title).Take(max)
-            .Select(o => new QuickHit(nameof(Operation), o.Id, o.Title, o.CaseNumber)).ToListAsync(cancellationToken);
-        var taskforces = await db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(t => t.Name.Contains(s) || t.CaseNumber.Contains(s))
-            .OrderBy(t => t.Name).Take(max)
-            .Select(t => new QuickHit(nameof(Taskforce), t.Id, t.Name, t.CaseNumber)).ToListAsync(cancellationToken);
-        var cases = await db.Cases.OnlyPartnerVisible(db, agency, partnerAgentId)
-            .Where(v => v.Title.Contains(s) || v.CaseNumber.Contains(s))
-            .OrderBy(v => v.Title).Take(max)
-            .Select(v => new QuickHit(nameof(Case), v.Id, v.Title, v.CaseNumber)).ToListAsync(cancellationToken);
-        return Shuffle(
-            SearchRelevance.RankQuick(s, people), SearchRelevance.RankQuick(s, factions),
-            SearchRelevance.RankQuick(s, groups), SearchRelevance.RankQuick(s, parties),
-            SearchRelevance.RankQuick(s, operations), SearchRelevance.RankQuick(s, taskforces),
-            SearchRelevance.RankQuick(s, cases)).Take(max).ToList();
-    }
-
-    /// <summary>Global search for partners: released, non-classified releasable records; no content/job categories.</summary>
-    private async Task<List<SearchResultGroup>> SearchPartnerAsync(AppDbContext db, SearchCriteria criteria, PartnerAgency agency, string? partnerAgentId, CancellationToken cancellationToken)
-    {
-        var s = criteria.Text?.Trim();
-        var hasText = !string.IsNullOrEmpty(s);
-        var tagIds = criteria.TagIds ?? new();
-        var hasTags = tagIds.Count > 0;
-        var categories = criteria.Categories is { Count: > 0 } ? criteria.Categories.ToHashSet() : null;
-        bool Active(string kat) => categories is null || categories.Contains(kat);
-
-        var groups = new List<SearchResultGroup>();
-
-        if (Active(nameof(Person)))
-        {
-            var q = db.People.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
-                    || (p.Description != null && p.Description.Contains(s!))
-                    || p.Aliases.Any(a => a.AliasName.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Person) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
-                .Select(p => new SearchHit(nameof(Person), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Person), "Personen", hit));
-            }
-        }
-
-        if (Active(nameof(Faction)))
-        {
-            var q = db.Factions.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(f => f.Name.Contains(s!) || f.CaseNumber.Contains(s!)
-                    || (f.Kind != null && f.Kind.Contains(s!))
-                    || (f.Description != null && f.Description.Contains(s!))
-                    || (f.Targets != null && f.Targets.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(f => db.TagMappings.Any(z => z.EntityType == nameof(Faction) && z.EntityId == f.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(f => f.Name).Take(MaxPerCategory)
-                .Select(f => new SearchHit(nameof(Faction), f.Id, f.Name, f.Kind ?? string.Empty, f.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Faction), "Fraktionen", hit));
-            }
-        }
-
-        if (Active(nameof(PersonGroup)))
-        {
-            var q = db.PersonGroups.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(g => g.Name.Contains(s!) || g.CaseNumber.Contains(s!)
-                    || (g.Description != null && g.Description.Contains(s!))
-                    || (g.Targets != null && g.Targets.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(g => db.TagMappings.Any(z => z.EntityType == nameof(PersonGroup) && z.EntityId == g.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(g => g.Name).Take(MaxPerCategory)
-                .Select(g => new SearchHit(nameof(PersonGroup), g.Id, g.Name, g.Description ?? string.Empty, g.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(PersonGroup), "Personengruppen", hit));
-            }
-        }
-
-        if (Active(nameof(Party)))
-        {
-            var q = db.Parties.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(p => p.Name.Contains(s!) || p.CaseNumber.Contains(s!)
-                    || (p.Description != null && p.Description.Contains(s!))
-                    || (p.Targets != null && p.Targets.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(p => db.TagMappings.Any(z => z.EntityType == nameof(Party) && z.EntityId == p.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(p => p.Name).Take(MaxPerCategory)
-                .Select(p => new SearchHit(nameof(Party), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Party), "Parteien", hit));
-            }
-        }
-
-        if (Active(nameof(Operation)))
-        {
-            var q = db.Operations.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(o => o.Title.Contains(s!) || o.CaseNumber.Contains(s!)
-                    || (o.Result != null && o.Result.Contains(s!))
-                    || (o.Location != null && o.Location.Contains(s!))
-                    || (o.Type != null && o.Type.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(o => db.TagMappings.Any(z => z.EntityType == nameof(Operation) && z.EntityId == o.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(o => o.Title).Take(MaxPerCategory)
-                .Select(o => new SearchHit(nameof(Operation), o.Id, o.Title, o.Type ?? string.Empty, o.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Operation), "Operationen", hit));
-            }
-        }
-
-        if (Active(nameof(Taskforce)))
-        {
-            var q = db.Taskforces.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(t => t.Name.Contains(s!) || t.CaseNumber.Contains(s!)
-                    || (t.Purpose != null && t.Purpose.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(t => db.TagMappings.Any(z => z.EntityType == nameof(Taskforce) && z.EntityId == t.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(t => t.Name).Take(MaxPerCategory)
-                .Select(t => new SearchHit(nameof(Taskforce), t.Id, t.Name, t.Purpose ?? string.Empty, t.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Taskforce), "Taskforces", hit));
-            }
-        }
-
-        if (Active(nameof(Case)))
-        {
-            var q = db.Cases.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(v => v.Title.Contains(s!) || v.CaseNumber.Contains(s!)
-                    || (v.Type != null && v.Type.Contains(s!))
-                    || (v.Description != null && v.Description.Contains(s!))
-                    || (v.Summary != null && v.Summary.Contains(s!)));
-            }
-            if (hasTags)
-            {
-                q = q.Where(v => db.TagMappings.Any(z => z.EntityType == nameof(Case) && z.EntityId == v.Id && tagIds.Contains(z.TagId)));
-            }
-            var hit = await q.OrderBy(v => v.Title).Take(MaxPerCategory)
-                .Select(v => new SearchHit(nameof(Case), v.Id, v.Title, v.Description ?? v.Type ?? string.Empty, v.CaseNumber)).ToListAsync(cancellationToken);
-            if (hit.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Case), "Vorgänge", hit));
-            }
-        }
-
-        if (Active(nameof(Law)) && !hasTags)
-        {
-            var q = db.Laws.OnlyPartnerVisible(db, agency, partnerAgentId);
-            if (hasText)
-            {
-                q = q.Where(g => g.Title.Contains(s!) || g.Paragraph.Contains(s!)
-                    || g.LawBook.Contains(s!) || g.Text.Contains(s!)
-                    || (g.Sentence != null && g.Sentence.Contains(s!)));
-            }
-            var rawLaws = await q.OrderBy(g => g.LawBook).ThenBy(g => g.Paragraph).Take(MaxPerCategory)
-                .Select(g => new { g.Id, g.Paragraph, g.Title, g.LawBook }).ToListAsync(cancellationToken);
-            if (rawLaws.Count > 0)
-            {
-                groups.Add(new SearchResultGroup(nameof(Law), "Gesetze",
-                    rawLaws.Select(g => new SearchHit(nameof(Law), g.Id, $"{g.Paragraph} {g.Title}", g.LawBook, g.Paragraph)).ToList()));
-            }
-        }
-
-        // relevance-rank each category (recall is LIKE; ordering happens here)
-        if (hasText)
-        {
-            for (var i = 0; i < groups.Count; i++)
-            {
-                groups[i] = groups[i] with { Hit = SearchRelevance.Rank(s!, groups[i].Hit) };
-            }
-        }
-        return groups;
-    }
-
-    /// <summary>Round-robin merge of several hit lists for a fair distribution.</summary>
-    private static IEnumerable<QuickHit> Shuffle(params List<QuickHit>[] lists)
-    {
-        for (var index = 0; ; index++)
-        {
-            var some = false;
-            foreach (var list in lists)
-            {
-                if (index < list.Count)
-                {
-                    some = true;
-                    yield return list[index];
-                }
-            }
-            if (!some)
-            {
-                yield break;
-            }
-        }
-    }
-
-    private static readonly IReadOnlyDictionary<string, string> SideIndexLabels = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        [nameof(Person)] = "Personen",
-        [nameof(Faction)] = "Fraktionen",
-        [nameof(PersonGroup)] = "Personengruppen",
-        [nameof(Party)] = "Parteien",
-        [nameof(Operation)] = "Operationen",
-        [nameof(Taskforce)] = "Taskforces",
-        [nameof(Case)] = "Vorgänge",
-        [nameof(Job)] = "Aufgaben",
-    };
-
-    /// <summary>Deck-free recall from the persisted phonetic/stem side-index (catches Maier↔Meyer that Levenshtein
-    /// misses). Resolves each candidate id against the live, VS-/visibility-filtered table, then appends to the group.</summary>
-    private async Task AppendSideIndexAsync(AppDbContext db, List<SearchResultGroup> groups, string text,
-        bool isLeadership, string? meId, Func<string, bool> active, CancellationToken ct)
-    {
-        var phon = SearchTokenizer.PhoneticKeys(text);
-        var stems = SearchTokenizer.Stems(text);
-        if (phon.Count == 0 && stems.Count == 0)
-        {
-            return;
-        }
-        var types = SideIndexLabels.Keys.Where(active).ToHashSet(StringComparer.Ordinal);
-        if (types.Count == 0)
-        {
-            return;
-        }
-
-        var byType = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        void Note(string t, string id)
-        {
-            if (!byType.TryGetValue(t, out var set))
-            {
-                set = new HashSet<string>(StringComparer.Ordinal);
-                byType[t] = set;
-            }
-            set.Add(id);
-        }
-        if (phon.Count > 0)
-        {
-            foreach (var r in await db.SearchPhoneticKeys.Where(k => types.Contains(k.EntityType) && phon.Contains(k.Key))
-                .Select(k => new { k.EntityType, k.EntityId }).Distinct().ToListAsync(ct))
-            {
-                Note(r.EntityType, r.EntityId);
-            }
-        }
-        if (stems.Count > 0)
-        {
-            foreach (var r in await db.SearchStemTokens.Where(k => types.Contains(k.EntityType) && stems.Contains(k.Stem))
-                .Select(k => new { k.EntityType, k.EntityId }).Distinct().ToListAsync(ct))
-            {
-                Note(r.EntityType, r.EntityId);
-            }
-        }
-
-        foreach (var (type, ids) in byType)
-        {
-            var existing = groups.FirstOrDefault(g => g.Category == type);
-            var have = existing is null
-                ? new HashSet<string>(StringComparer.Ordinal)
-                : existing.Hit.Select(h => h.TargetId).ToHashSet(StringComparer.Ordinal);
-            var need = ids.Where(id => !have.Contains(id)).ToList();
-            var slots = MaxPerCategory - (existing?.Hit.Count ?? 0);
-            if (need.Count == 0 || slots <= 0)
+            searched.Add(category);
+            if (hits.Count == 0)
             {
                 continue;
             }
-            var extra = await LoadSideHitsAsync(db, type, need, isLeadership, meId, slots, ct);
-            if (extra.Count == 0)
+            // recall is LIKE; ordering happens here, once, for every category alike
+            var ranked = query.HasText ? SearchRelevance.Rank(query.Text, hits.ToList()) : hits.ToList();
+            groups.Add(new SearchResultGroup(category, SearchCatalog.Plural(category), ranked,
+                Capped: ranked.Count >= query.PerCategory));
+        }
+
+        // phonetic/stem recall last: weakest matches, appended after ranking, resolved through the providers so
+        // each visibility rule stays with the one place that owns it
+        if (query.Fuzzy && query.HasText && !budget.IsCancellationRequested)
+        {
+            try
             {
-                continue;
+                await SearchSideIndex.AppendAsync(dbFactory, runnable, groups, query, budget.Token);
             }
-            var merged = (existing?.Hit ?? Enumerable.Empty<SearchHit>()).Concat(extra).ToList();
-            if (existing is not null)
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                // replace in place so a supplemented category keeps its ranked position (remove+append sank it to the tail)
-                groups[groups.IndexOf(existing)] = existing with { Hit = merged };
-            }
-            else
-            {
-                groups.Add(new SearchResultGroup(type, SideIndexLabels[type], merged));
+                /* budget spent; the groups collected so far still stand */
             }
         }
+
+        return new SearchResults(groups, groups.Sum(g => g.Hit.Count), searched, incomplete,
+            allowed.Count, started.Elapsed);
     }
 
-    // resolve side-index candidate ids to hits against the live table with the same visibility filter as the main pipeline
-    private static async Task<List<SearchHit>> LoadSideHitsAsync(AppDbContext db, string type, List<string> ids,
-        bool isLeadership, string? meId, int take, CancellationToken ct) => type switch
+    public async Task<List<QuickHit>> QuickSearchAsync(
+        string text, ClaimsPrincipal actor, int max = 8, CancellationToken cancellationToken = default)
     {
-        nameof(Person) => await db.People.Where(p => (isLeadership || !p.IsClassified) && ids.Contains(p.Id))
-            .Take(take).Select(p => new SearchHit(nameof(Person), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(ct),
-        nameof(Faction) => await db.Factions.Where(f => (isLeadership || !f.IsClassified) && ids.Contains(f.Id))
-            .Take(take).Select(f => new SearchHit(nameof(Faction), f.Id, f.Name, f.Kind ?? string.Empty, f.CaseNumber)).ToListAsync(ct),
-        nameof(PersonGroup) => await db.PersonGroups.Where(g => (isLeadership || !g.IsClassified) && ids.Contains(g.Id))
-            .Take(take).Select(g => new SearchHit(nameof(PersonGroup), g.Id, g.Name, g.Description ?? string.Empty, g.CaseNumber)).ToListAsync(ct),
-        nameof(Party) => await db.Parties.Where(p => (isLeadership || !p.IsClassified) && ids.Contains(p.Id))
-            .Take(take).Select(p => new SearchHit(nameof(Party), p.Id, p.Name, p.Description ?? string.Empty, p.CaseNumber)).ToListAsync(ct),
-        nameof(Operation) => await db.Operations.Where(o => (isLeadership || !o.IsClassified) && ids.Contains(o.Id))
-            .Take(take).Select(o => new SearchHit(nameof(Operation), o.Id, o.Title, o.Type ?? string.Empty, o.CaseNumber)).ToListAsync(ct),
-        nameof(Case) => await db.Cases.Where(c => (isLeadership || !c.IsClassified) && ids.Contains(c.Id))
-            .Take(take).Select(c => new SearchHit(nameof(Case), c.Id, c.Title, c.Type ?? string.Empty, c.CaseNumber)).ToListAsync(ct),
-        nameof(Taskforce) => await db.Taskforces.OnlyVisible(db, isLeadership, meId).Where(t => ids.Contains(t.Id))
-            .Take(take).Select(t => new SearchHit(nameof(Taskforce), t.Id, t.Name, t.Purpose ?? string.Empty, t.CaseNumber)).ToListAsync(ct),
-        nameof(Job) => await db.Jobs.OnlyVisible(db, isLeadership, meId).Where(j => ids.Contains(j.Id))
-            .Take(take).Select(j => new SearchHit(nameof(Job), j.Id, j.Title, j.Description ?? string.Empty, j.CaseNumber)).ToListAsync(ct),
-        _ => new List<SearchHit>(),
-    };
-
-    /// <summary>Candidate for the in-memory fuzzy pass: display data plus the words to compare.</summary>
-    private sealed record FuzzyCandidate(string Id, string Display, string CaseNumber, string Snippet, IReadOnlyList<string> Tokens);
-
-    /// <summary>Appends Levenshtein-similar candidates to the substring hits, deduped and sorted by distance; substring hits stay first.</summary>
-    private static List<SearchHit> FuzzySupplement(
-        string category, List<SearchHit> substring, IReadOnlyList<string> searchWords, IEnumerable<FuzzyCandidate> candidates)
-    {
-        if (searchWords.Count == 0)
+        var trimmed = text?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0)
         {
-            return substring;
+            return [];
         }
-        var exists = substring.Select(t => t.TargetId).ToHashSet();
-        var fuzzy = new List<(SearchHit Hit, int Distance)>();
-        foreach (var k in candidates)
+        var viewer = await SearchViewer.FromAsync(actor, partnerPolicy, cancellationToken);
+        var query = SearchQuery.From(new SearchCriteria { Text = trimmed, Fuzzy = true }, viewer, _options);
+        var runnable = Allowed(viewer)
+            .Where(p => SearchCatalog.Has(p.Category, SearchTraits.Quick))
+            .ToList();
+        if (runnable.Count == 0)
         {
-            if (exists.Contains(k.Id))
+            return [];
+        }
+
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(100, _options.QuickBudgetMs)));
+
+        var lists = new List<IReadOnlyList<QuickHit>>(runnable.Count);
+        foreach (var provider in runnable)
+        {
+            try
             {
-                continue;
+                var hits = await provider.QuickAsync(query, max, budget.Token);
+                if (hits.Count > 0)
+                {
+                    lists.Add(SearchRelevance.RankQuick(trimmed, hits.ToList()));
+                }
             }
-            if (TextSimilarity.PhraseSimilar(searchWords, k.Tokens, out var distance))
-            {
-                fuzzy.Add((new SearchHit(category, k.Id, k.Display, k.Snippet, k.CaseNumber), distance));
-            }
-        }
-        if (fuzzy.Count == 0)
-        {
-            return substring;
-        }
-        var result = new List<SearchHit>(substring);
-        result.AddRange(fuzzy.OrderBy(f => f.Distance).Select(f => f.Hit));
-        return result.Count > MaxPerCategory ? result.Take(MaxPerCategory).ToList() : result;
-    }
-
-    /// <summary>Lightweight fuzzy supplement for quick search: identifiers (name/title + case number).</summary>
-    private static List<QuickHit> QuickFuzzy(
-        string category, List<QuickHit> already, IReadOnlyList<string> searchWords,
-        IEnumerable<(string Id, string Name, string CaseNumber)> candidates, int max)
-    {
-        var exists = already.Select(t => t.TargetId).ToHashSet();
-        var fuzzy = new List<(QuickHit Hit, int Distance)>();
-        foreach (var k in candidates)
-        {
-            if (exists.Contains(k.Id))
-            {
-                continue;
-            }
-            if (TextSimilarity.PhraseSimilar(searchWords, TextSimilarity.Tokens(k.Name, k.CaseNumber), out var distance))
-            {
-                fuzzy.Add((new QuickHit(category, k.Id, k.Name, k.CaseNumber), distance));
-            }
-        }
-        if (fuzzy.Count == 0)
-        {
-            return already;
-        }
-        var result = new List<QuickHit>(already);
-        result.AddRange(fuzzy.OrderBy(f => f.Distance).Take(max).Select(f => f.Hit));
-        return result;
-    }
-
-    /// <summary>Raw hit of polymorphic content (source/comment): parent type/id plus a display snippet.</summary>
-    private sealed record RawHit(string EntityType, string EntityId, string Snippet);
-
-    /// <summary>Resolves raw content hits to their parent record, filters classified (unless leadership) and by tag; keeps order.</summary>
-    private static async Task<List<SearchHit>> RecordParentsHitAsync(
-        AppDbContext db, string category, List<RawHit> raw, bool isLeadership, string? meId, bool hasTags, List<string> tagIds, CancellationToken cancellationToken)
-    {
-        if (raw.Count == 0)
-        {
-            return new();
-        }
-
-        var personIds = raw.Where(r => r.EntityType == nameof(Person)).Select(r => r.EntityId).Distinct().ToList();
-        var factionIds = raw.Where(r => r.EntityType == nameof(Faction)).Select(r => r.EntityId).Distinct().ToList();
-        var groupsIds = raw.Where(r => r.EntityType == nameof(PersonGroup)).Select(r => r.EntityId).Distinct().ToList();
-        var partyIds = raw.Where(r => r.EntityType == nameof(Party)).Select(r => r.EntityId).Distinct().ToList();
-        var operationIds = raw.Where(r => r.EntityType == nameof(Operation)).Select(r => r.EntityId).Distinct().ToList();
-        var taskforceIds = raw.Where(r => r.EntityType == nameof(Taskforce)).Select(r => r.EntityId).Distinct().ToList();
-        var caseIds = raw.Where(r => r.EntityType == nameof(Case)).Select(r => r.EntityId).Distinct().ToList();
-        var jobIds = raw.Where(r => r.EntityType == nameof(Job)).Select(r => r.EntityId).Distinct().ToList();
-
-        // (type, id) -> (name, case number, classified); deleted records absent via global filter
-        var map = new Dictionary<(string, string), (string Name, string CaseNumber, bool Classified)>();
-        foreach (var x in await db.People.Where(p => personIds.Contains(p.Id))
-                     .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Person), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
-        }
-        foreach (var x in await db.Factions.Where(f => factionIds.Contains(f.Id))
-                     .Select(f => new { f.Id, f.Name, f.CaseNumber, f.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Faction), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
-        }
-        foreach (var x in await db.PersonGroups.Where(g => groupsIds.Contains(g.Id))
-                     .Select(g => new { g.Id, g.Name, g.CaseNumber, g.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(PersonGroup), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
-        }
-        foreach (var x in await db.Parties.Where(p => partyIds.Contains(p.Id))
-                     .Select(p => new { p.Id, p.Name, p.CaseNumber, p.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Party), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
-        }
-        foreach (var x in await db.Operations.Where(o => operationIds.Contains(o.Id))
-                     .Select(o => new { o.Id, o.Title, o.CaseNumber, o.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Operation), x.Id)] = (x.Title, x.CaseNumber, x.IsClassified);
-        }
-        // taskforces are membership-gated, not classification-gated: resolve only visible ones
-        foreach (var x in await db.Taskforces.OnlyVisible(db, isLeadership, meId).Where(t => taskforceIds.Contains(t.Id))
-                     .Select(t => new { t.Id, t.Name, t.CaseNumber, t.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Taskforce), x.Id)] = (x.Name, x.CaseNumber, x.IsClassified);
-        }
-        foreach (var x in await db.Cases.Where(v => caseIds.Contains(v.Id))
-                     .Select(v => new { v.Id, v.Title, v.CaseNumber, v.IsClassified }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Case), x.Id)] = (x.Title, x.CaseNumber, x.IsClassified);
-        }
-        // restricted jobs only for participants/supervision; otherwise their content hits are dropped below
-        foreach (var x in await db.Jobs.OnlyVisible(db, isLeadership, meId).Where(a => jobIds.Contains(a.Id))
-                     .Select(a => new { a.Id, a.Title, a.CaseNumber }).ToListAsync(cancellationToken))
-        {
-            map[(nameof(Job), x.Id)] = (x.Title, x.CaseNumber, false);
-        }
-
-        // which parent records carry at least one of the selected tags
-        HashSet<(string, string)>? withTag = null;
-        if (hasTags)
-        {
-            withTag = (await db.TagMappings
-                .Where(z => tagIds.Contains(z.TagId)
-                    && ((z.EntityType == nameof(Person) && personIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(Faction) && factionIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(PersonGroup) && groupsIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(Party) && partyIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(Operation) && operationIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(Taskforce) && taskforceIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(Case) && caseIds.Contains(z.EntityId))
-                     || (z.EntityType == nameof(Job) && jobIds.Contains(z.EntityId))))
-                .Select(z => new { z.EntityType, z.EntityId }).ToListAsync(cancellationToken))
-                .Select(z => (z.EntityType, z.EntityId)).ToHashSet();
-        }
-
-        var result = new List<SearchHit>();
-        foreach (var r in raw)
-        {
-            if (!map.TryGetValue((r.EntityType, r.EntityId), out var info))
-            {
-                continue; // parent deleted/unknown
-            }
-            if (info.Classified && !isLeadership)
-            {
-                continue;
-            }
-            if (hasTags && (withTag is null || !withTag.Contains((r.EntityType, r.EntityId))))
-            {
-                continue;
-            }
-            result.Add(new SearchHit(category, r.EntityId, info.Name, r.Snippet, info.CaseNumber, r.EntityType));
-            if (result.Count >= MaxPerCategory)
+            // budget spent: hand back what is already there. The viewer's own cancel rethrows.
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 break;
             }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Schnellsuche: Kategorie {Category} fehlgeschlagen.", provider.Category);
+            }
         }
-        return result;
+        // round-robin, so one populous category cannot fill every slot
+        return SearchProviderKit.Shuffle(lists).Take(max).ToList();
+    }
+
+    /// <summary>Providers this viewer may use at all. Two independent caps for a partner, both re-asserted here.</summary>
+    private IEnumerable<ISearchProvider> Allowed(SearchViewer viewer)
+    {
+        if (!viewer.IsPartner)
+        {
+            return _providers.Where(p => p.AppliesTo(viewer));
+        }
+        return _providers
+            .Where(p => p.Partner != PartnerAccess.Never)
+            // cap 1: the hard nine-type ceiling, asserted rather than trusted. A child provider is exempt by
+            // construction — its parent check rejects a non-releasable parent type before anything else.
+            .Where(p => p.Partner == PartnerAccess.ViaParentShare || PartnerVisibility.IsReleasableType(p.Category))
+            // cap 2: the rank allowlist. It used to gate navigation only, so a partner could find by search what
+            // their rank was never allowed to list.
+            .Where(p => viewer.PartnerAllowedTypes is null
+                || p.Partner == PartnerAccess.ViaParentShare
+                || viewer.PartnerAllowedTypes.Contains(p.Category))
+            .Where(p => p.AppliesTo(viewer));
+    }
+
+    /// <summary>Whether the caller restricted the search to this category. Empty = everything the viewer may use.</summary>
+    /// <remarks>The list is attacker-controlled — it round-trips through a saved search and the query string — so
+    /// it only ever narrows what <see cref="Allowed"/> already permitted, and an unknown key is dropped silently.</remarks>
+    private static bool Selected(SearchQuery query, ISearchProvider provider)
+        => query.OnlyCategories.Count == 0
+        || query.OnlyCategories.Contains(provider.Category, StringComparer.Ordinal);
+
+    /// <summary>Whether this category can answer this query at all.</summary>
+    /// <remarks>A tag-scoped query skips categories that carry no tags: they would answer zero, and zero reads
+    /// as "nothing there" rather than "not applicable".</remarks>
+    private static bool Answers(SearchQuery query, ISearchProvider provider)
+        => !query.HasTags || SearchCatalog.Has(provider.Category, SearchTraits.Tagged);
+
+    private async Task WaveAsync(
+        IReadOnlyList<ISearchProvider> runnable, IReadOnlyList<SearchHit>?[] found,
+        SearchQuery query, bool heavy, CancellationToken budget)
+    {
+        var wave = Enumerable.Range(0, runnable.Count)
+            .Where(index => SearchCatalog.IsHeavy(runnable[index].Category) == heavy)
+            .ToList();
+        if (wave.Count == 0 || budget.IsCancellationRequested)
+        {
+            return;
+        }
+        // CancellationToken.None on the loop, the budget inside the body: an aborted loop leaves its siblings
+        // unawaited, and an abandoned provider task resurfaces later as an unobserved exception with no search
+        // left to attribute it to
+        await Parallel.ForEachAsync(
+            wave,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Clamp(_options.MaxConcurrency, 1, 16),
+                CancellationToken = CancellationToken.None,
+            },
+            async (index, _) => found[index] = await RunAsync(runnable[index], query, budget));
+    }
+
+    /// <summary>One provider under its own ceiling. Never throws — a category that did not finish is a named gap
+    /// in the result, not a failed search.</summary>
+    private async Task<IReadOnlyList<SearchHit>?> RunAsync(ISearchProvider provider, SearchQuery query, CancellationToken budget)
+    {
+        using var own = CancellationTokenSource.CreateLinkedTokenSource(budget);
+        own.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(250, _options.ProviderBudgetMs)));
+        try
+        {
+            return await provider.SearchAsync(query, own.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Suche: Kategorie {Category} fehlgeschlagen.", provider.Category);
+            return null;
+        }
     }
 }

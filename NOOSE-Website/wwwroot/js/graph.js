@@ -56,18 +56,23 @@ const SCHLUESSEL_FUELLUNG = '#4A3708';
 const SCHLUESSEL_HELL = '#5E4609';
 const SCHLUESSEL_GROESSE = 1.8; // value factor over the busiest ordinary node
 
+// the record the viewer picked: magenta is the only hue no type/level/edge kind uses
+const FOKUS_MAGENTA = '#F778BA';
+const FOKUS_GLUEHEN = 'rgba(247,120,186,0.85)';
+
 function fuellung(schluessel) {
     return schluessel ? SCHLUESSEL_FUELLUNG : '#161B22';
 }
 
 function knotenfarbe(k, schluessel) {
     const basis = TYP_FARBE[k.type] || '#8B98A8';
-    const rand = EINSTUFUNG_RAND[k.classificationLevel] || basis;
+    const rand = k.isFocus ? FOKUS_MAGENTA : (EINSTUFUNG_RAND[k.classificationLevel] || basis);
     const hell = schluessel ? SCHLUESSEL_HELL : '#1F2630';
     return {
         background: fuellung(schluessel),
         border: rand,
-        highlight: { background: hell, border: '#22D3EE' },
+        // selecting the focus node must not swap its ring for the cyan one
+        highlight: { background: hell, border: k.isFocus ? FOKUS_MAGENTA : '#22D3EE' },
         hover: { background: hell, border: rand },
     };
 }
@@ -96,6 +101,12 @@ function baueTooltip(k) {
         schluessel.textContent = '★ Schlüsselfigur' + wert;
         div.appendChild(schluessel);
     }
+    if (k.isFocus) {
+        const fokus = document.createElement('div');
+        fokus.style.cssText = 'font-size:12px;font-weight:600;color:' + FOKUS_MAGENTA + ';margin-top:4px;';
+        fokus.textContent = '◎ Fokus-Akte';
+        div.appendChild(fokus);
+    }
     return div;
 }
 
@@ -104,24 +115,32 @@ const CLUSTER_FARBE = ['#22D3EE', '#F0883E', '#3FB950', '#A371F7', '#D29922', '#
 
 function mapKnoten(k, maxWert) {
     const schluessel = !!k.isKeyFigure;
+    const fokus = !!k.isFocus;
     const wert = 1 + (k.degree || 0);
     const node = {
         id: k.id,
-        label: (schluessel ? '★ ' : '') + k.designation,
+        label: (fokus ? '◎ ' : '') + (schluessel ? '★ ' : '') + k.designation,
         title: baueTooltip(k),
         color: knotenfarbe(k, schluessel),
         // outgrow every ordinary node — a bridge node can be key with only two links
-        value: schluessel ? Math.max(wert, Math.round(maxWert * SCHLUESSEL_GROESSE)) : wert,
-        borderWidth: schluessel ? 5 : (k.classificationLevel >= 3 ? 3 : 2),
-        borderWidthSelected: schluessel ? 6 : 5,
-        shadow: schluessel
-            ? { enabled: true, color: 'rgba(255,200,87,0.9)', size: 34, x: 0, y: 0 }
-            : k.classificationLevel >= 3
-                ? { enabled: true, color: 'rgba(248,81,73,0.55)', size: 18, x: 0, y: 0 }
-                : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
+        value: schluessel
+            ? Math.max(wert, Math.round(maxWert * SCHLUESSEL_GROESSE))
+            : fokus ? Math.max(wert, maxWert) : wert,
+        borderWidth: fokus ? 6 : (schluessel ? 5 : (k.classificationLevel >= 3 ? 3 : 2)),
+        borderWidthSelected: fokus ? 7 : (schluessel ? 6 : 5),
+        // the searched-for record wins every other glow
+        shadow: fokus
+            ? { enabled: true, color: FOKUS_GLUEHEN, size: 30, x: 0, y: 0 }
+            : schluessel
+                ? { enabled: true, color: 'rgba(255,200,87,0.9)', size: 34, x: 0, y: 0 }
+                : k.classificationLevel >= 3
+                    ? { enabled: true, color: 'rgba(248,81,73,0.55)', size: 18, x: 0, y: 0 }
+                    : { enabled: true, color: 'rgba(0,0,0,0.5)', size: 8, x: 0, y: 2 },
     };
     if (schluessel) {
         node.font = { color: SCHLUESSEL_GOLD, strokeWidth: 4, strokeColor: '#0B0E13', face: 'Inter, Segoe UI, sans-serif' };
+    } else if (fokus) {
+        node.font = { color: FOKUS_MAGENTA, strokeWidth: 4, strokeColor: '#0B0E13', face: 'Inter, Segoe UI, sans-serif' };
     }
     if (k.photoUrl) {
         node.shape = 'circularImage';
@@ -230,6 +249,7 @@ export async function render(containerId, datenJson, dotnetRef) {
     const edges = new window.vis.DataSet(kantenListe);
     const opts = optionen(knotenListe.length, kantenListe.length);
     const network = new window.vis.Network(container, { nodes, edges }, opts);
+    const fokusKnoten = (daten.node || []).find((k) => k.isFocus);
 
     // physics stays on
 
@@ -335,7 +355,20 @@ export async function render(containerId, datenJson, dotnetRef) {
         zug: null,
         nachbarn: baueNachbarn(daten.edges),
         rohKnoten: daten.node || [],
+        fokusId: fokusKnoten ? fokusKnoten.id : null,
+        autoZentrieren: true,
     });
+
+    if (fokusKnoten) {
+        // vis fits the whole graph when stabilising ends — centre only after that
+        network.once('stabilizationIterationsDone', () => {
+            const inst = instanzen.get(containerId);
+            if (!inst || inst.autoZentrieren === false) {
+                return;
+            }
+            requestAnimationFrame(() => fokussiere(containerId, null, 0));
+        });
+    }
 }
 
 export function setzeFreierModus(containerId, frei) {
@@ -393,11 +426,22 @@ export function passeAn(containerId) {
     }
 }
 
-export function fokussiere(containerId, nodeId) {
+// centre on a node; without an id the remembered focus node
+export function fokussiere(containerId, nodeId, mindestZoom) {
     const inst = instanzen.get(containerId);
-    if (inst && nodeId) {
-        try { inst.network.focus(nodeId, { scale: 1.3, animation: { duration: 500, easingFunction: 'easeInOutQuad' } }); inst.network.selectNodes([nodeId]); } catch (e) { /* ignore */ }
+    if (!inst) {
+        return;
     }
+    const ziel = nodeId || inst.fokusId;
+    if (!ziel) {
+        return;
+    }
+    try {
+        // no minimum means pan only — zooming in would throw away the overview
+        const jetzt = inst.network.getScale();
+        const skala = mindestZoom ? Math.max(jetzt, mindestZoom) : jetzt;
+        inst.network.focus(ziel, { scale: skala, animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+    } catch (e) { /* ignore */ }
 }
 
 export function vollbild(containerId) {
@@ -442,11 +486,11 @@ export function faerbeNachCommunity(containerId, an) {
         }
         const schluessel = !!k.isKeyFigure;
         if (an) {
-            // cluster colour takes over the border; the key-figure fill must survive it
-            const farbe = CLUSTER_FARBE[(k.communityId || 0) % CLUSTER_FARBE.length];
+            // cluster colour takes over the border; key-figure fill and focus ring must survive it
+            const farbe = k.isFocus ? FOKUS_MAGENTA : CLUSTER_FARBE[(k.communityId || 0) % CLUSTER_FARBE.length];
             const grund = fuellung(schluessel);
             const hell = schluessel ? SCHLUESSEL_HELL : '#1F2630';
-            inst.nodes.update({ id: n.id, color: { background: grund, border: farbe, highlight: { background: hell, border: '#22D3EE' }, hover: { background: hell, border: farbe } } });
+            inst.nodes.update({ id: n.id, color: { background: grund, border: farbe, highlight: { background: hell, border: k.isFocus ? FOKUS_MAGENTA : '#22D3EE' }, hover: { background: hell, border: farbe } } });
         } else {
             inst.nodes.update({ id: n.id, color: knotenfarbe(k, schluessel) });
         }
@@ -533,6 +577,8 @@ export function setzePositionen(containerId, json) {
     // freeze physics so the loaded layout sticks
     inst.frei = true;
     inst.zug = null;
+    // a saved view carries its own framing — do not centre over it
+    inst.autoZentrieren = false;
     inst.network.setOptions({ physics: false });
     const koerper = inst.network.body && inst.network.body.nodes ? inst.network.body.nodes : null;
     Object.keys(pos || {}).forEach((id) => {

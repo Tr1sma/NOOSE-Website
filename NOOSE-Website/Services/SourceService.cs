@@ -50,14 +50,11 @@ public class SourceService(
             sources = sources.Where(q => kept.Contains(q.Id)).ToList();
         }
 
-        // taskforce-internal sources: only taskforce members may see them, never partners
-        if (entityType == nameof(Taskforce))
+        // "nur intern" sources: taskforce members only on a taskforce, never a partner anywhere
+        if (sources.Any(s => s.IsInternalOnly))
         {
-            bool isMember = scope.MeId is not null && !scope.IsPartner &&
-                await db.TaskforceAgents.AnyAsync(
-                    ta => ta.TaskforceId == entityId && ta.AgentId == scope.MeId, cancellationToken);
-            if (!isMember)
-                sources = sources.Where(s => !s.IsInternalOnly).ToList();
+            var myTaskforces = await SourceVisibility.MyTaskforceIdsAsync(db, scope, cancellationToken);
+            sources = sources.OnlyVisible(entityType, entityId, scope, myTaskforces);
         }
 
         return sources;

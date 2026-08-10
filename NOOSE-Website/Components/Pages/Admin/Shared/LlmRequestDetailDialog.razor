@@ -96,7 +96,7 @@
     private static string? Route(LlmContextRef reference)
         => reference.Kind == "tool" || string.IsNullOrEmpty(reference.Id)
             ? null
-            : SearchNavigation.Route(reference.Kind, reference.Id);
+            : SearchNavigation.For(reference.Kind, reference.Id);
 
     private void Close() => MudDialog.Close();
 

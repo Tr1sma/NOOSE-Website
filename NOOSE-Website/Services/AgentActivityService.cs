@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -296,9 +295,8 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
 
         if (factionIds.Count > 0)
         {
-            var rows = await db.Factions
-                .Where(f => factionIds.Contains(f.Id)
-                    && (!f.IsClassified || scope.MayClassifiedRead || (f.IsTRUClassified && scope.IsTru) || (f.IsHRBClassified && scope.IsHrb)))
+            var rows = await db.Factions.OnlyVisible(scope)
+                .Where(f => factionIds.Contains(f.Id))
                 .Select(f => new { f.Id, f.Name })
                 .ToListAsync(cancellationToken);
             foreach (var r in rows)
@@ -308,9 +306,8 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
         }
         if (groupIds.Count > 0)
         {
-            var rows = await db.PersonGroups
-                .Where(g => groupIds.Contains(g.Id)
-                    && (!g.IsClassified || scope.MayClassifiedRead || (g.IsTRUClassified && scope.IsTru) || (g.IsHRBClassified && scope.IsHrb)))
+            var rows = await db.PersonGroups.OnlyVisible(scope)
+                .Where(g => groupIds.Contains(g.Id))
                 .Select(g => new { g.Id, g.Name })
                 .ToListAsync(cancellationToken);
             foreach (var r in rows)
@@ -344,12 +341,7 @@ public class AgentActivityService(IDbContextFactory<AppDbContext> dbFactory, ITh
     // strip tags to a short plain-text snippet for client-side filtering
     private static string PlainText(string? html)
     {
-        if (string.IsNullOrEmpty(html))
-        {
-            return string.Empty;
-        }
-        var text = System.Net.WebUtility.HtmlDecode(Regex.Replace(html, "<[^>]+>", " "));
-        text = Regex.Replace(text, "\\s+", " ").Trim();
+        var text = HtmlCleanup.PlainText(html);
         return text.Length > PlainSnippetMax ? text[..PlainSnippetMax] : text;
     }
 }

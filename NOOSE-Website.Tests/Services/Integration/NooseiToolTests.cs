@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.People;
@@ -25,6 +26,12 @@ public sealed class NooseiToolTests
 
     private static ClaimsPrincipal Leader()
         => ClaimsPrincipalBuilder.Agent("lead").WithRank(Rank.Director).Build();
+
+    /// <summary>A complete search envelope around the given groups.</summary>
+    private static NOOSE_Website.Models.Common.SearchResults Results(
+        params NOOSE_Website.Models.Common.SearchResultGroup[] groups)
+        => new(groups, groups.Sum(g => g.Hit.Count), groups.Select(g => g.Category).ToList(), [],
+            groups.Length, TimeSpan.Zero);
 
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
@@ -339,19 +346,19 @@ public sealed class NooseiToolTests
     {
         using var ctx = new SqliteTestContext();
         var search = Substitute.For<ISearchService>();
-        ViewerScope? seen = null;
-        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+        ClaimsPrincipal? seen = null;
+        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                seen = call.ArgAt<ViewerScope>(1);
-                return Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>());
+                seen = call.ArgAt<ClaimsPrincipal>(1);
+                return Task.FromResult(NOOSE_Website.Models.Common.SearchResults.None);
             });
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
         await tool.InvokeAsync(Args("""{"suchtext":"Ballas"}"""), NooseiToolContext.From(Junior()));
 
         Assert.NotNull(seen);
-        Assert.False(seen!.Value.MayClassifiedRead);
+        Assert.False(seen!.MayClassifiedRead());
     }
 
     [Fact]
@@ -360,11 +367,11 @@ public sealed class NooseiToolTests
         using var ctx = new SqliteTestContext();
         var search = Substitute.For<ISearchService>();
         NOOSE_Website.Models.Common.SearchCriteria? criteria = null;
-        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 criteria = call.ArgAt<NOOSE_Website.Models.Common.SearchCriteria>(0);
-                return Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>());
+                return Task.FromResult(NOOSE_Website.Models.Common.SearchResults.None);
             });
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
@@ -387,14 +394,12 @@ public sealed class NooseiToolTests
     public async Task SearchRecords_WithholdsTheIdOfARecordLiesAkteCannotOpen()
     {
         var search = Substitute.For<ISearchService>();
-        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>
-            {
-                new("Faction", "Fraktionen",
+        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Results(
+                new NOOSE_Website.Models.Common.SearchResultGroup("Faction", "Fraktionen",
                     [new NOOSE_Website.Models.Common.SearchHit("Faction", "f1", "Ballas", "", "NOOSE-F-2026-0001")]),
-                new("Job", "Aufgaben",
-                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "NOOSE-A-2026-0007")]),
-            }));
+                new NOOSE_Website.Models.Common.SearchResultGroup("Job", "Aufgaben",
+                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "NOOSE-A-2026-0007")]))));
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
         var result = await tool.InvokeAsync(Args("""{"suchtext":"Waffen"}"""), NooseiToolContext.From(Leader()));
@@ -414,12 +419,10 @@ public sealed class NooseiToolTests
     public async Task SearchRecords_KeepsRefsForRecordsItCannotOpen()
     {
         var search = Substitute.For<ISearchService>();
-        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new List<NOOSE_Website.Models.Common.SearchResultGroup>
-            {
-                new("Job", "Aufgaben",
-                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "")]),
-            }));
+        search.SearchAsync(Arg.Any<NOOSE_Website.Models.Common.SearchCriteria>(), Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Results(
+                new NOOSE_Website.Models.Common.SearchResultGroup("Job", "Aufgaben",
+                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "")]))));
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
         var result = await tool.InvokeAsync(Args("""{"suchtext":"Waffen"}"""), NooseiToolContext.From(Leader()));

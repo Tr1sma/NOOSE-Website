@@ -1,7 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using System.Net;
 using System.Text;
-using System.Text.RegularExpressions;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Cases;
@@ -943,16 +941,7 @@ public static class DossierContextBuilder
 
     static string? Fmt(DateTime? dt) => dt.HasValue ? dt.Value.ToString("dd.MM.yyyy HH:mm") : null;
 
-    static string StripHtml(string? html)
-    {
-        if (string.IsNullOrWhiteSpace(html))
-        {
-            return string.Empty;
-        }
-        var text = Regex.Replace(html, "<[^>]+>", " ");
-        text = WebUtility.HtmlDecode(text);
-        return Regex.Replace(text, "\\s+", " ").Trim();
-    }
+    static string StripHtml(string? html) => HtmlCleanup.PlainText(html);
 
     /// <summary>Projection shape for a record's member roster.</summary>
     sealed class MemberProj

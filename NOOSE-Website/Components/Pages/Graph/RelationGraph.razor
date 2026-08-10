@@ -28,6 +28,13 @@
         <MudTooltip Text="Auf den Bildschirm einpassen">
             <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" OnClick="CustomizeAsync" Disabled="@(!_ready)" />
         </MudTooltip>
+        @if (_focus is not null)
+        {
+            <MudTooltip Text="@($"Zur Fokus-Akte springen{(MarkName is null ? string.Empty : $": {MarkName}")}")">
+                <MudIconButton Icon="@Icons.Material.Filled.MyLocation" Color="Color.Secondary"
+                               OnClick="JumpToFocusAsync" Disabled="@(!_ready)" />
+            </MudTooltip>
+        }
         <MudTooltip Text="Vollbild">
             <MudIconButton Icon="@Icons.Material.Filled.Fullscreen" OnClick="FullscreenAsync" Disabled="@(!_ready)" />
         </MudTooltip>
@@ -51,10 +58,10 @@
             {
                 <GraphRecordPicker Label="Fokus-Akte" IsLeadership="_isLeadership" MeId="_meId" MayAllTf="_mayAllTf"
                                  Selected="FocusSelectedAsync" Preset="_focusPreset" />
-                @if (_focusPreset is not null && !string.IsNullOrWhiteSpace(_focusPreset.Designation))
+                @if (_focusPreset is not null && MarkName is not null)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
-                             Icon="@Icons.Material.Filled.CenterFocusWeak">@_focusPreset.Designation</MudChip>
+                             Icon="@Icons.Material.Filled.CenterFocusWeak">@MarkName</MudChip>
                 }
                 <MudSelect T="int" @bind-Value="_depth" @bind-Value:after="LoadAndDrawAsync" Label="Tiefe" Dense="true"
                            Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:110px;">
@@ -62,6 +69,14 @@
                     <MudSelectItem Value="2">2 Hops</MudSelectItem>
                     <MudSelectItem Value="3">3 Hops</MudSelectItem>
                 </MudSelect>
+            }
+            else if (_focus is not null)
+            {
+                @* The picker is hidden here, so name what stays marked and offer a way out. *@
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                         Icon="@Icons.Material.Filled.MyLocation" OnClose="@(() => MarkClearAsync())">
+                    Markiert: @(MarkName ?? "Akte")
+                </MudChip>
             }
 
             <MudSelect T="string" MultiSelection="true" SelectedValues="_typeFilter" SelectedValuesChanged="TypeFilterChanged"
@@ -208,6 +223,13 @@
                 <span class="noose-graph-punkt noose-graph-schluessel"></span>
                 <MudText Typo="Typo.caption">★ groß &amp; gold = Schlüsselfigur</MudText>
             </MudStack>
+            @if (_focus is not null)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <span class="noose-graph-punkt noose-graph-fokus"></span>
+                    <MudText Typo="Typo.caption">◎ magenta &amp; groß = Fokus-Akte</MudText>
+                </MudStack>
+            }
             <MudText Typo="Typo.caption" Class="mud-text-secondary">· Doppelklick öffnet die Akte</MudText>
         </MudStack>
     </MudPaper>
@@ -369,7 +391,7 @@
         try
         {
             // Bump ?v= when graph.js changes
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=12");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/graph.js?v=13");
             _ref = DotNetObjectReference.Create(this);
             _ready = true;
             await LoadAndDrawAsync();
@@ -386,6 +408,10 @@
             StateHasChanged();
         }
     }
+
+    // a deep link carries no designation, so prefer the name the server resolved
+    private string? MarkName => _data?.Node.FirstOrDefault(n => n.IsFocus)?.Designation
+        ?? (string.IsNullOrWhiteSpace(_focus?.Designation) ? null : _focus!.Designation);
 
     private LinkKind? KindFilter => _kindChoice switch
     {
@@ -418,7 +444,10 @@
                     _typeFilter.Any() ? _typeFilter.ToList() : null,
                     KindFilter,
                     ComputeCentrality: _computeCentrality,
-                    ComputeCommunities: _communityOn);
+                    ComputeCommunities: _communityOn,
+                    // the pick stays marked in both modes
+                    MarkType: _focus?.Type,
+                    MarkId: _focus?.Id);
                 _data = await GraphService.GetGraphAsync(query, _user);
             }
         }
@@ -483,6 +512,25 @@
         {
             await LoadAndDrawAsync();
         }
+    }
+
+    private async Task MarkClearAsync()
+    {
+        _focus = null;
+        _focusPreset = null;
+        await LoadAndDrawAsync();
+    }
+
+    private async Task JumpToFocusAsync()
+    {
+        if (_module is null || !_ready)
+        {
+            return;
+        }
+        // zoom in only when the view is too far out to read
+        try { await _module.InvokeVoidAsync("fokussiere", ContainerId, (string?)null, 0.9); }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception ex) { Logger.LogWarning(ex, "Beziehungsgraph: Sprung zur Fokus-Akte fehlgeschlagen."); }
     }
 
     private async Task TypeFilterChanged(IReadOnlyCollection<string> values)
