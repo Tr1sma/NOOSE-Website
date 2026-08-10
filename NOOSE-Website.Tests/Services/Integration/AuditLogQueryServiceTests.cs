@@ -265,6 +265,72 @@ public sealed class AuditLogQueryServiceTests
             () => NewService(ctx).QueryAccessAsync(new AuditLogFilter(), NonLeader()));
     }
 
+    // ---- Group pseudo filters ----------------------------------------------
+
+    [Fact]
+    public async Task QueryChangesAsync_FiltersByGroup_TeamLeads()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("lead-1", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("agent-1"));
+            db.AuditLogs.AddRange(
+                Change(T1, agentId: "lead-1"),
+                Change(T2, agentId: "agent-1"),
+                Change(T3, agentId: "lead-1"));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).QueryChangesAsync(
+            new AuditLogFilter { AgentId = AuditAgentGroup.TeamLeads }, Leader());
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(new[] { T3, T1 }, result.Rows.Select(r => r.TimestampUtc).ToArray());
+    }
+
+    [Fact]
+    public async Task QueryChangesAsync_FiltersByGroup_Partners()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("partner-1", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.Users.Add(Seed.Agent("agent-1"));
+            db.AuditLogs.AddRange(
+                Change(T1, agentId: "partner-1"),
+                Change(T2, agentId: "agent-1"));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).QueryChangesAsync(
+            new AuditLogFilter { AgentId = AuditAgentGroup.Partners }, Leader());
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(T1, Assert.Single(result.Rows).TimestampUtc);
+    }
+
+    [Fact]
+    public async Task QueryAccessAsync_FiltersByGroup_Partners()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("partner-1", configure: a => a.PartnerAgency = PartnerAgency.DoJ));
+            db.Users.Add(Seed.Agent("agent-1"));
+            db.AccessLogs.AddRange(
+                Access(T1, agentId: "partner-1"),
+                Access(T2, agentId: "agent-1"),
+                Access(T3, agentId: "partner-1"));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).QueryAccessAsync(
+            new AuditLogFilter { AgentId = AuditAgentGroup.Partners }, Leader());
+
+        Assert.Equal(2, result.TotalCount);
+    }
+
     // ---- GetFilterOptionsAsync ---------------------------------------------
 
     [Fact]
@@ -289,7 +355,7 @@ public sealed class AuditLogQueryServiceTests
     }
 
     [Fact]
-    public async Task GetFilterOptionsAsync_SkipsCodenamelessAccountsAndReadOnlySupervisors()
+    public async Task GetFilterOptionsAsync_SkipsCodenamelessRegulars_ButListsSupervisionWithDetail()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -317,7 +383,56 @@ public sealed class AuditLogQueryServiceTests
 
         var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
 
-        Assert.Equal(new[] { "Alpha", "Chef", "Zulu" }, result.Agents.Select(a => a.Codename).ToArray());
+        // group entry first (a team lead exists), then individuals ordered by codename
+        Assert.Equal(new[] { "Alle Teamleitungen", "Alpha", "Aufsicht", "Chef", "Zulu" },
+            result.Agents.Select(a => a.Codename).ToArray());
+        Assert.Equal(AuditAgentGroup.TeamLeads, result.Agents[0].Id);
+        // read-only supervision carries the role suffix; the admin team lead stays a plain entry
+        Assert.Equal("Teamleitung", result.Agents.Single(a => a.Id == "supervisor").Detail);
+        Assert.Null(result.Agents.Single(a => a.Id == "chief").Detail);
+    }
+
+    [Fact]
+    public async Task GetFilterOptionsAsync_IncludesPartnersWithAgencyDetail()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("p1", configure: a =>
+            {
+                a.Codename = "PartnerEins";
+                a.PartnerAgency = PartnerAgency.LSPD;
+            }));
+            // partner without codename stays selectable: their log entries exist regardless
+            db.Users.Add(Seed.Agent("p2", configure: a =>
+            {
+                a.Codename = string.Empty;
+                a.PartnerAgency = PartnerAgency.DoJ;
+            }));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
+
+        Assert.Equal(AuditAgentGroup.Partners, result.Agents[0].Id);
+        Assert.Equal("Alle Partner", result.Agents[0].Codename);
+        Assert.Equal("Partner · LSPD", result.Agents.Single(a => a.Id == "p1").Detail);
+        Assert.Equal("Partner · DoJ", result.Agents.Single(a => a.Id == "p2").Detail);
+    }
+
+    [Fact]
+    public async Task GetFilterOptionsAsync_OmitsGroupEntries_WhenNoSuchAccountsExist()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("u1", configure: a => a.Codename = "Alpha"));
+            db.SaveChanges();
+        }
+
+        var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
+
+        Assert.Equal("Alpha", Assert.Single(result.Agents).Codename);
     }
 
     [Fact]

@@ -37,8 +37,15 @@ public sealed record AccessLogPage(IReadOnlyList<AuditAccessRow> Rows, int Total
     public bool Capped => TotalCount > Rows.Count;
 }
 
-/// <summary>Agent option for the audit filter dropdown.</summary>
-public sealed record AuditAgentOption(string Id, string Codename);
+/// <summary>Agent option for the audit filter dropdown; Detail carries the role suffix ("Teamleitung", "Partner · LSPD").</summary>
+public sealed record AuditAgentOption(string Id, string Codename, string? Detail = null);
+
+/// <summary>Pseudo agent-filter ids matching whole account groups in the audit viewer.</summary>
+public static class AuditAgentGroup
+{
+    public const string TeamLeads = "group:teamleads";
+    public const string Partners = "group:partner";
+}
 
 /// <summary>Dropdown source values for the audit viewer filters.</summary>
 public sealed record AuditFilterOptions(
