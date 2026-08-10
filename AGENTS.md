@@ -160,7 +160,7 @@ Three orthogonal axes: **rank** (`Models/Enums/Rank.cs`, int-backed `JuniorAgent
 
 ## Misc gotchas
 
-- `NOOSE-Website/BuildNumber.txt` auto-increments on every real build (MSBuild target in the `.csproj`; design-time builds excluded) → shows up in `git status` after every local build, **must be committed along**.
+- `NOOSE-Website/BuildNumber.txt` auto-increments on every real build (MSBuild target in the `.csproj`; design-time builds excluded) → local-only counter, **gitignored — never commit it**.
 - Stale docs: `Authorization/README.md` and `Infrastructure/README.md` are outdated "Phase 0" stubs; many `<see cref>` tags point at old German type names. Source of truth is the code, not the READMEs.
 
 ## Further docs
