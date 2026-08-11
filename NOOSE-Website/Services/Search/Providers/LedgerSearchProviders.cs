@@ -58,13 +58,29 @@ public sealed class EvidenceItemSearchProvider(IDbContextFactory<AppDbContext> d
                 || (i.Category != null && i.Category.Contains(s)));
         }
         var rows = await q.OrderBy(i => i.Name).Take(query.PerCategory)
-            .Select(i => new { i.Id, i.Name, i.Description, i.Category }).ToListAsync(cancellationToken);
-        // category leads the snippet so a category match is visibly the reason for the hit
-        return rows.Select(i => new SearchHit(nameof(EvidenceItem), i.Id, i.Name,
-                string.Join(" · ", new[] { i.Category, i.Description }.Where(p => !string.IsNullOrWhiteSpace(p))),
-                string.Empty))
-            .ToList();
+            .Select(Row).ToListAsync(cancellationToken);
+        return rows.Select(Hit).ToList();
     }
+
+    public async Task<IReadOnlyList<SearchHit>> ResolveIdsAsync(
+        SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.EvidenceItems.Where(i => ids.Contains(i.Id)).Take(take)
+            .Select(Row).ToListAsync(cancellationToken);
+        return rows.Select(Hit).ToList();
+    }
+
+    private sealed record ItemRow(string Id, string Name, string? Description, string? Category);
+
+    private static readonly System.Linq.Expressions.Expression<Func<EvidenceItem, ItemRow>> Row =
+        i => new ItemRow(i.Id, i.Name, i.Description, i.Category);
+
+    // category leads the snippet so a category match is visibly the reason for the hit
+    private static SearchHit Hit(ItemRow i)
+        => new(nameof(EvidenceItem), i.Id, i.Name,
+            string.Join(" · ", new[] { i.Category, i.Description }.Where(p => !string.IsNullOrWhiteSpace(p))),
+            string.Empty);
 }
 
 /// <summary>Evidence in/out entries.</summary>

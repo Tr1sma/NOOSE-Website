@@ -263,7 +263,7 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 - **`App_Data` beim Deploy nie löschen** — enthält Uploads **und** Data-Protection-Keys (`App_Data/keys`); Verlust loggt alle User bei jedem Restart aus. `deploy.ps1` schließt `App_Data` explizit vom Löschen aus.
 - **Deploy nutzt `tar`, nie `Compress-Archive`** (packte früher 0-Byte-Dateien → kaputtes MudBlazor-CSS).
 - **`TZ=Europe/Berlin` in `/etc/noose/noose.env`** nötig — Blazor Server rechnet `ToLocalTime()` in der Server-TZ; ohne TZ sind alle Zeiten (inkl. 20-Min-„Tot"-Fenster) verschoben. `TimeZoneInfo.Local` ist prozess-gecached → Restart nach Änderung.
-- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=10`, `app.js?v=2`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting.
+- **`?v=` bumpen bei JS-Modul-Edits** (`graph.js?v=8`, `kalender.js?v=7`, `richtext.js?v=10`, `app.js?v=3`) — dynamische ES-Imports umgehen Blazors Asset-Fingerprinting. **Alle** Importstellen eines Moduls mitziehen: `app.js` wird von `CommandPalette.razor` **und** `FinancingCatalogPanel.razor` geladen, und zwei verschiedene `?v=` holen zwei Kopien.
 - **Bewerbungs-Platzhalter sind groß-/kleinschreibungsabhängig.** `BewerbungTemplateRenderer` matcht `\bNAME\b`
   case-sensitiv; aus `NAME` ein `Name` zu machen schaltet die `███████`-Schwärzung für jede daraus gebaute
   Nachricht still ab. `TextAssistService` lehnt eine NOOSEI-Korrektur deshalb hart ab, wenn Anzahl **oder**
@@ -288,8 +288,9 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
   Route ist nicht klickbar; wer eine Route braucht, prüft `SearchCatalog.IsRoutable`.
 - **Neue Suchkategorie = eine `SearchCatalog`-Zeile + ein `ISearchProvider` + eine Registrierungszeile.** Fehlt eins,
   schlägt `SearchCatalogTests`/`SearchCoverageTests` fehl. Der `Assistant`-Trait wird **zusammen mit dem Provider**
-  gesetzt und muss mit `NooseiUse.Search` in `NooseiRecordTypes` übereinstimmen (bidirektionaler Drift-Test) — sonst
-  sagt man dem Modell, es dürfe auf eine Kategorie eingrenzen, die immer null Treffer hat.
+  gesetzt; `NooseiRecordTypes` leitet Name, Plural und die durchsuchbare Menge daraus ab, eine zweite Tabelle gibt
+  es nicht mehr. Alle 58 Kategorien tragen den Trait — er entscheidet nur, ob das Modell **eingrenzen** darf;
+  Treffer daraus kamen bei einer unbeschränkten `suche_akten` ohnehin an, nur ohne `id=` zum Weiterverfolgen.
 - **`SearchIndexBackfillWorker.Version` hochzählen**, wenn `SearchIndexProjection` einen Typ dazubekommt. Sonst
   bekommen Bestandsinstallationen **null** Index-Zeilen für den neuen Typ, und die phonetische Suche wirkt „flaky".
 - **Suchtests konstruieren mit `MaxConcurrency = 1`** (`SearchTestHost`): `SqliteTestContext` gibt jedem Context
@@ -318,15 +319,33 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
   **abgeleitet**, nie als `true` übergeben, sonst verrät ein Aggregat die Existenz eingestufter Akten, die kein
   Werkzeug nennen würde.
 - **Welcher Aktentyp in welches Werkzeug darf, steht ausschließlich in `NooseiRecordTypes`** (`INooseiTool.cs`):
-  eine Zeile je Typ mit den Flags `Read`/`List`/`Search`/`Chronicle`, aus denen die vier Schema-Enums beim
-  statischen Init berechnet werden. **Jedes Werkzeug mit `typ`-Parameter nimmt den geprüften Overload
-  `Clr(german, NooseiUse.X)`** — nicht das nackte `Clr(german)`. Das Schema-Enum ist nur ein Hinweis, und ein
-  durchgerutschter Typ landet in `Visibility.IsRecordVisibleAsync`, das jeden **unbekannten** Typ als „für alle
-  sichtbar" beantwortet (gilt für `Job`/`Appointment`, deren echte Regeln in `JobVisibility`/`AppointmentVisibility`
-  stehen). Vier Achsen statt einer Liste, weil sonst die schmalste Fähigkeit für alle entscheidet.
-  `NooseiRecordTypesTests` prüft je Flag per Dateiscan, dass der Dienst dahinter es auch kann.
+  eine `Uses`-Zeile je Typ mit den Flags `Read`/`List`/`Chronicle`, aus denen die Schema-Enums beim statischen
+  Init berechnet werden. **Deutscher Name, Plural und die durchsuchbare Menge stehen dort NICHT** — sie kommen
+  aus `SearchCatalog` (`NooseiUse.Search` ist der `SearchTraits.Assistant`-Trait, nicht eine Kopie davon).
+  Zwei Label-Tabellen über dieselben 58 Kategorien driften; abgeleitet können sie es baulich nicht.
+  **Jedes Werkzeug mit `typ`-Parameter nimmt den geprüften Overload `Clr(german, NooseiUse.X)`** — nicht das
+  nackte `Clr(german)`. Das Schema-Enum ist nur ein Hinweis, und ein durchgerutschter Typ landet in
+  `Visibility.IsRecordVisibleAsync`. Drei Achsen statt einer Liste, weil sonst die schmalste Fähigkeit für alle
+  entscheidet. `NooseiRecordTypesTests` prüft je Flag per Dateiscan, dass der Dienst dahinter es auch kann.
   `German(clr)` fällt nie auf den CLR-Namen zurück, sondern auf `"Eintrag"` — ein englischer Typname liest sich
   für das Modell wie eine Aktenart, die es öffnen darf.
+- **`NooseiUse.Read` verlangt zwingend einen Arm in `Visibility.IsRecordVisibleAsync`.** Dessen Schwanz beantwortet
+  jeden **unbekannten** Typ mit „für alle sichtbar" — für einen lesbaren Typ ist das ein Leck, kein Default.
+  `EveryReadableType_HasAnArmInTheVisibilityGate` hält das per Dateiscan fest. `Job` und `Appointment` waren dort
+  lange reine Existenzprüfungen, obwohl ihre echten Regeln in `JobVisibility`/`AppointmentVisibility` stehen; das
+  blieb nur folgenlos, solange beide nicht lesbar waren. Ein neuer Arm **benennt** einen vorhandenen Helfer und
+  schreibt nie ein eigenes Prädikat.
+- **Ein Dossier ist ein Budget, Akteninhalte sind ein eigenes.** `lies_akte` liefert Stammdaten plus einen Auszug;
+  Kommentare, Quellen, Wiedervorlagen, Doks, Chat, Tagesordnung und Bewerbungs-Schriftwechsel holt
+  `lies_akteninhalt` (`ReadRecordContentTool`) paginiert und mit `MaxContentResultChars`. Es **gatet die Elternakte
+  selbst** — `TagService.GetForRecordAsync` und `CustomFieldValueService` haben für interne Agenten kein eigenes
+  Gate, sie verlassen sich auf die Seite, die sie rendert. Hier ist das Werkzeug diese Seite.
+- **`finde_akten` zählt Akten, `lies_bereich` berichtet einen Zustand.** Die Trennung steht in beiden
+  Beschreibungen und in `NooseiPrompts.ToolChoice`; ohne sie rät das Modell. In `lies_bereich` (`ReadAreaTool`)
+  liest ein Bereich ohne Recht **wortgleich wie ein leerer** — `UnauthorizedAccessException` wird abgefangen,
+  sonst wäre das Werkzeug ein Rechte-Orakel über Bereiche, die das Schema ohnehin nennt.
+- **`DossierContextBuilder` ist `partial` über zwei Dateien** (Aktenarten / Betrieb). Der Drift-Scan liest
+  `DossierContextBuilder*.cs` — wer nur die Hauptdatei scannt, bekommt einen falsch-roten Wächter und entschärft ihn.
 - **Modell pro Funktion** über `LlmOptions.ModelByFeature` (`ModelFor(feature)`, leer = Standardmodell).
   `LlmService` löst es aus `request.Context.Feature` auf — es gibt bewusst kein `Model` auf `LlmRequest`, damit
   Funktion und Modell nicht auseinanderlaufen können. Sichtbar bleibt es nur in `/einstellungen?tab=noosei`.

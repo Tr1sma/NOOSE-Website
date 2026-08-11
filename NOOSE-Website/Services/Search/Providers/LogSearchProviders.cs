@@ -119,9 +119,11 @@ public sealed class LlmRequestLogSearchProvider(IDbContextFactory<AppDbContext> 
             ? Enum.GetValues<LlmFeature>().Where(f => LlmFeatureDisplay.Name(f).Contains(s, StringComparison.OrdinalIgnoreCase)).ToList()
             : [];
         var q = oversight
-            ? db.LlmRequests.Where(r => (r.AgentId == meId && (r.Prompt.Contains(s) || (r.Answer != null && r.Answer.Contains(s))))
+            ? db.LlmRequests.Where(r => (r.AgentId == meId
+                    && ((r.Prompt != null && r.Prompt.Contains(s)) || (r.Answer != null && r.Answer.Contains(s))))
                 || features.Contains(r.Feature))
-            : db.LlmRequests.Where(r => r.AgentId == meId && (r.Prompt.Contains(s) || (r.Answer != null && r.Answer.Contains(s))));
+            : db.LlmRequests.Where(r => r.AgentId == meId
+                && ((r.Prompt != null && r.Prompt.Contains(s)) || (r.Answer != null && r.Answer.Contains(s))));
 
         var rows = await q.OrderByDescending(r => r.CreatedAt).Take(query.PerCategory)
             .Select(r => new { r.Id, r.AgentId, r.CreatedAt, r.Feature, r.Prompt })

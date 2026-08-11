@@ -107,6 +107,21 @@ else
                             </div>
                         }
                         <ProfileList Title="Ränge" Values="@_faction.Ranks.OrderBy(r => r.Order).Select(r => r.Designation)" />
+                        @if (TabOn("bestaende"))
+                        {
+                            <ProfileList Title="Drogenrouten" Values="StockTexts(_faction.DrugRoutes.Select(d => (d.Designation, d.Note)))" />
+                        }
+                        @if (TabOn("mitglieder"))
+                        {
+                            <ProfileList Title="Leitung" Values="StockTexts(_members.Where(m => m.IsLead).Select(m => (m.Person!.Name, m.Rank)))" />
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Erstellt am @(_faction.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy"))
+                            @if (_faction.ModifiedAt is { } modified)
+                            {
+                                @($" · Zuletzt geändert am {modified.ToLocalTime():dd.MM.yyyy}")
+                            }
+                        </MudText>
                     </MudStack>
                 </RecordSection>
                 }
@@ -236,6 +251,7 @@ else
     private bool _isPartner;
     private Faction? _faction;
     private int _memberCount;
+    private List<FactionMember> _members = new();
     private List<string> _investigationLead = new();
     private List<string> _ranks = new();
     private List<ClassificationHistory> _classificationHistory = new();
@@ -288,7 +304,8 @@ else
         {
             _ranks = _faction.Ranks.OrderBy(r => r.Order).Select(r => r.Designation).ToList();
             _classificationHistory = await FactionService.GetClassificationHistoryAsync(_faction.Id, scope);
-            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, scope)).Count;
+            _members = await FactionService.GetMembersAsync(_faction.Id, scope);
+            _memberCount = _members.Count;
             // partners: skip agent fan-out
             if (!_isPartner)
             {
@@ -329,7 +346,8 @@ else
     {
         if (_faction is not null)
         {
-            _memberCount = (await FactionService.GetMembersAsync(_faction.Id, ViewerScope.From(_user))).Count;
+            _members = await FactionService.GetMembersAsync(_faction.Id, ViewerScope.From(_user));
+            _memberCount = _members.Count;
             StateHasChanged();
         }
     }

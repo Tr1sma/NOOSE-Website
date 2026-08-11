@@ -19,3 +19,8 @@ export function unregisterCommandPalette() {
         commandPaletteHandler = null;
     }
 }
+
+// scrolls an element into view (smooth, below the fixed app bar via scroll-margin)
+export function scrollToElement(element) {
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}

@@ -1,7 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Data.Entities.Activities;
+using NOOSE_Website.Data.Entities.Announcements;
+using NOOSE_Website.Data.Entities.CounterIntel;
+using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Jobs;
+using NOOSE_Website.Data.Entities.Kasse;
+using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Groups;
@@ -97,18 +107,114 @@ public static class Visibility
             return row is not null && RecordVisibility.IsVisible(scope, row.Classified, row.Tru, row.Hrb);
         }
 
-        // always visible, but the record must exist
+        // gated by their own helper: existence alone would answer past the rule that owns the type
+        switch (entityType)
+        {
+            // restricted jobs belong to their creator and assignees; this used to be an existence check,
+            // which handed every restricted job to every agent that asked for it by id
+            case nameof(Job):
+                return await db.Jobs.OnlyVisible(db, scope.MayClassifiedRead, scope.MeId)
+                    .AnyAsync(a => a.Id == entityId, cancellationToken);
+            // same story for a non-public appointment
+            case nameof(Appointment):
+                return await db.Appointments.OnlyVisible(db, scope.MayClassifiedRead, scope.MeId)
+                    .AnyAsync(t => t.Id == entityId, cancellationToken);
+            // agenda: rank/supervision at once, any other internal agent 2h after the meeting, partners never
+            case nameof(MeetingAgendaItem):
+                return await AgendaItemVisibleAsync(db, entityId, scope, cancellationToken);
+            case nameof(Informant):
+                return await InformantVisibleAsync(db, entityId, scope, cancellationToken);
+            case nameof(Announcement):
+                return await db.Announcements
+                    .OnlyVisible(scope, await AnnouncementVisibility.MyTaskforceIdsAsync(db, scope.MeId, cancellationToken))
+                    .AnyAsync(a => a.Id == entityId, cancellationToken);
+            // the roster tier grants the row but not the reason; that split lives in the reader, not here
+            case nameof(Absence):
+                return await db.Absences
+                    .OnlyVisible(db, scope.MayClassifiedRead ? AbsenceViewScope.All : AbsenceViewScope.Team, scope.MeId)
+                    .AnyAsync(a => a.Id == entityId, cancellationToken);
+            case nameof(LibraryFile):
+                return await db.LibraryFiles.OnlyVisible(scope.AsDocumentScope())
+                    .AnyAsync(f => f.Id == entityId, cancellationToken);
+            // a request is as visible as the record it is about, plus always to its own requester
+            case nameof(Request):
+                return await RequestVisibleAsync(db, entityId, scope, cancellationToken);
+            // recruiting material: HRB or leadership, same audience as the application itself
+            case nameof(BewerbungMessage):
+                return scope.MayRecruiting
+                    && await db.BewerbungMessages.AnyAsync(m => m.Id == entityId, cancellationToken);
+            case nameof(Bewerbungssperre):
+                return scope.MayRecruiting
+                    && await db.Bewerbungssperren.AnyAsync(s => s.Id == entityId, cancellationToken);
+            case nameof(BewerbungTest):
+                return scope.MayRecruiting
+                    && await db.BewerbungTests.AnyAsync(t => t.Id == entityId, cancellationToken);
+            // leadership-only material
+            case nameof(SituationReport):
+                return scope.MayClassifiedRead
+                    && await db.SituationReports.AnyAsync(r => r.Id == entityId, cancellationToken);
+            case nameof(AgentNote):
+                return scope.MayClassifiedRead
+                    && await db.AgentNotes.AnyAsync(n => n.Id == entityId, cancellationToken);
+            // counter-intelligence: leadership but never read-only supervision, which a scope cannot express.
+            // Narrower than MayCounterIntel() by exactly that, which is an omission and never a leak.
+            case nameof(CounterIntelRule):
+                return scope.IsLeadership
+                    && await db.CounterIntelRules.AnyAsync(r => r.Id == entityId, cancellationToken);
+            // own report, or anyone who reads everything. Fully qualified: the entity shares its simple name with
+            // the namespace it lives in, and an alias would make nameof() yield the alias instead of the CLR name.
+            case nameof(Data.Entities.Feedback.Feedback):
+                return await db.Feedbacks.AnyAsync(
+                    f => f.Id == entityId && (scope.MayClassifiedRead || f.AgentId == scope.MeId), cancellationToken);
+        }
+
+        // open to every internal agent, but named rather than left to the tail below: a type that falls through
+        // there is answered "visible" without anyone having decided that
         return entityType switch
         {
-            nameof(Job) => await db.Jobs.AnyAsync(a => a.Id == entityId, cancellationToken),
-            nameof(Appointment) => await db.Appointments.AnyAsync(t => t.Id == entityId, cancellationToken),
             nameof(Law) => await db.Laws.AnyAsync(g => g.Id == entityId, cancellationToken),
             nameof(Meeting) => await db.Meetings.AnyAsync(m => m.Id == entityId, cancellationToken),
-            // agenda: rank/supervision at once, any other internal agent 2h after the meeting, partners never
-            nameof(MeetingAgendaItem) => await AgendaItemVisibleAsync(db, entityId, scope, cancellationToken),
+            nameof(EvidenceItem) => await db.EvidenceItems.AnyAsync(i => i.Id == entityId, cancellationToken),
+            nameof(EvidenceEntry) => await db.EvidenceEntries.AnyAsync(e => e.Id == entityId, cancellationToken),
+            nameof(KassenBuchung) => await db.KassenBuchungen.AnyAsync(b => b.Id == entityId, cancellationToken),
+            nameof(AgentAbduction) => await db.AgentAbductions.AnyAsync(a => a.Id == entityId, cancellationToken),
+            nameof(AgentActivity) => await db.AgentActivities.AnyAsync(a => a.Id == entityId, cancellationToken),
+            nameof(TrainingModule) => await db.TrainingModules.AnyAsync(m => m.Id == entityId, cancellationToken),
             // unknown type = visible
             _ => true,
         };
+    }
+
+    /// <summary>Informant gate: leadership or the assigned handler, fail-closed on a missing record.</summary>
+    private static async Task<bool> InformantVisibleAsync(
+        AppDbContext db, string informantId, ViewerScope scope, CancellationToken cancellationToken)
+    {
+        var handler = await db.Informants.AsNoTracking()
+            .Where(i => i.Id == informantId)
+            .Select(i => new { i.HandlerId })
+            .FirstOrDefaultAsync(cancellationToken);
+        return handler is not null && InformantVisibility.MaySeeRecord(scope, handler.HandlerId);
+    }
+
+    /// <summary>Request gate: its own requester always, everyone else exactly as far as the target record reaches.</summary>
+    /// <remarks>Mirrors the search provider, which resolves a request through its target rather than through a rank.
+    /// One hop only — a request never targets another request.</remarks>
+    private static async Task<bool> RequestVisibleAsync(
+        AppDbContext db, string requestId, ViewerScope scope, CancellationToken cancellationToken)
+    {
+        var row = await db.Requests.AsNoTracking()
+            .Where(r => r.Id == requestId)
+            .Select(r => new { r.CreatedById, r.TargetType, r.TargetId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (row is null)
+        {
+            return false;
+        }
+        if (scope.MeId is { Length: > 0 } && row.CreatedById == scope.MeId)
+        {
+            return true;
+        }
+        return await IsRecordVisibleAsync(db, row.TargetType, row.TargetId, scope, cancellationToken);
     }
 
     /// <summary>Agenda item visibility: leadership keeps its immediate access; other internal agents gain it 2h after the meeting.</summary>

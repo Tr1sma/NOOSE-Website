@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using NOOSE_Website.Models.Enums;
@@ -18,8 +19,22 @@ public sealed class FilterRecordsTool(
     IPartyService parties,
     ICaseService cases,
     IOperationService operations,
-    ILawService laws) : INooseiTool
+    ILawService laws,
+    ITaskforceService taskforces,
+    IDocumentService documents,
+    IMeetingService meetings,
+    IJobService jobs,
+    IInformantService informants,
+    IEvidenceService evidence,
+    ILibraryService library,
+    IAbsenceService absences,
+    IAnnouncementService announcements,
+    IFinancingService financing,
+    IBewerbungService applications) : INooseiTool
 {
+    /// <summary>How deep the paged list services are asked to go; the filter then runs over the whole page.</summary>
+    private const int MaxRows = 200;
+
     public string Name => "finde_akten";
 
     public string Description =>
@@ -38,6 +53,8 @@ public sealed class FilterRecordsTool(
                      "description": "Aktentyp, der durchgesehen wird." },
             "einstufung": { "type": "string", "enum": ["Unbekannt","Prüffall","Verdachtsfall","Gesichert staatsgefährdend"],
                             "description": "Nur Akten mit dieser Einstufung." },
+            "status": { "type": "string",
+                        "description": "Nur Akten in diesem Status, deutsche Bezeichnung (Offen, Angenommen, Abgelehnt, Geplant …). Nur bei Typen, die einen Status führen." },
             "lebensstatus": { "type": "string", "enum": ["Lebend","Tot","Flüchtig"],
                               "description": "Nur bei typ=Person; berücksichtigt das Respawn-Fenster." },
             "nur_fahndung": { "type": "boolean",
@@ -65,7 +82,7 @@ public sealed class FilterRecordsTool(
                 + string.Join(", ", NooseiRecordTypes.Names(NooseiUse.List)) + ".", null, true);
         }
 
-        var rows = await LoadAsync(clr, context.Scope, cancellationToken);
+        var rows = await LoadAsync(clr, context.Scope, context.Actor, cancellationToken);
         if (rows is null)
         {
             return new NooseiToolResult($"Für {german} steht keine Merkmalssuche zur Verfügung.", null, true);
@@ -108,6 +125,10 @@ public sealed class FilterRecordsTool(
             {
                 sb.Append(" | Bedrohungs-Score: ").Append(score);
             }
+            if (row.Status is { Length: > 0 } state)
+            {
+                sb.Append(" | Status: ").Append(state);
+            }
             if (row.Extra is { Length: > 0 } extra)
             {
                 sb.Append(" | ").Append(extra);
@@ -128,7 +149,8 @@ public sealed class FilterRecordsTool(
     }
 
     /// <summary>Loads one type through its own list service, which applies the viewer's scope.</summary>
-    private async Task<List<Row>?> LoadAsync(string clr, ViewerScope scope, CancellationToken cancellationToken) => clr switch
+    private async Task<List<Row>?> LoadAsync(
+        string clr, ViewerScope scope, ClaimsPrincipal actor, CancellationToken cancellationToken) => clr switch
     {
         nameof(Data.Entities.People.Person) => (await people.GetListAsync(scope, cancellationToken))
             .Select(p => new Row(p.Id, p.Name, p.CaseNumber, p.Classification, p.SecrecyLevel, p.ThreatScore,
@@ -161,8 +183,92 @@ public sealed class FilterRecordsTool(
                 DocumentClassification.None, null, l.ModifiedAt, l.CreatedAt,
                 string.IsNullOrWhiteSpace(l.LawBook) ? null : "Gesetzbuch: " + l.LawBook))
             .ToList(),
+
+        nameof(Data.Entities.Taskforces.Taskforce) => (await taskforces.GetListAsync(
+                scope.MayAllTaskforces, scope.MeId, cancellationToken, scope.PartnerAgency))
+            .Select(t => new Row(t.Id, t.Name, t.CaseNumber, null,
+                t.IsClassified ? DocumentClassification.Leadership : DocumentClassification.None, null,
+                t.ModifiedAt, t.CreatedAt, "Umfang: " + TaskforceScopeDisplay.Name(t.Scope),
+                Status: TaskforceStatusDisplay.Name(t.Status)))
+            .ToList(),
+        nameof(Data.Entities.Common.Document) => (await documents.GetListAsync(
+                scope.AsDocumentScope(), cancellationToken, scope.PartnerAgency, scope.MeId))
+            .Select(d => new Row(d.Id, d.Title, string.Empty, null, d.Classification, null,
+                d.Refreshed, d.Refreshed, string.IsNullOrWhiteSpace(d.Category) ? null : "Kategorie: " + d.Category))
+            .ToList(),
+        nameof(Data.Entities.Meetings.Meeting) => (await meetings.GetListAsync(
+                scope.MeId, null, null, 0, MaxRows, cancellationToken))
+            .Select(m => new Row(m.Id, m.Title, m.CaseNumber, null, DocumentClassification.None, null,
+                m.Start, m.Start, $"Beginn: {m.Start:dd.MM.yyyy HH:mm} | Tagesordnungspunkte: {m.AgendaCount}",
+                Status: MeetingStatusDisplay.Name(m.Status)))
+            .ToList(),
+        nameof(Data.Entities.Jobs.Job) => (await jobs.GetTeamBoardAsync(false, actor, cancellationToken))
+            .Select(a => new Row(a.Id, a.Title, a.CaseNumber, null, DocumentClassification.None, null,
+                a.DoneAt, a.DueDate ?? DateTime.UtcNow,
+                a.AssignedCodenames.Count > 0 ? "Zugeteilt: " + string.Join(", ", a.AssignedCodenames) : null,
+                Status: JobStatusDisplay.Name(a.Status)))
+            .ToList(),
+        // fail-closed by its own helper: a stranger gets an empty roster, not a refusal
+        nameof(Data.Entities.Informants.Informant) => (await informants.GetListAsync(actor, cancellationToken))
+            .Select(i => new Row(i.Id, i.Name, i.CaseNumber, null, DocumentClassification.Leadership, null,
+                null, DateTime.UtcNow,
+                $"Zuverlässigkeit: {InformantEnumDisplay.Reliability(i.Reliability)}"
+                    + (string.IsNullOrWhiteSpace(i.HandlerName) ? null : $" | Führung: {i.HandlerName}"),
+                Status: InformantEnumDisplay.Status(i.Status)))
+            .ToList(),
+        nameof(Data.Entities.Evidence.EvidenceItem) => (await evidence.GetItemsAsync(null, null, cancellationToken))
+            .Select(e => new Row(e.Item.Id, e.Item.Name, string.Empty, null, DocumentClassification.None, null,
+                e.Item.ModifiedAt, e.Item.CreatedAt,
+                $"Bestand: {e.OnHand}"
+                    + (string.IsNullOrWhiteSpace(e.Item.Category) ? null : $" | Kategorie: {e.Item.Category}")))
+            .ToList(),
+        nameof(Data.Entities.Common.LibraryFile) => (await library.GetListAsync(scope.AsDocumentScope(), cancellationToken))
+            .Select(f => new Row(f.Id, f.Title, string.Empty, null,
+                RecordVisibility.LevelOf(f.IsClassified, f.IsTRUClassified, f.IsHRBClassified), null,
+                f.ModifiedAt, f.CreatedAt, string.IsNullOrWhiteSpace(f.Category) ? null : "Kategorie: " + f.Category))
+            .ToList(),
+        // the roster tier already dropped the reason before this ever sees the row
+        nameof(Data.Entities.Absences.Absence) => (await absences.GetListAsync(
+                actor, AbsenceViewScope.All, null, null, cancellationToken))
+            .Select(a => new Row(a.Id, $"{a.Codename} {a.FromDate:dd.MM.yyyy}–{a.ToDate:dd.MM.yyyy}", string.Empty,
+                null, DocumentClassification.None, null, null, a.FromDate.ToDateTime(TimeOnly.MinValue),
+                $"Tage: {a.Days}", Status: AbsenceCategoryDisplay.Name(a.Category)))
+            .ToList(),
+        nameof(Data.Entities.Announcements.Announcement) => (await announcements.GetBoardAsync(actor, cancellationToken))
+            .Select(a => new Row(a.Id, a.Title, a.CaseNumber, null, DocumentClassification.None, null,
+                a.CreatedAt, a.CreatedAt,
+                (a.Important ? "Wichtig | " : null) + "Zielgruppe: " + a.TargetDisplay))
+            .ToList(),
+        nameof(Data.Entities.Financing.FinancingRequest) => (await financing.GetVisibleAsync(null, actor, cancellationToken))
+            .Select(f => new Row(f.Request.Id, $"Antrag {f.AgentCodename}", f.Request.CaseNumber, null,
+                DocumentClassification.None, null, f.Request.ModifiedAt, f.Request.CreatedAt,
+                $"Zuschuss: {f.Request.RequestedSubsidy:N0} $",
+                Status: FinancingStatusDisplay.Name(f.Request.Status)))
+            .ToList(),
+        nameof(Data.Entities.Recruiting.Bewerbung) => (await ApplicationsAsync(actor, cancellationToken))
+            .Select(b => new Row(b.Id, b.Name, b.CaseNumber, null, DocumentClassification.None, null,
+                b.ModifiedAt, b.SubmittedAt,
+                string.IsNullOrWhiteSpace(b.AssignedAgentName) ? null : "Zuständig: " + b.AssignedAgentName,
+                Status: BewerbungStatusDisplay.Name(b.Status)))
+            .ToList(),
         _ => null,
     };
+
+    /// <summary>Applications, or nothing at all for an agent without recruiting access.</summary>
+    /// <remarks>An empty roster and a refused one must read the same: the guard throws, and turning that into a
+    /// distinct message would tell an ordinary agent that applications exist and are being kept from them.</remarks>
+    private async Task<List<Data.Entities.Recruiting.Bewerbung>> ApplicationsAsync(
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await applications.ListAsync(actor, cancellationToken);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
 
     /// <summary>The wanted note of a person, else their life status — one extra column, whichever says more.</summary>
     private static string Wanted(Data.Entities.People.Person person)
@@ -174,7 +280,7 @@ public sealed class FilterRecordsTool(
     private sealed record Row(
         string Id, string Title, string CaseNumber, Classification? Classification, DocumentClassification Secrecy,
         int? Score, DateTime? ModifiedAt, DateTime CreatedAt, string? Extra = null, LifeStatus? LifeStatus = null,
-        bool IsWanted = false)
+        bool IsWanted = false, string? Status = null)
     {
         /// <summary>When the record was last touched. The audit interceptor stamps <c>ModifiedAt</c> only on an
         /// update, so a record created yesterday and never edited still has none — falling through to
@@ -184,7 +290,7 @@ public sealed class FilterRecordsTool(
 
     private sealed record Filter(
         Classification? Classification, LifeStatus? LifeStatus, int? ScoreMin, int? ScoreMax,
-        int? ChangedWithinDays, bool ClassifiedOnly, bool WantedOnly)
+        int? ChangedWithinDays, bool ClassifiedOnly, bool WantedOnly, string? Status)
     {
         public static Filter From(JsonElement args) => new(
             ParseLabel(NooseiLimits.Text(args, "einstufung"), ClassificationDisplay.All,
@@ -195,7 +301,8 @@ public sealed class FilterRecordsTool(
             Number(args, "score_max"),
             Number(args, "geaendert_seit_tagen"),
             Flag(args, "nur_verschlusssache"),
-            Flag(args, "nur_fahndung"));
+            Flag(args, "nur_fahndung"),
+            NooseiLimits.Text(args, "status"));
 
         public bool Matches(Row row)
             => (Classification is not { } c || row.Classification == c)
@@ -204,7 +311,10 @@ public sealed class FilterRecordsTool(
                 && (ScoreMax is not { } max || row.Score <= max)
                 && (ChangedWithinDays is not { } days || row.TouchedAt >= DateTime.UtcNow.AddDays(-days))
                 && (!ClassifiedOnly || row.Secrecy != DocumentClassification.None)
-                && (!WantedOnly || row.IsWanted);
+                && (!WantedOnly || row.IsWanted)
+                // matched against the rendered German label, which is what the model was shown in the first place
+                && (Status is not { Length: > 0 } state
+                    || string.Equals(row.Status, state, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>Repeats the applied filters, so a bare count cannot be read as a different question's answer.</summary>
         public string Describe()
@@ -217,6 +327,7 @@ public sealed class FilterRecordsTool(
             if (ChangedWithinDays is { } days) { parts.Add($"in den letzten {days} Tagen angelegt oder geändert"); }
             if (ClassifiedOnly) { parts.Add("nur Verschlusssachen"); }
             if (WantedOnly) { parts.Add("nur zur Fahndung ausgeschrieben"); }
+            if (Status is { Length: > 0 } state) { parts.Add("Status " + state); }
             return parts.Count == 0 ? " (ohne Einschränkung)" : " (" + string.Join(", ", parts) + ")";
         }
 

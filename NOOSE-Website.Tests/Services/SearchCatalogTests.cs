@@ -32,8 +32,12 @@ public class SearchCatalogTests
     [Fact]
     public void German_labels_are_present_and_unique()
     {
-        Assert.Empty(SearchCatalog.Categories.Where(c =>
-            string.IsNullOrWhiteSpace(c.German) || string.IsNullOrWhiteSpace(c.Plural)));
+        // materialized so a failure names the offending category instead of just saying "not empty"
+        var unlabelled = SearchCatalog.Categories
+            .Where(c => string.IsNullOrWhiteSpace(c.German) || string.IsNullOrWhiteSpace(c.Plural))
+            .Select(c => c.Clr)
+            .ToArray();
+        Assert.Empty(unlabelled);
 
         var duplicates = SearchCatalog.Categories.GroupBy(c => c.Plural, StringComparer.Ordinal)
             .Where(g => g.Count() > 1).Select(g => g.Key);

@@ -30,12 +30,7 @@ public sealed class FilterRecordsToolTests
         var factions = new FactionService(ctx.Factory, Substitute.For<ICaseNumberService>(),
             Substitute.For<IProfileSuggestionService>(), people, Substitute.For<IFactionPhotoStorageService>(),
             Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>());
-        return new FilterRecordsTool(people, factions,
-            Substitute.For<IPersonGroupService>(),
-            Substitute.For<IPartyService>(),
-            Substitute.For<ICaseService>(),
-            Substitute.For<IOperationService>(),
-            new LawService(ctx.Factory));
+        return NooseiToolHost.Filter(people: people, factions: factions, laws: new LawService(ctx.Factory));
     }
 
     private static void Seed(SqliteTestContext ctx)

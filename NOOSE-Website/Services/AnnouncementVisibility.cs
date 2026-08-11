@@ -32,12 +32,21 @@ public static class AnnouncementVisibility
     /// <summary>Announcements the viewer may read.</summary>
     public static IQueryable<Announcement> OnlyVisible(this IQueryable<Announcement> query,
         ClaimsPrincipal actor, IReadOnlyCollection<string> myTaskforceIds)
+        => query.OnlyVisible(ViewerScope.From(actor), myTaskforceIds);
+
+    /// <summary>Announcements the viewer may read, from a scope rather than a principal.</summary>
+    /// <remarks>Twin of the principal overload, which delegates here — same shape as
+    /// <see cref="MeetingVisibility.MayReadAgenda(ViewerScope, DateTime, DateTime?, DateTime)" />. The record gate
+    /// holds a scope, not a principal, and a second copy of this predicate would be a second chance to widen it.</remarks>
+    public static IQueryable<Announcement> OnlyVisible(this IQueryable<Announcement> query,
+        ViewerScope scope, IReadOnlyCollection<string> myTaskforceIds)
     {
-        var meId = actor.GetAgentId();
-        var isLeadership = actor.IsLeadership();
-        var isTru = actor.IsTRU();
-        var isHrb = actor.IsHRB();
-        var myRank = actor.GetRank();
+        // locals so EF parameterizes them
+        var meId = scope.MeId;
+        var isLeadership = scope.IsLeadership;
+        var isTru = scope.IsTru;
+        var isHrb = scope.IsHrb;
+        var myRank = scope.Rank;
         return query.Where(a => isLeadership
             || a.CreatedById == meId
             || a.Audience == AnnouncementAudience.AllActive

@@ -83,7 +83,9 @@ public sealed class LlmOptions
     public bool ToolsEnabled { get; set; } = true;
 
     /// <summary>Tool rounds one turn may spend before the tools are withdrawn and an answer is forced.</summary>
-    public int MaxToolRounds { get; set; } = 6;
+    /// <remarks>Raised from six when the offering grew past twenty record kinds and gained the content and area
+    /// tools: opening a record and then reading its comments is two rounds where it used to be one.</remarks>
+    public int MaxToolRounds { get; set; } = 8;
 
     /// <summary>Tool calls executed per round; extras get a German refusal the model can recover from.</summary>
     public int MaxToolCallsPerRound { get; set; } = 4;

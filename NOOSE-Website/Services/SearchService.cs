@@ -103,7 +103,9 @@ public class SearchService(
             return [];
         }
         var viewer = await SearchViewer.FromAsync(actor, partnerPolicy, cancellationToken);
-        var query = SearchQuery.From(new SearchCriteria { Text = trimmed, Fuzzy = true }, viewer, _options);
+        var query = SearchQuery.From(new SearchCriteria { Text = trimmed, Fuzzy = true }, viewer, _options)
+            // a much smaller candidate pool than the page uses: see SearchOptions.QuickFuzzyCandidates
+            with { FuzzyCandidates = Math.Max(50, _options.QuickFuzzyCandidates) };
         var runnable = Allowed(viewer)
             .Where(p => SearchCatalog.Has(p.Category, SearchTraits.Quick))
             .ToList();

@@ -1,5 +1,6 @@
 @* Command palette (Ctrl+K); hotkey registered via JS interop. *@
 @using NOOSE_Website.Navigation
+@using NOOSE_Website.Services.Search
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject ISearchService SearchService
@@ -23,13 +24,18 @@
                          ResetValueOnEmptyText="true" AutoFocus="true"
                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search">
             <ItemTemplate Context="i">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@i.Icon" Size="Size.Small" Color="Color.Primary" />
+                @* MudAutocomplete has no group headers, so the kind has to live in the row itself: without the
+                   trailing chip a record hit and a static command are indistinguishable. *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width:100%">
+                    <MudIcon Icon="@i.Icon" Size="Size.Small"
+                             Color="@(i.Kind == PaletteKind.Record ? Color.Info : Color.Primary)" />
                     <MudText Typo="Typo.body2">@i.Label</MudText>
                     @if (!string.IsNullOrEmpty(i.Sub))
                     {
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@i.Sub</MudText>
                     }
+                    <MudSpacer />
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0">@Badge(i)</MudChip>
                 </MudStack>
             </ItemTemplate>
             <NoItemsTemplate>
@@ -127,7 +133,7 @@
     {
         if (firstRender)
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=2");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=3");
             _ref = DotNetObjectReference.Create(this);
             await _module.InvokeVoidAsync("registerCommandPalette", _ref);
         }
@@ -151,12 +157,15 @@
         try
         {
             var prefs = await NavPrefs.GetAsync(_agentId);
-            _favorites = prefs.Favorites.Select(f => new PaletteItem(f.Label, "Favorit", f.Icon, f.Route)).ToList();
+            // the kind chip carries "Favorit"/"Zuletzt" now, so the subtitle no longer repeats it
+            _favorites = prefs.Favorites
+                .Select(f => new PaletteItem(f.Label, null, f.Icon, f.Route, PaletteKind.Favorite))
+                .ToList();
             var favRoutes = prefs.Favorites.Select(f => f.Route).ToHashSet(StringComparer.Ordinal);
             _recents = prefs.Recents
                 .Where(r => !favRoutes.Contains(r.Route))
                 .Take(8)
-                .Select(r => new PaletteItem(r.Label, "Zuletzt", r.Icon, r.Route))
+                .Select(r => new PaletteItem(r.Label, null, r.Icon, r.Route, PaletteKind.Recent))
                 .ToList();
         }
         catch (Exception ex)
@@ -191,7 +200,8 @@
                 result.AddRange(hit
                     .Select(t => new { t.Name, t.CaseNumber, t.Category, Url = SearchNavigation.For(t.Category, t.TargetId) })
                     .Where(t => t.Url is not null)
-                    .Select(t => new PaletteItem(t.Name, t.CaseNumber, PaletteIcon(t.Category), t.Url!)));
+                    .Select(t => new PaletteItem(t.Name, t.CaseNumber, SearchCatalog.Icon(t.Category), t.Url!,
+                        PaletteKind.Record, SearchCatalog.German(t.Category))));
             }
             catch (Exception ex)
             {
@@ -199,11 +209,17 @@
                 Logger.LogDebug(ex, "Schnellsuche in der Command-Palette fehlgeschlagen.");
             }
 
+            // the funnel: the palette offers a handful of record types, the search covers every category. Without
+            // this line a narrow palette silently stands in for a wide search.
+            result.Add(new PaletteItem($"Alles durchsuchen: {v}",
+                $"{SearchCatalog.Categories.Count} Kategorien", Icons.Material.Filled.ManageSearch,
+                "/suche?q=" + Uri.EscapeDataString(v), PaletteKind.Search));
+
             // last, so it never pushes a real hit out of sight; the chat only pre-fills the question
             if (_mayUseNoosei)
             {
                 result.Add(new PaletteItem($"NOOSEI fragen: {v}", null, Icons.Material.Filled.SmartToy,
-                    "/ki-assistent?frage=" + Uri.EscapeDataString(v)));
+                    "/ki-assistent?frage=" + Uri.EscapeDataString(v), PaletteKind.Noosei));
             }
         }
         return result;
@@ -237,17 +253,21 @@
         _ref?.Dispose();
     }
 
-    private static string PaletteIcon(string category) => category switch
+    /// <summary>What a row is, for the trailing chip. Icons come from the catalog, so the palette and the result
+    /// list can never label the same category differently.</summary>
+    private enum PaletteKind { Command, Favorite, Recent, Record, Search, Noosei }
+
+    private static string Badge(PaletteItem item) => item.Kind switch
     {
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        nameof(Taskforce) => Icons.Material.Filled.Groups2,
-        nameof(Case) => Icons.Material.Filled.FolderSpecial,
-        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
-        _ => Icons.Material.Filled.Badge,
+        PaletteKind.Favorite => "Favorit",
+        PaletteKind.Recent => "Zuletzt",
+        PaletteKind.Record => item.TypeName ?? "Akte",
+        PaletteKind.Search => "Suche",
+        PaletteKind.Noosei => "NOOSEI",
+        _ => "Befehl",
     };
 
-    private record PaletteItem(string Label, string? Sub, string Icon, string Url);
+    /// <param name="TypeName">German category name of a record hit; null for everything else.</param>
+    private record PaletteItem(string Label, string? Sub, string Icon, string Url,
+        PaletteKind Kind = PaletteKind.Command, string? TypeName = null);
 }

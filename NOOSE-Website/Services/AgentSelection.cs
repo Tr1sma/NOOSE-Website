@@ -6,11 +6,11 @@ namespace NOOSE_Website.Services;
 
 /// <summary>Central rule for which agents an option list may contain.</summary>
 /// <remarks>
-/// Two predicates on purpose: pickers need current staff, log filters need everyone who ever acted.
-/// Team leads are read-only supervision and RP-wide invisible, so they appear in no list at all — not even
-/// with the admin flag on top. Partners are external and stay selectable only where a share is being
-/// granted: PartnerShareDialog, the Admin partner surfaces and the PersonnelList partner tab.
-/// MentionService is a deliberate exception and keeps its own predicate. Callers own ordering.
+/// Three predicates on purpose: pickers need current staff, log filters need everyone who ever acted, and the
+/// personnel area needs everyone who has a file. Team leads are read-only supervision and RP-wide invisible, so
+/// they appear in no list at all — not even with the admin flag on top. Partners are external and stay selectable
+/// only where a share is being granted: PartnerShareDialog, the Admin partner surfaces and the PersonnelList
+/// partner tab. MentionService is a deliberate exception and keeps its own predicate. Callers own ordering.
 /// </remarks>
 public static class AgentSelection
 {
@@ -23,6 +23,11 @@ public static class AgentSelection
     private static readonly Expression<Func<Agent, bool>> ListableRule =
         a => !string.IsNullOrEmpty(a.Codename) && !a.IsTeamLead && a.PartnerAgency == null;
 
+    private static readonly Expression<Func<Agent, bool>> PersonnelFileRule =
+        a => a.Status != AgentStatus.Applicant && a.Status != AgentStatus.Blocked && !a.IsTeamLead;
+
+    private static readonly Func<Agent, bool> PersonnelFileInMemory = PersonnelFileRule.Compile();
+
     /// <summary>Agents a picker, dropdown or roster may offer: active in-house staff only.</summary>
     public static IQueryable<Agent> OnlySelectable(this IQueryable<Agent> agents) => agents.Where(SelectableRule);
 
@@ -33,6 +38,18 @@ public static class AgentSelection
     /// </remarks>
     public static IQueryable<Agent> OnlyListable(this IQueryable<Agent> agents) => agents.Where(ListableRule);
 
+    /// <summary>Agents that have a personnel file: the roster of <c>/personal</c> and the search over it.</summary>
+    /// <remarks>
+    /// Wider than <see cref="OnlySelectable"/> — a terminated agent keeps their file, and a partner account has one
+    /// too. Narrower in the other direction: an applicant is not an agent (they belong to recruiting), a blocked
+    /// account is hidden, and a team lead is invisible RP-wide. The global search MUST go through this, or it hands
+    /// out exactly the accounts the page hides.
+    /// </remarks>
+    public static IQueryable<Agent> OnlyWithPersonnelFile(this IQueryable<Agent> agents) => agents.Where(PersonnelFileRule);
+
     /// <summary>Selectable check for rows already materialized; inside a query use OnlySelectable.</summary>
     public static bool IsSelectable(Agent agent) => SelectableInMemory(agent);
+
+    /// <summary>Personnel-file check for rows already materialized; inside a query use OnlyWithPersonnelFile.</summary>
+    public static bool HasPersonnelFile(Agent agent) => PersonnelFileInMemory(agent);
 }

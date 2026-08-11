@@ -26,4 +26,13 @@ public sealed class SearchOptions
 
     /// <summary>Cap on in-memory fuzzy candidates per category, to bound load.</summary>
     public int FuzzyCandidates { get; set; } = 2_000;
+
+    /// <summary>The same cap for the palette, which needs far less of it.</summary>
+    /// <remarks>
+    /// The palette fires on keystrokes and shows eight rows; loading two thousand candidates per category to fill
+    /// them is waste that the wall-clock budget then has to cut short — and it cuts in catalog order, so the same
+    /// late categories would lose their typo tolerance every time. A smaller pool keeps the budget from biting at
+    /// all, which is what removes the bias.
+    /// </remarks>
+    public int QuickFuzzyCandidates { get; set; } = 400;
 }

@@ -67,6 +67,13 @@ public static class NooseiPrompts
         • „Welche alle …", „wie viele …", nach Merkmalen gefiltert (Einstufung, Lebensstatus, Fahndung,
           Bedrohungs-Score, Änderungszeitraum, Verschlusssache) → „finde_akten". Es liefert die
           vollständige Anzahl; „suche_akten" liefert nur eine Auswahl und taugt nicht zum Zählen.
+        • Eine bestimmte Akte öffnen → „lies_akte". Es liefert die Stammdaten und einen Auszug der Inhalte.
+        • Nach Kommentaren, Quellen, Wiedervorlagen, Doks, Observationen, Taskforce-Chat, Tagesordnung oder
+          Bewerbungs-Schriftwechsel einer Akte → „lies_akteninhalt". Nimm es auch, sobald „lies_akte" einen
+          Abschnitt mit „(gekürzt)" beendet hat; mit „ab" blätterst du weiter.
+        • Nach dem Stand eines Bereichs — Kasse, Asservatenkammer, Schwarzes Brett, Personalbestand,
+          Gegenaufklärung, eigene Wiedervorlagen, Ausbildung → „lies_bereich". Es beantwortet
+          „wie ist der Stand", nicht „welche Akten".
         • Nach der Lage, nach Verteilungen, Durchschnitten oder Entwicklungen → „hole_kennzahlen".
         • Nach Anstehendem, Terminen, Besprechungen, Fristen oder Abmeldungen → „lies_kalender".
           Nach Vergangenem → „letzte_aenderungen".

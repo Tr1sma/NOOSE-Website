@@ -101,6 +101,7 @@
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [CascadingParameter] private RendererInfo RendererInfo { get; set; } = default!;
     [Inject] private IAuthorizationService Authorization { get; set; } = default!;
     [Inject] private IAgentManagementService AgentService { get; set; } = default!;
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
@@ -334,9 +335,13 @@
             return;
         }
 
-        SharesBroadcaster.Modified += OnSharesModified;
-        AcknowledgmentBroadcaster.Modified += OnAcknowledgmentModified;
-        FinancingBroadcaster.Modified += OnFinancingModified;
+        // prerender is a static snapshot: subscribing would leak a dead handler onto the singletons
+        if (RendererInfo.IsInteractive)
+        {
+            SharesBroadcaster.Modified += OnSharesModified;
+            AcknowledgmentBroadcaster.Modified += OnAcknowledgmentModified;
+            FinancingBroadcaster.Modified += OnFinancingModified;
+        }
         await LoadSharesAsync();
         await LoadAcknowledgmentsAsync();
         await LoadFinancingAsync();
@@ -456,19 +461,33 @@
         }
     }
 
+    // a handler must never throw back into the broadcaster's invocation chain, or the live
+    // subscribers later in the chain are skipped and the triggering page catches the fault
     private void OnSharesModified()
-        => _ = InvokeAsync(async () =>
+    {
+        try
         {
-            await LoadSharesAsync();
-            StateHasChanged();
-        });
+            _ = InvokeAsync(async () =>
+            {
+                await LoadSharesAsync();
+                StateHasChanged();
+            });
+        }
+        catch (InvalidOperationException) { /* circuit gone */ }
+    }
 
     private void OnFinancingModified()
-        => _ = InvokeAsync(async () =>
+    {
+        try
         {
-            await LoadFinancingAsync();
-            StateHasChanged();
-        });
+            _ = InvokeAsync(async () =>
+            {
+                await LoadFinancingAsync();
+                StateHasChanged();
+            });
+        }
+        catch (InvalidOperationException) { /* circuit gone */ }
+    }
 
     // only react to this agent's own acknowledgment signal
     private void OnAcknowledgmentModified(string agentId)
@@ -477,11 +496,15 @@
         {
             return;
         }
-        _ = InvokeAsync(async () =>
+        try
         {
-            await LoadAcknowledgmentsAsync();
-            StateHasChanged();
-        });
+            _ = InvokeAsync(async () =>
+            {
+                await LoadAcknowledgmentsAsync();
+                StateHasChanged();
+            });
+        }
+        catch (InvalidOperationException) { /* circuit gone */ }
     }
 
     public void Dispose()

@@ -398,8 +398,8 @@ public sealed class NooseiToolTests
             .Returns(Task.FromResult(Results(
                 new NOOSE_Website.Models.Common.SearchResultGroup("Faction", "Fraktionen",
                     [new NOOSE_Website.Models.Common.SearchHit("Faction", "f1", "Ballas", "", "NOOSE-F-2026-0001")]),
-                new NOOSE_Website.Models.Common.SearchResultGroup("Job", "Aufgaben",
-                    [new NOOSE_Website.Models.Common.SearchHit("Job", "j1", "Waffenlager prüfen", "", "NOOSE-A-2026-0007")]))));
+                new NOOSE_Website.Models.Common.SearchResultGroup("Comment", "Kommentare",
+                    [new NOOSE_Website.Models.Common.SearchHit("Comment", "c1", "Waffenlager prüfen", "", "")]))));
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
         var result = await tool.InvokeAsync(Args("""{"suchtext":"Waffen"}"""), NooseiToolContext.From(Leader()));
@@ -407,12 +407,13 @@ public sealed class NooseiToolTests
         // the faction can be opened, so it gets an id
         Assert.Contains("Fraktion | Ballas", result.Text);
         Assert.Contains("id=f1", result.Text);
-        // a job cannot: an id here would cost the model a round to discover that lies_akte rejects it
-        Assert.Contains("Aufgabe | Waffenlager prüfen", result.Text);
-        Assert.DoesNotContain("id=j1", result.Text);
+        // a comment cannot: it is read through its parent, and an id here would cost the model a round to
+        // discover that lies_akte rejects it
+        Assert.Contains("Kommentar | Waffenlager prüfen", result.Text);
+        Assert.DoesNotContain("id=c1", result.Text);
         Assert.Contains("nicht als Akte lesbar", result.Text);
         // and never the English CLR name
-        Assert.DoesNotContain("Job", result.Text);
+        Assert.DoesNotContain("Comment", result.Text);
     }
 
     [Fact]

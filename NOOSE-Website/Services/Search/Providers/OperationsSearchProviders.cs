@@ -225,10 +225,7 @@ public sealed class LawSearchProvider(IDbContextFactory<AppDbContext> dbFactory)
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var scope = query.Scope;
-        var q = scope.PartnerAgency is { } agency
-            ? db.Laws.OnlyPartnerVisible(db, agency, scope.MeId)
-            : db.Laws.AsQueryable();
+        var q = Visible(db, query);
         if (query.HasText)
         {
             var s = query.Text;
@@ -241,5 +238,23 @@ public sealed class LawSearchProvider(IDbContextFactory<AppDbContext> dbFactory)
         return rows
             .Select(g => new SearchHit(nameof(Law), g.Id, $"{g.Paragraph} {g.Title}", g.LawBook, g.Paragraph))
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> ResolveIdsAsync(
+        SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await Visible(db, query).Where(g => ids.Contains(g.Id)).Take(take)
+            .Select(g => new SearchHit(nameof(Law), g.Id, $"{g.Paragraph} {g.Title}", g.LawBook, g.Paragraph))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>The one gate, shared by recall and side-index resolution.</summary>
+    private static IQueryable<Law> Visible(AppDbContext db, SearchQuery query)
+    {
+        var scope = query.Scope;
+        return scope.PartnerAgency is { } agency
+            ? db.Laws.OnlyPartnerVisible(db, agency, scope.MeId)
+            : db.Laws.AsQueryable();
     }
 }

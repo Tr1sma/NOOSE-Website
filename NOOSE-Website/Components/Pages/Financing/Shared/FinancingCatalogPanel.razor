@@ -1,8 +1,10 @@
 @* The catalog of financeable positions: everyone reads it, leadership maintains it. *@
+@implements IAsyncDisposable
 @inject IFinancingCatalogService Catalog
 @inject IProfileSuggestionService Suggestions
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <MudStack Spacing="3">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -17,6 +19,7 @@
 
     @if (_editing is not null)
     {
+        <div @ref="_editorAnchor" style="scroll-margin-top:80px">
         <MudPaper Class="pa-4" Elevation="1">
             <MudForm @ref="_form">
                 <MudStack Spacing="3">
@@ -76,6 +79,7 @@
                 </MudStack>
             </MudForm>
         </MudPaper>
+        </div>
     }
 
     @if (_load)
@@ -154,6 +158,9 @@
     private MudForm _form = default!;
     private FinancingItemInput? _editing;
     private string? _editingId;
+    private IJSObjectReference? _module;
+    private ElementReference _editorAnchor;
+    private bool _scrollToEditor;
 
     private decimal PreviewSubsidy => _editing is null
         ? 0m
@@ -178,6 +185,39 @@
         _load = false;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Bump ?v= when app.js changes
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./app.js?v=3");
+            }
+            catch (JSDisconnectedException)
+            {
+                /* ignore */
+            }
+            return;
+        }
+        if (!_scrollToEditor || _editing is null)
+        {
+            return;
+        }
+        _scrollToEditor = false;
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("scrollToElement", _editorAnchor);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            /* ignore */
+        }
+    }
+
     private Task<IEnumerable<string>> SearchCategoriesAsync(string value, CancellationToken token)
         => Task.FromResult(string.IsNullOrWhiteSpace(value)
             ? _categories.AsEnumerable()
@@ -200,6 +240,8 @@
                 IsActive = item.IsActive,
                 Sorting = item.Sorting,
             };
+        // the editor sits above the list, so scroll back up to it
+        _scrollToEditor = true;
     }
 
     private void CancelEdit()
@@ -265,5 +307,18 @@
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception) { /* best effort */ }
     }
 }

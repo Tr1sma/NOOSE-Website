@@ -24,6 +24,14 @@ public static class InformantVisibility
         return handlerId is not null && me is not null && me == handlerId;
     }
 
+    /// <summary>May the viewer scope see the informant record, from a scope rather than a principal.</summary>
+    /// <remarks>Deliberately narrower than the principal overload: a scope cannot express read-only supervision, so
+    /// this arm leaves it out. Never a leak, only an omission — and none for the assistant, which
+    /// <see cref="Permission.RequireLlmUse" /> bars supervision from entirely.</remarks>
+    public static bool MaySeeRecord(ViewerScope scope, string? handlerId)
+        => !scope.IsPartner
+        && (scope.IsLeadership || (handlerId is { Length: > 0 } && handlerId == scope.MeId));
+
     /// <summary>May create/edit meetings + record fields.</summary>
     public static bool MayWrite(ClaimsPrincipal actor, string? handlerId)
     {

@@ -28,7 +28,9 @@ public sealed class AgentSearchProvider(IDbContextFactory<AppDbContext> dbFactor
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var mayRealName = query.Viewer.User.MayRealNameSee();
-        var q = db.Users.AsQueryable();
+        // the roster rule of /personal, named once: raw db.Users would hand out team leads (RP-invisible),
+        // blocked accounts and applicants — exactly what the page hides
+        var q = db.Users.OnlyWithPersonnelFile();
         if (query.HasText)
         {
             var s = query.Text;
@@ -54,11 +56,27 @@ public sealed class AgentSearchProvider(IDbContextFactory<AppDbContext> dbFactor
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var s = query.Text;
-        var rows = await db.Users.Where(u => u.Codename != null && u.Codename.Contains(s))
+        var rows = await db.Users.OnlyWithPersonnelFile()
+            .Where(u => u.Codename != null && u.Codename.Contains(s))
             .OrderBy(u => u.Codename).Take(max)
             .Select(u => new { u.Id, u.Codename, u.BadgeNumber }).ToListAsync(cancellationToken);
         return rows
             .Select(u => new QuickHit(nameof(Agent), u.Id, u.Codename ?? AgentNameDisplay.Unnamed, u.BadgeNumber ?? string.Empty))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> ResolveIdsAsync(
+        SearchQuery query, IReadOnlyCollection<string> ids, int take, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // the index only ever carries codenames, but the display still goes through the real-name gate
+        var mayRealName = query.Viewer.User.MayRealNameSee();
+        var rows = await db.Users.OnlyWithPersonnelFile().Where(u => ids.Contains(u.Id)).Take(take)
+            .Select(u => new { u.Id, u.Codename, u.RealName, u.BadgeNumber, u.Rank })
+            .ToListAsync(cancellationToken);
+        return rows.Select(u => new SearchHit(nameof(Agent), u.Id,
+                AgentNameDisplay.Pick(u.Codename, u.RealName, mayRealName),
+                RankDisplay.Name(u.Rank), u.BadgeNumber ?? string.Empty))
             .ToList();
     }
 }
@@ -84,7 +102,8 @@ public sealed class AgentNoteSearchProvider(IDbContextFactory<AppDbContext> dbFa
         var rows = await (
             from n in db.AgentNotes
             where n.Text.Contains(s) || (n.ArtFreetext != null && n.ArtFreetext.Contains(s))
-            join u in db.Users on n.AgentId equals u.Id
+            // same roster rule: a note on a team lead's file would name an account that is invisible RP-wide
+            join u in db.Users.OnlyWithPersonnelFile() on n.AgentId equals u.Id
             orderby n.EntryDate descending
             select new { n.Id, n.AgentId, n.Text, n.ArtFreetext, n.EntryDate, u.Codename, u.RealName })
             .Take(query.PerCategory)
@@ -163,7 +182,7 @@ public sealed class InformantMeetingSearchProvider(IDbContextFactory<AppDbContex
         var rows = await (
             from m in db.InformantMeetings
             where visible.Contains(m.InformantId)
-                && (m.Content.Contains(s) || (m.Location != null && m.Location.Contains(s)))
+                && ((m.Content != null && m.Content.Contains(s)) || (m.Location != null && m.Location.Contains(s)))
             join i in db.Informants on m.InformantId equals i.Id
             orderby m.MeetingDate descending
             select new { m.Id, m.InformantId, m.Content, m.MeetingDate, i.RealName, i.CaseNumber })

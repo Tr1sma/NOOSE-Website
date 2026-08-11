@@ -274,14 +274,15 @@ public sealed class NooseiCoverageToolTests
         watchlist.GetFollowedResolvedAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new List<FollowedRecord>
             {
-                new("Job", "j1", "Waffenlager prüfen", "/aufgaben/j1", new DateTime(2026, 7, 1), true),
+                new("PersonDoc", "d1", "Vernehmung Mustermann", "/personen/p1?tab=doks", new DateTime(2026, 7, 1), true),
             }));
 
         var result = await new MyRecordsTool(watchlist)
             .InvokeAsync(Args("{}"), NooseiToolContext.From(Junior()));
 
-        Assert.Contains("Aufgabe | Waffenlager prüfen", result.Text);
-        Assert.DoesNotContain("id=j1", result.Text);
+        // a dok is read through the person it sits in, so it never carries an id of its own
+        Assert.Contains("Personen-Dok | Vernehmung Mustermann", result.Text);
+        Assert.DoesNotContain("id=d1", result.Text);
     }
 
     [Fact]
@@ -345,11 +346,7 @@ public sealed class NooseiCoverageToolTests
             });
             db.SaveChanges();
         }
-        var tool = new FilterRecordsTool(
-            Substitute.For<IPersonService>(), Substitute.For<IFactionService>(),
-            Substitute.For<IPersonGroupService>(), Substitute.For<IPartyService>(),
-            Substitute.For<ICaseService>(), Substitute.For<IOperationService>(),
-            new LawService(ctx.Factory));
+        var tool = NooseiToolHost.Filter(laws: new LawService(ctx.Factory));
 
         var result = await tool.InvokeAsync(
             Args("""{"typ":"Gesetz"}"""), NooseiToolContext.From(Junior()));
@@ -364,18 +361,15 @@ public sealed class NooseiCoverageToolTests
     public async Task FilterRecords_NamesWhatItCanEnumerate_WhenAskedForSomethingElse()
     {
         using var ctx = new SqliteTestContext();
-        var tool = new FilterRecordsTool(
-            Substitute.For<IPersonService>(), Substitute.For<IFactionService>(),
-            Substitute.For<IPersonGroupService>(), Substitute.For<IPartyService>(),
-            Substitute.For<ICaseService>(), Substitute.For<IOperationService>(),
-            new LawService(ctx.Factory));
+        var tool = NooseiToolHost.Filter(laws: new LawService(ctx.Factory));
 
+        // an appointment is readable but has no plain list service; lies_kalender is what answers about it
         var result = await tool.InvokeAsync(
-            Args("""{"typ":"Taskforce"}"""), NooseiToolContext.From(Leader()));
+            Args("""{"typ":"Termin"}"""), NooseiToolContext.From(Leader()));
 
         Assert.True(result.IsError);
         Assert.Contains("Person", result.Text);
-        Assert.DoesNotContain("Taskforce", result.Text);
+        Assert.DoesNotContain("Termin", result.Text);
     }
 
     // ---- keywords and mention refs ----
@@ -410,9 +404,10 @@ public sealed class NooseiCoverageToolTests
         var search = Substitute.For<ISearchService>();
         var tool = new SearchRecordsTool(search, Substitute.For<ITagService>());
 
-        // a Bewerbung is named in results but has no search category, so narrowing to it would answer zero
+        // every catalog category is searchable now, so the case left is the one that matters most: a kind the
+        // model made up. Searching everything instead would answer a question nobody asked.
         var result = await tool.InvokeAsync(
-            Args("""{"suchtext":"x","typen":["Bewerbung"]}"""), NooseiToolContext.From(Leader()));
+            Args("""{"suchtext":"x","typen":["Hausmeister"]}"""), NooseiToolContext.From(Leader()));
 
         Assert.True(result.IsError);
         Assert.Contains("nicht durchsuchbar", result.Text);
@@ -430,9 +425,9 @@ public sealed class NooseiCoverageToolTests
                     [new SearchHit("Person", "p1", "Otto Offen", "", "NOOSE-P-2026-0001")]))));
 
         var result = await new SearchRecordsTool(search, Substitute.For<ITagService>()).InvokeAsync(
-            Args("""{"suchtext":"Otto","typen":["Person","Bewerbung"]}"""), NooseiToolContext.From(Leader()));
+            Args("""{"suchtext":"Otto","typen":["Person","Hausmeister"]}"""), NooseiToolContext.From(Leader()));
 
-        // without the note the model reads "one person, no applications" out of a search that never looked at them
+        // without the note the model reads "one person, no caretakers" out of a search that never looked at them
         Assert.Contains("Otto Offen", result.Text);
         Assert.Contains("nicht durchsuchbar und wurden weggelassen", result.Text);
     }

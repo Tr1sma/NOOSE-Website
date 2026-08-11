@@ -1,5 +1,9 @@
 # Etappe 7 — Seitenindex erweitern + Ctrl+K-Palette
 
+> **Status: umgesetzt.** Build grün, **5030 Tests grün**. Drei Abweichungen vom ursprünglich geschriebenen Plan,
+> jeweils begründet — siehe „Abweichungen" am Ende. **Nicht** verifiziert ist alles, was einen App-Start braucht:
+> der manuelle Durchlauf unten steht noch aus (MariaDB/XAMPP lief hier nicht).
+
 Letzte offene Etappe des Such-Umbaus (`~/.claude/plans/bitte-stelle-sicher-das-adaptive-deer.md`).
 **Keine Lücke, sondern Verbesserung:** die Suche ist vollständig und getestet; hier geht es um Trefferquote bei
 Tippfehlern und um die Bedienbarkeit der Befehlspalette.
@@ -50,29 +54,26 @@ Stamm-Zeilen. `SearchTokenizer.Stems(ContentHtml)` würde tausende Zeilen in die
 Deshalb schließt `SideIndexed` per Test `Heavy` aus — und deshalb kommen Dokumente, Besprechungen und Kommentare
 hier **nicht** dazu.
 
-### Die vier
+### Die drei
 
-| Typ | Phonetik-Feld(er) | Stamm-Felder | Warum |
+| Typ | Phonetik-Feld | Stamm-Felder | Warum |
 |---|---|---|---|
 | `Agent` | `Codename` | `Codename`, `BadgeNumber` | Personalakte und Palette wollen beide `Maier`↔`Meyer` |
 | `Law` | `Title` | `Paragraph`, `Title`, `LawBook` | Paragraphen werden falsch erinnert, nicht falsch geschrieben — aber der Titel schon |
 | `EvidenceItem` | `Name` | `Name`, `Category` | Asservat-Namen sind Freitext von Hand |
-| `Informant` | `RealName` | `CaseNumber` | siehe Entscheidungspunkt unten |
 
 **Klarname NICHT in die Stamm-Felder.** Bei `Agent` wandert der `RealName` weder in Phonetik noch in Stämme: die
 Index-Tabelle trägt kein Sichtbarkeits-Gate, und der Klarname ist führungsexklusiv. Nur `Codename`.
+Ein Test hält das fest (`The_projection_indexes_an_agents_codename_but_never_their_real_name`).
 
-### Entscheidungspunkt: `Informant.RealName` im Index
+### Informanten: bewusst gar nicht indiziert
 
 Der Index leakt **nicht** in die App — `SearchSideIndex` löst Kandidaten-Ids über
-`InformantVisibility.VisibleIdsAsync` auf, und was nicht auflöst, erzeugt keine Ausgabe. Aber der phonetische Code
-des Klarnamens einer V-Person läge dann in `Suche_PhonetikSchluessel`, einer Tabelle ohne Zugriffsschicht.
-Das ist bereits für `Person.Name` so. Trotzdem: **vor der Umsetzung entscheiden**, nicht stillschweigend tun.
-
-- **Option A (empfohlen):** Informant nur über `CaseNumber` indizieren, Klarname weglassen. Kostet die
-  Tippfehler-Toleranz genau da, wo sie am wenigsten gebraucht wird (den Klarnamen kennt, wer die Akte führt).
-- **Option B:** Klarname indizieren wie bei Personenakten. Konsistent, aber vergrößert den DB-Fußabdruck des
-  sensibelsten Namens im System.
+`InformantVisibility.VisibleIdsAsync` auf, und was nicht auflöst, erzeugt keine Ausgabe. Trotzdem: der einzige
+Informanten-Wert, der einen phonetischen Pass verdient, ist der Klarname der V-Person, und der hat in einer Tabelle
+ohne Zugriffsschicht nichts zu suchen. Das Aktenzeichen stattdessen zu indizieren bringt nichts — ein exaktes
+Aktenzeichen findet die LIKE-Suche längst. Also **kein** Projektions-Arm, mit Begründung im Code und einem Test
+(`The_projection_leaves_informants_out`), damit es niemand als Versehen „nachträgt".
 
 ### Nebenwirkung, die im Kommentar stehen muss
 
@@ -150,9 +151,10 @@ Palette und Ergebnisliste garantiert gleich beschriftet, und eine neue Kategorie
 
 ### B4. Was **nicht** angefasst wird
 
-- **`app.js?v=2` bleibt.** Es wird kein JS geändert; die `?v=`-Regel gilt für ES-Modul-Edits. Erst wenn die
-  Zeilen-Hervorhebung (`nooseHighlight`) nachkommt, muss die Zahl hoch — dann an **beiden** CLAUDE.md-Stellen **und**
-  in `CommandPalette.razor`.
+- **`app.js?v=`**: kein JS geändert, also kein Bump *nötig*. Beim Umsetzen kam heraus, dass
+  `CommandPalette.razor` auf `v=2` stand, `FinancingCatalogPanel.razor` aber längst auf `v=3` — zwei `?v=` auf
+  dasselbe Modul holen zwei Kopien. Das steht jetzt einheitlich auf `v=3`, und CLAUDE.md nennt die Regel
+  „**alle** Importstellen mitziehen" ausdrücklich.
 - **Das stille Degradieren auf statische Befehle** (`try`/`catch` + `LogDebug`) bleibt. Kein Snackbar: die Palette
   feuert beim Tippen, ein Fehler-Toast pro Tastendruck ist schlimmer als ein fehlender Vorschlag.
 - **`Shuffle`** bleibt. Ohne das Round-Robin füllen Personen alle acht Plätze, sobald irgendeine Person passt.
@@ -243,13 +245,98 @@ er ist der Teil, der still nichts tut, wenn `Version` vergessen wurde.
 
 | Datei | Änderung |
 |---|---|
-| `NOOSE-Website/Services/SearchIndexProjection.cs` | 4 Arme + `IndexedTypes` |
-| `NOOSE-Website/Services/Search/SearchCatalog.cs` | `SideIndexed` an 4 Zeilen |
-| `NOOSE-Website/Services/Search/Providers/PersonnelSearchProviders.cs` | `ResolveIdsAsync` für Agent + Informant |
-| `NOOSE-Website/Services/Search/Providers/OperationsSearchProviders.cs` | `ResolveIdsAsync` für Law |
+| `NOOSE-Website/Services/SearchIndexProjection.cs` | 3 Arme; `IndexedTypes` **gelöscht** |
+| `NOOSE-Website/Services/Search/SearchCatalog.cs` | `SideIndexed` an Agent, Law, EvidenceItem |
+| `NOOSE-Website/Services/Search/Providers/PersonnelSearchProviders.cs` | `ResolveIdsAsync` für Agent |
+| `NOOSE-Website/Services/Search/Providers/OperationsSearchProviders.cs` | `ResolveIdsAsync` + `Visible()` für Law |
 | `NOOSE-Website/Services/Search/Providers/LedgerSearchProviders.cs` | `ResolveIdsAsync` für EvidenceItem |
-| `NOOSE-Website/Infrastructure/Search/SearchIndexBackfillWorker.cs` | 4 Zeilen + `Version = 2` |
-| `NOOSE-Website/Components/Common/Shared/CommandPalette.razor` | Trichter, `PaletteKind`, Chips, `PaletteIcon` weg |
-| `NOOSE-Website.Tests/Services/SearchCatalogTests.cs` | 2 Drift-Tests |
-| `NOOSE-Website.Tests/Services/SearchCoverageTests.cs` | Backfill-Abdeckung |
-| `CLAUDE.md` | Seitenindex-Bullet: 8 → 12 Typen |
+| `NOOSE-Website/Infrastructure/Search/SearchIndexBackfillWorker.cs` | 3 Zeilen + `Version = 2` |
+| `NOOSE-Website/Components/Common/Shared/CommandPalette.razor` | Trichter, `PaletteKind`, Chips, `PaletteIcon` weg, `?v=3` |
+| `NOOSE-Website.Tests/Services/SearchIndexCoverageTests.cs` | **neu** — 6 Drift-Wächter |
+| `NOOSE-Website.Tests/Services/Integration/SearchServiceFuzzyTests.cs` | 6 funktionale Tests der neuen Typen |
+| `CLAUDE.md` | `?v=`-Regel: alle Importstellen mitziehen |
+
+---
+
+## Abweichungen vom geschriebenen Plan
+
+**1. Informanten sind gar nicht im Index — nicht „nur über das Aktenzeichen".**
+Option A war halbgar: Phonetik auf `NOOSE-VP-2026-0001` ist Rauschen, und ein exaktes Aktenzeichen findet die
+LIKE-Suche längst. Der einzige Wert läge im Klarnamen, und der gehört nicht in eine Tabelle ohne Zugriffsschicht.
+Also drei Typen statt vier, mit einem Kommentar an der Projektion, der das begründet, damit niemand es „nachträgt".
+
+**2. `SearchIndexProjection.IndexedTypes` ist gelöscht statt erweitert.**
+Beim Nachsehen hatte das Set **keinen einzigen Konsumenten** — der Interceptor liest ausschließlich `For()`.
+Eine Liste, die mit einem Switch synchron gehalten werden muss und von niemandem gelesen wird, ist dieselbe Falle,
+die den 12-vs-18-Checkbox-Bug erzeugt hat. Der Drift-Test liest stattdessen die `Build(nameof(X))`-Aufrufe aus dem
+Quelltext, also das tatsächliche Verhalten.
+
+**3. Sechs Wächter statt zwei, in eigener Datei.**
+`SearchIndexCoverageTests` prüft beide Richtungen (Katalog↔Projektion), die Backfill-Abdeckung, die Versionszahl
+und — für Seitenindex *und* Palette — dass der Provider die jeweilige Default-Interface-Methode wirklich
+überschreibt. Letzteres fehlte komplett: eine `Quick`-Kategorie ohne `QuickAsync`-Override erscheint nie in der
+Palette, und niemand merkt es, weil die Default-Implementierung eine leere Liste zurückgibt.
+
+**Nicht gemacht:** die Palette selbst bleibt ungetestet (kein bUnit im Projekt). Trichter und Chips hängen am
+manuellen Durchlauf.
+
+---
+
+## Beim Nachprüfen gefunden und behoben
+
+Zwei Fehler, die Build und Tests nicht gezeigt haben:
+
+**1. Der Personalakten-Provider umging `AgentSelection` (Leak).**
+`AgentSearchProvider` und `AgentNoteSearchProvider` griffen auf rohes `db.Users` zu. `/personal` filtert dagegen
+`Status != Applicant && Status != Blocked && !IsTeamLead` — die Suche hätte also **TeamLead-Konten** (laut CLAUDE.md
+RP-weit unsichtbar), **gesperrte Konten** und **Bewerber** ausgeliefert, inklusive eines Vermerks, dessen Titel den
+TeamLead benennt. Genau die Divergenz „Suche weiter als Seite", gegen die der ganze Umbau gebaut ist, und der in
+CLAUDE.md als wiederkehrend markierte `AgentSelection`-Fehler.
+Behoben über eine **dritte** benannte Regel `AgentSelection.OnlyWithPersonnelFile()` (+ In-Memory-Zwilling
+`HasPersonnelFile`), die jetzt **sowohl** `PersonnelList.razor` **als auch** die zwei Provider benutzen — nicht als
+Kopie im Provider. Sechs neue Tests nageln alle fünf Konto-Zustände fest.
+
+**2. Die Palette hatte eine reihenfolgeabhängige Verzerrung, die ich selbst eingebaut hatte.**
+Der Fuzzy-Pass lädt `FuzzyCandidates` (2000) Zeilen **pro Kategorie**. Bei 11 Palette-Kategorien sind das 22.000
+Zeilen pro Tastendruck, und das neue 300-ms-Budget bricht die sequenzielle Schleife dann mitten drin ab — immer an
+derselben Stelle. Person/Fraktion hätten ihre Tippfehler-Toleranz immer behalten, Personalakte/Dokument/Besprechung
+(später im Katalog) immer verloren. Die alte Implementierung lud dieselben 2000, hatte aber kein Budget und damit
+keine Verzerrung — die habe ich also erst erzeugt.
+Behoben über `SearchOptions.QuickFuzzyCandidates = 400`: der Pool schrumpft auf 4.400 Zeilen, das Budget beißt
+gar nicht mehr, und damit ist die Verzerrung weg statt nur seltener.
+
+**3. Die Suchseite hätte weder Facettenleiste noch Trefferzeilen gerendert.**
+`SearchFacetBar` und `SearchHitRow` liegen unter `Components/Pages/Search/Shared/`, also in einem Unter-Namespace,
+den `_Imports.razor` nicht mitbringt. Razor meldete das als **`warning RZ10012`** und behandelte beide als unbekannte
+HTML-Elemente — die Komponenten wären gar nicht instanziiert worden. Build grün, 5030 Tests grün, Seite kaputt.
+Behoben mit `@using NOOSE_Website.Components.Pages.Search.Shared` in `SearchPage.razor`.
+
+**Warum das so lange unentdeckt blieb — und die eigentliche Lehre:** ich habe die Build-Ausgabe die ganze Zeit auf
+`: error` gefiltert. Razor meldet eine nicht auflösbare Komponente aber nur als *Warnung*. Ein Clean-Build **ohne**
+Warnungsfilter hat zusätzlich vier Nullable-Warnungen in den neuen Providern gezeigt (nullable Spalte in einen
+`string`-Parameter, und drei EF-Prädikate, die nicht dem `(x != null && x.Contains(s))`-Muster der Codebase folgten).
+Alle behoben; die Warnungsbasis der neuen Dateien ist jetzt leer, damit die nächste echte Warnung auffällt.
+
+---
+
+## `SearchPageParityTests` — der Test, der die ersten zwei Fehler gefunden hätte
+
+Neu: `NOOSE-Website.Tests/Services/Integration/SearchPageParityTests.cs`, **26 Assertions** über 13 Kategorien
+× 2 Betrachter. Für jede Kategorie mit kanonischem Listendienst wird die Id-Menge des Suchproviders gegen die des
+Dienstes verglichen — mit **echten** Diensten, nicht mit Stubs, weil die Sichtbarkeit in ihnen wohnt.
+
+Abgedeckt: Person, Fraktion, Personengruppe, Partei, Operation, Vorgang, Taskforce, Dokument, Gesetz,
+Bibliotheks-Datei, Informant, Asservat, Personalakte.
+
+Der Wert liegt darin, dass der Test **keine Regel kennen muss**: er vergleicht zwei Implementierungen derselben
+Frage und schlägt fehl, wenn sie sich uneinig sind — egal welche Seite falsch ist. Eine zu weite Suche leakt, eine
+zu enge versteckt die Akte an der einen Stelle, an der ein Agent sie sucht.
+
+**Verifiziert, dass er fehlschlagen kann:** mit wieder eingebautem `db.Users`-Bug meldet er
+`Expected: ["a-active", "a-gone", "me"]` gegen `Actual: [..., "a-applicant", "a-blocked", ..., "a-tl"]`.
+Ein Paritätstest, der nicht rot werden kann, wäre wertlos.
+
+**Nicht abgedeckt:** Inhalts-Kinder (Kommentare, Quellen, Wiedervorlagen, Verknüpfungen, Zusatzfelder,
+Taskforce-Chat, Vermerke …) — sie laufen über den `SearchParentResolver` und haben kein Roster zum Vergleichen.
+Für die bleibt `SearchVisibilityTests` zuständig. Ebenso ohne Parität: Termine, Abmeldungen, Feedback, Anträge,
+Ankündigungen, Lageberichte, Bewerbungen, Vorlagen, Protokolle und das Persönliche.

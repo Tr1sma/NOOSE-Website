@@ -33,7 +33,7 @@ public sealed class RequestSearchProvider(IDbContextFactory<AppDbContext> dbFact
         if (query.HasText)
         {
             var s = query.Text;
-            q = q.Where(a => a.Justification.Contains(s)
+            q = q.Where(a => (a.Justification != null && a.Justification.Contains(s))
                 || (a.TargetDesignation != null && a.TargetDesignation.Contains(s))
                 || (a.DecisionNote != null && a.DecisionNote.Contains(s)));
         }
@@ -58,7 +58,7 @@ public sealed class RequestSearchProvider(IDbContextFactory<AppDbContext> dbFact
                 continue; // the request names a record the viewer may not see
             }
             hits.Add(new SearchHit(nameof(Request), a.Id,
-                $"{RequestTypeDisplay.Name(a.Type)} · {target}", a.Justification, string.Empty)
+                $"{RequestTypeDisplay.Name(a.Type)} · {target}", a.Justification ?? string.Empty, string.Empty)
             {
                 Timestamp = a.CreatedAt,
                 Href = "/admin/freigaben",

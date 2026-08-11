@@ -1,6 +1,31 @@
 using System.Security.Claims;
 using System.Text.Json;
+using NOOSE_Website.Data.Entities;
+using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Absences;
+using NOOSE_Website.Data.Entities.Activities;
+using NOOSE_Website.Data.Entities.Announcements;
+using NOOSE_Website.Data.Entities.Appointments;
+using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.CounterIntel;
+using NOOSE_Website.Data.Entities.Evidence;
+using NOOSE_Website.Data.Entities.Factions;
+using NOOSE_Website.Data.Entities.Financing;
+using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Informants;
+using NOOSE_Website.Data.Entities.Jobs;
+using NOOSE_Website.Data.Entities.Kasse;
+using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.Operations;
+using NOOSE_Website.Data.Entities.Parties;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Recruiting;
+using NOOSE_Website.Data.Entities.Requests;
+using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Llm;
+using NOOSE_Website.Services.Search;
 
 namespace NOOSE_Website.Services.Llm.Tools;
 
@@ -39,6 +64,10 @@ public static class NooseiLimits
 {
     public const int MaxToolResultChars = 6_000;
     public const int MaxCompactRecordChars = 2_500;
+
+    /// <summary>Budget of the content tools, which exist precisely to deliver what the record budget cuts off.</summary>
+    public const int MaxContentResultChars = 8_000;
+
     public const int MaxRowsPerTool = 40;
     public const int MaxSnippetChars = 160;
 
@@ -132,53 +161,74 @@ public sealed record NooseiRecordType(string German, string Clr, string Plural, 
 
 /// <summary>Maps the German record type names the model sees to the CLR names the services expect, and decides
 /// which tool accepts which type.</summary>
+/// <remarks>
+/// German name, plural and the searchable set are not decided here — they come from <see cref="SearchCatalog" />,
+/// which already carries a row per category. Two label tables over the same categories drift, and a drifted label
+/// reaches the model as a record kind that does not exist. The searchable set is likewise the catalog's
+/// <see cref="SearchTraits.Assistant" /> flag rather than a copy of it: derived, the two cannot disagree, which is
+/// stronger than the drift test that used to compare them.
+/// </remarks>
 public static class NooseiRecordTypes
 {
-    /// <summary>Order is load-bearing: it decides the order inside every schema enum, and the tool block is the
-    /// cached prompt prefix. Append, never reorder.</summary>
-    private static readonly NooseiRecordType[] All =
-    [
-        // record kinds proper: everything a tool may open
-        new("Person", "Person", "Personen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Fraktion", "Faction", "Fraktionen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Personengruppe", "PersonGroup", "Personengruppen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Partei", "Party", "Parteien", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Operation", "Operation", "Operationen", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Vorgang", "Case", "Vorgänge", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
-        // no plain list service: membership decides who sees a taskforce, release who sees a document
-        new("Taskforce", "Taskforce", "Taskforces", NooseiUse.Read | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Dokument", "Document", "Dokumente", NooseiUse.Read | NooseiUse.Search | NooseiUse.Chronicle),
-        new("Gesetz", "Law", "Gesetze", NooseiUse.Read | NooseiUse.List | NooseiUse.Search | NooseiUse.Chronicle),
+    /// <summary>What a tool may do with a type beyond searching it.</summary>
+    /// <remarks>Only these three flags live here, because each is a promise about a service this file cannot see:
+    /// <see cref="NooseiUse.Read" /> needs a branch in <see cref="DossierContextBuilder" /> and an arm in
+    /// <see cref="Visibility.IsRecordVisibleAsync" />, <see cref="NooseiUse.List" /> a branch in the filter tool,
+    /// <see cref="NooseiUse.Chronicle" /> collection by the chronicle. A drift test guards each.</remarks>
+    private static readonly Dictionary<string, NooseiUse> Uses = new(StringComparer.Ordinal)
+    {
+        [nameof(Person)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Faction)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(PersonGroup)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Party)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Operation)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Case)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Law)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Taskforce)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Document)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
 
-        // nameable and filterable, but no dossier: reading one would have to go through its own visibility helper
-        new("Aufgabe", "Job", "Aufgaben", NooseiUse.Search | NooseiUse.Chronicle),
-        new("Aktivität", "AgentActivity", "Aktivitäten", NooseiUse.Search),
-        new("Personen-Dok", "PersonDoc", "Doks", NooseiUse.Search),
+        // duty, personnel, ledger and administration: openable through DossierContextBuilder.Operations.cs
+        [nameof(Job)] = NooseiUse.Read | NooseiUse.List | NooseiUse.Chronicle,
+        [nameof(Meeting)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(Bewerbung)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(Informant)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(EvidenceItem)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(FinancingRequest)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(Announcement)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(Absence)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(LibraryFile)] = NooseiUse.Read | NooseiUse.List,
 
-        // searchable but not openable: the global search emits these categories, so the model may narrow to them.
-        // It could not before, although the hits arrived anyway — narrowing simply answered zero.
-        new("Asservat", "EvidenceItem", "Asservate", NooseiUse.Search),
-        new("Asservat-Eintrag", "EvidenceEntry", "Asservat-Einträge", NooseiUse.Search),
-        new("Kassenbuchung", "KassenBuchung", "Kassenbuchungen", NooseiUse.Search),
-        new("Finanzierungsantrag", "FinancingRequest", "Finanzierungsanträge", NooseiUse.Search),
-        new("Entführung", "AgentAbduction", "Entführungen", NooseiUse.Search),
-        new("Quelle", "Source", "Quellen", NooseiUse.Search),
-        new("Kommentar", "Comment", "Kommentare", NooseiUse.Search),
+        // readable but not enumerable: an appointment has no plain list service, and lies_kalender already
+        // answers what is coming up. The rest are single records nobody asks for by attribute.
+        [nameof(Appointment)] = NooseiUse.Read,
+        [nameof(Agent)] = NooseiUse.Read,
+        [nameof(EvidenceEntry)] = NooseiUse.Read,
+        [nameof(KassenBuchung)] = NooseiUse.Read,
+        [nameof(AgentAbduction)] = NooseiUse.Read,
+        [nameof(SituationReport)] = NooseiUse.Read,
+        [nameof(AgentActivity)] = NooseiUse.Read,
+        [nameof(Request)] = NooseiUse.Read,
+        [nameof(TrainingModule)] = NooseiUse.Read,
+        [nameof(CounterIntelRule)] = NooseiUse.Read,
+        [nameof(Data.Entities.Feedback.Feedback)] = NooseiUse.Read,
+    };
 
-        new("Termin", "Appointment", "Termine", NooseiUse.Search),
-        new("Besprechung", "Meeting", "Besprechungen", NooseiUse.Search),
-        new("Observation", "Observation", "Observationen", NooseiUse.Search),
-
-        // label only. The chronicle and the graph emit these; without a German name the model reads an English
-        // CLR name, takes it for a record kind and spends a round asking lies_akte for a rejected id
-        new("Bewerbung", "Bewerbung", "Bewerbungen"),
-    ];
+    /// <summary>Every category, in catalog order, with the capabilities decided above.</summary>
+    /// <remarks>Order is load-bearing: it decides the order inside every schema enum, and the tool block is the
+    /// cached prompt prefix. It is the catalog's order, so appending a category there appends it here too.</remarks>
+    private static readonly NooseiRecordType[] All = SearchCatalog.Categories
+        .Select(c => new NooseiRecordType(c.German, c.Clr, c.Plural,
+            Uses.GetValueOrDefault(c.Clr) | (c.Has(SearchTraits.Assistant) ? NooseiUse.Search : NooseiUse.None)))
+        .ToArray();
 
     private static readonly Dictionary<string, NooseiRecordType> ByGerman =
         All.ToDictionary(t => t.German, StringComparer.OrdinalIgnoreCase);
 
     private static readonly Dictionary<string, NooseiRecordType> ByClr =
         All.ToDictionary(t => t.Clr, StringComparer.Ordinal);
+
+    /// <summary>The types a capability was configured for, so a test can catch a key naming no category at all.</summary>
+    public static IReadOnlyCollection<string> ConfiguredClrs => Uses.Keys;
 
     /// <summary>The enum values offered where a type must be openable as a record.</summary>
     public static readonly string EnumJson = Json(NooseiUse.Read);

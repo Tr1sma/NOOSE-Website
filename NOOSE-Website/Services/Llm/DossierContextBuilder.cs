@@ -11,6 +11,7 @@ using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Search;
 
 namespace NOOSE_Website.Services;
 
@@ -18,7 +19,10 @@ namespace NOOSE_Website.Services;
 public readonly record struct DossierContext(string Title, string Text, bool IsClassified);
 
 /// <summary>Builds a comprehensive German plain-text dossier for a record, for AI summarisation.</summary>
-public static class DossierContextBuilder
+/// <remarks>Split across two files: the record kinds proper live here, everything the agency runs on — duty,
+/// personnel, ledger, recruiting — in <c>DossierContextBuilder.Operations.cs</c>. The shared helpers at the bottom
+/// of this file serve both.</remarks>
+public static partial class DossierContextBuilder
 {
     /// <summary>Dispatches by CLR type name; returns null for unknown types or missing ids.</summary>
     /// <param name="scope">Whose eyes the dossier is assembled for. Null uses <see cref="DossierScope.ForRecord"/>,
@@ -36,7 +40,8 @@ public static class DossierContextBuilder
             nameof(Taskforce) => await BuildTaskforceAsync(db, entityId, scope, cancellationToken),
             nameof(Document) => await BuildDocumentAsync(db, entityId, scope, cancellationToken),
             nameof(Law) => await BuildLawAsync(db, entityId, scope, cancellationToken),
-            _ => null,
+            // everything the agency runs on, in DossierContextBuilder.Operations.cs
+            _ => await BuildOperationsAsync(db, entityType, entityId, scope, cancellationToken),
         };
 
     // ---- per-type builders ----
@@ -900,20 +905,9 @@ public static class DossierContextBuilder
     static string Codename(Dictionary<string, string> map, string? agentId)
         => agentId is not null && map.TryGetValue(agentId, out var cn) ? cn : "(unbekannter Agent)";
 
-    // German display name for a record type, used when a linked record can no longer be resolved
-    static string GermanType(string type) => type switch
-    {
-        nameof(Person) => "Person",
-        nameof(Faction) => "Fraktion",
-        nameof(PersonGroup) => "Personengruppe",
-        nameof(Party) => "Partei",
-        nameof(Operation) => "Operation",
-        nameof(Case) => "Vorgang",
-        nameof(Taskforce) => "Taskforce",
-        nameof(Document) => "Dokument",
-        nameof(Law) => "Gesetz",
-        _ => "Eintrag",
-    };
+    // German display name for a record type, used when a linked record can no longer be resolved. The catalog
+    // names all of them; a nine-arm copy here answered "Eintrag" for every kind a link may also point at.
+    static string GermanType(string type) => SearchCatalog.German(type);
 
     static async Task<(List<T> Items, int Total)> TakeAsync<T>(IQueryable<T> query, CancellationToken ct)
     {

@@ -184,9 +184,10 @@ else
         var user = (await AuthStateTask).User;
         _mayRealName = user.MayRealNameSee();
         _isLeadership = user.IsLeadership();
-        // TeamLeads invisible in RP; blocked accounts hidden too
+        // TeamLeads invisible in RP; blocked accounts hidden too. Named in AgentSelection so the global
+        // search over personnel files answers the same, instead of being wider than this page.
         _agents = (await AgentService.GetAllAsync())
-            .Where(a => !a.IsTeamLead && a.Status != AgentStatus.Blocked)
+            .Where(AgentSelection.HasPersonnelFile)
             .ToList();
         _load = false;
     }

@@ -1,4 +1,7 @@
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Cases;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Jobs;
@@ -19,13 +22,12 @@ public readonly record struct SearchIndexRow(
 /// Kept in one place instead of a marker interface so entity classes stay clean and EF-agnostic.</summary>
 public static class SearchIndexProjection
 {
-    public static readonly IReadOnlySet<Type> IndexedTypes = new HashSet<Type>
-    {
-        typeof(Person), typeof(PersonAlias), typeof(Faction), typeof(PersonGroup),
-        typeof(Party), typeof(Operation), typeof(Taskforce), typeof(Case), typeof(Job),
-    };
-
     /// <summary>Index contribution for an entity, or null when the type is not search-indexed.</summary>
+    /// <remarks>
+    /// Called for every tracked entry of every <c>SaveChangesAsync</c> in the app, so what goes in here is names
+    /// and identifiers only — never a longtext body. Stemming a document would write thousands of rows inside the
+    /// user's transaction, which is why <c>SideIndexed</c> and <c>Heavy</c> are mutually exclusive in the catalog.
+    /// </remarks>
     public static SearchIndexRow? For(object entity) => entity switch
     {
         Person p => Build(nameof(Person), p.Id, p.Id,
@@ -48,6 +50,19 @@ public static class SearchIndexProjection
             new[] { c.Title }, new[] { c.Title, c.Type, c.Description, c.Summary, c.ClosingNote, c.CaseNumber }),
         Job j => Build(nameof(Job), j.Id, j.Id,
             new[] { j.Title }, new[] { j.Title, j.Description, j.CaseNumber }),
+        // codename only: the real name is leadership-exclusive and this table carries no visibility gate.
+        // Note the cost — Identity writes the user row on every login, so this re-tokenises inside that transaction.
+        // It is two short fields; do not grow it.
+        Agent a => Build(nameof(Agent), a.Id, a.Id,
+            new[] { a.Codename }, new[] { a.Codename, a.BadgeNumber }),
+        // the paragraph is misremembered, not misspelled — the title is what needs the phonetic pass
+        Law g => Build(nameof(Law), g.Id, g.Id,
+            new[] { g.Title }, new[] { g.Paragraph, g.Title, g.LawBook }),
+        EvidenceItem i => Build(nameof(EvidenceItem), i.Id, i.Id,
+            new[] { i.Name }, new[] { i.Name, i.Category }),
+        // Informant is deliberately absent: the only field worth a phonetic pass is the V-person's real name, and
+        // this table has no gate. Indexing the case number instead buys nothing — an exact case number is already
+        // found by the LIKE recall.
         _ => null,
     };
 

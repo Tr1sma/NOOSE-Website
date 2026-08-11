@@ -165,6 +165,50 @@ public class SearchVisibilityTests
         Assert.DoesNotContain("Zitrone vermerkt", AllText(plain));
     }
 
+    [Theory]
+    [InlineData(true, AgentStatus.Active, false)]     // team lead: read-only supervision, invisible RP-wide
+    [InlineData(false, AgentStatus.Blocked, false)]   // blocked account: hidden on /personal too
+    [InlineData(false, AgentStatus.Applicant, false)] // an applicant is not an agent; recruiting owns them
+    [InlineData(false, AgentStatus.Active, true)]
+    [InlineData(false, AgentStatus.Terminated, true)] // a terminated agent keeps their file
+    public async Task The_personnel_search_offers_exactly_the_accounts_the_roster_page_shows(
+        bool teamLead, AgentStatus status, bool expected)
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("a1", status: status, configure: a =>
+            {
+                a.Codename = "Zitrone";
+                a.IsTeamLead = teamLead;
+            }));
+            await db.SaveChangesAsync();
+        }
+
+        var results = await SearchTestHost.NewService(ctx).SearchAsync(Text("Zitrone"), Leadership());
+
+        // the search must not be wider than /personal: raw db.Users would hand out all three hidden cases
+        Assert.Equal(expected, AllText(results).Any(t => t.Contains("Zitrone", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task A_note_on_a_team_leads_file_is_not_findable_either()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("tl", configure: a => { a.Codename = "Aufsicht"; a.IsTeamLead = true; }));
+            db.AgentNotes.Add(new AgentNote { Id = "n1", AgentId = "tl", Text = "<p>Zitrone vermerkt</p>", EntryDate = Now });
+            await db.SaveChangesAsync();
+        }
+
+        var results = await SearchTestHost.NewService(ctx).SearchAsync(Text("Zitrone"), Leadership());
+
+        // the note would name the team lead in its title, which is the thing that must stay invisible
+        Assert.DoesNotContain(AllText(results), t => t.Contains("Aufsicht", StringComparison.Ordinal));
+        Assert.DoesNotContain(AllText(results), t => t.Contains("Zitrone vermerkt", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task The_read_only_supervision_never_sees_a_real_name()
     {
