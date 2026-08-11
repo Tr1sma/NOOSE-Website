@@ -101,7 +101,6 @@
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
-    [CascadingParameter] private RendererInfo RendererInfo { get; set; } = default!;
     [Inject] private IAuthorizationService Authorization { get; set; } = default!;
     [Inject] private IAgentManagementService AgentService { get; set; } = default!;
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
