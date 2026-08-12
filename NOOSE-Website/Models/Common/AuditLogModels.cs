@@ -37,8 +37,8 @@ public sealed record AccessLogPage(IReadOnlyList<AuditAccessRow> Rows, int Total
     public bool Capped => TotalCount > Rows.Count;
 }
 
-/// <summary>Agent option for the audit filter dropdown.</summary>
-public sealed record AuditAgentOption(string Id, string Codename);
+/// <summary>Agent option for the audit filter dropdown; Marker flags team leads and partner agencies.</summary>
+public sealed record AuditAgentOption(string Id, string Codename, string? Marker = null);
 
 /// <summary>Dropdown source values for the audit viewer filters.</summary>
 public sealed record AuditFilterOptions(

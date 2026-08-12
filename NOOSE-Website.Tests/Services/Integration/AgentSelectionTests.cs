@@ -6,27 +6,27 @@ namespace NOOSE_Website.Tests.Services.Integration;
 
 /// <summary>Guard tests for <see cref="AgentSelection"/> over in-memory SQLite.</summary>
 /// <remarks>
-/// One fixed matrix, both predicates asserted by exact membership. Every agent option list in the app
-/// routes through here, so a silent widening of either rule has to fail loudly in this file.
+/// One fixed matrix, every predicate asserted by exact membership. Every agent option list in the app
+/// routes through here, so a silent widening of any rule has to fail loudly in this file.
 /// </remarks>
 public sealed class AgentSelectionTests
 {
-    /// <summary>Every account shape the roster can hold, with the expected verdict of both predicates.</summary>
-    private static readonly (string Id, AgentStatus Status, Action<Agent>? Configure, bool Selectable, bool Listable)[] Matrix =
+    /// <summary>Every account shape the roster can hold, with the expected verdict of each predicate.</summary>
+    private static readonly (string Id, AgentStatus Status, Action<Agent>? Configure, bool Selectable, bool Listable, bool AuditFilterable)[] Matrix =
     [
-        ("active", AgentStatus.Active, null, true, true),
-        // read-only supervision is RP-wide invisible, so it shows up in no list at all
-        ("teamlead", AgentStatus.Active, a => a.IsTeamLead = true, false, false),
+        ("active", AgentStatus.Active, null, true, true, true),
+        // read-only supervision is RP-wide invisible — except in the audit viewer, on purpose
+        ("teamlead", AgentStatus.Active, a => a.IsTeamLead = true, false, false, true),
         // not even with the admin flag on top: the marker itself hides the account
-        ("teamlead-admin", AgentStatus.Active, a => { a.IsTeamLead = true; a.IsAdmin = true; }, false, false),
-        ("partner", AgentStatus.Active, a => a.PartnerAgency = PartnerAgency.LSPD, false, false),
-        ("partner-teamlead", AgentStatus.Active, a => { a.PartnerAgency = PartnerAgency.DoJ; a.IsTeamLead = true; }, false, false),
+        ("teamlead-admin", AgentStatus.Active, a => { a.IsTeamLead = true; a.IsAdmin = true; }, false, false, true),
+        ("partner", AgentStatus.Active, a => a.PartnerAgency = PartnerAgency.LSPD, false, false, true),
+        ("partner-teamlead", AgentStatus.Active, a => { a.PartnerAgency = PartnerAgency.DoJ; a.IsTeamLead = true; }, false, false, true),
         // blank codename = never released, so there is no agent to name
-        ("pending-blank", AgentStatus.Pending, a => a.Codename = string.Empty, false, false),
-        ("pending-named", AgentStatus.Pending, null, false, true),
-        ("blocked", AgentStatus.Blocked, null, false, true),
-        ("terminated", AgentStatus.Terminated, null, false, true),
-        ("applicant", AgentStatus.Applicant, a => a.Codename = string.Empty, false, false),
+        ("pending-blank", AgentStatus.Pending, a => a.Codename = string.Empty, false, false, false),
+        ("pending-named", AgentStatus.Pending, null, false, true, true),
+        ("blocked", AgentStatus.Blocked, null, false, true, true),
+        ("terminated", AgentStatus.Terminated, null, false, true, true),
+        ("applicant", AgentStatus.Applicant, a => a.Codename = string.Empty, false, false, false),
     ];
 
     private static async Task<SqliteTestContext> SeededAsync()
@@ -41,7 +41,7 @@ public sealed class AgentSelectionTests
         return ctx;
     }
 
-    private static string[] Expected(Func<(string Id, AgentStatus Status, Action<Agent>? Configure, bool Selectable, bool Listable), bool> pick)
+    private static string[] Expected(Func<(string Id, AgentStatus Status, Action<Agent>? Configure, bool Selectable, bool Listable, bool AuditFilterable), bool> pick)
         => Matrix.Where(pick).Select(r => r.Id).OrderBy(id => id).ToArray();
 
     [Fact]
@@ -64,6 +64,33 @@ public sealed class AgentSelectionTests
         var ids = await db.Users.OnlyListable().OrderBy(u => u.Id).Select(u => u.Id).ToListAsync();
 
         Assert.Equal(Expected(r => r.Listable), ids);
+    }
+
+    [Fact]
+    public async Task OnlyAuditFilterable_ReturnsExactlyTheExpectedAgents()
+    {
+        using var ctx = await SeededAsync();
+        await using var db = ctx.NewContext();
+
+        var ids = await db.Users.OnlyAuditFilterable().OrderBy(u => u.Id).Select(u => u.Id).ToListAsync();
+
+        Assert.Equal(Expected(r => r.AuditFilterable), ids);
+    }
+
+    [Fact]
+    public async Task OnlyAuditFilterable_ListsTeamLeadsAndPartnersOnPurpose()
+    {
+        using var ctx = await SeededAsync();
+        await using var db = ctx.NewContext();
+
+        var ids = await db.Users.OnlyAuditFilterable().Select(u => u.Id).ToListAsync();
+
+        // the audit viewer exists to inspect exactly these accounts' log rows
+        Assert.Contains("teamlead", ids);
+        Assert.Contains("partner", ids);
+        Assert.Contains("partner-teamlead", ids);
+        Assert.DoesNotContain("pending-blank", ids);
+        Assert.DoesNotContain("applicant", ids);
     }
 
     [Fact]

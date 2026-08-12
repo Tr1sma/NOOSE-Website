@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services;
 
@@ -88,8 +89,9 @@ public class AuditLogQueryService(IDbContextFactory<AppDbContext> dbFactory) : I
         Permission.RequireClassifiedRead(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
 
-        var agents = (await AgentDirectory.AllAsync(db, cancellationToken))
-            .Select(a => new AuditAgentOption(a.Id, a.Codename))
+        // team leads and partners listed on purpose: their rows are what the counter-intel tabs filter
+        var agents = (await AgentDirectory.AllForAuditAsync(db, cancellationToken))
+            .Select(a => new AuditAgentOption(a.Id, a.Codename, Marker(a.IsTeamLead, a.Agency)))
             .ToList();
 
         // union of types that actually appear in either log
@@ -99,4 +101,13 @@ public class AuditLogQueryService(IDbContextFactory<AppDbContext> dbFactory) : I
 
         return new AuditFilterOptions(agents, types);
     }
+
+    /// <summary>Dropdown suffix flagging team leads and partner agencies; null for in-house staff.</summary>
+    private static string? Marker(bool isTeamLead, PartnerAgency? agency) => (isTeamLead, agency) switch
+    {
+        (true, not null) => $"Teamleitung · {PartnerAgencyDisplay.Name(agency)}",
+        (true, null) => "Teamleitung",
+        (false, not null) => PartnerAgencyDisplay.Name(agency),
+        _ => null,
+    };
 }

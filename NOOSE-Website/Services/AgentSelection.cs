@@ -6,9 +6,10 @@ namespace NOOSE_Website.Services;
 
 /// <summary>Central rule for which agents an option list may contain.</summary>
 /// <remarks>
-/// Three predicates on purpose: pickers need current staff, log filters need everyone who ever acted, and the
-/// personnel area needs everyone who has a file. Team leads are read-only supervision and RP-wide invisible, so
-/// they appear in no list at all — not even with the admin flag on top. Partners are external and stay selectable
+/// Four predicates on purpose: pickers need current staff, log filters need everyone who ever acted, the
+/// audit viewer additionally needs team leads and partners, and the personnel area needs everyone who has
+/// a file. Team leads are read-only supervision and RP-wide invisible, so outside the audit viewer they
+/// appear in no list at all — not even with the admin flag on top. Partners are external and stay selectable
 /// only where a share is being granted: PartnerShareDialog, the Admin partner surfaces and the PersonnelList
 /// partner tab. MentionService is a deliberate exception and keeps its own predicate. Callers own ordering.
 /// </remarks>
@@ -22,6 +23,9 @@ public static class AgentSelection
 
     private static readonly Expression<Func<Agent, bool>> ListableRule =
         a => !string.IsNullOrEmpty(a.Codename) && !a.IsTeamLead && a.PartnerAgency == null;
+
+    private static readonly Expression<Func<Agent, bool>> AuditFilterableRule =
+        a => !string.IsNullOrEmpty(a.Codename);
 
     private static readonly Expression<Func<Agent, bool>> PersonnelFileRule =
         a => a.Status != AgentStatus.Applicant && a.Status != AgentStatus.Blocked && !a.IsTeamLead;
@@ -37,6 +41,13 @@ public static class AgentSelection
     /// for. A blank codename means never released, so there is no agent to name.
     /// </remarks>
     public static IQueryable<Agent> OnlyListable(this IQueryable<Agent> agents) => agents.Where(ListableRule);
+
+    /// <summary>Agents the audit viewer's agent filter may offer: everyone who ever acted.</summary>
+    /// <remarks>
+    /// Deliberately wider than <see cref="OnlyListable"/>: team leads and partners stay listed so the
+    /// counter-intelligence tabs can filter their log rows. Audit-viewer use only — nowhere else.
+    /// </remarks>
+    public static IQueryable<Agent> OnlyAuditFilterable(this IQueryable<Agent> agents) => agents.Where(AuditFilterableRule);
 
     /// <summary>Agents that have a personnel file: the roster of <c>/personal</c> and the search over it.</summary>
     /// <remarks>

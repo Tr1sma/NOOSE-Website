@@ -7,7 +7,7 @@
                        Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense">
                 @foreach (var a in Options.Agents)
                 {
-                    <MudSelectItem T="string" Value="@a.Id">@(string.IsNullOrWhiteSpace(a.Codename) ? "(unbenannt)" : a.Codename)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@a.Id">@(string.IsNullOrWhiteSpace(a.Codename) ? "(unbenannt)" : a.Codename)@(string.IsNullOrEmpty(a.Marker) ? "" : $" · {a.Marker}")</MudSelectItem>
                 }
             </MudSelect>
         </MudItem>

@@ -265,6 +265,35 @@ public sealed class AuditLogQueryServiceTests
             () => NewService(ctx).QueryAccessAsync(new AuditLogFilter(), NonLeader()));
     }
 
+    [Fact]
+    public async Task BothQueries_FilterByTeamLeadAndPartnerIds()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Users.Add(Seed.Agent("supervisor", configure: a => a.IsTeamLead = true));
+            db.Users.Add(Seed.Agent("extern", configure: a => a.PartnerAgency = PartnerAgency.LSPD));
+            db.AuditLogs.AddRange(
+                Change(T1, agentId: "supervisor"),
+                Change(T2, agentId: "extern"),
+                Change(T3, agentId: "internal"));
+            db.AccessLogs.AddRange(
+                Access(T1, agentId: "supervisor"),
+                Access(T2, agentId: "extern"),
+                Access(T3, agentId: "internal"));
+            db.SaveChanges();
+        }
+
+        // the option list now offers these accounts, so their ids must actually hit rows
+        foreach (var id in new[] { "supervisor", "extern" })
+        {
+            var changes = await NewService(ctx).QueryChangesAsync(new AuditLogFilter { AgentId = id }, Leader());
+            var accesses = await NewService(ctx).QueryAccessAsync(new AuditLogFilter { AgentId = id }, Leader());
+            Assert.Single(changes.Rows);
+            Assert.Single(accesses.Rows);
+        }
+    }
+
     // ---- GetFilterOptionsAsync ---------------------------------------------
 
     [Fact]
@@ -289,7 +318,7 @@ public sealed class AuditLogQueryServiceTests
     }
 
     [Fact]
-    public async Task GetFilterOptionsAsync_SkipsCodenamelessAccountsAndEveryTeamLead()
+    public async Task GetFilterOptionsAsync_SkipsCodenamelessAccounts_ButListsTeamLeadsWithMarker()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -305,7 +334,7 @@ public sealed class AuditLogQueryServiceTests
                 a.Codename = "Aufsicht";
                 a.IsTeamLead = true;
             }));
-            // not even with the admin flag on top
+            // supervision stays listed even with the admin flag on top
             db.Users.Add(Seed.Agent("chief", configure: a =>
             {
                 a.Codename = "Chef";
@@ -317,11 +346,14 @@ public sealed class AuditLogQueryServiceTests
 
         var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
 
-        Assert.Equal(new[] { "Alpha", "Zulu" }, result.Agents.Select(a => a.Codename).ToArray());
+        Assert.Equal(new[] { "Alpha", "Aufsicht", "Chef", "Zulu" }, result.Agents.Select(a => a.Codename).ToArray());
+        Assert.Equal("Teamleitung", result.Agents.Single(a => a.Codename == "Aufsicht").Marker);
+        Assert.Equal("Teamleitung", result.Agents.Single(a => a.Codename == "Chef").Marker);
+        Assert.Null(result.Agents.Single(a => a.Codename == "Alpha").Marker);
     }
 
     [Fact]
-    public async Task GetFilterOptionsAsync_ExcludesPartnerAccounts()
+    public async Task GetFilterOptionsAsync_ListsPartnerAccountsWithAgencyMarker()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -332,12 +364,21 @@ public sealed class AuditLogQueryServiceTests
                 a.Codename = "Extern";
                 a.PartnerAgency = PartnerAgency.LSPD;
             }));
+            db.Users.Add(Seed.Agent("p2", configure: a =>
+            {
+                a.Codename = "Beides";
+                a.PartnerAgency = PartnerAgency.DoJ;
+                a.IsTeamLead = true;
+            }));
             db.SaveChanges();
         }
 
         var result = await NewService(ctx).GetFilterOptionsAsync(Leader());
 
-        Assert.Equal("Intern", Assert.Single(result.Agents).Codename);
+        Assert.Equal(new[] { "Beides", "Extern", "Intern" }, result.Agents.Select(a => a.Codename).ToArray());
+        Assert.Equal("LSPD", result.Agents.Single(a => a.Codename == "Extern").Marker);
+        Assert.Equal("Teamleitung · DoJ", result.Agents.Single(a => a.Codename == "Beides").Marker);
+        Assert.Null(result.Agents.Single(a => a.Codename == "Intern").Marker);
     }
 
     [Fact]
