@@ -69,7 +69,10 @@ public sealed class NooseiContentToolTests
             Substitute.For<IObservationService>(),
             chat ?? Substitute.For<ITaskforceChatService>(),
             Substitute.For<IMeetingService>(),
-            Substitute.For<IBewerbungService>());
+            Substitute.For<IBewerbungService>(),
+            Substitute.For<IPersonnelFileService>(),
+            Substitute.For<IInformantService>(),
+            Substitute.For<IAuditLogQueryService>());
 
     [Fact]
     public async Task ReadContent_GivesTheSameAnswer_ForMissingAndForbidden()

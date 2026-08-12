@@ -1,9 +1,16 @@
 using System.Security.Claims;
 using System.Text.Json;
+using NOOSE_Website.Data.Entities.Abductions;
+using NOOSE_Website.Data.Entities.Personnel;
 using NOOSE_Website.Infrastructure.Storage;
+using NOOSE_Website.Models.Abductions;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Feedback;
+using NOOSE_Website.Models.Statistics;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Llm.Tools;
+using NOOSE_Website.Services.Statistics;
 using NOOSE_Website.Tests.Infrastructure;
 using NSubstitute;
 
@@ -22,7 +29,7 @@ public sealed class FilterRecordsToolTests
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
     /// <summary>Real list services, not stubs: the visibility this tool relies on lives in them.</summary>
-    private static FilterRecordsTool Tool(SqliteTestContext ctx)
+    private static FilterRecordsTool Tool(SqliteTestContext ctx, ISystemSettingService? settings = null)
     {
         var people = new PersonService(ctx.Factory, Substitute.For<IFileStorageService>(),
             Substitute.For<IProfileSuggestionService>(), Substitute.For<ICaseNumberService>(),
@@ -30,7 +37,18 @@ public sealed class FilterRecordsToolTests
         var factions = new FactionService(ctx.Factory, Substitute.For<ICaseNumberService>(),
             Substitute.For<IProfileSuggestionService>(), people, Substitute.For<IFactionPhotoStorageService>(),
             Substitute.For<IThreatScoreService>(), Substitute.For<INotificationService>());
-        return NooseiToolHost.Filter(people: people, factions: factions, laws: new LawService(ctx.Factory));
+        return NooseiToolHost.Filter(
+            people: people, factions: factions, laws: new LawService(ctx.Factory), settings: settings);
+    }
+
+    /// <summary>Settings that report a fixed wanted-board threshold, so auf_fahndungsliste has a rule to apply.</summary>
+    private static ISystemSettingService Settings(HazardLevel threshold)
+    {
+        var settings = Substitute.For<ISystemSettingService>();
+        settings.GetAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new SystemConfiguration(
+            false, null, null, BannerLevels.Info, null, null, null, null, null, false,
+            threshold, 5, 2, 3)));
+        return settings;
     }
 
     private static void Seed(SqliteTestContext ctx)
@@ -214,6 +232,119 @@ public sealed class FilterRecordsToolTests
 
         Assert.StartsWith("0 Personen", result.Text);
         Assert.DoesNotContain("Gerd Geheim", result.Text);
+    }
+
+    [Fact]
+    public async Task OnWantedBoard_IncludesTheAutomaticEntriesTheManualFilterMisses()
+    {
+        using var ctx = new SqliteTestContext();
+        await using (var db = ctx.NewContext())
+        {
+            // manually wanted, low score — on the board by the flag
+            db.People.Add(Infrastructure.Seed.Person(id: "p-manual", name: "Manni Manuell", configure: p =>
+            {
+                p.IsWanted = true;
+                p.ThreatScore = 10;
+            }));
+            // never manually flagged, but a critical score — on the board by the threshold, the case nur_fahndung misses
+            db.People.Add(Infrastructure.Seed.Person(id: "p-auto", name: "Auto Achtzig", configure: p => p.ThreatScore = 90));
+            // low score, not wanted — off the board
+            db.People.Add(Infrastructure.Seed.Person(id: "p-off", name: "Otto Ohne", configure: p => p.ThreatScore = 20));
+            await db.SaveChangesAsync();
+        }
+        var tool = Tool(ctx, Settings(HazardLevel.Critical));
+
+        var manual = await tool.InvokeAsync(
+            Args("""{"typ":"Person","nur_fahndung":true}"""), NooseiToolContext.From(Leader()));
+        var board = await tool.InvokeAsync(
+            Args("""{"typ":"Person","auf_fahndungsliste":true}"""), NooseiToolContext.From(Leader()));
+
+        // nur_fahndung is the manual flag only — it never sees the automatic entry
+        Assert.Contains("Manni Manuell", manual.Text);
+        Assert.DoesNotContain("Auto Achtzig", manual.Text);
+
+        // auf_fahndungsliste is the whole Fahndung page: manual and score-driven, but not the quiet one
+        Assert.Contains("Manni Manuell", board.Text);
+        Assert.Contains("Auto Achtzig", board.Text);
+        Assert.DoesNotContain("Otto Ohne", board.Text);
+    }
+
+    [Fact]
+    public async Task Feedback_IsEnumerated_ThroughTheInbox()
+    {
+        using var ctx = new SqliteTestContext();
+        var feedback = Substitute.For<IFeedbackService>();
+        feedback.GetInboxAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<FeedbackRow>>(new[]
+            {
+                new FeedbackRow("f1", FeedbackKind.Bug, FeedbackStatus.New, null, null,
+                    "Absturz beim Speichern", "Falke", DateTime.UtcNow, null, null, null),
+            }));
+
+        var result = await NooseiToolHost.Filter(feedback: feedback)
+            .InvokeAsync(Args("""{"typ":"Feedback"}"""), NooseiToolContext.From(Leader()));
+
+        Assert.Contains("Bug-Meldung", result.Text);
+        Assert.Contains("Falke", result.Text);
+        Assert.Contains("Absturz beim Speichern", result.Text);
+    }
+
+    [Fact]
+    public async Task TrainingModules_AreEnumerated()
+    {
+        using var ctx = new SqliteTestContext();
+        var training = Substitute.For<ITrainingModuleService>();
+        training.GetActiveAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<TrainingModule> { new() { Id = "m1", Name = "Nahkampf", IsActive = true } }));
+
+        var result = await NooseiToolHost.Filter(trainingModules: training)
+            .InvokeAsync(Args("""{"typ":"Ausbildungsmodul"}"""), NooseiToolContext.From(Junior()));
+
+        Assert.Contains("Nahkampf", result.Text);
+    }
+
+    [Fact]
+    public async Task Abductions_AreEnumeratedWithTheirOutcome()
+    {
+        using var ctx = new SqliteTestContext();
+        var abductions = Substitute.For<IAbductionService>();
+        abductions.GetListAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<AbductionDisplay>
+            {
+                new(new AgentAbduction
+                {
+                    Id = "a1", CaseNumber = "NOOSE-E-2026-0001", Outcome = AbductionOutcome.Killed,
+                    Timestamp = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc),
+                }, "Falke", "Ganoven-Gerd", null, 0),
+            }));
+
+        var result = await NooseiToolHost.Filter(abductions: abductions)
+            .InvokeAsync(Args("""{"typ":"Entführung"}"""), NooseiToolContext.From(Junior()));
+
+        Assert.Contains("Entführung Falke", result.Text);
+        Assert.Contains("Getötet", result.Text);
+        Assert.Contains("Ganoven-Gerd", result.Text);
+    }
+
+    [Fact]
+    public async Task SituationReports_AreLeadershipOnly()
+    {
+        using var ctx = new SqliteTestContext();
+        var reports = Substitute.For<ISituationReportService>();
+        reports.GetArchiveAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<SituationReportHead>
+            {
+                new("r1", 2026, 1, "Lagebericht Januar", DateTime.UtcNow, "Falke"),
+            }));
+        var tool = NooseiToolHost.Filter(situationReports: reports);
+
+        var junior = await tool.InvokeAsync(Args("""{"typ":"Lagebericht"}"""), NooseiToolContext.From(Junior()));
+        var leader = await tool.InvokeAsync(Args("""{"typ":"Lagebericht"}"""), NooseiToolContext.From(Leader()));
+
+        // gated exactly like the record: a plain agent sees a clean zero, never the report
+        Assert.StartsWith("0 Lageberichte", junior.Text);
+        Assert.DoesNotContain("Januar", junior.Text);
+        Assert.Contains("Lagebericht Januar", leader.Text);
     }
 
     [Fact]

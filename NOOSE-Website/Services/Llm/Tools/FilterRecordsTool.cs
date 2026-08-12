@@ -1,8 +1,11 @@
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using NOOSE_Website.Models.CounterIntel;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Feedback;
 using NOOSE_Website.Models.Llm;
+using NOOSE_Website.Services.Statistics;
 
 namespace NOOSE_Website.Services.Llm.Tools;
 
@@ -30,7 +33,14 @@ public sealed class FilterRecordsTool(
     IAbsenceService absences,
     IAnnouncementService announcements,
     IFinancingService financing,
-    IBewerbungService applications) : INooseiTool
+    IBewerbungService applications,
+    ISystemSettingService settings,
+    IAgentActivityService activities,
+    IAbductionService abductions,
+    ISituationReportService situationReports,
+    ITrainingModuleService trainingModules,
+    ICounterIntelRuleService counterIntelRules,
+    IFeedbackService feedback) : INooseiTool
 {
     /// <summary>How deep the paged list services are asked to go; the filter then runs over the whole page.</summary>
     private const int MaxRows = 200;
@@ -39,8 +49,8 @@ public sealed class FilterRecordsTool(
 
     public string Description =>
         "Findet Akten über Merkmale statt über Suchtext und zählt sie. Nutze es für Fragen der Form "
-        + "welche alle und wie viele: alle Personen einer Einstufung, alle zur Fahndung ausgeschriebenen "
-        + "Personen, alle Fraktionen über einem Bedrohungs-Score, alle seit X Tagen geänderten Akten. "
+        + "welche alle und wie viele: alle Personen einer Einstufung, alle Personen auf der Fahndungsliste, "
+        + "alle Fraktionen über einem Bedrohungs-Score, alle seit X Tagen geänderten Akten. "
         + "Für die Suche nach einem Namen nimm suche_akten.";
 
     public JsonElement ParameterSchema { get; } = NooseiLimits.Schema($$"""
@@ -58,7 +68,9 @@ public sealed class FilterRecordsTool(
             "lebensstatus": { "type": "string", "enum": ["Lebend","Tot","Flüchtig"],
                               "description": "Nur bei typ=Person; berücksichtigt das Respawn-Fenster." },
             "nur_fahndung": { "type": "boolean",
-                              "description": "Nur bei typ=Person: nur zur Fahndung ausgeschriebene Personen." },
+                              "description": "Nur bei typ=Person: nur manuell zur Fahndung ausgeschriebene Personen." },
+            "auf_fahndungsliste": { "type": "boolean",
+                              "description": "Nur bei typ=Person: alle, die auf der Fahndungsseite stehen — manuell ausgeschrieben ODER Bedrohungs-Score ab der eingestellten Gefahrenstufe." },
             "score_min": { "type": "integer", "minimum": 0, "maximum": 100,
                            "description": "Nur Akten mit Bedrohungs-Score ab diesem Wert (Person und Fraktion)." },
             "score_max": { "type": "integer", "minimum": 0, "maximum": 100 },
@@ -88,7 +100,14 @@ public sealed class FilterRecordsTool(
             return new NooseiToolResult($"Für {german} steht keine Merkmalssuche zur Verfügung.", null, true);
         }
 
-        var filter = Filter.From(arguments);
+        // the wanted-board threshold is admin-set; read it (cached ~10 s) only when the board filter is actually
+        // asked for, so auf_fahndungsliste means the same set the Fahndung page shows, not just the manual flag
+        var wantsBoard = arguments.ValueKind == JsonValueKind.Object
+            && arguments.TryGetProperty("auf_fahndungsliste", out var board) && board.ValueKind == JsonValueKind.True;
+        var boardThreshold = wantsBoard
+            ? (await settings.GetAsync(cancellationToken)).WantedBoardMinHazard
+            : HazardLevel.Critical;
+        var filter = Filter.From(arguments, boardThreshold);
         var matches = rows.Where(filter.Matches)
             .OrderByDescending(r => r.Score ?? -1)
             .ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)
@@ -251,8 +270,76 @@ public sealed class FilterRecordsTool(
                 string.IsNullOrWhiteSpace(b.AssignedAgentName) ? null : "Zuständig: " + b.AssignedAgentName,
                 Status: BewerbungStatusDisplay.Name(b.Status)))
             .ToList(),
+        nameof(Data.Entities.Activities.AgentActivity) => (await activities.GetListAsync(scope, cancellationToken))
+            .Select(a => new Row(a.Id, a.Title, string.Empty, null, DocumentClassification.None, null,
+                null, a.CreatedAt,
+                $"Datum: {a.ActivityDate:dd.MM.yyyy}"
+                    + (string.IsNullOrWhiteSpace(a.Kind) ? "" : " | Art: " + a.Kind)
+                    + (string.IsNullOrWhiteSpace(a.OwnerName) ? "" : " | " + a.OwnerName)))
+            .ToList(),
+        // visible to every internal agent (its record gate is a bare existence check), so an unscoped list is consistent
+        nameof(Data.Entities.Abductions.AgentAbduction) => (await abductions.GetListAsync(cancellationToken))
+            .Select(a => new Row(a.Abduction.Id, "Entführung " + a.VictimCodename, a.Abduction.CaseNumber, null,
+                DocumentClassification.None, null, a.Abduction.ModifiedAt, a.Abduction.CreatedAt,
+                $"Zeitpunkt: {a.Abduction.Timestamp:dd.MM.yyyy}"
+                    + (string.IsNullOrWhiteSpace(a.PerpetratorName) ? "" : " | Täter: " + a.PerpetratorName),
+                Status: AbductionOutcomeDisplay.Name(a.Abduction.Outcome)))
+            .ToList(),
+        // leadership-only, exactly as the record gate is; a plain agent gets an empty list, never a refusal
+        nameof(Data.Entities.Common.SituationReport) => scope.MayClassifiedRead
+            ? (await situationReports.GetArchiveAsync(cancellationToken))
+                .Select(r => new Row(r.Id, r.Title, string.Empty, null, DocumentClassification.Leadership, null,
+                    null, r.GeneratedAt, $"Zeitraum: {r.Month:00}/{r.Year}"))
+                .ToList()
+            : [],
+        nameof(Data.Entities.Personnel.TrainingModule) => (await trainingModules.GetActiveAsync(cancellationToken))
+            .Select(m => new Row(m.Id, m.Name, string.Empty, null, DocumentClassification.None, null,
+                m.ModifiedAt, m.CreatedAt,
+                string.IsNullOrWhiteSpace(m.Description) ? null : Free(m.Description)))
+            .ToList(),
+        // both fail closed by their own helper: a stranger gets nothing, not a distinct refusal
+        nameof(Data.Entities.CounterIntel.CounterIntelRule) => (await CounterIntelRulesAsync(actor, cancellationToken))
+            .Select(r => new Row(r.Id, r.Name, string.Empty, null, DocumentClassification.Leadership, null,
+                null, DateTime.UtcNow,
+                (r.IsActive ? "aktiv" : "inaktiv") + " | Schwere: " + CounterIntelSeverityDisplay.Name(r.Severity)
+                    + (string.IsNullOrWhiteSpace(r.Description) ? "" : " | " + Free(r.Description))))
+            .ToList(),
+        nameof(Data.Entities.Feedback.Feedback) => (await FeedbackAsync(actor, cancellationToken))
+            .Select(f => new Row(f.Id, FeedbackKindDisplay.Name(f.Kind), string.Empty, null,
+                DocumentClassification.None, null, null, f.CreatedAt,
+                "von " + f.AgentCodename + ": " + Free(f.Text),
+                Status: FeedbackStatusDisplay.Name(f.Status)))
+            .ToList(),
         _ => null,
     };
+
+    /// <summary>Counter-intel rules, or nothing for an agent who may not see them. Empty and refused read alike.</summary>
+    private async Task<IReadOnlyList<CounterIntelRuleView>> CounterIntelRulesAsync(
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await counterIntelRules.GetAllAsync(actor, cancellationToken);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>The inbox for leadership, one's own reports otherwise — the two arms of feedback visibility.</summary>
+    private async Task<IReadOnlyList<FeedbackRow>> FeedbackAsync(
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await feedback.GetInboxAsync(actor, cancellationToken);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return await feedback.GetMyAsync(actor, cancellationToken);
+        }
+    }
 
     /// <summary>Applications, or nothing at all for an agent without recruiting access.</summary>
     /// <remarks>An empty roster and a refused one must read the same: the guard throws, and turning that into a
@@ -269,6 +356,9 @@ public sealed class FilterRecordsTool(
             return [];
         }
     }
+
+    /// <summary>Strips mention tokens so a raw @{Typ:Id} never reaches the model as free text.</summary>
+    private static string Free(string? text) => MentionParser.Strip(text).Trim();
 
     /// <summary>The wanted note of a person, else their life status — one extra column, whichever says more.</summary>
     private static string Wanted(Data.Entities.People.Person person)
@@ -290,9 +380,10 @@ public sealed class FilterRecordsTool(
 
     private sealed record Filter(
         Classification? Classification, LifeStatus? LifeStatus, int? ScoreMin, int? ScoreMax,
-        int? ChangedWithinDays, bool ClassifiedOnly, bool WantedOnly, string? Status)
+        int? ChangedWithinDays, bool ClassifiedOnly, bool WantedOnly, bool OnWantedBoard,
+        HazardLevel BoardThreshold, string? Status)
     {
-        public static Filter From(JsonElement args) => new(
+        public static Filter From(JsonElement args, HazardLevel boardThreshold) => new(
             ParseLabel(NooseiLimits.Text(args, "einstufung"), ClassificationDisplay.All,
                 ClassificationDisplay.Name, ClassificationDisplay.DefaultName),
             ParseLabel(NooseiLimits.Text(args, "lebensstatus"), LifeStatusDisplay.All,
@@ -302,6 +393,8 @@ public sealed class FilterRecordsTool(
             Number(args, "geaendert_seit_tagen"),
             Flag(args, "nur_verschlusssache"),
             Flag(args, "nur_fahndung"),
+            Flag(args, "auf_fahndungsliste"),
+            boardThreshold,
             NooseiLimits.Text(args, "status"));
 
         public bool Matches(Row row)
@@ -312,6 +405,8 @@ public sealed class FilterRecordsTool(
                 && (ChangedWithinDays is not { } days || row.TouchedAt >= DateTime.UtcNow.AddDays(-days))
                 && (!ClassifiedOnly || row.Secrecy != DocumentClassification.None)
                 && (!WantedOnly || row.IsWanted)
+                // same rule the Fahndung page uses, via the shared helper, so the two never diverge
+                && (!OnWantedBoard || WantedBoard.IsOnBoard(row.IsWanted, row.Score, BoardThreshold))
                 // matched against the rendered German label, which is what the model was shown in the first place
                 && (Status is not { Length: > 0 } state
                     || string.Equals(row.Status, state, StringComparison.OrdinalIgnoreCase));
@@ -327,6 +422,7 @@ public sealed class FilterRecordsTool(
             if (ChangedWithinDays is { } days) { parts.Add($"in den letzten {days} Tagen angelegt oder geändert"); }
             if (ClassifiedOnly) { parts.Add("nur Verschlusssachen"); }
             if (WantedOnly) { parts.Add("nur zur Fahndung ausgeschrieben"); }
+            if (OnWantedBoard) { parts.Add("auf der Fahndungsliste"); }
             if (Status is { Length: > 0 } state) { parts.Add("Status " + state); }
             return parts.Count == 0 ? " (ohne Einschränkung)" : " (" + string.Join(", ", parts) + ")";
         }

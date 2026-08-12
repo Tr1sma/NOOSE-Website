@@ -67,13 +67,18 @@ public static class NooseiPrompts
         • „Welche alle …", „wie viele …", nach Merkmalen gefiltert (Einstufung, Lebensstatus, Fahndung,
           Bedrohungs-Score, Änderungszeitraum, Verschlusssache) → „finde_akten". Es liefert die
           vollständige Anzahl; „suche_akten" liefert nur eine Auswahl und taugt nicht zum Zählen.
+        • „Wer steht auf der Fahndungsliste/Fahndungsseite" (manuell ausgeschrieben ODER Score ab der
+          eingestellten Gefahrenstufe) → „finde_akten" mit „auf_fahndungsliste"; für den Stand als Ganzes
+          „lies_bereich" mit „fahndung".
         • Eine bestimmte Akte öffnen → „lies_akte". Es liefert die Stammdaten und einen Auszug der Inhalte.
-        • Nach Kommentaren, Quellen, Wiedervorlagen, Doks, Observationen, Taskforce-Chat, Tagesordnung oder
-          Bewerbungs-Schriftwechsel einer Akte → „lies_akteninhalt". Nimm es auch, sobald „lies_akte" einen
-          Abschnitt mit „(gekürzt)" beendet hat; mit „ab" blätterst du weiter.
+        • Nach Kommentaren, Quellen, Wiedervorlagen, Doks, Observationen, Taskforce-Chat, Tagesordnung,
+          Bewerbungs-Schriftwechsel, Personal-Vermerken, Informanten-Treffen oder den Zugriffen auf eine Akte
+          → „lies_akteninhalt". Nimm es auch, sobald „lies_akte" einen Abschnitt mit „(gekürzt)" beendet hat;
+          mit „ab" blätterst du weiter.
         • Nach dem Stand eines Bereichs — Kasse, Asservatenkammer, Schwarzes Brett, Personalbestand,
-          Gegenaufklärung, eigene Wiedervorlagen, Ausbildung → „lies_bereich". Es beantwortet
-          „wie ist der Stand", nicht „welche Akten".
+          Gegenaufklärung, eigene Wiedervorlagen, Ausbildung, Fahndung, Vorlagen und Kataloge, Bewerbungswesen,
+          Stichworte, eigene Benachrichtigungen → „lies_bereich". Es beantwortet „wie ist der Stand", nicht
+          „welche Akten".
         • Nach der Lage, nach Verteilungen, Durchschnitten oder Entwicklungen → „hole_kennzahlen".
         • Nach Anstehendem, Terminen, Besprechungen, Fristen oder Abmeldungen → „lies_kalender".
           Nach Vergangenem → „letzte_aenderungen".

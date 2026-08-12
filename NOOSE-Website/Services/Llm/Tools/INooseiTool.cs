@@ -198,19 +198,21 @@ public static class NooseiRecordTypes
         [nameof(Absence)] = NooseiUse.Read | NooseiUse.List,
         [nameof(LibraryFile)] = NooseiUse.Read | NooseiUse.List,
 
-        // readable but not enumerable: an appointment has no plain list service, and lies_kalender already
-        // answers what is coming up. The rest are single records nobody asks for by attribute.
-        [nameof(Appointment)] = NooseiUse.Read,
-        [nameof(Agent)] = NooseiUse.Read,
-        [nameof(EvidenceEntry)] = NooseiUse.Read,
-        [nameof(KassenBuchung)] = NooseiUse.Read,
-        [nameof(AgentAbduction)] = NooseiUse.Read,
-        [nameof(SituationReport)] = NooseiUse.Read,
-        [nameof(AgentActivity)] = NooseiUse.Read,
-        [nameof(Request)] = NooseiUse.Read,
-        [nameof(TrainingModule)] = NooseiUse.Read,
-        [nameof(CounterIntelRule)] = NooseiUse.Read,
-        [nameof(Data.Entities.Feedback.Feedback)] = NooseiUse.Read,
+        // readable but not enumerable: no scope-filtered list, or an area/kalender already enumerates them
+        [nameof(Appointment)] = NooseiUse.Read,     // lies_kalender lists what is coming up
+        [nameof(Agent)] = NooseiUse.Read,           // the roster is lies_bereich personal
+        [nameof(EvidenceEntry)] = NooseiUse.Read,   // lies_bereich asservatenkammer
+        [nameof(KassenBuchung)] = NooseiUse.Read,   // lies_bereich kasse
+        [nameof(Request)] = NooseiUse.Read,         // no scope-filtered list; open one by id only
+
+        // readable and enumerable by attribute — each has a scope-/actor-filtered list or is visible to every
+        // internal agent; the matching branch lives in FilterRecordsTool
+        [nameof(AgentAbduction)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(SituationReport)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(AgentActivity)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(TrainingModule)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(CounterIntelRule)] = NooseiUse.Read | NooseiUse.List,
+        [nameof(Data.Entities.Feedback.Feedback)] = NooseiUse.Read | NooseiUse.List,
     };
 
     /// <summary>Every category, in catalog order, with the capabilities decided above.</summary>
@@ -229,6 +231,54 @@ public static class NooseiRecordTypes
 
     /// <summary>The types a capability was configured for, so a test can catch a key naming no category at all.</summary>
     public static IReadOnlyCollection<string> ConfiguredClrs => Uses.Keys;
+
+    /// <summary>Search categories that carry no <see cref="NooseiUse.Read" /> yet are still reachable — through a
+    /// content section of <c>lies_akteninhalt</c>, an operating area of <c>lies_bereich</c>, or a personal tool —
+    /// each mapped to the path that reaches it.</summary>
+    /// <remarks>With the Read set and <see cref="NotAssistantReadable" /> this decides every catalog category. The
+    /// coverage test fails on any category that is neither Read-capable, listed here, nor excluded — that is the
+    /// guard that keeps the assistant reading everything the asking agent can.</remarks>
+    public static readonly IReadOnlyDictionary<string, string> ReachableWithoutRead =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Comment"] = "kommentare (lies_akteninhalt)",
+            ["Source"] = "quellen (lies_akteninhalt)",
+            ["Followup"] = "wiedervorlagen (lies_akteninhalt)",
+            ["Link"] = "verknuepfungen (lies_akteninhalt)",
+            ["CustomFieldValue"] = "zusatzfelder (lies_akteninhalt)",
+            ["PersonDoc"] = "doks (lies_akteninhalt)",
+            ["Observation"] = "observationen (lies_akteninhalt)",
+            ["TaskforceMessage"] = "chat (lies_akteninhalt)",
+            ["MeetingAgendaItem"] = "tagesordnung (lies_akteninhalt)",
+            ["BewerbungMessage"] = "nachrichten (lies_akteninhalt)",
+            ["AgentNote"] = "vermerke (lies_akteninhalt)",
+            ["InformantMeeting"] = "treffen (lies_akteninhalt)",
+            ["AccessLog"] = "zugriffe (lies_akteninhalt)",
+            ["Tag"] = "stichworte (lies_akteninhalt / lies_bereich)",
+            ["WatchlistEntry"] = "meine_akten",
+            ["Notification"] = "benachrichtigungen (lies_bereich)",
+            ["FinancingItem"] = "vorlagen (lies_bereich)",
+            ["DocumentTemplate"] = "vorlagen / bewerbungswesen (lies_bereich)",
+            ["ActivityTemplate"] = "vorlagen (lies_bereich)",
+            ["PersonnelTemplate"] = "vorlagen (lies_bereich)",
+            ["DocTemplate"] = "vorlagen (lies_bereich)",
+            ["KassenBuchungVorlage"] = "vorlagen (lies_bereich)",
+            ["BewerbungTest"] = "bewerbungswesen (lies_bereich)",
+            ["Bewerbungssperre"] = "bewerbungswesen (lies_bereich)",
+            ["AuditLog"] = "lies_zeitstrahl / letzte_aenderungen",
+        };
+
+    /// <summary>Search categories NOOSEI deliberately does not read as a record, each with the reason.</summary>
+    /// <remarks>The counterpart to <see cref="SearchCatalog" />'s NotSearchable: personal UI state, the assistant's
+    /// own chats, and cost/operating meta behind the AI-owner axis.</remarks>
+    public static readonly IReadOnlyDictionary<string, string> NotAssistantReadable =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["NooseiConversation"] = "eigene KI-Chats; sie im Chat zu lesen wäre zirkulär",
+            ["SavedSearch"] = "reine UI-Voreinstellung ohne Ermittlungsinhalt",
+            ["GraphCanvasLayout"] = "reine UI-Voreinstellung ohne Ermittlungsinhalt",
+            ["LlmRequestLog"] = "NOOSEI-Kosten- und Betriebsmeta hinter der KI-Eigner-Achse",
+        };
 
     /// <summary>The enum values offered where a type must be openable as a record.</summary>
     public static readonly string EnumJson = Json(NooseiUse.Read);

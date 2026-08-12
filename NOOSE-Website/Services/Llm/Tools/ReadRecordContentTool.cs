@@ -2,13 +2,16 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Groups;
+using NOOSE_Website.Data.Entities.Informants;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Data.Entities.Taskforces;
+using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Llm;
 
@@ -35,7 +38,10 @@ public sealed class ReadRecordContentTool(
     IObservationService observations,
     ITaskforceChatService taskforceChat,
     IMeetingService meetings,
-    IBewerbungService applications) : INooseiTool
+    IBewerbungService applications,
+    IPersonnelFileService personnel,
+    IInformantService informants,
+    IAuditLogQueryService auditLog) : INooseiTool
 {
     private const string Comments = "kommentare";
     private const string Sources = "quellen";
@@ -48,6 +54,9 @@ public sealed class ReadRecordContentTool(
     private const string Chat = "chat";
     private const string Agenda = "tagesordnung";
     private const string Messages = "nachrichten";
+    private const string Notes = "vermerke";
+    private const string Meetings2 = "treffen";
+    private const string Access = "zugriffe";
     private const string Everything = "alles";
 
     /// <summary>Sections that hang off any record through the polymorphic association, in reading order.</summary>
@@ -55,13 +64,14 @@ public sealed class ReadRecordContentTool(
         [Comments, Sources, Followups, Links, CustomFields, Tags];
 
     private static readonly string[] All =
-        [.. Universal, Docs, Observations, Chat, Agenda, Messages, Everything];
+        [.. Universal, Docs, Observations, Chat, Agenda, Messages, Notes, Meetings2, Access, Everything];
 
     public string Name => "lies_akteninhalt";
 
     public string Description =>
         "Liest die Inhalte einer Akte in voller Länge: Kommentare, Quellen, Wiedervorlagen, Verknüpfungen, "
-        + "Zusatzfelder, Stichworte, Doks, Observationen, Taskforce-Chat, Tagesordnung und Bewerbungs-Schriftwechsel. "
+        + "Zusatzfelder, Stichworte, Doks, Observationen, Taskforce-Chat, Tagesordnung, Bewerbungs-Schriftwechsel, "
+        + "Personal-Vermerke (typ=Personalakte) und Informanten-Treffen (typ=Informant). "
         + "Nimm es, wenn lies_akte einen Abschnitt gekürzt hat oder wenn genau danach gefragt ist. "
         + "Mit „ab\" blätterst du weiter.";
 
@@ -115,7 +125,10 @@ public sealed class ReadRecordContentTool(
                 $"„{wanted}\" gibt es bei einer Akte vom Typ {NooseiRecordTypes.German(type)} nicht. "
                 + "Vorhanden sind: " + string.Join(", ", applicable) + ".", null, true);
         }
-        var sections = everything ? applicable : [wanted];
+        // "alles" gives record content; the access log is a deliberate query, not part of a bulk dump
+        var sections = everything
+            ? applicable.Where(s => !string.Equals(s, Access, StringComparison.Ordinal)).ToArray()
+            : [wanted];
 
         var max = NooseiLimits.Count(arguments, "max", 20);
         var offset = Offset(arguments, "ab");
@@ -165,16 +178,24 @@ public sealed class ReadRecordContentTool(
     }
 
     /// <summary>The sections a record of this kind actually has.</summary>
-    private static string[] Applicable(string type) => type switch
+    private static string[] Applicable(string type)
     {
-        // doks and observations hang off a person and off the three kinds of organisation, nothing else
-        nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party) =>
-            [.. Universal, Docs, Observations],
-        nameof(Taskforce) => [.. Universal, Chat],
-        nameof(Meeting) => [.. Universal, Agenda],
-        nameof(Bewerbung) => [.. Universal, Messages],
-        _ => Universal,
-    };
+        string[] baseSet = type switch
+        {
+            // doks and observations hang off a person and off the three kinds of organisation, nothing else
+            nameof(Person) or nameof(Faction) or nameof(PersonGroup) or nameof(Party) =>
+                [.. Universal, Docs, Observations],
+            nameof(Taskforce) => [.. Universal, Chat],
+            nameof(Meeting) => [.. Universal, Agenda],
+            nameof(Bewerbung) => [.. Universal, Messages],
+            // notes hang off a personnel file, meetings off an informant — each already shown (truncated) in the dossier
+            nameof(Agent) => [.. Universal, Notes],
+            nameof(Informant) => [.. Universal, Meetings2],
+            _ => Universal,
+        };
+        // who viewed this record — requestable on any record, but leadership/supervision-gated and never in "alles"
+        return [.. baseSet, Access];
+    }
 
     private async Task<(string Heading, IReadOnlyList<string> Rows)> LoadAsync(
         AppDbContext db, string section, string type, string id, NooseiToolContext context, CancellationToken ct)
@@ -301,6 +322,50 @@ public sealed class ReadRecordContentTool(
                         return string.IsNullOrWhiteSpace(note) ? head : head + " — " + Free(note);
                     })
                     .ToList());
+            }
+            case Notes:
+            {
+                // personnel notes; the Agent parent gate (MayClassifiedRead) has already run, as it does for tags/fields
+                var rows = await personnel.GetNotesAsync(id, null, ct);
+                return ("Vermerke", rows
+                    .Select(n =>
+                    {
+                        var kind = string.IsNullOrWhiteSpace(n.ArtFreetext) ? AgentNoteKindDisplay.Name(n.Kind) : n.ArtFreetext;
+                        return $"{Fmt(n.EntryDate)} [{Free(kind)}] {Who(n.AuthorName)}: {Free(n.Text)}";
+                    })
+                    .ToList());
+            }
+            case Meetings2:
+            {
+                // the service re-checks informant visibility on top of the parent gate — empty for a stranger
+                var rows = await informants.GetMeetingsAsync(id, context.Actor, ct);
+                return ("Treffen", rows
+                    .Select(m =>
+                    {
+                        var sb = new StringBuilder(Fmt(m.MeetingDate));
+                        if (Free(m.Location) is { Length: > 0 } place) { sb.Append(" [").Append(place).Append(']'); }
+                        if (Free(m.AuthorName) is { Length: > 0 } author) { sb.Append(' ').Append(Who(author)); }
+                        sb.Append(": ").Append(Free(m.Content));
+                        return sb.ToString();
+                    })
+                    .ToList());
+            }
+            case Access:
+            {
+                // who viewed this record; QueryAccessAsync itself gates leadership/supervision and throws otherwise
+                try
+                {
+                    var page = await auditLog.QueryAccessAsync(
+                        new AuditLogFilter { EntityType = type, EntityId = id }, context.Actor, ct);
+                    return ("Zugriffe", page.Rows
+                        .Select(r => $"{Fmt(r.TimestampUtc.ToLocalTime())} {Who(r.AgentName)}")
+                        .ToList());
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // reads exactly like a record with no logged access, so the gate is not an oracle
+                    return ("Zugriffe", []);
+                }
             }
             case Messages:
             {

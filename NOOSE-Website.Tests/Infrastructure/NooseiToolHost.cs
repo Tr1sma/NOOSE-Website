@@ -1,12 +1,20 @@
 using System.Security.Claims;
+using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Data.Entities.Financing;
+using NOOSE_Website.Data.Entities.Kasse;
+using NOOSE_Website.Data.Entities.Notifications;
+using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Personnel;
+using NOOSE_Website.Data.Entities.Recruiting;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Models.CounterIntel;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Evidence;
 using NOOSE_Website.Models.Kasse;
+using NOOSE_Website.Models.Recruiting;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Llm.Tools;
+using NOOSE_Website.Services.Statistics;
 using NSubstitute;
 
 namespace NOOSE_Website.Tests.Infrastructure;
@@ -35,7 +43,14 @@ public static class NooseiToolHost
         IAbsenceService? absences = null,
         IAnnouncementService? announcements = null,
         IFinancingService? financing = null,
-        IBewerbungService? applications = null)
+        IBewerbungService? applications = null,
+        ISystemSettingService? settings = null,
+        IAgentActivityService? activities = null,
+        IAbductionService? abductions = null,
+        ISituationReportService? situationReports = null,
+        ITrainingModuleService? trainingModules = null,
+        ICounterIntelRuleService? counterIntelRules = null,
+        IFeedbackService? feedback = null)
         => new(
             people ?? Substitute.For<IPersonService>(),
             factions ?? Substitute.For<IFactionService>(),
@@ -54,7 +69,14 @@ public static class NooseiToolHost
             absences ?? Substitute.For<IAbsenceService>(),
             announcements ?? Substitute.For<IAnnouncementService>(),
             financing ?? Substitute.For<IFinancingService>(),
-            applications ?? Substitute.For<IBewerbungService>());
+            applications ?? Substitute.For<IBewerbungService>(),
+            settings ?? Substitute.For<ISystemSettingService>(),
+            activities ?? Substitute.For<IAgentActivityService>(),
+            abductions ?? Substitute.For<IAbductionService>(),
+            situationReports ?? Substitute.For<ISituationReportService>(),
+            trainingModules ?? Substitute.For<ITrainingModuleService>(),
+            counterIntelRules ?? Substitute.For<ICounterIntelRuleService>(),
+            feedback ?? Substitute.For<IFeedbackService>());
 
     /// <summary>The area tool with every service the caller did not supply answering nothing.</summary>
     /// <remarks>Empty rather than a bare substitute: an unconfigured NSubstitute hands back a null list, which no
@@ -66,7 +88,20 @@ public static class NooseiToolHost
         IAnnouncementService? announcements = null,
         ICounterIntelService? counterIntel = null,
         IFollowupService? followups = null,
-        ITrainingModuleService? training = null)
+        ITrainingModuleService? training = null,
+        IPersonService? people = null,
+        ISystemSettingService? settings = null,
+        IDocumentTemplateService? documentTemplates = null,
+        IActivityTemplateService? activityTemplates = null,
+        IPersonnelTemplateService? personnelTemplates = null,
+        IDocTemplateService? docTemplates = null,
+        IKassenTemplateService? kassenTemplates = null,
+        IFinancingCatalogService? financingCatalog = null,
+        ITagService? tags = null,
+        IBewerbungTestService? bewerbungTests = null,
+        IBewerbungssperreService? bewerbungssperren = null,
+        IBewerbungTemplateService? bewerbungTemplates = null,
+        INotificationService? notifications = null)
         => new(
             ctx.Factory,
             treasury ?? QuietTreasury(),
@@ -74,7 +109,35 @@ public static class NooseiToolHost
             announcements ?? QuietBoard(),
             counterIntel ?? QuietCounterIntel(),
             followups ?? QuietFollowups(),
-            training ?? QuietTraining());
+            training ?? QuietTraining(),
+            people ?? QuietPeople(),
+            settings ?? QuietSettings(),
+            documentTemplates ?? Quiet<IDocumentTemplateService>(s =>
+                s.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<DocumentTemplate>()))),
+            activityTemplates ?? Quiet<IActivityTemplateService>(s =>
+                s.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<ActivityTemplate>()))),
+            personnelTemplates ?? Quiet<IPersonnelTemplateService>(s =>
+                s.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<PersonnelTemplate>()))),
+            docTemplates ?? Quiet<IDocTemplateService>(s =>
+                s.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<DocTemplate>()))),
+            kassenTemplates ?? Quiet<IKassenTemplateService>(s =>
+                s.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<KassenBuchungVorlage>()))),
+            financingCatalog ?? Quiet<IFinancingCatalogService>(s =>
+                s.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<FinancingItem>()))),
+            tags ?? Quiet<ITagService>(s =>
+                s.GetWithUsageAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new List<TagUsage>()))),
+            bewerbungTests ?? Quiet<IBewerbungTestService>(s =>
+                s.GetTestsAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new List<BewerbungTest>()))),
+            bewerbungssperren ?? Quiet<IBewerbungssperreService>(s =>
+                s.ListActiveAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new List<BewerbungssperreInfo>()))),
+            bewerbungTemplates ?? Quiet<IBewerbungTemplateService>(s =>
+                s.ListAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new List<DocumentTemplate>()))),
+            notifications ?? Quiet<INotificationService>(s =>
+                s.GetOwnAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new List<Notification>()))));
 
     private static IKassenService QuietTreasury()
     {
@@ -126,5 +189,30 @@ public static class NooseiToolHost
         training.GetActiveAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new List<TrainingModule>()));
         return training;
+    }
+
+    private static IPersonService QuietPeople()
+    {
+        var people = Substitute.For<IPersonService>();
+        people.GetListAsync(Arg.Any<ViewerScope>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<Person>()));
+        return people;
+    }
+
+    private static ISystemSettingService QuietSettings()
+    {
+        var settings = Substitute.For<ISystemSettingService>();
+        settings.GetAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(new SystemConfiguration(
+            false, null, null, BannerLevels.Info, null, null, null, null, null, false,
+            HazardLevel.Critical, 5, 2, 3)));
+        return settings;
+    }
+
+    /// <summary>A substitute configured by one lambda — for the many area services that need a single empty list.</summary>
+    private static T Quiet<T>(Action<T> configure) where T : class
+    {
+        var sub = Substitute.For<T>();
+        configure(sub);
+        return sub;
     }
 }

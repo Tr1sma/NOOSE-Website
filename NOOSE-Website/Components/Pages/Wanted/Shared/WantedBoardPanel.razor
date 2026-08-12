@@ -119,8 +119,9 @@ else
         var people = await PersonService.GetListAsync(ViewerScope.From(user));
         var now = DateTime.UtcNow;
 
-        // wanted = under investigation (any classification) or currently fugitive
+        // wanted = manually flagged or threat score at/above the configured threshold (WantedBoard is the one rule)
         _all = people
+            .Where(p => WantedBoard.IsOnBoard(p, _threshold))
             .Select(p => new WantedRow
             {
                 Id = p.Id,
@@ -138,7 +139,6 @@ else
                 IsWanted = p.IsWanted,
                 WantedReason = p.WantedReason,
             })
-            .Where(r => r.IsWanted || r.Hazard >= _threshold)
             .OrderByDescending(r => r.IsWanted)
             .ThenByDescending(r => r.Classification)
             .ThenByDescending(r => r.ThreatScore ?? -1)

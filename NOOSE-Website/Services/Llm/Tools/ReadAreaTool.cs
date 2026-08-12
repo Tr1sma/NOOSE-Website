@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
+using NOOSE_Website.Infrastructure;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services.Llm.Tools;
@@ -23,7 +24,20 @@ public sealed class ReadAreaTool(
     IAnnouncementService announcements,
     ICounterIntelService counterIntel,
     IFollowupService followups,
-    ITrainingModuleService training) : INooseiTool
+    ITrainingModuleService training,
+    IPersonService people,
+    ISystemSettingService settings,
+    IDocumentTemplateService documentTemplates,
+    IActivityTemplateService activityTemplates,
+    IPersonnelTemplateService personnelTemplates,
+    IDocTemplateService docTemplates,
+    IKassenTemplateService kassenTemplates,
+    IFinancingCatalogService financingCatalog,
+    ITagService tags,
+    IBewerbungTestService bewerbungTests,
+    IBewerbungssperreService bewerbungssperren,
+    IBewerbungTemplateService bewerbungTemplates,
+    INotificationService notifications) : INooseiTool
 {
     private const string Treasury = "kasse";
     private const string EvidenceRoom = "asservatenkammer";
@@ -32,17 +46,24 @@ public sealed class ReadAreaTool(
     private const string CounterIntelligence = "gegenaufklaerung";
     private const string Followups = "wiedervorlagen";
     private const string Training = "ausbildung";
+    private const string Wanted = "fahndung";
+    private const string Templates = "vorlagen";
+    private const string Recruiting = "bewerbungswesen";
+    private const string Keywords = "stichworte";
+    private const string Notifications = "benachrichtigungen";
 
     private static readonly string[] Areas =
-        [Treasury, EvidenceRoom, Board, Roster, CounterIntelligence, Followups, Training];
+        [Treasury, EvidenceRoom, Board, Roster, CounterIntelligence, Followups, Training, Wanted,
+         Templates, Recruiting, Keywords, Notifications];
 
     public string Name => "lies_bereich";
 
     public string Description =>
         "Liest den aktuellen Stand eines Bereichs: Kassenstand und letzte Buchungen, Bestand der "
         + "Asservatenkammer, Schwarzes Brett, Personalbestand, Auffälligkeiten der Gegenaufklärung, eigene "
-        + "offene Wiedervorlagen, Ausbildungsmodule. Für Fragen nach einzelnen Akten oder deren Anzahl "
-        + "nimm finde_akten.";
+        + "offene Wiedervorlagen, Ausbildungsmodule, Fahndungsliste (wer steht drauf und warum), "
+        + "Vorlagen und Kataloge, Bewerbungswesen (Tests, Sperren, Anschreiben), Stichworte mit Nutzung, "
+        + "eigene Benachrichtigungen. Für Fragen nach einzelnen Akten oder deren Anzahl nimm finde_akten.";
 
     public JsonElement ParameterSchema { get; } = NooseiLimits.Schema($$"""
         {
@@ -77,6 +98,11 @@ public sealed class ReadAreaTool(
                 case Roster: await RosterAsync(sb, max, context.Scope, cancellationToken); break;
                 case CounterIntelligence: await CounterIntelAsync(sb, max, context.Actor, cancellationToken); break;
                 case Followups: await FollowupsAsync(sb, max, context.Actor, cancellationToken); break;
+                case Wanted: await WantedAsync(sb, max, context.Scope, cancellationToken); break;
+                case Templates: await TemplatesAsync(sb, max, context.Scope, cancellationToken); break;
+                case Recruiting: await RecruitingAsync(sb, max, context.Actor, cancellationToken); break;
+                case Keywords: await KeywordsAsync(sb, max, context.Scope, cancellationToken); break;
+                case Notifications: await NotificationsAsync(sb, max, context.Actor, cancellationToken); break;
                 default: await TrainingAsync(sb, max, cancellationToken); break;
             }
         }
@@ -278,6 +304,151 @@ public sealed class ReadAreaTool(
             sb.AppendLine();
         }
     }
+
+    private async Task WantedAsync(StringBuilder sb, int max, ViewerScope scope, CancellationToken ct)
+    {
+        // same rule and threshold as the /fahndung page, via the shared helper and the scope-filtered list
+        var threshold = (await settings.GetAsync(ct)).WantedBoardMinHazard;
+        var board = (await people.GetListAsync(scope, ct))
+            .Where(p => WantedBoard.IsOnBoard(p, threshold))
+            .OrderByDescending(p => p.IsWanted)
+            .ThenByDescending(p => p.ThreatScore ?? -1)
+            .ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        if (board.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("Fahndung");
+        sb.Append("Schwelle: ab Gefahrenstufe ").Append(HazardLevelLogic.Name(threshold))
+            .Append(" | auf der Liste: ").Append(board.Count)
+            .Append(" | davon manuell ausgeschrieben: ").Append(board.Count(p => p.IsWanted)).AppendLine();
+        sb.Append("— Personen (").Append(Math.Min(max, board.Count)).Append(" von ").Append(board.Count).AppendLine(") —");
+        foreach (var p in board.Take(max))
+        {
+            sb.Append("• ").Append(Free(p.Name))
+                .Append(" | Aktenzeichen: ").Append(string.IsNullOrWhiteSpace(p.CaseNumber) ? "—" : p.CaseNumber)
+                .Append(" | Einstufung: ").Append(ClassificationDisplay.Name(p.Classification))
+                .Append(" | Grund: ").Append(WantedBoard.Reason(p, threshold));
+            if (p.ThreatScore is { } score)
+            {
+                sb.Append(" | Bedrohungs-Score: ").Append(score);
+            }
+            sb.AppendLine();
+        }
+    }
+
+    private async Task TemplatesAsync(StringBuilder sb, int max, ViewerScope scope, CancellationToken ct)
+    {
+        // the template/catalog management pages are leadership-gated in /einstellungen; a plain agent, who cannot
+        // open them in the app, reads this area as empty rather than as a config dump
+        if (!scope.MayClassifiedRead)
+        {
+            return;
+        }
+        // the library page hides the recruiting-category rows; they belong to the HRB-gated Bewerbungswesen area
+        var docs = (await documentTemplates.GetAllAsync(ct))
+            .Where(t => !string.Equals(t.Category, RecruitingSeeder.TemplateCategory, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var acts = await activityTemplates.GetAllAsync(ct);
+        var pers = await personnelTemplates.GetAllAsync(ct);
+        var lib = await docTemplates.GetAllAsync(ct);
+        var kas = await kassenTemplates.GetAllAsync(ct);
+        var fin = await financingCatalog.GetAllAsync(ct);
+        if (docs.Count + acts.Count + pers.Count + lib.Count + kas.Count + fin.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("Vorlagen & Kataloge");
+        Section(sb, "Dokument-Vorlagen", max, docs.Count, docs.Select(t => Label(t.Name, t.IsActive)));
+        Section(sb, "Aktivitäts-Vorlagen", max, acts.Count, acts.Select(t => Label(t.Name, t.IsActive)));
+        Section(sb, "Personal-Vorlagen", max, pers.Count,
+            pers.Select(t => PersonnelTemplateKindDisplay.Name(t.Kind) + ": " + Label(t.Name, t.IsActive)));
+        Section(sb, "Personen-Dok-Vorlagen", max, lib.Count, lib.Select(t => Label(t.Name, t.IsActive)));
+        Section(sb, "Kassen-Vorlagen", max, kas.Count,
+            kas.Select(t => $"{Label(t.Name, t.IsActive)} | {KassenBuchungArtDisplay.Name(t.Kind)} {t.Amount:N0} $"));
+        Section(sb, "Finanzierungs-Katalog", max, fin.Count, fin.Select(t => Label(t.Name, t.IsActive)));
+    }
+
+    private async Task RecruitingAsync(StringBuilder sb, int max, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        // every read here is RequireHrbOrLeadership; a plain agent trips the throw and the area reads as empty
+        var tests = await bewerbungTests.GetTestsAsync(actor, ct);
+        var bans = await bewerbungssperren.ListActiveAsync(actor, ct);
+        var templates = await bewerbungTemplates.ListAsync(actor, ct);
+        if (tests.Count + bans.Count + templates.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("Bewerbungswesen");
+        Section(sb, "Tests", max, tests.Count, tests.Select(t => Label(t.Title, t.IsActive)));
+        Section(sb, "Aktive Sperren", max, bans.Count, bans.Select(b =>
+            (b.IsBlacklist ? "[Blacklist] " : "")
+                + Free(string.IsNullOrWhiteSpace(b.ApplicantName) ? b.AgentId : b.ApplicantName)
+                + (b.BannedUntil is { } until ? " bis " + Fmt(until) : "")
+                + (Free(b.Reason) is { Length: > 0 } why ? " — " + why : "")));
+        Section(sb, "Anschreiben-Vorlagen", max, templates.Count, templates.Select(t => Label(t.Name, t.IsActive)));
+    }
+
+    private async Task KeywordsAsync(StringBuilder sb, int max, ViewerScope scope, CancellationToken ct)
+    {
+        // usage counts aggregate across records the viewer may not open; the Stichworte admin page is leadership-gated,
+        // so keep the global list to leadership. Per-record tags stay readable via the lies_akteninhalt stichworte section
+        if (!scope.MayClassifiedRead)
+        {
+            return;
+        }
+        var rows = (await tags.GetWithUsageAsync(ct))
+            .OrderByDescending(t => t.Count).ThenBy(t => t.Tag.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        sb.AppendLine("Stichworte");
+        Section(sb, "Stichworte mit Nutzung", max, rows.Count, rows.Select(t => $"{Free(t.Tag.Name)} ({t.Count})"));
+    }
+
+    private async Task NotificationsAsync(StringBuilder sb, int max, ClaimsPrincipal actor, CancellationToken ct)
+    {
+        // always the asking agent's own, by construction of the service — never anyone else's
+        var rows = await notifications.GetOwnAsync(actor, Math.Max(max, 20), ct);
+        if (rows.Count == 0)
+        {
+            return;
+        }
+        // GetOwnAsync returns only the most-recent page, so its count is not the grand total; take the exact unread
+        // figure from the counter instead of deriving it from the page
+        var unread = await notifications.GetUnreadCountAsync(actor, ct);
+        sb.AppendLine("Benachrichtigungen");
+        sb.Append("Ungelesen: ").Append(unread).AppendLine();
+        sb.Append("— Neueste (").Append(Math.Min(max, rows.Count)).AppendLine(") —");
+        foreach (var n in rows.Take(max))
+        {
+            sb.Append("• ").Append(Fmt(n.CreatedAt)).Append(n.ReadAt is null ? " [ungelesen] " : " ")
+                .Append(NotificationTypeDisplay.Name(n.Type)).Append(": ").AppendLine(Free(n.Title));
+        }
+    }
+
+    /// <summary>One capped subsection with its "n von m" count; skipped entirely when the source is empty.</summary>
+    private static void Section(StringBuilder sb, string heading, int max, int total, IEnumerable<string> rows)
+    {
+        if (total == 0)
+        {
+            return;
+        }
+        sb.Append("— ").Append(heading).Append(" (").Append(Math.Min(max, total))
+            .Append(" von ").Append(total).AppendLine(") —");
+        foreach (var row in rows.Take(max))
+        {
+            sb.Append("• ").AppendLine(row);
+        }
+    }
+
+    private static string Label(string name, bool active) => Free(name) + (active ? "" : " (inaktiv)");
 
     private static string Free(string? text) => MentionParser.Strip(text).Trim();
 
