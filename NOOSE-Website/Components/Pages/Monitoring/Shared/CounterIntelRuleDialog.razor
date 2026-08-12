@@ -21,8 +21,8 @@
                             <MudTextField @bind-Value="_input.Name" Label="Regel-Name" Variant="Variant.Outlined"
                                           Required="true" RequiredError="Name ist erforderlich" Immediate="true"
                                           HelperText="Erscheint als Muster-Chip bei jeder Auffälligkeit." />
-                            <MudTextField @bind-Value="_input.Description" Label="Beschreibung" Lines="2"
-                                          Variant="Variant.Outlined" HelperText="Wofür diese Regel da ist (optional)." />
+                            <MentionInput @bind-Text="_input.Description" Label="Beschreibung" Lines="2"
+                                          HelperText="@($"Wofür diese Regel da ist (optional). {MentionInput.Hint}")" />
                             <MudGrid>
                                 <MudItem xs="12" sm="4">
                                     <MudSelect T="CounterIntelSeverity" Label="Schweregrad" @bind-Value="_input.Severity"

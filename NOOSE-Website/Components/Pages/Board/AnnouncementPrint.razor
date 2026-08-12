@@ -47,8 +47,7 @@ else
         {
             <section>
                 <h2>Inhalt</h2>
-                @* Sanitized server-side on save, so safe as MarkupString. *@
-                <div class="dokument-html">@((MarkupString)_detail.Row.Content)</div>
+                <RichHtml Html="@_detail.Row.Content" Plain="true" />
             </section>
         }
 

@@ -38,7 +38,7 @@
                             <MudText Typo="Typo.body1">@m.Module.Name</MudText>
                             @if (!string.IsNullOrWhiteSpace(m.Module.Description))
                             {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="white-space:pre-wrap;">@m.Module.Description</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@m.Module.Description" /></MudText>
                             }
                             @if (m.IsCompleted)
                             {

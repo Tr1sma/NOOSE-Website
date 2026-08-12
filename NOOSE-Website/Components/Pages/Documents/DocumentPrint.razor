@@ -38,8 +38,7 @@ else
 
         <section>
             <h2>Inhalt</h2>
-            @* Sanitized server-side, so safe as MarkupString. *@
-            <div class="dokument-html">@((MarkupString)_document.ContentHtml)</div>
+            <RichHtml Html="@_document.ContentHtml" Plain="true" />
         </section>
 
         @if (_attachments.Count > 0)

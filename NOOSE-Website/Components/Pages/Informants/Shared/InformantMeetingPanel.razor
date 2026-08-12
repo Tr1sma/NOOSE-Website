@@ -16,7 +16,7 @@
                 <MudTextField @bind-Value="_location" Label="Ort" />
             </MudItem>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_content" Label="Inhalt / Meldung" Lines="3" />
+                <MentionInput @bind-Text="_content" Label="Inhalt / Meldung" Lines="3" HelperText="@MentionInput.Hint" />
             </MudItem>
         </MudGrid>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
@@ -37,7 +37,7 @@ else
                 <MudText Typo="Typo.body2"><b>@m.MeetingDate.ToLocalTime().ToString("dd.MM.yyyy")</b>@(string.IsNullOrWhiteSpace(m.Location) ? "" : $" · {m.Location}")</MudText>
                 @if (!string.IsNullOrWhiteSpace(m.Content))
                 {
-                    <MudText Typo="Typo.body2">@m.Content</MudText>
+                    <MudText Typo="Typo.body2"><MentionDisplay Text="@m.Content" /></MudText>
                 }
                 @if (!string.IsNullOrWhiteSpace(m.AuthorName))
                 {

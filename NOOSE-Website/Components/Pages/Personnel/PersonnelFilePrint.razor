@@ -102,7 +102,7 @@ else
                                 <text> · Auszuführende: @exec</text>
                             }
                         </div>
-                        <div class="dokument-html">@((MarkupString)v.Text)</div>
+                        <RichHtml Html="@v.Text" Plain="true" />
                     </div>
                 }
             </section>

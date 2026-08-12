@@ -87,7 +87,7 @@ else
                 </MudSelect>
             </MudItem>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_description" Label="Beschreibung" Lines="2" />
+                <MentionInput @bind-Text="_description" Label="Beschreibung" Lines="2" HelperText="@MentionInput.Hint" />
             </MudItem>
             <MudItem xs="12" sm="6">
                 @if (_canChangeHandler)
@@ -113,7 +113,7 @@ else
                 <MudTextField @bind-Value="_contact" Label="Kontakt" />
             </MudItem>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_notes" Label="Notizen" Lines="2" />
+                <MentionInput @bind-Text="_notes" Label="Notizen" Lines="2" HelperText="@MentionInput.Hint" />
             </MudItem>
         </MudGrid>
 

@@ -62,8 +62,7 @@ else
 
                     @if (!string.IsNullOrWhiteSpace(z.Content))
                     {
-                        @* Sanitized server-side on save, so safe as MarkupString. *@
-                        <div class="dokument-html">@((MarkupString)z.Content)</div>
+                        <RichHtml Html="@z.Content" />
                     }
                     else
                     {

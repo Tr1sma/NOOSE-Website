@@ -289,6 +289,34 @@ html, body {
         color: var(--mud-palette-primary);
     }
 
+    /* ---- @-Erwähnungen: Chip im Editor, Link in der Anzeige ---- */
+    .dokument-html .erwaehnung,
+    .ql-editor .erwaehnung {
+        display: inline-block;
+        padding: 0 .3rem;
+        border-radius: 4px;
+        background-color: rgba(var(--mud-palette-primary-rgb), .14);
+        color: var(--mud-palette-primary);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .dokument-html .erwaehnung-vs {
+        background-color: rgba(var(--mud-palette-warning-rgb), .16);
+        color: var(--mud-palette-warning);
+    }
+
+    .dokument-html .erwaehnung-fehlt {
+        background-color: var(--mud-palette-background-grey);
+        color: var(--mud-palette-text-secondary);
+    }
+
+.ql-editor .erwaehnung {
+    /* atomic embed: the caret must not land inside the label */
+    user-select: none;
+    cursor: default;
+}
+
     .dokument-html blockquote {
         border-left: 3px solid var(--mud-palette-lines-default);
         margin-left: 0;

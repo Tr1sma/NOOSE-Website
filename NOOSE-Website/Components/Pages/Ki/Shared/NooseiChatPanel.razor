@@ -129,7 +129,7 @@ else
                             else
                             {
                                 @* the agent's own wording stays verbatim; only NOOSEI answers in Markdown *@
-                                <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@m.Text</MudText>
+                                <MudText Typo="Typo.body2"><MentionDisplay Text="@m.Text" /></MudText>
                             }
                             @if (m.Truncated || m.Degraded || m.UnsupportedNote is { Length: > 0 })
                             {
@@ -221,8 +221,9 @@ else
             </MudPaper>
 
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
-                <MudTextField @bind-Value="_input" Label="Frage an NOOSEI" Lines="3" Immediate="true"
-                              Variant="Variant.Outlined" Class="flex-grow-1" Disabled="@(_busy || Locked)" />
+                @* NOOSEI resolves the token itself via loese_erwaehnung_auf, so an @ here points it at a record *@
+                <MentionInput @bind-Text="_input" Label="Frage an NOOSEI" Lines="3" HelperText="@MentionInput.Hint"
+                              Class="flex-grow-1" Disabled="@(_busy || Locked)" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
                            OnClick="SendAsync"
                            Disabled="@(_busy || string.IsNullOrWhiteSpace(_input) || Locked)">Senden</MudButton>

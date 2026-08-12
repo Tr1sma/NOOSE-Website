@@ -6,6 +6,7 @@
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 @inject ITextAssistService TextAssist
+@inject IMentionService MentionService
 @inject Microsoft.Extensions.Logging.ILogger<RichTextEditor> Logger
 @implements IAsyncDisposable
 
@@ -16,7 +17,15 @@
         besteht das Problem weiter, wende dich an die NOOSE-Administration.
     </MudAlert>
 }
-<div @ref="_element" class="noose-rte"></div>
+@* relative: the mention picker is placed at the caret, in coordinates JS measures against this wrapper *@
+<div style="position:relative;">
+    <div @ref="_element" class="noose-rte"></div>
+    @if (_mentionsOpen && _candidates.Count > 0)
+    {
+        <MentionPicker Candidates="_candidates" ActiveIndex="_active" OnPick="InsertMentionAsync"
+                       Style="@($"position:absolute;z-index:10;min-width:280px;max-width:420px;top:{_mentionTop}px;left:{_mentionLeft}px;")" />
+    }
+</div>
 @if (_aiBusy)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-1" />
@@ -51,6 +60,10 @@ else if (_lastCost is { } cost)
     /// <summary>One-line subject appended to the compose prompt, e.g. the record's title.</summary>
     [Parameter] public string? AiSubject { get; set; }
 
+    /// <summary>Enables the @-mention picker. Opt-in like <see cref="Ai"/>: an applicant-visible editor must
+    /// never offer it, or internal record names surface in the applicant portal.</summary>
+    [Parameter] public bool Mentions { get; set; }
+
     [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
 
     private ElementReference _element;
@@ -79,6 +92,17 @@ else if (_lastCost is { } cost)
         Ai is not null && TextAssist.IsAvailable && _user is { } u
         && !u.IsPartner() && !u.IsDemo() && u.MayWrite();
 
+    // partners post plain text: the picker is unscoped, same rule as MentionInput
+    private bool MentionsEnabled => Mentions && _user is { } u && !u.IsPartner();
+
+    private bool _mentionsOpen;
+    private int _active;
+    private int _mentionStart;
+    private int _mentionLength;
+    private int _mentionTop;
+    private int _mentionLeft;
+    private List<MentionHit> _candidates = new();
+
     protected override async Task OnInitializedAsync()
     {
         if (AuthStateTask is not null)
@@ -96,9 +120,10 @@ else if (_lastCost is { } cost)
         try
         {
             // ?v= cache-buster: bump it on every richtext.js change (dynamic imports bypass asset fingerprinting)
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=10");
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/richtext.js?v=11");
             _ref = DotNetObjectReference.Create(this);
-            await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight, AiEnabled);
+            await _module.InvokeVoidAsync("initRichText", _element, _ref, Value ?? string.Empty, MinHeight,
+                AiEnabled, MentionsEnabled, await LabelsAsync(Value));
             _ready = true;
         }
         catch (JSDisconnectedException)
@@ -122,6 +147,118 @@ else if (_lastCost is { } cost)
         {
             await ValueChanged.InvokeAsync(html);
         }
+    }
+
+    /// <summary>Chip labels for the tokens in <paramref name="html"/>; a token the viewer may not resolve is left out
+    /// on purpose, so it stays literal text in the editor instead of gaining a name it should not carry.</summary>
+    private async Task<IReadOnlyDictionary<string, string>> LabelsAsync(string? html)
+    {
+        if (!MentionsEnabled || _user is null)
+        {
+            return new Dictionary<string, string>();
+        }
+        return await MentionService.HtmlLabelsAsync(html, _user.MayClassifiedRead(), _user.GetAgentId());
+    }
+
+    [JSInvokable]
+    public async Task OnMentionQuery(string? query, int start, int length, int top, int left)
+    {
+        if (_disposed || !MentionsEnabled || _user is null)
+        {
+            return;
+        }
+        if (string.IsNullOrEmpty(query))
+        {
+            await CloseMentionsAsync();
+            return;
+        }
+        _candidates = await MentionService.CandidatesAsync(query, _user);
+        _mentionStart = start;
+        _mentionLength = length;
+        _mentionTop = top;
+        _mentionLeft = left;
+        _active = 0;
+        await SetMentionsOpenAsync(_candidates.Count > 0);
+    }
+
+    [JSInvokable]
+    public async Task OnMentionKey(string key)
+    {
+        if (_disposed || !_mentionsOpen || _candidates.Count == 0)
+        {
+            return;
+        }
+        switch (key)
+        {
+            case "ArrowDown":
+                _active = (_active + 1) % _candidates.Count;
+                break;
+            case "ArrowUp":
+                _active = (_active - 1 + _candidates.Count) % _candidates.Count;
+                break;
+            case "Enter":
+            case "Tab":
+                await InsertMentionAsync(_candidates[_active]);
+                return;
+            default:
+                await CloseMentionsAsync();
+                return;
+        }
+        StateHasChanged();
+    }
+
+    private async Task InsertMentionAsync(MentionHit hit)
+    {
+        var token = MentionParser.Token(hit.Type, hit.Id);
+        await SetMentionsOpenAsync(false);
+        if (_module is null)
+        {
+            return;
+        }
+        try
+        {
+            // the token, not the display name, is what gets stored — the chip is only what the writer sees
+            var fresh = await _module.InvokeAsync<string?>("erwaehnungEinfuegen", _element,
+                _mentionStart, _mentionLength, $"{hit.Type}:{hit.Id}", hit.Display);
+            if (fresh is null)
+            {
+                return;
+            }
+            Value = fresh;
+            if (ValueChanged.HasDelegate)
+            {
+                await ValueChanged.InvokeAsync(fresh);
+            }
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "WYSIWYG-Editor: Erwähnung konnte nicht eingefügt werden (JS-Interop). Token: {Token}", token);
+        }
+    }
+
+    private Task CloseMentionsAsync() => SetMentionsOpenAsync(false);
+
+    private async Task SetMentionsOpenAsync(bool open)
+    {
+        var changed = _mentionsOpen != open;
+        _mentionsOpen = open;
+        if (!open)
+        {
+            _candidates = new();
+            _active = 0;
+        }
+        if (changed && _module is not null)
+        {
+            // the editor only claims the arrow keys while the picker is up
+            try
+            {
+                await _module.InvokeVoidAsync("setzeErwaehnungOffen", _element, open);
+            }
+            catch (JSDisconnectedException) { /* ignore */ }
+            catch (Exception) { /* best effort */ }
+        }
+        StateHasChanged();
     }
 
     [JSInvokable]
@@ -217,7 +354,7 @@ else if (_lastCost is { } cost)
         }
         try
         {
-            await _module.InvokeVoidAsync("setHtml", _element, html ?? string.Empty);
+            await _module.InvokeVoidAsync("setHtml", _element, html ?? string.Empty, await LabelsAsync(html));
             Value = html;
         }
         catch (JSDisconnectedException)

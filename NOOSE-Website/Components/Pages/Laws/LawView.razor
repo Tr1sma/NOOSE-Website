@@ -41,7 +41,7 @@ else
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@_law.LawBook</MudChip>
                 <MudText Typo="Typo.h6">@_law.Paragraph – @_law.Title</MudText>
             </MudStack>
-            <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_law.Text</MudText>
+            <MudText Typo="Typo.body1"><MentionDisplay Text="@_law.Text" /></MudText>
             @if (!string.IsNullOrWhiteSpace(_law.Sentence))
             {
                 <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">

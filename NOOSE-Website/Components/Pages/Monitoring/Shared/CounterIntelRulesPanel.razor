@@ -47,7 +47,7 @@ else
                 <MudText Typo="Typo.body2"><b>@context.Name</b></MudText>
                 @if (!string.IsNullOrWhiteSpace(context.Description))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Description</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary"><MentionDisplay Text="@context.Description" /></MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Schweregrad">

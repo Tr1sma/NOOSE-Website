@@ -73,8 +73,7 @@ else
         }
         else
         {
-            @* Sanitized server-side on save, so safe as MarkupString. *@
-            <div class="dokument-html">@((MarkupString)_view.Activity.ContentHtml)</div>
+            <RichHtml Html="@_view.Activity.ContentHtml" />
         }
     </MudPaper>
 }

@@ -31,7 +31,7 @@
 
             <div>
                 <MudText Typo="Typo.subtitle2">Meldung</MudText>
-                <MudText Typo="Typo.body2" Style="white-space:pre-line;">@Row.Text</MudText>
+                <MudText Typo="Typo.body2"><MentionDisplay Text="@Row.Text" /></MudText>
             </div>
 
             @* whoever may decide reads the reply in the editable field below instead *@
@@ -40,7 +40,7 @@
                 <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" NoIcon="true" Dense="true">
                     <MudText Typo="Typo.subtitle2">Antwort der Führung</MudText>
                     <MudText Typo="Typo.body2" Style="white-space:pre-line;">
-                        @(string.IsNullOrWhiteSpace(Row.Response) ? "—" : Row.Response)
+                        <MentionDisplay Text="@(string.IsNullOrWhiteSpace(Row.Response) ? "—" : Row.Response)" />
                     </MudText>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
                         @(Row.DeciderName ?? "—") · @answered.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
@@ -66,8 +66,8 @@
                     }
                 </MudSelect>
 
-                <MudTextField @bind-Value="_response" Label="Antwort an den Melder (optional)" Lines="4"
-                              Counter="2000" MaxLength="2000" Immediate="true" Variant="Variant.Outlined" />
+                <MentionInput @bind-Text="_response" Label="Antwort an den Melder (optional)" Lines="4"
+                              Counter="2000" MaxLength="2000" HelperText="@MentionInput.Hint" />
 
                 @if (Row.DecidedAt is { } decided)
                 {

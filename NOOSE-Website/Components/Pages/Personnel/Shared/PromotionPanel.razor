@@ -37,8 +37,7 @@
                     </MudStack>
                     @if (!string.IsNullOrWhiteSpace(a.Justification))
                     {
-                        @* Sanitized server-side on save, so safe as MarkupString. *@
-                        <div class="dokument-html">@((MarkupString)a.Justification)</div>
+                        <RichHtml Html="@a.Justification" />
                     }
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
                         Beantragt von @(a.RequesterName ?? "—") · @a.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")

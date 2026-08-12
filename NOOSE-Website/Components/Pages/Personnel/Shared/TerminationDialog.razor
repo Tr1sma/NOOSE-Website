@@ -24,8 +24,8 @@
         {
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6">Bestätigung</MudText>
-                <MudTextField @bind-Value="_reason" Label="Begründung" Lines="3" Variant="Variant.Outlined"
-                              AutoFocus="true" Immediate="true" Required="true"
+                <MentionInput @bind-Text="_reason" Label="Begründung" Lines="3"
+                              AutoFocus="true" Required="true" HelperText="@MentionInput.Hint"
                               RequiredError="Bitte eine Begründung angeben." />
                 <MudStack Spacing="0">
                     <MudCheckBox @bind-Value="_createNote" Color="Color.Primary" Dense="true"

@@ -7,7 +7,7 @@
                 <MudTextField @bind-Value="_name" Label="Modul-Name" Variant="Variant.Outlined"
                               Required="true" RequiredError="Name ist erforderlich"
                               AutoFocus="true" Immediate="true" MaxLength="160" />
-                <MudTextField @bind-Value="_description" Label="Beschreibung (optional)" Variant="Variant.Outlined"
+                <MentionInput @bind-Text="_description" Label="Beschreibung (optional)" HelperText="@MentionInput.Hint"
                               Lines="3" MaxLength="2000" />
                 <MudNumericField @bind-Value="_sorting" Label="Sortierung" Variant="Variant.Outlined"
                                  Min="0" HelperText="Kleinere Werte erscheinen zuerst." />

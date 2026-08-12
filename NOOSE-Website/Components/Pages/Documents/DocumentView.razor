@@ -58,8 +58,7 @@ else
     <MudGrid>
         <MudItem xs="12" md="8" lg="9">
             <MudPaper Class="pa-6" Elevation="2">
-                @* Sanitized server-side on save, so safe as MarkupString. *@
-                <div class="dokument-html">@((MarkupString)_document.ContentHtml)</div>
+                <RichHtml Html="@_document.ContentHtml" />
             </MudPaper>
             @if (!_isPartner)
             {

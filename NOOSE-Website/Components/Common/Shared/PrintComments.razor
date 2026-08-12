@@ -1,9 +1,13 @@
+@inject IMentionService MentionService
+
 @if (Entries.Count > 0)
 {
     <section>
         <h2>Vermerke</h2>
-        @foreach (var k in Entries)
+        @for (var i = 0; i < Entries.Count; i++)
         {
+            var k = Entries[i];
+            var index = i;
             <div class="druck-eintrag">
                 <div class="druck-eintrag-kopf">
                     <b>@k.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</b>
@@ -12,7 +16,16 @@
                         <text> · @k.AuthorName</text>
                     }
                 </div>
-                <div class="druck-mehrzeilig">@k.Text</div>
+                <div class="druck-mehrzeilig">
+                    @if (_segments is not null && index < _segments.Count)
+                    {
+                        <MentionText Segments="_segments[index]" Plain="true" />
+                    }
+                    else
+                    {
+                        @k.Text
+                    }
+                </div>
             </div>
         }
     </section>
@@ -20,4 +33,22 @@
 
 @code {
     [Parameter, EditorRequired] public List<Comment> Entries { get; set; } = new();
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private IReadOnlyList<IReadOnlyList<MentionSegment>>? _segments;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _segments = null;
+        if (Entries.Count == 0 || AuthStateTask is null)
+        {
+            return;
+        }
+        var user = (await AuthStateTask).User;
+        // one query for the whole list, never MentionDisplay per row
+        _segments = await MentionService.ResolveManyAsync(
+            Entries.Select(k => (string?)k.Text).ToList(),
+            user.MayClassifiedRead(), user.GetAgentId(), partnerAgency: user.GetPartnerAgency());
+    }
 }

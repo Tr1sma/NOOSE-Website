@@ -45,14 +45,14 @@
 
             @if (Overrun > 0)
             {
-                <MudTextField T="string" @bind-Value="_overrunReason" Label="Begründung der Überschreitung"
-                              Variant="Variant.Outlined" Lines="2" MaxLength="500" Required="true"
+                <MentionInput @bind-Text="_overrunReason" Label="Begründung der Überschreitung"
+                              Lines="2" MaxLength="500" Required="true"
                               RequiredError="Für eine Überschreitung ist eine Begründung nötig"
                               HelperText="Wird am Antrag festgehalten und ist im Protokoll nachvollziehbar" />
             }
 
-            <MudTextField T="string" @bind-Value="_note" Label="Notiz zur Entscheidung (optional)"
-                          Variant="Variant.Outlined" Lines="2" MaxLength="2000" />
+            <MentionInput @bind-Text="_note" Label="Notiz zur Entscheidung (optional)"
+                          Lines="2" MaxLength="2000" HelperText="@MentionInput.Hint" />
         </MudStack>
     </DialogContent>
     <DialogActions>

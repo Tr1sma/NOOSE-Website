@@ -139,7 +139,7 @@ else
                         <b>Budget-Überschreitung um @Money.Format(overrun)</b>
                         @if (!string.IsNullOrWhiteSpace(_request.OverrunReason))
                         {
-                            <div>@_request.OverrunReason</div>
+                            <div><MentionDisplay Text="@_request.OverrunReason" /></div>
                         }
                     </MudAlert>
                 }
@@ -158,7 +158,7 @@ else
                         }
                         @if (!string.IsNullOrWhiteSpace(_request.DecisionNote))
                         {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@_request.DecisionNote</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary"><MentionDisplay Text="@_request.DecisionNote" /></MudText>
                         }
                         @if (_request.PaidAt is { } paidAt)
                         {

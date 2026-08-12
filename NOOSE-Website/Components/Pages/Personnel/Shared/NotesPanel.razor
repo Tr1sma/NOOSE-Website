@@ -46,7 +46,7 @@
                         }
                     </MudSelect>
                 }
-                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" Ai="TextAssistContext.PersonnelNote" />
+                <RichTextEditor @ref="_editor" @bind-Value="_newHtml" MinHeight="200px" Ai="TextAssistContext.PersonnelNote" Mentions="true" />
                 <div>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                                OnClick="AddAsync" Disabled="@(_saves || string.IsNullOrWhiteSpace(_newHtml))">Hinzufügen</MudButton>
@@ -90,8 +90,7 @@
                                 📅 @v.EntryDate.ToString("dd.MM.yyyy HH:mm")
                             </MudText>
                         </MudStack>
-                        @* Sanitized server-side on save, so safe as MarkupString. *@
-                        <div class="dokument-html">@((MarkupString)v.Text)</div>
+                        <RichHtml Html="@v.Text" />
                         @if (ExecutorNames(v) is { Length: > 0 } exec)
                         {
                             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">👮 @exec</MudText>

@@ -4,7 +4,7 @@
 
 <MudTextField T="string" Value="@_text" ValueChanged="OnTextChanged" Immediate="true"
               Label="@Label" Placeholder="@Placeholder" HelperText="@HelperText" Variant="Variant.Outlined"
-              Lines="@Lines" MaxLength="@MaxLength" Disabled="@Disabled" Class="@Class"
+              Lines="@Lines" MaxLength="@MaxLength" Counter="@Counter" Disabled="@Disabled" Class="@Class"
               Required="@Required" RequiredError="@RequiredError" AutoFocus="@AutoFocus"
               Adornment="@(_isPartner ? Adornment.None : Adornment.End)" AdornmentIcon="@Icons.Material.Filled.AlternateEmail"
               OnAdornmentClick="ManualOpenAsync" AdornmentAriaLabel="Objekt verlinken"
@@ -12,24 +12,8 @@
 
 @if (_pickerOpen && _candidates.Count > 0)
 {
-    <MudPaper Class="pa-1 mt-1" Elevation="4" Style="max-height:260px;overflow-y:auto;">
-        @foreach (var k in _candidates)
-        {
-            <MudButton FullWidth="true" Variant="Variant.Text" Class="justify-start text-none px-2"
-                       OnClick="@(() => InsertAsync(k))">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-grow-1" Style="width:100%;">
-                    <MudIcon Icon="@Symbol(k.Type)" Size="Size.Small" Color="Color.Primary" />
-                    <MudText Typo="Typo.body2">@k.Display</MudText>
-                    @if (!string.IsNullOrWhiteSpace(k.Sub))
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@k.Sub</MudText>
-                    }
-                    <MudSpacer />
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@TypeLabel(k.Type)</MudText>
-                </MudStack>
-            </MudButton>
-        }
-    </MudPaper>
+    @* no ActiveIndex: MudTextField only offers a blanket preventDefault, so arrow keys stay with the caret *@
+    <MentionPicker Candidates="_candidates" OnPick="InsertAsync" Class="mt-1" />
 }
 
 @if (_references.Count > 0)
@@ -42,7 +26,7 @@
             var v = _references[i];
             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
                      Color="@(v.Hidden ? Color.Warning : Color.Primary)"
-                     Icon="@Symbol(v.Type)" OnClose="@(() => RemoveTokenAsync(idx))">@v.Text</MudChip>
+                     Icon="@MentionVisuals.Symbol(v.Type)" OnClose="@(() => RemoveTokenAsync(idx))">@v.Text</MudChip>
         }
     </MudStack>
 }
@@ -62,6 +46,7 @@
     [Parameter] public string? HelperText { get; set; }
     [Parameter] public int Lines { get; set; } = 2;
     [Parameter] public int MaxLength { get; set; } = 524288;
+    [Parameter] public int? Counter { get; set; }
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public bool Required { get; set; }
@@ -121,8 +106,7 @@
         var m = ActiveQuery.Match(_text);
         if (!m.Success || m.Groups[1].Value.Length < 1)
         {
-            _pickerOpen = false;
-            _candidates = new();
+            ClosePicker();
             return;
         }
         if (AuthStateTask is null)
@@ -133,6 +117,12 @@
         _pickerOpen = _candidates.Count > 0;
     }
 
+    private void ClosePicker()
+    {
+        _pickerOpen = false;
+        _candidates = new();
+    }
+
     private async Task InsertAsync(MentionHit k)
     {
         var m = ActiveQuery.Match(_text);
@@ -140,8 +130,7 @@
         _text = m.Success
             ? string.Concat(_text.AsSpan(0, m.Index), MentionParser.Token(k.Type, k.Id), " ")
             : _text + MentionParser.Token(k.Type, k.Id) + " ";
-        _pickerOpen = false;
-        _candidates = new();
+        ClosePicker();
         await TextChanged.InvokeAsync(_text);
         await ReferencesRefreshAsync();
     }
@@ -185,12 +174,12 @@
     {
         if (e.Key == "Escape" && _pickerOpen)
         {
-            _pickerOpen = false;
+            ClosePicker();
             return;
         }
         if (e.Key == "Enter" && e.CtrlKey)
         {
-            _pickerOpen = false;
+            ClosePicker();
             await OnSubmit.InvokeAsync();
         }
     }
@@ -202,39 +191,4 @@
         await TextChanged.InvokeAsync(_text);
     }
 
-    private static string Symbol(string? type) => type switch
-    {
-        nameof(Person) => Icons.Material.Filled.Badge,
-        nameof(Faction) => Icons.Material.Filled.Groups,
-        nameof(PersonGroup) => Icons.Material.Filled.Diversity3,
-        nameof(Party) => Icons.Material.Filled.AccountBalance,
-        nameof(Operation) => Icons.Material.Filled.Radar,
-        nameof(Taskforce) => Icons.Material.Filled.Groups2,
-        nameof(Case) => Icons.Material.Filled.FolderSpecial,
-        nameof(Job) => Icons.Material.Filled.AssignmentTurnedIn,
-        nameof(Appointment) => Icons.Material.Filled.Event,
-        nameof(Meeting) => Icons.Material.Filled.Groups,
-        nameof(Document) => Icons.Material.Filled.Article,
-        nameof(Source) => Icons.Material.Filled.AttachFile,
-        nameof(Agent) => Icons.Material.Filled.Person,
-        _ => Icons.Material.Filled.Link,
-    };
-
-    private static string TypeLabel(string? type) => type switch
-    {
-        nameof(Person) => "Person",
-        nameof(Faction) => "Fraktion",
-        nameof(PersonGroup) => "Gruppe",
-        nameof(Party) => "Partei",
-        nameof(Operation) => "Operation",
-        nameof(Taskforce) => "Taskforce",
-        nameof(Case) => "Vorgang",
-        nameof(Job) => "Aufgabe",
-        nameof(Appointment) => "Termin",
-        nameof(Meeting) => "Besprechung",
-        nameof(Document) => "Dokument",
-        nameof(Source) => "Quelle",
-        nameof(Agent) => "Agent",
-        _ => "",
-    };
 }

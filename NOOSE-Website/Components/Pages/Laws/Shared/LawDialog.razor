@@ -12,7 +12,7 @@
             <MudTextField @bind-Value="_input.Title" Label="Titel" Variant="Variant.Outlined"
                           Required="true" RequiredError="Titel ist erforderlich"
                           Placeholder="z. B. Landfriedensbruch" />
-            <MudTextField @bind-Value="_input.Text" Label="Gesetzestext" Variant="Variant.Outlined"
+            <MentionInput @bind-Text="_input.Text" Label="Gesetzestext" HelperText="@MentionInput.Hint"
                           Lines="8" Required="true" RequiredError="Text ist erforderlich" />
             <MudTextField @bind-Value="_input.Sentence" Label="Strafmaß / Rechtsfolge (optional)" Variant="Variant.Outlined"
                           Placeholder="z. B. Freiheitsstrafe bis zu 3 Jahren oder Geldstrafe" />

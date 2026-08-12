@@ -21,6 +21,12 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
 {
     private const int CandidatesPerGroup = 5;
 
+    /// <summary>Stands in for a target the viewer may not see; never the record's name.</summary>
+    internal const string ClassifiedLabel = "Verschlusssache";
+
+    /// <summary>Stands in for a target that is gone, trashed or outside the viewer's taskforces.</summary>
+    internal const string MissingLabel = "(nicht verfügbar)";
+
     // releasable record types whose name a partner mention may reveal once released; all other types are hidden from partners
     private static readonly string[] PartnerReleasableMentionTypes =
     {
@@ -81,6 +87,47 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         return result;
     }
 
+    public async Task<string> ResolveHtmlAsync(string? html, bool isLeadership, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null, bool plain = false)
+    {
+        var refs = MentionHtml.Refs(html);
+        if (refs.Count == 0)
+        {
+            return html ?? string.Empty;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // foreign taskforces stay unresolved -> shown as unavailable
+        var map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
+        if (partnerAgency is { } agency)
+        {
+            await ApplyPartnerScopeAsync(db, map, agency, meId, cancellationToken);
+        }
+        return MentionHtml.Rewrite(html, map, isLeadership, plain);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> HtmlLabelsAsync(string? html, bool isLeadership, string? meId, CancellationToken cancellationToken = default, PartnerAgency? partnerAgency = null)
+    {
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+        var refs = MentionHtml.Refs(html);
+        if (refs.Count == 0)
+        {
+            return labels;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var map = await RecordsReference.ResolveAsync(db, refs, cancellationToken, mayAllTaskforces: isLeadership, meId: meId);
+        if (partnerAgency is { } agency)
+        {
+            await ApplyPartnerScopeAsync(db, map, agency, meId, cancellationToken);
+        }
+        foreach (var (type, id) in refs)
+        {
+            // every ref gets a chip: an unlabelled token would sit in the editor as loose text the writer can break
+            labels[$"{type}:{id}"] = map.TryGetValue((type, id), out var a)
+                ? (a.Classified && !isLeadership ? ClassifiedLabel : a.Display)
+                : MissingLabel;
+        }
+        return labels;
+    }
+
     /// <summary>Drops resolved mentions a partner may not see (unreleased, classified, or a non-releasable type) so they render as a neutral unavailable chip — no name, Aktenzeichen or link.</summary>
     private static async Task ApplyPartnerScopeAsync(
         AppDbContext db, Dictionary<(string, string), RecordsReference.Resolution> map,
@@ -120,7 +167,8 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
         }
     }
 
-    private static List<MentionSegment> Segment(string text, IReadOnlyList<MentionToken> tokens,
+    /// <summary>The one place that decides how a resolved, classified or missing target reads; shared with <see cref="MentionHtml"/>.</summary>
+    internal static List<MentionSegment> Segment(string text, IReadOnlyList<MentionToken> tokens,
         Dictionary<(string, string), RecordsReference.Resolution> map, bool isLeadership)
     {
         if (tokens.Count == 0)
@@ -139,13 +187,13 @@ public class MentionService(IDbContextFactory<AppDbContext> dbFactory, ISearchSe
             {
                 // classified the viewer can't see -> neutral chip without name/link
                 segments.Add(a.Classified && !isLeadership
-                    ? new MentionSegment(true, "Verschlusssache", tok.Type, null, Hidden: true)
+                    ? new MentionSegment(true, ClassifiedLabel, tok.Type, null, Hidden: true)
                     : new MentionSegment(true, a.Display, tok.Type, a.Href, false));
             }
             else
             {
                 // target deleted/unknown
-                segments.Add(new MentionSegment(true, "(nicht verfügbar)", tok.Type, null, false));
+                segments.Add(new MentionSegment(true, MissingLabel, tok.Type, null, false));
             }
             pos = tok.Start + tok.Length;
         }

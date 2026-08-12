@@ -107,5 +107,9 @@ else
     }
 
     private static string Snippet(string text)
-        => text.Length <= 100 ? text : string.Concat(text.AsSpan(0, 100), "…");
+    {
+        // a list preview never resolves tokens, so drop them rather than print @{Typ:Id}
+        var bare = MentionParser.Strip(text);
+        return bare.Length <= 100 ? bare : string.Concat(bare.AsSpan(0, 100), "…");
+    }
 }

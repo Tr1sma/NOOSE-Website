@@ -9,7 +9,7 @@
 
     <MudItem xs="12">
         <MudText Typo="Typo.subtitle2" Class="mb-1">Inhalt</MudText>
-        <RichTextEditor @ref="_editor" Value="@_content" MinHeight="320px" Ai="TextAssistContext.Announcement" AiSubject="@Input.Title" />
+        <RichTextEditor @ref="_editor" Value="@_content" MinHeight="320px" Ai="TextAssistContext.Announcement" AiSubject="@Input.Title" Mentions="true" />
     </MudItem>
 
     <MudItem xs="12">

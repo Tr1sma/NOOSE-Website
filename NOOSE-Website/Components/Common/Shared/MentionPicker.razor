@@ -1,0 +1,35 @@
+@* Candidate list of an @-mention picker; shared by MentionInput and RichTextEditor. *@
+
+<MudPaper Class="@($"pa-1 {Class}")" Elevation="4" Style="@($"max-height:260px;overflow-y:auto;{Style}")">
+    @for (var i = 0; i < Candidates.Count; i++)
+    {
+        var k = Candidates[i];
+        var active = i == ActiveIndex;
+        <MudButton FullWidth="true" Variant="@(active ? Variant.Filled : Variant.Text)"
+                   Color="@(active ? Color.Primary : Color.Default)"
+                   Class="justify-start text-none px-2" OnClick="@(() => OnPick.InvokeAsync(k))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-grow-1" Style="width:100%;">
+                <MudIcon Icon="@MentionVisuals.Symbol(k.Type)" Size="Size.Small" Color="Color.Primary" />
+                <MudText Typo="Typo.body2">@k.Display</MudText>
+                @if (!string.IsNullOrWhiteSpace(k.Sub))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@k.Sub</MudText>
+                }
+                <MudSpacer />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@MentionVisuals.Label(k.Type)</MudText>
+            </MudStack>
+        </MudButton>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<MentionHit> Candidates { get; set; } = Array.Empty<MentionHit>();
+
+    /// <summary>Keyboard-highlighted row; -1 highlights nothing.</summary>
+    [Parameter] public int ActiveIndex { get; set; } = -1;
+
+    [Parameter] public EventCallback<MentionHit> OnPick { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+}

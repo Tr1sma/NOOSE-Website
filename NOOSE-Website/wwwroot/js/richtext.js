@@ -3,8 +3,15 @@
 let quillLadenPromise = null;
 let tabellenModulPromise = null; // table handler
 let groessenRegistriert = false;
+let erwaehnungRegistriert = false;
 const SCHRIFTGROESSEN = ['0.75em', '1.5em', '2.5em']; // inline font-size values
 const SCROLL_TOLERANZ = 2; // ignore sub-pixel drift
+const ERWAEHNUNG_BLOT = 'erwaehnung';
+const ERWAEHNUNG_FENSTER = 60; // chars scanned back from the caret
+const ERWAEHNUNG_VERZOEGERUNG = 120;
+const ERWAEHNUNG_ABFRAGE = /@([^\s@{}]*)$/;
+const ERWAEHNUNG_TOKEN = /@\{(\w+:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\}/g;
+const ERWAEHNUNG_TASTEN = ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'];
 
 // register style-based size so font-size survives sanitization
 function registriereGroessen() {
@@ -15,6 +22,65 @@ function registriereGroessen() {
     SizeStyle.whitelist = SCHRIFTGROESSEN;
     window.Quill.register(SizeStyle, true);
     groessenRegistriert = true;
+}
+
+// Stored html carries the bare @{Typ:Id} token, same as every plain-text field — a frozen label would leak
+// the name of a classified record into search snippets, Discord embeds and LLM context. The chip below is
+// view-only: built on load, dissolved back into the token on read.
+function registriereErwaehnung() {
+    if (erwaehnungRegistriert || !window.Quill) {
+        return;
+    }
+    const Embed = window.Quill.import('blots/embed');
+    class ErwaehnungBlot extends Embed {
+        static create(wert) {
+            const knoten = super.create();
+            knoten.setAttribute('data-erwaehnung', wert.token);
+            knoten.textContent = '@' + wert.beschriftung;
+            return knoten;
+        }
+        static value(knoten) {
+            return {
+                token: knoten.getAttribute('data-erwaehnung'),
+                beschriftung: (knoten.textContent || '').replace(/^@/, ''),
+            };
+        }
+    }
+    ErwaehnungBlot.blotName = ERWAEHNUNG_BLOT;
+    ErwaehnungBlot.tagName = 'SPAN';
+    ErwaehnungBlot.className = 'erwaehnung';
+    window.Quill.register(ErwaehnungBlot, true);
+    erwaehnungRegistriert = true;
+}
+
+function maskiere(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// token -> chip; an unresolvable token stays literal text so nothing is silently dropped
+function tokenZuChip(html, beschriftungen) {
+    if (!html || html.indexOf('@{') < 0) {
+        return html;
+    }
+    return html.replace(ERWAEHNUNG_TOKEN, (treffer, schluessel) => {
+        const beschriftung = beschriftungen && beschriftungen[schluessel];
+        return beschriftung
+            ? '<span class="erwaehnung" data-erwaehnung="' + maskiere(schluessel) + '">@' + maskiere(beschriftung) + '</span>'
+            : treffer;
+    });
+}
+
+// chip -> token, on a clone: quill's embed wraps the label in guard text nodes, which no regex survives
+function chipZuToken(wurzel) {
+    if (!wurzel.querySelector('[data-erwaehnung]')) {
+        return wurzel.innerHTML;
+    }
+    const klon = wurzel.cloneNode(true);
+    for (const knoten of Array.from(klon.querySelectorAll('[data-erwaehnung]'))) {
+        const token = '@{' + knoten.getAttribute('data-erwaehnung') + '}';
+        knoten.parentNode.replaceChild(document.createTextNode(token), knoten);
+    }
+    return klon.innerHTML;
 }
 
 // quill focuses hidden nodes; suppress the induced scroll
@@ -240,7 +306,8 @@ function htmlAusBereich(editor, index, laenge) {
         entschaerfeFokus(schattenEditor.root);
     }
     schattenEditor.setContents(editor.getContents(index, laenge), 'silent');
-    const html = schattenEditor.root.innerHTML;
+    // tokens, not chips: NOOSEI must see what the field stores, and TextAssistService counts them
+    const html = chipZuToken(schattenEditor.root);
     schattenEditor.setText('', 'silent'); // never hold a copy of the document
     return html;
 }
@@ -266,6 +333,83 @@ function bilderZurueck(zustand, html) {
         const quelle = zustand.bilder[Number(nummer)];
         return quelle ? ' src="' + quelle + '"' : '';
     });
+}
+
+// watches the caret for a trailing @query and reports it with the coordinates the picker renders at
+function haengeErwaehnungAn(element, editor, zustand) {
+    const melde = () => {
+        zustand.timer = null;
+        if (zustand.tot || !zustand.dotnetRef) {
+            return;
+        }
+        const bereich = editor.getSelection();
+        if (!bereich) {
+            // no range means the editor lost focus — clicking a candidate does that, so leave the list standing
+            return;
+        }
+        if (bereich.length > 0) {
+            zustand.dotnetRef.invokeMethodAsync('OnMentionQuery', null, 0, 0, 0, 0).catch(() => { });
+            return;
+        }
+        const von = Math.max(0, bereich.index - ERWAEHNUNG_FENSTER);
+        const treffer = ERWAEHNUNG_ABFRAGE.exec(editor.getText(von, bereich.index - von));
+        if (!treffer || treffer[1].length < 1) {
+            zustand.dotnetRef.invokeMethodAsync('OnMentionQuery', null, 0, 0, 0, 0).catch(() => { });
+            return;
+        }
+        const start = bereich.index - treffer[0].length;
+        const masse = editor.getBounds(bereich.index);
+        zustand.dotnetRef.invokeMethodAsync('OnMentionQuery', treffer[1], start, treffer[0].length,
+            Math.round(masse.bottom + element.offsetTop), Math.round(masse.left + element.offsetLeft))
+            .catch(() => { });
+    };
+
+    const anstossen = () => {
+        if (zustand.timer) {
+            clearTimeout(zustand.timer);
+        }
+        zustand.timer = setTimeout(melde, ERWAEHNUNG_VERZOEGERUNG);
+    };
+    editor.on('text-change', anstossen);
+    editor.on('selection-change', anstossen);
+
+    // capture on the container runs before quill's own keyboard module
+    zustand.tasten = (ereignis) => {
+        if (!zustand.offen || zustand.tot || !zustand.dotnetRef || !ERWAEHNUNG_TASTEN.includes(ereignis.key)) {
+            return;
+        }
+        ereignis.preventDefault();
+        ereignis.stopPropagation();
+        zustand.dotnetRef.invokeMethodAsync('OnMentionKey', ereignis.key).catch(() => { });
+    };
+    element.addEventListener('keydown', zustand.tasten, true);
+}
+
+/// tells the editor whether the picker is open, so it may claim the arrow keys
+export function setzeErwaehnungOffen(element, offen) {
+    const zustand = element && element.__nooseErwaehnung;
+    if (zustand) {
+        zustand.offen = !!offen;
+    }
+}
+
+/// replaces the active @query with a mention chip; returns the fresh html
+export function erwaehnungEinfuegen(element, start, laenge, token, beschriftung) {
+    const editor = element && element.__nooseQuill;
+    const zustand = element && element.__nooseErwaehnung;
+    if (!editor || !zustand || zustand.tot) {
+        return null;
+    }
+    zustand.offen = false;
+    zustand.beschriftungen[token] = beschriftung;
+    if (laenge > 0) {
+        editor.deleteText(start, laenge, 'user');
+    }
+    editor.insertEmbed(start, ERWAEHNUNG_BLOT, { token, beschriftung }, 'user');
+    editor.insertText(start + 1, ' ', 'user');
+    editor.setSelection(start + 2, 0, 'silent');
+    editor.focus();
+    return leseHtml(editor);
 }
 
 function setzeKiBeschaeftigt(element, beschaeftigt) {
@@ -303,12 +447,13 @@ function meldeKi(element, zustand, modus) {
         });
 }
 
-export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv) {
+export async function initRichText(element, dotnetRef, initialHtml, minHeight, kiAktiv, erwaehnungAktiv, beschriftungen) {
     await ladeQuill();
     if (!element) {
         return;
     }
     registriereGroessen();
+    registriereErwaehnung();
     const tableHandler = await ladeTabellenModul();
 
     const toolbarGruppen = [
@@ -332,6 +477,10 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
 
     const zustand = { dotnetRef, laeuft: false, tot: false, bilder: [] };
     element.__nooseKi = zustand;
+    element.__nooseErwaehnung = {
+        dotnetRef, tot: false, offen: false, timer: null, tasten: null,
+        beschriftungen: Object.assign({}, beschriftungen),
+    };
 
     if (kiAktiv) {
         registriereKiSymbole();
@@ -366,7 +515,11 @@ export async function initRichText(element, dotnetRef, initialHtml, minHeight, k
     }
 
     if (initialHtml) {
-        editor.clipboard.dangerouslyPasteHTML(initialHtml);
+        editor.clipboard.dangerouslyPasteHTML(tokenZuChip(initialHtml, element.__nooseErwaehnung.beschriftungen));
+    }
+
+    if (erwaehnungAktiv) {
+        haengeErwaehnungAn(element, editor, element.__nooseErwaehnung);
     }
 
     let timer = null;
@@ -409,7 +562,10 @@ export function applyAiResult(element, index, laenge, html, erwarteteLaenge) {
         return null;
     }
 
-    const fertig = bilderZurueck(zustand, html || '');
+    // the token set is unchanged (TextAssistService rejects a correction that moved a mention), so the
+    // labels captured when the document was loaded still describe every token coming back
+    const erwaehnungen = element.__nooseErwaehnung;
+    const fertig = tokenZuChip(bilderZurueck(zustand, html || ''), erwaehnungen ? erwaehnungen.beschriftungen : null);
     const verlauf = editor.getModule('history');
     // own undo entry on both sides: neither swallow the last keystroke nor merge with the next
     if (verlauf && verlauf.cutoff) {
@@ -445,17 +601,23 @@ function leseHtml(editor) {
     const ohneText = editor.getText().trim().length === 0;
     const ohneTabelle = editor.root.querySelector('table') === null;
     const ohneBild = editor.root.querySelector('img') === null;
-    return ohneText && ohneTabelle && ohneBild ? '' : editor.root.innerHTML;
+    // a mention carries text, but a document consisting only of one is not empty either
+    const ohneErwaehnung = editor.root.querySelector('[data-erwaehnung]') === null;
+    return ohneText && ohneTabelle && ohneBild && ohneErwaehnung ? '' : chipZuToken(editor.root);
 }
 
-export function setHtml(element, html) {
+export function setHtml(element, html, beschriftungen) {
     const editor = element && element.__nooseQuill;
     if (!editor) {
         return;
     }
+    const zustand = element.__nooseErwaehnung;
+    if (zustand && beschriftungen) {
+        Object.assign(zustand.beschriftungen, beschriftungen);
+    }
     editor.setText('');
     if (html) {
-        editor.clipboard.dangerouslyPasteHTML(html);
+        editor.clipboard.dangerouslyPasteHTML(tokenZuChip(html, zustand ? zustand.beschriftungen : null));
     }
 }
 
@@ -474,6 +636,19 @@ export function destroyRichText(element) {
         element.__nooseKi.dotnetRef = null;
         element.__nooseKi.bilder = [];
     }
+    const erwaehnungen = element.__nooseErwaehnung;
+    if (erwaehnungen) {
+        erwaehnungen.tot = true;
+        erwaehnungen.dotnetRef = null;
+        erwaehnungen.offen = false;
+        if (erwaehnungen.timer) {
+            clearTimeout(erwaehnungen.timer);
+        }
+        if (erwaehnungen.tasten) {
+            element.removeEventListener('keydown', erwaehnungen.tasten, true);
+        }
+    }
+    element.__nooseErwaehnung = null;
     element.__nooseKi = null;
     element.__nooseQuill = null;
 }

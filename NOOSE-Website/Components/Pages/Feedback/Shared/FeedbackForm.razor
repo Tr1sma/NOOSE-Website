@@ -54,9 +54,9 @@
             </MudSelect>
         }
 
-        <MudTextField @bind-Value="_input.Text" Label="Deine Meldung" Lines="5" Required="true"
+        <MentionInput @bind-Text="_input.Text" Label="Deine Meldung" Lines="5" Required="true"
                       RequiredError="Bitte eine Meldung eingeben." Counter="2000" MaxLength="2000"
-                      Immediate="true" Variant="Variant.Outlined" />
+                      HelperText="@MentionInput.Hint" />
 
         @* write guard: read-only supervision files nothing *@
         <AuthorizeView Policy="@Policies.WriteAccess">
