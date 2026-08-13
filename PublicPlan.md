@@ -89,24 +89,32 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 
 ## Phasenübersicht
 
-| # | Phase | Migration | Abhängt von |
-|---|---|---|---|
-| 1 | Bürger-Login & Profil | `Phase61_BuergerKonto` | — |
-| 2 | Modul-Schalter, Kill-Switch, Nav, Indexierung, `PublicVisibility` | `Phase62_OeffentlicheModule` | 1 |
-| 3 | CMS-Seiten (Text zur Arbeit, FAQ, Zuständigkeiten) | `Phase63_OeffentlicheSeiten` | 2 |
-| 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Phase64_OeffentlicheFahndung` | 2 |
-| 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Phase65_FahndungWarnhinweise` | 4 |
-| 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Phase66_Kopfgeld` | 4 |
-| 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Phase67_Hinweise` | 4 |
-| 8 | Hinweise Ausbau: Dubletten, Priorität, Vertrauen, Übernahme | keine | 7 |
-| 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Phase69_HinweisBelohnung` | 6, 7 |
-| 10 | Ticket-Chat (Führungsebene) | `Phase70_Tickets` | 2 |
-| 11 | Öffentliche Vorlagen + 4. Token-System | `Phase71_OeffentlicheVorlagen` | 7, 10 |
-| 12 | Organisationen + Gefahrenlisten | `Phase72_Fraktionsprofile` | 4 |
-| 13 | Gesuchte Fahrzeuge/Waffen + Einspruch | `Phase73_FahrzeugeEinspruch` | 4, 1 |
-| 14 | Presse, Lageberichte, Gesetzesauszüge, Warnungen | `Phase74_Redaktion` | 3 |
-| 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14 |
-| 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 |
+| # | Phase | Migration | Abhängt von | Status |
+|---|---|---|---|---|
+| 1 | Bürger-Login & Profil | `Phase61_BuergerKonto` | — | **fertig** |
+| 2 | Modul-Schalter, Kill-Switch, Nav, Indexierung, `PublicVisibility` | `Oeffentlich02_Module` | 1 | **fertig** |
+| 3 | CMS-Seiten (Text zur Arbeit, FAQ, Zuständigkeiten) | `Oeffentlich03_Seiten` | 2 | **fertig** |
+| 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Oeffentlich04_Fahndung` | 2 | offen |
+| 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | offen |
+| 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | offen |
+| 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | offen |
+| 8 | Hinweise Ausbau: Dubletten, Priorität, Vertrauen, Übernahme | keine | 7 | offen |
+| 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | offen |
+| 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | offen |
+| 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | offen |
+| 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | offen |
+| 13 | Gesuchte Fahrzeuge/Waffen + Einspruch | `Oeffentlich13_FahrzeugeEinspruch` | 4, 1 | offen |
+| 14 | Presse, Lageberichte, Gesetzesauszüge, Warnungen | `Oeffentlich14_Redaktion` | 3 | offen |
+| 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14 | offen |
+| 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
+
+> **Migrations-Präfix `Oeffentlich<Phase>_`.** Die interne Phasen-Zählung des Projekts steht schon bei
+> `Phase69_*`; die ursprünglich geplanten Namen `Phase61`–`Phase74` hätten sechs bestehende Migrationen
+> doppelt belegt (`Phase61_Finanzierungsantraege`, `Phase62_Feedback`, `Phase63_FeedbackStatus`,
+> `Phase65_KiKontingente`, `Phase66_NooseiKurzbrief`, `Phase67_NooseiUnterhaltungen`, `Phase68`/`Phase69`).
+> Der öffentliche Bereich zählt deshalb in einer eigenen Reihe, deren Nummer die **Planphase** ist.
+> Ausnahme: Phase 1 heißt noch `Phase61_BuergerKonto` — sie war bereits angewendet, als die Kollision
+> auffiel, und ein Umbenennen hätte die Migrations-Historie der Entwicklungs-DB von Hand korrigieren müssen.
 
 Nach jeder Phase gilt derselbe Abschluss: `dotnet build` ohne Warnung, `dotnet test` grün,
 `dotnet run` und die genannten Klickpfade wirklich durchgehen. Nach 3, 9 und 16 sind natürliche Deploy-Punkte.
@@ -156,59 +164,173 @@ Roster nirgends auftaucht, und eine Sperre ihn beim nächsten Schreibversuch abw
 **Ziel:** Das Gerüst, in das alle späteren Module eingehängt werden. Ab hier ist jedes neue Modul
 per Definition abschaltbar.
 
-**Daten** (`Phase62_OeffentlicheModule`)
+**Daten** (`Oeffentlich02_Module`)
 - `Data/Entities/Public/OeffentlichesModul.cs` → `OeffentlicheModule`: `Schluessel` (unique),
   `IstAktiv`, `OfflineText`, `Reihenfolge`, `LabelUeberschreibung`, `IconUeberschreibung`, `IAuditable`.
-- `SystemSettingKeys`: `PublicAreaKillSwitch`.
+  **Kein `ISoftDelete`:** der Katalog im Code besitzt die Schlüssel, die Zeile nur die Wahl des Betreibers —
+  eine gelöschte Zeile würde das Modul stillschweigend auf seinen Standard zurückfallen lassen statt aus zu bleiben.
+- `SystemSettingKeys`: `PublicAreaKillSwitch` (`OeffentlicherBereichNotAus`).
 
 **Code**
-- `Services/Public/PublicModules.cs` — statischer Katalog aller Modul-Schlüssel (eine Zeile je Modul,
-  auch für noch nicht gebaute); Seeding beim Start wie `ThreatScoreSweepWorker` seine Fraktionen seedet.
-- `IPublicModuleService` + Impl: `GetAsync` (`IMemoryCache`, 10 s), `IsEnabled`, `RequireEnabled` (wirft),
-  `SaveAsync` (`Permission.RequireAdmin`), Kill-Switch schlägt jedes Einzelmodul.
-- `Services/Public/PublicVisibility.cs` + `PublicVisibilityCoverageTests` — jetzt einführen, solange die
-  Liste noch leer ist. Jede Entität aus späteren Phasen muss sich eintragen, sonst roter Build.
-- `Components/Common/Shared/PublicModuleGate.razor` — rendert Inhalt oder Offline-Text.
+- `Services/Public/PublicModules.cs` — statischer Katalog **aller 21** Modul-Schlüssel (auch der noch nicht
+  gebauten), je Zeile Label, Beschreibung, Icon, Nav-Route, Gruppe, Reihenfolge, `DefaultEnabled`, `Available`.
+  `PublicModuleSeeder` legt beim Start fehlende Zeilen an und **überschreibt nie** eine gespeicherte Wahl.
+- Zwei Module sind sofort scharf, damit die Phase überhaupt nachweisbar ist: `Karriere` (Seite + Nav-Tab +
+  Landing-Kachel + `source=bewerbung`-Login) und `BuergerRegistrierung`. Beide stehen auf „an", weil ein
+  Standard-„aus" eine bestehende Funktion abgeschaltet hätte. **`BuergerRegistrierung` steuert nur die
+  Neuanmeldung** — ein bestehendes Bürgerkonto behält seinen Zugang, sonst sperrt ein Versehen Leute aus
+  ihren eigenen laufenden Hinweisen aus.
+- `IPublicModuleService` + Impl: `GetAsync` (`IMemoryCache`, 10 s), `IsEnabledAsync`, `RequireEnabledAsync`
+  (wirft), `OfflineTextAsync`, `NavEntriesAsync`, `SaveAsync` (`Permission.RequireAdmin`),
+  `KillSwitchSetAsync`. Kill-Switch schlägt jedes Einzelmodul, **ohne** gespeicherte Wahlen zu verändern.
+  `PublicModuleState` trägt Effektiv-Werte **und** die rohen Overrides — ein Eingabefeld, das mit einem
+  gemergten Standard vorbelegt ist, macht beim ersten Speichern jeden Standard zum Override.
+- **Icon-Overrides sind eine Allowlist, kein Freitext** (`PublicModules.IconChoices`, gespeichert wird der
+  Name): MudBlazor rendert einen Icon-Wert als Markup, ein freies SVG liefe bei jedem anonymen Besucher.
+- `Services/Public/PublicVisibility.cs` + `PublicVisibilityCoverageTests` — jetzt eingeführt, solange die
+  `Publishable`-Liste noch (fast) leer ist. Jede Entität aus späteren Phasen muss sich eintragen, sonst roter Build.
+- `Components/Common/Shared/PublicModuleGate.razor` — rendert Inhalt oder Offline-Text; sitzt **in der Seite**,
+  nicht nur in der Nav, weil eine bekannte URL die Route trotzdem erreicht.
 - `Components/Layout/PublicNav.razor`: hartkodiertes `Tabs`-Array raus, aus `IPublicModuleService` gespeist,
-  nach `Reihenfolge`; Gruppierung vorbereiten (Fahndung / Behörde / Service), damit 10+ Tabs später tragen.
-- `/einstellungen`: `PublicModulesPanel` (Schalter, Offline-Text, Reihenfolge, Label/Icon) — hängt an
-  `Policies.AdminPage`.
-- `wwwroot/robots.txt` erlaubt öffentliche Routen, sperrt alles andere; Middleware setzt
-  `X-Robots-Tag: noindex` für alles außerhalb der Public-Routen.
+  nach `Reihenfolge`, mit Trenner zwischen den Gruppen (Fahndung / Behörde / Service). „Start" ist kein Modul
+  und bleibt fest. `PublicSiteLayout` zeigt bei Not-Aus einen Banner — die Startseite bleibt erreichbar,
+  ihre Inhalte sind weg.
+- **Ein eingeschaltetes Modul ohne Seiten bekommt trotzdem keinen Tab** (`NavEntries()` filtert `Available`):
+  Vorab-Einschalten ist der Sinn der Sache, ein Tab auf eine 404-Route nicht. Die Wahl bleibt gespeichert und
+  wirkt, sobald die bauende Phase `Available` umstellt — also **jede Phase muss ihr Modul dort umstellen**.
+- `/einstellungen?tab=oeffentliche-module`: `PublicModulesPanel` (Schalter, Offline-Text, Reihenfolge,
+  Label/Icon, Not-Aus) — hängt an `Policies.AdminPage`; Module ohne Seiten tragen „in Vorbereitung".
+- `Services/Public/PublicRoutes.cs` als einzige Wahrheit der öffentlichen Pfade (Nav-Routen **abgeleitet**
+  aus dem Katalog + Extras), `wwwroot/robots.txt`, `PublicIndexingMiddleware` setzt
+  `X-Robots-Tag: noindex, nofollow` außerhalb dieser Pfade. `/buerger` ist bewusst **nicht** dabei: das
+  Konto eines Bürgers ist privat, nicht öffentlich.
+- **Der Schalter gilt auch am Login-Endpoint:** `source=bewerbung` und `source=buerger` prüfen ihr Modul,
+  bevor ein Konto entsteht — eine versteckte Schaltfläche lässt den POST offen.
 
-**Tests** `PublicModuleServiceTests` (Cache, Kill-Switch schlägt Einzelmodul, `RequireEnabled` wirft) ·
-`PublicVisibilityCoverageTests` (scharf, noch leer) · `PublicNavTests` (nur aktive Module, Reihenfolge) ·
-`RobotsTests` (öffentliche Route ohne noindex, interne mit).
+**Tests** (87 neue) `PublicModuleServiceTests` (Cache, Kill-Switch schlägt Einzelmodul und lässt Wahlen
+unberührt, `RequireEnabled` wirft, Admin-only, Seeder idempotent und überschreibungsfrei, Icon-Allowlist,
+Audit-Zeile für den Not-Aus, Nav-Reihenfolge) · `PublicModulesCatalogTests` (Konsistenz; „nur ein gebautes
+Modul darf standardmäßig an sein") · `PublicVisibilityCoverageTests` (scharf über alle `DbSet`s) ·
+`PublicRoutesTests` (Segmentgrenze, `/fahndung` bleibt intern neben `/gesucht`, robots.txt deckt jeden
+öffentlichen Pfad) · `PublicIndexingMiddlewareTests`.
 
 **Fertig, wenn** ein Modul im Panel ausgeschaltet werden kann und die zugehörige Route den Offline-Text
 zeigt, der Tab verschwindet und der Kill-Switch alles auf einmal abschaltet.
 
+**Nachgewiesen** (13.08.2026, laufende App, Modul in der DB umgeschaltet):
+Karriere aus ⇒ `/karriere` Offline-Text, Nav-Tab und Landing-Kachel weg · Karriere an ⇒ alles zurück ·
+Not-Aus ⇒ Banner, alle Tabs weg, Kachel weg, Discord-Formular weg, Route offline · Not-Aus aus ⇒ zurück.
+`X-Robots-Tag` gesetzt auf `/dashboard`, `/personen`, `/einstellungen`, `/nachweis`, `/buerger`,
+`/Account/Login`; **nicht** auf `/`, `/karriere`, `/robots.txt`. Seeder: 21 Zeilen, davon 2 aktiv.
+**Nicht geprüft:** das Panel selbst (braucht Admin-Login über Discord) und der Bürger-/Bewerber-Login-Pfad.
+
 ---
 
-## Phase 3 — CMS-Seiten
+## Phase 3 — CMS-Seiten ✅
 
 **Ziel:** „Text zu unserer Arbeit" — Auftrag, Befugnisse, Zuständigkeiten, FAQ — redigierbar mit Entwurf,
 Vorschau und bewusstem Veröffentlichen.
 
-**Daten** (`Phase63_OeffentlicheSeiten`)
-- `OeffentlicheSeite` → `OeffentlicheSeiten`: `Slug` (unique), `Titel`, `MenueTitel`, `Icon`, `Reihenfolge`,
+**Daten** (`Oeffentlich03_Seiten`)
+- `OeffentlicheSeite` → `OeffentlicheSeiten`: `Slug`, `Titel`, `MenueTitel`, `Icon`, `Reihenfolge`,
   `InhaltHtml` (`longtext`, veröffentlicht), `EntwurfHtml` (`longtext`), `Status`
-  (`Entwurf`/`Veroeffentlicht`), `IstAktiv`, `VeroeffentlichtAm`/`VonId`, `IAuditable`, `ISoftDelete`.
+  (`Entwurf`/`Veroeffentlicht`), `ImMenue`, `VeroeffentlichtAm`/`VonId`, `IAuditable`, `ISoftDelete`.
+- **Zwei Abweichungen von der Planzeile, beide bewusst:**
+  - `Slug` ist **nicht unique indexiert**. Bei Soft-Delete würde ein Unique-Index die Adresse für immer
+    blockieren — eine gelöschte Seite behält ihren Slug. Eindeutigkeit prüft der Dienst über die *lebenden*
+    Zeilen. (Der Prüfausdruck ist ausgeschrieben, weil `Id != input.Id` mit `null` zu SQL-`NULL` übersetzt
+    und die Prüfung damit stumm nichts gefunden hätte.)
+  - `IstAktiv` heißt `ImMenue` und bedeutet **nicht** „veröffentlicht" — das entscheidet `Status`. Zwei
+    Schalter für dieselbe Frage wären eine Fehlerquelle; `ImMenue = false` heißt „veröffentlicht, aber nur
+    über den direkten Link erreichbar" (z. B. Nutzungshinweise, die ein Formular verlinkt).
 
 **Code**
-- `IPublicPageService`: Entwurf speichern, Vorschau (agentenseitig), veröffentlichen, zurückziehen.
-  HTML immer über `HtmlCleanup.Clean` — **nicht** `CleanAiPayload`.
-- `Components/Pages/Public/Seite.razor` (`/info/{Slug}`), statisch gerendert, gecacht.
-- `/einstellungen` → `PublicPagesPanel` (Liste, RichTextEditor, Vorschau-Link, Veröffentlichen,
-  „geändert von/am"), `Policies.LeadershipPage`.
-- Seed: `auftrag`, `befugnisse`, `zustaendigkeiten`, `faq` als Entwürfe mit Platzhaltertext.
-- `TrashService` + `TrashProjection`: eine Zeile für `OeffentlicheSeite`.
+- `IPublicPageService`: `SaveDraftAsync` (Entwurf), `PublishAsync`, `RetractAsync`, `GetPreviewAsync`,
+  `GetAsync`/`GetMenuAsync` (öffentlich, 10 s `IMemoryCache`), `GetAllAsync` (Panel), Papierkorb-Paar.
+  **`EntwurfHtml` und `InhaltHtml` haben je eine Bedeutung:** der Entwurf ist die Arbeitskopie, der Inhalt
+  wird *nur* vom Veröffentlichen geschrieben. Ohne diese Trennung wäre jedes Speichern eine Publikation.
+  HTML läuft über `HtmlCleanup.Clean` — **nicht** `CleanAiPayload` — und beim Veröffentlichen **noch einmal**,
+  weil das der Moment ist, in dem es anonym erreichbar wird.
+- **Rechte:** Lesen (Panel + Vorschau) `Permission.RequireClassifiedRead` — die Nur-Lese-Aufsicht muss sehen,
+  was die Behörde nach außen sagt. Schreiben `Permission.RequirePublicPageWrite` (Führung **und** `MayWrite`),
+  neu nach dem Muster von `RequireMeetingWrite`.
+- `Services/Public/PublicPageSlug.cs`: `Normalize` faltet einen deutschen Titel (Umlaute, `ß`, `§`) in einen
+  Slug, `IsValid` erlaubt nur Kleinbuchstaben, Zahlen und einzelne Bindestriche. Der Dienst normalisiert
+  **und** validiert — eine Adresse landet in einer Route, also wird sie beim Schreiben geprüft, nicht beim
+  Lesen escaped.
+- `Components/Pages/Public/InfoHub.razor` (`/info`) und `InfoPage.razor` (`/info/{Slug}`), beide
+  `[AllowAnonymous]` + `[ExcludeFromInteractiveRouting]` + `PublicModuleGate`. Statt eines Nav-Tabs je Seite
+  gibt es **einen** Tab „Information" auf den Hub — die Nav bleibt damit einzige Quelle: `PublicModules`.
+  Geladen wird in `OnParametersSetAsync` mit Guard (dieselbe Instanz überlebt den Wechsel zwischen Slugs).
+- **Der Inhalt wird als rohes `MarkupString` gerendert, nicht über `RichHtml`**: das löst `@{Typ:GUID}`-
+  Erwähnungen auf und würde interne Aktennamen nach draußen schreiben.
+- **`?vorschau=…` ist als `string` gebunden, nicht als `bool`.** Blazor antwortet auf einen Wert, den es nicht
+  in ein `bool` parsen kann, mit **HTTP 500** — auf einer Route, an die jeder eine Query hängen kann. (Genau
+  so aufgefallen: `?vorschau=1` war live ein 500.)
+- `/einstellungen?tab=oeffentliche-seiten` → `PublicPagesPanel` (Liste mit Status, „Entwurf abweichend",
+  „nicht verlinkt", Vorschau-Link, Veröffentlichen/Zurückziehen/Löschen; Editor mit `RichTextEditor`).
+  **Ohne `Ai` und ohne `Mentions`** — beides ist Opt-in, und öffentlicher Text darf keine Erwähnung tragen.
+- `PublicPageSeeder`: `auftrag`, `befugnisse`, `zustaendigkeiten`, `faq` als **Entwürfe** mit Platzhaltertext.
+  Legt nur fehlende Slugs an, überschreibt nie, und **weckt keine gelöschte Seite wieder auf** (er zählt
+  soft-gelöschte Zeilen als bekannt). `InhaltHtml` bleibt `NULL` — nichts geht durch ein Deploy online.
+- `PublicModules`: `Infoseiten` bekommt `NavRoute = "/info"` und `Available = true`, bleibt aber
+  `DefaultEnabled = false`. Einschalten ist eine Entscheidung, kein Deploy-Nebeneffekt.
+- `TrashService` + `TrashProjection.PublicPage` (Adresse + Status als Detail). **Wiederherstellen bringt die
+  Seite als Entwurf zurück** — ein Rückgängig darf nichts nebenbei wieder veröffentlichen.
+- Achsen-Einträge: `PublicVisibility.Publishable`, `SearchCatalog.NotSearchable` (eigener Provider erst in
+  Phase 16), `AuditEntityDisplay` (Label **und** Route auf den bearbeitenden Abschnitt),
+  `MergedPageSections.Settings` + `.Trash`, `FeedbackPageTabs`.
 
-**Tests** `PublicPageServiceTests` (Entwurf ändert die veröffentlichte Ausgabe nicht; Zurückziehen macht die
-Route unsichtbar; Sanitizer greift) · `TrashCoverage` bleibt grün.
+**Tests** (+95, gesamt 5373 grün) — `PublicPageSlugTests` (Slug-Form, Umlaut-Faltung, Kürzen ohne
+Trenner-Rest, Starter-Seiten haben gültige Slugs und Allowlist-Icons) · `PublicPageServiceTests`
+(Seeder ×4 · Entwurf anonym unerreichbar · Speichern ändert die veröffentlichte Ausgabe **nicht** ·
+Veröffentlichen kopiert · Slug case-insensitiv · Modul-Aus verbirgt auch Veröffentlichtes · Menü-Ordnung ·
+nicht verlinkte Seite bleibt per Link erreichbar · Vorschau trotz Modul-Aus · Vorschau für die Aufsicht,
+nicht für einfache Agenten · Doppel-Slug, Slug-Wiederverwendung nach Löschen · Icon-Allowlist gegen
+`<script>` · Sanitizer beim Speichern **und** beim Veröffentlichen · leerer Entwurf nicht publizierbar ·
+Zurückziehen behält den Entwurf · Wiederherstellen als Entwurf · Cache samt Invalidierung · Audit-Zeilen
+ohne `ManualAudit`).
 
 **Fertig, wenn** eine Seite als Entwurf geschrieben, als Agent vorab betrachtet und dann veröffentlicht
 werden kann — und der Entwurf vorher anonym nicht erreichbar war.
+
+**In der Nachprüfung gefunden und behoben** (Details in `CODE_REVIEW_TODO.md` nicht nötig, hier ist die Quelle):
+1. **Wiederherstellen konnte den ganzen Bereich abschalten.** Adresse einer gelöschten Seite neu belegen ist
+   erlaubt; danach die alte Seite aus dem Papierkorb holen ergab **zwei lebende Seiten auf einer Adresse**, und
+   `ToDictionary` warf — vom `catch` verschluckt, also war `/info` **komplett** leer, nicht nur die eine Seite.
+   Zwei Fixes: `RestoreAsync` weist die Kollision mit Begründung ab, und der Lesepfad dedupliziert ohnehin
+   (`GroupBy`), damit ein Duplikat höchstens die strittige Seite kostet. Beides mit Regressionstest.
+2. **Nur ein Bild war „leerer Entwurf".** Die Leer-Prüfung sah nur Klartext; eine Seite, die aus einem
+   Organigramm besteht, war nicht publizierbar.
+3. **`DraftHtml = null` löschte den Text still.** Jetzt heißt `null` „Entwurf unverändert", `""` heißt „leeren" —
+   ein Aufruf, der nur den Titel ändert, kann den Text nicht mehr verlieren.
+4. **Die Panel-Liste zog jeden Entwurf mit.** Bilder liegen als base64 im Body, also lud ein Tab-Wechsel
+   potenziell Megabyte pro Seite. `PublicPageEdit` trägt kein HTML mehr; der Editor holt den einen Entwurf über
+   `GetDraftAsync`.
+5. **`GetAllAsync` lud den ganzen Identity-User** des Veröffentlichenden (inkl. `RealName`) in ein Panel, das die
+   Nur-Lese-Aufsicht rendert. Jetzt projiziert auf den Codename.
+6. **`/info` stand doppelt** in `PublicRoutes` — als Modul-Route und als „Extra", genau die Wiederholung, gegen
+   die die Klasse geschrieben ist. Entfernt; `robots.txt` deckt `/info` weiter ab (nachgemessen).
+7. Kleinere: fehlende Seite trägt jetzt `noindex` (`/info` ist indexierbar, die Route antwortet für jeden
+   erfundenen Slug) · Vorschau-Link zeigt auf die **gespeicherte** Adresse, nicht auf das bearbeitete Feld ·
+   `GetDraftAsync`-Fehler im Panel gefangen statt in den Circuit · „Entwurf abweichend"-Chip nur neben einer
+   veröffentlichten Seite · Vorschau-Slug case-insensitiv wie der öffentliche Pfad.
+
+**Nachgewiesen** (laufender Server, MariaDB, anonym):
+- Migration angewendet, 4 Seiten als Entwurf geseedet (`InhaltHtml` = `NULL`), Modul `Infoseiten` bleibt aus.
+- Modul aus: `/info` **und** `/info/auftrag` zeigen den Offline-Text; kein Tab in der Nav.
+- Modul an, nichts veröffentlicht: Hub zeigt „Derzeit sind keine Informationsseiten veröffentlicht".
+- Eine Seite veröffentlicht: Hub listet **genau** einen Link (`/info/auftrag`), die drei Entwürfe nicht;
+  die Seite rendert Inhalt und Stand-Datum; `/info/faq` antwortet „Seite nicht gefunden".
+- `?vorschau=1`/`=true`/`=quatsch` anonym: HTTP 200, kein Entwurf, kein Vorschau-Banner (vor dem Fix: 500).
+- Not-Aus schlägt das Modul: veröffentlichter Inhalt weg, kein Tab, Banner auf der Startseite,
+  `/buerger` weiter erreichbar.
+- `X-Robots-Tag`: `/info`, `/info/auftrag` ohne Header; `/personen` mit `noindex, nofollow`.
+- Erfundener Slug (`/info/gibtsnichtxyz`): HTTP 200 mit `noindex`-Meta und „Seite nicht gefunden".
+- `robots.txt` deckt `/info` weiter ab, obwohl der Extra-Eintrag entfernt wurde (Ableitung aus dem Katalog greift).
+- Serverlog ohne Exception (nur die bekannte https-Port-Warnung).
+- **Nicht geprüft:** das Panel selbst und der Quill-Editor — dafür braucht es einen Discord-Login mit
+  Führungsrang. Panel-Logik hängt vollständig am getesteten Dienst.
 
 ---
 
@@ -217,7 +339,7 @@ werden kann — und der Entwurf vorher anonym nicht erreichbar war.
 **Ziel:** Der eigentliche Kern. Eine Person wird bewusst publiziert, erscheint auf `/gesucht` und hat einen
 Steckbrief. Noch ohne Kopfgeld, ohne Hinweis-Button.
 
-**Daten** (`Phase64_OeffentlicheFahndung`)
+**Daten** (`Oeffentlich04_Fahndung`)
 - `OeffentlicheFahndung` → `OeffentlicheFahndungen`: `Aktenzeichen` (eigener Präfix `NOOSE-F` über
   `CaseNumberCounter`), `Art` (`Fahndung`/`Vermisst`/`Zeugenaufruf`/`Fahrzeug`/`Waffe` — Enum jetzt komplett,
   genutzt zunächst nur `Fahndung`), `PersonId` (nullable), `FraktionId` (nullable),
@@ -260,7 +382,7 @@ Antrag erzeugt, eine VS-Akte gar nicht geht, und der Zeitstrahl der Akte die Pub
 
 **Ziel:** Warnhinweise, kein Vergessen, Archiv, Poster, Reichweite.
 
-**Daten** (`Phase65_FahndungWarnhinweise`)
+**Daten** (`Oeffentlich05_Warnhinweise`)
 - `FahndungWarnhinweis` → `FahndungWarnhinweise`: `FahndungId` + Werteliste-Eintrag (n:m).
 - Werteliste „Warnhinweise" nach dem Muster der vorhandenen Wertelisten in `BaseDataPanel`
   („bewaffnet", „gewaltbereit", „flieht mit Fahrzeug", „nicht selbst eingreifen").
@@ -288,7 +410,7 @@ druckbar ist.
 **Ziel:** Behördliches Geld aus der Kasse **und** privates Geld von Agenten auf einen Kopf; öffentlich nur
 die Gesamtsumme.
 
-**Daten** (`Phase66_Kopfgeld`)
+**Daten** (`Oeffentlich06_Kopfgeld`)
 - `FahndungKopfgeldAnteil` → `FahndungKopfgeldAnteile`: `FahndungId`, `Herkunft`
   (`NooseKasse`/`AgentPrivat`), `Betrag`, `Konto` (nur behördlich), `StifterAgentId`,
   `KassenBuchungId` (nullable), `Status` (`Zugesagt`/`Gesichert`/`Ausgezahlt`/`Zurueckgezogen`),
@@ -322,7 +444,7 @@ private Anteil optional eingezahlt werden kann und `/kasse` die Deckung korrekt 
 
 **Ziel:** Bürger können Hinweise abgeben, Agenten sie bearbeiten, Bürger den Stand verfolgen.
 
-**Daten** (`Phase67_Hinweise`)
+**Daten** (`Oeffentlich07_Hinweise`)
 - `Hinweis` → `Hinweise`: `Aktenzeichen` (`NOOSE-H`), `BuergerProfilId`, `AnonymGewuenscht`,
   `FahndungId` (nullable), `Text`, `AnhangDateiname`/`Originalname`/`Typ`, `Status`
   (`Neu`/`InPruefung`/`Rueckfrage`/`Bestaetigt`/`Verworfen`/`FuehrteZurErgreifung`), `BearbeiterId`,
@@ -388,7 +510,7 @@ wird und die Akte den Hinweisgeber-Bezug zeigt.
 
 **Ziel:** Geld fließt nachvollziehbar, auch bei mehreren Hinweisgebern.
 
-**Daten** (`Phase69_HinweisBelohnung`)
+**Daten** (`Oeffentlich09_Belohnung`)
 - `HinweisBelohnung` → `HinweisBelohnungen`: `HinweisId`, `AnteilId`, `Betrag`, `KassenBuchungId` (nullable),
   `SelbstAusgezahltAm` (privater Anteil ohne Kassenbuchung), `BelegNummer`, `IAuditable`, `ISoftDelete`.
 
@@ -415,7 +537,7 @@ Buchungen zeigt und beide Bürger ihren Beleg drucken können.
 
 **Ziel:** Das öffentliche Discord-Ticketsystem ist ersetzt.
 
-**Daten** (`Phase70_Tickets`)
+**Daten** (`Oeffentlich10_Tickets`)
 - `Ticket` → `Tickets`: `Aktenzeichen` (`NOOSE-T`), `Art` (`Fuehrungsebene = 0`, weitere Werte
   **vorbereitet, inaktiv**), `BuergerProfilId`, `Betreff`, `Status`
   (`Offen`/`InBearbeitung`/`WartetAufBuerger`/`Geschlossen`), `BearbeiterId`, `LetzteAktivitaetAm`,
@@ -445,7 +567,7 @@ und ein Junior-Agent nichts davon sieht.
 
 **Ziel:** Vorlagen für jede Art öffentlicher Kommunikation, ohne die drei bestehenden Token-Systeme zu berühren.
 
-**Daten** (`Phase71_OeffentlicheVorlagen`)
+**Daten** (`Oeffentlich11_Vorlagen`)
 - `OeffentlicheVorlage` → `OeffentlicheVorlagen`: `Art` (`TicketAntwort`, `Eingangsbestaetigung`,
   `HinweisRueckfrage`, `HinweisAblehnung`, `Belohnungszusage`, `Pressemitteilung`), `Titel`,
   `Html` (`longtext`), `IstAktiv`, `IAuditable`, `ISoftDelete`.
@@ -473,7 +595,7 @@ Eingangsbestätigung automatisch kommt.
 
 **Ziel:** „Gefährlichste Fraktionen" und „gefährlichste Personen" — nur aus Publiziertem.
 
-**Daten** (`Phase72_Fraktionsprofile`)
+**Daten** (`Oeffentlich12_Fraktionsprofile`)
 - `OeffentlichesFraktionsprofil` → `OeffentlicheFraktionsprofile`: `FraktionId`, Snapshot `AnzeigeName`,
   `KurzbeschreibungHtml` (`longtext`), `Status` (`Beobachtet`/`Verboten`), `OeffentlicheGefahrenstufe`,
   `VeroeffentlichtAm`/`VonId`, `IAuditable`, `ISoftDelete`.
@@ -497,7 +619,7 @@ nachweislich fehlt.
 
 **Ziel:** Zwei kleine, unabhängige Ergänzungen.
 
-**Daten** (`Phase73_FahrzeugeEinspruch`)
+**Daten** (`Oeffentlich13_FahrzeugeEinspruch`)
 - `FahndungEinspruch` → `FahndungEinsprueche`: `FahndungId`, `BuergerProfilId`, `Text`, `Status`,
   `Entscheidungsnotiz`, `EntschiedenVonId`/`Am`, `LinkedCaseId`, `IAuditable`, `ISoftDelete`.
 - Fahrzeuge/Waffen brauchen keine neue Tabelle — `Art = Fahrzeug|Waffe` aus Phase 4 plus die vorhandenen
@@ -522,7 +644,7 @@ ohne Personenbezug online ist.
 
 **Ziel:** Die Behörde spricht selbst.
 
-**Daten** (`Phase74_Redaktion`)
+**Daten** (`Oeffentlich14_Redaktion`)
 - `Pressemitteilung` → `Pressemitteilungen`: `Titel`, `Teaser`, `Html` (`longtext`), `Status`
   (`Entwurf`/`Veroeffentlicht`), `VeroeffentlichtAm`/`VonId`, `DiscordGepushtAm`, `IAuditable`, `ISoftDelete`.
 - `OeffentlicherLagebericht` → `OeffentlicheLageberichte`: `SituationReportId`, `FreigegebenHtml`

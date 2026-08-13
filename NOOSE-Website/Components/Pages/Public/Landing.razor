@@ -2,6 +2,7 @@
 @layout PublicSiteLayout
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
+@inject IPublicModuleService ModuleService
 
 <PageTitle>NOOSE · National Office of Security Enforcement</PageTitle>
 
@@ -20,18 +21,21 @@
         <MudDivider />
 
         <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap" AlignItems="AlignItems.Stretch">
-            <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
-                <MudStack Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" Size="Size.Large" />
-                    <MudText Typo="Typo.h6">Karriere beim NOOSE</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Du möchtest Teil der Behörde werden? Informiere dich über das Auswahlverfahren und reiche deine
-                        Bewerbung vertraulich über das Portal ein.
-                    </MudText>
-                    <MudButton Href="/karriere" Variant="Variant.Filled" Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.ArrowForward" Class="mt-2">Zur Karriere-Seite</MudButton>
-                </MudStack>
-            </MudPaper>
+            @if (_careersEnabled)
+            {
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
+                    <MudStack Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h6">Karriere beim NOOSE</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Du möchtest Teil der Behörde werden? Informiere dich über das Auswahlverfahren und reiche deine
+                            Bewerbung vertraulich über das Portal ein.
+                        </MudText>
+                        <MudButton Href="/karriere" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.ArrowForward" Class="mt-2">Zur Karriere-Seite</MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
 
             <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
                 <MudStack Spacing="2">
@@ -56,13 +60,20 @@
                             }
                         </Authorized>
                         <NotAuthorized>
-                            <form method="post" action="/Account/PerformExternalLogin" class="mt-2">
-                                <AntiforgeryToken />
-                                <input type="hidden" name="returnUrl" value="/buerger" />
-                                <input type="hidden" name="source" value="buerger" />
-                                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
-                                           StartIcon="@Icons.Material.Filled.Login">Mit Discord anmelden</MudButton>
-                            </form>
+                            @if (_registrationEnabled)
+                            {
+                                <form method="post" action="/Account/PerformExternalLogin" class="mt-2">
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="returnUrl" value="/buerger" />
+                                    <input type="hidden" name="source" value="buerger" />
+                                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Login">Mit Discord anmelden</MudButton>
+                                </form>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@_registrationOfflineText</MudText>
+                            }
                         </NotAuthorized>
                     </AuthorizeView>
                 </MudStack>
@@ -103,3 +114,27 @@
         </MudStack>
     </MudStack>
 </MudPaper>
+
+@code {
+    private bool _careersEnabled;
+    private bool _registrationEnabled;
+    private string _registrationOfflineText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var snapshot = await ModuleService.GetAsync();
+            _careersEnabled = snapshot.IsEnabled(PublicModules.Careers);
+            _registrationEnabled = snapshot.IsEnabled(PublicModules.CitizenRegistration);
+            // an existing citizen keeps their access, so only the sign-up path reads the switch
+            _registrationOfflineText = snapshot.Find(PublicModules.CitizenRegistration)?.OfflineText
+                ?? "Neue Bürgerkonten können derzeit nicht angelegt werden.";
+        }
+        catch
+        {
+            /* best effort */
+            _registrationOfflineText = "Neue Bürgerkonten können derzeit nicht angelegt werden.";
+        }
+    }
+}

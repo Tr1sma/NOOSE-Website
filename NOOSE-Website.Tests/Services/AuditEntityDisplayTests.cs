@@ -27,6 +27,11 @@ public class AuditEntityDisplayTests
     [InlineData("MeetingAttendance", "Anwesenheit")]
     [InlineData("MeetingSignOff", "Abmeldung (Besprechung)")]
     [InlineData("Absence", "Abmeldung")]
+    [InlineData("SystemSetting", "Systemeinstellung")]
+    [InlineData("BuergerProfil", "Bürgerkonto")]
+    [InlineData("OeffentlichesModul", "Öffentliches Modul")]
+    [InlineData("OeffentlicheSeite", "Öffentliche Seite")]
+    [InlineData("PublicArea", "Öffentlicher Bereich")]
     public void Label_KnownType_ReturnsGermanLabel(string type, string expected)
     {
         Assert.Equal(expected, AuditEntityDisplay.Label(type));
@@ -119,6 +124,19 @@ public class AuditEntityDisplayTests
         // types that have a Label but no detail page
         Assert.Null(AuditEntityDisplay.Route("Announcement", "x"));
         Assert.Null(AuditEntityDisplay.Route("PersonDoc", "x"));
+        // a system setting spans several settings tabs, so there is no single place to point at
+        Assert.Null(AuditEntityDisplay.Route("SystemSetting", "x"));
+    }
+
+    [Theory]
+    [InlineData("BuergerProfil", "/einstellungen?tab=buerger")]
+    [InlineData("OeffentlichesModul", "/einstellungen?tab=oeffentliche-module")]
+    [InlineData("PublicArea", "/einstellungen?tab=oeffentliche-module")]
+    [InlineData("OeffentlicheSeite", "/einstellungen?tab=oeffentliche-seiten")]
+    public void Route_PublicAreaConfig_PointsAtTheEditingSection(string type, string expected)
+    {
+        // these have no detail page; the audit row should still be followable to where it was changed
+        Assert.Equal(expected, AuditEntityDisplay.Route(type, "any-id"));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Navigation;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services;
 
@@ -31,7 +32,8 @@ public class TrashServiceTests
         Substitute.For<IEvidenceService>(),
         Substitute.For<IKassenService>(),
         Substitute.For<IFinancingService>(),
-        Substitute.For<IFeedbackService>());
+        Substitute.For<IFeedbackService>(),
+        Substitute.For<IPublicPageService>());
 
     [Fact]
     public void Kind_keys_are_unique()

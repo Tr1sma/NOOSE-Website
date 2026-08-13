@@ -425,6 +425,10 @@ public static class SearchCatalog
             // --- public area ---
             ["BuergerProfil"] = "Konto des öffentlichen Bereichs, keine Akte. Der Name ist eine Fremdeingabe ohne "
                 + "Aktenbezug und wird ausschließlich über den Bürger-Bestand in /einstellungen gesucht.",
+            ["OeffentlichesModul"] = "Ein-/Aus-Schalter einer öffentlichen Seite, kein Inhalt. Der Katalog steht im "
+                + "Code, bedient wird er in /einstellungen.",
+            ["OeffentlicheSeite"] = "Redaktionelle Außendarstellung ohne Aktenbezug; gepflegt wird sie in "
+                + "/einstellungen. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

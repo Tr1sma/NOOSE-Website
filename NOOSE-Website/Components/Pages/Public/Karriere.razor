@@ -7,6 +7,7 @@
 
 <PageTitle>Karriere · NOOSE</PageTitle>
 
+<PublicModuleGate Module="@PublicModules.Careers" Title="Karriere">
 <MudPaper Elevation="4" Class="pa-8">
     <MudStack Spacing="4">
         <MudText Typo="Typo.h4">Bewerbung beim National Office of Security Enforcement</MudText>
@@ -99,6 +100,7 @@
         </MudText>
     </MudStack>
 </MudPaper>
+</PublicModuleGate>
 
 @code {
     private IReadOnlyList<CareerRequirement> _items = Array.Empty<CareerRequirement>();

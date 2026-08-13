@@ -50,6 +50,9 @@ public static class SystemSettingKeys
 
     /// <summary>Set once the one-shot search side-index backfill has fully completed; guards against re-scanning. Not user-edited.</summary>
     public const string SearchIndexBackfillDone = "SuchIndexBackfillFertig";
+
+    /// <summary>Shuts the whole public area down at once; beats every single module switch.</summary>
+    public const string PublicAreaKillSwitch = "OeffentlicherBereichNotAus";
 }
 
 /// <summary>Banner urgency, stored as text; UI maps it to MudBlazor severity.</summary>

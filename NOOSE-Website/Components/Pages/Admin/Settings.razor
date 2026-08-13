@@ -116,6 +116,18 @@
         </RecordSection>
     </AuthorizeView>
 
+    <AuthorizeView Policy="@Policies.AdminPage" Context="publicModulesSection">
+        <RecordSection Group="Öffentlicher Bereich" Slug="oeffentliche-module" Label="Module &amp; Not-Aus"
+                       Icon="@Icons.Material.Filled.ToggleOn">
+            <PublicModulesPanel />
+        </RecordSection>
+    </AuthorizeView>
+
+    <RecordSection Group="Öffentlicher Bereich" Slug="oeffentliche-seiten" Label="Öffentliche Seiten"
+                   Icon="@Icons.Material.Filled.MenuBook">
+        <PublicPagesPanel />
+    </RecordSection>
+
     <RecordSection Group="Öffentlicher Bereich" Slug="buerger" Label="Bürgerkonten"
                    Icon="@Icons.Material.Filled.Person">
         <PublicCitizensPanel />

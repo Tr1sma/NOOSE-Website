@@ -10,8 +10,9 @@
     overflow-y: auto;
 }
 
-/* „Fraktionen nach Gefährdung": echte Liste, intern begrenzt, damit sie nicht beliebig lang wird. */
+/* Gefährdungslisten (Fraktionen/Personen): Top 5 sichtbar, der Rest scrollt intern.
+   Höhe deckt 5 Dense-Items ab; der 6. Eintrag blinzelt als Scroll-Hinweis hervor. */
 .dashboard-fraktionsliste {
-    max-height: 22rem;
+    max-height: 16rem;
     overflow-y: auto;
 }

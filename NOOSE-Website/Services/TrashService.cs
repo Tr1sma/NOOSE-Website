@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using MudBlazor;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -23,7 +24,8 @@ public sealed class TrashService(
     IEvidenceService evidence,
     IKassenService kasse,
     IFinancingService financing,
-    IFeedbackService feedback) : ITrashService
+    IFeedbackService feedback,
+    IPublicPageService publicPages) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -78,6 +80,9 @@ public sealed class TrashService(
             financing.GetTrashAsync, TrashProjection.FinancingRequest, financing.RestoreAsync),
         Source(new TrashKind("feedback", "Feedback", Icons.Material.Filled.Feedback, "/feedback"),
             feedback.GetTrashAsync, TrashProjection.Feedback, feedback.RestoreAsync),
+        Source(new TrashKind("oeffentliche-seiten", "Öffentliche Seiten", Icons.Material.Filled.MenuBook,
+                "/einstellungen?tab=oeffentliche-seiten"),
+            publicPages.GetTrashAsync, TrashProjection.PublicPage, publicPages.RestoreAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

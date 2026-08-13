@@ -34,6 +34,11 @@ public static class AuditEntityDisplay
         "FinancingRequestLine" => "Finanzierungsposition (Antrag)",
         "FinancingItem" => "Finanzierungs-Katalogposition",
         "FinancingBudgetConfig" => "Finanzierungs-Budgets",
+        "SystemSetting" => "Systemeinstellung",
+        "BuergerProfil" => "Bürgerkonto",
+        "OeffentlichesModul" => "Öffentliches Modul",
+        "OeffentlicheSeite" => "Öffentliche Seite",
+        "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
 
@@ -63,6 +68,10 @@ public static class AuditEntityDisplay
         // catalog positions and config have no own page; point at the section that edits them
         "FinancingItem" => "/finanzierungen?tab=katalog",
         "FinancingBudgetConfig" => "/einstellungen?tab=finanzierung",
+        "BuergerProfil" => "/einstellungen?tab=buerger",
+        "OeffentlichesModul" => "/einstellungen?tab=oeffentliche-module",
+        "PublicArea" => "/einstellungen?tab=oeffentliche-module",
+        "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
         _ => null,
     };
 }

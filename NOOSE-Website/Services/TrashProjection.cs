@@ -13,6 +13,7 @@ using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
@@ -89,6 +90,11 @@ public static class TrashProjection
         => new("feedback", x.Id, null,
             $"{FeedbackKindDisplay.Name(x.Kind)}: {Snippet(x.Text)}",
             x.Agent?.Codename ?? x.AgentId, x.DeletedAt);
+
+    // editorial pages carry no Aktenzeichen; the address identifies the row and the state is the detail
+    public static TrashItem PublicPage(OeffentlicheSeite x)
+        => new("oeffentliche-seiten", x.Id, null, x.Title,
+            Join($"/info/{x.Slug}", PublicPageStatusDisplay.Name(x.Status)), x.DeletedAt);
 
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");

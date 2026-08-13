@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IPublicModuleService ModuleService
 
 @* Public site shell (landing, career) with top tab nav; no maintenance wall, no auth chrome. *@
 <MudThemeProvider Theme="NooseTheme.Theme" IsDarkMode="true" />
@@ -44,6 +45,14 @@
         <MudDivider Class="mb-2" />
         <PublicNav />
 
+        @if (_killSwitchActive)
+        {
+            @* the internal maintenance mode deliberately does not reach out here; this is its public counterpart *@
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true" Class="mt-4">
+                Der öffentliche Bereich ist derzeit abgeschaltet. Bitte versuche es später erneut.
+            </MudAlert>
+        }
+
         <div class="mt-4">
             @Body
         </div>
@@ -58,3 +67,19 @@
         </MudStack>
     </div>
 </div>
+
+@code {
+    private bool _killSwitchActive;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _killSwitchActive = (await ModuleService.GetAsync()).KillSwitchActive;
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

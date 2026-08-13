@@ -227,6 +227,20 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to edit and publish editorial pages of the public area.</summary>
+    /// <remarks>
+    /// Reading them stays with <see cref="RequireClassifiedRead"/>: the read-only supervision must be able to see what
+    /// the agency says publicly, it just may not be the one saying it.
+    /// </remarks>
+    public static void RequirePublicPageWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.IsLeadership() || !actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Öffentliche Seiten bearbeitet und veröffentlicht nur die Führung.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

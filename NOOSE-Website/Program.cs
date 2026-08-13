@@ -335,8 +335,10 @@ builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
 
-// ---- public area (citizen accounts) ----
+// ---- public area (citizen accounts, module switches) ----
 builder.Services.AddScoped<IBuergerService, BuergerService>();
+builder.Services.AddScoped<IPublicModuleService, PublicModuleService>();
+builder.Services.AddScoped<IPublicPageService, PublicPageService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>
@@ -371,6 +373,9 @@ app.UseRequestLocalization(new RequestLocalizationOptions()
     .SetDefaultCulture("de-DE")
     .AddSupportedCultures("de-DE")
     .AddSupportedUICultures("de-DE"));
+
+// noindex for everything outside the public routes; before the error handler so re-executed pages keep the header
+app.UseMiddleware<NOOSE_Website.Infrastructure.PublicIndexingMiddleware>();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -417,6 +422,12 @@ using (var scope = app.Services.CreateScope())
 
     // seed the auto-provisioned Sicherheitsüberprüfung case-document template (idempotent)
     await NOOSE_Website.Infrastructure.ApplicationTemplateSeeder.SeedAsync(db);
+
+    // seed one switch row per public module (idempotent; never overwrites a stored choice)
+    await NOOSE_Website.Infrastructure.PublicModuleSeeder.SeedAsync(db);
+
+    // seed the four editorial starter pages as drafts (idempotent; never overwrites an edited page)
+    await NOOSE_Website.Infrastructure.PublicPageSeeder.SeedAsync(db);
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

@@ -1,0 +1,118 @@
+@page "/info/{Slug}"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicPageService Pages
+
+<PageTitle>@(_page?.Title ?? "Information") · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.InfoPages" Title="Information">
+<MudPaper Elevation="4" Class="pa-8">
+    @if (_page is null)
+    {
+        @* /info is indexable, and this route answers for any slug someone invents; keep the misses out of the index *@
+        <HeadContent>
+            <meta name="robots" content="noindex, nofollow" />
+        </HeadContent>
+        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6">Seite nicht gefunden</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Diese Informationsseite ist nicht veröffentlicht oder wurde zurückgezogen.
+            </MudText>
+            <MudButton Href="/info" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.MenuBook">Zur Übersicht</MudButton>
+        </MudStack>
+    }
+    else
+    {
+        <MudStack Spacing="4">
+            @if (_page.IsDraft)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Dense="true">
+                    Vorschau des Entwurfs — dieser Stand ist öffentlich nicht sichtbar.
+                </MudAlert>
+            }
+            <MudText Typo="Typo.h4">@_page.Title</MudText>
+            <MudDivider />
+            @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+            <div class="dokument-html">@((MarkupString)_page.Html)</div>
+            @if (!_page.IsDraft && _page.PublishedAt is { } published)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Stand: @published.ToLocalTime().ToString("dd.MM.yyyy")
+                </MudText>
+            }
+            <div>
+                <MudButton Href="/info" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.ArrowBack">Zur Übersicht</MudButton>
+            </div>
+        </MudStack>
+    }
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = string.Empty;
+
+    /// <summary>Agent-side preview of the draft; falls back to the published copy for everyone else.</summary>
+    /// <remarks>
+    /// Bound as a string on purpose: Blazor answers a value it cannot parse into a <c>bool</c> with a 500, and this
+    /// route is reachable by anyone who can type a query string.
+    /// </remarks>
+    [SupplyParameterFromQuery(Name = "vorschau")]
+    public string? PreviewFlag { get; set; }
+
+    private bool Preview => PreviewFlag is "1" or "true" or "ja";
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private PublicPageView? _page;
+    private string? _loadedKey;
+
+    // navigating from one slug to another stays on this route template, so Blazor reuses the instance and
+    // OnInitializedAsync would not run again
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{Slug}|{Preview}";
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        _page = await LoadAsync();
+    }
+
+    private async Task<PublicPageView?> LoadAsync()
+    {
+        if (Preview && AuthStateTask is not null)
+        {
+            try
+            {
+                var user = (await AuthStateTask).User;
+                return await Pages.GetPreviewAsync(Slug, user);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // an anonymous visitor appending ?vorschau=1 simply gets the published page
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+
+        try
+        {
+            return await Pages.GetAsync(Slug);
+        }
+        catch
+        {
+            /* best effort */
+            return null;
+        }
+    }
+}

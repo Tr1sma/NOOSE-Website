@@ -238,6 +238,8 @@ public class AppDbContext : IdentityDbContext<Agent>
 
     // ---- public area (citizen accounts) ----
     public DbSet<BuergerProfil> BuergerProfile => Set<BuergerProfil>();
+    public DbSet<OeffentlichesModul> OeffentlicheModule => Set<OeffentlichesModul>();
+    public DbSet<OeffentlicheSeite> OeffentlicheSeiten => Set<OeffentlicheSeite>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1628,6 +1630,34 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(p => p.BlockedById).OnDelete(DeleteBehavior.Restrict);
             b.HasOne<Person>().WithMany()
                 .HasForeignKey(p => p.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlichesModul>(b =>
+        {
+            b.Property(m => m.Key).HasMaxLength(64).IsRequired();
+            b.Property(m => m.OfflineText).HasColumnType("longtext");
+            b.Property(m => m.LabelOverride).HasMaxLength(64);
+            // an icon name from the allowlist, not the SVG itself
+            b.Property(m => m.IconOverride).HasMaxLength(64);
+            // one row per catalog key; a duplicate would let two switches fight over one module
+            b.HasIndex(m => m.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<OeffentlicheSeite>(b =>
+        {
+            b.Property(p => p.Slug).HasMaxLength(64).IsRequired();
+            b.Property(p => p.Title).HasMaxLength(200).IsRequired();
+            b.Property(p => p.MenuTitle).HasMaxLength(64);
+            // an icon name from the allowlist, not the SVG itself
+            b.Property(p => p.IconName).HasMaxLength(64);
+            b.Property(p => p.ContentHtml).HasColumnType("longtext");
+            b.Property(p => p.DraftHtml).HasColumnType("longtext");
+            b.Property(p => p.PublishedById).HasMaxLength(64);
+            // NOT unique: a soft-deleted page keeps its slug, and a unique index would block reusing the address
+            b.HasIndex(p => p.Slug);
+            b.HasIndex(p => p.Status);
+            b.HasOne(p => p.PublishedBy).WithMany()
+                .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         // global soft-delete filter

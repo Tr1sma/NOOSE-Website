@@ -1,0 +1,207 @@
+@inject IPublicModuleService ModuleService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Jedes Modul des öffentlichen Bereichs lässt sich hier einzeln abschalten. Ein abgeschaltetes Modul verschwindet
+    aus der öffentlichen Navigation, und seine Route zeigt den Offline-Text — auch für Besucher, die die Adresse
+    kennen. Module, deren Seiten noch nicht gebaut sind, tragen den Hinweis „in Vorbereitung"; ihr Schalter wird
+    trotzdem gespeichert und gilt ab dem Tag, an dem die Seiten dazukommen.
+</MudText>
+
+<MudPaper Outlined="true" Class="pa-4 mb-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+        <MudIcon Icon="@Icons.Material.Filled.PowerSettingsNew"
+                 Color="@(_killSwitchActive ? Color.Error : Color.Default)" Size="Size.Large" />
+        <MudStack Spacing="0" Style="flex:1 1 320px;">
+            <MudText Typo="Typo.subtitle1">Not-Aus für den gesamten öffentlichen Bereich</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Schlägt jeden Einzelschalter, ohne die gespeicherten Einstellungen zu verändern. Der interne
+                Wartungsmodus wirkt nach außen bewusst nicht — dafür ist dieser Schalter da.
+            </MudText>
+        </MudStack>
+        <MudSwitch T="bool" Value="_killSwitchActive" ValueChanged="KillSwitchChangedAsync"
+                   Color="Color.Error" Label="@(_killSwitchActive ? "Abgeschaltet" : "Erreichbar")" />
+    </MudStack>
+</MudPaper>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @foreach (var group in Groups)
+    {
+        var rows = _rows.Where(r => r.Group == group).ToList();
+        if (rows.Count == 0)
+        {
+            continue;
+        }
+
+        <MudText Typo="Typo.subtitle1" Class="mb-2">@PublicModuleGroupDisplay.Name(group)</MudText>
+        <MudStack Spacing="2" Class="mb-6">
+            @foreach (var row in rows)
+            {
+                @* keyed: after saving a changed order the rows re-sort, and position-mapping would move the focus *@
+                <MudPaper Outlined="true" Class="pa-3" @key="row.Input.Key">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                            <MudSwitch T="bool" @bind-Value="row.Input.IsEnabled" Color="Color.Primary" Class="ml-1" />
+                            <MudStack Spacing="0" Style="flex:1 1 300px;">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                    <MudIcon Icon="@row.Icon" Size="Size.Small" Color="Color.Default" />
+                                    <MudText Typo="Typo.body1">@row.DefaultLabel</MudText>
+                                    @if (!string.IsNullOrWhiteSpace(row.NavRoute))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@row.NavRoute</MudChip>
+                                    }
+                                    @if (!row.Available)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">in Vorbereitung</MudChip>
+                                    }
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.Description</MudText>
+                            </MudStack>
+                            <MudNumericField T="int" @bind-Value="row.Input.SortOrder" Label="Reihenfolge"
+                                             Min="0" Max="9999" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                             Style="max-width:120px;" />
+                            <MudSelect T="string" @bind-Value="row.Input.IconOverride" Label="Icon" Clearable="true"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:180px;">
+                                @foreach (var choice in PublicModules.IconChoices)
+                                {
+                                    <MudSelectItem T="string" Value="@choice.Name">@choice.Label</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                            <MudTextField @bind-Value="row.Input.LabelOverride" Label="Eigene Bezeichnung"
+                                          Placeholder="@row.DefaultLabel" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          Style="flex:0 1 240px;" />
+                            <MudTextField @bind-Value="row.Input.OfflineText" Label="Offline-Text"
+                                          Placeholder="@row.DefaultOfflineText" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Style="flex:1 1 360px;" />
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    }
+
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="_save">Speichern</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="LoadAsync" Disabled="_save">Verwerfen</MudButton>
+    </MudStack>
+}
+
+@code {
+    private static readonly PublicModuleGroup[] Groups =
+        Enum.GetValues<PublicModuleGroup>();
+
+    // display values come from the catalog, edit values from the stored row — mixing them would turn a default
+    // into a stored override on the first save
+    private sealed class Row
+    {
+        public string Icon { get; init; } = string.Empty;
+        public string DefaultLabel { get; init; } = string.Empty;
+        public string DefaultOfflineText { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
+        public string? NavRoute { get; init; }
+        public PublicModuleGroup Group { get; init; }
+        public bool Available { get; init; }
+        public PublicModuleInput Input { get; init; } = new();
+    }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private bool _load = true;
+    private bool _save;
+    private bool _killSwitchActive;
+    private List<Row> _rows = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            var snapshot = await ModuleService.GetAsync();
+            _killSwitchActive = snapshot.KillSwitchActive;
+            _rows = snapshot.Modules
+                .Select(state =>
+                {
+                    var definition = PublicModules.Find(state.Key);
+                    return new Row
+                    {
+                        Icon = state.Icon,
+                        DefaultLabel = definition?.Label ?? state.Label,
+                        DefaultOfflineText = definition?.DefaultOfflineText ?? state.OfflineText,
+                        Description = state.Description,
+                        NavRoute = state.NavRoute,
+                        Group = state.Group,
+                        Available = state.Available,
+                        Input = new PublicModuleInput
+                        {
+                            Key = state.Key,
+                            IsEnabled = state.IsEnabled,
+                            OfflineText = state.OfflineTextOverride,
+                            SortOrder = state.SortOrder,
+                            LabelOverride = state.LabelOverride,
+                            IconOverride = state.IconOverride,
+                        },
+                    };
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _save = true;
+        try
+        {
+            await ModuleService.SaveAsync(_rows.Select(r => r.Input), _user);
+            Snackbar.Add("Module gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _save = false;
+        }
+    }
+
+    private async Task KillSwitchChangedAsync(bool active)
+    {
+        try
+        {
+            await ModuleService.KillSwitchSetAsync(active, _user);
+            _killSwitchActive = active;
+            Snackbar.Add(active
+                ? "Der öffentliche Bereich ist abgeschaltet."
+                : "Der öffentliche Bereich ist wieder erreichbar.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}
