@@ -712,6 +712,42 @@ public class AgentPrincipalExtensionsTests
         Assert.False(user.IsApplicant());
     }
 
+    // ---------- IsCitizen ----------
+
+    [Fact]
+    public void IsCitizen_statusCivilian_returnsTrue()
+    {
+        ClaimsPrincipal user = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian).Build();
+        Assert.True(user.IsCitizen());
+    }
+
+    [Fact]
+    public void IsCitizen_neverTrueForAgentApplicantOrAnonymous()
+    {
+        Assert.False(ClaimsPrincipalBuilder.Agent().Build().IsCitizen());
+        Assert.False(ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Applicant).Build().IsCitizen());
+        Assert.False(ClaimsPrincipalBuilder.Anonymous().IsCitizen());
+    }
+
+    [Fact]
+    public void IsCitizen_andIsApplicant_areMutuallyExclusive()
+    {
+        ClaimsPrincipal citizen = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian).Build();
+        Assert.True(citizen.IsCitizen());
+        Assert.False(citizen.IsApplicant());
+    }
+
+    [Fact]
+    public void IsCitizen_grantsNoAgencyRights()
+    {
+        // the admin flag is a separate axis, but a citizen account never carries one; assert the plain shape
+        ClaimsPrincipal citizen = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian).Build();
+        Assert.False(citizen.IsAdmin());
+        Assert.False(citizen.IsLeadership());
+        Assert.False(citizen.MayClassifiedRead());
+        Assert.False(citizen.MayRealNameSee());
+    }
+
     // ---------- IsHrbOrLeadership (IsHRB || IsLeadership) ----------
 
     [Fact]

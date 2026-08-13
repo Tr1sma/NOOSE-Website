@@ -12,6 +12,7 @@ public static class MergedPageSections
         "finanzierung",
         "noosei", "ki-regeln", "ki-betrieb", "ki-kontingente", "ki-anfragen",
         "partner",
+        "buerger",
         "basisdaten",
     ];
 

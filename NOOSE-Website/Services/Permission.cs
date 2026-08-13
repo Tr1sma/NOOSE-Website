@@ -246,4 +246,14 @@ public static class Permission
                 "Diese Aktion ist nur für Bewerber verfügbar.");
         }
     }
+
+    /// <summary>Require citizen status (public-area owner actions).</summary>
+    public static void RequireCitizen(ClaimsPrincipal actor)
+    {
+        if (!actor.IsCitizen())
+        {
+            throw new UnauthorizedAccessException(
+                "Diese Aktion ist nur für angemeldete Bürger verfügbar.");
+        }
+    }
 }

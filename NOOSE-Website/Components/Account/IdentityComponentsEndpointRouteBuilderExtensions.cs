@@ -101,6 +101,11 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 {
                     agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Applicant);
                 }
+                else if (string.Equals(source, "buerger", StringComparison.OrdinalIgnoreCase))
+                {
+                    // public area: self-registration is open, the account gets no agency rights at all
+                    agent = await CreateAgentAsync(userManager, info, configuration, logger, AgentStatus.Civilian);
+                }
                 else
                 {
                     // invite-only: a plain login can no longer self-register as an agent
@@ -140,6 +145,9 @@ public static class IdentityComponentsEndpointRouteBuilderExtensions
                 case AgentStatus.Applicant:
                     await signInManager.SignInAsync(agent, isPersistent: true);
                     return Results.LocalRedirect("/portal");
+                case AgentStatus.Civilian:
+                    await signInManager.SignInAsync(agent, isPersistent: true);
+                    return Results.LocalRedirect("/buerger");
                 case AgentStatus.Pending:
                     return Results.Redirect("/Account/Ausstehend");
                 default:

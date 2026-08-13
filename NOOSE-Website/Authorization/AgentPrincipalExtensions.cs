@@ -130,4 +130,7 @@ public static class AgentPrincipalExtensions
 
     /// <summary>May access recruiting management = HRB member or leadership.</summary>
     public static bool IsHrbOrLeadership(this ClaimsPrincipal user) => user.IsHRB() || user.IsLeadership();
+
+    /// <summary>Citizen (status Civilian): public-area account only, never an agent and never an applicant.</summary>
+    public static bool IsCitizen(this ClaimsPrincipal user) => user.GetStatus() == AgentStatus.Civilian;
 }

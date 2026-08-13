@@ -35,6 +35,41 @@
 
             <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
                 <MudStack Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">Bürgerkonto</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Melde dich mit Discord an und gib Vor- und Nachnamen an, um Hinweise zu übermitteln und
+                        ihren Stand zu verfolgen.
+                    </MudText>
+                    <AuthorizeView>
+                        <Authorized Context="citizenCtx">
+                            @if (citizenCtx.User.IsCitizen())
+                            {
+                                <MudButton Href="/buerger" Variant="Variant.Filled" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Person" Class="mt-2">Zum Bürgerbereich</MudButton>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                                    Du bist bereits mit einem anderen Konto angemeldet.
+                                </MudText>
+                            }
+                        </Authorized>
+                        <NotAuthorized>
+                            <form method="post" action="/Account/PerformExternalLogin" class="mt-2">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="returnUrl" value="/buerger" />
+                                <input type="hidden" name="source" value="buerger" />
+                                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Login">Mit Discord anmelden</MudButton>
+                            </form>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </MudStack>
+            </MudPaper>
+
+            <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 280px;">
+                <MudStack Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Primary" Size="Size.Large" />
                     <MudText Typo="Typo.h6">Agent-Zugang</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -46,6 +81,11 @@
                             {
                                 <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary"
                                            StartIcon="@Icons.Material.Filled.Badge" Class="mt-2">Zum Bewerber-Portal</MudButton>
+                            }
+                            else if (agentCtx.User.IsCitizen())
+                            {
+                                @* a citizen has no agency access at all; the tile above is their way in *@
+                                <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="true" Class="mt-2">Kein Zugriff</MudButton>
                             }
                             else
                             {

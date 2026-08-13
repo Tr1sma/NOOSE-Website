@@ -12,22 +12,28 @@ namespace NOOSE_Website.Tests.Services.Integration;
 public sealed class AgentSelectionTests
 {
     /// <summary>Every account shape the roster can hold, with the expected verdict of each predicate.</summary>
-    private static readonly (string Id, AgentStatus Status, Action<Agent>? Configure, bool Selectable, bool Listable, bool AuditFilterable)[] Matrix =
+    private static readonly Row[] Matrix =
     [
-        ("active", AgentStatus.Active, null, true, true, true),
+        new("active", AgentStatus.Active, null, true, true, true, true),
         // read-only supervision is RP-wide invisible — except in the audit viewer, on purpose
-        ("teamlead", AgentStatus.Active, a => a.IsTeamLead = true, false, false, true),
+        new("teamlead", AgentStatus.Active, a => a.IsTeamLead = true, false, false, true, false),
         // not even with the admin flag on top: the marker itself hides the account
-        ("teamlead-admin", AgentStatus.Active, a => { a.IsTeamLead = true; a.IsAdmin = true; }, false, false, true),
-        ("partner", AgentStatus.Active, a => a.PartnerAgency = PartnerAgency.LSPD, false, false, true),
-        ("partner-teamlead", AgentStatus.Active, a => { a.PartnerAgency = PartnerAgency.DoJ; a.IsTeamLead = true; }, false, false, true),
+        new("teamlead-admin", AgentStatus.Active, a => { a.IsTeamLead = true; a.IsAdmin = true; }, false, false, true, false),
+        new("partner", AgentStatus.Active, a => a.PartnerAgency = PartnerAgency.LSPD, false, false, true, true),
+        new("partner-teamlead", AgentStatus.Active, a => { a.PartnerAgency = PartnerAgency.DoJ; a.IsTeamLead = true; }, false, false, true, false),
         // blank codename = never released, so there is no agent to name
-        ("pending-blank", AgentStatus.Pending, a => a.Codename = string.Empty, false, false, false),
-        ("pending-named", AgentStatus.Pending, null, false, true, true),
-        ("blocked", AgentStatus.Blocked, null, false, true, true),
-        ("terminated", AgentStatus.Terminated, null, false, true, true),
-        ("applicant", AgentStatus.Applicant, a => a.Codename = string.Empty, false, false, false),
+        new("pending-blank", AgentStatus.Pending, a => a.Codename = string.Empty, false, false, false, true),
+        new("pending-named", AgentStatus.Pending, null, false, true, true, true),
+        new("blocked", AgentStatus.Blocked, null, false, true, true, false),
+        new("terminated", AgentStatus.Terminated, null, false, true, true, true),
+        new("applicant", AgentStatus.Applicant, a => a.Codename = string.Empty, false, false, false, false),
+        // a citizen of the public area is no agent at all: no picker, no filter, no roster, no personnel file
+        new("civilian", AgentStatus.Civilian, a => a.Codename = string.Empty, false, false, false, false),
     ];
+
+    private sealed record Row(
+        string Id, AgentStatus Status, Action<Agent>? Configure,
+        bool Selectable, bool Listable, bool AuditFilterable, bool PersonnelFile);
 
     private static async Task<SqliteTestContext> SeededAsync()
     {
@@ -41,7 +47,7 @@ public sealed class AgentSelectionTests
         return ctx;
     }
 
-    private static string[] Expected(Func<(string Id, AgentStatus Status, Action<Agent>? Configure, bool Selectable, bool Listable, bool AuditFilterable), bool> pick)
+    private static string[] Expected(Func<Row, bool> pick)
         => Matrix.Where(pick).Select(r => r.Id).OrderBy(id => id).ToArray();
 
     [Fact]
@@ -138,6 +144,42 @@ public sealed class AgentSelectionTests
             Assert.DoesNotContain(id, selectable);
             Assert.DoesNotContain(id, listable);
         }
+    }
+
+    [Fact]
+    public async Task OnlyWithPersonnelFile_ReturnsExactlyTheExpectedAgents()
+    {
+        using var ctx = await SeededAsync();
+        await using var db = ctx.NewContext();
+
+        var ids = await db.Users.OnlyWithPersonnelFile().OrderBy(u => u.Id).Select(u => u.Id).ToListAsync();
+
+        Assert.Equal(Expected(r => r.PersonnelFile), ids);
+    }
+
+    [Fact]
+    public async Task NoPredicate_EverReturnsACitizen()
+    {
+        using var ctx = await SeededAsync();
+        await using var db = ctx.NewContext();
+
+        // the public area shares the identity table; a citizen must never surface as agency staff
+        Assert.DoesNotContain("civilian", await db.Users.OnlySelectable().Select(u => u.Id).ToListAsync());
+        Assert.DoesNotContain("civilian", await db.Users.OnlyListable().Select(u => u.Id).ToListAsync());
+        Assert.DoesNotContain("civilian", await db.Users.OnlyAuditFilterable().Select(u => u.Id).ToListAsync());
+        Assert.DoesNotContain("civilian", await db.Users.OnlyWithPersonnelFile().Select(u => u.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task HasPersonnelFile_MirrorsOnlyWithPersonnelFile()
+    {
+        using var ctx = await SeededAsync();
+        await using var db = ctx.NewContext();
+
+        var fromDb = await db.Users.OnlyWithPersonnelFile().OrderBy(u => u.Id).Select(u => u.Id).ToListAsync();
+        var all = await db.Users.OrderBy(u => u.Id).ToListAsync();
+
+        Assert.Equal(fromDb, all.Where(AgentSelection.HasPersonnelFile).Select(a => a.Id).ToList());
     }
 
     [Fact]

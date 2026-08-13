@@ -35,6 +35,7 @@ using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Infrastructure.Meetings;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services;
+using NOOSE_Website.Services.Public;
 using NOOSE_Website.Services.Search;
 using NOOSE_Website.Services.Statistics;
 
@@ -333,6 +334,9 @@ builder.Services.AddScoped<ICareerRequirementsService, CareerRequirementsService
 builder.Services.AddScoped<IBewerbungssperreService, BewerbungssperreService>();
 builder.Services.AddScoped<IBewerbungTestService, BewerbungTestService>();
 builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>();
+
+// ---- public area (citizen accounts) ----
+builder.Services.AddScoped<IBuergerService, BuergerService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>

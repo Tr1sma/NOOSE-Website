@@ -23,6 +23,11 @@
                         <MudButton Href="/portal" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Badge">Zum Bewerber-Portal</MudButton>
                     }
+                    else if (authCtx.User.IsCitizen())
+                    {
+                        <MudButton Href="/buerger" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Person">Zum Bürgerbereich</MudButton>
+                    }
                     else
                     {
                         <MudButton Href="/dashboard" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"

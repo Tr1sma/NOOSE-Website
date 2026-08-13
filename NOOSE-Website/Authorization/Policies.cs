@@ -56,4 +56,7 @@ public static class Policies
 
     /// <summary>Recruiting management access: HRB member or leadership.</summary>
     public const string HrbOrLeadership = "HrbOderFuehrung";
+
+    /// <summary>Citizen portal access: signed in with status Civilian.</summary>
+    public const string CitizenPortal = "BuergerPortal";
 }

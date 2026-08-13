@@ -626,6 +626,7 @@ public sealed class PermissionTests
     [InlineData(AgentStatus.Pending)]
     [InlineData(AgentStatus.Blocked)]
     [InlineData(AgentStatus.Terminated)]
+    [InlineData(AgentStatus.Civilian)]
     public void RequireApplicant_nonApplicantStatus_throws(AgentStatus status)
     {
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
@@ -635,4 +636,37 @@ public sealed class PermissionTests
     [Fact]
     public void RequireApplicant_anonymous_throws()
         => AssertDenied(() => Permission.RequireApplicant(ClaimsPrincipalBuilder.Anonymous()));
+
+    // ---------------------------------------------------------------- RequireCitizen
+
+    [Fact]
+    public void RequireCitizen_civilianStatus_passes()
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian);
+        AssertAllowed(() => Permission.RequireCitizen(actor));
+    }
+
+    [Theory]
+    [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Pending)]
+    [InlineData(AgentStatus.Blocked)]
+    [InlineData(AgentStatus.Terminated)]
+    [InlineData(AgentStatus.Applicant)]
+    public void RequireCitizen_nonCivilianStatus_throws(AgentStatus status)
+    {
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
+        AssertDenied(() => Permission.RequireCitizen(actor));
+    }
+
+    [Fact]
+    public void RequireCitizen_adminIsNoShortcut()
+    {
+        // every other guard lets an admin through; a citizen action is about ownership, not power
+        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin().WithRank(Rank.Director);
+        AssertDenied(() => Permission.RequireCitizen(actor));
+    }
+
+    [Fact]
+    public void RequireCitizen_anonymous_throws()
+        => AssertDenied(() => Permission.RequireCitizen(ClaimsPrincipalBuilder.Anonymous()));
 }

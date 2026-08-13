@@ -29,6 +29,7 @@ public static class FeedbackPageTabs
         new("ki-kontingente", "Kontingente"),
         new("ki-anfragen", "NOOSEI-Anfragen"),
         new("partner", "Sichtbarkeit & Freigaben"),
+        new("buerger", "Bürgerkonten"),
         new("basisdaten", "Wertelisten"),
     ];
 

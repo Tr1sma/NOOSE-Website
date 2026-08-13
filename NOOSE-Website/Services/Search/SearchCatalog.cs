@@ -421,6 +421,10 @@ public static class SearchCatalog
             ["BewerbungTestAnswer"] = "Bewertetes Material.",
             ["NooseiMessage"] = "Der Rechte-Stempel macht gespeicherte Werkzeug-Antworten gegenüber dem aktuellen "
                 + "Scope potenziell veraltet; nur der Titel der Unterhaltung ist durchsuchbar.",
+
+            // --- public area ---
+            ["BuergerProfil"] = "Konto des öffentlichen Bereichs, keine Akte. Der Name ist eine Fremdeingabe ohne "
+                + "Aktenbezug und wird ausschließlich über den Bürger-Bestand in /einstellungen gesucht.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

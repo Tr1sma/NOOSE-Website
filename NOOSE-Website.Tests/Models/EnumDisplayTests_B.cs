@@ -455,6 +455,7 @@ public class EnumDisplayTests_B
     [InlineData(AgentStatus.Blocked, "Gesperrt")]
     [InlineData(AgentStatus.Applicant, "Bewerber")]
     [InlineData(AgentStatus.Terminated, "Gekündigt")]
+    [InlineData(AgentStatus.Civilian, "Bürger")]
     public void AgentStatusName_definedValue_mapsToLabel(AgentStatus status, string expected)
         => Assert.Equal(expected, AgentStatusDisplay.Name(status));
 

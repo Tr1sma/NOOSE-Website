@@ -30,6 +30,7 @@ using NOOSE_Website.Data.Entities.Evidence;
 using NOOSE_Website.Data.Entities.Kasse;
 using NOOSE_Website.Data.Entities.Financing;
 using NOOSE_Website.Data.Entities.Llm;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Abstractions;
 
@@ -234,6 +235,9 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<BewerbungTestAssignment> BewerbungTestAssignments => Set<BewerbungTestAssignment>();
     public DbSet<BewerbungTestAnswer> BewerbungTestAnswers => Set<BewerbungTestAnswer>();
     public DbSet<Bewerbungssperre> Bewerbungssperren => Set<Bewerbungssperre>();
+
+    // ---- public area (citizen accounts) ----
+    public DbSet<BuergerProfil> BuergerProfile => Set<BuergerProfil>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1605,6 +1609,25 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(a => a.AssignmentId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(a => a.Question).WithMany()
                 .HasForeignKey(a => a.QuestionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BuergerProfil>(b =>
+        {
+            b.Property(p => p.UserId).HasMaxLength(64).IsRequired();
+            b.Property(p => p.FirstName).HasMaxLength(64);
+            b.Property(p => p.LastName).HasMaxLength(64);
+            b.Property(p => p.BlockedReason).HasColumnType("longtext");
+            b.Property(p => p.BlockedById).HasMaxLength(64);
+            b.Property(p => p.LinkedPersonId).HasMaxLength(64);
+            // one citizen profile per identity user
+            b.HasIndex(p => p.UserId).IsUnique();
+            b.HasIndex(p => p.IsBlocked);
+            b.HasOne(p => p.User).WithMany()
+                .HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Agent>().WithMany()
+                .HasForeignKey(p => p.BlockedById).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Person>().WithMany()
+                .HasForeignKey(p => p.LinkedPersonId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // global soft-delete filter
