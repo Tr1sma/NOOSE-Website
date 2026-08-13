@@ -348,4 +348,63 @@ public sealed class RequestServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.DecideAsync(request.Id, approved: true, note: null, actor));
     }
+
+    // ---- type scoping: three request types share one table, one decision path ----
+
+    [Theory]
+    [InlineData(RequestType.PartnerFreigabe)]
+    [InlineData(RequestType.Veroeffentlichung)]
+    public async Task DecideAsync_ANonUpgradeRequest_Throws(RequestType type)
+    {
+        // approval here means "set the classification on the target"; any other type would run that with an unset
+        // classification and silently downgrade the record
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", configure: p => p.Classification = Classification.SuspicionCase));
+            db.SaveChanges();
+        }
+        var request = SeedRequest(ctx, type, RequestStatus.Requested, nameof(Person), "p1",
+            configure: r => r.TargetClassification = Classification.Unknown);
+        var service = CreateService(ctx);
+        var actor = ClaimsPrincipalBuilder.Agent("decider").AsAdmin().WithCodename("Warden").Build();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.DecideAsync(request.Id, approved: true, note: null, actor));
+
+        using var read = ctx.NewContext();
+        Assert.Equal(Classification.SuspicionCase, read.People.Single().Classification);
+        Assert.Equal(RequestStatus.Requested, read.Requests.Single().Status);
+    }
+
+    [Fact]
+    public async Task HasOpenRequestAsync_IgnoresAPublicationRequest()
+    {
+        // it drives the classification panel; a publication request must not read as "an upgrade is running"
+        using var ctx = new SqliteTestContext();
+        SeedRequest(ctx, RequestType.Veroeffentlichung, RequestStatus.Requested, nameof(Person), "p1");
+        var service = CreateService(ctx);
+
+        Assert.False(await service.HasOpenRequestAsync(nameof(Person), "p1"));
+    }
+
+    [Fact]
+    public async Task UpgradeRequestAsync_IsNotBlockedByAnOpenPublicationRequest()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.SaveChanges();
+        }
+        SeedRequest(ctx, RequestType.Veroeffentlichung, RequestStatus.Requested, nameof(Person), "p1");
+        var service = CreateService(ctx);
+        var actor = ClaimsPrincipalBuilder.Agent("agent").WithRank(Rank.Director).WithCodename("Falcon").Build();
+
+        await service.UpgradeRequestAsync(nameof(Person), "p1", "Ziel",
+            Classification.SecuredStateThreatening, "Begründung", actor);
+
+        using var read = ctx.NewContext();
+        Assert.Single(read.Requests, r => r.Type == RequestType.Upgrade);
+    }
 }

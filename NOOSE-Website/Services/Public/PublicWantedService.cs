@@ -1,0 +1,921 @@
+using System.Net;
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using NOOSE_Website.Authorization;
+using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Requests;
+using NOOSE_Website.Infrastructure.Storage;
+using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Models.Public;
+
+namespace NOOSE_Website.Services.Public;
+
+/// <inheritdoc cref="IPublicWantedService" />
+/// <remarks>
+/// Takes no <c>IPersonService</c> on purpose: the dependency runs the other way, because a person file that becomes a
+/// Verschlusssache has to pull its own notice offline.
+/// </remarks>
+public class PublicWantedService(
+    IDbContextFactory<AppDbContext> dbFactory,
+    IPublicModuleService modules,
+    ICaseNumberService caseNumbers,
+    IFileStorageService peopleFiles,
+    IPublicWantedPhotoStorageService publicFiles,
+    INotificationService notifications,
+    IMemoryCache cache) : IPublicWantedService
+{
+    private const string CacheKey = "OeffentlicheFahndungen";
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
+
+    /// <summary>Own case-number counter: "F" belongs to factions, and one number must name one kind of record.</summary>
+    public const string CaseNumberPrefix = "FA";
+
+    private const int MaxDisplayName = 200;
+    private const int MaxAliasText = 400;
+    private const int MaxLastArea = 200;
+    private const int MaxVehicleText = 400;
+
+    private const string NotFound = "Ausschreibung nicht gefunden.";
+    private const string RecordNotFound = "Akte nicht gefunden.";
+    private const string Classified = "Eine Verschlusssache wird nicht öffentlich ausgeschrieben.";
+
+    // ---- outward reads ----
+
+    public async Task<PublicWantedBoard> GetBoardAsync(CancellationToken cancellationToken = default)
+    {
+        // the module switch is read outside the content cache: caching "module is off" as an empty board would keep
+        // the board dark for a whole cache window after someone turns it back on
+        if (!await modules.IsEnabledAsync(PublicModules.Wanted, cancellationToken))
+        {
+            return PublicWantedBoard.Empty;
+        }
+        return await LoadAsync(cancellationToken);
+    }
+
+    public async Task<PublicWantedDetail?> GetByCaseNumberAsync(string? caseNumber, CancellationToken cancellationToken = default)
+        => (await GetBoardAsync(cancellationToken)).Find(caseNumber);
+
+    public async Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseNumber) || !await modules.IsEnabledAsync(PublicModules.Wanted, cancellationToken))
+        {
+            return null;
+        }
+
+        // read through the same snapshot the board uses, so a notice that is hidden there has no picture either
+        var entry = (await LoadAsync(cancellationToken)).Find(caseNumber);
+        if (entry is null || !entry.HasPhoto)
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.CaseNumber == entry.CaseNumber && f.Status == PublicWantedStatus.Veroeffentlicht)
+            .Select(f => new { f.PhotoFileName, f.PhotoContentType })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return row?.PhotoFileName is { Length: > 0 } name
+            ? new PublicWantedPhoto(name, row.PhotoContentType ?? "application/octet-stream")
+            : null;
+    }
+
+    // ---- internal reads ----
+
+    public async Task<PublicWantedBanner?> GetBannerForPersonAsync(string personId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(personId))
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.PersonId == personId
+                && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Beantragt))
+            .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
+            .Select(f => new PublicWantedBanner(f.CaseNumber, f.Status, f.PublishedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PublicWantedEdit>> GetAllAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // projected rather than Include'd: only the codename is wanted, and pulling the whole identity user would
+        // carry the publisher's clear name into a panel the read-only supervision renders
+        var rows = await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
+            .Select(f => new { f.PersonId, Row = new PublicWantedEdit(
+                f.Id,
+                f.CaseNumber,
+                f.Kind,
+                f.Status,
+                f.DisplayName,
+                f.Person!.CaseNumber,
+                f.PublicHazardLevel,
+                f.PhotoFileName != null,
+                f.PublishedAt,
+                f.PublishedBy!.Codename,
+                f.ExpiresAt,
+                f.ModifiedAt ?? f.CreatedAt) })
+            .ToListAsync(cancellationToken);
+
+        // a notice carries the file's content, so it answers to the file's read gate — otherwise the list would show
+        // the name, accusation and Aktenzeichen of a Verschlusssache to every rank-3 agent
+        var visible = await VisibleRecordsAsync(db, rows.Select(r => r.PersonId), actor, cancellationToken);
+        return rows.Where(r => r.PersonId is null || visible.Contains(r.PersonId)).Select(r => r.Row).ToList();
+    }
+
+    public async Task<PublicWantedDraft?> GetDraftAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRecordRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.Id == id)
+            .Select(f => new { f.PersonId, Draft = new PublicWantedDraft(f.Id, f.CaseNumber, f.Status, f.DisplayName,
+                f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml) })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return row is not null && await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken)
+            ? row.Draft
+            : null;
+    }
+
+    public async Task<PublicWantedOptions> GetOptionsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRecordRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var personId = await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.Id == id)
+            .Select(f => f.PersonId)
+            .FirstOrDefaultAsync(cancellationToken);
+        // these are LIVE rows of the file, not snapshot fields — without the gate the editor hands a rank-3 agent
+        // the current whereabouts of a file he may not open anywhere else
+        if (personId is null || !await IsRecordVisibleAsync(db, personId, actor, cancellationToken))
+        {
+            return PublicWantedOptions.Empty;
+        }
+
+        var photos = await db.PersonPhotos
+            .AsNoTracking()
+            .Where(f => f.PersonId == personId)
+            .OrderByDescending(f => f.CreatedAt)
+            .Select(f => new PublicWantedPhotoOption(f.Id, f.CreatedAt.ToString("dd.MM.yyyy")))
+            .ToListAsync(cancellationToken);
+        var areas = await db.PersonLocations
+            .AsNoTracking()
+            .Where(o => o.PersonId == personId)
+            .Select(o => o.Text)
+            .ToListAsync(cancellationToken);
+
+        return new PublicWantedOptions(photos, areas);
+    }
+
+    public async Task<PublicWantedEdit?> GetForPersonAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRecordRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await IsRecordVisibleAsync(db, personId, actor, cancellationToken))
+        {
+            return null;
+        }
+
+        return await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.PersonId == personId)
+            .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
+            .Select(f => new PublicWantedEdit(
+                f.Id, f.CaseNumber, f.Kind, f.Status, f.DisplayName, f.Person!.CaseNumber, f.PublicHazardLevel,
+                f.PhotoFileName != null, f.PublishedAt, f.PublishedBy!.Codename, f.ExpiresAt,
+                f.ModifiedAt ?? f.CreatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // ---- writes ----
+
+    public async Task<string> CreateDraftFromPersonAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // resolved through the canonical visibility gate first: an invisible file must read as "not found", never as
+        // "not allowed", or the create button becomes an existence oracle for classified records
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, ViewerScope.From(actor), cancellationToken))
+        {
+            throw new InvalidOperationException(RecordNotFound);
+        }
+
+        var person = await db.People.AsNoTracking().FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
+            ?? throw new InvalidOperationException(RecordNotFound);
+        RequireNotClassified(person, actor);
+
+        var live = await db.OeffentlicheFahndungen.AnyAsync(f => f.PersonId == personId
+            && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Beantragt
+                || f.Status == PublicWantedStatus.Entwurf), cancellationToken);
+        if (live)
+        {
+            throw new InvalidOperationException("Für diese Akte gibt es bereits eine Ausschreibung.");
+        }
+
+        var row = new OeffentlicheFahndung
+        {
+            PersonId = person.Id,
+            Kind = PublicWantedKind.Fahndung,
+            Status = PublicWantedStatus.Entwurf,
+            DisplayName = Cut(person.Name, MaxDisplayName),
+            // only name and accusation are pulled: a licence plate correlates live, and an alias may be informant-
+            // sourced, so the author picks those two by hand in the editor
+            ChargeHtml = ChargeFrom(person.WantedReason),
+        };
+        db.OeffentlicheFahndungen.Add(row);
+        await db.SaveChangesAsync(cancellationToken);
+        // no cache drop: a draft was never on the board
+        return row.Id;
+    }
+
+    public async Task UpdateSnapshotAsync(PublicWantedInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == input.Id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+
+        var live = row.Status == PublicWantedStatus.Veroeffentlicht;
+        if (live)
+        {
+            // editing a live notice is a publication, so it answers to the same gates
+            await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+            await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+        }
+
+        var name = (input.DisplayName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            throw new InvalidOperationException("Die Ausschreibung braucht einen Anzeigenamen.");
+        }
+
+        row.DisplayName = Cut(name, MaxDisplayName);
+        row.AliasText = CutOrNull(input.AliasText, MaxAliasText);
+        row.LastArea = CutOrNull(input.LastArea, MaxLastArea);
+        row.VehicleText = CutOrNull(input.VehicleText, MaxVehicleText);
+        row.ExpiresAt = ExpiryFrom(input.ExpiresAt);
+
+        var previousPhoto = row.PhotoFileName;
+        await PhotoSourceSetAsync(db, row, input.PhotoSourceId, cancellationToken);
+        if (live)
+        {
+            // the copy has to follow the choice here, not only at publish time: otherwise clearing the photo of a
+            // published notice reports success while the mugshot stays anonymously downloadable
+            await PhotoCopyAsync(db, row, cancellationToken);
+        }
+
+        // null means "leave the stored accusation alone", "" means "clear it" — without the split, saving a renamed
+        // notice would silently drop its text
+        if (input.ChargeHtml is not null)
+        {
+            row.ChargeHtml = HtmlCleanup.Clean(input.ChargeHtml);
+        }
+
+        if (live)
+        {
+            RequirePublishableCharge(row.ChargeHtml);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+
+        // after the save, for the same reason as in the publish body
+        if (live && previousPhoto != row.PhotoFileName)
+        {
+            DeleteCopy(previousPhoto);
+        }
+    }
+
+    /// <summary>A date picked in the editor is local midnight; outside it must mean "to the end of that day".</summary>
+    private static DateTime? ExpiryFrom(DateTime? picked) => picked switch
+    {
+        null => null,
+        { Kind: DateTimeKind.Utc } value => value,
+        { } value => DateTime.SpecifyKind(value.Date.AddDays(1).AddTicks(-1), DateTimeKind.Local).ToUniversalTime(),
+    };
+
+    public async Task<PublicWantedPublishOutcome> PublishAsync(string id, string? justification, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        // first, so a read-only supervisor does not even learn whether the module is on
+        Permission.RequirePublicWantedWrite(actor);
+        await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        if (row.Status == PublicWantedStatus.Veroeffentlicht)
+        {
+            throw new InvalidOperationException("Die Ausschreibung ist bereits veröffentlicht.");
+        }
+        if (row.PersonId is null)
+        {
+            throw new InvalidOperationException("Diese Phase veröffentlicht nur Personen-Ausschreibungen.");
+        }
+
+        var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+        // checked here as well so a request is never filed for content that approval would have to refuse; the
+        // authoritative run is inside PublishRowAsync, which both entry points share
+        RequirePublishableContent(row);
+
+        // rank 1-2 may prepare a notice but not put it outside; the request is filed after the classification block
+        // above, so nobody files one that could never be approved
+        if (!actor.MayHighestClassification())
+        {
+            if (string.IsNullOrWhiteSpace(justification))
+            {
+                throw new InvalidOperationException("Ein Veröffentlichungsantrag braucht eine Begründung.");
+            }
+            var open = await db.Requests.AnyAsync(a => a.Type == RequestType.Veroeffentlichung
+                && a.PublicationWantedId == row.Id && a.Status == RequestStatus.Requested, cancellationToken);
+            if (open)
+            {
+                throw new InvalidOperationException("Für diese Ausschreibung läuft bereits ein Veröffentlichungsantrag.");
+            }
+
+            db.Requests.Add(new Request
+            {
+                Type = RequestType.Veroeffentlichung,
+                TargetType = nameof(Person),
+                TargetId = person.Id,
+                TargetDesignation = $"{person.Name} ({person.CaseNumber})",
+                TargetClassification = person.Classification,
+                Justification = justification!.Trim(),
+                RequesterName = actor.GetCodename(),
+                PublicationWantedId = row.Id,
+            });
+            row.Status = PublicWantedStatus.Beantragt;
+            await db.SaveChangesAsync(cancellationToken);
+            cache.Remove(CacheKey);
+            return PublicWantedPublishOutcome.Requested;
+        }
+
+        await PublishRowAsync(db, row, person, actor, cancellationToken);
+        return PublicWantedPublishOutcome.Published;
+    }
+
+    public async Task RetractAsync(string id, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new InvalidOperationException("Zum Zurückziehen gehört ein Grund.");
+        }
+
+        // deliberately no module gate: publishing needs a live module, taking something offline never does — otherwise
+        // the kill switch would make it impossible to pull an entry, exactly backwards
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        if (row.Status is not (PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Beantragt))
+        {
+            throw new InvalidOperationException("Nur eine laufende Ausschreibung lässt sich zurückziehen.");
+        }
+
+        await RetractRowAsync(db, row, reason.Trim(), cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+    }
+
+    public async Task CapturedAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        if (row.Status != PublicWantedStatus.Veroeffentlicht)
+        {
+            throw new InvalidOperationException("Nur eine veröffentlichte Ausschreibung lässt sich auf gefasst setzen.");
+        }
+
+        row.Status = PublicWantedStatus.Gefasst;
+        row.CapturedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+    }
+
+    public async Task RefreshHazardLevelAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+
+        row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+    }
+
+    public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        if (row.Status == PublicWantedStatus.Veroeffentlicht)
+        {
+            // otherwise deleting would be a silent depublication with no reason on the record
+            throw new InvalidOperationException("Zuerst zurückziehen, dann löschen.");
+        }
+
+        // a request pointing at a deleted notice can never be decided again: the inbox resolves the notice through the
+        // soft-delete filter and would not find it, while the badge counts the request row forever
+        await CloseOpenRequestsAsync(db, row.Id, cancellationToken);
+
+        // the audit interceptor rewrites this into a soft delete; the photo copy stays so a restore is not a broken poster
+        db.OeffentlicheFahndungen.Remove(row);
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+    }
+
+    public async Task RetractForRecordAsync(string personId, string reason, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        // no rights guard: the caller already passed one, and a classification upgrade must never fail because this
+        // guard said no — that would leave the poster up, the exact outcome it exists to prevent
+        if (string.IsNullOrEmpty(personId))
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.OeffentlicheFahndungen
+            .Where(f => f.PersonId == personId
+                && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Beantragt))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var row in rows)
+        {
+            await RetractRowAsync(db, row, reason, cancellationToken);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+    }
+
+    // ---- trash ----
+
+    public async Task<List<OeffentlicheFahndung>> GetTrashAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.OeffentlicheFahndungen
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(f => f.IsDeleted)
+            .OrderByDescending(f => f.DeletedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(f => f.Id == id && f.IsDeleted, cancellationToken)
+            ?? throw new InvalidOperationException("Die Ausschreibung liegt nicht im Papierkorb.");
+
+        // the file may have become a Verschlusssache while the notice sat in the bin
+        await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+
+        row.IsDeleted = false;
+        row.DeletedAt = null;
+        row.DeletedById = null;
+        // back as a draft: undoing a delete must not republish anything on the way
+        row.Status = PublicWantedStatus.Entwurf;
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+    }
+
+    // ---- publication requests ----
+
+    public async Task<IReadOnlyList<PublicWantedRequestRow>> GetPendingRequestsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await PendingRequests(db)
+            .OrderBy(a => a.CreatedAt)
+            .Join(db.OeffentlicheFahndungen, a => a.PublicationWantedId, f => f.Id,
+                (a, f) => new PublicWantedRequestRow(a.Id, f.Id, f.DisplayName, a.TargetDesignation,
+                    a.RequesterName, a.Justification, a.CreatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> GetPendingRequestCountAsync(CancellationToken cancellationToken = default)
+    {
+        // the same join as the list, not a bare count over Antraege: a request whose notice is gone must not keep the
+        // badge at one while the inbox says there is nothing to decide
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await PendingRequests(db).CountAsync(cancellationToken);
+    }
+
+    public async Task ApprovePublicationRequestAsync(string requestId, string? note, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        // the write guard first: approving publishes, and RequireHighestClassification alone admits the read-only
+        // supervision and the demo principal, which would mint a case number and copy a photo before the
+        // ReadOnlyBarrierInterceptor vetoes the save
+        Permission.RequirePublicWantedWrite(actor);
+        Permission.RequireHighestClassification(actor);
+        await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var (request, row) = await PendingRequestAsync(db, requestId, cancellationToken);
+        var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+
+        DecideRequest(request, approved: true, note, actor);
+        await PublishRowAsync(db, row, person, actor, cancellationToken);
+        await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
+            "Veröffentlichung genehmigt", "/fahndung?tab=oeffentlich", cancellationToken);
+    }
+
+    public async Task RejectPublicationRequestAsync(string requestId, string? note, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+        Permission.RequireHighestClassification(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var (request, row) = await PendingRequestAsync(db, requestId, cancellationToken);
+
+        DecideRequest(request, approved: false, note, actor);
+        row.Status = PublicWantedStatus.Entwurf;
+        await db.SaveChangesAsync(cancellationToken);
+        cache.Remove(CacheKey);
+        await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
+            "Veröffentlichung abgelehnt", "/fahndung?tab=oeffentlich", cancellationToken);
+    }
+
+    // ---- internals ----
+
+    /// <summary>The one publish body; the direct and the approved path share it so they cannot drift apart.</summary>
+    private async Task PublishRowAsync(AppDbContext db, OeffentlicheFahndung row, Person person, ClaimsPrincipal actor,
+        CancellationToken cancellationToken)
+    {
+        // cleaned before the state check, and the content rules run here rather than only in PublishAsync: the
+        // approval path reaches this body too, and a Beantragt row can be edited between filing and decision
+        row.ChargeHtml = HtmlCleanup.Clean(row.ChargeHtml);
+        RequirePublishableContent(row);
+
+        // unconditional: the case-number service refuses to issue a number without an enclosing transaction
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        row.CaseNumber ??= await caseNumbers.NextAsync(db, CaseNumberPrefix, cancellationToken);
+
+        var previousPhoto = row.PhotoFileName;
+        await PhotoCopyAsync(db, row, cancellationToken);
+        var freshPhoto = row.PhotoFileName != previousPhoto ? row.PhotoFileName : null;
+
+        row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
+        row.Status = PublicWantedStatus.Veroeffentlicht;
+        row.PublishedAt = DateTime.UtcNow;
+        row.PublishedById = actor.GetAgentId();
+        row.RetractedAt = null;
+        row.RetractedReason = null;
+        row.CapturedAt = null;
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            // the copy is the one side effect a rollback cannot undo; without this every refused publish leaves an
+            // unreferenced image behind, and a read-only account can repeat the attempt
+            DeleteCopy(freshPhoto);
+            throw;
+        }
+        cache.Remove(CacheKey);
+
+        // after the commit: a rollback would otherwise have thrown away the row that still points at this file
+        DeleteCopy(previousPhoto is { Length: > 0 } && previousPhoto != row.PhotoFileName ? previousPhoto : null);
+    }
+
+    private void DeleteCopy(string? fileName)
+    {
+        if (fileName is not { Length: > 0 })
+        {
+            return;
+        }
+        try { publicFiles.Delete(fileName); } catch { /* best effort */ }
+    }
+
+    /// <summary>Copies the chosen file photo into the public folder; the notice never points at an internal file.</summary>
+    private async Task PhotoCopyAsync(AppDbContext db, OeffentlicheFahndung row, CancellationToken cancellationToken)
+    {
+        if (row.PhotoSourceId is not { Length: > 0 } sourceId)
+        {
+            row.PhotoFileName = null;
+            row.PhotoContentType = null;
+            return;
+        }
+
+        var source = await db.PersonPhotos
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Id == sourceId && f.PersonId == row.PersonId, cancellationToken);
+        if (source is null)
+        {
+            row.PhotoSourceId = null;
+            row.PhotoFileName = null;
+            row.PhotoContentType = null;
+            return;
+        }
+
+        try
+        {
+            await using var stream = peopleFiles.OpenRead(source.FileNameSaved);
+            row.PhotoFileName = await publicFiles.SaveAsync(stream, source.ContentType, cancellationToken);
+            row.PhotoContentType = source.ContentType;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // a missing source file is a poster without a picture, not a failed publication
+            row.PhotoFileName = null;
+            row.PhotoContentType = null;
+        }
+    }
+
+    private async Task PhotoSourceSetAsync(AppDbContext db, OeffentlicheFahndung row, string? photoSourceId,
+        CancellationToken cancellationToken)
+    {
+        if (photoSourceId is not { Length: > 0 })
+        {
+            row.PhotoSourceId = null;
+            return;
+        }
+
+        var known = await db.PersonPhotos
+            .AnyAsync(f => f.Id == photoSourceId && f.PersonId == row.PersonId, cancellationToken);
+        row.PhotoSourceId = known ? photoSourceId : null;
+    }
+
+    private static void DecideRequest(Request request, bool approved, string? note, ClaimsPrincipal actor)
+    {
+        request.Status = approved ? RequestStatus.Approved : RequestStatus.Rejected;
+        request.DeciderName = actor.GetCodename();
+        request.DecidedAt = DateTime.UtcNow;
+        request.DecisionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+    }
+
+    private static async Task<(Request Request, OeffentlicheFahndung Row)> PendingRequestAsync(
+        AppDbContext db, string requestId, CancellationToken cancellationToken)
+    {
+        var request = await db.Requests.FirstOrDefaultAsync(a => a.Id == requestId, cancellationToken)
+            ?? throw new InvalidOperationException("Antrag nicht gefunden.");
+        if (request.Type != RequestType.Veroeffentlichung)
+        {
+            throw new InvalidOperationException("Ungültiger Antragstyp.");
+        }
+        if (request.Status != RequestStatus.Requested)
+        {
+            throw new InvalidOperationException("Der Antrag ist bereits entschieden.");
+        }
+
+        var row = await db.OeffentlicheFahndungen
+            .FirstOrDefaultAsync(f => f.Id == request.PublicationWantedId, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+        return (request, row);
+    }
+
+    /// <summary>Loads the file behind a notice and refuses a classified or deleted one, rank-independently.</summary>
+    private static async Task<Person> RequirePublishableRecordAsync(AppDbContext db, OeffentlicheFahndung row,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        if (row.PersonId is null)
+        {
+            throw new InvalidOperationException(RecordNotFound);
+        }
+
+        // no IgnoreQueryFilters: a soft-deleted file blocks publication the same way a missing one does
+        var person = await db.People.AsNoTracking().FirstOrDefaultAsync(p => p.Id == row.PersonId, cancellationToken)
+            ?? throw new InvalidOperationException(RecordNotFound);
+        RequireNotClassified(person, actor);
+        return person;
+    }
+
+    /// <summary>All three secrecy flags block, admin included; the message depends on who is asking.</summary>
+    private static void RequireNotClassified(Person person, ClaimsPrincipal actor)
+    {
+        if (!person.IsClassified && !person.IsTRUClassified && !person.IsHRBClassified)
+        {
+            return;
+        }
+        // to someone who may not read classified records, the refusal reads exactly like a missing file — otherwise
+        // pressing publish would tell a junior agent that the record has since become a Verschlusssache
+        throw new InvalidOperationException(actor.MayClassifiedRead() ? Classified : RecordNotFound);
+    }
+
+    /// <summary>Everything a notice must satisfy before it may go outside.</summary>
+    private static void RequirePublishableContent(OeffentlicheFahndung row)
+    {
+        if (string.IsNullOrWhiteSpace(row.DisplayName))
+        {
+            throw new InvalidOperationException("Die Ausschreibung braucht einen Anzeigenamen.");
+        }
+        RequirePublishableCharge(row.ChargeHtml);
+    }
+
+    /// <summary>Refuses, never strips: silently removing part of an accusation changes what it says.</summary>
+    private static void RequirePublishableCharge(string? html)
+    {
+        var text = HtmlCleanup.PlainText(html);
+        if (text.Length == 0 && !(html ?? string.Empty).Contains("<img", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Die Ausschreibung braucht einen Vorwurfstext.");
+        }
+        if (MentionParser.Parse(html).Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Der Vorwurfstext enthält eine Erwähnung; öffentlicher Text darf keine Akte verlinken.");
+        }
+        if ((html ?? string.Empty).Contains("{{", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Der Vorwurfstext enthält einen Platzhalter.");
+        }
+    }
+
+    private static Task RetractRowAsync(AppDbContext db, OeffentlicheFahndung row, string reason,
+        CancellationToken cancellationToken)
+    {
+        // case number, accusation and the photo copy stay: visibility hangs on the status, so going back online is one
+        // click on the same address
+        row.Status = PublicWantedStatus.Zurueckgezogen;
+        row.RetractedAt = DateTime.UtcNow;
+        row.RetractedReason = reason;
+
+        return CloseOpenRequestsAsync(db, row.Id, cancellationToken);
+    }
+
+    private async Task<PublicWantedBoard> LoadAsync(CancellationToken cancellationToken)
+    {
+        if (cache.TryGetValue(CacheKey, out PublicWantedBoard? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        PublicWantedBoard board;
+        try
+        {
+            var now = DateTime.UtcNow;
+            await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+            var rows = await db.OeffentlicheFahndungen
+                .AsNoTracking()
+                .Where(f => f.Status == PublicWantedStatus.Veroeffentlicht
+                    && f.CaseNumber != null
+                    && (f.ExpiresAt == null || f.ExpiresAt > now))
+                .OrderByDescending(f => f.PublishedAt)
+                .Select(f => new { f.PersonId, Detail = new PublicWantedDetail(
+                    f.CaseNumber!,
+                    f.Kind,
+                    f.DisplayName,
+                    f.AliasText,
+                    f.PhotoFileName != null,
+                    f.PublicHazardLevel,
+                    f.PublishedAt,
+                    f.ChargeHtml,
+                    f.LastArea,
+                    f.VehicleText,
+                    f.ExpiresAt) })
+                .ToListAsync(cancellationToken);
+
+            // The suppression belt, as a second query rather than a subquery: IgnoreQueryFilters is compilation-scoped,
+            // so a subquery using it strips !IsDeleted from the OUTER set as well and a deleted notice goes live —
+            // measured, not assumed. Standalone it can only do what it says.
+            var open = await OpenRecordsAsync(db, rows.Select(r => r.PersonId), cancellationToken);
+
+            // deduplicated before the dictionary: a throwing ToDictionary inside this try would blank the whole board
+            var byCaseNumber = rows
+                .Where(r => r.PersonId is null || open.Contains(r.PersonId))
+                .Select(r => r.Detail)
+                .GroupBy(f => f.CaseNumber, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var cards = byCaseNumber.Values
+                .OrderByDescending(f => f.PublishedAt)
+                .Select(f => new PublicWantedCard(
+                    f.CaseNumber, f.Kind, f.DisplayName, f.AliasText, f.HasPhoto, f.HazardLevel, f.PublishedAt))
+                .ToList();
+            board = new PublicWantedBoard(cards, byCaseNumber);
+        }
+        catch (Exception)
+        {
+            // never cache a failure: the next request should try again rather than sit on an empty board
+            return PublicWantedBoard.Empty;
+        }
+
+        cache.Set(CacheKey, board, CacheDuration);
+        return board;
+    }
+
+    /// <summary>Open publication requests whose notice still exists; count and list share it so they cannot disagree.</summary>
+    private static IQueryable<Request> PendingRequests(AppDbContext db)
+        => db.Requests.Where(a => a.Type == RequestType.Veroeffentlichung
+            && a.Status == RequestStatus.Requested
+            && db.OeffentlicheFahndungen.Any(f => f.Id == a.PublicationWantedId));
+
+    /// <summary>Closes every open publication request of a notice; a request nobody can decide is worse than none.</summary>
+    private static Task CloseOpenRequestsAsync(AppDbContext db, string wantedId, CancellationToken cancellationToken)
+        => db.Requests
+            .Where(a => a.Type == RequestType.Veroeffentlichung && a.PublicationWantedId == wantedId
+                && a.Status == RequestStatus.Requested)
+            .ForEachAsync(a => a.Status = RequestStatus.Rejected, cancellationToken);
+
+    /// <summary>Of the given person files, the ones that may appear outside at all: alive, undeleted, no secrecy flag.</summary>
+    private static async Task<HashSet<string>> OpenRecordsAsync(AppDbContext db, IEnumerable<string?> personIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = Ids(personIds);
+        if (ids.Count == 0)
+        {
+            return Empty();
+        }
+
+        return (await db.People
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(p => ids.Contains(p.Id) && !p.IsDeleted
+                    && !p.IsClassified && !p.IsTRUClassified && !p.IsHRBClassified)
+                .Select(p => p.Id)
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>Of the given person files, the ones this actor may read.</summary>
+    /// <remarks>
+    /// A deleted file still resolves its secrecy level here, so a leftover notice stays manageable by whoever may see
+    /// that level. A file that does not resolve at all is not visible — fail closed.
+    /// </remarks>
+    private static async Task<HashSet<string>> VisibleRecordsAsync(AppDbContext db, IEnumerable<string?> personIds,
+        ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        var ids = Ids(personIds);
+        if (ids.Count == 0)
+        {
+            return Empty();
+        }
+
+        var scope = ViewerScope.From(actor);
+        var rows = await db.People
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.IsClassified, p.IsTRUClassified, p.IsHRBClassified })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Where(p => RecordVisibility.IsVisible(scope, p.IsClassified, p.IsTRUClassified, p.IsHRBClassified))
+            .Select(p => p.Id)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>True when the notice's record is readable for the actor; a notice without a record has no gate yet.</summary>
+    private static async Task<bool> IsRecordVisibleAsync(AppDbContext db, string? personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken)
+        => personId is null
+            || (await VisibleRecordsAsync(db, [personId], actor, cancellationToken)).Contains(personId);
+
+    private static List<string> Ids(IEnumerable<string?> personIds)
+        => personIds.Where(id => !string.IsNullOrEmpty(id)).Select(id => id!).Distinct(StringComparer.Ordinal).ToList();
+
+    private static HashSet<string> Empty() => new(StringComparer.Ordinal);
+
+    private static string ChargeFrom(string? wantedReason)
+    {
+        var bare = MentionParser.Strip(wantedReason);
+        return bare.Length == 0 ? string.Empty : HtmlCleanup.Clean($"<p>{WebUtility.HtmlEncode(bare)}</p>");
+    }
+
+    private static string Cut(string value, int max) => value.Length <= max ? value : value[..max];
+
+    private static string? CutOrNull(string? value, int max)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        return trimmed.Length == 0 ? null : Cut(trimmed, max);
+    }
+}

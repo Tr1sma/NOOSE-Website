@@ -255,12 +255,51 @@ public class EnumDisplayTests_B
     [Theory]
     [InlineData(RequestType.Upgrade, "Hochstufung")]
     [InlineData(RequestType.PartnerFreigabe, "Partner-Freigabe")]
+    [InlineData(RequestType.Veroeffentlichung, "Veröffentlichung")]
     public void RequestTypeName_definedValue_mapsToLabel(RequestType type, string expected)
         => Assert.Equal(expected, RequestTypeDisplay.Name(type));
 
     [Fact]
     public void RequestTypeName_undefinedValue_returnsDash()
         => Assert.Equal("—", RequestTypeDisplay.Name((RequestType)99));
+
+    // ---------------------------------------------------------------------
+    // PublicWantedKindDisplay / PublicWantedStatusDisplay
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(PublicWantedKind.Fahndung, "Fahndung")]
+    [InlineData(PublicWantedKind.Vermisst, "Vermisst")]
+    [InlineData(PublicWantedKind.Zeugenaufruf, "Zeugenaufruf")]
+    [InlineData(PublicWantedKind.Fahrzeug, "Fahrzeug")]
+    [InlineData(PublicWantedKind.Waffe, "Waffe")]
+    public void PublicWantedKindName_definedValue_mapsToLabel(PublicWantedKind kind, string expected)
+        => Assert.Equal(expected, PublicWantedKindDisplay.Name(kind));
+
+    [Fact]
+    public void PublicWantedKindName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicWantedKindDisplay.Name((PublicWantedKind)99));
+
+    [Theory]
+    [InlineData(PublicWantedStatus.Entwurf, "Entwurf")]
+    [InlineData(PublicWantedStatus.Beantragt, "Beantragt")]
+    [InlineData(PublicWantedStatus.Veroeffentlicht, "Veröffentlicht")]
+    [InlineData(PublicWantedStatus.Gefasst, "Gefasst")]
+    [InlineData(PublicWantedStatus.Zurueckgezogen, "Zurückgezogen")]
+    [InlineData(PublicWantedStatus.Abgelaufen, "Abgelaufen")]
+    public void PublicWantedStatusName_definedValue_mapsToLabel(PublicWantedStatus status, string expected)
+        => Assert.Equal(expected, PublicWantedStatusDisplay.Name(status));
+
+    [Fact]
+    public void PublicWantedStatusName_undefinedValue_returnsDash()
+        => Assert.Equal("—", PublicWantedStatusDisplay.Name((PublicWantedStatus)99));
+
+    [Fact]
+    public void PublicWantedDisplays_ListEveryDefinedValue()
+    {
+        Assert.Equal(Enum.GetValues<PublicWantedKind>().Length, PublicWantedKindDisplay.All.Count);
+        Assert.Equal(Enum.GetValues<PublicWantedStatus>().Length, PublicWantedStatusDisplay.All.Count);
+    }
 
     // ---------------------------------------------------------------------
     // SourceTypeDisplay

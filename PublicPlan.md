@@ -103,7 +103,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 1 | Bürger-Login & Profil | `Phase61_BuergerKonto` | — | **fertig** |
 | 2 | Modul-Schalter, Kill-Switch, Nav, Indexierung, `PublicVisibility` | `Oeffentlich02_Module` | 1 | **fertig** |
 | 3 | CMS-Seiten (Text zur Arbeit, FAQ, Zuständigkeiten) | `Oeffentlich03_Seiten` | 2 | **fertig** |
-| 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Oeffentlich04_Fahndung` | 2 | offen |
+| 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Oeffentlich04_Fahndung` | 2 | **fertig** |
 | 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | offen |
 | 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | offen |
 | 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | offen |
@@ -349,47 +349,180 @@ werden kann — und der Entwurf vorher anonym nicht erreichbar war.
 
 ---
 
-## Phase 4 — Fahndung Kern
+## Phase 4 — Fahndung Kern ✅
 
 **Ziel:** Der eigentliche Kern. Eine Person wird bewusst publiziert, erscheint auf `/gesucht` und hat einen
 Steckbrief. Noch ohne Kopfgeld, ohne Hinweis-Button.
 
 **Daten** (`Oeffentlich04_Fahndung`)
-- `OeffentlicheFahndung` → `OeffentlicheFahndungen`: `Aktenzeichen` (eigener Präfix `NOOSE-F` über
+- `OeffentlicheFahndung` → `OeffentlicheFahndungen`: `Aktenzeichen` (eigener Präfix **`FA`** über
   `CaseNumberCounter`), `Art` (`Fahndung`/`Vermisst`/`Zeugenaufruf`/`Fahrzeug`/`Waffe` — Enum jetzt komplett,
   genutzt zunächst nur `Fahndung`), `PersonId` (nullable), `FraktionId` (nullable),
-  **Snapshot:** `AnzeigeName`, `AliaseText`, `FotoDateiname`, `VorwurfHtml` (`longtext`), `LetzteGegend`,
-  `FahrzeugText`, `OeffentlicheGefahrenstufe`; `Status`
+  **Snapshot:** `AnzeigeName`, `AliaseText`, `FotoDateiname`, `FotoTyp`, `FotoQuellId`, `VorwurfHtml`
+  (`longtext`), `LetzteGegend`, `FahrzeugText`, `OeffentlicheGefahrenstufe`; `Status`
   (`Entwurf`/`Beantragt`/`Veroeffentlicht`/`Gefasst`/`Zurueckgezogen`/`Abgelaufen`), `AblaufDatum` (nullable),
-  `KopfgeldIstObergrenze`, `VeroeffentlichtAm`/`VonId`, `AufrufZaehler`, `IAuditable`, `ISoftDelete`.
+  `KopfgeldIstObergrenze`, `VeroeffentlichtAm`/`VonId`, `ZurueckgezogenAm`/`-Grund`, `GefasstAm`,
+  `AufrufZaehler`, `IAuditable`, `ISoftDelete`.
+- `Request`: eine neue nullable Spalte `VeroeffentlichungFahndungId` (kein FK, Muster der `Freigabe*`-Gruppe).
 - `RequestType`: `Veroeffentlichung`.
+
+**Sechs bewusste Abweichungen von der Planzeile**
+1. **Präfix `FA`, nicht `F`.** `F` gehört seit `FactionService.cs` den Fraktionen, und `CaseNumberCounter` ist
+   auf `(Präfix, Jahr)` verschlüsselt — geteilt benennte ein Aktenzeichen zwei Aktenarten.
+2. **`Aktenzeichen` ist nullable** und wird erst bei der *ersten* Publikation geprägt: ein Entwurf, der nie
+   rausgeht, verbrennt keine öffentliche Nummer. Der Index darauf ist **unique** — anders als beim Seiten-Slug,
+   denn eine Zählernummer wird nie wiederverwendet.
+3. **Kein Live-`ThreatScore` nach außen.** `OeffentlicheGefahrenstufe` ist ein `HazardLevel`, festgehalten beim
+   Publizieren, mit einer Aktion „Stufe aktualisieren" im Panel. Der rohe 0–100-Wert wäre der einzige
+   verbliebene Grund, `Personen` für *Inhalt* zu lesen — und die Score-Konfiguration steht in
+   `PublicVisibility.NeverPublic` ausdrücklich als „Anleitung zur Umgehung".
+4. **Der Foto-Endpoint ist `[AllowAnonymous]`**, nicht „autorisiert": ein Fahndungsfoto, das nur Agenten sehen,
+   ist kein Fahndungsfoto. Die Autorisierung *ist* die Publikationsprüfung. Er liegt unter `/gesucht/{az}/foto`
+   und liefert **eine** `404` für jeden Fehlschlag — unbekannt, Entwurf, zurückgezogen, Modul aus, Not-Aus,
+   eingestufte Akte, fehlende Datei —, sonst wäre er ein Existenz-Orakel.
+5. **Das Foto wird beim Publizieren kopiert** (`App_Data/uploads/fahndung`, eigener
+   `IPublicWantedPhotoStorageService`). `PersonService.PhotoRemoveAsync` löscht die Datei hart, während die
+   Zeile nur soft-gelöscht wird — eine Referenz zerrisse den Steckbrief lautlos. Getrennter Basispfad heißt
+   außerdem: der anonyme Endpoint kann baulich keine interne Datei erreichen.
+6. **Kein `ManualAudit.Row` gegen die Personenakte** (Leitsatz 9). `OeffentlicheFahndung` ist `IAuditable`, der
+   Interceptor schreibt die Zeile selbst; eine zusätzliche `Person`-getypte Zeile fiele in
+   `TimelineDisplay.MapAudit` durch den Schwanz und läse sich als generisches „Akte geändert". Stattdessen
+   Fan-out über `TimelineService.AuditSourceAsync` + eigener `MapAudit`-Arm — dasselbe Muster wie bei
+   `PublicPageService.PublishAsync`.
 
 **Code**
 - `Services/Public/IPublicWantedService`: Entwurf anlegen (Snapshot aus der Personenakte ziehen),
-  Snapshot aktualisieren, publizieren, depublizieren mit Grund, `GefasstAsync`.
-  **Publish-Guards in dieser Reihenfolge:** `Permission.RequireWriteAccess` →
-  `IPublicModuleService.RequireEnabled` → **harte VS-Sperre** (`person.IsClassified` ⇒
-  `InvalidOperationException`, rangunabhängig, auch für Admin) → Rang ≥ 3 publiziert direkt, Rang 1–2 erzeugt
-  `Request` mit `RequestType.Veroeffentlichung` → `ManualAudit.Row` gegen die Personenakte.
-- `Models/Public/PublicWantedCard`/`PublicWantedDetail` — enthalten baulich **kein** Feld für
-  Codename/Klarname/Dienstgrad. Score wird beim Rendern live aus `Person.ThreatScore` gelesen, nur für
-  publizierte Einträge.
-- Foto: Auswahl aus `PersonPhoto`, Auslieferung über autorisierten Endpoint aus `App_Data/uploads` — der
-  öffentliche Endpoint prüft, dass genau dieses Foto publiziert ist, nicht nur, dass es existiert.
-- Seiten: `/gesucht` (Board, statisch, gecacht, Filter Art/Stufe), `/gesucht/{Aktenzeichen}` (Steckbrief).
-- Intern: Publish-Dialog in `PersonDetail`, **Warnbanner** „Diese Akte ist öffentlich ausgeschrieben" oben
-  in `PersonDetail`, Antrags-Eintrag in der bestehenden Anträge-Inbox.
-- `PublicVisibility`-Eintrag · `TrashService`+`TrashProjection` · `TimelineService.AuditSourceAsync` +
-  `TimelineDisplay.MapAudit` für Publizieren/Depublizieren.
-- `PublicModules`: `Fahndung`.
+  Snapshot aktualisieren, publizieren, zurückziehen mit Grund, `CapturedAsync`, `RefreshHazardLevelAsync`,
+  Papierkorb-Paar, `RetractForRecordAsync` und die vier Antrags-Methoden.
+  **Publish-Guards in dieser Reihenfolge:** `Permission.RequirePublicWantedWrite` →
+  `IPublicModuleService.RequireEnabledAsync` → **harte VS-Sperre** (alle drei VS-Flags ⇒
+  `InvalidOperationException`, rangunabhängig, auch für Admin) → Vollständigkeit + Erwähnungs-/Platzhalter-Verbot
+  → Rang ≥ 3 publiziert direkt, Rang 1–2 erzeugt `Request` mit `RequestType.Veroeffentlichung`.
+  - **Zwei neue Guards.** `RequirePublicWantedWrite` ist **nicht** `RequireWriteAccess`: das blockt nur Aufsicht
+    und Partner, ein angemeldeter Bürger trägt keinen Rang-Claim und wäre in den „Rang 1–2 ⇒ Antrag"-Zweig
+    gefallen. `RequirePublicWantedRead` ist bewusst weiter als `RequireClassifiedRead` (Rang ≥ 4) — ein Rang-3
+    publiziert direkt und muss seine eigenen Entwürfe öffnen können.
+  - **Zurückziehen und Gefasst lassen das Modul-Gate aus:** Publizieren braucht ein lebendes Modul,
+    *De*publizieren nie — sonst machte der Not-Aus das Zurückziehen unmöglich, genau verkehrt herum.
+  - **Die VS-Meldung hängt vom Akteur ab:** wer keine eingestuften Akten lesen darf, bekommt wortgleich das
+    „nicht gefunden" — sonst verriete der Publizieren-Knopf einem Junior die Einstufung.
+  - **Der Lesepfad trägt einen Unterdrückungsgürtel** als korrelierte `Any`-Unterabfrage: eine Ausschreibung
+    verschwindet, sobald ihre Akte eingestuft oder gelöscht ist. Bewusst keine Navigation — `f.Person` erbt den
+    Soft-Delete-Filter und wäre für eine gelöschte Akte `null`, `f.Person == null || …` zeigte also genau die
+    Zeilen, die es verbergen soll.
+  - **Auto-Rückzug** über `RetractForRecordAsync` an drei Stellen: `PersonService.EditAsync` (der einzige
+    `SecrecyLevel`-Schreibpfad), `PersonService.DeleteAsync` und `PersonMergeService` (das `IsClassified` direkt
+    setzt und die Quelle soft-löscht). Ein Publikationsantrag folgt beim Zusammenführen **nicht** dem Ziel — sein
+    Snapshot nennt weiter die Quelle — sondern wird mitgeschlossen.
+- **`RequestService` bekommt drei Typ-Klauseln:** `DecideAsync` weist jeden Nicht-`Upgrade`-Antrag ab (die
+  Genehmigung setzt bedingungslos eine Einstufung, mit `Classification.Unknown` wäre das eine stille
+  Herabstufung), und `HasOpenRequestAsync` + der Dedup in `UpgradeRequestAsync` sind nicht mehr typblind.
+  `GetOpenCountAsync` bleibt unangetastet — `DashboardService` liest es für *jeden* Agenten und beschriftet die
+  Zahl „Hochstufung"; der Zähler kommt stattdessen in `NavMenu` dazu.
+- `Models/Public/PublicWantedCard`/`PublicWantedDetail`/`PublicWantedBoard`/`PublicWantedPhoto` — enthalten
+  baulich **kein** Feld für Codename/Klarname/Dienstgrad, keinen Aktenbezug, keine Zeilen-Id und keinen
+  Zahlenwert. Intern getrennt: `PublicWantedEdit` (ohne HTML), `PublicWantedDraft`, `PublicWantedBanner`.
+- Seiten: `WantedHub.razor` (`/gesucht`, Board, statisch, gecacht, Filter Art/Stufe als Query-Links) und
+  `WantedProfile.razor` (`/gesucht/{CaseNumber}`). **Nicht** `WantedBoard` — `Services/WantedBoard.cs` ist eine
+  global importierte statische Klasse. Filter sind als `string` gebunden und von Hand geparst; ein Enum-Binding
+  wäre der `?vorschau=1`-Fehler an neuer Stelle.
+- Intern: `PublicWantedEditor` (`Components/Common/Shared/`, von beiden Seiten benutzt),
+  `PublicWantedPanel` in `PersonDetail` als eigener Abschnitt **außerhalb** von `einstufung` — den Slug listet
+  `PartnerTabCatalog`, dort wäre alles einem freigegebenen Partner sichtbar. **Warnbanner** oben in
+  `PersonDetail`, nur für `Veroeffentlicht`; ein `Beantragt` ist nicht draußen und verriete eine offene interne
+  Entscheidung. `PublicWantedListPanel` auf `/fahndung?tab=oeffentlich` (in `AuthorizeView` mit
+  `Policies.InternalAgent`, weil `/fahndung` nur `ActiveAgent` erbt und das ein Partner erfüllt).
+  Antrags-Abschnitt in `Shares.razor`, **außerhalb** des Führungs-Blocks — entschieden wird auf Rang 3.
+- `PublicVisibility`-Eintrag · `SearchCatalog.NotSearchable` (eigener Provider erst in Phase 16) ·
+  `TrashService`+`TrashProjection` · `MergedPageSections.Trash`+`.Wanted` · `FeedbackPageTabs.Wanted` ·
+  `AuditEntityDisplay` (Label **und** Route) · `TimelineService.AuditSourceAsync` + `TimelineDisplay.MapAudit` ·
+  **`ChronikParentResolver`** (vierte Registry, die der Fan-out verlangt) · `DemoModeMiddleware` (`/gesucht`
+  bleibt anonym, sonst trägt ein Besucher im Demo-Modus das Demo-Principal).
+- `PublicModules`: `Fahndung` wird `Available`, bleibt `DefaultEnabled = false`.
 
-**Tests** VS-Akte ist rangunabhängig nicht publizierbar · Rang-Weiche (3 direkt, 2 erzeugt Antrag) ·
-**Snapshot-Isolation**: Änderung am Namen/Vorwurf in der Personenakte verändert die öffentliche Ausgabe nicht ·
-Foto-Endpoint liefert unpublizierte Fotos nicht aus · Anonymitäts-Datei-Scan über `Models/Public/*` und
-`Components/Pages/Public/*` · Zeitstrahl-Eintrag entsteht.
+**Tests** (+105, gesamt 5478 grün) — `PublicWantedServiceTests` (VS-Sperre rangunabhängig inkl. TRU/HRB und
+soft-gelöschter Akte · Guard-Reihenfolge verrät die Einstufung nicht · Aufsicht/Bürger abgewiesen · Modul-Aus
+und Not-Aus · Rang-Weiche 3 direkt / 2 erzeugt Antrag, Dedup, Begründungspflicht, Antrag ohne HTML ·
+**Snapshot-Isolation** über Name, Vorwurf und Score · Entwurf zieht nur Name und Vorwurf · nachträgliche
+Einstufung/Löschung räumt das Board über den Lesegürtel · `RetractForRecord` schließt auch den Antrag · jeder
+nicht-öffentliche Status ist von „gibt es nicht" ununterscheidbar · Ablaufdatum ohne Worker · Erwähnung,
+Platzhalter, leerer Vorwurf abgewiesen, reines Bild erlaubt, erneutes Bereinigen beim Publizieren ·
+Zurückziehen behält Aktenzeichen und Text und geht auch bei Not-Aus · Löschen erst nach Zurückziehen ·
+Wiederherstellen als Entwurf, nicht nach Einstufung · Aktenzeichen genau einmal · Foto wird kopiert und der
+interne Dateiname nie gespeichert · Cache samt Invalidierung · Antrags-Genehmigung/-Ablehnung) ·
+`PublicWantedModelTests` (positive Allowlist über die Nach-außen-Typen) · `PublicPageScanTests` (Datei-Scan
+über die öffentlichen Seiten, Kommentare vorher entfernt) · `ChronikParentResolverTests` ·
+Zeitstrahl-Fan-out · `RequestServiceTests` um die drei Typ-Klauseln erweitert.
 
 **Fertig, wenn** eine Person publiziert ist, anonym auf `/gesucht` erscheint, ein Rang-2-Agent nur einen
 Antrag erzeugt, eine VS-Akte gar nicht geht, und der Zeitstrahl der Akte die Publikation zeigt.
+
+**In der Umsetzung gefunden und behoben:**
+1. **`Request.VeroeffentlichungFahndungId` wurde `longtext`** — die Spalte stand in der Entity, aber nicht im
+   `OnModelCreating`-Block von `Request`, und ohne `HasMaxLength` macht Pomelo daraus `longtext`. Beim Rollback
+   der Migration aufgefallen, `HasMaxLength(64)` nachgezogen und die Migration neu erzeugt.
+2. **`PublicModuleServiceTests.NavEntries_ExcludeAModuleWhosePagesDoNotExistYet` benutzte `Fahndung`** als
+   Beispiel für ein noch nicht gebautes Modul — mit dieser Phase ist es gebaut. Steht jetzt auf
+   `FahndungArchiv` (Phase 5).
+
+**In der Nachprüfung gefunden und behoben** (fünf Prüf-Achsen, jeder Befund einzeln widerlegt oder bestätigt):
+1. **Eine soft-gelöschte Ausschreibung ging anonym live.** `IgnoreQueryFilters()` gilt für die ganze
+   Kompilierung, nicht für den Operanden — in der Gürtel-Unterabfrage benutzt, entfernte es `!IsDeleted` auch
+   vom **äußeren** Set. Nachgemessen mit einer EF-Probe, nicht erschlossen. Der Gürtel ist jetzt eine eigene
+   zweite Abfrage; `/gesucht` wurde gegen MariaDB mit einer live und einer soft-gelöschten Zeile nachgeprüft.
+2. **Die internen Lesepfade hatten kein Aktengate.** `GetAllAsync`/`GetDraftAsync`/`GetOptionsAsync`/
+   `GetForPersonAsync` gaben einem Rang-3-Agenten Name, Aktenzeichen und Vorwurf einer Verschlusssache, und
+   `GetOptionsAsync` sogar deren **aktuelle** `PersonOrte` — live gelesen, nicht aus dem Snapshot. Alle vier
+   filtern jetzt über `RecordVisibility`; eine nicht mehr auflösende Akte gilt als unsichtbar.
+3. **Der Antragsweg war unerreichbar.** Das Panel gate den Editor auf „Rang ≥ 3 oder Aufsicht", also legte ein
+   Rang-2-Agent einen Entwurf an und sah ihn nie wieder — `Beantragt`, der `Shares.razor`-Abschnitt und das
+   Badge waren toter Code. Der Guard ist geteilt: `RequirePublicWantedRead` für die Querliste,
+   `RequirePublicWantedRecordRead` für die Ausschreibung einer Akte.
+4. **Genehmigen umging die Inhaltsprüfung.** Eine `Beantragt`-Zeile lässt sich zwischen Antrag und Entscheidung
+   bearbeiten; Platzhalter, Erwähnung oder leerer Vorwurf gingen über die Genehmigung live. Die Prüfung sitzt
+   jetzt im gemeinsamen Publish-Rumpf.
+5. **Genehmigen hatte den falschen Guard.** `RequireHighestClassification` allein lässt die Nur-Lese-Aufsicht
+   und das Demo-Principal durch, die Aktenzeichen und Fotokopie erzeugten, bevor der `ReadOnlyBarrierInterceptor`
+   das Speichern verweigerte — auf einer Demo-Instanz anonym wiederholbar. `RequirePublicWantedWrite` läuft
+   jetzt zuerst.
+6. **Löschen verwaiste den Antrag.** Das Badge zählte eine Zeile, die der Posteingang nicht mehr fand und
+   niemand entscheiden konnte. `DeleteAsync` schließt offene Anträge; Zähler und Liste kommen aus derselben
+   Abfrage.
+7. **Das Foto einer laufenden Ausschreibung ließ sich nicht wechseln.** Entfernen meldete Erfolg, das Bild
+   blieb anonym abrufbar. `UpdateSnapshotAsync` kopiert bei einer laufenden Zeile jetzt neu und löscht die alte
+   Kopie; ein fehlgeschlagenes Publizieren räumt die frische Kopie weg.
+8. **Ablaufdatum in Ortszeit.** Der Datepicker liefert lokale Mitternacht, verglichen wurde gegen `UtcNow` —
+   ein heute gewähltes Datum lief bis zu zwei Stunden zu früh ab. Gilt jetzt bis zum lokalen Tagesende.
+9. **Testlücken:** `PublicPageScanTests` kannte `MentionText` nicht, nahm `Invite.razor` von allen Prüfungen
+   statt nur vom Layout aus und verlor stillschweigend Hüllen-Dateien, die jemand verschiebt;
+   `PublicWantedModelTests` listete `PublicModuleState` und `CareerRequirement` nicht; die Aktenzeichen-Prüfung
+   konnte `??=` nicht von `=` unterscheiden. Alles nachgezogen, dazu je ein Regressionstest für 1–8.
+
+Ausdrücklich **widerlegt** und nicht geändert: der Zeitstrahl unterscheidet Publizieren und Zurückziehen sehr
+wohl (das `Status`-Paar des Interceptors rendert `AuditDisplay.Parse`), `HtmlCleanup` läuft auf jedem
+Service-Schreibpfad vor der Prüfung, und `GetOpenCountAsync` war schon vorher typ-gebunden.
+
+**Nachgewiesen** (laufender Server, MariaDB, anonym):
+- Migration angewendet (`OeffentlicheFahndungen`, `Antraege.VeroeffentlichungFahndungId` als `varchar(64)`),
+  Modul `Fahndung` bleibt nach dem Seed aus.
+- Modul aus: `/gesucht` und `/gesucht/{az}` zeigen den Offline-Text, kein Tab in der Nav.
+- Modul an, nichts publiziert: „Derzeit sind keine Ausschreibungen veröffentlicht", Tab erscheint.
+- Eine Ausschreibung veröffentlicht: `/gesucht` listet die Karte, `/gesucht/NOOSE-FA-2026-0001` rendert
+  Steckbrief mit Alias, Art, Gefahrenstufe „Kritisch", Warnhinweis, Vorwurf, Gegend und Fahrzeug.
+- **VS nachträglich:** ein `IstVerschlusssacheTRU` auf der Akte leert das Board binnen eines Cache-Fensters,
+  der Steckbrief antwortet mit „nicht gefunden" **plus** `noindex`-Meta, das Foto mit 404 — ohne dass die Zeile
+  angefasst wurde (Lesegürtel allein).
+- **Soft-gelöscht:** eine zweite, veröffentlichte Zeile mit `IstGeloescht = 1` erscheint **nicht** auf dem
+  Board, ihr Steckbrief ist „nicht gefunden" mit `noindex`, ihr Foto 404 — während die lebende Zeile daneben
+  normal ausgeliefert wird.
+- Not-Aus: `/gesucht`, der Steckbrief und die Nav gehen dunkel, Banner auf der Startseite, `/buerger` bleibt
+  erreichbar.
+- `X-Robots-Tag`: `/gesucht`, `/gesucht/{az}` ohne Header; `/personen` und `/fahndung` mit `noindex, nofollow`.
+- Erfundenes Aktenzeichen (`/gesucht/NOOSE-FA-9999-0001`): HTTP 200 mit `noindex`-Meta und „nicht gefunden".
+- Müll-Queries (`?art=quatsch&stufe=99`, `?stufe=Critical`): HTTP 200, kein 500.
+- Serverlog ohne Exception (nur die bekannte https-Port-Warnung).
+- **Nicht geprüft:** die internen Panels, der Antrags-Posteingang und die Foto-Kopie im laufenden System —
+  dafür braucht es einen Discord-Login. Ihre Logik hängt vollständig am getesteten Dienst.
 
 ---
 

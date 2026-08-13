@@ -12,6 +12,9 @@ public class FileUploadOptions
     /// <summary>Evidence-room item images path.</summary>
     public string AsservatePath { get; set; } = "App_Data/uploads/asservate";
 
+    /// <summary>Public wanted-notice photo path; holds copies, so deleting a file photo cannot break a poster.</summary>
+    public string WantedPath { get; set; } = "App_Data/uploads/fahndung";
+
     /// <summary>Max file size.</summary>
     public long MaxBytes { get; set; } = 10 * 1024 * 1024;
 

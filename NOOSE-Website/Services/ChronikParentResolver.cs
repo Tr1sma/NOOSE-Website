@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Jobs;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 
 namespace NOOSE_Website.Services;
@@ -43,6 +44,7 @@ public static class ChronikParentResolver
         [nameof(CaseAgent)] = nameof(Case),
         [nameof(TaskforceAgent)] = nameof(Taskforce),
         [nameof(JobAssignment)] = nameof(Job),
+        [nameof(OeffentlicheFahndung)] = nameof(Person),
     };
 
     /// <summary>True when the audit type is a child rather than a record itself.</summary>
@@ -161,6 +163,10 @@ public static class ChronikParentResolver
             .Where(a => i.Contains(a.Id)).Select(a => new Pair(a.Id, a.TaskforceId)));
         await FanInAsync(nameof(JobAssignment), nameof(Job), i => db.JobAssignments.IgnoreQueryFilters()
             .Where(z => i.Contains(z.Id)).Select(z => new Pair(z.Id, z.JobId)));
+        // PersonId is nullable on the snapshot (faction notices follow later) and Pair.ParentId is not, so a notice
+        // without a person file simply resolves to nothing
+        await FanInAsync(nameof(OeffentlicheFahndung), nameof(Person), i => db.OeffentlicheFahndungen.IgnoreQueryFilters()
+            .Where(f => i.Contains(f.Id) && f.PersonId != null).Select(f => new Pair(f.Id, f.PersonId!)));
 
         return map;
 

@@ -33,7 +33,8 @@ public class TrashServiceTests
         Substitute.For<IKassenService>(),
         Substitute.For<IFinancingService>(),
         Substitute.For<IFeedbackService>(),
-        Substitute.For<IPublicPageService>());
+        Substitute.For<IPublicPageService>(),
+        Substitute.For<IPublicWantedService>());
 
     [Fact]
     public void Kind_keys_are_unique()

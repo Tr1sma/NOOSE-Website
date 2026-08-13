@@ -38,6 +38,7 @@ public static class AuditEntityDisplay
         "BuergerProfil" => "Bürgerkonto",
         "OeffentlichesModul" => "Öffentliches Modul",
         "OeffentlicheSeite" => "Öffentliche Seite",
+        "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -72,6 +73,7 @@ public static class AuditEntityDisplay
         "OeffentlichesModul" => "/einstellungen?tab=oeffentliche-module",
         "PublicArea" => "/einstellungen?tab=oeffentliche-module",
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
+        "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
         _ => null,
     };
 }

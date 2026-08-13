@@ -38,6 +38,7 @@ public static class FeedbackPageTabs
     public static readonly FeedbackTab[] Wanted =
     [
         new("fahndung", "Fahndung"),
+        new("oeffentlich", "Öffentliche Ausschreibungen"),
         new("observationen", "Observationen"),
         new("doks", "Vernehmungen & Maßnahmen"),
     ];

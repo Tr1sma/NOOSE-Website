@@ -241,6 +241,53 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to author a public wanted notice.</summary>
+    /// <remarks>
+    /// Not <see cref="RequireWriteAccess"/>: that one only blocks the read-only supervision and partners, so a
+    /// signed-in citizen — who carries no rank claim — would fall into the "rank 1-2 files a request" branch and could
+    /// file a publication request against an internal file. Publishing itself still needs rank ≥ 3; below that the
+    /// service turns the attempt into a request.
+    /// </remarks>
+    public static void RequirePublicWantedWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || actor.IsCitizen() || string.IsNullOrEmpty(actor.GetAgentId()))
+        {
+            throw new UnauthorizedAccessException(
+                "Öffentliche Ausschreibungen bearbeitet nur ein schreibberechtigter Agent.");
+        }
+    }
+
+    /// <summary>Require the right to see the list of all public wanted notices across records.</summary>
+    /// <remarks>
+    /// Deliberately wider than <see cref="RequireClassifiedRead"/> (rank ≥ 4): a Senior Special Agent publishes
+    /// directly and must be able to work the list. The read-only supervision is admitted as everywhere else.
+    /// Which rows they then see is decided per record — see <see cref="RequirePublicWantedRecordRead"/>.
+    /// </remarks>
+    public static void RequirePublicWantedRead(ClaimsPrincipal actor)
+    {
+        if (!actor.MayHighestClassification() && !actor.IsOnlyReader())
+        {
+            throw new UnauthorizedAccessException(
+                "Öffentliche Ausschreibungen sieht Senior Special Agent aufwärts und die Aufsicht.");
+        }
+    }
+
+    /// <summary>Require an internal agent for the notice of one record.</summary>
+    /// <remarks>
+    /// Wider than <see cref="RequirePublicWantedRead"/> on purpose: a rank 1-2 agent may prepare a notice and file a
+    /// publication request, so he must be able to open the one he is working on. It is not a permission to read the
+    /// underlying file — the service answers "not found" for a notice whose record the caller may not see, exactly as
+    /// <see cref="Visibility.IsRecordVisibleAsync"/> decides everywhere else.
+    /// </remarks>
+    public static void RequirePublicWantedRecordRead(ClaimsPrincipal actor)
+    {
+        if (actor.IsPartner() || actor.IsCitizen() || string.IsNullOrEmpty(actor.GetAgentId()))
+        {
+            throw new UnauthorizedAccessException(
+                "Öffentliche Ausschreibungen sieht nur ein interner Agent.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

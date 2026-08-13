@@ -12,7 +12,8 @@ public sealed class DemoModeMiddleware(RequestDelegate next, IConfiguration conf
     // login + framework + asset paths must not be hijacked
     private static readonly string[] ExcludedPrefixes =
     [
-        "/Account", "/signin-discord", "/health", "/_blazor", "/_framework", "/system/logo",
+        // /gesucht is public: an anonymous visitor there must stay anonymous, not arrive carrying the demo agent
+        "/Account", "/signin-discord", "/health", "/_blazor", "/_framework", "/system/logo", "/gesucht",
     ];
 
     public async Task InvokeAsync(HttpContext context, ISystemSettingService settings)

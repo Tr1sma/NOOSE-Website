@@ -1,10 +1,11 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Activities;
 using NOOSE_Website.Data.Entities.Common;
 using NOOSE_Website.Data.Entities.Factions;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Timeline;
@@ -390,6 +391,67 @@ public sealed class TimelineServiceTests
         var photo = Assert.Single(result.Where(e => e.Category == TimelineCategory.Photo));
         Assert.Equal("Foto hinzugefügt", photo.Title);
         Assert.Equal("Falcon", photo.ActorName);
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_PublicWanted_AuditFanOut_ShowsExactlyOneRowPerEvent()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "f1", PersonId = "p1", DisplayName = "Max Mustermann",
+                Status = PublicWantedStatus.Veroeffentlicht, CreatedAt = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(OeffentlicheFahndung), EntityId = "f1", Action = AuditAction.Created,
+                AgentName = "Falcon", Timestamp = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(OeffentlicheFahndung), EntityId = "f1", Action = AuditAction.Modified,
+                AgentName = "Falcon", Timestamp = Utc(3),
+                ChangesJson = "{\"Status\":[\"Veroeffentlicht\",\"Zurueckgezogen\"]}",
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        var rows = result.Where(e => e.Title.Contains("Öffentliche Ausschreibung", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, rows.Count);
+        // no second, Person-typed manual row: that one would fall through MapAudit and read as "Akte geändert"
+        Assert.DoesNotContain(result, e => e.Title == "Akte geändert");
+    }
+
+    [Fact]
+    public async Task GetTimelineAsync_PublicWanted_OfADeletedNotice_StaysOnTheFile()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1"));
+            db.OeffentlicheFahndungen.Add(new OeffentlicheFahndung
+            {
+                Id = "f1", PersonId = "p1", DisplayName = "Max Mustermann",
+                IsDeleted = true, DeletedAt = Utc(4), CreatedAt = Utc(2),
+            });
+            db.AuditLogs.Add(new AuditLog
+            {
+                EntityType = nameof(OeffentlicheFahndung), EntityId = "f1", Action = AuditAction.Deleted,
+                AgentName = "Falcon", Timestamp = Utc(4),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        Assert.Contains(result, e => e.Title == "Öffentliche Ausschreibung gelöscht");
     }
 
     [Fact]

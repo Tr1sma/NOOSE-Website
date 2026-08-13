@@ -7,6 +7,8 @@ public enum RequestType
     Upgrade = 0,
     /// <summary>Partner-agency record release request.</summary>
     PartnerFreigabe = 1,
+    /// <summary>Public wanted notice awaiting leadership approval.</summary>
+    Veroeffentlichung = 2,
 }
 
 /// <summary>Display labels.</summary>
@@ -16,6 +18,7 @@ public static class RequestTypeDisplay
     {
         RequestType.Upgrade => "Hochstufung",
         RequestType.PartnerFreigabe => "Partner-Freigabe",
+        RequestType.Veroeffentlichung => "Veröffentlichung",
         _ => "—",
     };
 }

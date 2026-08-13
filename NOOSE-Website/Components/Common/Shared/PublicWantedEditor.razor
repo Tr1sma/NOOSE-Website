@@ -1,0 +1,303 @@
+@* One public wanted notice: snapshot fields, accusation, and the publish/retract actions. Shared by the file page and the management list. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IPublicWantedService Wanted
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_draft is null)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+        Die Ausschreibung wurde nicht gefunden.
+    </MudAlert>
+}
+else
+{
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudChip T="string" Size="Size.Small" Color="@StatusColour(_draft.Status)" Variant="Variant.Filled">
+                @PublicWantedStatusDisplay.Name(_draft.Status)
+            </MudChip>
+            @if (!string.IsNullOrWhiteSpace(_draft.CaseNumber))
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_draft.CaseNumber</MudChip>
+                @if (_draft.Status == PublicWantedStatus.Veroeffentlicht)
+                {
+                    <MudButton Href="@($"/gesucht/{_draft.CaseNumber}")" Target="_blank" Variant="Variant.Text"
+                               Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.OpenInNew">Öffentliche Seite</MudButton>
+                }
+            }
+        </MudStack>
+
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_input.DisplayName" Label="Anzeigename" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Anzeigename ist erforderlich" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_input.AliasText" Label="Aliase (optional)" Variant="Variant.Outlined"
+                              HelperText="Nur was nach außen darf — Aliase werden bewusst nicht automatisch übernommen." />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_input.LastArea" Label="Zuletzt gesehen (optional)" Variant="Variant.Outlined" />
+                @if (_options.Areas.Count > 0)
+                {
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
+                        @foreach (var area in _options.Areas.Take(6))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     OnClick="@(() => _input.LastArea = area)">@area</MudChip>
+                        }
+                    </MudStack>
+                }
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_input.VehicleText" Label="Fahrzeug (optional)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="string" @bind-Value="_input.PhotoSourceId" Label="Foto" Clearable="true"
+                           Variant="Variant.Outlined"
+                           HelperText="Wird beim Veröffentlichen kopiert; ein späteres Löschen des Aktenfotos ändert den Steckbrief nicht.">
+                    @foreach (var photo in _options.Photos)
+                    {
+                        <MudSelectItem T="string" Value="@photo.Id">Foto vom @photo.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="_input.ExpiresAt" Label="Ablaufdatum (optional)" Variant="Variant.Outlined"
+                               Clearable="true" />
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.subtitle2">Vorwurf</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.
+        </MudText>
+        @* keyed by row, and deliberately without Ai and without Mentions: public text carries no record link *@
+        <RichTextEditor @ref="_editor" @key="_draft.Id" Value="@_draft.ChargeHtml" MinHeight="240px" />
+
+        @if (!_mayWrite)
+        {
+            @* the read-only supervision must see what the agency publishes, it just may not be the one publishing *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Nur-Lese-Modus: Änderungen sind in dieser Rolle nicht möglich.
+            </MudAlert>
+        }
+        else
+        {
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            <MudButton OnClick="SaveAsync" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy"
+                       StartIcon="@Icons.Material.Filled.Save">Speichern</MudButton>
+
+            @if (_draft.Status is PublicWantedStatus.Entwurf or PublicWantedStatus.Zurueckgezogen
+                or PublicWantedStatus.Gefasst or PublicWantedStatus.Abgelaufen)
+            {
+                <MudButton OnClick="PublishAsync" Variant="Variant.Filled" Color="Color.Error" Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.Campaign">
+                    @(_mayPublish ? "Veröffentlichen" : "Veröffentlichung beantragen")
+                </MudButton>
+            }
+            @if (_draft.Status is PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Beantragt)
+            {
+                <MudButton OnClick="RetractAsync" Variant="Variant.Outlined" Color="Color.Default" Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.Block">Zurückziehen</MudButton>
+            }
+            @if (_draft.Status == PublicWantedStatus.Veroeffentlicht)
+            {
+                <MudButton OnClick="CapturedAsync" Variant="Variant.Outlined" Color="Color.Success" Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.CheckCircle">Gefasst</MudButton>
+                <MudButton OnClick="RefreshHazardAsync" Variant="Variant.Text" Color="Color.Default" Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.Refresh">Stufe aktualisieren</MudButton>
+            }
+            <MudSpacer />
+            @if (_draft.Status != PublicWantedStatus.Veroeffentlicht)
+            {
+                <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error" Disabled="_busy"
+                           StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+            }
+        </MudStack>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+
+    /// <summary>Raised after every mutation so the hosting page can reload its own view.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    /// <summary>Raised after a delete, when there is nothing left to edit.</summary>
+    [Parameter] public EventCallback Closed { get; set; }
+
+    private PublicWantedDraft? _draft;
+    private PublicWantedOptions _options = PublicWantedOptions.Empty;
+    private readonly PublicWantedInput _input = new();
+    private RichTextEditor? _editor;
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayPublish;
+    private bool _mayWrite;
+    private string? _loadedId;
+
+    protected override void OnInitialized()
+    {
+        _mayPublish = User.MayHighestClassification();
+        _mayWrite = User.MayWrite() && !User.IsCitizen();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _draft = await Wanted.GetDraftAsync(Id, User);
+            _options = await Wanted.GetOptionsAsync(Id, User);
+            if (_draft is not null)
+            {
+                _input.Id = _draft.Id;
+                _input.DisplayName = _draft.DisplayName;
+                _input.AliasText = _draft.AliasText;
+                _input.LastArea = _draft.LastArea;
+                _input.VehicleText = _draft.VehicleText;
+                _input.PhotoSourceId = _draft.PhotoSourceId;
+                _input.ExpiresAt = _draft.ExpiresAt;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _draft = null;
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task<bool> StoreAsync()
+    {
+        // null would tell the service to keep the stored accusation; the editor always has the current text
+        _input.ChargeHtml = _editor is null ? _draft?.ChargeHtml : await _editor.GetHtmlAsync();
+        await Wanted.UpdateSnapshotAsync(_input, User);
+        return true;
+    }
+
+    private async Task SaveAsync() => await RunAsync(async () =>
+    {
+        await StoreAsync();
+        Snackbar.Add("Ausschreibung gespeichert.", Severity.Success);
+    });
+
+    private async Task PublishAsync() => await RunAsync(async () =>
+    {
+        string? justification = null;
+        if (!_mayPublish)
+        {
+            justification = await ReasonDialog.ShowAsync(DialogService, "Veröffentlichung beantragen",
+                "Ab Senior Special Agent wird direkt veröffentlicht; darunter entscheidet die Führung.",
+                "Antrag stellen", "Begründung", mandatoryReason: true);
+            if (justification is null)
+            {
+                return;
+            }
+        }
+        else if (!await ConfirmDialog.ShowAsync(DialogService, "Ausschreibung veröffentlichen?",
+                     "Der Steckbrief wird sofort anonym abrufbar."))
+        {
+            return;
+        }
+
+        await StoreAsync();
+        var outcome = await Wanted.PublishAsync(Id, justification, User);
+        Snackbar.Add(outcome == PublicWantedPublishOutcome.Published
+            ? "Ausschreibung veröffentlicht."
+            : "Veröffentlichung beantragt.", Severity.Success);
+    });
+
+    private async Task RetractAsync() => await RunAsync(async () =>
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService, "Ausschreibung zurückziehen?",
+            "Der Steckbrief ist danach nicht mehr öffentlich erreichbar.", "Zurückziehen", "Grund",
+            mandatoryReason: true);
+        if (reason is null)
+        {
+            return;
+        }
+        await Wanted.RetractAsync(Id, reason, User);
+        Snackbar.Add("Ausschreibung zurückgezogen.", Severity.Success);
+    });
+
+    private async Task CapturedAsync() => await RunAsync(async () =>
+    {
+        if (!await ConfirmDialog.ShowAsync(DialogService, "Als gefasst markieren?",
+                "Die Ausschreibung verschwindet damit vom öffentlichen Board."))
+        {
+            return;
+        }
+        await Wanted.CapturedAsync(Id, User);
+        Snackbar.Add("Als gefasst markiert.", Severity.Success);
+    });
+
+    private async Task RefreshHazardAsync() => await RunAsync(async () =>
+    {
+        await Wanted.RefreshHazardLevelAsync(Id, User);
+        Snackbar.Add("Gefahrenstufe aktualisiert.", Severity.Success);
+    });
+
+    private async Task DeleteAsync() => await RunAsync(async () =>
+    {
+        if (!await ConfirmDialog.ShowAsync(DialogService, "Ausschreibung löschen?",
+                "Sie landet im Papierkorb und lässt sich als Entwurf wiederherstellen."))
+        {
+            return;
+        }
+        await Wanted.DeleteAsync(Id, User);
+        Snackbar.Add("Ausschreibung gelöscht.", Severity.Success);
+        await Closed.InvokeAsync();
+    });
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+            await LoadAsync();
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static Color StatusColour(PublicWantedStatus status) => status switch
+    {
+        PublicWantedStatus.Veroeffentlicht => Color.Error,
+        PublicWantedStatus.Beantragt => Color.Warning,
+        PublicWantedStatus.Gefasst => Color.Success,
+        _ => Color.Default,
+    };
+}

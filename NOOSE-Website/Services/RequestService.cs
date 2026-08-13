@@ -20,8 +20,11 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
     public async Task<bool> HasOpenRequestAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // type-scoped: an open publication or partner request against the same record says nothing about an upgrade,
+        // and the classification panel reads this as "an upgrade request is running"
         return await db.Requests.AnyAsync(
-            a => a.TargetType == targetType && a.TargetId == targetId && a.Status == RequestStatus.Requested, cancellationToken);
+            a => a.Type == RequestType.Upgrade && a.TargetType == targetType && a.TargetId == targetId
+                && a.Status == RequestStatus.Requested, cancellationToken);
     }
 
     public async Task UpgradeRequestAsync(string targetType, string targetId, string targetDesignation, Classification target,
@@ -44,7 +47,8 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
             throw new InvalidOperationException("Die Ziel-Akte wurde nicht gefunden.");
         }
 
-        if (await db.Requests.AnyAsync(a => a.TargetType == targetType && a.TargetId == targetId && a.Status == RequestStatus.Requested, cancellationToken))
+        if (await db.Requests.AnyAsync(a => a.Type == RequestType.Upgrade && a.TargetType == targetType
+                && a.TargetId == targetId && a.Status == RequestStatus.Requested, cancellationToken))
         {
             throw new InvalidOperationException("Für diese Akte läuft bereits ein Hochstufungs-Antrag.");
         }
@@ -121,6 +125,12 @@ public class RequestService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         if (request.Status != RequestStatus.Requested)
         {
             throw new InvalidOperationException("Dieser Antrag wurde bereits entschieden.");
+        }
+        // approval here means "set the classification on the target"; any other type would run that with an unset
+        // classification and silently downgrade the record. Partner releases and publications are decided elsewhere.
+        if (request.Type != RequestType.Upgrade)
+        {
+            throw new InvalidOperationException("Ungültiger Antragstyp.");
         }
 
         if (!await Visibility.IsRecordVisibleAsync(db, request.TargetType, request.TargetId, actor.IsLeadership(), cancellationToken))

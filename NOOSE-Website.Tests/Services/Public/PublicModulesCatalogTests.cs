@@ -62,6 +62,17 @@ public class PublicModulesCatalogTests
     }
 
     [Fact]
+    public void TheWantedBoard_IsBuiltButStillOffByDefault()
+    {
+        // phase 4 ships /gesucht, so the module is Available — turning it on stays a decision, not a deploy effect
+        var wanted = PublicModules.All.Single(m => m.Key == PublicModules.Wanted);
+
+        Assert.True(wanted.Available);
+        Assert.False(wanted.DefaultEnabled);
+        Assert.Equal("/gesucht", wanted.NavRoute);
+    }
+
+    [Fact]
     public void Every_nav_route_counts_as_public_for_the_crawler()
     {
         // a module can otherwise be public in the nav and noindex to the crawler at the same time

@@ -8,6 +8,7 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
@@ -118,6 +119,11 @@ public static class TimelineDisplay
         if (entityType == nameof(FinancingRequestLine))
         {
             return (TimelineCategory.Change, $"Antragsposition {Verb("aufgenommen", "entfernt")}");
+        }
+        // publish and retract both arrive here; the interceptor's Status old/new pair carries which one it was
+        if (entityType == nameof(OeffentlicheFahndung))
+        {
+            return (TimelineCategory.Change, $"Öffentliche Ausschreibung {Verb("angelegt", "gelöscht")}");
         }
 
         var kat = action switch

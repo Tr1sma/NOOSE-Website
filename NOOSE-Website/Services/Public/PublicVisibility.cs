@@ -31,6 +31,11 @@ public static class PublicVisibility
             ["OeffentlichesModul"] = "Nur Beschriftung, Icon und Reihenfolge eines Nav-Eintrags; kein Aktenbezug.",
             ["OeffentlicheSeite"] = "Titel, Menütitel, Icon und der veröffentlichte Inhalt einer redaktionellen "
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
+            ["OeffentlicheFahndung"] = "Der Publikations-Snapshot einer Ausschreibung: öffentliches Aktenzeichen, "
+                + "Art, Anzeigename, die vom Autor gewählten Aliase, Vorwurfstext, letzte Gegend, Fahrzeugtext, die "
+                + "beim Publizieren festgehaltene Gefahrenstufe und eine Kopie des Fotos. Der Aktenbezug "
+                + "(PersonId/FraktionId), der rohe Bedrohungs-Score, die Kopfgeld-Obergrenze, der Aufrufzähler und "
+                + "der Rückzugsgrund bleiben drinnen.",
         };
 
     /// <summary>Entity name → why it can never appear outside.</summary>

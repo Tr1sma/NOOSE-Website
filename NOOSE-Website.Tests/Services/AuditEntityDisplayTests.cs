@@ -1,4 +1,4 @@
-using NOOSE_Website.Services;
+﻿using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Tests.Services;
 
@@ -31,6 +31,7 @@ public class AuditEntityDisplayTests
     [InlineData("BuergerProfil", "Bürgerkonto")]
     [InlineData("OeffentlichesModul", "Öffentliches Modul")]
     [InlineData("OeffentlicheSeite", "Öffentliche Seite")]
+    [InlineData("OeffentlicheFahndung", "Öffentliche Ausschreibung")]
     [InlineData("PublicArea", "Öffentlicher Bereich")]
     public void Label_KnownType_ReturnsGermanLabel(string type, string expected)
     {
@@ -133,6 +134,7 @@ public class AuditEntityDisplayTests
     [InlineData("OeffentlichesModul", "/einstellungen?tab=oeffentliche-module")]
     [InlineData("PublicArea", "/einstellungen?tab=oeffentliche-module")]
     [InlineData("OeffentlicheSeite", "/einstellungen?tab=oeffentliche-seiten")]
+    [InlineData("OeffentlicheFahndung", "/fahndung?tab=oeffentlich")]
     public void Route_PublicAreaConfig_PointsAtTheEditingSection(string type, string expected)
     {
         // these have no detail page; the audit row should still be followable to where it was changed

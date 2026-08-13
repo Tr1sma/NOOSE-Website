@@ -47,7 +47,7 @@ public static class PublicModules
     public static readonly IReadOnlyList<PublicModuleDefinition> All =
     [
         new(Wanted, "Gesucht", "Öffentliches Fahndungsboard mit Steckbriefen.",
-            Icons.Material.Filled.PersonSearch, "/gesucht", PublicModuleGroup.Fahndung, 10, false, false, OffWanted),
+            Icons.Material.Filled.PersonSearch, "/gesucht", PublicModuleGroup.Fahndung, 10, false, true, OffWanted),
         new(WantedVehicles, "Gesuchte Fahrzeuge & Waffen", "Ausschreibungen ohne Personenbezug (Kennzeichen, Waffen).",
             Icons.Material.Filled.DirectionsCar, null, PublicModuleGroup.Fahndung, 15, false, false, OffWanted),
         new(WantedArchive, "Gefasst", "Archiv abgeschlossener Ausschreibungen.",

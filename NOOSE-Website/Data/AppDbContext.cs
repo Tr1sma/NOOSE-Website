@@ -240,6 +240,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<BuergerProfil> BuergerProfile => Set<BuergerProfil>();
     public DbSet<OeffentlichesModul> OeffentlicheModule => Set<OeffentlichesModul>();
     public DbSet<OeffentlicheSeite> OeffentlicheSeiten => Set<OeffentlicheSeite>();
+    public DbSet<OeffentlicheFahndung> OeffentlicheFahndungen => Set<OeffentlicheFahndung>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1343,6 +1344,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.RequesterName).HasMaxLength(100);
             b.Property(a => a.DeciderName).HasMaxLength(100);
             b.Property(a => a.CreatedById).HasMaxLength(64);
+            b.Property(a => a.PublicationWantedId).HasMaxLength(64);
             b.HasIndex(a => new { a.Type, a.Status });
             b.HasIndex(a => new { a.TargetType, a.TargetId });
             b.HasIndex(a => a.CreatedById);
@@ -1658,6 +1660,36 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(p => p.Status);
             b.HasOne(p => p.PublishedBy).WithMany()
                 .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OeffentlicheFahndung>(b =>
+        {
+            b.Property(f => f.CaseNumber).HasMaxLength(32);
+            b.Property(f => f.DisplayName).HasMaxLength(200).IsRequired();
+            b.Property(f => f.AliasText).HasMaxLength(400);
+            b.Property(f => f.PhotoFileName).HasMaxLength(128);
+            b.Property(f => f.PhotoContentType).HasMaxLength(64);
+            b.Property(f => f.PhotoSourceId).HasMaxLength(64);
+            b.Property(f => f.ChargeHtml).HasColumnType("longtext");
+            b.Property(f => f.LastArea).HasMaxLength(200);
+            b.Property(f => f.VehicleText).HasMaxLength(400);
+            b.Property(f => f.RetractedReason).HasColumnType("longtext");
+            b.Property(f => f.PersonId).HasMaxLength(64);
+            b.Property(f => f.FactionId).HasMaxLength(64);
+            b.Property(f => f.PublishedById).HasMaxLength(64);
+            // unique, unlike the page slug: a counter number is issued once and never reused, so a
+            // soft-deleted row blocks no address anyone could want back
+            b.HasIndex(f => f.CaseNumber).IsUnique();
+            b.HasIndex(f => new { f.Status, f.PublishedAt });
+            b.HasIndex(f => f.PersonId);
+            b.HasIndex(f => f.FactionId);
+            b.HasIndex(f => f.ExpiresAt);
+            b.HasOne(f => f.Person).WithMany()
+                .HasForeignKey(f => f.PersonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(f => f.Faction).WithMany()
+                .HasForeignKey(f => f.FactionId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(f => f.PublishedBy).WithMany()
+                .HasForeignKey(f => f.PublishedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         // global soft-delete filter

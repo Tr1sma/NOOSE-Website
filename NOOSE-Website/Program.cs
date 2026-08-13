@@ -15,6 +15,7 @@ using NOOSE_Website.Components.Factions;
 using NOOSE_Website.Components.People;
 using NOOSE_Website.Components.Common;
 using NOOSE_Website.Components.Recruiting;
+using NOOSE_Website.Components.Public;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Infrastructure.Announcements;
@@ -161,6 +162,7 @@ builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
 builder.Services.AddScoped<IEvidenceImageStorageService, EvidenceImageStorageService>();
+builder.Services.AddScoped<IPublicWantedPhotoStorageService, PublicWantedPhotoStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
@@ -339,6 +341,7 @@ builder.Services.AddScoped<IBewerbungTemplateService, BewerbungTemplateService>(
 builder.Services.AddScoped<IBuergerService, BuergerService>();
 builder.Services.AddScoped<IPublicModuleService, PublicModuleService>();
 builder.Services.AddScoped<IPublicPageService, PublicPageService>();
+builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>
@@ -404,6 +407,7 @@ app.MapNooseLibraryFileEndpoints();
 app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
 app.MapNooseRecruitingFileEndpoints();
+app.MapNoosePublicWantedFileEndpoints();
 
 // apply pending migrations on startup
 using (var scope = app.Services.CreateScope())

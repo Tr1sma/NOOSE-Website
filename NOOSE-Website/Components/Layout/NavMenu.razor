@@ -106,6 +106,7 @@
     [Inject] private ITaskforceService TaskforceService { get; set; } = default!;
     [Inject] private IPersonnelFileService PersonnelFileService { get; set; } = default!;
     [Inject] private IRequestService RequestService { get; set; } = default!;
+    [Inject] private NOOSE_Website.Services.Public.IPublicWantedService PublicWanted { get; set; } = default!;
     [Inject] private IAnnouncementService BoardService { get; set; } = default!;
     [Inject] private SharesBroadcaster SharesBroadcaster { get; set; } = default!;
     [Inject] private AcknowledgmentBroadcaster AcknowledgmentBroadcaster { get; set; } = default!;
@@ -422,6 +423,9 @@
             if (_user.MayHighestClassification())
             {
                 open += await RequestService.GetOpenCountAsync(_user.IsLeadership());
+                // added here rather than inside GetOpenCountAsync: the dashboard reads that one unconditionally for
+                // every agent and labels the number "Hochstufung"
+                open += await PublicWanted.GetPendingRequestCountAsync();
             }
 
             // registrations, name changes, taskforce and promotion requests are leadership-only

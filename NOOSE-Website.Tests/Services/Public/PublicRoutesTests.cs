@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Public;
@@ -14,8 +14,9 @@ public class PublicRoutesTests
     [InlineData("/")]
     [InlineData("/karriere")]
     [InlineData("/gesucht")]
-    [InlineData("/gesucht/NOOSE-F-2026-0001")]
-    [InlineData("/gesucht/NOOSE-F-2026-0001/druck")]
+    [InlineData("/gesucht/NOOSE-FA-2026-0001")]
+    [InlineData("/gesucht/NOOSE-FA-2026-0001/foto")]
+    [InlineData("/gesucht/NOOSE-FA-2026-0001/druck")]
     [InlineData("/GESUCHT")]
     [InlineData("/datenschutz")]
     [InlineData("/nutzungsbedingungen")]

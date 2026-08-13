@@ -429,6 +429,9 @@ public static class SearchCatalog
                 + "Code, bedient wird er in /einstellungen.",
             ["OeffentlicheSeite"] = "Redaktionelle Außendarstellung ohne Aktenbezug; gepflegt wird sie in "
                 + "/einstellungen. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
+            ["OeffentlicheFahndung"] = "Publikations-Snapshot einer Personenakte; jedes Feld stammt aus der Akte, "
+                + "die schon durchsuchbar ist. Gefunden wird sie über die Akte, gepflegt in /fahndung. Ein eigener "
+                + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

@@ -96,6 +96,11 @@ public static class TrashProjection
         => new("oeffentliche-seiten", x.Id, null, x.Title,
             Join($"/info/{x.Slug}", PublicPageStatusDisplay.Name(x.Status)), x.DeletedAt);
 
+    // never the accusation text: the trash page is a list, and the snapshot's markup belongs to the editor
+    public static TrashItem PublicWanted(OeffentlicheFahndung x)
+        => new("oeffentliche-fahndungen", x.Id, x.CaseNumber, x.DisplayName,
+            Join(PublicWantedKindDisplay.Name(x.Kind), PublicWantedStatusDisplay.Name(x.Status)), x.DeletedAt);
+
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");
 

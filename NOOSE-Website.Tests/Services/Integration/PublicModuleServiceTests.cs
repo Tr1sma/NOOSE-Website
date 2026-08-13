@@ -435,16 +435,17 @@ public sealed class PublicModuleServiceTests
     [Fact]
     public async Task NavEntries_ExcludeAModuleWhosePagesDoNotExistYet()
     {
-        // pre-configuring an unbuilt module is allowed; a tab pointing at a 404 is not
+        // pre-configuring an unbuilt module is allowed; a tab pointing at a 404 is not. The archive has a nav route
+        // and is still unbuilt — the wanted board itself ships with phase 4 and is Available now.
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
 
-        await service.SaveAsync([Input(PublicModules.Wanted, enabled: true)], Admin());
+        await service.SaveAsync([Input(PublicModules.WantedArchive, enabled: true)], Admin());
 
         var entries = await service.NavEntriesAsync();
-        Assert.DoesNotContain(entries, e => e.Key == PublicModules.Wanted);
+        Assert.DoesNotContain(entries, e => e.Key == PublicModules.WantedArchive);
         // the choice itself is stored, so the tab appears by itself once the pages ship
-        Assert.True((await service.GetAsync()).Find(PublicModules.Wanted)!.IsEnabled);
+        Assert.True((await service.GetAsync()).Find(PublicModules.WantedArchive)!.IsEnabled);
     }
 
     [Fact]

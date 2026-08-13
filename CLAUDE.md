@@ -456,9 +456,9 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–3 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst und die redaktionellen Seiten.
-Fahndung, Hinweise, Tickets, Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden —
-ihre Modul-Schlüssel existieren schon und stehen auf „aus".
+Gebaut sind Phase 1–4 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten und die
+öffentliche Fahndung. Kopfgeld, Hinweise, Tickets, Presse und die öffentlichen Zahlen sind geplant, aber
+**nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -543,6 +543,89 @@ ihre Modul-Schlüssel existieren schon und stehen auf „aus".
     hängt jeder eine Query. `?vorschau=1` war genau so ein 500.
   - Ein Tab je Seite gibt es nicht: `Infoseiten` hat **einen** Tab auf den Hub `/info`, damit die Nav weiter
     allein aus `PublicModules` kommt.
+- **Eine öffentliche Ausschreibung (`OeffentlicheFahndung`, `/gesucht/{Aktenzeichen}`) ist ein
+  Publikations-Snapshot, kein Blick in die Akte.** Jedes Außenfeld steht auf der Zeile; die Personenakte wird
+  nach dem Publizieren nur noch für **eine** Frage gelesen, und zwar negativ (siehe Unterdrückungsgürtel).
+  Eigener Aktenzeichen-Präfix **`FA`** — `F` gehört den Fraktionen, und `CaseNumberCounter` ist auf
+  `(Präfix, Jahr)` verschlüsselt. Das Aktenzeichen ist **nullable** (erst bei der ersten Publikation geprägt)
+  und **unique** indexiert — anders als der Seiten-Slug, weil eine Zählernummer nie wiederverwendet wird.
+  - **`Status` allein entscheidet die öffentliche Sichtbarkeit.** Zurückziehen behält Aktenzeichen, Vorwurf und
+    Fotokopie, damit ein Wiedereinschalten ein Klick auf derselben Adresse ist; Löschen ist erst nach dem
+    Zurückziehen erlaubt, sonst wäre es eine stille Depublikation ohne Grund auf der Akte.
+  - **Zurückziehen und „gefasst" lassen das Modul-Gate bewusst aus.** Publizieren braucht ein lebendes Modul,
+    *De*publizieren nie — sonst machte der Not-Aus das Zurückziehen unmöglich, genau verkehrt herum.
+  - **Der Unterdrückungsgürtel im Lesepfad ist eine zweite Abfrage, keine Unterabfrage — und das ist der
+    eigentliche Punkt.** `IgnoreQueryFilters()` gilt **für die ganze Kompilierung, nicht für den Operanden**:
+    in einer Unterabfrage benutzt, entfernt es den Soft-Delete-Filter auch vom **äußeren** Set. Genau so ging
+    eine soft-gelöschte, veröffentlichte Ausschreibung anonym live (nachgemessen, nicht vermutet). `f.Person`
+    ist als Navigation ebenso unbrauchbar: sie erbt den Filter und ist für eine gelöschte Akte `null`, also
+    zeigte `f.Person == null || …` genau die Zeilen, die es verbergen soll. Deshalb: Zeilen laden, dann
+    `OpenRecordsAsync`/`VisibleRecordsAsync` als **eigene** Abfrage, dann im Speicher filtern — dort kann
+    `IgnoreQueryFilters` nur das weiten, was es weiten soll. Zusätzlich zieht `RetractForRecordAsync` die Zeile
+    selbst offline, gerufen aus `PersonService.EditAsync`/`DeleteAsync` und `PersonMergeService` (das
+    `IsClassified` an `PersonService` vorbei setzt) — der Gürtel ist der Gurt, der Hook der Airbag.
+  - **Eine Ausschreibung trägt den Inhalt der Akte, also gilt für sie das Lesegate der Akte.** `GetAllAsync`,
+    `GetDraftAsync`, `GetOptionsAsync` und `GetForPersonAsync` filtern über `RecordVisibility.IsVisible` —
+    ohne das las ein Rang-3-Agent Name, Aktenzeichen, Vorwurf und über `GetOptionsAsync` sogar die **aktuellen**
+    `PersonOrte` einer Verschlusssache, die er nirgends sonst öffnen darf. Eine Akte, die gar nicht mehr
+    auflöst, ist nicht sichtbar (fail closed).
+  - **Zwei Lese-Guards, nicht einer.** `RequirePublicWantedRead` (Rang ≥ 3 oder Aufsicht) gilt nur für die
+    **Querliste**; die Ausschreibung *einer* Akte öffnet `RequirePublicWantedRecordRead` (jeder interne Agent).
+    Sonst legt ein Rang-2-Agent einen Entwurf an und kommt nie wieder an ihn heran — und die ganze Rang-Weiche
+    samt Antrag ist toter Code.
+  - **Die VS-Sperre prüft alle drei Flags und ihre Meldung hängt vom Akteur ab:** wer keine eingestuften Akten
+    lesen darf, bekommt wortgleich das „nicht gefunden" — sonst verrät der Publizieren-Knopf die Einstufung.
+  - **Zwei eigene Guards, und `RequireWriteAccess` ist keiner davon.** Der blockt nur Aufsicht und Partner; ein
+    angemeldeter Bürger trägt keinen Rang-Claim und fiele in den „Rang 1–2 ⇒ Antrag"-Zweig. Deshalb
+    `Permission.RequirePublicWantedWrite`. Lesen ist `RequirePublicWantedRead` (Rang ≥ 3 **oder** Aufsicht),
+    bewusst weiter als `RequireClassifiedRead`: wer direkt publizieren darf, muss seine Entwürfe öffnen können.
+  - **Die Inhaltsprüfung sitzt im gemeinsamen Publish-Rumpf, nicht im Aufrufer.** Genehmigen ist der zweite
+    Eingang, und eine `Beantragt`-Zeile lässt sich zwischen Antrag und Entscheidung bearbeiten — läuft die
+    Prüfung nur in `PublishAsync`, geht ein Platzhalter oder eine Erwähnung über die Genehmigung live.
+    Genauso braucht der Genehmigungspfad `RequirePublicWantedWrite` **vor** `RequireHighestClassification`:
+    Letzteres allein lässt die Nur-Lese-Aufsicht und das Demo-Principal durch, die dann Aktenzeichen und
+    Fotokopie erzeugen, bevor der `ReadOnlyBarrierInterceptor` das Speichern verweigert.
+  - **Löschen schließt offene Anträge**, sonst zählt das Nav-Badge eine Zeile, die der Posteingang nicht mehr
+    findet und niemand mehr entscheiden kann. Zähler und Liste kommen deshalb aus **derselben** Abfrage.
+  - **Foto-Wechsel gilt sofort, nicht erst beim nächsten Publizieren.** `UpdateSnapshotAsync` kopiert bei einer
+    laufenden Ausschreibung neu und löscht die alte Kopie — sonst meldet das Entfernen eines Fotos Erfolg,
+    während es anonym weiter abrufbar bleibt. Schlägt ein Publizieren fehl, wird die frische Kopie entfernt:
+    sie ist die einzige Nebenwirkung, die ein Rollback nicht zurücknimmt.
+  - **Rang ≥ 3 publiziert, Rang 1–2 erzeugt einen `Request` mit `RequestType.Veroeffentlichung`** — entschieden
+    wird er in `IPublicWantedService`, **nie** über `RequestService.DecideAsync` (Präzedenz: `PartnerFreigabe`).
+    Deshalb weist `DecideAsync` jeden Nicht-`Upgrade`-Antrag jetzt ab: Genehmigen heißt dort bedingungslos „setze
+    die Einstufung", mit `Classification.Unknown` wäre das eine stille Herabstufung. `HasOpenRequestAsync` und
+    der Dedup in `UpgradeRequestAsync` sind aus demselben Grund typ-gebunden.
+    **`GetOpenCountAsync` bleibt unangetastet** — `DashboardService` liest es unbedingt für jeden Agenten und
+    beschriftet die Zahl „Hochstufung"; der Publikationszähler kommt nur in `NavMenu` dazu.
+  - **Das Foto wird beim Publizieren kopiert** (`App_Data/uploads/fahndung`, eigener
+    `IPublicWantedPhotoStorageService`). `PersonService.PhotoRemoveAsync` löscht die Datei hart, während die
+    Zeile nur soft-gelöscht wird — eine Referenz zerrisse den Steckbrief lautlos. Der Endpoint
+    `/gesucht/{Aktenzeichen}/foto` ist die **einzige** `[AllowAnonymous]`-Dateiroute der App: die Autorisierung
+    ist die Publikationsprüfung, und er liefert **eine** `404` für jeden Fehlschlag, sonst wäre er ein
+    Existenz-Orakel. Er liegt unter `/gesucht`, weil das Präfix schon öffentlich ist — eine eigene
+    `/dateien/…`-Route bräuchte `PublicRoutes.ExtraPrefixes` **und** eine `robots.txt`-Zeile.
+  - **Nach außen geht die Gefahrenstufe, nicht der Score.** `OeffentlicheGefahrenstufe` wird beim Publizieren
+    festgehalten (Aktion „Stufe aktualisieren" im Panel). Der rohe 0–100-Wert wäre der einzige verbliebene
+    Grund, `Personen` für Inhalt zu lesen, und die Score-Konfiguration steht in `NeverPublic` als „Anleitung
+    zur Umgehung". `PublicWantedModelTests` hält das als **positive** Allowlist der Nach-außen-Typen fest —
+    eine Ausnahmeliste wird pro Datei erteilt und weitet sich still.
+  - **Publizieren schreibt kein `ManualAudit.Row` gegen die Personenakte** (entgegen Leitsatz 9 in
+    `PublicPlan.md`): die Zeile ist `IAuditable`, und eine zweite, `Person`-getypte Zeile fiele in
+    `TimelineDisplay.MapAudit` durch den Schwanz und läse sich als „Akte geändert". Der Zeitstrahl kommt über
+    den Fan-out in `TimelineService.AuditSourceAsync` — und der verlangt **vier** Registrierungen, nicht drei:
+    `AuditSourceAsync`, `MapAudit`, `AuditEntityDisplay` **und `ChronikParentResolver`**.
+  - **`AufrufZaehler` ist deklariert und wird in Phase 4 nie geschrieben.** Ein Inkrement auf einer
+    `IAuditable`-Zeile schriebe eine `AuditLog`-Zeile pro anonymem Aufruf; Phase 5 zählt über `ExecuteUpdateAsync`.
+  - **Das Panel in `PersonDetail` liegt außerhalb des `einstufung`-Abschnitts** (`@if (!_isPartner)`):
+    `PartnerTabCatalog` listet diesen Slug, dort wäre alles einem freigegebenen Partner sichtbar. Der Warnbanner
+    zeigt nur `Veroeffentlicht` — ein `Beantragt` ist nicht draußen und verriete eine offene interne Entscheidung.
+    Der Übersichts-Abschnitt auf `/fahndung?tab=oeffentlich` hängt in `AuthorizeView Policy="InternalAgent"`,
+    weil `/fahndung` keine Seiten-Policy trägt und `ActiveAgent` erbt — was ein Partner erfüllt.
+  - **`/gesucht` steht in `DemoModeMiddleware.ExcludedPrefixes`** — sonst trägt ein anonymer Besucher bei
+    aktivem Demo-Modus das Demo-Principal.
+  - Die öffentlichen Seiten heißen `WantedHub`/`WantedProfile`, **nicht** `WantedBoard`: `Services/WantedBoard.cs`
+    ist eine global importierte statische Klasse, und `/fahndung` bleibt die interne Seite.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.

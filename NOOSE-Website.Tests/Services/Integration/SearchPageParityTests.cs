@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data.Entities;
@@ -12,6 +12,7 @@ using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
 using NOOSE_Website.Tests.Infrastructure;
 using NSubstitute;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Services.Integration;
 
@@ -103,7 +104,7 @@ public class SearchPageParityTests
     private static PersonService People(SqliteTestContext ctx)
         => new(ctx.Factory, Substitute.For<IFileStorageService>(), Substitute.For<IProfileSuggestionService>(),
             Substitute.For<ICaseNumberService>(), Substitute.For<IThreatScoreService>(),
-            Substitute.For<INotificationService>());
+            Substitute.For<INotificationService>(), Substitute.For<IPublicWantedService>());
 
     private static async Task<IReadOnlyList<string>> CanonicalAsync(
         string category, SqliteTestContext ctx, ClaimsPrincipal user)

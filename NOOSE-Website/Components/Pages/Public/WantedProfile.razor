@@ -1,0 +1,134 @@
+@page "/gesucht/{CaseNumber}"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicWantedService Wanted
+
+<PageTitle>@(_entry?.DisplayName ?? "Gesucht") · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Wanted" Title="Gesucht">
+<MudPaper Elevation="4" Class="pa-8">
+    @if (_entry is null)
+    {
+        @* /gesucht is indexable and this route answers 200 for any case number someone invents *@
+        <HeadContent>
+            <meta name="robots" content="noindex, nofollow" />
+        </HeadContent>
+        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.h6">Ausschreibung nicht gefunden</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Diese Ausschreibung ist nicht veröffentlicht oder wurde zurückgezogen.
+            </MudText>
+            <MudButton Href="/gesucht" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.PersonSearch">Zur Fahndungsübersicht</MudButton>
+        </MudStack>
+    }
+    else
+    {
+        <MudGrid Spacing="4">
+            @if (_entry.HasPhoto)
+            {
+                <MudItem xs="12" sm="5" md="4">
+                    <MudImage Src="@($"/gesucht/{_entry.CaseNumber}/foto")" Alt="@_entry.DisplayName"
+                              Fluid="true" ObjectFit="ObjectFit.Cover" Class="rounded" Style="width:100%;" />
+                </MudItem>
+            }
+            <MudItem xs="12" sm="@(_entry.HasPhoto ? 7 : 12)" md="@(_entry.HasPhoto ? 8 : 12)">
+                <MudStack Spacing="3">
+                    <div>
+                        <MudText Typo="Typo.h4">@_entry.DisplayName</MudText>
+                        @if (!string.IsNullOrWhiteSpace(_entry.AliasText))
+                        {
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">alias @_entry.AliasText</MudText>
+                        }
+                    </div>
+
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                            @PublicWantedKindDisplay.Name(_entry.Kind)
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@LevelColour(_entry.HazardLevel)">
+                            Gefahrenstufe: @HazardLevelLogic.Name(_entry.HazardLevel)
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_entry.CaseNumber</MudChip>
+                    </MudStack>
+
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                        Nicht selbst eingreifen. Beobachtungen bitte der nächsten Dienststelle melden.
+                    </MudAlert>
+
+                    <MudDivider />
+
+                    @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names outside *@
+                    <div class="dokument-html">@((MarkupString)(_entry.ChargeHtml ?? string.Empty))</div>
+
+                    @if (!string.IsNullOrWhiteSpace(_entry.LastArea) || !string.IsNullOrWhiteSpace(_entry.VehicleText))
+                    {
+                        <MudDivider />
+                        <MudStack Spacing="1">
+                            @if (!string.IsNullOrWhiteSpace(_entry.LastArea))
+                            {
+                                <MudText Typo="Typo.body2"><b>Zuletzt gesehen:</b> @_entry.LastArea</MudText>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_entry.VehicleText))
+                            {
+                                <MudText Typo="Typo.body2"><b>Fahrzeug:</b> @_entry.VehicleText</MudText>
+                            }
+                        </MudStack>
+                    }
+
+                    @if (_entry.PublishedAt is { } published)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Ausgeschrieben am @published.ToLocalTime().ToString("dd.MM.yyyy")
+                        </MudText>
+                    }
+
+                    <div>
+                        <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.ArrowBack">Zur Fahndungsübersicht</MudButton>
+                    </div>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    [Parameter]
+    public string CaseNumber { get; set; } = string.Empty;
+
+    private PublicWantedDetail? _entry;
+    private string? _loadedKey;
+
+    // navigating from one case number to another stays on this route template, so Blazor reuses the instance and
+    // OnInitializedAsync would not run again
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedKey == CaseNumber)
+        {
+            return;
+        }
+        _loadedKey = CaseNumber;
+        try
+        {
+            _entry = await Wanted.GetByCaseNumberAsync(CaseNumber);
+        }
+        catch
+        {
+            /* best effort */
+            _entry = null;
+        }
+    }
+
+    private static Color LevelColour(HazardLevel level) => level switch
+    {
+        HazardLevel.Critical => Color.Error,
+        HazardLevel.High => Color.Warning,
+        HazardLevel.Medium => Color.Info,
+        _ => Color.Default,
+    };
+}
