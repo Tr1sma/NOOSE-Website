@@ -261,13 +261,13 @@ public static class Permission
         }
     }
 
-    /// <summary>Require citizen status (public-area owner actions).</summary>
-    public static void RequireCitizen(ClaimsPrincipal actor)
+    /// <summary>Require an account that may use the citizen area; every signed-in account qualifies, not only Civilian.</summary>
+    public static void RequireCitizenPortal(ClaimsPrincipal actor)
     {
-        if (!actor.IsCitizen())
+        if (!actor.MayUseCitizenPortal())
         {
             throw new UnauthorizedAccessException(
-                "Diese Aktion ist nur für angemeldete Bürger verfügbar.");
+                "Der Bürgerbereich steht nur angemeldeten Konten zur Verfügung.");
         }
     }
 }

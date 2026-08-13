@@ -25,6 +25,11 @@
                 }
                 <MudButton Href="/buerger/profil" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Badge">Mein Konto</MudButton>
+                @if (_returnHref is not null)
+                {
+                    <MudButton Href="@_returnHref" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.ArrowBack">@_returnLabel</MudButton>
+                }
                 <form method="post" action="/Account/Logout">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="/" />
@@ -56,6 +61,9 @@
     private Task<AuthenticationState>? AuthState { get; set; }
 
     private string? _displayName;
+    private string? _returnHref;
+    private string _returnLabel = string.Empty;
+    private bool _mustComplete;
 
     // OnParametersSet, not OnInitialized: the layout instance survives navigation between citizen pages, so an
     // incomplete profile has to be re-checked on each of them instead of once per shell.
@@ -70,10 +78,20 @@
         try
         {
             var user = (await AuthState).User;
-            if (!user.IsCitizen())
+            if (!user.MayUseCitizenPortal())
             {
                 return;
             }
+
+            // an agent, partner or applicant keeps a way back to their own area
+            if (!user.IsCitizen())
+            {
+                _returnHref = user.IsApplicant() ? "/portal" : "/dashboard";
+                _returnLabel = user.IsApplicant() ? "Bewerber-Portal" : "Interner Bereich";
+            }
+            // only a citizen is pushed into the form: for everyone else the area is readable without a civilian
+            // identity, and a read-only account could not create one anyway
+            _mustComplete = user.IsCitizen();
             profile = await BuergerService.GetOwnAsync(user);
         }
         catch
@@ -89,7 +107,7 @@
         var incomplete = profile is null
             || string.IsNullOrWhiteSpace(profile.FirstName)
             || string.IsNullOrWhiteSpace(profile.LastName);
-        if (incomplete && !OnProfilePage())
+        if (_mustComplete && incomplete && !OnProfilePage())
         {
             Nav.NavigateTo(ProfileRoute);
         }

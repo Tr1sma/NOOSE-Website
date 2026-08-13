@@ -26,6 +26,8 @@ eigener Status, eigene Policy, eigenes Portal, anonymisierter Nachrichtenaustaus
 | Thema | Entscheidung |
 |---|---|
 | Zivilisten-Konto | `AgentStatus.Civilian` + neue Tabelle `BuergerProfile` (Vor-/Nachname). **Nicht** in `Agent.RealName` |
+| Zugang Bürgerbereich | **Jedes angemeldete Konto** darf ihn sehen (Bürger, Agent, Partner, Nur-Lese-Aufsicht, Bewerber). `Civilian` heißt nur: dieses Konto hat sonst nichts |
+| Einreichen im Bürgerbereich | Braucht ein eigenes, vollständiges, ungesperrtes `BuergerProfil` **und** Schreibrecht — Nur-Lese-Aufsicht und Partner lesen nur |
 | Öffentliche Fahndung | Eigene Entity mit **Publish-Snapshot**; nie aus `Person.IsWanted` abgeleitet |
 | Lesen/Schreiben | Lesen anonym, Schreiben nur nach Discord-Login mit Vor-/Nachname |
 | Publish-Recht | Rang ≥ `SeniorSpecialAgent` (3) direkt; Rang 1–2 über `Request`-Antrag an Führung |
@@ -80,7 +82,14 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
    Dafür der separate Kill-Switch.
 7. **Modul-Aus wirkt im Service, nicht nur in der UI.** `IPublicModuleService.RequireEnabled(module)` wirft;
    die Route liefert den Offline-Text, der Nav-Tab verschwindet.
-8. **Nachvollziehbarkeit:** Publizieren, Depublizieren, Kopfgeld-Änderung, Anonymitäts-Auflösung und
+8. **Der Bürgerbereich ist für jedes angemeldete Konto lesbar.** Gate ist
+   `AgentPrincipalExtensions.MayUseCitizenPortal()` / `Permission.RequireCitizenPortal` (angemeldet), **nicht**
+   `IsCitizen()` — ein Agent, Partner, Bewerber oder eine Aufsicht hat auch eine Zivil-Identität, und eine
+   Statusprüfung als Zugangsgate hätte jede neue Bürgerseite erneut falsch gebaut. `IsCitizen()` bleibt und
+   beantwortet nur noch eine andere Frage: *muss* dieses Konto ein Profil anlegen (Profil-Zwang im Layout).
+   Jede Bürgerseite, die Daten des Kontos zeigt, geht weiter über `BuergerProfilId` — wer keins hat, sieht die
+   Seite ohne eigene Zeilen. Kein Recht am Aktenbestand hängt daran: der Bürgerbereich gibt nichts Internes her.
+9. **Nachvollziehbarkeit:** Publizieren, Depublizieren, Kopfgeld-Änderung, Anonymitäts-Auflösung und
    Ticket-Antwort schreiben `ManualAudit.Row` **gegen die Personen-/Fraktionsakte** (⇒ Zeitstrahl + Chronik).
    Neue Kind-Tabellen brauchen ihren Fall in `TimelineService.AuditSourceAsync` **und** einen Titel in
    `TimelineDisplay.MapAudit`.
@@ -134,8 +143,9 @@ können ein Konto sperren. Noch kein öffentlicher Inhalt.
 
 **Code**
 - `Policies.CitizenPortal` + Registrierung in `AuthorizationRegistration` neben `ApplicantPortal`
-  (`RequireAssertion(ctx => ctx.User.GetStatus() == AgentStatus.Civilian)`).
-- `AgentPrincipalExtensions.IsCitizen()`.
+  (`RequireAssertion(ctx => ctx.User.MayUseCitizenPortal())` — jedes angemeldete Konto, siehe Leitsatz 8).
+- `AgentPrincipalExtensions.IsCitizen()` (Statusfrage) und `MayUseCitizenPortal()` (Zugangsfrage);
+  `Permission.RequireCitizenPortal` ist der Service-Guard, `RequireWriteAccess` kommt beim Schreiben dazu.
 - `IdentityComponentsEndpointRouteBuilderExtensions`: Zweig `source == "buerger"` →
   `CreateAgentAsync(..., AgentStatus.Civilian)`; im Status-`switch` Fall `Civilian` → SignIn + `/buerger`.
   Bestehende Zweige unangetastet.
@@ -143,7 +153,10 @@ können ein Konto sperren. Noch kein öffentlicher Inhalt.
   (`Permission.RequireLeadership`), `RequireNotBlocked` als Guard für spätere Schreibpfade.
 - `Components/Layout/BuergerLayout.razor` (Kopie-Muster `ApplicantPortalLayout`) und
   `Components/Pages/Portal/BuergerPortal.razor` (`/buerger`) + `BuergerProfil.razor` (`/buerger/profil`).
-  Profil-Zwang im **Layout**, nicht nur in der UI: ohne Vor-/Nachname wird auf `/buerger/profil` umgeleitet.
+  Profil-Zwang im **Layout**, nicht nur in der UI: ohne Vor-/Nachname wird auf `/buerger/profil` umgeleitet —
+  aber **nur für `IsCitizen()`**. Ein Agent, Partner oder Bewerber sieht den Bereich ohne Zivil-Identität; eine
+  Nur-Lese-Aufsicht könnte gar keine anlegen und liefe sonst in eine Umleitungsschleife. Das Layout trägt für
+  diese Konten einen Rückweg (`/dashboard` bzw. `/portal`).
 - `/einstellungen` → neue Gruppe „Öffentlicher Bereich", erster Abschnitt `PublicCitizensPanel`
   (Liste, Suche, Sperren mit Grund).
 - `Privacy.razor` + `Nutzungsbedingungen.razor`: Bürgerdaten, Zweck, Aufbewahrung, Anonymitätszusage.
@@ -151,11 +164,13 @@ können ein Konto sperren. Noch kein öffentlicher Inhalt.
   Das ist mit einem Test festzuhalten, nicht mit Code.
 
 **Tests** `CitizenLoginFlowTests` (Status-Weiche, bestehende Zweige unverändert) · `BuergerServiceTests`
-(Sperre blockt Schreibpfade, Namensänderung erzeugt Audit-Zeile) · `AgentSelectionTests` erweitern:
-ein `Civilian` erscheint in **keinem** Picker, keiner Filterliste, keinem Roster.
+(Sperre blockt Schreibpfade, Namensänderung erzeugt Audit-Zeile, Agent/Bewerber dürfen ein Profil anlegen,
+Aufsicht/Partner/Anonym nicht) · `AgentSelectionTests` erweitern: ein `Civilian` erscheint in **keinem**
+Picker, keiner Filterliste, keinem Roster.
 
 **Fertig, wenn** ein zweiter Discord-Account sich anmelden, Namen setzen und wieder anmelden kann, im
-Roster nirgends auftaucht, und eine Sperre ihn beim nächsten Schreibversuch abweist.
+Roster nirgends auftaucht, eine Sperre ihn beim nächsten Schreibversuch abweist — und ein angemeldeter
+Agent `/buerger` öffnen kann, ohne zur Namenseingabe gezwungen zu werden.
 
 ---
 
@@ -457,6 +472,11 @@ private Anteil optional eingezahlt werden kann und `/kasse` die Deckung korrekt 
 - `Services/Public/ITipService`: Einreichen (`RequireEnabled`, `RequireNotBlocked`, Mindestlänge,
   Rate-Limit je Konto, Bild-Upload über `FileUploadOptions` + `FilePathHelper.SafePath` nach
   `App_Data/uploads`), Status setzen, Rückfrage an den Bürger, verwerfen.
+- **„Bürger" heißt hier Konto mit `BuergerProfil`, nicht `Status = Civilian`.** Der Einreicher wird immer über
+  `IBuergerService.RequireSubmittingCitizenAsync` aufgelöst (vollständig, nicht gesperrt) — ein Agent, der über
+  seine Zivil-Identität meldet, ist ein normaler Hinweisgeber, und die Bearbeiter-Projektion kennt ohnehin nur
+  das Profil. Einzige Stelle, an der die Zuordnung Konto ↔ Zivil-Identität sichtbar wird, bleibt der
+  Führungs-Roster (`PublicCitizensPanel`, Discord-Name) — gewollt für die Missbrauchskontrolle, sonst nirgends.
 - Rate-Limit: eigene Policy in `Program.cs` **plus** Zählprüfung im Service (der SignalR-Pfad umgeht die
   Middleware — genau die Lücke, vor der CLAUDE.md bei Schreibpfaden warnt).
 - Anonymität: `AnonymGewuenscht` ⇒ Bearbeiter-Projektion enthält kein Bürgerfeld. Auflösen ist eine eigene
@@ -546,8 +566,9 @@ Buchungen zeigt und beide Bürger ihren Beleg drucken können.
   `AutorAgentId` (**nur intern**).
 
 **Code**
-- `ITicketService`: Öffnen (Bürger, `RequireEnabled`, `RequireNotBlocked`, Rate-Limit), Antworten
-  (`Permission.RequireLeadership`), interne Notizen, Schließen/Wiederöffnen, Lesestände.
+- `ITicketService`: Öffnen (jedes Konto mit vollständigem, ungesperrtem `BuergerProfil` — siehe Phase 7 —
+  `RequireEnabled`, Rate-Limit), Antworten (`Permission.RequireLeadership`), interne Notizen,
+  Schließen/Wiederöffnen, Lesestände.
 - Außen-Absender ist die Konstante „NOOSE – Führungsebene". `AutorAgentId` existiert in **keiner**
   Bürger-Projektion — Datei-Scan-Test hält es fest.
 - `Infrastructure/PublicChatBroadcaster.cs` — Singleton, Muster `TaskforceChatBroadcaster`, beide Seiten.
@@ -774,5 +795,8 @@ beantwortet, und die öffentliche Suche nachweislich nur Publiziertes zeigt.
   (Saldo, Ledger-Zeilen, Deckungswarnung), Beleg drucken.
 - Ticket: als Bürger öffnen, als Führung antworten — Absender zeigt **nie** einen Agentennamen; als
   Junior-Agent darf `/tickets` nicht sichtbar sein.
+- Bürgerbereich mit einem **Agenten-Konto** öffnen: `/buerger` und `/buerger/profil` sind erreichbar, keine
+  Zwangsumleitung zur Namenseingabe, Rückweg ins Dashboard vorhanden — und mit einer Nur-Lese-Aufsicht
+  scheitert das Speichern der Zivil-Identität mit Meldung statt mit einer Schleife.
 - Zeitstrahl der Personenakte enthält Publizieren, Depublizieren und Kopfgeld-Änderung.
 - `App_Data` bleibt beim Deploy unberührt; `?v=` bei JS-Änderungen gebumpt.

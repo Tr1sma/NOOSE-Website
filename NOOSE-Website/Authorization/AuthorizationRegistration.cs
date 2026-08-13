@@ -74,7 +74,7 @@ public static class AuthorizationRegistration
             // public area
             .AddPolicy(Policies.CitizenPortal, p => p
                 .RequireAuthenticatedUser()
-                .RequireAssertion(ctx => ctx.User.GetStatus() == AgentStatus.Civilian));
+                .RequireAssertion(ctx => ctx.User.MayUseCitizenPortal()));
 
         return services;
     }

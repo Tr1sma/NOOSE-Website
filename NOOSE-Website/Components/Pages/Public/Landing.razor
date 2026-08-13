@@ -47,17 +47,9 @@
                     </MudText>
                     <AuthorizeView>
                         <Authorized Context="citizenCtx">
-                            @if (citizenCtx.User.IsCitizen())
-                            {
-                                <MudButton Href="/buerger" Variant="Variant.Filled" Color="Color.Primary"
-                                           StartIcon="@Icons.Material.Filled.Person" Class="mt-2">Zum Bürgerbereich</MudButton>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                                    Du bist bereits mit einem anderen Konto angemeldet.
-                                </MudText>
-                            }
+                            @* open to every account: an agent, partner or applicant has a civilian identity too *@
+                            <MudButton Href="/buerger" Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Person" Class="mt-2">Zum Bürgerbereich</MudButton>
                         </Authorized>
                         <NotAuthorized>
                             @if (_registrationEnabled)

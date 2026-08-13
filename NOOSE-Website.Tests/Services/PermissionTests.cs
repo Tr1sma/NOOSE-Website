@@ -637,36 +637,32 @@ public sealed class PermissionTests
     public void RequireApplicant_anonymous_throws()
         => AssertDenied(() => Permission.RequireApplicant(ClaimsPrincipalBuilder.Anonymous()));
 
-    // ---------------------------------------------------------------- RequireCitizen
-
-    [Fact]
-    public void RequireCitizen_civilianStatus_passes()
-    {
-        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(AgentStatus.Civilian);
-        AssertAllowed(() => Permission.RequireCitizen(actor));
-    }
+    // ---------------------------------------------------------------- RequireCitizenPortal
 
     [Theory]
+    [InlineData(AgentStatus.Civilian)]
     [InlineData(AgentStatus.Active)]
+    [InlineData(AgentStatus.Applicant)]
     [InlineData(AgentStatus.Pending)]
     [InlineData(AgentStatus.Blocked)]
     [InlineData(AgentStatus.Terminated)]
-    [InlineData(AgentStatus.Applicant)]
-    public void RequireCitizen_nonCivilianStatus_throws(AgentStatus status)
+    public void RequireCitizenPortal_anySignedInStatus_passes(AgentStatus status)
     {
+        // the citizen area is readable for every account; only submissions need a civilian identity
         ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().WithStatus(status);
-        AssertDenied(() => Permission.RequireCitizen(actor));
+        AssertAllowed(() => Permission.RequireCitizenPortal(actor));
     }
 
     [Fact]
-    public void RequireCitizen_adminIsNoShortcut()
+    public void RequireCitizenPortal_partnerAndOnlyReader_pass()
     {
-        // every other guard lets an admin through; a citizen action is about ownership, not power
-        ClaimsPrincipal actor = ClaimsPrincipalBuilder.Agent().AsAdmin().WithRank(Rank.Director);
-        AssertDenied(() => Permission.RequireCitizen(actor));
+        AssertAllowed(() => Permission.RequireCitizenPortal(
+            ClaimsPrincipalBuilder.Agent().AsPartner(PartnerAgency.LSPD, PartnerRank.Chief)));
+        AssertAllowed(() => Permission.RequireCitizenPortal(
+            ClaimsPrincipalBuilder.Agent().AsTeamLead().WithRank(Rank.Director)));
     }
 
     [Fact]
-    public void RequireCitizen_anonymous_throws()
-        => AssertDenied(() => Permission.RequireCitizen(ClaimsPrincipalBuilder.Anonymous()));
+    public void RequireCitizenPortal_anonymous_throws()
+        => AssertDenied(() => Permission.RequireCitizenPortal(ClaimsPrincipalBuilder.Anonymous()));
 }

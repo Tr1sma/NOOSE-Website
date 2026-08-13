@@ -22,7 +22,9 @@
             @if (_isNew)
             {
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                    Bitte vervollständige deine Angaben, um den Bürgerbereich nutzen zu können.
+                    @(_mustComplete
+                        ? "Bitte vervollständige deine Angaben, um den Bürgerbereich nutzen zu können."
+                        : "Ohne diese Angaben kannst du den Bürgerbereich ansehen, aber nichts einreichen.")
                 </MudAlert>
             }
 
@@ -36,7 +38,7 @@
             <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
                            Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
-                @if (!_isNew)
+                @if (!_isNew || !_mustComplete)
                 {
                     <MudButton Href="/buerger" Variant="Variant.Text" Color="Color.Default">Zurück</MudButton>
                 }
@@ -61,6 +63,7 @@
     private bool _ready;
     private bool _saving;
     private bool _isNew;
+    private bool _mustComplete;
     private bool _blocked;
     private string _firstName = string.Empty;
     private string _lastName = string.Empty;
@@ -68,7 +71,7 @@
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
-        if (!_user.IsCitizen())
+        if (!_user.MayUseCitizenPortal())
         {
             Nav.NavigateTo("/", forceLoad: true);
             return;
@@ -79,6 +82,8 @@
         _lastName = profile?.LastName ?? string.Empty;
         _blocked = profile?.IsBlocked ?? false;
         _isNew = string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName);
+        // only a citizen account is held on this page until the names are there
+        _mustComplete = _user.IsCitizen();
         _ready = true;
     }
 

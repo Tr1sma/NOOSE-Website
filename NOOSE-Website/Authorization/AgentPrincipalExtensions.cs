@@ -133,4 +133,7 @@ public static class AgentPrincipalExtensions
 
     /// <summary>Citizen (status Civilian): public-area account only, never an agent and never an applicant.</summary>
     public static bool IsCitizen(this ClaimsPrincipal user) => user.GetStatus() == AgentStatus.Civilian;
+
+    /// <summary>May enter the citizen area = every signed-in account; Civilian only means the account has nothing else.</summary>
+    public static bool MayUseCitizenPortal(this ClaimsPrincipal user) => user.Identity?.IsAuthenticated == true;
 }

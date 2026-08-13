@@ -19,7 +19,7 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
 
     public async Task<BuergerProfil?> GetOwnAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireCitizen(actor);
+        Permission.RequireCitizenPortal(actor);
 
         var userId = actor.GetAgentId();
         if (string.IsNullOrEmpty(userId))
@@ -35,7 +35,9 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
     public async Task<BuergerProfil> SaveOwnAsync(string firstName, string lastName, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        Permission.RequireCitizen(actor);
+        Permission.RequireCitizenPortal(actor);
+        // a civilian identity is a write like any other: read-only supervision and partners stay read-only here too
+        Permission.RequireWriteAccess(actor);
 
         var userId = actor.GetAgentId()
             ?? throw new InvalidOperationException("Kein angemeldetes Konto.");

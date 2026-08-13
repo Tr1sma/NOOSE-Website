@@ -33,6 +33,9 @@ public sealed class BuergerServiceTests
         db.Users.Add(Seed.Agent("buerger-2", status: AgentStatus.Civilian,
             configure: a => { a.Codename = string.Empty; a.DiscordUsername = "spieler_lena"; }));
         db.Users.Add(Seed.Agent("lead", rank: Rank.Director));
+        // accounts that may also hold a civilian identity
+        db.Users.Add(Seed.Agent("agent-1", rank: Rank.SpecialAgent));
+        db.Users.Add(Seed.Agent("bew", status: AgentStatus.Applicant));
         await db.SaveChangesAsync();
         return ctx;
     }
@@ -72,17 +75,48 @@ public sealed class BuergerServiceTests
     }
 
     [Fact]
-    public async Task SaveOwnAsync_DeniedForAgentsAndApplicants()
+    public async Task SaveOwnAsync_AllowedForAgentsAndApplicants()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var applicant = ClaimsPrincipalBuilder.Agent("bew").WithStatus(AgentStatus.Applicant).Build();
+
+        // the civilian identity is a second, separate identity — an agent or applicant may hold one too
+        await service.SaveOwnAsync("Max", "Mustermann", PlainAgent());
+        await service.SaveOwnAsync("Lena", "Schmitt", applicant);
+
+        await using var db = ctx.NewContext();
+        Assert.Equal("Mustermann", (await db.BuergerProfile.SingleAsync(p => p.UserId == "agent-1")).LastName);
+        Assert.Equal("Schmitt", (await db.BuergerProfile.SingleAsync(p => p.UserId == "bew")).LastName);
+    }
+
+    [Fact]
+    public async Task SaveOwnAsync_DeniedForOnlyReaderPartnerAndAnonymous()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var partner = ClaimsPrincipalBuilder.Agent("partner")
+            .AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.SaveOwnAsync("Max", "Mustermann", OnlyReader()));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.SaveOwnAsync("Max", "Mustermann", partner));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.SaveOwnAsync("Max", "Mustermann", ClaimsPrincipalBuilder.Anonymous()));
+    }
+
+    [Fact]
+    public async Task GetOwnAsync_ReadableForEverySignedInAccount_ButNotAnonymous()
     {
         using var ctx = await SeededAsync();
         var service = NewService(ctx);
 
+        Assert.Null(await service.GetOwnAsync(PlainAgent()));
+        Assert.Null(await service.GetOwnAsync(Leader()));
+        Assert.Null(await service.GetOwnAsync(OnlyReader()));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => service.SaveOwnAsync("Max", "Mustermann", PlainAgent()));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => service.SaveOwnAsync("Max", "Mustermann", Leader()));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.SaveOwnAsync(
-            "Max", "Mustermann", ClaimsPrincipalBuilder.Agent("bew").WithStatus(AgentStatus.Applicant).Build()));
+            () => service.GetOwnAsync(ClaimsPrincipalBuilder.Anonymous()));
     }
 
     [Theory]

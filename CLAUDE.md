@@ -460,11 +460,18 @@ Gebaut sind Phase 1–3 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst 
 Fahndung, Hinweise, Tickets, Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden —
 ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
-- **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`,
-  `Policies.CitizenPortal`, `Permission.RequireCitizen`). Der Klarname liegt in `BuergerProfil`, **nie** in
-  `Agent.RealName` — das ist der behördliche Klarname hinter einem Führungs-Gate. `AgentSelection` schließt
-  `Civilian` überall aus; `BuergerLayout` erzwingt Vor-/Nachname zentral in `OnParametersSetAsync`
-  (nicht `OnInitializedAsync`: die Layout-Instanz überlebt die Navigation zwischen Bürgerseiten).
+- **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
+  liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
+  Führungs-Gate. `AgentSelection` schließt `Civilian` überall aus.
+- **Zugang und Status sind zwei Fragen.** Den Bürgerbereich betreten darf **jedes angemeldete Konto**
+  (`MayUseCitizenPortal()`, `Policies.CitizenPortal`, `Permission.RequireCitizenPortal`) — Agent, Partner,
+  Nur-Lese-Aufsicht und Bewerber haben auch eine Zivil-Identität. `IsCitizen()` beantwortet nur noch, ob das
+  Konto ein Profil haben **muss**: `BuergerLayout` erzwingt Vor-/Nachname zentral in `OnParametersSetAsync`
+  (nicht `OnInitializedAsync`: die Layout-Instanz überlebt die Navigation zwischen Bürgerseiten) — aber **nur
+  für `IsCitizen()`**. Sonst liefe eine Nur-Lese-Aufsicht in eine Umleitungsschleife auf ein Profil, das sie
+  gar nicht anlegen darf: `SaveOwnAsync` ist ein Schreibpfad und hält zusätzlich `RequireWriteAccess`.
+  Wer kein Profil hat, sieht die Seiten ohne eigene Zeilen; jeder Einreichungspfad geht über
+  `RequireSubmittingCitizenAsync` (vollständig + nicht gesperrt).
 - **Welche Module es gibt, steht ausschließlich in `Services/Public/PublicModules.cs`** — eine Zeile je
   Modul, auch für noch nicht gebaute. `PublicModuleSeeder` legt fehlende Zeilen beim Start an und
   überschreibt **nie** eine gespeicherte Wahl; ein Modul geht deshalb nie durch ein Deploy online.
