@@ -478,6 +478,7 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen, beschlossen aber noch nicht begonnen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings
