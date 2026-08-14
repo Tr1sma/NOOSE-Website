@@ -122,7 +122,7 @@ public sealed class AgentNoteSearchProvider(IDbContextFactory<AppDbContext> dbFa
     }
 }
 
-/// <summary>Confidential informants. Row-level: the handling agent, leadership and the read-only supervision.</summary>
+/// <summary>Confidential informants. Open to every internal agent, never to a partner.</summary>
 public sealed class InformantSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
 {
     public string Category => nameof(Informant);
@@ -134,12 +134,7 @@ public sealed class InformantSearchProvider(IDbContextFactory<AppDbContext> dbFa
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var visible = await InformantVisibility.VisibleIdsAsync(db, query.Viewer.User, cancellationToken);
-        if (visible.Count == 0)
-        {
-            return [];
-        }
-        var q = db.Informants.Where(i => visible.Contains(i.Id));
+        var q = db.Informants.AsQueryable();
         if (query.HasText)
         {
             var s = query.Text;
@@ -149,7 +144,7 @@ public sealed class InformantSearchProvider(IDbContextFactory<AppDbContext> dbFa
                 || (i.ContactInfo != null && i.ContactInfo.Contains(s))
                 || (i.Notes != null && i.Notes.Contains(s)));
         }
-        // record access is all-or-nothing here, so the full detail may be shown once the id passed the gate
+        // record access is all-or-nothing here, so the full detail may be shown once the viewer passed the gate
         return await q.OrderBy(i => i.CaseNumber).Take(query.PerCategory)
             .Select(i => new SearchHit(nameof(Informant), i.Id, i.RealName ?? i.CaseNumber,
                 i.Description ?? string.Empty, i.CaseNumber))
@@ -173,16 +168,10 @@ public sealed class InformantMeetingSearchProvider(IDbContextFactory<AppDbContex
             return [];
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var visible = await InformantVisibility.VisibleIdsAsync(db, query.Viewer.User, cancellationToken);
-        if (visible.Count == 0)
-        {
-            return [];
-        }
         var s = query.Text;
         var rows = await (
             from m in db.InformantMeetings
-            where visible.Contains(m.InformantId)
-                && ((m.Content != null && m.Content.Contains(s)) || (m.Location != null && m.Location.Contains(s)))
+            where (m.Content != null && m.Content.Contains(s)) || (m.Location != null && m.Location.Contains(s))
             join i in db.Informants on m.InformantId equals i.Id
             orderby m.MeetingDate descending
             select new { m.Id, m.InformantId, m.Content, m.MeetingDate, i.RealName, i.CaseNumber })

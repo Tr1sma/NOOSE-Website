@@ -27,6 +27,7 @@ public static class MergedPageSections
         "personen", "fraktionen", "personengruppen", "parteien",
         "vorgaenge", "operationen", "taskforces", "aufgaben",
         "brett", "kalender", "besprechungen", "aktivitaeten", "abmeldungen", "entfuehrungen",
+        "informanten",
         "asservate-items", "asservate-eintraege", "kasse-buchungen", "finanzierungen",
         "feedback",
     ];

@@ -1,5 +1,6 @@
 @page "/informanten/neu"
 @page "/informanten/{Id}/bearbeiten"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @using NOOSE_Website.Models.Enums
 @using NOOSE_Website.Models.Informants
 @inject IInformantService Service
@@ -90,19 +91,13 @@ else
                 <MentionInput @bind-Text="_description" Label="Beschreibung" Lines="2" HelperText="@MentionInput.Hint" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                @if (_canChangeHandler)
-                {
-                    <MudSelect T="string" @bind-Value="_handlerId" Label="Führungsagent" Required="true">
-                        @foreach (var h in _handlers)
-                        {
-                            <MudSelectItem T="string" Value="@h.Id">@h.Name</MudSelectItem>
-                        }
-                    </MudSelect>
-                }
-                else
-                {
-                    <MudTextField Value="@_handlerName" Label="Führungsagent" ReadOnly="true" />
-                }
+                <MudSelect T="string" @bind-Value="_handlerId" Label="Führungsagent" Required="true"
+                           HelperText="Wer die Quelle führt — jeder Agent darf das ändern.">
+                    @foreach (var h in _handlers)
+                    {
+                        <MudSelectItem T="string" Value="@h.Id">@h.Name</MudSelectItem>
+                    }
+                </MudSelect>
             </MudItem>
         </MudGrid>
 
@@ -131,7 +126,6 @@ else
     private bool _forbidden;
     private bool _isNew;
     private bool _saving;
-    private bool _canChangeHandler;
     private List<InformantHandlerOption> _handlers = new();
 
     private string? _realName;
@@ -141,7 +135,6 @@ else
     private InformantReliability _reliability = InformantReliability.C;
     private InformantStatus _status = InformantStatus.Active;
     private string _handlerId = string.Empty;
-    private string? _handlerName;
     private string? _contact;
     private string? _notes;
 
@@ -159,8 +152,7 @@ else
         _forbidden = false;
         _user = (await AuthStateTask).User;
         _isNew = string.IsNullOrEmpty(Id);
-        _canChangeHandler = _user.IsLeadership();
-        if (_canChangeHandler)
+        if (_user.MayWrite())
         {
             _handlers = await Service.GetHandlerOptionsAsync(_user);
         }
@@ -173,13 +165,12 @@ else
         _reliability = InformantReliability.C;
         _status = InformantStatus.Active;
         _handlerId = string.Empty;
-        _handlerName = null;
         _contact = null;
         _notes = null;
 
         if (_isNew)
         {
-            if (!_user.IsLeadership())
+            if (!_user.MayWrite())
             {
                 _forbidden = true;
                 _load = false;
@@ -200,7 +191,11 @@ else
             _reliability = d.Reliability;
             _status = d.Status;
             _handlerId = d.HandlerId;
-            _handlerName = d.HandlerName;
+            // a handler who left the roster is no longer offered — carry them in so the field is not blank
+            if (_handlers.All(h => h.Id != d.HandlerId))
+            {
+                _handlers.Add(new InformantHandlerOption(d.HandlerId, d.HandlerName ?? d.HandlerId));
+            }
             _contact = d.ContactInfo;
             _notes = d.Notes;
             // the pickers only need id/name/case number — no point loading the whole record

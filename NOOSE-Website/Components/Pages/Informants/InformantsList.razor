@@ -1,4 +1,5 @@
 @page "/informanten"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @using NOOSE_Website.Models.Enums
 @using NOOSE_Website.Models.Informants
 @inject IInformantService Service
@@ -8,7 +9,7 @@
 
 <PageHeader Icon="@Icons.Material.Filled.VisibilityOff"
             Title="Informanten"
-            Subtitle="Vertrauliche Quellen (V-Personen) — kein Deckname, nur Klarname. Sichtbar für Führung und den zuständigen Führungsagenten.">
+            Subtitle="Vertrauliche Quellen (V-Personen) — kein Deckname, nur Klarname. Jeder Agent kann sie anlegen, einsehen und pflegen.">
     <Actions>
         @if (_mayCreate)
         {
@@ -24,7 +25,7 @@
 }
 else if (_list.Count == 0)
 {
-    <EmptyState Icon="@Icons.Material.Filled.VisibilityOff" Text="Keine für dich sichtbaren Informanten." />
+    <EmptyState Icon="@Icons.Material.Filled.VisibilityOff" Text="Noch keine Informanten erfasst." />
 }
 else
 {
@@ -70,7 +71,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         var user = (await AuthStateTask).User;
-        _mayCreate = user.IsLeadership();
+        _mayCreate = user.MayWrite();
         _list = await Service.GetListAsync(user);
         _load = false;
     }

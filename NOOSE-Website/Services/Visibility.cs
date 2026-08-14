@@ -185,16 +185,11 @@ public static class Visibility
         };
     }
 
-    /// <summary>Informant gate: leadership or the assigned handler, fail-closed on a missing record.</summary>
+    /// <summary>Informant gate: every internal agent, never a partner — fail-closed on a missing record.</summary>
     private static async Task<bool> InformantVisibleAsync(
         AppDbContext db, string informantId, ViewerScope scope, CancellationToken cancellationToken)
-    {
-        var handler = await db.Informants.AsNoTracking()
-            .Where(i => i.Id == informantId)
-            .Select(i => new { i.HandlerId })
-            .FirstOrDefaultAsync(cancellationToken);
-        return handler is not null && InformantVisibility.MaySeeRecord(scope, handler.HandlerId);
-    }
+        => InformantVisibility.MaySeeRecord(scope)
+        && await db.Informants.AsNoTracking().AnyAsync(i => i.Id == informantId, cancellationToken);
 
     /// <summary>Request gate: its own requester always, everyone else exactly as far as the target record reaches.</summary>
     /// <remarks>Mirrors the search provider, which resolves a request through its target rather than through a rank.

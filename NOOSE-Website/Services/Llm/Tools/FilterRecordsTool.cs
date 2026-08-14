@@ -227,7 +227,7 @@ public sealed class FilterRecordsTool(
                 a.AssignedCodenames.Count > 0 ? "Zugeteilt: " + string.Join(", ", a.AssignedCodenames) : null,
                 Status: JobStatusDisplay.Name(a.Status)))
             .ToList(),
-        // fail-closed by its own helper: a stranger gets an empty roster, not a refusal
+        // fail-closed by its own helper: a partner gets an empty roster, not a refusal
         nameof(Data.Entities.Informants.Informant) => (await informants.GetListAsync(actor, cancellationToken))
             .Select(i => new Row(i.Id, i.Name, i.CaseNumber, null, DocumentClassification.Leadership, null,
                 null, DateTime.UtcNow,

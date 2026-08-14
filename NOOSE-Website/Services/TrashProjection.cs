@@ -16,6 +16,7 @@ using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.Activities;
 using NOOSE_Website.Models.Common;
+using NOOSE_Website.Models.Informants;
 using NOOSE_Website.Models.Enums;
 using FeedbackEntity = NOOSE_Website.Data.Entities.Feedback.Feedback;
 
@@ -66,6 +67,9 @@ public static class TrashProjection
     public static TrashItem Abduction(AgentAbduction x)
         => new("entfuehrungen", x.Id, x.CaseNumber, x.VictimAgent?.Codename ?? x.VictimAgentId,
             AbductionOutcomeDisplay.Name(x.Outcome), x.DeletedAt);
+
+    public static TrashItem Informant(InformantTrashItem x)
+        => new("informanten", x.Id, x.CaseNumber, x.Name, x.Detail, x.DeletedAt);
 
     // evidence items carry no Aktenzeichen; the name identifies the row
     public static TrashItem EvidenceItem(EvidenceItem x)

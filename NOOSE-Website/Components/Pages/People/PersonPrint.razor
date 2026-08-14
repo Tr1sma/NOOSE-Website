@@ -63,7 +63,7 @@ else
                     {
                         <tr>
                             <th>Informant</th>
-                            <td>Als Informant geführt · @InformantEnumDisplay.Status(_informant.Status)@(_informant.MayOpen ? $" · {_informant.CaseNumber}" : string.Empty)</td>
+                            <td>Als Informant geführt · @InformantEnumDisplay.Status(_informant.Status) · @_informant.CaseNumber</td>
                         </tr>
                     }
                     @if (!string.IsNullOrWhiteSpace(_person.Description))

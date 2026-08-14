@@ -61,8 +61,8 @@ public static class SearchIndexProjection
         EvidenceItem i => Build(nameof(EvidenceItem), i.Id, i.Id,
             new[] { i.Name }, new[] { i.Name, i.Category }),
         // Informant is deliberately absent: the only field worth a phonetic pass is the V-person's real name, and
-        // this table has no gate. Indexing the case number instead buys nothing — an exact case number is already
-        // found by the LIKE recall.
+        // this table has no gate — partners search against it too. Indexing the case number instead buys nothing:
+        // an exact case number is already found by the LIKE recall.
         _ => null,
     };
 

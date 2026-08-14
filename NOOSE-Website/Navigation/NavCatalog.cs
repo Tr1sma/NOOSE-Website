@@ -58,7 +58,7 @@ public static class NavCatalog
         new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung & Überwachung", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Gesuchte Personen, Observationen und Vernehmungen"),
         new NavEntry("informanten", "/informanten", Icons.Material.Filled.VisibilityOff, "Informanten", NavSection.Fahndung, NavArea.Ermittlung,
-            Description: "Vertrauliche Quellen (V-Personen) — Zeilen-Sichtbarkeit je Führungsagent"),
+            Description: "Vertrauliche Quellen (V-Personen) mit Treffen-Protokollen"),
         new NavEntry("entfuehrungen", "/entfuehrungen", Icons.Material.Filled.PersonOff, "Entführungen", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Entführungen von NOOSE-Agenten: Täter, Informationsabfluss und kompromittierte Akten"),
 

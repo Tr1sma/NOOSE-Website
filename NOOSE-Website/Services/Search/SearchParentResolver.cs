@@ -172,15 +172,10 @@ public static class SearchParentResolver
         }
         if (!viewer.IsPartner && Ids(nameof(Informant)) is { Count: > 0 } informantIds)
         {
-            var visible = await InformantVisibility.VisibleIdsAsync(db, viewer.User, cancellationToken);
-            var allowed = informantIds.Where(visible.Contains).ToList();
-            if (allowed.Count > 0)
+            foreach (var x in await db.Informants.Where(i => informantIds.Contains(i.Id))
+                         .Select(i => new { i.Id, i.RealName, i.CaseNumber }).ToListAsync(cancellationToken))
             {
-                foreach (var x in await db.Informants.Where(i => allowed.Contains(i.Id))
-                             .Select(i => new { i.Id, i.RealName, i.CaseNumber }).ToListAsync(cancellationToken))
-                {
-                    Put(nameof(Informant), x.Id, x.RealName ?? x.CaseNumber, x.CaseNumber);
-                }
+                Put(nameof(Informant), x.Id, x.RealName ?? x.CaseNumber, x.CaseNumber);
             }
         }
 
