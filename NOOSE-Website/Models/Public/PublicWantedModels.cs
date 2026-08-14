@@ -14,7 +14,8 @@ public sealed record PublicWantedCard(
     string? AliasText,
     bool HasPhoto,
     HazardLevel HazardLevel,
-    DateTime? PublishedAt);
+    DateTime? PublishedAt,
+    IReadOnlyList<PublicWantedHint> Hints);
 
 /// <summary>A public wanted profile.</summary>
 public sealed record PublicWantedDetail(
@@ -28,18 +29,47 @@ public sealed record PublicWantedDetail(
     string? ChargeHtml,
     string? LastArea,
     string? VehicleText,
-    DateTime? ExpiresAt);
+    DateTime? ExpiresAt,
+    IReadOnlyList<PublicWantedHint> Hints);
+
+/// <summary>One warning chip: a label and an allowlisted colour name, nothing else.</summary>
+public sealed record PublicWantedHint(string Label, string Colour);
+
+/// <summary>One row of the anonymous archive: the fact that someone was caught, not a profile.</summary>
+/// <remarks>
+/// Its own type rather than nullable fields on <see cref="PublicWantedCard"/>. The archive must carry no hazard level,
+/// no accusation, no area and no vehicle, and a shared record would let the board render "gefasst am" and the archive
+/// render a hazard level. The case number stays because the photo endpoint is addressed through it — the card itself
+/// links nowhere, since /gesucht/{az} answers "not found" for a captured notice.
+/// </remarks>
+public sealed record PublicWantedArchiveCard(
+    string CaseNumber,
+    PublicWantedKind Kind,
+    string DisplayName,
+    bool HasPhoto,
+    DateTime CapturedAt);
 
 /// <summary>Everything the outside world may read, in one cached snapshot.</summary>
+/// <remarks>
+/// Board and archive share one record and therefore one cache key. They come from the same table and are invalidated
+/// by exactly the same writes; a second key would double every drop site and create a failure class where one is
+/// dropped and the other left standing — and marking a notice as captured moves a row between both lists at once.
+/// </remarks>
 public sealed record PublicWantedBoard(
     IReadOnlyList<PublicWantedCard> Cards,
-    IReadOnlyDictionary<string, PublicWantedDetail> ByCaseNumber)
+    IReadOnlyDictionary<string, PublicWantedDetail> ByCaseNumber,
+    IReadOnlyList<PublicWantedArchiveCard> Archive,
+    IReadOnlyDictionary<string, PublicWantedArchiveCard> CapturedByCaseNumber)
 {
     public static PublicWantedBoard Empty { get; } =
-        new([], new Dictionary<string, PublicWantedDetail>(StringComparer.OrdinalIgnoreCase));
+        new([], new Dictionary<string, PublicWantedDetail>(StringComparer.OrdinalIgnoreCase),
+            [], new Dictionary<string, PublicWantedArchiveCard>(StringComparer.OrdinalIgnoreCase));
 
     public PublicWantedDetail? Find(string? caseNumber)
         => caseNumber is not null && ByCaseNumber.TryGetValue(caseNumber, out var entry) ? entry : null;
+
+    public PublicWantedArchiveCard? FindCaptured(string? caseNumber)
+        => caseNumber is not null && CapturedByCaseNumber.TryGetValue(caseNumber, out var entry) ? entry : null;
 }
 
 /// <summary>What the anonymous photo endpoint needs to stream a file, and nothing else.</summary>
@@ -62,7 +92,8 @@ public sealed record PublicWantedEdit(
     DateTime? PublishedAt,
     string? PublishedByName,
     DateTime? ExpiresAt,
-    DateTime? ModifiedAt);
+    DateTime? ModifiedAt,
+    int ViewCount);
 
 /// <summary>The one notice an author is editing, HTML included.</summary>
 public sealed record PublicWantedDraft(

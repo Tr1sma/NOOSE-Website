@@ -318,6 +318,9 @@ public class DiscordWebhookService(
         NotificationType.MeetingScheduled => "/besprechungen",
         NotificationType.MeetingReminder => "/besprechungen",
         NotificationType.PersonnelEntry => "/personal",
+        // the one outward category: its fallback must stay outside, or a generic push would post an internal
+        // destination into the public channel
+        NotificationType.PublicWantedPublished => "/gesucht",
         _ => "/dashboard",
     };
 
@@ -333,6 +336,7 @@ public class DiscordWebhookService(
         NotificationType.MeetingScheduled => "📅 Eine neue Besprechung wurde angesetzt.",
         NotificationType.MeetingReminder => "⏰ Eine Besprechung beginnt bald.",
         NotificationType.PersonnelEntry => "📝 Neuer Personalakten-Eintrag.",
+        NotificationType.PublicWantedPublished => "🔎 Neue öffentliche Fahndung.",
         _ => "🔔 Neue Benachrichtigung.",
     };
 

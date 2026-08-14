@@ -241,6 +241,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<OeffentlichesModul> OeffentlicheModule => Set<OeffentlichesModul>();
     public DbSet<OeffentlicheSeite> OeffentlicheSeiten => Set<OeffentlicheSeite>();
     public DbSet<OeffentlicheFahndung> OeffentlicheFahndungen => Set<OeffentlicheFahndung>();
+    public DbSet<Warnhinweis> Warnhinweise => Set<Warnhinweis>();
+    public DbSet<FahndungWarnhinweis> FahndungWarnhinweise => Set<FahndungWarnhinweis>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1690,6 +1692,29 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(f => f.FactionId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(f => f.PublishedBy).WithMany()
                 .HasForeignKey(f => f.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Warnhinweis>(b =>
+        {
+            b.Property(w => w.Name).HasMaxLength(60).IsRequired();
+            // a colour NAME from the allowlist, not a free value: this one is rendered anonymously
+            b.Property(w => w.Colour).HasMaxLength(32);
+            b.HasIndex(w => w.Name).IsUnique();
+            b.HasIndex(w => new { w.IsActive, w.SortOrder });
+        });
+
+        modelBuilder.Entity<FahndungWarnhinweis>(b =>
+        {
+            b.Property(z => z.FahndungId).HasMaxLength(64);
+            b.Property(z => z.WarnhinweisId).HasMaxLength(64);
+            // cascade on both ends: the row says nothing without either of them, and it is what keeps the unique
+            // index on Bezeichnung usable after a hard delete. No cascade-path clash — the notice itself hangs on
+            // Personen/Fraktionen/Agent with Restrict, so the chain ends at OeffentlicheFahndungen
+            b.HasOne(z => z.Fahndung).WithMany()
+                .HasForeignKey(z => z.FahndungId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(z => z.Warnhinweis).WithMany()
+                .HasForeignKey(z => z.WarnhinweisId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(z => new { z.FahndungId, z.WarnhinweisId }).IsUnique();
         });
 
         // global soft-delete filter

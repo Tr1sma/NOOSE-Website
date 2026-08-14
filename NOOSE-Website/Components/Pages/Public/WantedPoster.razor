@@ -1,0 +1,126 @@
+@page "/gesucht/{CaseNumber}/druck"
+@layout PrintLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicWantedService Wanted
+@inject IPublicModuleService Modules
+
+<PageTitle>@(_entry?.DisplayName ?? "Fahndungsposter") · NOOSE</PageTitle>
+
+@* always, not only on the miss branch: /gesucht/* is indexable, this route answers 200 for any invented case
+   number, and a print artefact is a near-duplicate of the profile anyway *@
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+@if (_entry is null)
+{
+    <div class="druck-dokument">
+        <header class="druck-kopf">
+            <div class="druck-behoerde">N.O.O.S.E. · National Office of Security Enforcement</div>
+            <h1>Ausschreibung nicht gefunden</h1>
+        </header>
+        <p>Diese Ausschreibung ist nicht veröffentlicht oder wurde zurückgezogen.</p>
+    </div>
+}
+else
+{
+    @* a raw onclick attribute, rendered verbatim by static SSR. PrintFrame is unusable here: it prints through
+       JS interop in OnAfterRenderAsync and a MudButton OnClick, both dead without a circuit, and it renders
+       "Gedruckt am … von {PrintedBy}" plus an internal footer. No automatic dialog either — an anonymous page
+       that opens the print dialog unasked is presumptuous. *@
+    <div class="no-print druck-aktionen">
+        <button type="button" class="druck-knopf" onclick="window.print()">Drucken / als PDF speichern</button>
+        <a class="druck-knopf" href="@($"/gesucht/{_entry.CaseNumber}")">Zurück zum Steckbrief</a>
+    </div>
+
+    <div class="druck-dokument">
+        <header class="druck-kopf">
+            <div class="druck-behoerde">N.O.O.S.E. · National Office of Security Enforcement</div>
+            <h1>GESUCHT</h1>
+            <div class="druck-meta">
+                @PublicWantedKindDisplay.Name(_entry.Kind) · Aktenzeichen @_entry.CaseNumber
+                @if (_entry.PublishedAt is { } published)
+                {
+                    <text> · ausgeschrieben am @published.ToLocalTime().ToString("dd.MM.yyyy")</text>
+                }
+            </div>
+        </header>
+
+        @if (_entry.HasPhoto)
+        {
+            <p><img class="druck-poster-foto" src="@($"/gesucht/{_entry.CaseNumber}/foto")" alt="@_entry.DisplayName" /></p>
+        }
+
+        <h2>@_entry.DisplayName</h2>
+        @if (!string.IsNullOrWhiteSpace(_entry.AliasText))
+        {
+            <p><b>Aliase:</b> @_entry.AliasText</p>
+        }
+
+        <p><b>Gefahrenstufe:</b> @HazardLevelLogic.Name(_entry.HazardLevel)</p>
+
+        @if (_entry.Hints.Count > 0)
+        {
+            <p>
+                @foreach (var hint in _entry.Hints)
+                {
+                    <span class="druck-poster-warnung">@hint.Label</span>
+                }
+            </p>
+        }
+
+        <h2>Vorwurf</h2>
+        @* raw markup, not RichHtml: that component resolves @{Typ:GUID} mentions and would print internal record names *@
+        <div class="dokument-html">@((MarkupString)(_entry.ChargeHtml ?? string.Empty))</div>
+
+        @if (!string.IsNullOrWhiteSpace(_entry.LastArea))
+        {
+            <p><b>Zuletzt gesehen:</b> @_entry.LastArea</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_entry.VehicleText))
+        {
+            <p><b>Fahrzeug:</b> @_entry.VehicleText</p>
+        }
+
+        <footer class="druck-fusszeile">
+            Nicht selbst eingreifen. Beobachtungen der nächsten Dienststelle melden.<br />
+            @* plain text, not a link: a printed sheet cannot be clicked *@
+            noose.info/gesucht/@_entry.CaseNumber
+        </footer>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string CaseNumber { get; set; } = string.Empty;
+
+    private PublicWantedDetail? _entry;
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedKey == CaseNumber)
+        {
+            return;
+        }
+        _loadedKey = CaseNumber;
+        try
+        {
+            // both switches, checked in the page itself: PrintLayout carries neither PublicNav nor the kill-switch
+            // banner of PublicSiteLayout, and IsEnabled folds the kill switch in. Wanted has to be one of them, or
+            // the poster would be a second front door to a board that is switched off.
+            var snapshot = await Modules.GetAsync();
+            var available = snapshot.IsEnabled(PublicModules.Wanted)
+                && snapshot.IsEnabled(PublicModules.WantedPrint);
+            // no counting here: the poster is opened from a profile that already counted this reader
+            _entry = available ? await Wanted.GetByCaseNumberAsync(CaseNumber) : null;
+        }
+        catch
+        {
+            /* best effort */
+            _entry = null;
+        }
+    }
+}

@@ -52,6 +52,8 @@ public sealed class PublicWantedServiceTests
         IFileStorageService PeopleFiles,
         IPublicWantedPhotoStorageService PublicFiles,
         ICaseNumberService CaseNumbers,
+        IDiscordWebhookService Discord,
+        INotificationService Notifications,
         IMemoryCache Cache);
 
     /// <summary>The service with the audit interceptor attached, as in production.</summary>
@@ -76,9 +78,23 @@ public sealed class PublicWantedServiceTests
         var peopleFiles = Substitute.For<IFileStorageService>();
         var publicFiles = Substitute.For<IPublicWantedPhotoStorageService>();
 
+        var discord = Substitute.For<IDiscordWebhookService>();
+        var notifications = Substitute.For<INotificationService>();
+
         var service = new PublicWantedService(factory, modules, caseNumbers, peopleFiles, publicFiles,
-            Substitute.For<INotificationService>(), cache);
-        return new Host(service, modules, peopleFiles, publicFiles, caseNumbers, cache);
+            notifications, discord, cache);
+        return new Host(service, modules, peopleFiles, publicFiles, caseNumbers, discord, notifications, cache);
+    }
+
+    /// <summary>Turns a module switch on or off and drops the 10 s module snapshot so the change is visible now.</summary>
+    private static async Task ModuleAsync(SqliteTestContext ctx, Host host, string key, bool on)
+    {
+        await using var db = ctx.NewContext();
+        var row = await db.OeffentlicheModule.SingleAsync(m => m.Key == key);
+        row.IsEnabled = on;
+        await db.SaveChangesAsync();
+        host.Cache.Remove("OeffentlicheModule");
+        DropCache(host);
     }
 
     /// <summary>Seeds the module switches plus one clean person file, and turns the wanted module on.</summary>
@@ -1214,6 +1230,794 @@ public sealed class PublicWantedServiceTests
         host.PublicFiles.SaveAsync(Arg.Any<Stream>(), "image/jpeg", Arg.Any<CancellationToken>())
             .Returns("oeffentlich.jpg");
         return host;
+    }
+
+    // ---- the archive (/gefasst) ----
+
+    [Fact]
+    public async Task TheArchive_ShowsOnlyCapturedNotices()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        Assert.Empty(await host.Service.GetArchiveAsync());
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        var card = Assert.Single(await host.Service.GetArchiveAsync());
+        Assert.Equal("NOOSE-FA-2026-0001", card.CaseNumber);
+        Assert.Equal("Max Mustermann", card.DisplayName);
+        // and it left the live board in the same snapshot
+        Assert.Empty((await host.Service.GetBoardAsync()).Cards);
+    }
+
+    [Fact]
+    public async Task TheProfileRoute_StillAnswersNotFoundForACapturedNotice()
+    {
+        // the archive is a list, not a second way into the profile: the accusation is over with the arrest
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        Assert.Null(await host.Service.GetByCaseNumberAsync("NOOSE-FA-2026-0001"));
+    }
+
+    [Fact]
+    public async Task TheArchive_IsEmptyWhileItsOwnModuleIsOff()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        Assert.Empty(await host.Service.GetArchiveAsync());
+    }
+
+    [Fact]
+    public async Task TheArchive_StaysOnlineWhileTheWantedModuleIsOff()
+    {
+        // two switches, one snapshot: turning the board off must not take the archive with it
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        await ModuleAsync(ctx, host, PublicModules.Wanted, false);
+
+        Assert.Single(await host.Service.GetArchiveAsync());
+        Assert.Empty((await host.Service.GetBoardAsync()).Cards);
+    }
+
+    [Fact]
+    public async Task TheArchive_IsEmptyWhileTheKillSwitchIsOn()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        await host.Modules.KillSwitchSetAsync(true,
+            ClaimsPrincipalBuilder.Agent("admin").WithRank(Rank.Director).AsAdmin().Build());
+
+        Assert.Empty(await host.Service.GetArchiveAsync());
+    }
+
+    [Theory]
+    [InlineData("vs")]
+    [InlineData("tru")]
+    [InlineData("hrb")]
+    public async Task TheArchive_HidesACapturedNoticeWhoseRecordBecameClassified(string flag)
+    {
+        // the belt, not the hook: this test never touches the notice row
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+        Assert.Single(await host.Service.GetArchiveAsync());
+
+        await ClassifyAsync(ctx, p =>
+        {
+            switch (flag)
+            {
+                case "vs": p.IsClassified = true; break;
+                case "tru": p.IsTRUClassified = true; break;
+                default: p.IsHRBClassified = true; break;
+            }
+        });
+        DropCache(host);
+
+        Assert.Empty(await host.Service.GetArchiveAsync());
+    }
+
+    [Fact]
+    public async Task TheArchive_HidesACapturedNoticeWhoseRecordWasDeleted()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        await using (var db = ctx.NewContext())
+        {
+            var person = await db.People.SingleAsync(p => p.Id == PersonId);
+            person.IsDeleted = true;
+            await db.SaveChangesAsync();
+        }
+        DropCache(host);
+
+        Assert.Empty(await host.Service.GetArchiveAsync());
+    }
+
+    // ---- the retraction hook now covers Gefasst ----
+
+    [Fact]
+    public async Task RetractForRecord_PullsACapturedNoticeToo()
+    {
+        // before the archive existed this was harmless: a person caught in August and classified in September would
+        // otherwise keep photo, name and date on /gefasst forever
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        await host.Service.RetractForRecordAsync(PersonId, "Akte eingestuft", Leader());
+
+        await using var db = ctx.NewContext();
+        var row = await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id);
+        Assert.Equal(PublicWantedStatus.Zurueckgezogen, row.Status);
+        Assert.Empty(await host.Service.GetArchiveAsync());
+    }
+
+    [Fact]
+    public async Task Retracting_ACapturedNotice_IsAllowed()
+    {
+        // otherwise the only way off /gefasst would be deleting it — a silent depublication with no reason
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        await host.Service.RetractAsync(id, "Falsche Person", Leader());
+
+        Assert.Empty(await host.Service.GetArchiveAsync());
+    }
+
+    // ---- the photo endpoint, widened by one status ----
+
+    [Fact]
+    public async Task ThePhoto_OfACapturedNotice_IsServedWhileTheArchiveIsOn()
+    {
+        using var ctx = await SeededAsync();
+        var host = await PhotoHostAsync(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedWithPhotoAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        Assert.NotNull(await host.Service.GetPublishedPhotoAsync("NOOSE-FA-2026-0001"));
+    }
+
+    [Fact]
+    public async Task ThePhoto_OfACapturedNotice_IsGoneWhileTheArchiveIsOff()
+    {
+        // a per-entry gate, not "either module is on": switching the archive off has to take its pictures with it
+        using var ctx = await SeededAsync();
+        var host = await PhotoHostAsync(ctx);
+        var id = await PublishedWithPhotoAsync(host);
+
+        await host.Service.CapturedAsync(id, Leader());
+
+        Assert.Null(await host.Service.GetPublishedPhotoAsync("NOOSE-FA-2026-0001"));
+    }
+
+    [Fact]
+    public async Task ThePhoto_OfALiveNotice_IsGoneWhileTheBoardIsOff_EvenWithTheArchiveOn()
+    {
+        using var ctx = await SeededAsync();
+        var host = await PhotoHostAsync(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        await PublishedWithPhotoAsync(host);
+        Assert.NotNull(await host.Service.GetPublishedPhotoAsync("NOOSE-FA-2026-0001"));
+
+        await ModuleAsync(ctx, host, PublicModules.Wanted, false);
+
+        Assert.Null(await host.Service.GetPublishedPhotoAsync("NOOSE-FA-2026-0001"));
+    }
+
+    [Fact]
+    public async Task ThePhoto_OfACapturedNoticeOfAClassifiedRecord_IsGone()
+    {
+        using var ctx = await SeededAsync();
+        var host = await PhotoHostAsync(ctx);
+        await ModuleAsync(ctx, host, PublicModules.WantedArchive, true);
+        var id = await PublishedWithPhotoAsync(host);
+        await host.Service.CapturedAsync(id, Leader());
+
+        await ClassifyAsync(ctx, p => p.IsTRUClassified = true);
+        DropCache(host);
+
+        Assert.Null(await host.Service.GetPublishedPhotoAsync("NOOSE-FA-2026-0001"));
+    }
+
+    // ---- the view counter ----
+
+    [Fact]
+    public async Task CountView_IncrementsThePublishedRow()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await PublishedAsync(host);
+
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(2, (await db.OeffentlicheFahndungen.SingleAsync()).ViewCount);
+    }
+
+    [Fact]
+    public async Task CountView_LeavesTheModifiedStampAndTheAuditLogAlone()
+    {
+        // a tracked increment would stamp GeaendertAm, write one audit row per anonymous view and push the notice
+        // onto the person file's timeline on every page load
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await PublishedAsync(host);
+        DateTime? before;
+        int auditBefore;
+        await using (var db = ctx.NewContext())
+        {
+            before = (await db.OeffentlicheFahndungen.SingleAsync()).ModifiedAt;
+            auditBefore = await db.AuditLogs.CountAsync();
+        }
+
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+
+        await using var check = ctx.NewContext();
+        var row = await check.OeffentlicheFahndungen.SingleAsync();
+        Assert.Equal(before, row.ModifiedAt);
+        Assert.Equal(auditBefore, await check.AuditLogs.CountAsync());
+        Assert.Equal(1, row.ViewCount);
+    }
+
+    [Fact]
+    public async Task CountView_LeavesADraftAlone()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await DraftAsync(host);
+        await using (var db = ctx.NewContext())
+        {
+            var row = await db.OeffentlicheFahndungen.SingleAsync(f => f.Id == id);
+            row.CaseNumber = "NOOSE-FA-2026-0001";
+            await db.SaveChangesAsync();
+        }
+
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(0, (await check.OeffentlicheFahndungen.SingleAsync()).ViewCount);
+    }
+
+    [Fact]
+    public async Task CountView_LeavesARetractedNoticeAlone()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await host.Service.RetractAsync(id, "Grund", Leader());
+
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(0, (await db.OeffentlicheFahndungen.SingleAsync()).ViewCount);
+    }
+
+    [Fact]
+    public async Task CountView_LeavesAnExpiredNoticeAlone()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await PublishedAsync(host);
+        await ExpireInThePastAsync(ctx);
+
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(0, (await db.OeffentlicheFahndungen.SingleAsync()).ViewCount);
+    }
+
+    [Fact]
+    public async Task CountView_LeavesASoftDeletedNoticeAlone()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await host.Service.RetractAsync(id, "Grund", Leader());
+        await host.Service.DeleteAsync(id, Leader());
+
+        await host.Service.CountViewAsync("NOOSE-FA-2026-0001");
+
+        await using var db = ctx.NewContext();
+        var row = await db.OeffentlicheFahndungen.IgnoreQueryFilters().SingleAsync();
+        Assert.Equal(0, row.ViewCount);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("gibt-es-nicht")]
+    public async Task CountView_WithAnUnknownCaseNumber_DoesNothing(string caseNumber)
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await PublishedAsync(host);
+
+        await host.Service.CountViewAsync(caseNumber);
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(0, (await db.OeffentlicheFahndungen.SingleAsync()).ViewCount);
+    }
+
+    // ---- warning chips ----
+
+    [Fact]
+    public async Task TheBoard_RendersTheActiveHintsOfAPublishedNotice()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await PublishedAsync(host);
+
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+
+        var card = Assert.Single((await host.Service.GetBoardAsync()).Cards);
+        var chip = Assert.Single(card.Hints);
+        Assert.Equal("bewaffnet", chip.Label);
+        Assert.Equal("Error", chip.Colour);
+    }
+
+    [Fact]
+    public async Task DeactivatingAWarning_TakesItOffTheBoardWithoutTouchingTheNotice()
+    {
+        // read live, not copied onto the assignment: a warning that no longer applies must be retractable without
+        // editing forty notices by hand
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await PublishedAsync(host);
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+
+        await using (var db = ctx.NewContext())
+        {
+            (await db.Warnhinweise.SingleAsync()).IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        DropCache(host);
+
+        Assert.Empty(Assert.Single((await host.Service.GetBoardAsync()).Cards).Hints);
+    }
+
+    [Fact]
+    public async Task SetHints_WritesOneManualAuditRowAgainstTheNotice()
+    {
+        // FahndungWarnhinweis is not IAuditable, so the interceptor writes nothing on its own
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await DraftAsync(host);
+
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+
+        await using var db = ctx.NewContext();
+        var rows = await db.AuditLogs
+            .Where(a => a.EntityType == nameof(OeffentlicheFahndung) && a.EntityId == id)
+            .ToListAsync();
+        // filtered in memory, and on the prefix: the serializer escapes the umlaut to ü
+        Assert.Single(rows, a => a.ChangesJson is not null
+            && a.ChangesJson.Contains("Warnhinweise hinzugef", StringComparison.Ordinal)
+            && a.ChangesJson.Contains("bewaffnet", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SetHints_WithNoChange_WritesNothing()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await DraftAsync(host);
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+        int before;
+        await using (var db = ctx.NewContext())
+        {
+            before = await db.AuditLogs.CountAsync();
+        }
+
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(before, await check.AuditLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task SetHints_IgnoresAnInactiveWarning()
+    {
+        // a deactivated row must not reach the outside through a tampered dialog post
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "alt", "Info", active: false);
+        var id = await DraftAsync(host);
+
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+
+        await using var db = ctx.NewContext();
+        Assert.Empty(db.FahndungWarnhinweise);
+    }
+
+    [Fact]
+    public async Task SetHints_KeepsAnAssignmentWhoseWarningWasDeactivatedLater()
+    {
+        // narrowing the target to active rows alone would drop it unseen: the picker does not offer it and the
+        // editor marks it as inactive, so pressing "Übernehmen" without touching anything would destroy it
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await DraftAsync(host);
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+        await using (var db = ctx.NewContext())
+        {
+            (await db.Warnhinweise.SingleAsync()).IsActive = false;
+            await db.SaveChangesAsync();
+        }
+
+        // the round trip the editor makes: read the ids back, hand the same set in again
+        var current = await host.Service.GetHintIdsAsync(id, Leader());
+        await host.Service.SetHintsAsync(id, current, Leader());
+
+        Assert.Single(await host.Service.GetHintIdsAsync(id, Leader()));
+    }
+
+    [Fact]
+    public async Task SetHints_ForAFileTheActorMayNotRead_IsRefused()
+    {
+        // the write path used to check the file only for a live notice, while the read path always did — so an agent
+        // who knew a draft's id could chip a Verschlusssache and write an audit row against it
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await DraftAsync(host);
+        await ClassifyAsync(ctx, p => p.IsClassified = true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SetHintsAsync(id, [hint], Junior()));
+
+        await using var db = ctx.NewContext();
+        Assert.Empty(db.FahndungWarnhinweise);
+    }
+
+    [Fact]
+    public async Task SetHints_OnALiveNoticeOfAClassifiedRecord_IsRefused()
+    {
+        // chipping a live notice changes what is outside, so it answers to the same gates as an edit
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await PublishedAsync(host);
+        await ClassifyAsync(ctx, p => p.IsClassified = true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.Service.SetHintsAsync(id, [hint], Leader()));
+    }
+
+    [Fact]
+    public async Task SetHints_ByACitizen_IsRefused()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await DraftAsync(host);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.SetHintsAsync(id, [hint], Citizen()));
+    }
+
+    [Fact]
+    public async Task GetHintIds_ForAFileTheActorMayNotRead_IsEmpty()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var hint = await HintAsync(ctx, "bewaffnet", "Error");
+        var id = await DraftAsync(host);
+        await host.Service.SetHintsAsync(id, [hint], Leader());
+        await ClassifyAsync(ctx, p => p.IsClassified = true);
+
+        Assert.Empty(await host.Service.GetHintIdsAsync(id, Junior()));
+        Assert.Single(await host.Service.GetHintIdsAsync(id, Leader()));
+    }
+
+    // ---- expiry sweep ----
+
+    [Fact]
+    public async Task Expire_FlipsADueNoticeToAbgelaufen()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await LeadershipAsync(ctx);
+        await PublishedAsync(host);
+        await ExpireInThePastAsync(ctx);
+
+        Assert.Equal(1, await host.Service.ExpireDueAsync());
+
+        await using var db = ctx.NewContext();
+        Assert.Equal(PublicWantedStatus.Abgelaufen, (await db.OeffentlicheFahndungen.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Expire_LeavesEveryOtherStateAlone()
+    {
+        // Veroeffentlicht only, not "everything but Gefasst": a Beantragt row would die silently, without its open
+        // request being closed, and the nav badge would keep counting it
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await DraftAsync(host);
+        await host.Service.PublishAsync(id, "Begründung", Junior());
+        await using (var db = ctx.NewContext())
+        {
+            var row = await db.OeffentlicheFahndungen.SingleAsync();
+            row.ExpiresAt = DateTime.UtcNow.AddDays(-1);
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(0, await host.Service.ExpireDueAsync());
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(PublicWantedStatus.Beantragt, (await check.OeffentlicheFahndungen.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Expire_LeavesASoftDeletedNoticeAlone()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        await ExpireInThePastAsync(ctx);
+        await host.Service.RetractAsync(id, "Grund", Leader());
+        await host.Service.DeleteAsync(id, Leader());
+
+        Assert.Equal(0, await host.Service.ExpireDueAsync());
+    }
+
+    [Fact]
+    public async Task Expire_TellsLeadershipOncePerSweep_NotOncePerNotice()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await LeadershipAsync(ctx);
+        await PublishedAsync(host);
+        await ExpireInThePastAsync(ctx);
+
+        await host.Service.ExpireDueAsync();
+
+        await host.Notifications.Received(1).NotifyManyAsync(
+            Arg.Any<IReadOnlyCollection<string>>(), NotificationType.PublicWantedExpired,
+            Arg.Any<string>(), Arg.Is("/fahndung?tab=oeffentlich"), Arg.Is<string?>(x => x == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Expire_ASecondSweep_TellsNobodyAgain()
+    {
+        // the status change is the idempotency token; no NotifiedAt column needed
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await LeadershipAsync(ctx);
+        await PublishedAsync(host);
+        await ExpireInThePastAsync(ctx);
+        await host.Service.ExpireDueAsync();
+        host.Notifications.ClearReceivedCalls();
+
+        Assert.Equal(0, await host.Service.ExpireDueAsync());
+
+        await host.Notifications.DidNotReceive().NotifyManyAsync(
+            Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Expire_KeepsThePhotoCopy()
+    {
+        // expiry is reversible like a retraction: republishing is one click and must not silently come back blind
+        using var ctx = await SeededAsync();
+        var host = await PhotoHostAsync(ctx);
+        await LeadershipAsync(ctx);
+        await PublishedWithPhotoAsync(host);
+        await ExpireInThePastAsync(ctx);
+
+        await host.Service.ExpireDueAsync();
+
+        await using var db = ctx.NewContext();
+        Assert.Equal("oeffentlich.jpg", (await db.OeffentlicheFahndungen.SingleAsync()).PhotoFileName);
+        host.PublicFiles.DidNotReceive().Delete("oeffentlich.jpg");
+    }
+
+    [Fact]
+    public async Task AnExpiredNotice_LeavesTheBoardEvenBeforeTheSweepRuns()
+    {
+        // the worker is not a security control: the read path already filters by date
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await PublishedAsync(host);
+        await ExpireInThePastAsync(ctx);
+        DropCache(host);
+
+        Assert.Empty((await host.Service.GetBoardAsync()).Cards);
+    }
+
+    // ---- the Discord announcement ----
+
+    [Fact]
+    public async Task Publishing_PushesOneMessageToThePublicChannel()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        await PublishedAsync(host);
+
+        await host.Discord.Received(1).PushCustomAsync(NotificationType.PublicWantedPublished,
+            Arg.Any<string>(), "/gesucht/NOOSE-FA-2026-0001", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Publishing_WritesNoInAppNotification()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        await PublishedAsync(host);
+
+        await host.Notifications.DidNotReceive().NotifyManyAsync(
+            Arg.Any<IReadOnlyCollection<string>>(), NotificationType.PublicWantedPublished, Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ThePushText_NamesNeitherTheRecordCaseNumberNorACodename()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+
+        await PublishedAsync(host);
+
+        await host.Discord.Received(1).PushCustomAsync(
+            NotificationType.PublicWantedPublished,
+            Arg.Is<string>(text => text.Contains("Max Mustermann", StringComparison.Ordinal)
+                && text.Contains("NOOSE-FA-2026-0001", StringComparison.Ordinal)
+                && !text.Contains("NOOSE-P-", StringComparison.Ordinal)
+                && !text.Contains("Falcon", StringComparison.Ordinal)
+                && !text.Contains("Waffenhandel", StringComparison.Ordinal)),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ARankTwoRequest_PushesNothing()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await DraftAsync(host);
+
+        await host.Service.PublishAsync(id, "Begründung", Junior());
+
+        await host.Discord.DidNotReceive().PushCustomAsync(Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApprovingARequest_PushesTheSameOneMessage()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await DraftAsync(host);
+        await host.Service.PublishAsync(id, "Begründung", Junior());
+        var requestId = await OpenRequestIdAsync(ctx);
+
+        await host.Service.ApprovePublicationRequestAsync(requestId, null, Leader());
+
+        await host.Discord.Received(1).PushCustomAsync(NotificationType.PublicWantedPublished,
+            Arg.Any<string>(), "/gesucht/NOOSE-FA-2026-0001", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetractingCapturingAndEditing_PushNothing()
+    {
+        // a depublication notice in the public channel would point at a page that is no longer there
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await PublishedAsync(host);
+        host.Discord.ClearReceivedCalls();
+
+        await host.Service.UpdateSnapshotAsync(
+            new PublicWantedInput { Id = id, DisplayName = "Max Mustermann" }, Leader());
+        await host.Service.CapturedAsync(id, Leader());
+        await host.Service.RetractAsync(id, "Grund", Leader());
+
+        await host.Discord.DidNotReceive().PushCustomAsync(Arg.Any<NotificationType>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void ThePushComposer_TakesOnlyOutwardTypes()
+    {
+        // the riddle is the parameter type, not the care taken: PublicWantedCard structurally cannot carry a
+        // PersonId, the internal case number, a codename or a score, so the message cannot either
+        var method = typeof(PublicWantedService)
+            .GetMethod("PushPublishedAsync", System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var offenders = method!.GetParameters()
+            .Select(p => p.ParameterType)
+            .Where(t => t != typeof(CancellationToken) && t != typeof(PublicWantedCard)
+                && t != typeof(PublicWantedDetail))
+            .Select(t => t.Name)
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Discord-Text darf nur Nach-außen-Typen sehen: " + string.Join(", ", offenders));
+    }
+
+    // ---- phase 5 helpers ----
+
+    /// <summary>Draft with the first file photo selected, published; the copy is named oeffentlich.jpg.</summary>
+    private static async Task<string> PublishedWithPhotoAsync(Host host)
+    {
+        var id = await DraftAsync(host);
+        await host.Service.UpdateSnapshotAsync(
+            new PublicWantedInput { Id = id, DisplayName = "Max Mustermann", PhotoSourceId = "foto-1" }, Leader());
+        await host.Service.PublishAsync(id, null, Leader());
+        return id;
+    }
+
+    /// <summary>Adds one warning to the value list and returns its id.</summary>
+    private static async Task<string> HintAsync(SqliteTestContext ctx, string name, string colour, bool active = true)
+    {
+        await using var db = ctx.NewContext();
+        var row = new Warnhinweis { Name = name, Colour = colour, SortOrder = 10, IsActive = active };
+        db.Warnhinweise.Add(row);
+        await db.SaveChangesAsync();
+        return row.Id;
+    }
+
+    /// <summary>Publishes and then backdates the expiry, which the editor path would round to the end of a day.</summary>
+    private static async Task ExpireInThePastAsync(SqliteTestContext ctx)
+    {
+        await using var db = ctx.NewContext();
+        var row = await db.OeffentlicheFahndungen.SingleAsync();
+        row.ExpiresAt = DateTime.UtcNow.AddHours(-1);
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>One leadership account, so the expiry sweep has somebody to tell.</summary>
+    private static async Task LeadershipAsync(SqliteTestContext ctx)
+    {
+        await using var db = ctx.NewContext();
+        db.Users.Add(Seed.Agent("chef", Rank.Director));
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<string> OpenRequestIdAsync(SqliteTestContext ctx)
+    {
+        await using var db = ctx.NewContext();
+        return (await db.Requests.SingleAsync(a => a.Type == RequestType.Veroeffentlichung)).Id;
     }
 
     private static async Task SetChargeAsync(SqliteTestContext ctx, string id, string html)

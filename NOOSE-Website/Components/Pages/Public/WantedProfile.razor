@@ -4,6 +4,7 @@
 @attribute [ExcludeFromInteractiveRouting]
 @using NOOSE_Website.Models.Public
 @inject IPublicWantedService Wanted
+@inject IPublicModuleService Modules
 
 <PageTitle>@(_entry?.DisplayName ?? "Gesucht") · NOOSE</PageTitle>
 
@@ -55,6 +56,9 @@
                         <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_entry.CaseNumber</MudChip>
                     </MudStack>
 
+                    <WarnhinweisChips Hints="@_entry.Hints" />
+
+                    @* stays even without curated warnings: it holds for every notice *@
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
                         Nicht selbst eingreifen. Beobachtungen bitte der nächsten Dienststelle melden.
                     </MudAlert>
@@ -86,10 +90,16 @@
                         </MudText>
                     }
 
-                    <div>
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                         <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.ArrowBack">Zur Fahndungsübersicht</MudButton>
-                    </div>
+                        @if (_mayPrint)
+                        {
+                            <MudButton Href="@($"/gesucht/{_entry.CaseNumber}/druck")" Variant="Variant.Text"
+                                       Color="Color.Default" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Print">Poster drucken</MudButton>
+                        }
+                    </MudStack>
                 </MudStack>
             </MudItem>
         </MudGrid>
@@ -102,6 +112,7 @@
     public string CaseNumber { get; set; } = string.Empty;
 
     private PublicWantedDetail? _entry;
+    private bool _mayPrint;
     private string? _loadedKey;
 
     // navigating from one case number to another stays on this route template, so Blazor reuses the instance and
@@ -121,6 +132,20 @@
         {
             /* best effort */
             _entry = null;
+        }
+
+        if (_entry is not null)
+        {
+            // its own try: a failure reading the poster switch must not blank the profile, it may only cost the button
+            try { _mayPrint = (await Modules.GetAsync()).IsEnabled(PublicModules.WantedPrint); }
+            catch { /* best effort */ }
+        }
+
+        if (_entry is not null)
+        {
+            // counted here and only here: the photo endpoint would count thumbnails rather than readers, and the
+            // poster is opened from a profile that already counted
+            try { await Wanted.CountViewAsync(_entry.CaseNumber); } catch { /* best effort */ }
         }
     }
 

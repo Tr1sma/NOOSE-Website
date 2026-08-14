@@ -73,6 +73,27 @@ public class PublicModulesCatalogTests
     }
 
     [Fact]
+    public void TheArchive_IsBuiltButStillOffByDefault()
+    {
+        var archive = PublicModules.All.Single(m => m.Key == PublicModules.WantedArchive);
+
+        Assert.True(archive.Available);
+        Assert.False(archive.DefaultEnabled);
+        Assert.Equal("/gefasst", archive.NavRoute);
+    }
+
+    [Fact]
+    public void ThePoster_IsBuiltButHasNoNavTab()
+    {
+        // reached from a profile, not from a tab — so it ships Available with no nav route at all
+        var poster = PublicModules.All.Single(m => m.Key == PublicModules.WantedPrint);
+
+        Assert.True(poster.Available);
+        Assert.False(poster.DefaultEnabled);
+        Assert.Null(poster.NavRoute);
+    }
+
+    [Fact]
     public void Every_nav_route_counts_as_public_for_the_crawler()
     {
         // a module can otherwise be public in the nav and noindex to the crawler at the same time

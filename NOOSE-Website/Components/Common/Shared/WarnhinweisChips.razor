@@ -1,0 +1,20 @@
+@* Renders the warning chips of a notice; used internally and on the public pages. *@
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+
+@if (Hints.Count > 0)
+{
+    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+        @foreach (var hint in Hints)
+        {
+            <MudChip T="string" Size="@Size" Variant="Variant.Filled"
+                     Color="@WarnhinweisColours.Resolve(hint.Colour)">@hint.Label</MudChip>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PublicWantedHint> Hints { get; set; } = [];
+
+    [Parameter] public Size Size { get; set; } = Size.Small;
+}

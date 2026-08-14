@@ -23,10 +23,22 @@ public partial class PublicPageScanTests
     [
         "<RichHtml", "MentionDisplay", "MentionInput", "MentionText", "MentionPicker", "IgnoreQueryFilters",
         "ThreatScore", "IsClassified", "AuditLog", "AccessLog", "db.Users",
+        // a public page reads through a service, never through the context itself
+        "IDbContextFactory", "AppDbContext",
+        // PrintFrame prints through JS interop (dead without a circuit) and renders "von {PrintedBy}"
+        "PrintFrame",
     ];
 
-    /// <summary>The applicant invite page uses the narrow applicant shell; every other attribute still applies to it.</summary>
-    private const string LayoutExempt = "Invite.razor";
+    /// <summary>Pages that legitimately sit in another shell — the exemption covers the layout line only.</summary>
+    /// <remarks>
+    /// A set rather than one constant so the next exemption is a decision with a reason, not an overwritten string.
+    /// Moving a page out of this folder to escape a failure would drop it from all four scans at once.
+    /// </remarks>
+    private static readonly Dictionary<string, string> LayoutExempt = new(StringComparer.Ordinal)
+    {
+        ["Invite.razor"] = "applicant invite: uses the narrow applicant shell",
+        ["WantedPoster.razor"] = "print poster: PrintLayout is the document shell, and it pulls its own module gate",
+    };
 
     private static string Root([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website", "Components"));
@@ -116,7 +128,7 @@ public partial class PublicPageScanTests
                 var text = Code(f);
                 // the exemption covers the layout line only; anonymous and static apply to every public page
                 var layoutOk = text.Contains("@layout PublicSiteLayout", StringComparison.Ordinal)
-                    || Path.GetFileName(f) == LayoutExempt;
+                    || LayoutExempt.ContainsKey(Path.GetFileName(f));
                 return !text.Contains("[AllowAnonymous]", StringComparison.Ordinal)
                     || !text.Contains("[ExcludeFromInteractiveRouting]", StringComparison.Ordinal)
                     || !layoutOk;

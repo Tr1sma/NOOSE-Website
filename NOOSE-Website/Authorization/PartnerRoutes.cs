@@ -1,3 +1,5 @@
+using NOOSE_Website.Services.Public;
+
 namespace NOOSE_Website.Authorization;
 
 /// <summary>Relative routes a partner may open; everything else is blocked centrally (MainLayout/PrintLayout).</summary>
@@ -36,6 +38,12 @@ public static class PartnerRoutes
             return true;
         }
         if (IsDocumentAuthoringRoute(path))
+        {
+            return true;
+        }
+        // a public route is never blocked for a partner: he can open the same page logged out, so the refusal would
+        // claim a restriction that does not exist
+        if (PublicRoutes.IsPublic("/" + path))
         {
             return true;
         }

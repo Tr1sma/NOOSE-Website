@@ -17,6 +17,7 @@ public class PublicRoutesTests
     [InlineData("/gesucht/NOOSE-FA-2026-0001")]
     [InlineData("/gesucht/NOOSE-FA-2026-0001/foto")]
     [InlineData("/gesucht/NOOSE-FA-2026-0001/druck")]
+    [InlineData("/gefasst")]
     [InlineData("/GESUCHT")]
     [InlineData("/datenschutz")]
     [InlineData("/nutzungsbedingungen")]

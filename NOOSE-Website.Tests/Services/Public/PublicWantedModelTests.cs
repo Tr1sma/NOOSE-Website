@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Reflection;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
 
@@ -5,8 +7,10 @@ namespace NOOSE_Website.Tests.Services.Public;
 
 /// <summary>Anonymity is structural: what a public projection cannot carry, no page can render by accident.</summary>
 /// <remarks>
-/// The list of outward types is positive on purpose. An exemption list is granted per file and widens silently the
-/// moment someone drops a new outward DTO into an exempt file; naming the types instead makes a new one a decision.
+/// Every type in <c>NOOSE_Website.Models.Public</c> is decided either way — outward or inward, each with a reason.
+/// The list used to be outward-only and hand-kept, which meant a brand-new outward DTO was simply unlisted and no
+/// test went red. Reflection over the namespace turns that into a decision, the same mechanism as
+/// <c>PublicVisibility</c>.
 /// </remarks>
 public class PublicWantedModelTests
 {
@@ -15,6 +19,8 @@ public class PublicWantedModelTests
     [
         typeof(PublicWantedCard),
         typeof(PublicWantedDetail),
+        typeof(PublicWantedArchiveCard),
+        typeof(PublicWantedHint),
         typeof(PublicWantedBoard),
         typeof(PublicWantedPhoto),
         typeof(PublicPageLink),
@@ -25,6 +31,27 @@ public class PublicWantedModelTests
         typeof(NOOSE_Website.Models.Recruiting.CareerRequirement),
     ];
 
+    /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
+    private static readonly Dictionary<Type, string> Inward = new()
+    {
+        [typeof(PublicWantedEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aufrufzähler.",
+        [typeof(PublicWantedDraft)] = "Die eine Ausschreibung im Editor, inklusive Entwurfs-HTML.",
+        [typeof(PublicWantedOptions)] = "Foto- und Gegend-Auswahl aus der Akte; live gelesen, nie Snapshot.",
+        [typeof(PublicWantedPhotoOption)] = "Ein Aktenfoto zur Auswahl im Editor.",
+        [typeof(PublicWantedBanner)] = "Warnbanner auf der Personenakte; rein intern.",
+        [typeof(PublicWantedRequestRow)] = "Offener Veröffentlichungsantrag im Posteingang.",
+        [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
+        [typeof(PublicPageEdit)] = "Zeile der Redaktionsliste mit internem Bearbeiter.",
+        [typeof(PublicPageInput)] = "Formulareingabe des Seiteneditors.",
+        [typeof(PublicModuleDefinition)] = "Katalogzeile aus dem Code; Konfiguration, kein Inhalt.",
+        [typeof(PublicModuleSnapshot)] = "Schalterstand samt Not-Aus; die Seiten lesen daraus nur IsEnabled.",
+        [typeof(PublicModuleInput)] = "Formulareingabe des Modul-Panels.",
+        [typeof(CitizenRow)] = "Bürgerkonto in der Verwaltungsliste; enthält den Klarnamen.",
+        [typeof(WarnhinweisUsage)] = "Werteliste-Zeile mit Verwendungszähler; nach außen geht nur das Label.",
+        [typeof(WarnhinweisOption)] = "Auswahl im Editor-Picker; trägt die Zeilen-Id.",
+        [typeof(WarnhinweisInput)] = "Formulareingabe des Warnhinweis-Dialogs.",
+    };
+
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>
     private static readonly string[] Forbidden =
     [
@@ -33,10 +60,54 @@ public class PublicWantedModelTests
         "PublishedBy", "CreatedBy", "ModifiedBy", "DeletedBy",
     ];
 
+    /// <summary>Outward types plus the element types of any collection they expose.</summary>
+    private static IEnumerable<Type> OutwardClosure()
+    {
+        var seen = new HashSet<Type>(Outward);
+        foreach (var type in Outward)
+        {
+            foreach (var property in type.GetProperties())
+            {
+                // without this a list of chips on the detail record would go unchecked
+                if (property.PropertyType.IsGenericType
+                    && typeof(IEnumerable).IsAssignableFrom(property.PropertyType))
+                {
+                    foreach (var argument in property.PropertyType.GetGenericArguments())
+                    {
+                        if (argument.Namespace?.StartsWith("NOOSE_Website.Models", StringComparison.Ordinal) == true)
+                        {
+                            seen.Add(argument);
+                        }
+                    }
+                }
+            }
+        }
+        return seen;
+    }
+
+    [Fact]
+    public void EveryPublicModel_IsDecidedOutwardOrInward()
+    {
+        var undecided = typeof(PublicWantedCard).Assembly
+            .GetTypes()
+            .Where(t => t.Namespace == "NOOSE_Website.Models.Public")
+            // static classes (IsAbstract && IsSealed) are display helpers, not projections
+            .Where(t => t.IsPublic && !t.IsEnum && !t.IsInterface && !t.IsNested
+                && !(t.IsAbstract && t.IsSealed))
+            .Where(t => !Outward.Contains(t) && !Inward.ContainsKey(t))
+            .Select(t => t.Name)
+            .Order()
+            .ToArray();
+
+        Assert.True(undecided.Length == 0,
+            "Jedes Modell des öffentlichen Bereichs ist entweder Nach-außen oder Nach-innen — mit Begründung: "
+            + string.Join(", ", undecided));
+    }
+
     [Fact]
     public void OutwardModels_CarryNoInternalIdentifier()
     {
-        var offenders = Outward
+        var offenders = OutwardClosure()
             .SelectMany(t => t.GetProperties().Select(p => (Type: t, p.Name)))
             .Where(x => Forbidden.Any(f => x.Name.Contains(f, StringComparison.Ordinal)))
             .Select(x => $"{x.Type.Name}.{x.Name}")
@@ -49,7 +120,7 @@ public class PublicWantedModelTests
     [Fact]
     public void OutwardModels_CarryNoBareRecordId()
     {
-        var offenders = Outward
+        var offenders = OutwardClosure()
             .SelectMany(t => t.GetProperties().Select(p => (Type: t, p.Name)))
             .Where(x => x.Name == "Id")
             .Select(x => $"{x.Type.Name}.{x.Name}")
@@ -65,7 +136,7 @@ public class PublicWantedModelTests
     {
         // the hazard level goes out, the raw 0-100 value does not: it is the output of the scoring algorithm and
         // watched over time it says when NOOSE acted
-        var offenders = Outward
+        var offenders = OutwardClosure()
             .SelectMany(t => t.GetProperties().Select(p => (Type: t, p.Name, p.PropertyType)))
             .Where(x => x.Name.Contains("Score", StringComparison.Ordinal)
                 || (x.Name.Contains("Hazard", StringComparison.Ordinal) && x.PropertyType != typeof(HazardLevel)))
@@ -77,10 +148,50 @@ public class PublicWantedModelTests
     }
 
     [Fact]
+    public void NoOutwardModelExposesAViewCounter()
+    {
+        // a reach figure is a statement about the agency's own operation; it lives on the internal projection only
+        var offenders = OutwardClosure()
+            .SelectMany(t => t.GetProperties().Select(p => (Type: t, p.Name)))
+            .Where(x => x.Name.Contains("ViewCount", StringComparison.Ordinal)
+                || x.Name.Contains("Aufruf", StringComparison.Ordinal))
+            .Select(x => $"{x.Type.Name}.{x.Name}")
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Aufrufzähler bleibt drinnen: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
     public void TheWantedDetail_CarriesTheHazardLevelAsAnEnum()
     {
         var property = typeof(PublicWantedDetail).GetProperty(nameof(PublicWantedDetail.HazardLevel));
         Assert.NotNull(property);
         Assert.Equal(typeof(HazardLevel), property!.PropertyType);
+    }
+
+    [Fact]
+    public void TheArchiveCard_CarriesNoHazardLevelNoAccusationNoAreaAndNoVehicle()
+    {
+        // its own type rather than nullable fields on the board card: the archive states that someone was caught,
+        // it does not restate the allegation
+        var names = typeof(PublicWantedArchiveCard).GetProperties().Select(p => p.Name).ToArray();
+
+        Assert.DoesNotContain("HazardLevel", names);
+        Assert.DoesNotContain("ChargeHtml", names);
+        Assert.DoesNotContain("LastArea", names);
+        Assert.DoesNotContain("VehicleText", names);
+        Assert.Contains("CapturedAt", names);
+    }
+
+    [Fact]
+    public void TheHint_CarriesOnlyALabelAndAColour()
+    {
+        var properties = typeof(PublicWantedHint).GetProperties()
+            .Where(p => p.DeclaringType == typeof(PublicWantedHint))
+            .ToArray();
+
+        Assert.Equal(2, properties.Length);
+        Assert.All(properties, p => Assert.Equal(typeof(string), p.PropertyType));
     }
 }

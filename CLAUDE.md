@@ -456,8 +456,9 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–4 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten und die
-öffentliche Fahndung. Kopfgeld, Hinweise, Tickets, Presse und die öffentlichen Zahlen sind geplant, aber
+Gebaut sind Phase 1–5 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
+öffentliche Fahndung und ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
+Discord-Push). Kopfgeld, Hinweise, Tickets, Presse und die öffentlichen Zahlen sind geplant, aber
 **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
@@ -615,17 +616,104 @@ Gebaut sind Phase 1–4 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst,
     `TimelineDisplay.MapAudit` durch den Schwanz und läse sich als „Akte geändert". Der Zeitstrahl kommt über
     den Fan-out in `TimelineService.AuditSourceAsync` — und der verlangt **vier** Registrierungen, nicht drei:
     `AuditSourceAsync`, `MapAudit`, `AuditEntityDisplay` **und `ChronikParentResolver`**.
-  - **`AufrufZaehler` ist deklariert und wird in Phase 4 nie geschrieben.** Ein Inkrement auf einer
-    `IAuditable`-Zeile schriebe eine `AuditLog`-Zeile pro anonymem Aufruf; Phase 5 zählt über `ExecuteUpdateAsync`.
+  - **Der Aufrufzähler ist die dritte dokumentierte Ausnahme von „Bulk-Write ⇒ Guard selbst rufen"** (neben
+    Score-Writes und `FactionRecency.StampAsync`): es gibt keinen `ClaimsPrincipal`, der Aufrufer ist ein anonymer
+    Besucher, und die eine Zahl verlässt das Haus nie. `CountViewAsync` schreibt über `ExecuteUpdateAsync`, weil ein
+    getracktes Inkrement `GeaendertAm` stempeln, **eine `AuditLog`-Zeile pro anonymem Aufruf** schreiben und die
+    Ausschreibung bei jedem Seitenaufruf auf den Zeitstrahl der Personenakte schieben würde. Das ganze
+    Publikations-Prädikat steht im `Where`, nicht in einem vorgelagerten Lesen — ein zählender Schreibvorgang darf
+    eine Zeile, die nicht draußen ist, baulich nicht berühren. Gezählt wird **nur** in `WantedProfile`: der
+    Foto-Endpoint zählte Thumbnails statt Leser, und das Poster wird von einem Steckbrief aus geöffnet, der schon
+    gezählt hat.
   - **Das Panel in `PersonDetail` liegt außerhalb des `einstufung`-Abschnitts** (`@if (!_isPartner)`):
     `PartnerTabCatalog` listet diesen Slug, dort wäre alles einem freigegebenen Partner sichtbar. Der Warnbanner
     zeigt nur `Veroeffentlicht` — ein `Beantragt` ist nicht draußen und verriete eine offene interne Entscheidung.
     Der Übersichts-Abschnitt auf `/fahndung?tab=oeffentlich` hängt in `AuthorizeView Policy="InternalAgent"`,
     weil `/fahndung` keine Seiten-Policy trägt und `ActiveAgent` erbt — was ein Partner erfüllt.
-  - **`/gesucht` steht in `DemoModeMiddleware.ExcludedPrefixes`** — sonst trägt ein anonymer Besucher bei
-    aktivem Demo-Modus das Demo-Principal.
-  - Die öffentlichen Seiten heißen `WantedHub`/`WantedProfile`, **nicht** `WantedBoard`: `Services/WantedBoard.cs`
-    ist eine global importierte statische Klasse, und `/fahndung` bleibt die interne Seite.
+  - **`DemoModeMiddleware.ExcludedPrefixes` wird aus `PublicRoutes.Prefixes` abgeleitet**, nicht ein zweites Mal
+    gepflegt — sonst trägt ein anonymer Besucher bei aktivem Demo-Modus das Demo-Principal. `/gesucht` stand dort
+    von Hand; `/gefasst` ist eine **Geschwister**-Route, kein Kind davon, und wäre genauso durchgerutscht. Ebenso
+    gibt `PartnerRoutes.IsAllowed` für jede öffentliche Route `true` zurück: ein Partner kann dieselbe Seite
+    abgemeldet öffnen, die Sperrmeldung behauptete also eine Einschränkung, die es nicht gibt.
+  - Die öffentlichen Seiten heißen `WantedHub`/`WantedProfile`/`WantedArchiveHub`/`WantedPoster`, **nicht**
+    `WantedBoard`: `Services/WantedBoard.cs` ist eine global importierte statische Klasse, und `/fahndung` bleibt
+    die interne Seite.
+
+- **Phase 5 (Ausbau) — was daran anders ist als am Rest des öffentlichen Bereichs:**
+  - **Genau ein Speicherpfad, genau ein Cache-Schlüssel.** `PublicWantedService.SaveAndInvalidateAsync` ist die
+    einzige Stelle mit `SaveChangesAsync` **und** die einzige mit `cache.Remove`; ein Dateiscan
+    (`PublicWantedCacheDisciplineTests`) hält das fest, samt „kein zweiter Produktionsdateiname kennt den
+    Schlüssel". Board und Archiv liegen deshalb in **einem** Snapshot-Record: sie stammen aus derselben Tabelle,
+    werden von denselben Schreibpfaden ungültig, und „gefasst setzen" verschiebt eine Zeile zwischen beiden Listen
+    auf einmal. Ein zweiter Schlüssel verdoppelte jede Invalidierungsstelle. Die **Modul-Flags** werden weiterhin
+    außerhalb des Caches gelesen, je Menge eines: Archiv aus darf das Board nicht mitnehmen und umgekehrt.
+  - **Das Warnhinweis-Label ist der einzige Außenwert, der live gelesen wird** statt auf der Snapshot-Zeile zu
+    stehen. Bewusst: ein Warnhinweis ist ein redaktionelles Etikett der Behörde, kein Akteninhalt — eine Kopie
+    ließe einen korrigierten Tippfehler auf jedem laufenden Poster stehen, und `IstAktiv = false` müsste vierzig
+    Ausschreibungen einzeln nacharbeiten. **Der Preis:** das Label geht ohne Publikationsschritt live, also prüft
+    `WarnhinweisService` beim Schreiben dieselben drei Regeln wie ein Vorwurf (Klartext, keine `@{…}`-Erwähnung,
+    kein `{{`-Platzhalter) plus Längendeckel. Die **Farbe** ist eine Allowlist (`WarnhinweisColours`) — **nie
+    `Enum.Parse`**: ein in der Spalte gelandeter Wert wäre auf einer `[AllowAnonymous]`-Seite ein HTTP 500,
+    dieselbe Klasse wie `?vorschau=1`. Unsichtbare Farben (`Inherit`, `Transparent`, `Surface`, `Dark`) stehen
+    nicht drin; ein Warnhinweis, den niemand sieht, ist schlechter als keiner.
+  - **`Gefasst` gehört in die Rückzugs-Statusmenge.** `PubliclyVisible` (= `Veroeffentlicht`, `Beantragt`,
+    `Gefasst`) wird von `RetractForRecordAsync` **und** dem Guard von `RetractAsync` benutzt — kein zweites
+    Literal-Array. Ohne das zeigte `/gefasst` weiter Foto, Namen und Datum einer Person, die im August gefasst und
+    im September als Informant eingestuft wird; und der einzige Weg aus dem Archiv wäre `DeleteAsync` gewesen, also
+    eine stille Depublikation ohne Grund auf der Akte.
+  - **`/gefasst` ist eine Liste und verlinkt auf nichts.** `/gesucht/{az}` antwortet für eine gefasste Zeile weiter
+    „nicht gefunden"; ein Link dorthin wäre eine Sackgasse und suggerierte eine laufende Fahndung. Eigener
+    Nach-außen-Record `PublicWantedArchiveCard` statt nullable Felder auf der Board-Karte — was nicht auf dem Typ
+    ist, kann keine Seite versehentlich rendern. Gedeckelt auf die 100 jüngsten.
+  - **Der Foto-Endpoint bleibt unverändert.** `GetPublishedPhotoAsync` weitet intern auf `Gefasst`, steigt aber
+    weiter **nur** über den Snapshot ein (also durch den Unterdrückungsgürtel) und prüft **das Modul der Menge,
+    in der es die Zeile gefunden hat**. Kein Query-Parameter: der wäre angreifer-kontrolliert und machte
+    „gefasst?" getrennt von „veröffentlicht?" abfragbar — genau das Existenz-Orakel, das die eine `404` verhindert.
+  - **Das Poster benutzt `PrintFrame` nicht.** Das druckt über JS-Interop in `OnAfterRenderAsync` und
+    `MudButton OnClick` — beides tot auf einer `[ExcludeFromInteractiveRouting]`-Seite, also *stumm* kaputt — und
+    rendert „Gedruckt am … von {PrintedBy}", den VS-Stempel und „NOOSE-interne Akte". Stattdessen ein eigener
+    statischer Rahmen mit rohem `onclick="window.print()"`, **ohne** Auto-Druck. Die Seite bleibt unter
+    `Components/Pages/Public/` (ein Umzug nähme sie aus **allen vier** `PublicPageScanTests`-Prüfungen), zieht
+    **beide** Modul-Gates selbst — `PrintLayout` trägt weder `PublicNav` noch den Not-Aus-Banner — und trägt
+    **immer** `noindex`, nicht nur im Nichtgefunden-Fall.
+  - **Zwei `NotificationType`-Werte, nicht einer.** `NotificationService.NotifyManyAsync` ruft am Ende unbedingt
+    `discord.PushAsync`, also schriebe ein routbarer Betriebs-Typ jede abgelaufene Ausschreibung in den
+    öffentlichen Kanal. `PublicWantedPublished` ist routbar, `PublicWantedExpired` bewusst nicht. Der Push sitzt
+    **nach dem Commit** in `PublishRowAsync` (eine Discord-Nachricht lässt sich nicht zurückrufen) und nimmt als
+    Parameter **nur** einen `PublicWantedCard` — dieser Record kann `PersonId`, das interne `NOOSE-P-`-Aktenzeichen,
+    einen Codenamen oder einen Score strukturell nicht tragen, also die Nachricht auch nicht. Kein Vorwurfstext:
+    nach einem Rückzug ist der Post dann ein toter Link statt einer stehengebliebenen Anschuldigung.
+  - **Der Ablauf-Worker ist keine Sicherheitskontrolle.** `LoadAsync` filtert `ExpiresAt > now` ohnehin; ein toter,
+    verspäteter oder doppelt laufender Worker leakt nichts, er lässt nur den internen Status unehrlich. Genau
+    deshalb darf niemand den Ablauf-Filter aus dem Lesepfad entfernen, „weil der Worker das jetzt macht". Er hält
+    keinen `DbContext` (Gürtel, Statusregeln und Cache-Invalidierung dürfen nicht an einer zweiten Stelle liegen),
+    nimmt **nur** `Veroeffentlicht` (ein `Beantragt` mit Ablaufdatum stürbe sonst still, ohne dass sein offener
+    Antrag geschlossen wird), rechnet in `UtcNow` und schickt **eine** Sammelmeldung je Lauf. Der Statuswechsel ist
+    der Idempotenz-Token — deshalb braucht die Tabelle keine `NotifiedAt`-Spalte, anders als `Followup`.
+  - **Eine Chip-Zuordnung überlebt das Deaktivieren ihres Warnhinweises.** `SetHintsAsync` nimmt Zeilen an, die
+    *aktiv **oder** bereits zugeordnet* sind: **Hinzufügen** bleibt auf aktive beschränkt (der Riegel gegen einen
+    manipulierten Dialog-Post), **Bestehendes** bleibt. Nur-aktiv hätte die Zuordnung beim nächsten „Übernehmen"
+    still gelöscht — der Picker bietet einen inaktiven nicht an, der Agent sähe also nicht, was er zerstört.
+    Der Editor zeigt ihn deshalb grau mit „(inaktiv, nicht öffentlich)". Und der Schreibpfad prüft die
+    **Aktensichtbarkeit immer**, nicht nur bei einer laufenden Ausschreibung — sonst könnte, wer die Id eines
+    Entwurfs kennt, eine Verschlusssache bechippen und eine Audit-Zeile gegen sie schreiben.
+  - **`MySqlTranslationTests` kompiliert die neuen Abfrageformen gegen Pomelo, nicht gegen SQLite.** Alle
+    Integrationstests laufen auf SQLite, das ein anderer Übersetzer ist; eine dort akzeptierte Form kann auf
+    Pomelo mit „could not be translated" werfen — zur Laufzeit, auf einer anonymen Seite. `ToQueryString()`
+    kompiliert ohne Verbindung, der Test braucht also keinen Server. Neue Abfrageform im öffentlichen Bereich
+    ⇒ eine Zeile dort.
+  - **`WatchlistRecordRollup` ist die fünfte Registry**, die eine neue auditierte Entität braucht. Ihr Default-Arm
+    **warnt nur**, also lief der ganze öffentliche Bereich seit Phase 1 mit einer Logzeile pro Schreibvorgang —
+    im Serverlog aufgefallen, nicht im Test. `OeffentlicheFahndung` rollt auf ihre `Person` (Publizieren ist die
+    folgenreichste Änderung, die einer Akte passieren kann), die übrigen öffentlichen Tabellen sind „not watchable".
+  - **`PublicWantedModelTests` ist keine handgepflegte Liste mehr**, sondern Reflection über den ganzen Namensraum
+    `Models.Public`: jeder Record steht in `Outward` **oder** in `Inward` — mit Begründung, Muster
+    `PublicVisibility`. Vorher war ein neuer Nach-außen-Record schlicht ungelistet und nichts wurde rot. Generische
+    Argumente von Sammlungs-Properties werden mitgescannt, sonst bliebe `IReadOnlyList<PublicWantedHint>` ungeprüft.
+  - **`AuditEntityDisplay`-Wächter nur für den öffentlichen Bereich.** Rund siebzig interne Kindtabellen laufen seit
+    jeher ohne Label; das zu beheben ist eigene Arbeit. Und geprüft wird gegen die **Quelle**, nicht gegen
+    `Label(name) != name`: „Warnhinweis" liest sich in beiden Sprachen gleich, ein Wertvergleich hielte den
+    korrekten Arm für einen Treffer.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.

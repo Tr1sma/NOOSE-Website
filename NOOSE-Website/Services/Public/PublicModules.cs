@@ -51,9 +51,10 @@ public static class PublicModules
         new(WantedVehicles, "Gesuchte Fahrzeuge & Waffen", "Ausschreibungen ohne Personenbezug (Kennzeichen, Waffen).",
             Icons.Material.Filled.DirectionsCar, null, PublicModuleGroup.Fahndung, 15, false, false, OffWanted),
         new(WantedArchive, "Gefasst", "Archiv abgeschlossener Ausschreibungen.",
-            Icons.Material.Filled.Inventory2, "/gefasst", PublicModuleGroup.Fahndung, 20, false, false, OffGeneric),
+            Icons.Material.Filled.Inventory2, "/gefasst", PublicModuleGroup.Fahndung, 20, false, true, OffGeneric),
+        // no nav route: the poster is reached from a profile, not from a tab
         new(WantedPrint, "Fahndungsposter", "Druckansicht eines Steckbriefs zum Aushängen.",
-            Icons.Material.Filled.Print, null, PublicModuleGroup.Fahndung, 25, false, false, OffGeneric),
+            Icons.Material.Filled.Print, null, PublicModuleGroup.Fahndung, 25, false, true, OffGeneric),
         new(Bounty, "Kopfgeld", "Anzeige der ausgeschriebenen Belohnung an einem Steckbrief.",
             Icons.Material.Filled.Paid, null, PublicModuleGroup.Fahndung, 30, false, false, OffGeneric),
         new(HazardLists, "Gefahrenlisten", "Ranglisten der gefährlichsten Organisationen und Personen.",

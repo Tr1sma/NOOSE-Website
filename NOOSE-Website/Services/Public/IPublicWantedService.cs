@@ -15,8 +15,14 @@ public interface IPublicWantedService
     /// <summary>One published notice by its case number; null for every other state.</summary>
     Task<PublicWantedDetail?> GetByCaseNumberAsync(string? caseNumber, CancellationToken cancellationToken = default);
 
-    /// <summary>The photo copy of a published notice; null for every miss, so the endpoint cannot become an existence oracle.</summary>
+    /// <summary>The recently captured notices, cached; empty while the archive module is off.</summary>
+    Task<IReadOnlyList<PublicWantedArchiveCard>> GetArchiveAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>The photo copy of a published or captured notice; null for every miss, so the endpoint cannot become an existence oracle.</summary>
     Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default);
+
+    /// <summary>Counts one anonymous view of a published notice. A technical counter, deliberately past the audit interceptor.</summary>
+    Task CountViewAsync(string? caseNumber, CancellationToken cancellationToken = default);
 
     // ---- internal reads ----
 
@@ -59,8 +65,23 @@ public interface IPublicWantedService
     /// <summary>Soft-delete a notice; refused while it is published.</summary>
     Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Take every live notice of a record offline because the record itself changed; no rights guard, the caller passed one.</summary>
+    /// <summary>Take every publicly visible notice of a record offline because the record itself changed; no rights guard, the caller passed one.</summary>
     Task RetractForRecordAsync(string personId, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    // ---- warning chips ----
+
+    /// <summary>The warning ids assigned to a notice; empty when the actor may not read its file.</summary>
+    Task<IReadOnlyList<string>> GetHintIdsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Replace the warnings of a notice; the diff is logged against the notice.</summary>
+    Task SetHintsAsync(string id, IEnumerable<string> hintIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Flip every notice past its expiry date to Abgelaufen and tell leadership once. Returns how many.</summary>
+    /// <remarks>
+    /// The whole sweep lives here rather than in the worker: the belt, the status rules and the cache invalidation
+    /// must not exist in a second place.
+    /// </remarks>
+    Task<int> ExpireDueAsync(CancellationToken cancellationToken = default);
 
     // ---- trash ----
 

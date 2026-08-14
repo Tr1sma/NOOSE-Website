@@ -40,6 +40,14 @@
     }
     else
     {
+        @if (_row.Status is PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Gefasst
+            or PublicWantedStatus.Abgelaufen)
+        {
+            @* the counter is an internal figure and lives on an internal projection, so it cannot reach a public page *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+                @_row.ViewCount öffentliche Aufrufe
+            </MudText>
+        }
         @* every internal agent may open the notice of a file he can see — a rank 1-2 agent has to, or he could file
            a draft and never reach the request that is the whole point of the rank switch *@
         <PublicWantedEditor Id="@_row.Id" User="User" Changed="ReloadAsync" Closed="ReloadAsync" />

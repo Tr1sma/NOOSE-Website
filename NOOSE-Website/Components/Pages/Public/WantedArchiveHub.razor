@@ -1,0 +1,91 @@
+@page "/gefasst"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using NOOSE_Website.Models.Public
+@inject IPublicWantedService Wanted
+
+<PageTitle>Gefasst · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.WantedArchive" Title="Gefasst">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <div>
+            <MudText Typo="Typo.h4">Gefasst</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                Abgeschlossene Ausschreibungen. Der Vorwurf ist mit der Festnahme keine öffentliche Information
+                mehr — hier steht nur noch, dass die Fahndung beendet ist.
+            </MudText>
+        </div>
+
+        @if (_cards.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Derzeit sind keine abgeschlossenen Ausschreibungen veröffentlicht.
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                @foreach (var card in _cards)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        @* deliberately no MudLink: /gesucht/{az} answers "not found" for a captured notice, so a
+                           link would be a dead end that suggests a running search *@
+                        <MudPaper Outlined="true" Class="pa-0" Style="height:100%;">
+                            @if (card.HasPhoto)
+                            {
+                                <MudImage Src="@($"/gesucht/{card.CaseNumber}/foto")" Alt="@card.DisplayName"
+                                          ObjectFit="ObjectFit.Cover" Width="100" Height="180" Fluid="true"
+                                          Class="rounded-t" Style="width:100%;object-position:center 25%;filter:grayscale(1);" />
+                            }
+                            <MudStack Spacing="1" Class="pa-4">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Success">
+                                        Gefasst
+                                    </MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                        @PublicWantedKindDisplay.Name(card.Kind)
+                                    </MudChip>
+                                </MudStack>
+                                <MudText Typo="Typo.h6">@card.DisplayName</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    Gefasst am @card.CapturedAt.ToLocalTime().ToString("dd.MM.yyyy")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@card.CaseNumber</MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        <div>
+            <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.PersonSearch">Laufende Fahndungen</MudButton>
+        </div>
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    private IReadOnlyList<PublicWantedArchiveCard> _cards = [];
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        try
+        {
+            _cards = await Wanted.GetArchiveAsync();
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+}

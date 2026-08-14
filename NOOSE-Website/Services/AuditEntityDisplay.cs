@@ -39,6 +39,7 @@ public static class AuditEntityDisplay
         "OeffentlichesModul" => "Öffentliches Modul",
         "OeffentlicheSeite" => "Öffentliche Seite",
         "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
+        "Warnhinweis" => "Warnhinweis",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -74,6 +75,7 @@ public static class AuditEntityDisplay
         "PublicArea" => "/einstellungen?tab=oeffentliche-module",
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
         "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
+        "Warnhinweis" => "/einstellungen?tab=warnhinweise",
         _ => null,
     };
 }

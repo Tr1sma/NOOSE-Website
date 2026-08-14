@@ -21,6 +21,7 @@ public class DiscordWebhookModelsTests
         NotificationType.MeetingScheduled,
         NotificationType.MeetingReminder,
         NotificationType.PersonnelEntry,
+        NotificationType.PublicWantedPublished,
     };
 
     // Enum members NOT in the routable list.
@@ -31,6 +32,9 @@ public class DiscordWebhookModelsTests
         NotificationType.RecordModified,
         NotificationType.AppointmentAssigned,
         NotificationType.AbsenceFiled,
+        // an internal operating fact: NotifyManyAsync pushes every routable category, so a routable one here would
+        // post each expiry into the public channel
+        NotificationType.PublicWantedExpired,
     };
 
     // ----- IsRoutable: true branch -----
@@ -45,6 +49,7 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.JobDueSoon)]
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.PublicWantedPublished)]
     public void IsRoutable_forRoutableTypes_returnsTrue(NotificationType type)
     {
         Assert.True(DiscordRouting.IsRoutable(type));
@@ -89,6 +94,7 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.Recruiting)]
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.PublicWantedPublished)]
     public void PingsRecipients_forRoutableRoleCategories_returnsFalse(NotificationType type)
     {
         Assert.False(DiscordRouting.PingsRecipients(type));
@@ -121,6 +127,7 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.Recruiting)]
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
+    [InlineData(NotificationType.PublicWantedPublished)]
     public void PingsRole_forRoutableRoleCategories_returnsTrue(NotificationType type)
     {
         Assert.True(DiscordRouting.PingsRole(type));
@@ -241,6 +248,7 @@ public class DiscordWebhookModelsTests
             NotificationType.Recruiting,
             NotificationType.MeetingScheduled,
             NotificationType.MeetingReminder,
+            NotificationType.PublicWantedPublished,
         };
 
         Assert.Equal(expected.Length, DiscordRouting.RoleRoutableTypes.Count);

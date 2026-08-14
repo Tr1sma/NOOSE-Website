@@ -1,0 +1,163 @@
+@* Editorial value list of the warning chips a public wanted notice can carry. *@
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IWarnhinweisService Warnings
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+        Neuer Warnhinweis
+    </MudButton>
+</MudStack>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Warnhinweise erscheinen als Chips auf dem öffentlichen Fahndungsboard, dem Steckbrief und dem Poster.
+    Sie werden hier gepflegt und an der einzelnen Ausschreibung ausgewählt. Ein <em>inaktiver</em> Hinweis
+    verschwindet sofort von allen laufenden Ausschreibungen — das ist der übliche Weg, einen Hinweis
+    zurückzunehmen. Löschen entfernt ihn zusätzlich aus der Liste.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="_entries" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2" Dense="true">
+        <HeaderContent>
+            <MudTh>Bezeichnung</MudTh>
+            <MudTh>Reihenfolge</MudTh>
+            <MudTh>Aktiv</MudTh>
+            <MudTh>Verwendungen</MudTh>
+            <MudTh Style="text-align:right;">Aktion</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Bezeichnung">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@WarnhinweisColours.Resolve(context.Hinweis.Colour)">@context.Hinweis.Name</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Reihenfolge">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Hinweis.SortOrder</MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktiv">
+                @if (context.Hinweis.IsActive)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.RemoveCircleOutline" Color="Color.Default" Size="Size.Small" />
+                }
+            </MudTd>
+            <MudTd DataLabel="Verwendungen">
+                <MudText Typo="Typo.body2">@context.Count</MudText>
+            </MudTd>
+            <MudTd DataLabel="Aktion" Style="text-align:right;">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditAsync(context))" aria-label="Warnhinweis bearbeiten" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteAsync(context))" aria-label="Warnhinweis löschen" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-4">Noch keine Warnhinweise angelegt.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private bool _load = true;
+    private IReadOnlyList<WarnhinweisUsage> _entries = [];
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _entries = await Warnings.GetWithUsageAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task NewAsync()
+    {
+        var next = _entries.Count == 0 ? 10 : _entries.Max(e => e.Hinweis.SortOrder) + 10;
+        var input = await WarnhinweisDialog.ShowAsync(DialogService, "Neuer Warnhinweis", sortOrder: next);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await Warnings.CreateAsync(input.Name, input.Colour, input.SortOrder, input.IsActive, _user);
+            Snackbar.Add($"Warnhinweis „{input.Name}“ angelegt.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EditAsync(WarnhinweisUsage entry)
+    {
+        var input = await WarnhinweisDialog.ShowAsync(DialogService, "Warnhinweis bearbeiten",
+            entry.Hinweis.Name, entry.Hinweis.Colour, entry.Hinweis.SortOrder, entry.Hinweis.IsActive);
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await Warnings.RefreshAsync(entry.Hinweis.Id, input.Name, input.Colour, input.SortOrder,
+                input.IsActive, _user);
+            Snackbar.Add("Warnhinweis gespeichert.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(WarnhinweisUsage entry)
+    {
+        var text = entry.Count > 0
+            ? $"„{entry.Hinweis.Name}“ wird gelöscht und von {entry.Count} Ausschreibung(en) entfernt. "
+                + "Soll er nur vorübergehend nicht mehr gelten, setze ihn stattdessen auf inaktiv."
+            : $"„{entry.Hinweis.Name}“ wird gelöscht.";
+        if (!await ConfirmDialog.ShowAsync(DialogService, "Warnhinweis löschen?", text))
+        {
+            return;
+        }
+        try
+        {
+            await Warnings.DeleteAsync(entry.Hinweis.Id, _user);
+            Snackbar.Add("Warnhinweis gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

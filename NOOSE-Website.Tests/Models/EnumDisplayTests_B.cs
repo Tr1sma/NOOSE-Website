@@ -29,6 +29,8 @@ public class EnumDisplayTests_B
     [InlineData(NotificationType.MeetingScheduled, "Besprechung")]
     [InlineData(NotificationType.MeetingReminder, "Besprechung beginnt bald")]
     [InlineData(NotificationType.AbsenceFiled, "Abmeldung")]
+    [InlineData(NotificationType.PublicWantedPublished, "Öffentliche Ausschreibung")]
+    [InlineData(NotificationType.PublicWantedExpired, "Ausschreibung abgelaufen")]
     public void NotificationTypeName_definedValue_mapsToLabel(NotificationType type, string expected)
         => Assert.Equal(expected, NotificationTypeDisplay.Name(type));
 
@@ -53,6 +55,24 @@ public class EnumDisplayTests_B
         Assert.Equal(Icons.Material.Filled.Groups, NotificationTypeDisplay.Icon(NotificationType.MeetingScheduled));
         Assert.Equal(Icons.Material.Filled.NotificationsActive, NotificationTypeDisplay.Icon(NotificationType.MeetingReminder));
         Assert.Equal(Icons.Material.Filled.EventBusy, NotificationTypeDisplay.Icon(NotificationType.AbsenceFiled));
+        Assert.Equal(Icons.Material.Filled.PersonSearch, NotificationTypeDisplay.Icon(NotificationType.PublicWantedPublished));
+        Assert.Equal(Icons.Material.Filled.TimerOff, NotificationTypeDisplay.Icon(NotificationType.PublicWantedExpired));
+    }
+
+    [Fact]
+    public void EveryNotificationType_HasADisplayNameAndIcon()
+    {
+        // both switches end in a silent fallback, so a new enum value shows up nameless in the bell and in the
+        // Discord admin panel without any test going red — this is that test
+        var nameless = Enum.GetValues<NotificationType>()
+            .Where(t => NotificationTypeDisplay.Name(t) == "Benachrichtigung"
+                || NotificationTypeDisplay.Icon(t) == Icons.Material.Filled.Notifications)
+            .Select(t => t.ToString())
+            .Order()
+            .ToArray();
+
+        Assert.True(nameless.Length == 0,
+            "Jeder Benachrichtigungstyp braucht Namen und Icon: " + string.Join(", ", nameless));
     }
 
     [Fact]

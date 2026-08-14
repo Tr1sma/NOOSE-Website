@@ -1,8 +1,10 @@
 @* One public wanted notice: snapshot fields, accusation, and the publish/retract actions. Shared by the file page and the management list. *@
 @using System.Security.Claims
+@using NOOSE_Website.Data.Entities.Public
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
 @inject IPublicWantedService Wanted
+@inject IWarnhinweisService Warnings
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -76,6 +78,23 @@ else
             </MudItem>
         </MudGrid>
 
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.subtitle2">Warnhinweise</MudText>
+            @if (_mayWrite)
+            {
+                <MudButton OnClick="HintsAsync" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                           Disabled="_busy" StartIcon="@Icons.Material.Filled.Warning">Auswählen</MudButton>
+            }
+        </MudStack>
+        @if (SelectedHints().Count > 0)
+        {
+            <WarnhinweisChips Hints="@SelectedHints()" />
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Warnhinweise zugeordnet.</MudText>
+        }
+
         <MudText Typo="Typo.subtitle2">Vorwurf</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
             Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.
@@ -139,6 +158,8 @@ else
 
     private PublicWantedDraft? _draft;
     private PublicWantedOptions _options = PublicWantedOptions.Empty;
+    private IReadOnlyList<Warnhinweis> _hintCatalog = [];
+    private List<string> _hintIds = [];
     private readonly PublicWantedInput _input = new();
     private RichTextEditor? _editor;
     private bool _load = true;
@@ -170,6 +191,10 @@ else
         {
             _draft = await Wanted.GetDraftAsync(Id, User);
             _options = await Wanted.GetOptionsAsync(Id, User);
+            // all of them, not only the active ones: an assigned warning that was switched off afterwards stays
+            // assigned, and the author has to see that it is there
+            _hintCatalog = await Warnings.GetAllAsync();
+            _hintIds = [.. await Wanted.GetHintIdsAsync(Id, User)];
             if (_draft is not null)
             {
                 _input.Id = _draft.Id;
@@ -204,6 +229,28 @@ else
     {
         await StoreAsync();
         Snackbar.Add("Ausschreibung gespeichert.", Severity.Success);
+    });
+
+    /// <summary>Every assigned warning; an inactive one is marked, because it is not on the public page.</summary>
+    private List<PublicWantedHint> SelectedHints()
+        => _hintCatalog
+            .Where(o => _hintIds.Contains(o.Id))
+            .OrderBy(o => o.SortOrder).ThenBy(o => o.Name)
+            .Select(o => o.IsActive
+                ? new PublicWantedHint(o.Name, o.Colour ?? string.Empty)
+                : new PublicWantedHint($"{o.Name} (inaktiv, nicht öffentlich)", "Default"))
+            .ToList();
+
+    // own save path, not part of UpdateSnapshotAsync: its own table, its own audit diff
+    private async Task HintsAsync() => await RunAsync(async () =>
+    {
+        var picked = await WarnhinweisPickerDialog.ShowAsync(DialogService, _hintIds);
+        if (picked is null)
+        {
+            return;
+        }
+        await Wanted.SetHintsAsync(Id, picked, User);
+        Snackbar.Add("Warnhinweise gespeichert.", Severity.Success);
     });
 
     private async Task PublishAsync() => await RunAsync(async () =>

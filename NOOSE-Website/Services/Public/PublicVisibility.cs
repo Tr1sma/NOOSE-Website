@@ -33,9 +33,11 @@ public static class PublicVisibility
                 + "Seite. Der Entwurf bleibt drinnen, und die Seite trägt keinen Aktenbezug.",
             ["OeffentlicheFahndung"] = "Der Publikations-Snapshot einer Ausschreibung: öffentliches Aktenzeichen, "
                 + "Art, Anzeigename, die vom Autor gewählten Aliase, Vorwurfstext, letzte Gegend, Fahrzeugtext, die "
-                + "beim Publizieren festgehaltene Gefahrenstufe und eine Kopie des Fotos. Der Aktenbezug "
-                + "(PersonId/FraktionId), der rohe Bedrohungs-Score, die Kopfgeld-Obergrenze, der Aufrufzähler und "
-                + "der Rückzugsgrund bleiben drinnen.",
+                + "beim Publizieren festgehaltene Gefahrenstufe, eine Kopie des Fotos und — im Archiv — das "
+                + "Gefasst-Datum. Der Aktenbezug (PersonId/FraktionId), der rohe Bedrohungs-Score, die "
+                + "Kopfgeld-Obergrenze, der Aufrufzähler und der Rückzugsgrund bleiben drinnen.",
+            ["Warnhinweis"] = "Bezeichnung und Farbe eines zugeordneten Warnhinweises, als Chip auf Board, "
+                + "Steckbrief und Poster. Reihenfolge, Aktiv-Kennzeichen und die Zeilen-Id bleiben drinnen.",
         };
 
     /// <summary>Entity name → why it can never appear outside.</summary>
@@ -187,6 +189,7 @@ public static class PublicVisibility
 
             // --- public area's own tables ---
             ["BuergerProfil"] = "Konto eines Bürgers; sein Name gehört ihm, nicht der Website. Nach außen sieht ihn nur er selbst.",
+            ["FahndungWarnhinweis"] = Assignment,
         };
 
     /// <summary>True when someone has decided the entity's public fate either way.</summary>

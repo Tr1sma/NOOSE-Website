@@ -34,6 +34,7 @@ using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Infrastructure.Followups;
 using NOOSE_Website.Infrastructure.Jobs;
 using NOOSE_Website.Infrastructure.Meetings;
+using NOOSE_Website.Infrastructure.Public;
 using NOOSE_Website.Models.Common;
 using NOOSE_Website.Services;
 using NOOSE_Website.Services.Public;
@@ -342,6 +343,8 @@ builder.Services.AddScoped<IBuergerService, BuergerService>();
 builder.Services.AddScoped<IPublicModuleService, PublicModuleService>();
 builder.Services.AddScoped<IPublicPageService, PublicPageService>();
 builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
+builder.Services.AddHostedService<PublicWantedExpiryWorker>();
+builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>
@@ -432,6 +435,9 @@ using (var scope = app.Services.CreateScope())
 
     // seed the four editorial starter pages as drafts (idempotent; never overwrites an edited page)
     await NOOSE_Website.Infrastructure.PublicPageSeeder.SeedAsync(db);
+
+    // seed the four starting warning chips (only while the table is empty; a deleted one stays deleted)
+    await NOOSE_Website.Infrastructure.WarnhinweisSeeder.SeedAsync(db);
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

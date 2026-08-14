@@ -104,7 +104,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 2 | Modul-Schalter, Kill-Switch, Nav, Indexierung, `PublicVisibility` | `Oeffentlich02_Module` | 1 | **fertig** |
 | 3 | CMS-Seiten (Text zur Arbeit, FAQ, Zuständigkeiten) | `Oeffentlich03_Seiten` | 2 | **fertig** |
 | 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Oeffentlich04_Fahndung` | 2 | **fertig** |
-| 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | offen |
+| 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | **fertig** |
 | 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | offen |
 | 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | offen |
 | 8 | Hinweise Ausbau: Dubletten, Priorität, Vertrauen, Übernahme | keine | 7 | offen |
@@ -526,30 +526,148 @@ Service-Schreibpfad vor der Prüfung, und `GetOpenCountAsync` war schon vorher t
 
 ---
 
-## Phase 5 — Fahndung Ausbau
+## Phase 5 — Fahndung Ausbau ✅
 
 **Ziel:** Warnhinweise, kein Vergessen, Archiv, Poster, Reichweite.
 
-**Daten** (`Oeffentlich05_Warnhinweise`)
-- `FahndungWarnhinweis` → `FahndungWarnhinweise`: `FahndungId` + Werteliste-Eintrag (n:m).
-- Werteliste „Warnhinweise" nach dem Muster der vorhandenen Wertelisten in `BaseDataPanel`
-  („bewaffnet", „gewaltbereit", „flieht mit Fahrzeug", „nicht selbst eingreifen").
+**Daten** (`Oeffentlich05_Warnhinweise`) — zwei Tabellen, **keine** `AddColumn`:
+`GefasstAm`, `AblaufDatum` und `AufrufZaehler` kamen bereits mit Phase 4.
+- `Warnhinweis` → `Warnhinweise`: `Bezeichnung` (60, unique), `Farbe` (Allowlist-**Name**), `Reihenfolge`,
+  `IstAktiv`, `IAuditable`, **kein** `ISoftDelete` — Muster `Tag`: Hard-Delete hält den Unique-Index sauber.
+- `FahndungWarnhinweis` → `FahndungWarnhinweise`: typisiert statt polymorph (`FahndungId` +
+  `WarnhinweisId`, beide `Cascade`, unique Paar-Index), weder `IAuditable` noch `ISoftDelete`.
+
+**Sechs bewusste Abweichungen von der Planzeile**
+1. **Das Warnhinweis-Label wird live gelesen, nicht auf die Zuordnungszeile kopiert** — die einzige Stelle
+   im öffentlichen Bereich, die von der Snapshot-Doktrin abweicht. Ein Warnhinweis ist ein redaktionelles
+   Etikett der Behörde, kein Akteninhalt; eine Kopie hieße, ein korrigierter Tippfehler bliebe auf jedem
+   laufenden Poster stehen, und `IstAktiv = false` müsste vierzig Ausschreibungen einzeln nacharbeiten.
+   **Preis:** das Label geht ohne Publikationsschritt live, also prüft der Schreibpfad der Werteliste
+   dieselben drei Regeln wie ein Vorwurf (Klartext, keine Erwähnung, kein `{{`-Platzhalter, ≤ 60 Zeichen).
+2. **Das Archiv ist nur eine Liste** — Foto, Anzeigename, Art, „gefasst am". Kein Vorwurfstext, keine
+   Gefahrenstufe, **keine Verlinkung**: `/gesucht/{az}` antwortet für eine gefasste Zeile weiter „nicht
+   gefunden", ein Link dorthin wäre eine Sackgasse und suggerierte eine laufende Fahndung. Eigener
+   Nach-außen-Record `PublicWantedArchiveCard`, damit das Board kein „gefasst am" und das Archiv keine
+   Gefahrenstufe rendern *kann*. Gedeckelt auf die **100** jüngsten.
+3. **Zwei neue `NotificationType`-Werte statt einem.** `PublicWantedPublished` ist routbar (eigener Webhook
+   und eigene Rolle im Discord-Panel), `PublicWantedExpired` bewusst **nicht** —
+   `NotificationService.NotifyManyAsync` pusht jede routbare Kategorie von selbst, ein routbarer
+   Betriebs-Typ schriebe also jede abgelaufene Ausschreibung in den öffentlichen Kanal.
+4. **Das Poster benutzt `PrintFrame` nicht.** Es druckt über `JS.InvokeVoidAsync` in `OnAfterRenderAsync`
+   und `MudButton OnClick` — beides tot auf einer `[ExcludeFromInteractiveRouting]`-Seite, also *stumm*
+   kaputt —, und es rendert „Gedruckt am … von {PrintedBy}", den VS-Stempel und „NOOSE-interne Akte".
+   Stattdessen ein eigener statischer Rahmen mit rohem `onclick="window.print()"`, **ohne** Auto-Druck.
+5. **Ein Cache-Schlüssel für Board und Archiv.** Beide stammen aus derselben Tabelle und werden von
+   denselben Schreibpfaden ungültig; ein zweiter Key verdoppelte die zehn Invalidierungsstellen und
+   schüfe eine neue Fehlerklasse. Vorher standen zehn `cache.Remove` verstreut — jetzt gibt es genau
+   **einen** Speicherpfad (`SaveAndInvalidateAsync`), gehalten von einem Dateiscan.
+6. **Kein QR-Code auf dem Poster** — es ist keine Generator-Bibliothek vendored, und eine anonyme Seite
+   lädt keine Fremd-Ressource nach. Die gedruckte Klartext-URL leistet dasselbe.
 
 **Code**
-- `PublicWantedExpiryWorker` (Muster `FollowupDueWorker`): abgelaufene Einträge → `Abgelaufen` +
-  Führungs-Notification über `NotificationService`.
-- `/gefasst`: Archiv der Einträge mit Status `Gefasst`, mit Stempel und Datum.
-- `/gesucht/{Aktenzeichen}/druck`: Poster im vorhandenen `PrintLayout`, `[AllowAnonymous]`.
-- Aufrufzähler: `ExecuteUpdateAsync` (umgeht den Audit-Interceptor bewusst — rein technischer Zähler,
-  im Kommentar begründen).
-- Discord-Push beim Publizieren über die vorhandene Discord-Benachrichtigungs-Konfiguration.
-- `PublicModules`: `FahndungArchiv`, `FahndungDruck`.
+- `IWarnhinweisService` (Werteliste; Guards `RequireLeadership` **und** `RequireWriteAccess`, strenger als
+  `TagService`, wo jeder Agent anlegen darf) · `WarnhinweisColours` als Farb-Allowlist — **nie
+  `Enum.Parse`**: ein in der Spalte gelandeter Wert wäre auf einer `[AllowAnonymous]`-Seite ein HTTP 500,
+  dieselbe Klasse wie `?vorschau=1` in Phase 3. Die Liste enthält keine der auf `#0E1116` unsichtbaren
+  Farben. · `WarnhinweisSeeder` seedet **nur bei leerer Tabelle** (anders als `PublicModuleSeeder`, der pro
+  Schlüssel nachlegt: ein Modul-Schlüssel steht im Code, ein Warnhinweis gehört dem Betreiber).
+- `IPublicWantedService` wächst um `GetArchiveAsync`, `CountViewAsync`, `GetHintIdsAsync`, `SetHintsAsync`
+  und `ExpireDueAsync`. Die Zuordnung liegt **hier** und nicht auf `IWarnhinweisService`: sie ändert, was
+  draußen steht, muss also durch den einen Speicherpfad.
+- **`RetractForRecordAsync` deckt jetzt auch `Gefasst` ab** (gemeinsame Statusmenge `PubliclyVisible`, auch
+  von `RetractAsync` benutzt). Ohne das zeigte das Archiv Foto, Namen und Datum einer Person, die im
+  August gefasst und im September als Informant eingestuft wird — der Hauptleckpfad des Archivs.
+- **Der Foto-Endpoint bleibt unverändert**; `GetPublishedPhotoAsync` weitet intern auf `Gefasst`, prüft
+  aber **je Menge** das eigene Modul (Archiv aus ⇒ Kopie 404, Board aus ⇒ laufende Kopie 404) und steigt
+  weiter ausschließlich über den Snapshot ein, damit der Unterdrückungsgürtel entscheidet. Kein
+  Query-Parameter: der wäre angreifer-kontrolliert und machte „gefasst?" getrennt von „veröffentlicht?"
+  abfragbar — genau das Existenz-Orakel, das die eine `404` verhindert.
+- `PublicWantedExpiryWorker` (45 s Startverzögerung, 15 min Takt) ruft **nur** `ExpireDueAsync` und hält
+  keinen `DbContext`. Er ist **keine Sicherheitskontrolle** — der Lesepfad filtert `ExpiresAt > now`
+  ohnehin; er macht den internen Zustand ehrlich. Der Statuswechsel ist der Idempotenz-Token, deshalb
+  braucht die Migration keine `NotifiedAt`-Spalte. **Eine** Sammelmeldung je Lauf, `Take(200)`.
+- Seiten `WantedArchiveHub` (`/gefasst`) und `WantedPoster` (`/gesucht/{az}/druck`, `PrintLayout`, zieht
+  **beide** Modul-Gates selbst, weil `PrintLayout` weder `PublicNav` noch den Not-Aus-Banner trägt, und
+  trägt **immer** `noindex`). Intern: `WarnhinweisPanel`/`-Dialog` unter `/einstellungen?tab=warnhinweise`,
+  `WarnhinweisPickerDialog` (**ohne** Inline-Anlegen — die Liste ist redaktionell) und `WarnhinweisChips`.
+- `PublicModules`: `FahndungArchiv` und `FahndungDruck` werden `Available`, bleiben `DefaultEnabled = false`.
 
-**Tests** Ablauf-Worker setzt Status und benachrichtigt · Archiv zeigt nur `Gefasst` · Druckansicht ist
-anonym erreichbar und enthält keinen Agentenbezug · Aufrufzähler erzeugt kein `GeaendertAm`.
+**Tests** (+101, gesamt 5582 grün) — `WarnhinweisServiceTests` (Rechte, Dubletten, die drei Inhaltsregeln,
+Farb-Allowlist, Seeder weckt einen gelöschten Wert nicht wieder) · `PublicWantedServiceTests` um Archiv,
+Gefasst-Hook, Foto-Gate je Modul, Aufrufzähler, Chips und Discord erweitert · `PublicWantedCacheDisciplineTests`
+(ein Speicherpfad, ein `cache.Remove`, ein Schlüssel) · `PublicSurfaceGuardTests` (vier Wächter, die es
+vorher nicht gab) · `PublicWantedModelTests` von einer handgepflegten Liste auf **Reflection über den
+ganzen Namensraum** umgestellt: jedes Modell steht in `Outward` oder in `Inward` — mit Begründung.
 
 **Fertig, wenn** ein Eintrag mit Ablaufdatum von selbst offline geht, das Archiv gefüllt ist und ein Poster
 druckbar ist.
+
+**In der Umsetzung gefunden und behoben:**
+1. **Kein einziger Typ des öffentlichen Bereichs stand im `WatchlistRecordRollup`** — seit Phase 1. Dessen
+   Default-Arm warnt nur, also schrieb jede Publikation, jede Seitenänderung, jede Modulumschaltung und
+   jede Profiländerung stillschweigend eine Warnzeile ins Log. Im Serverlog aufgefallen, nicht im Test.
+   `OeffentlicheFahndung` rollt jetzt auf ihre `Person` (Publizieren ist die folgenreichste Änderung, die
+   einer Akte passieren kann); `OeffentlicheSeite`, `OeffentlichesModul`, `BuergerProfil` und `Warnhinweis`
+   sind „not watchable". Ein Wächter ruft den Rollup jetzt wirklich auf und zählt Warnungen.
+2. **`AuditEntityDisplay`-Wächter zu breit gedacht.** Der Plan versprach ihn über *alle* auditierten
+   Entitäten; tatsächlich laufen rund siebzig interne Kindtabellen seit jeher ohne Label. Der Wächter ist
+   deshalb auf `Data/Entities/Public` verengt — mit dem Grund im Kommentar. Die interne Lücke bleibt offen
+   und ist eigene Arbeit, kein Nebeneffekt einer Phase des öffentlichen Bereichs.
+3. **Das Label-Kriterium `Label(name) != name` trägt nicht:** „Warnhinweis" liest sich in beiden Sprachen
+   gleich, ein Wertvergleich hielte den korrekten Arm für einen Treffer. Der Wächter prüft jetzt die Quelle.
+4. **Löschen eines Warnhinweises räumt seine Zuordnungen selbst weg**, statt sich auf die FK-Cascade zu
+   verlassen — SQLite bildet sie im Test nicht nach, und eine nach außen wirkende Zuordnung darf nicht an
+   der Referenz-Semantik der Datenbank hängen. Die Cascade bleibt als Netz.
+5. `PublicModuleServiceTests` benutzte `FahndungArchiv` als Beispiel für ein ungebautes Modul — mit dieser
+   Phase ist es gebaut. Steht jetzt auf `Organisationen` (Phase 12).
+
+**In der Nachprüfung gefunden und behoben** (Durchgang über den ganzen Diff nach Logikfehlern):
+1. **Ein deaktivierter Warnhinweis wurde beim nächsten Speichern still aus der Zuordnung gelöscht.**
+   `SetHintsAsync` verengte die Zielmenge auf **aktive** Zeilen, der Picker bot einen inaktiven nicht an und
+   der Editor zeigte ihn nicht — ein „Übernehmen" ohne einen einzigen Klick zerstörte die Zuordnung also
+   unsichtbar, und ein späteres Reaktivieren brachte sie nicht zurück. Die Menge ist jetzt
+   *aktiv **oder** bereits zugeordnet*: **Hinzufügen** bleibt auf aktive beschränkt (das ist der Riegel gegen
+   einen manipulierten Dialog-Post), **Bestehendes** überlebt. Der Editor zeigt einen zugeordneten inaktiven
+   Hinweis jetzt grau mit „(inaktiv, nicht öffentlich)", statt ihn zu verschweigen.
+2. **`SetHintsAsync` prüfte die Aktensichtbarkeit nur bei einer laufenden Ausschreibung** — `GetHintIdsAsync`
+   dagegen immer. Wer die Id eines Entwurfs zu einer Verschlusssache kannte, konnte ihn also bechippen und
+   eine `ManualAudit`-Zeile gegen eine Akte schreiben, die er nicht öffnen darf. Schreib- und Lesepfad halten
+   jetzt dasselbe Gate.
+3. **Ein Fehler beim Lesen des *Poster*-Schalters blendete den ganzen Steckbrief aus.** In `WantedProfile`
+   standen `GetByCaseNumberAsync` und die Modulabfrage im selben `try`, dessen `catch` `_entry = null` setzt.
+   Die Modulabfrage hat jetzt ihr eigenes `try` — ein Fehler dort kostet höchstens den Druckknopf.
+4. **Die neuen Abfragen waren nur gegen SQLite bewiesen.** Alle Integrationstests laufen auf SQLite, das ein
+   anderer Übersetzer ist: eine Form, die dort durchgeht, kann auf Pomelo mit „could not be translated"
+   werfen — zur Laufzeit, auf einer Seite, die ein anonymer Besucher geöffnet hat. Besonders heikel war
+   `PubliclyVisible.Contains(f.Status)`, weil daran der Rückzugs-Hook hängt. `MySqlTranslationTests`
+   kompiliert die acht neuen Formen jetzt über `ToQueryString()` gegen den **Produktions-Provider** — ohne
+   Server, weil dafür keine Verbindung nötig ist.
+5. **Der `WatchlistRecordRollup`-Eintrag prüft die Sichtbarkeit nicht selbst** — nachgesehen, weil
+   `OeffentlicheFahndung` jetzt auf ihre `Person` rollt und ein Rückzug wegen Einstufung sonst genau die
+   Follower benachrichtigt hätte, die die Akte nicht mehr sehen dürfen. `WatchlistFanout` filtert je
+   Empfänger über `Visibility.IsRecordVisibleAsync`; kein Leck, ausdrücklich geprüft und nicht geändert.
+
+**Nachgewiesen** (laufender Server, MariaDB, anonym, zwei Testzeilen — eine veröffentlicht, eine gefasst):
+- Migration angewendet, beide Tabellen mit `varchar(64)`-FKs (nicht `longtext` wie in Phase 4), die vier
+  Warnhinweise geseedet, alle drei Module bleiben nach dem Seed **aus**.
+- Board zeigt nur die laufende Zeile samt beider Chips, das Archiv nur die gefasste mit „Gefasst am",
+  der Steckbrief der gefassten antwortet „nicht gefunden".
+- Poster rendert GESUCHT, Name, Chip, Klartext-URL und `window.print()` — und **kein** „Gedruckt am".
+- **Modul-Gates einzeln:** Archiv aus ⇒ Archiv leer, Board bleibt · Board aus ⇒ Archiv bleibt, Board leer,
+  Poster zu · Druck aus ⇒ Poster zu und der Knopf am Steckbrief verschwindet.
+- **Unterdrückungsgürtel auf allen drei neuen Pfaden:** TRU auf die *gefasste* Akte leert das Archiv, ohne
+  dass die Ausschreibungszeile angefasst wurde; eine soft-gelöschte Akte nimmt Board und Poster mit;
+  ein Ablaufdatum in der Vergangenheit leert das Board sofort und das Zurücksetzen bringt es zurück.
+- **Not-Aus** schließt Board, Archiv **und** Poster und lässt sich wieder einschalten.
+- Aufrufzähler: 1 nach einem Steckbrief-Aufruf, **0** nach dem Poster-Aufruf, `GeaendertAm` bleibt `NULL`.
+- `X-Robots-Tag` fehlt auf `/gefasst` und `/gesucht/{az}/druck`, steht auf `/personen`.
+- Müll-Queries (`?art=quatsch&stufe=99`, `?qr=1`, `?vorschau=ja&x=%00`, erfundenes Aktenzeichen):
+  **200, kein 500**; `/gesucht/../../etc/passwd/druck` ist 404; der Foto-Endpoint antwortet auf jeden
+  Fehlschlag mit derselben 404.
+- Serverlog ohne Exception (nur die bekannte https-Port-Warnung).
+- **Nicht geprüft:** die internen Panels, der Warnhinweis-Picker und der Discord-Push im laufenden System —
+  dafür braucht es einen Discord-Login bzw. einen konfigurierten Webhook. Ihre Logik hängt vollständig an
+  den getesteten Diensten.
 
 ---
 

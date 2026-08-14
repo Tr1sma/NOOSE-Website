@@ -61,6 +61,12 @@ public enum NotificationType
 
     /// <summary>New website feedback filed.</summary>
     Feedback = 18,
+
+    /// <summary>A wanted notice went public. Routable — this one is meant for the outside channel.</summary>
+    PublicWantedPublished = 19,
+
+    /// <summary>A published notice reached its expiry date. Deliberately not routable: it is an internal fact.</summary>
+    PublicWantedExpired = 20,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -87,6 +93,8 @@ public static class NotificationTypeDisplay
         NotificationType.AbductionFiled => "Agenten-Entführung",
         NotificationType.Financing => "Finanzierung",
         NotificationType.Feedback => "Feedback",
+        NotificationType.PublicWantedPublished => "Öffentliche Ausschreibung",
+        NotificationType.PublicWantedExpired => "Ausschreibung abgelaufen",
         _ => "Benachrichtigung",
     };
 
@@ -112,6 +120,8 @@ public static class NotificationTypeDisplay
         NotificationType.AbductionFiled => Icons.Material.Filled.PersonOff,
         NotificationType.Financing => Icons.Material.Filled.RequestQuote,
         NotificationType.Feedback => Icons.Material.Filled.Feedback,
+        NotificationType.PublicWantedPublished => Icons.Material.Filled.PersonSearch,
+        NotificationType.PublicWantedExpired => Icons.Material.Filled.TimerOff,
         _ => Icons.Material.Filled.Notifications,
     };
 }

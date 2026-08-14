@@ -17,6 +17,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Watchlist;
 using NOOSE_Website.Data.Entities.Absences;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Abstractions;
 
 namespace NOOSE_Website.Infrastructure.Notifications;
@@ -59,6 +60,8 @@ public static class WatchlistRecordRollup
             case Comment k: return One(k.EntityType, k.EntityId);
             case Source q: return One(q.EntityType, q.EntityId);
             case TagMapping tz: return One(tz.EntityType, tz.EntityId);
+            // going public is the most consequential thing that can happen to a file, so followers hear about it
+            case OeffentlicheFahndung of: return One(nameof(Person), of.PersonId);
 
             // ---- relations ----
             case Link vk: return Two((vk.SourceType, vk.SourceId), (vk.TargetType, vk.TargetId));
@@ -84,6 +87,12 @@ public static class WatchlistRecordRollup
             case FinancingRequest:
             case FinancingRequestLine:
             case FinancingItem:
+            // the public area's own tables carry no record reference anyone follows: editorial pages, module
+            // switches, a citizen's own account, and the warning value list are configuration, not casework
+            case OeffentlicheSeite:
+            case OeffentlichesModul:
+            case BuergerProfil:
+            case Warnhinweis:
                 return Array.Empty<(string, string)>();
 
             default:

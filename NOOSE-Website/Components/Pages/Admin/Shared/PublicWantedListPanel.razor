@@ -42,6 +42,7 @@ else
             <MudTh>Status</MudTh>
             <MudTh>Stufe</MudTh>
             <MudTh>Veröffentlicht</MudTh>
+            <MudTh>Aufrufe</MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -78,6 +79,9 @@ else
                         ? $"{published.ToLocalTime():dd.MM.yyyy} · {context.PublishedByName ?? "—"}"
                         : "—")
                 </MudText>
+            </MudTd>
+            <MudTd DataLabel="Aufrufe">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ViewCount</MudText>
             </MudTd>
             <MudTd DataLabel="Aktion" Style="text-align:right;">
                 @if (context.Status == PublicWantedStatus.Veroeffentlicht && context.CaseNumber is { Length: > 0 } cn)

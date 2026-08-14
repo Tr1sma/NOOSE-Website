@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Caching.Memory;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
@@ -25,10 +26,33 @@ public class PublicWantedService(
     IFileStorageService peopleFiles,
     IPublicWantedPhotoStorageService publicFiles,
     INotificationService notifications,
+    IDiscordWebhookService discord,
     IMemoryCache cache) : IPublicWantedService
 {
     private const string CacheKey = "OeffentlicheFahndungen";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(10);
+
+    /// <summary>How many captures the anonymous archive shows; the rest stays internal.</summary>
+    private const int ArchiveLimit = 100;
+
+    /// <summary>How many expiries one sweep handles, so a backlog cannot become one huge write.</summary>
+    private const int ExpiryBatch = 200;
+
+    private static readonly IReadOnlyList<PublicWantedHint> NoHints = [];
+
+    /// <summary>
+    /// The states in which a notice says something about a record outside — the set the retraction hook works on.
+    /// </summary>
+    /// <remarks>
+    /// Gefasst belongs here since the archive exists: a person caught in August and classified in September would
+    /// otherwise keep photo, name and date on /gefasst, because the hook only ever looked at live notices.
+    /// </remarks>
+    private static readonly PublicWantedStatus[] PubliclyVisible =
+    [
+        PublicWantedStatus.Veroeffentlicht,
+        PublicWantedStatus.Beantragt,
+        PublicWantedStatus.Gefasst,
+    ];
 
     /// <summary>Own case-number counter: "F" belongs to factions, and one number must name one kind of record.</summary>
     public const string CaseNumberPrefix = "FA";
@@ -58,29 +82,55 @@ public class PublicWantedService(
     public async Task<PublicWantedDetail?> GetByCaseNumberAsync(string? caseNumber, CancellationToken cancellationToken = default)
         => (await GetBoardAsync(cancellationToken)).Find(caseNumber);
 
+    public async Task<IReadOnlyList<PublicWantedArchiveCard>> GetArchiveAsync(CancellationToken cancellationToken = default)
+    {
+        // its own switch, read outside the content cache for the same reason as the board: the archive has to stay
+        // online while the board is off, and vice versa
+        if (!await modules.IsEnabledAsync(PublicModules.WantedArchive, cancellationToken))
+        {
+            return [];
+        }
+        return (await LoadAsync(cancellationToken)).Archive;
+    }
+
     public async Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(caseNumber) || !await modules.IsEnabledAsync(PublicModules.Wanted, cancellationToken))
+        if (string.IsNullOrWhiteSpace(caseNumber))
         {
             return null;
         }
 
-        // read through the same snapshot the board uses, so a notice that is hidden there has no picture either
-        var entry = (await LoadAsync(cancellationToken)).Find(caseNumber);
-        if (entry is null || !entry.HasPhoto)
+        // per-entry gate, not "either module is on": with the archive off a captured photo must 404, and with the
+        // board off a live one must, or turning a module off would leave its pictures downloadable
+        var boardOn = await modules.IsEnabledAsync(PublicModules.Wanted, cancellationToken);
+        var archiveOn = await modules.IsEnabledAsync(PublicModules.WantedArchive, cancellationToken);
+        if (!boardOn && !archiveOn)
         {
             return null;
         }
 
+        // read through the same snapshot the pages use, so a notice hidden there has no picture either
+        var snapshot = await LoadAsync(cancellationToken);
+        var live = boardOn ? snapshot.Find(caseNumber) : null;
+        var captured = live is null && archiveOn ? snapshot.FindCaptured(caseNumber) : null;
+        if (!(live?.HasPhoto ?? captured?.HasPhoto ?? false))
+        {
+            return null;
+        }
+
+        var name = live?.CaseNumber ?? captured!.CaseNumber;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // widened by one status, but only for a case number the snapshot already handed out — the belt above still
+        // decides, this query only resolves the file name
         var row = await db.OeffentlicheFahndungen
             .AsNoTracking()
-            .Where(f => f.CaseNumber == entry.CaseNumber && f.Status == PublicWantedStatus.Veroeffentlicht)
+            .Where(f => f.CaseNumber == name
+                && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Gefasst))
             .Select(f => new { f.PhotoFileName, f.PhotoContentType })
             .FirstOrDefaultAsync(cancellationToken);
 
-        return row?.PhotoFileName is { Length: > 0 } name
-            ? new PublicWantedPhoto(name, row.PhotoContentType ?? "application/octet-stream")
+        return row?.PhotoFileName is { Length: > 0 } file
+            ? new PublicWantedPhoto(file, row.PhotoContentType ?? "application/octet-stream")
             : null;
     }
 
@@ -125,7 +175,8 @@ public class PublicWantedService(
                 f.PublishedAt,
                 f.PublishedBy!.Codename,
                 f.ExpiresAt,
-                f.ModifiedAt ?? f.CreatedAt) })
+                f.ModifiedAt ?? f.CreatedAt,
+                f.ViewCount) })
             .ToListAsync(cancellationToken);
 
         // a notice carries the file's content, so it answers to the file's read gate — otherwise the list would show
@@ -200,7 +251,7 @@ public class PublicWantedService(
             .Select(f => new PublicWantedEdit(
                 f.Id, f.CaseNumber, f.Kind, f.Status, f.DisplayName, f.Person!.CaseNumber, f.PublicHazardLevel,
                 f.PhotoFileName != null, f.PublishedAt, f.PublishedBy!.Codename, f.ExpiresAt,
-                f.ModifiedAt ?? f.CreatedAt))
+                f.ModifiedAt ?? f.CreatedAt, f.ViewCount))
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -241,8 +292,9 @@ public class PublicWantedService(
             ChargeHtml = ChargeFrom(person.WantedReason),
         };
         db.OeffentlicheFahndungen.Add(row);
-        await db.SaveChangesAsync(cancellationToken);
-        // no cache drop: a draft was never on the board
+        // through the one save path even though a draft was never on the board: an exception here would have to be
+        // whitelisted in the guard, and an unnecessary drop costs one rebuild inside a 10 s window
+        await SaveAndInvalidateAsync(db, cancellationToken);
         return row.Id;
     }
 
@@ -295,8 +347,7 @@ public class PublicWantedService(
             RequirePublishableCharge(row.ChargeHtml);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
 
         // after the save, for the same reason as in the publish body
         if (live && previousPhoto != row.PhotoFileName)
@@ -364,8 +415,7 @@ public class PublicWantedService(
                 PublicationWantedId = row.Id,
             });
             row.Status = PublicWantedStatus.Beantragt;
-            await db.SaveChangesAsync(cancellationToken);
-            cache.Remove(CacheKey);
+            await SaveAndInvalidateAsync(db, cancellationToken);
             return PublicWantedPublishOutcome.Requested;
         }
 
@@ -386,14 +436,15 @@ public class PublicWantedService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException(NotFound);
-        if (row.Status is not (PublicWantedStatus.Veroeffentlicht or PublicWantedStatus.Beantragt))
+        // the same set the hook uses: a captured notice is still outside, in the archive, so it must be retractable
+        // — otherwise the only way off /gefasst would be deleting it, a silent depublication with no reason
+        if (!PubliclyVisible.Contains(row.Status))
         {
-            throw new InvalidOperationException("Nur eine laufende Ausschreibung lässt sich zurückziehen.");
+            throw new InvalidOperationException("Nur eine öffentlich sichtbare Ausschreibung lässt sich zurückziehen.");
         }
 
         await RetractRowAsync(db, row, reason.Trim(), cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
     public async Task CapturedAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -410,8 +461,7 @@ public class PublicWantedService(
 
         row.Status = PublicWantedStatus.Gefasst;
         row.CapturedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
     public async Task RefreshHazardLevelAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -424,8 +474,7 @@ public class PublicWantedService(
         var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
 
         row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -447,8 +496,7 @@ public class PublicWantedService(
 
         // the audit interceptor rewrites this into a soft delete; the photo copy stays so a restore is not a broken poster
         db.OeffentlicheFahndungen.Remove(row);
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
     public async Task RetractForRecordAsync(string personId, string reason, ClaimsPrincipal actor,
@@ -463,8 +511,7 @@ public class PublicWantedService(
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.OeffentlicheFahndungen
-            .Where(f => f.PersonId == personId
-                && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Beantragt))
+            .Where(f => f.PersonId == personId && PubliclyVisible.Contains(f.Status))
             .ToListAsync(cancellationToken);
         if (rows.Count == 0)
         {
@@ -475,8 +522,196 @@ public class PublicWantedService(
         {
             await RetractRowAsync(db, row, reason, cancellationToken);
         }
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
+    }
+
+    // ---- warning chips ----
+
+    public async Task<IReadOnlyList<string>> GetHintIdsAsync(string id, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRecordRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var personId = await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(f => f.Id == id)
+            .Select(f => f.PersonId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!await IsRecordVisibleAsync(db, personId, actor, cancellationToken))
+        {
+            return [];
+        }
+
+        return await db.FahndungWarnhinweise
+            .AsNoTracking()
+            .Where(z => z.FahndungId == id)
+            .Select(z => z.WarnhinweisId)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task SetHintsAsync(string id, IEnumerable<string> hintIds, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+
+        // the same gate the read path holds: without it an agent who knows an id could chip a notice whose file he
+        // may not open, and write an audit row against that file
+        if (!await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken))
+        {
+            throw new InvalidOperationException(NotFound);
+        }
+        if (row.Status == PublicWantedStatus.Veroeffentlicht)
+        {
+            // chipping a live notice changes what is outside, so it answers to the same gates as an edit
+            await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+            await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+        }
+
+        var requested = hintIds.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToList();
+        var existing = await db.FahndungWarnhinweise
+            .Where(z => z.FahndungId == id)
+            .ToListAsync(cancellationToken);
+        var existingIds = existing.Select(z => z.WarnhinweisId).ToHashSet(StringComparer.Ordinal);
+
+        // Narrowed to rows that exist and are either active or already assigned. Active-only would silently drop a
+        // warning that was deactivated after it was assigned: the picker does not offer it, the editor does not show
+        // it, so pressing "Übernehmen" without touching anything would destroy the assignment unseen. Adding one is
+        // still restricted to active rows, which is what keeps a tampered dialog post out.
+        var selectable = requested.Count == 0
+            ? []
+            : await db.Warnhinweise
+                .Where(w => requested.Contains(w.Id) && (w.IsActive || existingIds.Contains(w.Id)))
+                .Select(w => w.Id)
+                .ToListAsync(cancellationToken);
+        var wanted = selectable.ToHashSet(StringComparer.Ordinal);
+
+        var toRemove = existing.Where(z => !wanted.Contains(z.WarnhinweisId)).ToList();
+        var toSupplement = wanted
+            .Where(x => !existingIds.Contains(x))
+            .Select(x => new FahndungWarnhinweis { FahndungId = id, WarnhinweisId = x })
+            .ToList();
+        if (toRemove.Count == 0 && toSupplement.Count == 0)
+        {
+            return;
+        }
+
+        db.FahndungWarnhinweise.RemoveRange(toRemove);
+        db.FahndungWarnhinweise.AddRange(toSupplement);
+
+        // FahndungWarnhinweis is not IAuditable, so the interceptor would write nothing — log the diff against the
+        // notice, which is the row that carries the change outside
+        var touched = toRemove.Select(z => z.WarnhinweisId).Concat(toSupplement.Select(z => z.WarnhinweisId))
+            .Distinct(StringComparer.Ordinal).ToList();
+        var names = await db.Warnhinweise
+            .Where(w => touched.Contains(w.Id))
+            .ToDictionaryAsync(w => w.Id, w => w.Name, cancellationToken);
+        var changes = new Dictionary<string, object?[]>();
+        if (toSupplement.Count > 0)
+        {
+            changes["Warnhinweise hinzugefügt"] =
+                [null, string.Join(", ", toSupplement.Select(z => names.GetValueOrDefault(z.WarnhinweisId, z.WarnhinweisId)))];
+        }
+        if (toRemove.Count > 0)
+        {
+            changes["Warnhinweise entfernt"] =
+                [null, string.Join(", ", toRemove.Select(z => names.GetValueOrDefault(z.WarnhinweisId, z.WarnhinweisId)))];
+        }
+        db.AuditLogs.Add(ManualAudit.Row(nameof(OeffentlicheFahndung), row.Id, AuditAction.Modified, actor, changes));
+
+        await SaveAndInvalidateAsync(db, cancellationToken);
+    }
+
+    // ---- counter and expiry ----
+
+    public async Task CountViewAsync(string? caseNumber, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseNumber))
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // The whole publication predicate sits in the Where rather than in a preceding read: a counting write must be
+        // unable to touch a row that is not outside. No IgnoreQueryFilters — the global !IsDeleted filter applies here
+        // and is exactly the guard wanted. ExecuteUpdate because the row is IAuditable: a tracked increment would
+        // stamp GeaendertAm, write one AuditLog row per anonymous view, and push the notice onto the person file's
+        // timeline on every page load. No Permission guard either — there is no actor, the caller is an anonymous
+        // visitor, and the one integer this touches never leaves the house. Third documented exception to
+        // "bulk write ⇒ call the guard yourself", next to score writes and FactionRecency.StampAsync.
+        await db.OeffentlicheFahndungen
+            .Where(f => f.CaseNumber == caseNumber
+                && f.Status == PublicWantedStatus.Veroeffentlicht
+                && (f.ExpiresAt == null || f.ExpiresAt > now))
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.ViewCount, f => f.ViewCount + 1), cancellationToken);
+    }
+
+    public async Task<int> ExpireDueAsync(CancellationToken cancellationToken = default)
+    {
+        // UtcNow, never Now: ExpiryFrom stores the end of the chosen local day converted to UTC, and MySQL datetime
+        // carries no offset that would catch the mistake
+        var now = DateTime.UtcNow;
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Veroeffentlicht only, deliberately not "everything but Gefasst": a Beantragt row with an expiry date would
+        // otherwise die silently, without CloseOpenRequestsAsync running, and the nav badge would keep counting a
+        // request the inbox can no longer find. No IgnoreQueryFilters — a soft-deleted row belongs to the bin.
+        var rows = await db.OeffentlicheFahndungen
+            .Where(f => f.Status == PublicWantedStatus.Veroeffentlicht
+                && f.ExpiresAt != null && f.ExpiresAt <= now)
+            .OrderBy(f => f.ExpiresAt)
+            .Take(ExpiryBatch)
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var row in rows)
+        {
+            // the status change is the idempotency token: a second sweep selects nothing, so no NotifiedAt column
+            // is needed the way Followup needs one. The photo copy stays — expiry is reversible like a retraction.
+            row.Status = PublicWantedStatus.Abgelaufen;
+        }
+        await SaveAndInvalidateAsync(db, cancellationToken);
+
+        await NotifyExpiredAsync(db, rows, cancellationToken);
+        return rows.Count;
+    }
+
+    /// <summary>One bell per sweep, not one per notice; a failure here must not roll the status back.</summary>
+    private async Task NotifyExpiredAsync(AppDbContext db, List<OeffentlicheFahndung> rows,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var recipients = await db.Users
+                .AsNoTracking()
+                .OnlySelectable()
+                .Where(u => u.IsAdmin || (u.Rank != null && u.Rank >= Rank.SupervisorySpecialAgent))
+                .Select(u => u.Id)
+                .ToListAsync(cancellationToken);
+            if (recipients.Count == 0)
+            {
+                return;
+            }
+
+            var title = rows.Count == 1
+                ? $"Ausschreibung abgelaufen: {rows[0].DisplayName} ({rows[0].CaseNumber})"
+                : $"{rows.Count} öffentliche Ausschreibungen abgelaufen";
+            // PublicWantedExpired is not Discord-routable: this is an internal fact, and NotifyManyAsync pushes
+            // every routable category into its channel on its own
+            await notifications.NotifyManyAsync(recipients, NotificationType.PublicWantedExpired, title,
+                "/fahndung?tab=oeffentlich", null, cancellationToken);
+        }
+        catch (Exception)
+        {
+            /* best effort */
+        }
     }
 
     // ---- trash ----
@@ -510,8 +745,7 @@ public class PublicWantedService(
         row.DeletedById = null;
         // back as a draft: undoing a delete must not republish anything on the way
         row.Status = PublicWantedStatus.Entwurf;
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
     // ---- publication requests ----
@@ -566,8 +800,7 @@ public class PublicWantedService(
 
         DecideRequest(request, approved: false, note, actor);
         row.Status = PublicWantedStatus.Entwurf;
-        await db.SaveChangesAsync(cancellationToken);
-        cache.Remove(CacheKey);
+        await SaveAndInvalidateAsync(db, cancellationToken);
         await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
             "Veröffentlichung abgelehnt", "/fahndung?tab=oeffentlich", cancellationToken);
     }
@@ -602,8 +835,7 @@ public class PublicWantedService(
 
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
+            await SaveAndInvalidateAsync(db, cancellationToken, tx);
         }
         catch
         {
@@ -612,10 +844,45 @@ public class PublicWantedService(
             DeleteCopy(freshPhoto);
             throw;
         }
-        cache.Remove(CacheKey);
 
         // after the commit: a rollback would otherwise have thrown away the row that still points at this file
         DeleteCopy(previousPhoto is { Length: > 0 } && previousPhoto != row.PhotoFileName ? previousPhoto : null);
+
+        // and after the commit for the same reason: a Discord post cannot be recalled, so it must never announce a
+        // notice that never went live. Both entry points share this body, so it can neither fire twice nor fire for
+        // a rank-2 request, which returns before ever getting here.
+        await PushPublishedAsync(new PublicWantedCard(row.CaseNumber!, row.Kind, row.DisplayName, row.AliasText,
+            row.PhotoFileName != null, row.PublicHazardLevel, row.PublishedAt, NoHints), cancellationToken);
+    }
+
+    /// <summary>Announces a fresh notice in the public channel.</summary>
+    /// <remarks>
+    /// Takes a <see cref="PublicWantedCard"/> and nothing else on purpose — that record structurally cannot carry a
+    /// PersonId, the internal NOOSE-P case number, a codename or a score, so the message cannot either. No accusation
+    /// text: after a retraction the post is then a dead link rather than a standing allegation. Fire and forget —
+    /// PushCustomAsync swallows its own failures, and a dead webhook must never fail a publication.
+    /// </remarks>
+    private Task PushPublishedAsync(PublicWantedCard card, CancellationToken cancellationToken)
+        => discord.PushCustomAsync(NotificationType.PublicWantedPublished,
+            $"🔎 **Neue öffentliche Fahndung** — {card.DisplayName} ({card.CaseNumber})",
+            $"/gesucht/{card.CaseNumber}", cancellationToken);
+
+    /// <summary>The one save path of this table: nothing writes it without dropping the snapshot.</summary>
+    /// <remarks>
+    /// A file scan holds this shape (<c>PublicWantedCacheDisciplineTests</c>). Board and archive share one cache key
+    /// for the same reason: two keys would double every one of these call sites and create a new failure class where
+    /// one is dropped and the other stays.
+    /// </remarks>
+    private async Task SaveAndInvalidateAsync(AppDbContext db, CancellationToken cancellationToken,
+        IDbContextTransaction? transaction = null)
+    {
+        await db.SaveChangesAsync(cancellationToken);
+        // commit before the drop: invalidating first lets a concurrent read cache a pre-commit board for 10 s
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        cache.Remove(CacheKey);
     }
 
     private void DeleteCopy(string? fileName)
@@ -791,37 +1058,75 @@ public class PublicWantedService(
                     && f.CaseNumber != null
                     && (f.ExpiresAt == null || f.ExpiresAt > now))
                 .OrderByDescending(f => f.PublishedAt)
-                .Select(f => new { f.PersonId, Detail = new PublicWantedDetail(
-                    f.CaseNumber!,
+                .Select(f => new
+                {
+                    f.Id,
+                    f.PersonId,
+                    CaseNumber = f.CaseNumber!,
                     f.Kind,
                     f.DisplayName,
                     f.AliasText,
-                    f.PhotoFileName != null,
+                    HasPhoto = f.PhotoFileName != null,
                     f.PublicHazardLevel,
                     f.PublishedAt,
                     f.ChargeHtml,
                     f.LastArea,
                     f.VehicleText,
-                    f.ExpiresAt) })
+                    f.ExpiresAt,
+                })
+                .ToListAsync(cancellationToken);
+
+            // the archive is a record of recent results, not a dump: an anonymous page rendering every capture since
+            // launch is a page-weight problem and a scraping target
+            var captured = await db.OeffentlicheFahndungen
+                .AsNoTracking()
+                .Where(f => f.Status == PublicWantedStatus.Gefasst && f.CaseNumber != null && f.CapturedAt != null)
+                .OrderByDescending(f => f.CapturedAt)
+                .Take(ArchiveLimit)
+                .Select(f => new
+                {
+                    f.PersonId,
+                    CaseNumber = f.CaseNumber!,
+                    f.Kind,
+                    f.DisplayName,
+                    HasPhoto = f.PhotoFileName != null,
+                    f.CapturedAt,
+                })
                 .ToListAsync(cancellationToken);
 
             // The suppression belt, as a second query rather than a subquery: IgnoreQueryFilters is compilation-scoped,
             // so a subquery using it strips !IsDeleted from the OUTER set as well and a deleted notice goes live —
-            // measured, not assumed. Standalone it can only do what it says.
-            var open = await OpenRecordsAsync(db, rows.Select(r => r.PersonId), cancellationToken);
+            // measured, not assumed. Standalone it can only do what it says. One call over both lists, because the
+            // archive answers to the same belt as the board.
+            var open = await OpenRecordsAsync(db,
+                rows.Select(r => r.PersonId).Concat(captured.Select(r => r.PersonId)), cancellationToken);
+
+            var visible = rows.Where(r => r.PersonId is null || open.Contains(r.PersonId)).ToList();
+            // after the belt, so a suppressed notice does not even get its chips queried
+            var hints = await HintsAsync(db, visible.Select(r => r.Id), cancellationToken);
 
             // deduplicated before the dictionary: a throwing ToDictionary inside this try would blank the whole board
-            var byCaseNumber = rows
-                .Where(r => r.PersonId is null || open.Contains(r.PersonId))
-                .Select(r => r.Detail)
+            var byCaseNumber = visible
+                .Select(r => new PublicWantedDetail(r.CaseNumber, r.Kind, r.DisplayName, r.AliasText, r.HasPhoto,
+                    r.PublicHazardLevel, r.PublishedAt, r.ChargeHtml, r.LastArea, r.VehicleText, r.ExpiresAt,
+                    hints.GetValueOrDefault(r.Id, NoHints)))
                 .GroupBy(f => f.CaseNumber, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             var cards = byCaseNumber.Values
                 .OrderByDescending(f => f.PublishedAt)
-                .Select(f => new PublicWantedCard(
-                    f.CaseNumber, f.Kind, f.DisplayName, f.AliasText, f.HasPhoto, f.HazardLevel, f.PublishedAt))
+                .Select(f => new PublicWantedCard(f.CaseNumber, f.Kind, f.DisplayName, f.AliasText, f.HasPhoto,
+                    f.HazardLevel, f.PublishedAt, f.Hints))
                 .ToList();
-            board = new PublicWantedBoard(cards, byCaseNumber);
+
+            var capturedByCaseNumber = captured
+                .Where(r => r.PersonId is null || open.Contains(r.PersonId))
+                .Select(r => new PublicWantedArchiveCard(r.CaseNumber, r.Kind, r.DisplayName, r.HasPhoto,
+                    r.CapturedAt!.Value))
+                .GroupBy(f => f.CaseNumber, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var archive = capturedByCaseNumber.Values.OrderByDescending(f => f.CapturedAt).ToList();
+
+            board = new PublicWantedBoard(cards, byCaseNumber, archive, capturedByCaseNumber);
         }
         catch (Exception)
         {
@@ -831,6 +1136,34 @@ public class PublicWantedService(
 
         cache.Set(CacheKey, board, CacheDuration);
         return board;
+    }
+
+    /// <summary>The active warning chips of the given notices, keyed by notice, in display order.</summary>
+    private static async Task<Dictionary<string, IReadOnlyList<PublicWantedHint>>> HintsAsync(
+        AppDbContext db, IEnumerable<string> wantedIds, CancellationToken cancellationToken)
+    {
+        var ids = wantedIds.Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<string, IReadOnlyList<PublicWantedHint>>(StringComparer.Ordinal);
+        }
+
+        // IsActive is read here rather than copied onto the assignment: switching a warning off has to clear it from
+        // every live notice within one cache window, without editing forty notices by hand
+        var rows = await db.FahndungWarnhinweise
+            .AsNoTracking()
+            .Where(z => ids.Contains(z.FahndungId) && z.Warnhinweis!.IsActive)
+            .OrderBy(z => z.Warnhinweis!.SortOrder).ThenBy(z => z.Warnhinweis!.Name)
+            .Select(z => new { z.FahndungId, Label = z.Warnhinweis!.Name, z.Warnhinweis.Colour })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(z => z.FahndungId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<PublicWantedHint>)g
+                    .Select(z => new PublicWantedHint(z.Label, z.Colour ?? string.Empty)).ToList(),
+                StringComparer.Ordinal);
     }
 
     /// <summary>Open publication requests whose notice still exists; count and list share it so they cannot disagree.</summary>
