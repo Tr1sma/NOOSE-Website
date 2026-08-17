@@ -130,6 +130,11 @@ public static class TimelineDisplay
         {
             return (TimelineCategory.Change, $"Kopfgeld-Anteil {Verb("gestiftet", "entfernt")}");
         }
+        // the actor is stripped by TipAnonymity before this ever renders; the title must stand on its own
+        if (entityType == nameof(Hinweis))
+        {
+            return (TimelineCategory.Change, $"Bürgerhinweis {Verb("eingegangen", "gelöscht")}");
+        }
 
         var kat = action switch
         {

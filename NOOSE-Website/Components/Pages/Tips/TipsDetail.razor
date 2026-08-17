@@ -1,0 +1,257 @@
+@page "/hinweise/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
+@inject ITipService Tips
+@inject TipsBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@(_tip?.CaseNumber ?? "Bürgerhinweis") · NOOSE</PageTitle>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_tip is null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Hinweis nicht gefunden"
+                Text="Der Hinweis existiert nicht oder wurde gelöscht." />
+}
+else
+{
+    <PageHeader Icon="@Icons.Material.Filled.TipsAndUpdates"
+                Title="@($"Bürgerhinweis {_tip.CaseNumber}")"
+                Subtitle="@($"Eingegangen am {_tip.CreatedAt.ToLocalTime():dd.MM.yyyy HH:mm}")"
+                BackHref="/hinweise">
+        <Actions>
+            @if (_canWrite)
+            {
+                @if (_tip.HandlerId is null)
+                {
+                    <MudButton OnClick="AssignAsync" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AssignmentInd">Übernehmen</MudButton>
+                }
+                <MudMenu Label="Status setzen" Variant="Variant.Outlined" Color="Color.Default"
+                         StartIcon="@Icons.Material.Filled.Flag">
+                    @foreach (var target in TipRules.AllowedTargets(_tip.Status))
+                    {
+                        <MudMenuItem OnClick="@(() => SetStatusAsync(target))">@TipStatusDisplay.Name(target)</MudMenuItem>
+                    }
+                </MudMenu>
+                <MudButton OnClick="DeleteAsync" Variant="Variant.Text" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+            }
+        </Actions>
+    </PageHeader>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="6">
+            <MudStack Spacing="4">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColour(_tip.Status)">
+                                @TipStatusDisplay.Name(_tip.Status)
+                            </MudChip>
+                            @if (_tip.WantsAnonymity && !_tip.AnonymityResolved)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.VisibilityOff">anonym</MudChip>
+                            }
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Bearbeiter: @(string.IsNullOrWhiteSpace(_tip.HandlerCodename) ? "—" : _tip.HandlerCodename)
+                            </MudText>
+                        </MudStack>
+
+                        @if (_tip.WantedCaseNumber is not null)
+                        {
+                            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true"
+                                      Icon="@Icons.Material.Filled.PersonSearch">
+                                Bezug: <b>@_tip.WantedDisplayName</b> (@_tip.WantedCaseNumber)
+                            </MudAlert>
+                        }
+
+                        <MudDivider />
+                        <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_tip.Text</MudText>
+
+                        @if (_tip.HasAttachment)
+                        {
+                            <MudDivider />
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Anhang</MudText>
+                                <MudImage Src="@($"/dateien/hinweise/{_tip.Id}?inline=true")"
+                                          Alt="Anhang" Fluid="true" Class="rounded" Style="max-width:100%;" />
+                                <MudButton Href="@($"/dateien/hinweise/{_tip.Id}")" Target="_blank"
+                                           Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Download">
+                                    @(_tip.AttachmentName ?? "Herunterladen")
+                                </MudButton>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">Hinweisgeber</MudText>
+                        @if (_tip.CitizenName is not null)
+                        {
+                            <MudText Typo="Typo.body1">@_tip.CitizenName</MudText>
+                            @if (_tip.CitizenConfirmedTips is { } confirmed)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Bisher bestätigte Hinweise: @confirmed
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Der Hinweisgeber hat um Anonymität gebeten. Für eine Belohnung muss die Führungsebene
+                                sie ausdrücklich aufheben.
+                            </MudText>
+                            <AuthorizeView Policy="@Policies.Leadership" Context="leadCtx">
+                                <MudTextField @bind-Value="_reason" Label="Begründung der Auflösung" Lines="2"
+                                              Variant="Variant.Outlined" />
+                                <div>
+                                    <MudButton OnClick="ResolveAsync" Disabled="_busy" Variant="Variant.Filled"
+                                               Color="Color.Warning" StartIcon="@Icons.Material.Filled.LockOpen">
+                                        Anonymität aufheben
+                                    </MudButton>
+                                </div>
+                            </AuthorizeView>
+                        }
+                        @if (_tip.AnonymityResolved && _tip.AnonymityResolvedAt is { } resolvedAt)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                Anonymität aufgehoben am @resolvedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                @(_tip.AnonymityResolvedByCodename is null ? string.Empty : $" von {_tip.AnonymityResolvedByCodename}")
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudStack Spacing="4">
+                <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Buerger"
+                                 CanWrite="@(_canWrite && !TipRules.IsClosed(_tip.Status))" />
+                <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Intern"
+                                 CanWrite="_canWrite" />
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private TipDetail? _tip;
+    private string _reason = string.Empty;
+    private bool _load = true;
+    private bool _busy;
+    private bool _canWrite;
+    private string? _loadedId;
+
+    protected override void OnInitialized() => Broadcaster.Modified += OnModified;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _canWrite = _user.MayWrite();
+        if (_loadedId == Id)
+        {
+            return;
+        }
+        _loadedId = Id;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _tip = await Tips.GetAsync(Id, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _tip = null;
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private Task AssignAsync() => RunAsync(() => Tips.AssignSelfAsync(Id, _user));
+
+    private Task SetStatusAsync(TipStatus status) => RunAsync(() => Tips.SetStatusAsync(Id, status, _user));
+
+    private Task ResolveAsync() => RunAsync(() => Tips.ResolveAnonymityAsync(Id, _reason, _user));
+
+    private async Task DeleteAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Tips.DeleteAsync(Id, _user);
+            Snackbar.Add("Hinweis in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/hinweise");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OnModified(string tipId)
+    {
+        if (tipId != Id)
+        {
+            return;
+        }
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    private static Color StatusColour(TipStatus status) => status switch
+    {
+        TipStatus.Neu => Color.Info,
+        TipStatus.InPruefung => Color.Primary,
+        TipStatus.Rueckfrage => Color.Warning,
+        TipStatus.Bestaetigt => Color.Success,
+        TipStatus.FuehrteZurErgreifung => Color.Success,
+        _ => Color.Default,
+    };
+}

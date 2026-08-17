@@ -1,0 +1,105 @@
+using NOOSE_Website.Models.Enums;
+
+namespace NOOSE_Website.Models.Public;
+
+// ---- outward: what the citizen sees of their own tip ----
+
+/// <summary>One of the citizen's own tips in their list.</summary>
+/// <remarks>
+/// Addressed by case number, never by row id, and it carries no agent at all — the agency answers as "NOOSE", and a
+/// record that cannot hold a codename cannot leak one.
+/// </remarks>
+public record CitizenTipRow(
+    string CaseNumber,
+    TipStatus Status,
+    DateTime CreatedAt,
+    string Excerpt,
+    string? WantedCaseNumber,
+    string? WantedDisplayName,
+    bool HasAttachment,
+    int UnreadCount);
+
+/// <summary>One of the citizen's own tips, opened.</summary>
+public record CitizenTipDetail(
+    string CaseNumber,
+    TipStatus Status,
+    DateTime CreatedAt,
+    string Text,
+    bool WantsAnonymity,
+    bool AnonymityResolved,
+    string? WantedCaseNumber,
+    string? WantedDisplayName,
+    bool HasAttachment,
+    string? AttachmentName,
+    bool MayReply,
+    IReadOnlyList<CitizenTipMessage> Messages);
+
+/// <summary>One line of the conversation as the citizen sees it.</summary>
+public record CitizenTipMessage(DateTime CreatedAt, string Text, bool FromCitizen);
+
+// ---- inward: the handler's view ----
+
+/// <summary>One tip in the internal inbox.</summary>
+public record TipRow(
+    string Id,
+    string CaseNumber,
+    TipStatus Status,
+    DateTime CreatedAt,
+    string Excerpt,
+    bool IsAnonymous,
+    string? CitizenName,
+    string? WantedCaseNumber,
+    string? WantedDisplayName,
+    bool HasAttachment,
+    string? HandlerCodename,
+    DateTime? LastMessageAt,
+    bool AwaitingAnswer);
+
+/// <summary>One tip, opened by a handler.</summary>
+/// <remarks>
+/// <see cref="CitizenName"/> stays null while anonymity holds — the promise is kept by the projection, not by the page
+/// that renders it, so a second page cannot forget it.
+/// </remarks>
+public record TipDetail(
+    string Id,
+    string CaseNumber,
+    TipStatus Status,
+    DateTime CreatedAt,
+    string Text,
+    bool WantsAnonymity,
+    bool AnonymityResolved,
+    DateTime? AnonymityResolvedAt,
+    string? AnonymityResolvedByCodename,
+    string? CitizenName,
+    int? CitizenConfirmedTips,
+    string? WantedCaseNumber,
+    string? WantedDisplayName,
+    bool HasAttachment,
+    string? AttachmentName,
+    string? HandlerId,
+    string? HandlerCodename);
+
+/// <summary>One line of either thread as a handler sees it.</summary>
+public record TipMessageRow(
+    string Id,
+    TipMessageAudience Audience,
+    string Text,
+    bool FromCitizen,
+    string? AuthorCodename,
+    DateTime CreatedAt);
+
+/// <summary>Inbox tab counters.</summary>
+public record TipInboxCounts(int New, int InProgress, int Closed);
+
+/// <summary>What the delivery endpoint needs to hand out one attachment.</summary>
+public record TipAttachmentAccess(string FileNameSaved, string? ContentType, string? OriginalName);
+
+/// <summary>Form input of the public tip form.</summary>
+public class TipInput
+{
+    public string Text { get; set; } = string.Empty;
+    public bool WantsAnonymity { get; set; }
+
+    /// <summary>Public case number of the notice the tip refers to; resolved and verified by the service.</summary>
+    public string? WantedCaseNumber { get; set; }
+}

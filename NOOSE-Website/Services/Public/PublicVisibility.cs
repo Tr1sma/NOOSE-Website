@@ -195,6 +195,10 @@ public static class PublicVisibility
             // --- public area's own tables ---
             ["BuergerProfil"] = "Konto eines Bürgers; sein Name gehört ihm, nicht der Website. Nach außen sieht ihn nur er selbst.",
             ["FahndungWarnhinweis"] = Assignment,
+            ["Hinweis"] = "Bürgereinreichung; sie ist Aktenmaterial. Der Hinweisgeber liest seinen eigenen "
+                + "Hinweis angemeldet im Bürgerbereich — das ist sein Konto, nicht die Öffentlichkeit.",
+            ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; er gehört den beiden Beteiligten. "
+                + "Die interne Zielgruppe verlässt das Haus nie.",
         };
 
     /// <summary>True when someone has decided the entity's public fate either way.</summary>

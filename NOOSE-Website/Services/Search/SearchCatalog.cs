@@ -439,6 +439,12 @@ public static class SearchCatalog
             ["FahndungKopfgeldAnteil"] = "Geldposten an einer Ausschreibung ohne eigenen Text; gefunden wird die "
                 + "Akte, gepflegt wird der Anteil an ihrem Fahndungs-Panel. Eine durchsuchbare Geldliste wäre "
                 + "obendrein ein Verzeichnis, welcher Agent privat auf wen gesetzt hat.",
+            ["Hinweis"] = "Bürgereinreichung; bearbeitet wird sie im Eingang unter /hinweise. Ein eigener "
+                + "Provider kommt mit der Suchanbindung des öffentlichen Bereichs — er müsste zusätzlich die "
+                + "Anonymitätszusage tragen, die bisher nur die Bearbeiter-Projektion kennt.",
+            ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; gefunden wird der Hinweis, nicht die "
+                + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst an der "
+                + "Bearbeiter-Prüfung vorbei lesbar.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

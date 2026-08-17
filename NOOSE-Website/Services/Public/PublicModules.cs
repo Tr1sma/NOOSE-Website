@@ -83,7 +83,7 @@ public static class PublicModules
             Icons.Material.Filled.BarChart, null, PublicModuleGroup.Behoerde, 170, false, false, OffGeneric),
 
         new(Tips, "Hinweis geben", "Formular zur Übermittlung von Hinweisen.",
-            Icons.Material.Filled.TipsAndUpdates, "/hinweis", PublicModuleGroup.Service, 200, false, false,
+            Icons.Material.Filled.TipsAndUpdates, "/hinweis", PublicModuleGroup.Service, 200, false, true,
             "Wir nehmen derzeit keine Hinweise über die Website an."),
         new(Reward, "Belohnung", "Auszahlung und Belege für bestätigte Hinweise.",
             Icons.Material.Filled.Redeem, null, PublicModuleGroup.Service, 210, false, false, OffGeneric),

@@ -302,6 +302,34 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to read the citizen tip inbox.</summary>
+    /// <remarks>
+    /// Every internal agent, the read-only supervision included — it reads everything by design, and locking it out
+    /// of the inbox would be the one place it cannot look. A partner, a citizen and an applicant stay outside.
+    /// </remarks>
+    public static void RequireTipRead(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent())
+        {
+            throw new UnauthorizedAccessException("Bürgerhinweise sieht nur ein interner Agent.");
+        }
+    }
+
+    /// <summary>Require the right to work a citizen tip.</summary>
+    /// <remarks>
+    /// Triage is everyday work, so this is every internal agent who may write — not a rank gate. RequireWriteAccess
+    /// alone would not do it: it blocks the read-only supervision and partners, but a signed-in citizen carries no
+    /// rank claim and would walk into the inbox that holds other citizens' submissions.
+    /// </remarks>
+    public static void RequireTipHandling(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayWrite())
+        {
+            throw new UnauthorizedAccessException(
+                "Bürgerhinweise bearbeitet nur ein schreibberechtigter Agent.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

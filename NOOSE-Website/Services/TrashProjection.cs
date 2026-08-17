@@ -101,6 +101,12 @@ public static class TrashProjection
         => new("oeffentliche-fahndungen", x.Id, x.CaseNumber, x.DisplayName,
             Join(PublicWantedKindDisplay.Name(x.Kind), PublicWantedStatusDisplay.Name(x.Status)), x.DeletedAt);
 
+    // no citizen name and no text: the trash list is read by every handler, and the anonymity promise does not
+    // pause because a row was deleted
+    public static TrashItem Tip(Hinweis x)
+        => new("hinweise", x.Id, x.CaseNumber, $"Bürgerhinweis {x.CaseNumber}",
+            TipStatusDisplay.Name(x.Status), x.DeletedAt);
+
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");
 

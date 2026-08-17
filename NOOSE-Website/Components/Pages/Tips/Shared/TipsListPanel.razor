@@ -1,0 +1,129 @@
+@inject ITipService Tips
+@inject TipsBroadcaster Broadcaster
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-4">
+    <MudTextField T="string" @bind-Value="_search" Label="Suche" Placeholder="Aktenzeichen oder Text"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search" DebounceInterval="300"
+                  OnDebounceIntervalElapsed="ReloadAsync" Style="max-width:340px;" />
+    <MudSwitch T="bool" @bind-Value="_onlyMine" Color="Color.Primary" Label="Nur meine"
+               @bind-Value:after="ReloadAsync" />
+</MudStack>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_rows.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.TipsAndUpdates" Title="Keine Hinweise"
+                Text="In dieser Ansicht liegt derzeit nichts vor." />
+}
+else
+{
+    <MudTable Items="_rows" Hover="true" Dense="true" Style="cursor:pointer;"
+              OnRowClick="@((TableRowClickEventArgs<TipRow> e) => Open(e.Item))">
+        <HeaderContent>
+            <MudTh>Aktenzeichen</MudTh>
+            <MudTh>Hinweisgeber</MudTh>
+            <MudTh>Bezug</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Bearbeiter</MudTh>
+            <MudTh>Eingegangen</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Aktenzeichen">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    @context.CaseNumber
+                    @if (context.HasAttachment)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Small" Color="Color.Default" />
+                    }
+                    @if (context.AwaitingAnswer)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.MarkEmailUnread" Size="Size.Small" Color="Color.Warning" />
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="Hinweisgeber">
+                @if (context.IsAnonymous)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                             Icon="@Icons.Material.Filled.VisibilityOff">anonym</MudChip>
+                }
+                else
+                {
+                    @(context.CitizenName ?? "—")
+                }
+            </MudTd>
+            <MudTd DataLabel="Bezug">@(context.WantedCaseNumber is null ? "—" : $"{context.WantedDisplayName} ({context.WantedCaseNumber})")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                    @TipStatusDisplay.Name(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Bearbeiter">@(string.IsNullOrWhiteSpace(context.HandlerCodename) ? "—" : context.HandlerCodename)</MudTd>
+            <MudTd DataLabel="Eingegangen">@context.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public TipInboxScope Scope { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<TipRow> _rows = Array.Empty<TipRow>();
+    private string? _search;
+    private bool _onlyMine;
+    private bool _load = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        Broadcaster.Modified += OnModified;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Tips.GetInboxAsync(Scope, _search, _onlyMine, _user);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private void Open(TipRow row) => Nav.NavigateTo($"/hinweise/{row.Id}");
+
+    private void OnModified(string _)
+        => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    private static Color StatusColour(TipStatus status) => status switch
+    {
+        TipStatus.Neu => Color.Info,
+        TipStatus.InPruefung => Color.Primary,
+        TipStatus.Rueckfrage => Color.Warning,
+        TipStatus.Bestaetigt => Color.Success,
+        TipStatus.FuehrteZurErgreifung => Color.Success,
+        TipStatus.Verworfen => Color.Default,
+        _ => Color.Default,
+    };
+}

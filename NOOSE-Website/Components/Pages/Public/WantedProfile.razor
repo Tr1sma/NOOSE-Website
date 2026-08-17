@@ -101,6 +101,13 @@
                     <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
                         <MudButton Href="/gesucht" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.ArrowBack">Zur Fahndungsübersicht</MudButton>
+                        @if (_mayTip)
+                        {
+                            @* a link, not a dialog: this page is statically rendered and has no circuit *@
+                            <MudButton Href="@($"/hinweis?fahndung={_entry.CaseNumber}")" Variant="Variant.Filled"
+                                       Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.TipsAndUpdates">Hinweis geben</MudButton>
+                        }
                         @if (_mayPrint)
                         {
                             <MudButton Href="@($"/gesucht/{_entry.CaseNumber}/druck")" Variant="Variant.Text"
@@ -122,6 +129,7 @@
     private PublicWantedDetail? _entry;
     private PublicBounty? _bounty;
     private bool _mayPrint;
+    private bool _mayTip;
     private string? _loadedKey;
 
     // navigating from one case number to another stays on this route template, so Blazor reuses the instance and
@@ -145,8 +153,13 @@
 
         if (_entry is not null)
         {
-            // its own try: a failure reading the poster switch must not blank the profile, it may only cost the button
-            try { _mayPrint = (await Modules.GetAsync()).IsEnabled(PublicModules.WantedPrint); }
+            // its own try: a failure reading the switches must not blank the profile, it may only cost the buttons
+            try
+            {
+                var snapshot = await Modules.GetAsync();
+                _mayPrint = snapshot.IsEnabled(PublicModules.WantedPrint);
+                _mayTip = snapshot.IsEnabled(PublicModules.Tips);
+            }
             catch { /* best effort */ }
 
             // and its own again: a failure over the money must not cost the wanted notice

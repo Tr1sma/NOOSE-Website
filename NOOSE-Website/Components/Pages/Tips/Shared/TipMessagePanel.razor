@@ -1,0 +1,158 @@
+@inject ITipService Tips
+@inject TipsBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+@* one component, two threads. The citizen-facing rows carry no author at all, so nothing has to be hidden here *@
+<MudPaper Outlined="true" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@(IsInternal ? Icons.Material.Filled.Lock : Icons.Material.Filled.Forum)"
+                     Color="@(IsInternal ? Color.Warning : Color.Primary)" Size="Size.Small" />
+            <MudText Typo="Typo.h6">@(IsInternal ? "Interne Notizen" : "Schriftwechsel mit dem Hinweisgeber")</MudText>
+        </MudStack>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            @(IsInternal
+                ? "Nur für Agenten sichtbar."
+                : "Der Hinweisgeber sieht diese Zeilen als Nachricht von „NOOSE“ — nie mit Codename.")
+        </MudText>
+
+        @if (_load)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_messages.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Noch keine Nachricht.</MudText>
+        }
+        else
+        {
+            <MudStack Spacing="2" Style="max-height:420px;overflow-y:auto;">
+                @foreach (var message in _messages)
+                {
+                    <MudPaper Outlined="true" Class="pa-3"
+                              Style="@(message.FromCitizen ? "margin-right:12%;" : "margin-left:12%;")">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Color="@(message.FromCitizen ? Color.Default : Color.Primary)">
+                                @Author(message) · @message.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                            </MudText>
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+
+        @if (CanWrite)
+        {
+            <MudTextField @bind-Value="_draft" Label="@(IsInternal ? "Notiz" : "Nachricht an den Hinweisgeber")"
+                          Lines="3" Variant="Variant.Outlined" MaxLength="@TipRules.MaxMessageLength" />
+            <div>
+                <MudButton OnClick="SendAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Send">
+                    @(IsInternal ? "Notiz speichern" : "Senden")
+                </MudButton>
+            </div>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public string TipId { get; set; } = string.Empty;
+
+    [Parameter]
+    [EditorRequired]
+    public ClaimsPrincipal User { get; set; } = default!;
+
+    [Parameter]
+    [EditorRequired]
+    public TipMessageAudience Audience { get; set; }
+
+    [Parameter]
+    public bool CanWrite { get; set; }
+
+    private IReadOnlyList<TipMessageRow> _messages = Array.Empty<TipMessageRow>();
+    private string _draft = string.Empty;
+    private bool _load = true;
+    private bool _busy;
+    private string? _loadedId;
+
+    private bool IsInternal => Audience == TipMessageAudience.Intern;
+
+    protected override void OnInitialized() => Broadcaster.Modified += OnModified;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == TipId)
+        {
+            return;
+        }
+        _loadedId = TipId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _messages = await Tips.GetMessagesAsync(TipId, Audience, User);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (IsInternal)
+            {
+                await Tips.PostInternalNoteAsync(TipId, _draft, User);
+            }
+            else
+            {
+                await Tips.AskCitizenAsync(TipId, _draft, User);
+            }
+            _draft = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string Author(TipMessageRow message)
+    {
+        if (message.FromCitizen)
+        {
+            return "Hinweisgeber";
+        }
+        return IsInternal ? message.AuthorCodename ?? "NOOSE" : "NOOSE";
+    }
+
+    private void OnModified(string tipId)
+    {
+        if (tipId != TipId)
+        {
+            return;
+        }
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    public void Dispose() => Broadcaster.Modified -= OnModified;
+}

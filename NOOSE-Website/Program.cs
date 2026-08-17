@@ -164,6 +164,7 @@ builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
 builder.Services.AddScoped<IEvidenceImageStorageService, EvidenceImageStorageService>();
 builder.Services.AddScoped<IPublicWantedPhotoStorageService, PublicWantedPhotoStorageService>();
+builder.Services.AddScoped<ITipAttachmentStorageService, TipAttachmentStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
@@ -346,7 +347,9 @@ builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddHostedService<PublicWantedExpiryWorker>();
 builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();
 builder.Services.AddScoped<IBountyService, BountyService>();
+builder.Services.AddScoped<ITipService, TipService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
+builder.Services.AddSingleton<TipsBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -354,6 +357,14 @@ builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter(IdentityComponentsEndpointRouteBuilderExtensions.LoginRateLimitPolicy, limiter =>
     {
         limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+    // guards the tip attachment endpoint only. The submission itself travels over SignalR and never reaches this
+    // middleware, so the real quota is the count in TipService.SubmitAsync
+    options.AddFixedWindowLimiter(TipFileEndpointRouteBuilderExtensions.TipRateLimitPolicy, limiter =>
+    {
+        limiter.PermitLimit = 60;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
@@ -412,6 +423,7 @@ app.MapNooseSystemEndpoints();
 app.MapNooseStatisticsExportEndpoints();
 app.MapNooseRecruitingFileEndpoints();
 app.MapNoosePublicWantedFileEndpoints();
+app.MapNooseTipFileEndpoints();
 
 // apply pending migrations on startup
 using (var scope = app.Services.CreateScope())

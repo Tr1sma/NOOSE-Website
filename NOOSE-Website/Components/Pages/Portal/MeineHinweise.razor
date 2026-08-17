@@ -1,0 +1,261 @@
+@page "/buerger/hinweise"
+@page "/buerger/hinweise/{CaseNumber}"
+@layout BuergerLayout
+@attribute [AllowAnonymous]
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject ITipService Tips
+@inject IPublicModuleService Modules
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Meine Hinweise · NOOSE</PageTitle>
+
+@if (_ready)
+{
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudStack Spacing="4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerbereich</MudText>
+                    <MudText Typo="Typo.h4">Meine Hinweise</MudText>
+                </MudStack>
+                @if (_moduleOn && _detail is null)
+                {
+                    <MudButton Href="/hinweis" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add">Neuen Hinweis geben</MudButton>
+                }
+            </MudStack>
+
+            @if (_detail is not null)
+            {
+                <MudButton Href="/buerger/hinweise" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.ArrowBack" Class="align-self-start">Zur Übersicht</MudButton>
+
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_detail.CaseNumber</MudChip>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(_detail.Status)">
+                        @TipStatusDisplay.CitizenName(_detail.Status)
+                    </MudChip>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        eingegangen am @_detail.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudText>
+                </MudStack>
+
+                @if (_detail.WantedCaseNumber is not null)
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true"
+                              Icon="@Icons.Material.Filled.PersonSearch">
+                        Bezug: <b>@_detail.WantedDisplayName</b> (@_detail.WantedCaseNumber)
+                    </MudAlert>
+                }
+                @if (_detail.WantsAnonymity)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        @(_detail.AnonymityResolved
+                            ? "Die Anonymität wurde von der Führungsebene aufgehoben — eine Belohnung ist damit möglich."
+                            : "Dieser Hinweis ist anonym. Für eine Belohnung muss die Anonymität aufgehoben werden.")
+                    </MudAlert>
+                }
+
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.body1" Style="white-space:pre-wrap;">@_detail.Text</MudText>
+                </MudPaper>
+
+                @if (_detail.HasAttachment)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Anhang: @(_detail.AttachmentName ?? "Bild")
+                    </MudText>
+                }
+
+                <MudDivider />
+                <MudText Typo="Typo.h6">Schriftwechsel</MudText>
+                @if (_detail.Messages.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Noch keine Nachricht. Wir melden uns, wenn wir eine Rückfrage haben.
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        @foreach (var message in _detail.Messages)
+                        {
+                            <MudPaper Outlined="true" Class="pa-3"
+                                      Style="@(message.FromCitizen ? "margin-left:15%;" : "margin-right:15%;")">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="@(message.FromCitizen ? Color.Default : Color.Primary)">
+                                        @(message.FromCitizen ? "Du" : "NOOSE")
+                                        · @message.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                    </MudText>
+                                    <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@message.Text</MudText>
+                                </MudStack>
+                            </MudPaper>
+                        }
+                    </MudStack>
+                }
+
+                @if (_detail.MayReply)
+                {
+                    <MudTextField @bind-Value="_reply" Label="Antwort" Lines="3" Variant="Variant.Outlined"
+                                  MaxLength="@TipRules.MaxMessageLength" />
+                    <div>
+                        <MudButton OnClick="ReplyAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Send">Antwort senden</MudButton>
+                    </div>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Dieser Hinweis ist abgeschlossen; eine Antwort ist nicht mehr möglich.
+                    </MudText>
+                }
+            }
+            else if (_rows.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    Du hast noch keinen Hinweis übermittelt.
+                </MudAlert>
+            }
+            else
+            {
+                <MudStack Spacing="2">
+                    @foreach (var row in _rows)
+                    {
+                        <MudPaper Outlined="true" Class="pa-4" Style="cursor:pointer;"
+                                  @onclick="@(() => Open(row.CaseNumber))">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@row.CaseNumber</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColour(row.Status)">
+                                        @TipStatusDisplay.CitizenName(row.Status)
+                                    </MudChip>
+                                    @if (row.UnreadCount > 0)
+                                    {
+                                        <MudBadge Content="@row.UnreadCount" Color="Color.Error" Overlap="false">
+                                            <MudText Typo="Typo.caption">Neue Nachricht</MudText>
+                                        </MudBadge>
+                                    }
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @row.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")
+                                    </MudText>
+                                </MudStack>
+                                @if (row.WantedCaseNumber is not null)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Primary">
+                                        Bezug: @row.WantedDisplayName (@row.WantedCaseNumber)
+                                    </MudText>
+                                }
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@row.Excerpt</MudText>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public string? CaseNumber { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<CitizenTipRow> _rows = Array.Empty<CitizenTipRow>();
+    private CitizenTipDetail? _detail;
+    private string _reply = string.Empty;
+    private bool _ready;
+    private bool _busy;
+    private bool _moduleOn;
+    private string? _loadedKey;
+
+    // OnParametersSet, not OnInitialized: list and detail share this component, so Blazor reuses the instance
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (!_user.MayUseCitizenPortal())
+        {
+            Nav.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        var key = CaseNumber ?? string.Empty;
+        if (_loadedKey == key)
+        {
+            return;
+        }
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try { _moduleOn = (await Modules.GetAsync()).IsEnabled(PublicModules.Tips); }
+        catch { /* best effort */ }
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(CaseNumber))
+            {
+                _detail = null;
+                _rows = await Tips.GetOwnAsync(_user);
+            }
+            else
+            {
+                _detail = await Tips.GetOwnDetailAsync(CaseNumber, _user);
+                if (_detail is null)
+                {
+                    Nav.NavigateTo("/buerger/hinweise");
+                    return;
+                }
+                // opening is reading; the mark moves before the next unread count is drawn
+                await Tips.MarkCitizenReadAsync(CaseNumber, _user);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _ready = true;
+    }
+
+    private void Open(string caseNumber) => Nav.NavigateTo($"/buerger/hinweise/{caseNumber}");
+
+    private async Task ReplyAsync()
+    {
+        if (CaseNumber is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Tips.ReplyAsCitizenAsync(CaseNumber, _reply, _user);
+            _reply = string.Empty;
+            _detail = await Tips.GetOwnDetailAsync(CaseNumber, _user);
+            Snackbar.Add("Antwort gesendet.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static Color StatusColour(TipStatus status) => status switch
+    {
+        TipStatus.Neu => Color.Info,
+        TipStatus.InPruefung => Color.Primary,
+        TipStatus.Rueckfrage => Color.Warning,
+        TipStatus.Bestaetigt => Color.Success,
+        TipStatus.FuehrteZurErgreifung => Color.Success,
+        _ => Color.Default,
+    };
+}

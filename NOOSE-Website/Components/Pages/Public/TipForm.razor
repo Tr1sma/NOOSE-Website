@@ -1,0 +1,233 @@
+@page "/hinweis"
+@layout PublicSiteLayout
+@attribute [AllowAnonymous]
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject ITipService Tips
+@inject IBuergerService BuergerService
+@inject IPublicWantedService Wanted
+@inject ISnackbar Snackbar
+
+@* interactive on purpose: this is a form. The wanted profile that links here stays static and only carries a link *@
+
+<PageTitle>Hinweis geben · NOOSE</PageTitle>
+
+<PublicModuleGate Module="@PublicModules.Tips" Title="Hinweis geben">
+<MudPaper Elevation="4" Class="pa-8">
+    <MudStack Spacing="4">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.overline" Color="Color.Primary">Bürgerhinweis</MudText>
+            <MudText Typo="Typo.h4">Beobachtung melden</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary" Style="max-width:680px;">
+                Jeder Hinweis wird von einem Agenten gelesen und bewertet. Greife niemals selbst ein und
+                halte Abstand zu gesuchten Personen.
+            </MudText>
+        </MudStack>
+
+        @if (_caseNumber is not null)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
+                <MudStack Spacing="2">
+                    <div>Dein Hinweis wurde unter dem Aktenzeichen <b>@_caseNumber</b> aufgenommen.</div>
+                    <div>
+                        <MudButton Href="/buerger/hinweise" Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.TipsAndUpdates">Meine Hinweise</MudButton>
+                    </div>
+                </MudStack>
+            </MudAlert>
+        }
+        else
+        {
+            <AuthorizeView>
+                <NotAuthorized>
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Melde dich mit Discord an, um einen Hinweis zu übermitteln und seinen Stand zu verfolgen.
+                    </MudAlert>
+                    <div>
+                        <form method="post" action="/Account/PerformExternalLogin">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="returnUrl" value="@ReturnUrl()" />
+                            <input type="hidden" name="source" value="buerger" />
+                            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                                       Size="Size.Large" StartIcon="@Icons.Material.Filled.Login">
+                                Mit Discord anmelden
+                            </MudButton>
+                        </form>
+                    </div>
+                </NotAuthorized>
+                <Authorized Context="authCtx">
+                    @if (!_ready)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (_needsProfile)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            Für eine Einreichung brauchen wir deinen Vor- und Nachnamen — ohne ihn lässt sich weder
+                            eine Rückfrage noch eine Belohnung abwickeln.
+                        </MudAlert>
+                        <div>
+                            <MudButton Href="/buerger/profil" Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Badge">Angaben ergänzen</MudButton>
+                        </div>
+                    }
+                    else if (_blocked)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                            Dieses Konto ist für Einreichungen gesperrt. Öffentliche Inhalte kannst du weiterhin einsehen.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        @if (_reference is not null)
+                        {
+                            <MudAlert Severity="Severity.Normal" Variant="Variant.Filled" Dense="true"
+                                      Icon="@Icons.Material.Filled.PersonSearch">
+                                Bezug: <b>@_reference.DisplayName</b> (@_reference.CaseNumber)
+                            </MudAlert>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(Fahndung))
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                Zu diesem Aktenzeichen läuft keine Ausschreibung. Dein Hinweis wird ohne Bezug aufgenommen.
+                            </MudAlert>
+                        }
+
+                        <MudTextField @bind-Value="_input.Text" Label="Deine Beobachtung" Lines="8"
+                                      Variant="Variant.Outlined" Immediate="true"
+                                      MaxLength="@TipRules.MaxLength" Counter="@TipRules.MaxLength"
+                                      HelperText="@($"Wann, wo, wer, was — mindestens {TipRules.MinLength} Zeichen.")" />
+
+                        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept="image/*">
+                                <CustomContent>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.AddAPhoto"
+                                               OnClick="@context.OpenFilePickerAsync">Bild anhängen</MudButton>
+                                </CustomContent>
+                                <SelectedTemplate />
+                            </MudFileUpload>
+                            @if (_file is not null)
+                            {
+                                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined"
+                                         OnClose="@(() => _file = null)">@_file.Name</MudChip>
+                            }
+                        </MudStack>
+
+                        <MudCheckBox T="bool" @bind-Value="_input.WantsAnonymity" Color="Color.Primary"
+                                     Label="Meinen Namen gegenüber den Bearbeitern nicht anzeigen" />
+                        @if (_input.WantsAnonymity)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="max-width:680px;">
+                                Anonym heißt: die Bearbeiter sehen deinen Namen nicht. Für eine Belohnung muss die
+                                Führungsebene die Anonymität später ausdrücklich aufheben — ohne diesen Schritt ist
+                                keine Auszahlung möglich.
+                            </MudText>
+                        }
+
+                        <div>
+                            <MudButton OnClick="SubmitAsync" Disabled="_busy" Variant="Variant.Filled"
+                                       Color="Color.Primary" Size="Size.Large"
+                                       StartIcon="@Icons.Material.Filled.Send">Hinweis absenden</MudButton>
+                        </div>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        }
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Falsche Angaben sind strafbar. Bei akuter Gefahr wähle den Notruf statt dieses Formulars.
+        </MudText>
+    </MudStack>
+</MudPaper>
+</PublicModuleGate>
+
+@code {
+    // bound as string: Blazor answers a value it cannot parse with HTTP 500, and anyone can append a query
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "fahndung")]
+    public string? Fahndung { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private readonly TipInput _input = new();
+    private IBrowserFile? _file;
+    private PublicWantedDetail? _reference;
+    private ClaimsPrincipal _user = default!;
+    private bool _ready;
+    private bool _busy;
+    private bool _blocked;
+    private bool _needsProfile;
+    private string? _caseNumber;
+    private string? _loadedReference;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = (await AuthStateTask).User;
+        if (_user.MayUseCitizenPortal() && !_ready)
+        {
+            try
+            {
+                var profile = await BuergerService.GetOwnAsync(_user);
+                _needsProfile = profile is null
+                    || string.IsNullOrWhiteSpace(profile.FirstName)
+                    || string.IsNullOrWhiteSpace(profile.LastName);
+                _blocked = profile?.IsBlocked ?? false;
+            }
+            catch
+            {
+                /* best effort */
+            }
+            _ready = true;
+        }
+
+        // its own guard: navigating from one notice to another keeps the component instance
+        if (_loadedReference != Fahndung)
+        {
+            _loadedReference = Fahndung;
+            _input.WantedCaseNumber = string.IsNullOrWhiteSpace(Fahndung) ? null : Fahndung;
+            try { _reference = await Wanted.GetByCaseNumberAsync(Fahndung); }
+            catch { /* best effort */ _reference = null; }
+        }
+    }
+
+    private void OnFileChanged(IBrowserFile? file) => _file = file;
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        try
+        {
+            // an unresolvable reference must not cost the tip; it goes in without one
+            if (_reference is null)
+            {
+                _input.WantedCaseNumber = null;
+            }
+
+            if (_file is null)
+            {
+                _caseNumber = await Tips.SubmitAsync(_input, null, null, null, _user);
+            }
+            else
+            {
+                await using var stream = _file.OpenReadStream(TipUploadLimit);
+                _caseNumber = await Tips.SubmitAsync(_input, stream, _file.ContentType, _file.Name, _user);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // the storage service owns the real limit; the browser stream needs a number before the service is reached
+    private const long TipUploadLimit = 10 * 1024 * 1024;
+
+    private string ReturnUrl()
+        => string.IsNullOrWhiteSpace(Fahndung) ? "/hinweis" : $"/hinweis?fahndung={Uri.EscapeDataString(Fahndung)}";
+}

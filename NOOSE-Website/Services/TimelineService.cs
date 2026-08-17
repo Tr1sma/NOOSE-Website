@@ -18,6 +18,7 @@ using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Timeline;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -108,7 +109,10 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             .ToListAsync(cancellationToken))
         {
             var (kat, title) = TimelineDisplay.MapAudit(log.EntityType, log.Action);
-            raw.Add(new Raw(log.Timestamp, kat, title, null, log.AgentName, null, null,
+            // a tip carries the submitting account as its actor, and an agent may report through his civilian
+            // identity — naming him on the file he reported about is exactly what the promise forbids
+            var actor = TipAnonymity.HidesActor(log.EntityType) ? null : log.AgentName;
+            raw.Add(new Raw(log.Timestamp, kat, title, null, actor, null, null,
                 AuditDisplay.Parse(log.ChangesJson)));
         }
 
@@ -318,8 +322,11 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 // second hop: the money on a head hangs off the notice, not off the file
                 ids.UnionWith(await db.FahndungKopfgeldAnteile
                     .Where(k => noticeIds.Contains(k.WantedId)).Select(k => k.Id).ToListAsync(ct));
+                // second hop as well; the messages are left out on purpose, a conversation is not file history
+                ids.UnionWith(await db.Hinweise.IgnoreQueryFilters()
+                    .Where(h => h.WantedId != null && noticeIds.Contains(h.WantedId)).Select(h => h.Id).ToListAsync(ct));
                 types.AddRange([nameof(PersonDoc), nameof(PersonPhoto), nameof(OeffentlicheFahndung),
-                    nameof(FahndungKopfgeldAnteil)]);
+                    nameof(FahndungKopfgeldAnteil), nameof(Hinweis)]);
                 break;
             case nameof(Faction):
                 ids.UnionWith(await db.FactionMembers.IgnoreQueryFilters().Where(m => m.FactionId == id).Select(m => m.Id).ToListAsync(ct));

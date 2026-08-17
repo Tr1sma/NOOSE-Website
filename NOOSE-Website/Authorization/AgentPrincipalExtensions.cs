@@ -136,4 +136,14 @@ public static class AgentPrincipalExtensions
 
     /// <summary>May enter the citizen area = every signed-in account; Civilian only means the account has nothing else.</summary>
     public static bool MayUseCitizenPortal(this ClaimsPrincipal user) => user.Identity?.IsAuthenticated == true;
+
+    /// <summary>An in-house account: released, not external. The read-only supervision is one, a partner is not.</summary>
+    /// <remarks>
+    /// Active alone does the work of four exclusions — Pending, Blocked, Applicant and Civilian all fail it — so a
+    /// caller does not have to remember which of them still carries an agent id.
+    /// </remarks>
+    public static bool IsInternalAgent(this ClaimsPrincipal user)
+        => user.GetStatus() == AgentStatus.Active
+           && !user.IsPartner()
+           && !string.IsNullOrEmpty(user.GetAgentId());
 }

@@ -41,6 +41,8 @@ public static class AuditEntityDisplay
         "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
         "Warnhinweis" => "Warnhinweis",
         "FahndungKopfgeldAnteil" => "Kopfgeld-Anteil",
+        "Hinweis" => "Bürgerhinweis",
+        "HinweisNachricht" => "Hinweis-Nachricht",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -79,6 +81,9 @@ public static class AuditEntityDisplay
         "Warnhinweis" => "/einstellungen?tab=warnhinweise",
         // the share has no page of its own; it is managed at the notice, which is managed here
         "FahndungKopfgeldAnteil" => "/fahndung?tab=oeffentlich",
+        "Hinweis" => $"/hinweise/{id}",
+        // a message has no page; point at the tip that carries the conversation is impossible from here, so the inbox
+        "HinweisNachricht" => "/hinweise",
         _ => null,
     };
 }

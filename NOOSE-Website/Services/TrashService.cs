@@ -26,7 +26,8 @@ public sealed class TrashService(
     IFinancingService financing,
     IFeedbackService feedback,
     IPublicPageService publicPages,
-    IPublicWantedService publicWanted) : ITrashService
+    IPublicWantedService publicWanted,
+    ITipService tips) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -87,6 +88,8 @@ public sealed class TrashService(
         Source(new TrashKind("oeffentliche-fahndungen", "Öffentliche Ausschreibungen", Icons.Material.Filled.PersonSearch,
                 "/fahndung?tab=oeffentlich"),
             publicWanted.GetTrashAsync, TrashProjection.PublicWanted, publicWanted.RestoreAsync),
+        Source(new TrashKind("hinweise", "Bürgerhinweise", Icons.Material.Filled.TipsAndUpdates, "/hinweise"),
+            tips.GetTrashAsync, TrashProjection.Tip, tips.RestoreAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

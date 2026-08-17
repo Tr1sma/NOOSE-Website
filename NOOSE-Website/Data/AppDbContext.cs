@@ -244,6 +244,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Warnhinweis> Warnhinweise => Set<Warnhinweis>();
     public DbSet<FahndungWarnhinweis> FahndungWarnhinweise => Set<FahndungWarnhinweis>();
     public DbSet<FahndungKopfgeldAnteil> FahndungKopfgeldAnteile => Set<FahndungKopfgeldAnteil>();
+    public DbSet<Hinweis> Hinweise => Set<Hinweis>();
+    public DbSet<HinweisNachricht> HinweisNachrichten => Set<HinweisNachricht>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1736,6 +1738,46 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(k => new { k.WantedId, k.Status });
             // one booking backs at most one share, mirroring FinancingRequest
             b.HasIndex(k => k.KassenBuchungId).IsUnique();
+        });
+
+        modelBuilder.Entity<Hinweis>(b =>
+        {
+            b.Property(h => h.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(h => h.CitizenProfileId).HasMaxLength(64);
+            b.Property(h => h.WantedId).HasMaxLength(64);
+            b.Property(h => h.HandlerId).HasMaxLength(64);
+            b.Property(h => h.DuplicateGroupId).HasMaxLength(64);
+            b.Property(h => h.AnonymityResolvedById).HasMaxLength(64);
+            b.Property(h => h.Text).HasColumnType("longtext");
+            b.Property(h => h.AttachmentFileName).HasMaxLength(128);
+            b.Property(h => h.AttachmentOriginalName).HasMaxLength(255);
+            b.Property(h => h.AttachmentContentType).HasMaxLength(128);
+            // Restrict throughout: a tip outlives the account, the notice and the handler it names
+            b.HasOne(h => h.CitizenProfile).WithMany()
+                .HasForeignKey(h => h.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(h => h.Wanted).WithMany()
+                .HasForeignKey(h => h.WantedId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(h => h.Handler).WithMany()
+                .HasForeignKey(h => h.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(h => h.CaseNumber).IsUnique();
+            // the inbox order
+            b.HasIndex(h => new { h.Status, h.CreatedAt });
+            // the rate-limit count
+            b.HasIndex(h => new { h.CitizenProfileId, h.CreatedAt });
+            b.HasIndex(h => h.WantedId);
+        });
+
+        modelBuilder.Entity<HinweisNachricht>(b =>
+        {
+            b.Property(m => m.HinweisId).HasMaxLength(64);
+            b.Property(m => m.AuthorAgentId).HasMaxLength(64);
+            b.Property(m => m.Text).HasColumnType("longtext");
+            b.HasOne(m => m.Hinweis).WithMany()
+                .HasForeignKey(m => m.HinweisId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(m => m.AuthorAgent).WithMany()
+                .HasForeignKey(m => m.AuthorAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(m => new { m.HinweisId, m.Audience });
+            b.HasIndex(m => new { m.HinweisId, m.CreatedAt });
         });
 
         // global soft-delete filter

@@ -13,6 +13,7 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Timeline;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -392,8 +393,11 @@ public class GlobalChronikService(IDbContextFactory<AppDbContext> dbFactory) : I
             var detail = details.TryGetValue((p.Row.EntityType, p.Row.EntityId), out var d) ? Render(d, records) : null;
             // the feed reads at a glance; the full before/after stays in the audit log view
             var changes = AuditDisplay.Parse(p.Row.ChangesJson, maxValueLength: 90);
+            // same rule as the record timeline: a tip's actor is the submitting account, and naming it here would
+            // out an agent who reported through his civilian identity
+            var actor = TipAnonymity.HidesActor(p.Row.EntityType) ? null : p.Row.AgentName;
             events.Add(new ChronikEvent(p.Row.Timestamp, category, p.ParentType, p.ParentId, record.Name, title,
-                detail, p.Row.AgentName, Href(p.ParentType, p.ParentId), record.Deleted,
+                detail, actor, Href(p.ParentType, p.ParentId), record.Deleted,
                 changes.Count == 0 ? null : changes));
         }
 

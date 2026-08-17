@@ -96,6 +96,10 @@ public static class WatchlistRecordRollup
             // the bounty is treasury, not casework, and resolving it would need two hops through the database
             // this static map has no access to — publishing the notice is the watchable event
             case FahndungKopfgeldAnteil:
+            // a tip reaches its file over two hops as well, and every chat line would fire again — the tip is
+            // watched through the notice that was published, not line by line
+            case Hinweis:
+            case HinweisNachricht:
                 return Array.Empty<(string, string)>();
 
             default:

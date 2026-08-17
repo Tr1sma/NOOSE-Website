@@ -70,6 +70,12 @@ public enum NotificationType
 
     /// <summary>The advertised bounty on a live notice went up. Routable — a raise is meant for the outside channel.</summary>
     PublicWantedBountyRaised = 21,
+
+    /// <summary>A citizen filed a tip. Deliberately not routable: it belongs in the inbox, not in a public channel.</summary>
+    PublicTipReceived = 22,
+
+    /// <summary>The agency wrote to a citizen about their tip. Not routable for the same reason.</summary>
+    PublicTipAnswered = 23,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -99,6 +105,8 @@ public static class NotificationTypeDisplay
         NotificationType.PublicWantedPublished => "Öffentliche Ausschreibung",
         NotificationType.PublicWantedExpired => "Ausschreibung abgelaufen",
         NotificationType.PublicWantedBountyRaised => "Kopfgeld erhöht",
+        NotificationType.PublicTipReceived => "Bürgerhinweis",
+        NotificationType.PublicTipAnswered => "Antwort zu deinem Hinweis",
         _ => "Benachrichtigung",
     };
 
@@ -127,6 +135,8 @@ public static class NotificationTypeDisplay
         NotificationType.PublicWantedPublished => Icons.Material.Filled.PersonSearch,
         NotificationType.PublicWantedExpired => Icons.Material.Filled.TimerOff,
         NotificationType.PublicWantedBountyRaised => Icons.Material.Filled.Paid,
+        NotificationType.PublicTipReceived => Icons.Material.Filled.TipsAndUpdates,
+        NotificationType.PublicTipAnswered => Icons.Material.Filled.MarkEmailUnread,
         _ => Icons.Material.Filled.Notifications,
     };
 }
