@@ -330,9 +330,9 @@
 
 ### Phase 9 – Partner-Zugriff (DoJ / LSPD / LSMD)
 **Ziel:** Kontrollierter Lesezugriff für Partnerbehörden.
-- [ ] Partner-Rollen + **„für Partner freigegeben"-Flag** je Akte (Felder früh vorbereitet).
-- [ ] Partner-Login (Discord) → **eingeschränkte, schreibgeschützte** Ansichten (nur Freigegebenes), eigene Navigation.
-- [ ] Zugriffsprotokoll greift auch hier.
+- [X] Partner-Rollen + **„für Partner freigegeben"-Flag** je Akte (Felder früh vorbereitet).
+- [X] Partner-Login (Discord) → **eingeschränkte, schreibgeschützte** Ansichten (nur Freigegebenes), eigene Navigation.
+- [X] Zugriffsprotokoll greift auch hier.
 
 **Abnahme:** Partner loggt sich ein, sieht ausschließlich freigegebene Inhalte (nur lesen); NOOSE kann Freigabe pro Akte umschalten.
 
@@ -340,7 +340,7 @@
 **Ziel:** Stabil und sicher auf dem eigenen VPS.
 - [X] VPS-Setup (Reverse-Proxy, .NET-Runtime), **HTTPS** (Zertifikat), MariaDB-Prod-Konfig.
 - [X] Migrations & Admin-Seed beim Deploy.
-- [ ] **Backups** (DB-Dump + Upload-Dateien) + dokumentierte Wiederherstellung.
+- [X] **Backups** (DB-Dump + Upload-Dateien) + dokumentierte Wiederherstellung.
 - [ ] Härtung: HSTS, Login-Rate-Limit, Upload-Validierung, Logging/Monitoring.
 - [ ] **Betriebs-/Onboarding-Doku** (README: Agenten anlegen, Rechte, Backups).
 
