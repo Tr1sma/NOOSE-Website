@@ -209,4 +209,55 @@ public sealed class MySqlTranslationTests : IDisposable
 
         Assert.Contains("SELECT", sql, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheTipQuotaCount_TranslatesWithTheSoftDeleteFilterOff()
+    {
+        // IgnoreQueryFilters is the point: a deleted tip must still count against the quota
+        var since = new DateTime(2026, 8, 16, 12, 0, 0, DateTimeKind.Utc);
+        var unfiltered = _db.Hinweise.IgnoreQueryFilters()
+            .Where(h => h.CitizenProfileId == "profil1" && h.CreatedAt >= since)
+            .Select(h => h.Id)
+            .ToQueryString();
+        var filtered = _db.Hinweise
+            .Where(h => h.CitizenProfileId == "profil1" && h.CreatedAt >= since)
+            .Select(h => h.Id)
+            .ToQueryString();
+
+        Assert.DoesNotContain("IstGeloescht", unfiltered, StringComparison.Ordinal);
+        Assert.Contains("IstGeloescht", filtered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTipInboxProjection_TranslatesAcrossThreeOptionalNavigations()
+    {
+        // citizen profile, notice and handler are all optional; the inbox reads a column from each
+        var sql = _db.Hinweise.AsNoTracking()
+            .Where(h => h.Status == TipStatus.Neu)
+            .OrderByDescending(h => h.Priority).ThenByDescending(h => h.CreatedAt)
+            .Take(200)
+            .Select(h => new
+            {
+                h.Id,
+                h.CaseNumber,
+                CitizenFirstName = h.CitizenProfile!.FirstName,
+                WantedCaseNumber = h.Wanted!.CaseNumber,
+                HandlerCodename = h.Handler!.Codename,
+            })
+            .ToQueryString();
+
+        Assert.Contains("LEFT JOIN", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheUnreadMessageLookup_Translates()
+    {
+        var ids = new[] { "h1", "h2" };
+        var sql = _db.HinweisNachrichten.AsNoTracking()
+            .Where(m => ids.Contains(m.HinweisId) && m.Audience == TipMessageAudience.Buerger && !m.AuthorIsCitizen)
+            .Select(m => new { m.HinweisId, m.CreatedAt })
+            .ToQueryString();
+
+        Assert.Contains("SELECT", sql, StringComparison.Ordinal);
+    }
 }

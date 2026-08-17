@@ -142,6 +142,16 @@ public class AuditEntityDisplayTests
     }
 
     [Fact]
+    public void Tips_carry_a_German_label_and_a_route()
+    {
+        Assert.Equal("Bürgerhinweis", AuditEntityDisplay.Label("Hinweis"));
+        Assert.Equal("Hinweis-Nachricht", AuditEntityDisplay.Label("HinweisNachricht"));
+        Assert.Equal("/hinweise/h1", AuditEntityDisplay.Route("Hinweis", "h1"));
+        // a message has no page of its own; the inbox is where it is read
+        Assert.Equal("/hinweise", AuditEntityDisplay.Route("HinweisNachricht", "m1"));
+    }
+
+    [Fact]
     public void Route_IsCaseSensitive_MismatchedCaseYieldsNull()
     {
         Assert.Equal("/personen/1", AuditEntityDisplay.Route("Person", "1"));

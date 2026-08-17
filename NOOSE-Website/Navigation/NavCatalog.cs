@@ -57,6 +57,11 @@ public static class NavCatalog
 
         new NavEntry("fahndung", "/fahndung", Icons.Material.Filled.PersonSearch, "Fahndung & Überwachung", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Gesuchte Personen, Observationen und Vernehmungen"),
+        // key is not "hinweise": that one belongs to the algorithmic Ermittlungshinweise above, and stored
+        // favourites reference it
+        new NavEntry("buergerhinweise", "/hinweise", Icons.Material.Filled.TipsAndUpdates, "Bürgerhinweise",
+            NavSection.Fahndung, NavArea.Ermittlung, BadgeKey: "tips",
+            Description: "Meldungen aus der Bevölkerung: Eingang, Bearbeitung und Rückfragen"),
         new NavEntry("informanten", "/informanten", Icons.Material.Filled.VisibilityOff, "Informanten", NavSection.Fahndung, NavArea.Ermittlung,
             Description: "Vertrauliche Quellen (V-Personen) — Zeilen-Sichtbarkeit je Führungsagent"),
         new NavEntry("entfuehrungen", "/entfuehrungen", Icons.Material.Filled.PersonOff, "Entführungen", NavSection.Fahndung, NavArea.Ermittlung,

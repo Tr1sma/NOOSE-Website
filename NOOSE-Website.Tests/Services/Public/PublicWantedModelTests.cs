@@ -31,6 +31,10 @@ public class PublicWantedModelTests
         // the public shell renders these two as well: the nav tabs and the career page's requirement list
         typeof(PublicModuleState),
         typeof(NOOSE_Website.Models.Recruiting.CareerRequirement),
+        // a citizen reading their own tip is not an agent; the same rules apply
+        typeof(CitizenTipRow),
+        typeof(CitizenTipDetail),
+        typeof(CitizenTipMessage),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -56,6 +60,12 @@ public class PublicWantedModelTests
         [typeof(BountySummary)] = "Aufschlüsselung der Summe; nach außen geht ausschließlich Advertised.",
         [typeof(BountyCoverage)] = "Deckung eines Kassenkontos; ein Kontostand verlässt das Haus nie.",
         [typeof(BountyRequestRow)] = "Offener Kopfgeld-Antrag im Posteingang.",
+        [typeof(TipRow)] = "Zeile des Bearbeiter-Eingangs; nennt Hinweisgeber und Bearbeiter.",
+        [typeof(TipDetail)] = "Ein Hinweis in der Bearbeitung, inklusive Vertrauensstufe des Hinweisgebers.",
+        [typeof(TipMessageRow)] = "Nachricht mit Autor; die interne Zielgruppe verlässt das Haus nie.",
+        [typeof(TipInboxCounts)] = "Zähler der Eingangs-Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
+        [typeof(TipAttachmentAccess)] = "Dateiname und Typ für den autorisierten Ausliefer-Endpoint.",
+        [typeof(TipInput)] = "Formulareingabe des Hinweis-Formulars.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>

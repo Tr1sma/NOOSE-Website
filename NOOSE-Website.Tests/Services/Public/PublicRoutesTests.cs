@@ -66,6 +66,16 @@ public class PublicRoutesTests
     }
 
     [Fact]
+    public void The_internal_tip_desk_stays_internal_next_to_the_public_form()
+    {
+        // same trap as /fahndung next to /gesucht, one letter apart: /hinweis is the form, /hinweise is the desk
+        Assert.True(PublicRoutes.IsPublic("/hinweis"));
+        Assert.False(PublicRoutes.IsPublic("/hinweise"));
+        Assert.False(PublicRoutes.IsPublic("/hinweise/abc"));
+        Assert.False(PublicRoutes.IsPublic("/buerger/hinweise"));
+    }
+
+    [Fact]
     public void Robots_txt_exists_and_disallows_everything_by_default()
     {
         var text = File.ReadAllText(RobotsPath());

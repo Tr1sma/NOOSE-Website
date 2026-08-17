@@ -109,7 +109,13 @@ else
         }
     }
 
-    private void Open(TipRow row) => Nav.NavigateTo($"/hinweise/{row.Id}");
+    private void Open(TipRow? row)
+    {
+        if (row is not null)
+        {
+            Nav.NavigateTo($"/hinweise/{row.Id}");
+        }
+    }
 
     private void OnModified(string _)
         => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });

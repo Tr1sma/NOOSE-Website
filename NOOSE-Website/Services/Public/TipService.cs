@@ -112,6 +112,8 @@ public class TipService(
         return row.CaseNumber;
     }
 
+    /// <inheritdoc />
+    /// <remarks>Not module-gated either: a citizen keeps reading the tips they already filed.</remarks>
     public async Task<IReadOnlyList<CitizenTipRow>> GetOwnAsync(ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
@@ -196,10 +198,15 @@ public class TipService(
             !TipRules.IsClosed(row.Status) && !profile.IsBlocked, messages);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Deliberately not module-gated, unlike <see cref="SubmitAsync"/>: the switch stops new tips, it does not strand
+    /// a running one. Same call as with the citizen registration — an existing case keeps its way in, or one flipped
+    /// switch locks people out of a conversation the agency itself started.
+    /// </remarks>
     public async Task ReplyAsCitizenAsync(string caseNumber, string text, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        await modules.RequireEnabledAsync(PublicModules.Tips, cancellationToken);
         var profile = await buerger.RequireSubmittingCitizenAsync(actor, cancellationToken);
         Permission.RequireWriteAccess(actor);
 

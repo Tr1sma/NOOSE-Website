@@ -40,6 +40,17 @@ public partial class PublicPageScanTests
         ["WantedPoster.razor"] = "print poster: PrintLayout is the document shell, and it pulls its own module gate",
     };
 
+    /// <summary>Pages that must run a circuit — forms, not reading surfaces.</summary>
+    /// <remarks>
+    /// Static rendering is the rule because an anonymous reader must not open a SignalR circuit. A form is the
+    /// documented exception (PublicPlan, Leitsatz 5): it needs binding, a file picker and error feedback. Every other
+    /// fact in this file still applies to them, and the exemption is per file with a reason.
+    /// </remarks>
+    private static readonly Dictionary<string, string> InteractiveExempt = new(StringComparer.Ordinal)
+    {
+        ["TipForm.razor"] = "tip form: input, image upload and validation feedback need a circuit",
+    };
+
     private static string Root([CallerFilePath] string here = "")
         => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website", "Components"));
 
@@ -129,8 +140,10 @@ public partial class PublicPageScanTests
                 // the exemption covers the layout line only; anonymous and static apply to every public page
                 var layoutOk = text.Contains("@layout PublicSiteLayout", StringComparison.Ordinal)
                     || LayoutExempt.ContainsKey(Path.GetFileName(f));
+                var staticOk = text.Contains("[ExcludeFromInteractiveRouting]", StringComparison.Ordinal)
+                    || InteractiveExempt.ContainsKey(Path.GetFileName(f));
                 return !text.Contains("[AllowAnonymous]", StringComparison.Ordinal)
-                    || !text.Contains("[ExcludeFromInteractiveRouting]", StringComparison.Ordinal)
+                    || !staticOk
                     || !layoutOk;
             })
             .Select(Path.GetFileName)

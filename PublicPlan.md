@@ -106,7 +106,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Oeffentlich04_Fahndung` | 2 | **fertig** |
 | 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | **fertig** |
 | 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | **fertig** |
-| 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | offen |
+| 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | **fertig** |
 | 8 | Hinweise Ausbau: Dubletten, Priorität, Vertrauen, Übernahme | keine | 7 | offen |
 | 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | offen |
 | 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | offen |
@@ -827,6 +827,59 @@ Auflösung nur Führung + Audit · Bürger-Projektion enthält keinen Autor.
 
 **Fertig, wenn** ein Bürger einen Hinweis mit Bild abgibt, ihn in `/buerger/hinweise` mit Status sieht, ein
 Agent eine Rückfrage stellt und der Bürger sie beantwortet.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Zwei Routen, ein Buchstabe Unterschied.** `/hinweis` ist das öffentliche Formular (Modul-Nav-Route,
+   indexierbar), `/hinweise` der interne Eingang. `PublicRoutes.Matches` schneidet an der Segmentgrenze, die
+   interne Seite ist also nicht öffentlich — festgehalten wie bei `/fahndung` vs. `/gesucht`. Der
+   **NavCatalog-Key heißt `buergerhinweise`**: `hinweise` gehört seit Langem den algorithmischen
+   *Ermittlungs*hinweisen (`/ermittlungshinweise`), und gespeicherte Favoriten zeigen darauf.
+2. **Das Formular ist die erste interaktive Seite unter `Components/Pages/Public/`.** Leitsatz 5 erlaubt das
+   für Formulare; damit `PublicPageScanTests` weiter jede *Lese*seite statisch hält, gibt es dort jetzt
+   `InteractiveExempt` — eine Ausnahme je Datei mit Begründung, Muster `LayoutExempt`. Alle anderen Prüfungen
+   der Datei gelten unverändert weiter.
+3. **Der Knopf am Steckbrief ist ein Link, kein Dialog.** `/gesucht/{az}` ist `[ExcludeFromInteractiveRouting]`,
+   ein `MudDialog` wäre dort *stumm* tot (dieselbe Klasse wie `PrintFrame` beim Poster). Er führt auf
+   `/hinweis?fahndung={Aktenzeichen}` und erscheint nur bei eingeschaltetem Modul.
+4. **Der Bezug wird über das Aktenzeichen aufgelöst, nie über eine Id vom Client.** `SubmitAsync` fragt
+   `IPublicWantedService.GetByCaseNumberAsync` — also den Lesepfad *hinter* dem Unterdrückungsgürtel — und
+   sucht die Zeilen-Id erst danach. Eine rohe `FahndungId` anzunehmen machte das Formular zum Existenz-Orakel
+   für Entwürfe und zurückgezogene Ausschreibungen.
+5. **Das Rate-Limit steht im Dienst, nicht in der Middleware.** Die Einreichung läuft über SignalR und erreicht
+   `UseRateLimiter` nie. `TipRules.PerDay` wird in `SubmitAsync` gezählt — **mit `IgnoreQueryFilters`**, sonst
+   kauft Löschen einen weiteren Versuch. Die Policy `noose-hinweis` hängt nur am Datei-Endpoint.
+6. **Nur `SubmitAsync` hängt am Modul-Schalter**, weder `ReplyAsCitizenAsync` noch die Lesepfade des Bürgers.
+   Derselbe Ruf wie bei `BuergerRegistrierung`: der Schalter stoppt Neues, er strandet keine laufende
+   Unterhaltung — und die Rückfrage hat die Behörde selbst gestellt.
+7. **Anonymität ist eine Projektion und eine Audit-Regel, keine UI-Bedingung.** `TipDetail.CitizenName` ist
+   `null`, solange die Zusage gilt; und weil der Interceptor beim Einreichen das *einreichende Konto* stempelt —
+   ein Agent kann über seine Zivil-Identität melden —, streichen Zeitstrahl und Chronik den Akteur einer
+   `Hinweis`-Zeile. Die eine Regel steht in `Services/Public/TipAnonymity.cs`, beide Lesepfade nennen sie, und
+   das Änderungsprotokoll auf `/nachweis` ruft sie **bewusst nicht**: dort ist das Konto die Missbrauchskontrolle.
+8. **Eine Bürger-Zeile trägt baulich keinen Agenten.** `HinweisNachricht.AutorAgentId` wird nur auf
+   `Intern`-Zeilen gesetzt, und `CitizenTipMessage` hat gar kein Autorfeld — nach außen ist der Absender
+   konstant „NOOSE". Adressiert wird ein Hinweis draußen über sein **Aktenzeichen**, nie über die Zeilen-Id
+   (`PublicWantedModelTests.OutwardModels_CarryNoBareRecordId` gilt für die drei neuen Records mit).
+9. **Zwei Guards, nicht einer.** `Permission.RequireTipRead` lässt jeden internen Agenten samt Nur-Lese-Aufsicht
+   in den Eingang (sie liest sonst alles — der Eingang wäre die einzige Ausnahme), `RequireTipHandling` verlangt
+   zusätzlich Schreibrecht. Beide bauen auf der neuen `AgentPrincipalExtensions.IsInternalAgent()`; `Active`
+   allein erledigt vier Ausschlüsse (Pending, Blocked, Bewerber, Bürger).
+10. **Der Anhang ist nicht öffentlich.** Eigener Pfad `App_Data/uploads/hinweise`, eigener Storage-Dienst,
+    Endpoint `/dateien/hinweise/{id}` mit `.RequireAuthorization()` — anders als die Fahndungs-Fotoroute, deren
+    Autorisierung die Publikationsprüfung ist. Der Dienst gibt Eigentümer und Bearbeitern etwas, allen anderen
+    `null` ⇒ eine `404`.
+11. **Zwei nicht routbare `NotificationType`-Werte.** `NotifyManyAsync` pusht jede routbare Kategorie nach
+    Discord; ein eingehender Bürgerhinweis im öffentlichen Kanal würde den Hinweisgeber outen. Benachrichtigt
+    wird die Führung (der Eingang hat für alle anderen ein Nav-Badge) — ein Glockenschlag je Meldung für jeden
+    Agenten erzieht das Haus dazu, die Glocke zu ignorieren.
+12. **Kein Volltext, keine Suche, kein NOOSEI.** Beide Tabellen stehen in `SearchCatalog.NotSearchable` mit
+    Begründung: ein Provider müsste die Anonymitätszusage mittragen, die bisher nur die Bearbeiter-Projektion
+    kennt. Das kommt mit Phase 16.
+13. **Fünf Registries, wie gehabt** — `PublicVisibility` (beide `NeverPublic`), `SearchCatalog`,
+    `TrashService`/`TrashProjection` (die Papierkorb-Zeile nennt weder Bürger noch Text),
+    `AuditEntityDisplay`, `WatchlistRecordRollup` (beide „not watchable": zwei Hops zur Akte, und jede Chatzeile
+    würde feuern). Dazu die vier Zeitstrahl-Registrierungen und `MergedPageSections.Trash`.
 
 ---
 
