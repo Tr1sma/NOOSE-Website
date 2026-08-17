@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
+using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Tests.Infrastructure;
@@ -119,6 +120,80 @@ public sealed class MySqlTranslationTests : IDisposable
             .ToQueryString();
 
         Assert.Contains("LIMIT", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheBountySum_TranslatesToAGroupedSum()
+    {
+        // this is the number an anonymous visitor reads; "could not be translated" here is an HTTP 500 on /gesucht
+        List<string> ids = ["f1", "f2"];
+        var sql = _db.FahndungKopfgeldAnteile
+            .AsNoTracking()
+            .Where(k => ids.Contains(k.WantedId)
+                && (k.Status == BountyShareStatus.Zugesagt || k.Status == BountyShareStatus.Gesichert))
+            .GroupBy(k => k.WantedId)
+            .Select(g => new { WantedId = g.Key, Total = g.Sum(k => k.Amount) })
+            .ToQueryString();
+
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SUM(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheCoverageQuery_TranslatesGroupingOverANullableEnum()
+    {
+        // grouping by Account!.Value is the shape most likely to fall over: a nullable enum key on Pomelo
+        var sql = _db.FahndungKopfgeldAnteile
+            .AsNoTracking()
+            .Where(k => k.Account != null
+                && ((k.Origin == BountyOrigin.NooseKasse && k.Status == BountyShareStatus.Zugesagt)
+                    || (k.Origin == BountyOrigin.AgentPrivat && k.Status == BountyShareStatus.Gesichert)))
+            .GroupBy(k => k.Account!.Value)
+            .Select(g => new { Account = g.Key, Total = g.Sum(k => k.Amount) })
+            .ToQueryString();
+
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ThePendingBountyRequestQuery_TranslatesItsCorrelatedExists()
+    {
+        var sql = _db.Requests
+            .Where(a => a.Type == RequestType.Kopfgeld
+                && a.Status == RequestStatus.Requested
+                && _db.FahndungKopfgeldAnteile.Any(k => k.Id == a.BountyShareId
+                    && k.Status == BountyShareStatus.Beantragt))
+            .ToQueryString();
+
+        Assert.Contains("EXISTS", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheBountyRequestInbox_TranslatesItsJoinAndNavigation()
+    {
+        var sql = _db.Requests
+            .Where(a => a.Type == RequestType.Kopfgeld && a.Status == RequestStatus.Requested)
+            .OrderBy(a => a.CreatedAt)
+            .Join(_db.FahndungKopfgeldAnteile, a => a.BountyShareId, k => k.Id, (a, k) => new { Request = a, Share = k })
+            .Select(x => new { x.Request.Id, Name = x.Share.Wanted!.DisplayName, x.Share.Amount, x.Share.Account })
+            .ToQueryString();
+
+        Assert.Contains("JOIN", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheBountyRequestDeduplication_TranslatesItsNestedExists()
+    {
+        // two correlated subqueries in one predicate; it runs on a write path, so a failure here is a 500 for an agent
+        var sql = _db.Requests
+            .Where(a => a.Type == RequestType.Kopfgeld && a.Status == RequestStatus.Requested
+                && _db.FahndungKopfgeldAnteile.Any(k => k.Id == a.BountyShareId
+                    && k.Status == BountyShareStatus.Beantragt
+                    && _db.OeffentlicheFahndungen.Any(f => f.Id == k.WantedId)))
+            .Where(a => _db.FahndungKopfgeldAnteile.Any(k => k.Id == a.BountyShareId && k.WantedId == "f1"))
+            .ToQueryString();
+
+        Assert.Contains("EXISTS", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -1,0 +1,90 @@
+@* Files one share of a bounty: amount, origin, and — for agency money — the account it is to come from. *@
+@using NOOSE_Website.Models.Enums
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:340px;">
+            <MudNumericField T="decimal" @bind-Value="_amount" Label="Betrag ($)" Variant="Variant.Outlined"
+                             Min="1" Step="1000" HideSpinButtons="false" />
+
+            @if (MayOfficial)
+            {
+                <MudSelect T="BountyOrigin" @bind-Value="_origin" Label="Herkunft" Variant="Variant.Outlined">
+                    @foreach (var origin in BountyOriginDisplay.All)
+                    {
+                        <MudSelectItem T="BountyOrigin" Value="@origin">@BountyOriginDisplay.Name(origin)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            @if (_origin == BountyOrigin.NooseKasse)
+            {
+                <MudSelect T="KassenKonto" @bind-Value="_account" Label="Konto" Variant="Variant.Outlined"
+                           HelperText="Aus diesem Kassenbuch wird das behördliche Kopfgeld später bezahlt.">
+                    @foreach (var account in KassenKontoDisplay.All)
+                    {
+                        <MudSelectItem T="KassenKonto" Value="@account">@KassenKontoDisplay.Name(account)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (!MayCommit)
+                {
+                    <MudTextField @bind-Value="_justification" Label="Begründung" Variant="Variant.Outlined"
+                                  Lines="3"
+                                  HelperText="Ab Senior Special Agent wird direkt zugesagt; darunter entscheidet die Führung." />
+                }
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Privates Kopfgeld zählt sofort zur öffentlichen Summe. Einzahlen kannst du es danach jederzeit.
+                </MudAlert>
+            }
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Nach außen geht nur die Gesamtsumme — weder Herkunft noch Stifter noch die Zahl der Anteile.
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply" Disabled="@(_amount <= 0)">
+            @(_origin == BountyOrigin.NooseKasse && !MayCommit ? "Beantragen" : "Setzen")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Whether agency money is offered at all; a citizen-facing rank never sees the choice.</summary>
+    [Parameter] public bool MayOfficial { get; set; } = true;
+
+    /// <summary>Whether agency money is committed straight away rather than requested.</summary>
+    [Parameter] public bool MayCommit { get; set; }
+
+    private decimal _amount;
+    private BountyOrigin _origin = BountyOrigin.AgentPrivat;
+    private KassenKonto _account = KassenKonto.Gruengeld;
+    private string? _justification;
+
+    private void Apply()
+        => MudDialog.Close(DialogResult.Ok(new BountyDialogResult(_origin, _amount, _account, _justification)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>What the dialog collected; null when the author cancelled.</summary>
+    public record BountyDialogResult(BountyOrigin Origin, decimal Amount, KassenKonto Account, string? Justification);
+
+    public static async Task<BountyDialogResult?> ShowAsync(IDialogService dialog, bool mayOfficial, bool mayCommit)
+    {
+        var parameters = new DialogParameters<BountyDialog>
+        {
+            { x => x.MayOfficial, mayOfficial },
+            { x => x.MayCommit, mayCommit },
+        };
+        var reference = await dialog.ShowAsync<BountyDialog>("Kopfgeld setzen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: BountyDialogResult data } ? data : null;
+    }
+}

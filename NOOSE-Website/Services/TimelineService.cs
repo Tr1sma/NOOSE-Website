@@ -312,8 +312,14 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
             case nameof(Person):
                 ids.UnionWith(await db.PersonDocs.IgnoreQueryFilters().Where(d => d.PersonId == id).Select(d => d.Id).ToListAsync(ct));
                 ids.UnionWith(await db.PersonPhotos.IgnoreQueryFilters().Where(f => f.PersonId == id).Select(f => f.Id).ToListAsync(ct));
-                ids.UnionWith(await db.OeffentlicheFahndungen.IgnoreQueryFilters().Where(f => f.PersonId == id).Select(f => f.Id).ToListAsync(ct));
-                types.AddRange([nameof(PersonDoc), nameof(PersonPhoto), nameof(OeffentlicheFahndung)]);
+                var noticeIds = await db.OeffentlicheFahndungen.IgnoreQueryFilters()
+                    .Where(f => f.PersonId == id).Select(f => f.Id).ToListAsync(ct);
+                ids.UnionWith(noticeIds);
+                // second hop: the money on a head hangs off the notice, not off the file
+                ids.UnionWith(await db.FahndungKopfgeldAnteile
+                    .Where(k => noticeIds.Contains(k.WantedId)).Select(k => k.Id).ToListAsync(ct));
+                types.AddRange([nameof(PersonDoc), nameof(PersonPhoto), nameof(OeffentlicheFahndung),
+                    nameof(FahndungKopfgeldAnteil)]);
                 break;
             case nameof(Faction):
                 ids.UnionWith(await db.FactionMembers.IgnoreQueryFilters().Where(m => m.FactionId == id).Select(m => m.Id).ToListAsync(ct));

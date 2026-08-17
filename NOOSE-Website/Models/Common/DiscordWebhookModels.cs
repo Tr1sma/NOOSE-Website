@@ -20,6 +20,7 @@ public static class DiscordRouting
         // PublicWantedExpired is deliberately absent: NotificationService.NotifyManyAsync pushes every routable
         // category on its own, so a routable operating category would post each expiry into the public channel
         NotificationType.PublicWantedPublished,
+        NotificationType.PublicWantedBountyRaised,
     };
 
     public static bool IsRoutable(NotificationType type) => RoutableTypes.Contains(type);

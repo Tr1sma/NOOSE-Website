@@ -1,0 +1,43 @@
+@* Picks the cash account a pledged private share is handed into. *@
+@using NOOSE_Website.Models.Enums
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:320px;">
+            <MudText Typo="Typo.body2">
+                Es wird eine Einzahlung über @Amount.ToString("N0") $ gebucht. Die öffentliche Summe ändert sich nicht —
+                der Anteil zählte bereits als zugesagt.
+            </MudText>
+            <MudSelect T="KassenKonto" @bind-Value="_account" Label="Konto" Variant="Variant.Outlined">
+                @foreach (var account in KassenKontoDisplay.All)
+                {
+                    <MudSelectItem T="KassenKonto" Value="@account">@KassenKontoDisplay.Name(account)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="Apply">Einzahlen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public decimal Amount { get; set; }
+
+    private KassenKonto _account = KassenKonto.Gruengeld;
+
+    private void Apply() => MudDialog.Close(DialogResult.Ok(_account));
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the picker; returns the chosen account or null on cancel.</summary>
+    public static async Task<KassenKonto?> ShowAsync(IDialogService dialog, decimal amount)
+    {
+        var parameters = new DialogParameters<BountyPayInDialog> { { x => x.Amount, amount } };
+        var reference = await dialog.ShowAsync<BountyPayInDialog>("Anteil einzahlen", parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: KassenKonto account } ? account : null;
+    }
+}

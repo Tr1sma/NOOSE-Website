@@ -45,6 +45,7 @@ public static class ChronikParentResolver
         [nameof(TaskforceAgent)] = nameof(Taskforce),
         [nameof(JobAssignment)] = nameof(Job),
         [nameof(OeffentlicheFahndung)] = nameof(Person),
+        [nameof(FahndungKopfgeldAnteil)] = nameof(Person),
     };
 
     /// <summary>True when the audit type is a child rather than a record itself.</summary>
@@ -167,6 +168,11 @@ public static class ChronikParentResolver
         // without a person file simply resolves to nothing
         await FanInAsync(nameof(OeffentlicheFahndung), nameof(Person), i => db.OeffentlicheFahndungen.IgnoreQueryFilters()
             .Where(f => i.Contains(f.Id) && f.PersonId != null).Select(f => new Pair(f.Id, f.PersonId!)));
+        // two hops: share → notice → file. IgnoreQueryFilters sits at the root because it is compilation-scoped
+        // anyway, and it is wanted here — a share of a deleted notice must still resolve, or its money vanishes
+        // from the chronicle
+        await FanInAsync(nameof(FahndungKopfgeldAnteil), nameof(Person), i => db.FahndungKopfgeldAnteile.IgnoreQueryFilters()
+            .Where(k => i.Contains(k.Id) && k.Wanted!.PersonId != null).Select(k => new Pair(k.Id, k.Wanted!.PersonId!)));
 
         return map;
 

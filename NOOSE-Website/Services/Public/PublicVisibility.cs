@@ -34,8 +34,13 @@ public static class PublicVisibility
             ["OeffentlicheFahndung"] = "Der Publikations-Snapshot einer Ausschreibung: öffentliches Aktenzeichen, "
                 + "Art, Anzeigename, die vom Autor gewählten Aliase, Vorwurfstext, letzte Gegend, Fahrzeugtext, die "
                 + "beim Publizieren festgehaltene Gefahrenstufe, eine Kopie des Fotos und — im Archiv — das "
-                + "Gefasst-Datum. Der Aktenbezug (PersonId/FraktionId), der rohe Bedrohungs-Score, die "
-                + "Kopfgeld-Obergrenze, der Aufrufzähler und der Rückzugsgrund bleiben drinnen.",
+                + "Gefasst-Datum, dazu die Kopfgeld-Obergrenze als \"bis X\". Der Aktenbezug "
+                + "(PersonId/FraktionId), der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund "
+                + "bleiben drinnen.",
+            ["FahndungKopfgeldAnteil"] = "Ausschließlich die Summe aller zugesagten und gesicherten Anteile "
+                + "einer laufenden Ausschreibung, als eine Zahl. Herkunft, Stifter, der Betrag eines einzelnen "
+                + "Anteils, ihre Anzahl, das Konto, die Kassenbuchung und der Status bleiben drinnen — eine "
+                + "Aufschlüsselung verriete, welcher Agent wie viel eigenes Geld auf einen Kopf gesetzt hat.",
             ["Warnhinweis"] = "Bezeichnung und Farbe eines zugeordneten Warnhinweises, als Chip auf Board, "
                 + "Steckbrief und Poster. Reihenfolge, Aktiv-Kennzeichen und die Zeilen-Id bleiben drinnen.",
         };

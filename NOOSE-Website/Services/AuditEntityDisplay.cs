@@ -40,6 +40,7 @@ public static class AuditEntityDisplay
         "OeffentlicheSeite" => "Öffentliche Seite",
         "OeffentlicheFahndung" => "Öffentliche Ausschreibung",
         "Warnhinweis" => "Warnhinweis",
+        "FahndungKopfgeldAnteil" => "Kopfgeld-Anteil",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -76,6 +77,8 @@ public static class AuditEntityDisplay
         "OeffentlicheSeite" => "/einstellungen?tab=oeffentliche-seiten",
         "OeffentlicheFahndung" => "/fahndung?tab=oeffentlich",
         "Warnhinweis" => "/einstellungen?tab=warnhinweise",
+        // the share has no page of its own; it is managed at the notice, which is managed here
+        "FahndungKopfgeldAnteil" => "/fahndung?tab=oeffentlich",
         _ => null,
     };
 }

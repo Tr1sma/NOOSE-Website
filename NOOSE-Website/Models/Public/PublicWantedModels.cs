@@ -35,6 +35,19 @@ public sealed record PublicWantedDetail(
 /// <summary>One warning chip: a label and an allowlisted colour name, nothing else.</summary>
 public sealed record PublicWantedHint(string Label, string Colour);
 
+/// <summary>What the outside learns about the money on a head: one number, and whether it is a ceiling.</summary>
+/// <remarks>
+/// Structurally carries no origin, donor, account, booking or share count. A breakdown would be a public register of
+/// which agent staked how much of their own money on whom — the reason <c>PublicVisibility</c> publishes the sum and
+/// nothing else.
+/// </remarks>
+public sealed record PublicBounty(decimal Total, bool IsCap);
+
+/// <summary>What a raise may carry into the public Discord channel.</summary>
+/// <remarks>The bolt is the parameter type, not the care taken: this record cannot hold a PersonId, the internal
+/// NOOSE-P case number, a codename or a breakdown, so the message cannot either.</remarks>
+public sealed record PublicBountyAnnouncement(string CaseNumber, string DisplayName, decimal Total, bool IsCap);
+
 /// <summary>One row of the anonymous archive: the fact that someone was caught, not a profile.</summary>
 /// <remarks>
 /// Its own type rather than nullable fields on <see cref="PublicWantedCard"/>. The archive must carry no hazard level,
@@ -59,17 +72,30 @@ public sealed record PublicWantedBoard(
     IReadOnlyList<PublicWantedCard> Cards,
     IReadOnlyDictionary<string, PublicWantedDetail> ByCaseNumber,
     IReadOnlyList<PublicWantedArchiveCard> Archive,
-    IReadOnlyDictionary<string, PublicWantedArchiveCard> CapturedByCaseNumber)
+    IReadOnlyDictionary<string, PublicWantedArchiveCard> CapturedByCaseNumber,
+    IReadOnlyDictionary<string, PublicBounty> BountyByCaseNumber)
 {
+    public static IReadOnlyDictionary<string, PublicBounty> NoBounties { get; } =
+        new Dictionary<string, PublicBounty>(StringComparer.OrdinalIgnoreCase);
+
     public static PublicWantedBoard Empty { get; } =
         new([], new Dictionary<string, PublicWantedDetail>(StringComparer.OrdinalIgnoreCase),
-            [], new Dictionary<string, PublicWantedArchiveCard>(StringComparer.OrdinalIgnoreCase));
+            [], new Dictionary<string, PublicWantedArchiveCard>(StringComparer.OrdinalIgnoreCase), NoBounties);
 
     public PublicWantedDetail? Find(string? caseNumber)
         => caseNumber is not null && ByCaseNumber.TryGetValue(caseNumber, out var entry) ? entry : null;
 
     public PublicWantedArchiveCard? FindCaptured(string? caseNumber)
         => caseNumber is not null && CapturedByCaseNumber.TryGetValue(caseNumber, out var entry) ? entry : null;
+
+    /// <summary>The advertised bounty of a live notice; null when there is none or the module is off.</summary>
+    /// <remarks>
+    /// Sits on the board rather than on the card so the module switch, which is read outside the content cache like
+    /// the board's own, can drop every amount with one <c>with</c> instead of rebuilding each card. The archive gets
+    /// none: no money is advertised on a head that has been caught.
+    /// </remarks>
+    public PublicBounty? BountyFor(string? caseNumber)
+        => caseNumber is not null && BountyByCaseNumber.TryGetValue(caseNumber, out var bounty) ? bounty : null;
 }
 
 /// <summary>What the anonymous photo endpoint needs to stream a file, and nothing else.</summary>
@@ -93,7 +119,9 @@ public sealed record PublicWantedEdit(
     string? PublishedByName,
     DateTime? ExpiresAt,
     DateTime? ModifiedAt,
-    int ViewCount);
+    int ViewCount,
+    /// <summary>Advertised bounty; filled after the projection, so a zero means "none", never "not loaded".</summary>
+    decimal Bounty);
 
 /// <summary>The one notice an author is editing, HTML included.</summary>
 public sealed record PublicWantedDraft(
@@ -106,7 +134,8 @@ public sealed record PublicWantedDraft(
     string? VehicleText,
     string? PhotoSourceId,
     DateTime? ExpiresAt,
-    string? ChargeHtml);
+    string? ChargeHtml,
+    bool BountyIsCap);
 
 /// <summary>One selectable file photo, labelled by upload date rather than by file name.</summary>
 public sealed record PublicWantedPhotoOption(string Id, string Label);

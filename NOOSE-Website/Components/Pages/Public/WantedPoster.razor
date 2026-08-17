@@ -61,6 +61,13 @@ else
 
         <p><b>Gefahrenstufe:</b> @HazardLevelLogic.Name(_entry.HazardLevel)</p>
 
+        @if (_bounty is { } bounty)
+        {
+            <p class="druck-poster-belohnung">
+                <b>Belohnung:</b> @(bounty.IsCap ? "bis " : string.Empty)@bounty.Total.ToString("N0") $
+            </p>
+        }
+
         @if (_entry.Hints.Count > 0)
         {
             <p>
@@ -97,6 +104,7 @@ else
     public string CaseNumber { get; set; } = string.Empty;
 
     private PublicWantedDetail? _entry;
+    private PublicBounty? _bounty;
     private string? _loadedKey;
 
     protected override async Task OnParametersSetAsync()
@@ -121,6 +129,14 @@ else
         {
             /* best effort */
             _entry = null;
+        }
+
+        if (_entry is not null)
+        {
+            // its own try, and no third module check here: GetBountyAsync holds the bounty switch itself, so a
+            // second copy of that gate could only ever drift from it
+            try { _bounty = await Wanted.GetBountyAsync(_entry.CaseNumber); }
+            catch { /* best effort */ _bounty = null; }
         }
     }
 }

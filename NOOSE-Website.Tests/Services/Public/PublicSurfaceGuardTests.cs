@@ -144,4 +144,55 @@ public class PublicSurfaceGuardTests
         Assert.True(offenders.Length == 0,
             "Eine öffentliche Route ist für einen Partner nie gesperrt: " + string.Join(", ", offenders));
     }
+
+    private static string ProjectRoot([CallerFilePath] string here = "")
+        => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website"));
+
+    /// <summary>Names that would turn the advertised sum into a breakdown of who paid what.</summary>
+    private static readonly string[] BountyInternals =
+    [
+        "IBountyService", "BountyShareRow", "BountySummary", "BountyCoverage",
+        "BountyOrigin", "BountyShareStatus", "KassenKonto", "DonorAgentId", "KassenBuchungId",
+    ];
+
+    [Fact]
+    public void NoAnonymousPage_NamesTheBountyBreakdown()
+    {
+        // The outside gets one number. Origin, donor, account and share count are the part that would say which agent
+        // staked his own money on whom — a structural rule (PublicBounty cannot carry them) plus this scan, because
+        // a page could still reach past the record and query the service itself.
+        var pages = Path.Combine(ProjectRoot(), "Components", "Pages", "Public");
+        Assert.True(Directory.Exists(pages), $"Öffentliche Seiten nicht gefunden: {pages}");
+
+        var offenders = Directory.EnumerateFiles(pages, "*.razor", SearchOption.AllDirectories)
+            .Select(f => (File: Path.GetFileName(f), Text: File.ReadAllText(f)))
+            .SelectMany(f => BountyInternals
+                .Where(name => f.Text.Contains(name, StringComparison.Ordinal))
+                .Select(name => $"{f.File}: {name}"))
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Nach außen geht nur die Summe: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void EveryWriterOfTheBountyTable_DropsThePublicSnapshot()
+    {
+        // The share table feeds the cached snapshot but is owned by another service, so the one thing that must not be
+        // forgettable is the invalidation. PublicWantedService satisfies this by declaring the method itself.
+        var offenders = Directory
+            .EnumerateFiles(ProjectRoot(), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains(Path.Combine("Data", "Migrations"), StringComparison.Ordinal))
+            .Select(f => (File: Path.GetFileName(f), Text: File.ReadAllText(f)))
+            .Where(f => f.Text.Contains("FahndungKopfgeldAnteile", StringComparison.Ordinal)
+                && f.Text.Contains("SaveChangesAsync", StringComparison.Ordinal)
+                && !f.Text.Contains("InvalidatePublicViewAsync", StringComparison.Ordinal))
+            .Select(f => f.File)
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Wer Kopfgeld-Anteile schreibt, verwirft den öffentlichen Snapshot: " + string.Join(", ", offenders));
+    }
 }

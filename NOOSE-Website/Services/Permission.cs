@@ -288,6 +288,20 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to put money on a head, whether the agency's or the actor's own.</summary>
+    /// <remarks>
+    /// RequireWriteAccess alone is not this guard: it blocks only the read-only supervision and partners, so a signed-in
+    /// citizen would pass. A bounty is filed by an internal agent or by nobody.
+    /// </remarks>
+    public static void RequireBountyWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.MayWrite() || actor.IsCitizen() || actor.IsPartner() || string.IsNullOrEmpty(actor.GetAgentId()))
+        {
+            throw new UnauthorizedAccessException(
+                "Kopfgeld setzt nur ein schreibberechtigter Agent.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

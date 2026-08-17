@@ -345,6 +345,7 @@ builder.Services.AddScoped<IPublicPageService, PublicPageService>();
 builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddHostedService<PublicWantedExpiryWorker>();
 builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();
+builder.Services.AddScoped<IBountyService, BountyService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 
 builder.Services.AddRateLimiter(options =>

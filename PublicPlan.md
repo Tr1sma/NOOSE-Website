@@ -105,7 +105,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 3 | CMS-Seiten (Text zur Arbeit, FAQ, Zuständigkeiten) | `Oeffentlich03_Seiten` | 2 | **fertig** |
 | 4 | Fahndung Kern: publizieren, Board, Steckbrief | `Oeffentlich04_Fahndung` | 2 | **fertig** |
 | 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | **fertig** |
-| 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | offen |
+| 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | **fertig** |
 | 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | offen |
 | 8 | Hinweise Ausbau: Dubletten, Priorität, Vertrauen, Übernahme | keine | 7 | offen |
 | 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | offen |
@@ -671,7 +671,7 @@ druckbar ist.
 
 ---
 
-## Phase 6 — Kopfgeld
+## Phase 6 — Kopfgeld ✅
 
 **Ziel:** Behördliches Geld aus der Kasse **und** privates Geld von Agenten auf einen Kopf; öffentlich nur
 die Gesamtsumme.
@@ -703,6 +703,87 @@ Aufschlüsselung** (Datei-Scan + Unit) · Historie ist append-only.
 
 **Fertig, wenn** 500.000 behördlich + 1.000.000 privat gesetzt sind, öffentlich „1.500.000" steht, der
 private Anteil optional eingezahlt werden kann und `/kasse` die Deckung korrekt warnt.
+
+### Abweichungen vom Plan (bewusst)
+
+- **Rang 1–2 bekommt einen echten Antragsweg**, nicht nur eine Rang-Sperre: `RequestType.Kopfgeld` mit
+  eigener Spalte `KopfgeldAnteilId`, Posteingang in `/admin/freigaben`, Nav-Badge im selben Zähler wie die
+  Veröffentlichungsanträge. Der Anteil entsteht als `Beantragt` — ein fünfter Status, den der Plan nicht
+  vorsah, aber die Konstruktion spiegelt Phase 4 wörtlich (Ausschreibung wird `Beantragt`, der `Request`
+  zeigt darauf).
+- **Kein `ISoftDelete` auf `FahndungKopfgeldAnteil`.** Der Plan nannte es, aber Zurückziehen ist ein
+  Status und die Historie append-only (steht so in den Plan-Tests) — ein Papierkorb-Eintrag für etwas,
+  das nie gelöscht wird, wäre toter Code samt `TrashService`-Registrierung.
+- **Discord nur bei Erhöhung**, nicht bei Senkung: eine Behörde, die „das Kopfgeld ist jetzt kleiner"
+  postet, untergräbt die eigene Ausschreibung, und der alte Post steht ohnehin unkorrigierbar weiter.
+- **`Konto` trägt eine Bedeutung für beide Herkünfte**: behördlich das Konto, aus dem gezahlt wird; privat
+  das, in das eingezahlt wurde (erst beim Einzahlen gesetzt). Der Plan reservierte es für behördlich.
+- **Die Summe steht nicht auf der Ausschreibungszeile**, sondern wird im Snapshot **hinter dem
+  Unterdrückungsgürtel** summiert (fünfte Abfrage in `LoadAsync`, neben `HintsAsync`). Eine denormalisierte
+  Summe driftet still; ein zweiter Lesepfad müsste den Gürtel wiederholen.
+- **Der Anteil ist nicht beobachtbar** (`WatchlistRecordRollup` → „not watchable"): die Map ist statisch
+  und ohne Datenbank, Anteil → Ausschreibung → Akte sind zwei Hops. Zeitstrahl und Chronik gehen über beide.
+
+### Nachgewiesen
+
+Am laufenden System, anonym gegen MariaDB (500.000 behördlich + 1.000.000 privat, dazu ein beantragter
+Anteil über 250.000 und ein zurückgezogener über 999):
+
+- `/gesucht`, `/gesucht/{az}` und `/gesucht/{az}/druck` zeigen **1.500.000** — der beantragte und der
+  zurückgezogene Anteil zählen nicht.
+- Obergrenze an ⇒ „bis 1.500.000 $" auf dem Steckbrief.
+- Im ausgelieferten HTML kommen **Herkunft, Stifter, Konto, Status und die interne Aktennummer nicht vor**.
+- Modul `Kopfgeld` aus ⇒ Summe verschwindet auf Board, Steckbrief und Poster, das Board bleibt online.
+- Akte auf TRU-Verschlusssache ⇒ Karte, Steckbrief, Foto (404) **und Summe** verschwinden zusammen.
+- Not-Aus ⇒ alle drei Seiten dunkel, `/buerger` bleibt erreichbar.
+- Müll-Queries (`?betrag=quatsch`, `?kopfgeld=1&x=%00`, `?kopfgeld=ja` am Poster, erfundenes Aktenzeichen):
+  **200, kein 500**.
+- Intern gerendert: das Kopfgeld-Panel an der Personenakte (Summe, Aufschlüsselung, Status-Chips),
+  der Deckungs-Abschnitt `/kasse?tab=kopfgeld` und der Antrags-Abschnitt in `/admin/freigaben`.
+- Serverlog ohne Exception und ohne Rollup-Warnung (nur die bekannte https-Port-Warnung).
+
+### In der Nachprüfung gefunden und behoben
+
+1. **Ein gelöschter Entwurf ließ seinen Kopfgeld-Antrag im Posteingang stehen.** `PendingRequests` verlangte
+   nur, dass der *Anteil* noch `Beantragt` ist, nicht dass die Ausschreibung existiert — anders als der
+   Veröffentlichungs-Posteingang, der genau diese Klausel trägt. Genehmigen antwortete danach „Ausschreibung
+   nicht gefunden", während das Nav-Badge die Zeile weiterzählte. Regressionstest
+   (`DeletingTheNotice_TakesItsRequestOutOfTheInbox`) und live nachgemessen.
+2. **Die „ausgeschrieben"-Regel stand vier Mal im Code** (EF-Prädikat im Snapshot, EF-Prädikat im
+   Vorher/Nachher, In-Memory-Prädikat der Aufschlüsselung, dazu eine ungenutzte Liste im Display-Typ). Jetzt
+   einmal in `Services/Public/BountyShares.cs`, Muster `AgentSelection`; die tote Liste ist weg.
+3. **Ein Antrag klingelte als „Antrag entschieden".** Der Filing-Pfad benachrichtigte die Führung über
+   `NotificationType.RequestDecided` — es gibt keinen Typ für „gestellt", und Phase 4 klingelt beim Stellen
+   eines Veröffentlichungsantrags bewusst gar nicht. Die Benachrichtigung ist entfernt; das Badge ist das Signal.
+4. **Kopfgeld setzen verwarf ungespeicherte Editor-Eingaben.** `BountyPanel` meldete jede Änderung an
+   `PublicWantedEditor`, dessen `LoadAsync` `_input` aus dem Entwurf neu füllt — ein getippter, noch nicht
+   gespeicherter Anzeigename war danach weg. Das Panel ist selbstgenügsam (der Editor rendert keine
+   Kopfgeld-Daten), also ist die Rückmeldung entfallen.
+5. **Karte und Summe konnten auseinanderlaufen**, wenn zwei sichtbare Zeilen dasselbe Aktenzeichen tragen: der
+   Deduplizierungs-Pfad wählte die Zeile zweimal unabhängig. `LoadAsync` wählt sie jetzt einmal (`chosen`) und
+   baut Karte, Chips und Summe daraus. Nur über den Unique-Index erreichbar, aber der Zweig existiert genau für
+   den Fall, dass er verletzt ist.
+6. **Zwei neue Abfrageformen waren nur gegen SQLite belegt** — der Posteingangs-Join über die
+   `Wanted`-Navigation und die verschachtelte Dubletten-Prüfung. Beide kompilieren jetzt in
+   `MySqlTranslationTests` gegen Pomelo; eine Übersetzungslücke wäre ein 500 auf einem Schreibpfad gewesen.
+7. **Die Deckungswarnung im Panel las sich wie eine Aussage über diesen Kopf**, ist aber kassenweit — jetzt
+   ausdrücklich „Deckungslücke der Kasse (alle Ausschreibungen)".
+
+**Geprüft und in Ordnung:** der Posteingang liest **keine** Live-Aktendaten — `TargetDesignation` und
+`AnzeigeName` sind beim Stellen bzw. Publizieren eingefrorene Kopien, eine später eingestufte Akte leakt also
+nichts. Dass `RejectRequestAsync` (anders als `ApproveRequestAsync`) kein Aktengate hält, ist Absicht: wird die
+Akte zur Verschlusssache, muss Genehmigen scheitern und Ablehnen weiter möglich sein, sonst hängt der Antrag
+für immer. Und `PayInAsync` verlangt bewusst keine unklassifizierte Akte: der Anteil zählt bereits, ein Riegel
+würde nur das Geld stranden lassen.
+
+**Bekannte Grenze:** löscht die Führung eine Kassenbuchung, bleibt der zugehörige Anteil `Gesichert` und zeigt
+kein Aktenzeichen mehr. Dieselbe Klasse wie `FinancingRequest.KassenBuchungId`; aufgelöst wird sie mit der
+Auszahlung in Phase 9.
+
+**Nicht geprüft:** die Spalte „Kopfgeld" in `/fahndung?tab=oeffentlich` — dieser Abschnitt hängt an
+`Policies.InternalAgent`, den das Demo-Principal nicht erfüllt; dafür braucht es einen echten Discord-Login.
+Ebenso ungeprüft im laufenden System: der Discord-Push (kein Webhook konfiguriert) und die Dialoge, die
+einen Circuit brauchen. Ihre Logik hängt vollständig an den getesteten Diensten.
 
 ---
 

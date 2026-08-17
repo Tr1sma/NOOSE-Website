@@ -55,8 +55,9 @@ public static class PublicModules
         // no nav route: the poster is reached from a profile, not from a tab
         new(WantedPrint, "Fahndungsposter", "Druckansicht eines Steckbriefs zum Aushängen.",
             Icons.Material.Filled.Print, null, PublicModuleGroup.Fahndung, 25, false, true, OffGeneric),
+        // no nav route: a bounty is read at a profile, not from a tab of its own
         new(Bounty, "Kopfgeld", "Anzeige der ausgeschriebenen Belohnung an einem Steckbrief.",
-            Icons.Material.Filled.Paid, null, PublicModuleGroup.Fahndung, 30, false, false, OffGeneric),
+            Icons.Material.Filled.Paid, null, PublicModuleGroup.Fahndung, 30, false, true, OffGeneric),
         new(HazardLists, "Gefahrenlisten", "Ranglisten der gefährlichsten Organisationen und Personen.",
             Icons.Material.Filled.Warning, "/gefahr/fraktionen", PublicModuleGroup.Fahndung, 40, false, false, OffGeneric),
         new(Organisations, "Organisationen", "Öffentliche Profile beobachteter und verbotener Organisationen.",

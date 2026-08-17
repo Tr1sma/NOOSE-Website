@@ -95,6 +95,13 @@ else
             <MudText Typo="Typo.caption" Class="mud-text-secondary">Keine Warnhinweise zugeordnet.</MudText>
         }
 
+        <MudDivider />
+        @* its own service, its own table, its own save path — never part of UpdateSnapshotAsync. No reload of this
+           editor afterwards: nothing here renders bounty data, and LoadAsync would reset _input and throw away
+           whatever the author has typed into the fields above but not saved yet. *@
+        <BountyPanel WantedId="@_draft.Id" User="User" MayWrite="_mayWrite" />
+        <MudDivider />
+
         <MudText Typo="Typo.subtitle2">Vorwurf</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary">
             Dieser Text ist anonym lesbar. Erwähnungen und Platzhalter werden beim Veröffentlichen abgewiesen.

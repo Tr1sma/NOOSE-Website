@@ -15,6 +15,9 @@ public interface IPublicWantedService
     /// <summary>One published notice by its case number; null for every other state.</summary>
     Task<PublicWantedDetail?> GetByCaseNumberAsync(string? caseNumber, CancellationToken cancellationToken = default);
 
+    /// <summary>The advertised bounty of one published notice; null when there is none or the module is off.</summary>
+    Task<PublicBounty?> GetBountyAsync(string? caseNumber, CancellationToken cancellationToken = default);
+
     /// <summary>The recently captured notices, cached; empty while the archive module is off.</summary>
     Task<IReadOnlyList<PublicWantedArchiveCard>> GetArchiveAsync(CancellationToken cancellationToken = default);
 
@@ -75,6 +78,19 @@ public interface IPublicWantedService
 
     /// <summary>Replace the warnings of a notice; the diff is logged against the notice.</summary>
     Task SetHintsAsync(string id, IEnumerable<string> hintIds, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    // ---- bounty ----
+
+    /// <summary>Say whether the advertised bounty is an exact figure or a ceiling ("bis X").</summary>
+    Task SetBountyIsCapAsync(string id, bool isCap, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Drop the public snapshot after a write to a table that feeds it but is owned by another service.</summary>
+    /// <remarks>
+    /// The bounty shares are such a table. Routing their invalidation through here keeps the cache key and the single
+    /// drop site in one file — <c>PublicWantedCacheDisciplineTests</c> holds both, and a second guard holds that every
+    /// writer of the share table names this method.
+    /// </remarks>
+    Task InvalidatePublicViewAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Flip every notice past its expiry date to Abgelaufen and tell leadership once. Returns how many.</summary>
     /// <remarks>

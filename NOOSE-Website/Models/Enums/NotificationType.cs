@@ -67,6 +67,9 @@ public enum NotificationType
 
     /// <summary>A published notice reached its expiry date. Deliberately not routable: it is an internal fact.</summary>
     PublicWantedExpired = 20,
+
+    /// <summary>The advertised bounty on a live notice went up. Routable — a raise is meant for the outside channel.</summary>
+    PublicWantedBountyRaised = 21,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -95,6 +98,7 @@ public static class NotificationTypeDisplay
         NotificationType.Feedback => "Feedback",
         NotificationType.PublicWantedPublished => "Öffentliche Ausschreibung",
         NotificationType.PublicWantedExpired => "Ausschreibung abgelaufen",
+        NotificationType.PublicWantedBountyRaised => "Kopfgeld erhöht",
         _ => "Benachrichtigung",
     };
 
@@ -122,6 +126,7 @@ public static class NotificationTypeDisplay
         NotificationType.Feedback => Icons.Material.Filled.Feedback,
         NotificationType.PublicWantedPublished => Icons.Material.Filled.PersonSearch,
         NotificationType.PublicWantedExpired => Icons.Material.Filled.TimerOff,
+        NotificationType.PublicWantedBountyRaised => Icons.Material.Filled.Paid,
         _ => Icons.Material.Filled.Notifications,
     };
 }

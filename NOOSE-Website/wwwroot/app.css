@@ -506,6 +506,12 @@ html, body {
     text-transform: uppercase;
 }
 
+/* the one figure on the sheet that has to carry across a room */
+.druck-poster-belohnung {
+    font-size: 18px;
+    letter-spacing: .02em;
+}
+
 .druck-dokument {
     font-size: 14px;
     line-height: 1.45;

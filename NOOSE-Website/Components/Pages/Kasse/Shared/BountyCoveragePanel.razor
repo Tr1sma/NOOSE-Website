@@ -1,0 +1,85 @@
+@* What the two cash accounts owe in bounties against what they hold. A warning, never a block. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IBountyService Bounty
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Gerechnet wird gegen zugesagtes behördliches Kopfgeld <b>und</b> gegen bereits eingezahltes privates:
+        eine Einzahlung hebt den Kontostand und ist trotzdem schon vergeben.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var coverage in _coverage)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@KassenKontoDisplay.Icon(coverage.Account)"
+                                         Color="@KassenKontoDisplay.Colour(coverage.Account)" />
+                                <MudText Typo="Typo.subtitle1">@KassenKontoDisplay.Name(coverage.Account)</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2">Bestand: @Money.Format(coverage.Balance)</MudText>
+                            <MudText Typo="Typo.body2">Kopfgeld gebunden: @Money.Format(coverage.Owed)</MudText>
+                            @if (coverage.IsShort)
+                            {
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                    @Money.Format(coverage.Shortfall) fehlen, wenn alles fällig wird.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Gedeckt.</MudText>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    /// <summary>Bumped by the page to force a reload after a booking.</summary>
+    [Parameter] public int Refresh { get; set; }
+
+    private IReadOnlyList<BountyCoverage> _coverage = [];
+    private bool _load = true;
+    private int _loaded = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == Refresh)
+        {
+            return;
+        }
+        _loaded = Refresh;
+
+        _load = true;
+        try
+        {
+            var user = (await AuthStateTask).User;
+            _coverage = await Bounty.GetCoverageAsync(user);
+        }
+        catch
+        {
+            /* best effort */
+            _coverage = [];
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+}

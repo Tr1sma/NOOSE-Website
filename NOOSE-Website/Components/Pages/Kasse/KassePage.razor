@@ -35,6 +35,9 @@ else
         <RecordSection Slug="gruengeld" Label="Grüngeld" Icon="@Icons.Material.Filled.Payments">
             <KassenLedgerPanel Account="KassenKonto.Gruengeld" Refresh="_refresh" />
         </RecordSection>
+        <RecordSection Slug="kopfgeld" Label="Kopfgeld" Icon="@Icons.Material.Filled.Paid">
+            <BountyCoveragePanel Refresh="_refresh" />
+        </RecordSection>
         @* an unrendered section never registers, so the rail button is absent and a hand-edited ?tab= falls back *@
         <AuthorizeView Policy="@Policies.LeadershipPage" Context="templatesSection">
             <RecordSection Slug="vorlagen" Label="Vorlagen" Icon="@Icons.Material.Filled.Bookmarks">

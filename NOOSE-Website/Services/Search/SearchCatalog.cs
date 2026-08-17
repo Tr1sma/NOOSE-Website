@@ -436,6 +436,9 @@ public static class SearchCatalog
                 + "Gesucht wird die Ausschreibung, die den Hinweis trägt, nicht der Hinweis selbst.",
             ["FahndungWarnhinweis"] = "Zuordnungszeile zwischen Ausschreibung und Warnhinweis; sie trägt keinen "
                 + "eigenen Text.",
+            ["FahndungKopfgeldAnteil"] = "Geldposten an einer Ausschreibung ohne eigenen Text; gefunden wird die "
+                + "Akte, gepflegt wird der Anteil an ihrem Fahndungs-Panel. Eine durchsuchbare Geldliste wäre "
+                + "obendrein ein Verzeichnis, welcher Agent privat auf wen gesetzt hat.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

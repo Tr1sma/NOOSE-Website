@@ -243,6 +243,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<OeffentlicheFahndung> OeffentlicheFahndungen => Set<OeffentlicheFahndung>();
     public DbSet<Warnhinweis> Warnhinweise => Set<Warnhinweis>();
     public DbSet<FahndungWarnhinweis> FahndungWarnhinweise => Set<FahndungWarnhinweis>();
+    public DbSet<FahndungKopfgeldAnteil> FahndungKopfgeldAnteile => Set<FahndungKopfgeldAnteil>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1347,6 +1348,7 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.DeciderName).HasMaxLength(100);
             b.Property(a => a.CreatedById).HasMaxLength(64);
             b.Property(a => a.PublicationWantedId).HasMaxLength(64);
+            b.Property(a => a.BountyShareId).HasMaxLength(64);
             b.HasIndex(a => new { a.Type, a.Status });
             b.HasIndex(a => new { a.TargetType, a.TargetId });
             b.HasIndex(a => a.CreatedById);
@@ -1715,6 +1717,25 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasOne(z => z.Warnhinweis).WithMany()
                 .HasForeignKey(z => z.WarnhinweisId).OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(z => new { z.FahndungId, z.WarnhinweisId }).IsUnique();
+        });
+
+        modelBuilder.Entity<FahndungKopfgeldAnteil>(b =>
+        {
+            b.Property(k => k.WantedId).HasMaxLength(64);
+            b.Property(k => k.DonorAgentId).HasMaxLength(64);
+            b.Property(k => k.KassenBuchungId).HasMaxLength(255);
+            b.Property(k => k.Amount).HasPrecision(18, 2);
+            b.Property(k => k.WithdrawnReason).HasMaxLength(500);
+            // Restrict, unlike the warning assignment: a money trail must not disappear with its target, and the
+            // notice is only ever soft-deleted anyway
+            b.HasOne(k => k.Wanted).WithMany()
+                .HasForeignKey(k => k.WantedId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(k => k.DonorAgent).WithMany()
+                .HasForeignKey(k => k.DonorAgentId).OnDelete(DeleteBehavior.Restrict);
+            // the sum path
+            b.HasIndex(k => new { k.WantedId, k.Status });
+            // one booking backs at most one share, mirroring FinancingRequest
+            b.HasIndex(k => k.KassenBuchungId).IsUnique();
         });
 
         // global soft-delete filter

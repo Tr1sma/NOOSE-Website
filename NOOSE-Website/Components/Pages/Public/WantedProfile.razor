@@ -56,6 +56,14 @@
                         <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_entry.CaseNumber</MudChip>
                     </MudStack>
 
+                    @if (_bounty is { } bounty)
+                    {
+                        <MudAlert Severity="Severity.Normal" Variant="Variant.Filled" Dense="true"
+                                  Icon="@Icons.Material.Filled.Paid">
+                            Belohnung: <b>@(bounty.IsCap ? "bis " : string.Empty)@bounty.Total.ToString("N0") $</b>
+                        </MudAlert>
+                    }
+
                     <WarnhinweisChips Hints="@_entry.Hints" />
 
                     @* stays even without curated warnings: it holds for every notice *@
@@ -112,6 +120,7 @@
     public string CaseNumber { get; set; } = string.Empty;
 
     private PublicWantedDetail? _entry;
+    private PublicBounty? _bounty;
     private bool _mayPrint;
     private string? _loadedKey;
 
@@ -139,6 +148,10 @@
             // its own try: a failure reading the poster switch must not blank the profile, it may only cost the button
             try { _mayPrint = (await Modules.GetAsync()).IsEnabled(PublicModules.WantedPrint); }
             catch { /* best effort */ }
+
+            // and its own again: a failure over the money must not cost the wanted notice
+            try { _bounty = await Wanted.GetBountyAsync(_entry.CaseNumber); }
+            catch { /* best effort */ _bounty = null; }
         }
 
         if (_entry is not null)

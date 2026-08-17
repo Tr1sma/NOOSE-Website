@@ -93,6 +93,9 @@ public static class WatchlistRecordRollup
             case OeffentlichesModul:
             case BuergerProfil:
             case Warnhinweis:
+            // the bounty is treasury, not casework, and resolving it would need two hops through the database
+            // this static map has no access to — publishing the notice is the watchable event
+            case FahndungKopfgeldAnteil:
                 return Array.Empty<(string, string)>();
 
             default:

@@ -22,6 +22,7 @@ public class DiscordWebhookModelsTests
         NotificationType.MeetingReminder,
         NotificationType.PersonnelEntry,
         NotificationType.PublicWantedPublished,
+        NotificationType.PublicWantedBountyRaised,
     };
 
     // Enum members NOT in the routable list.
@@ -50,6 +51,7 @@ public class DiscordWebhookModelsTests
     [InlineData(NotificationType.MeetingScheduled)]
     [InlineData(NotificationType.MeetingReminder)]
     [InlineData(NotificationType.PublicWantedPublished)]
+    [InlineData(NotificationType.PublicWantedBountyRaised)]
     public void IsRoutable_forRoutableTypes_returnsTrue(NotificationType type)
     {
         Assert.True(DiscordRouting.IsRoutable(type));
@@ -249,6 +251,7 @@ public class DiscordWebhookModelsTests
             NotificationType.MeetingScheduled,
             NotificationType.MeetingReminder,
             NotificationType.PublicWantedPublished,
+            NotificationType.PublicWantedBountyRaised,
         };
 
         Assert.Equal(expected.Length, DiscordRouting.RoleRoutableTypes.Count);

@@ -23,6 +23,8 @@ public class PublicWantedModelTests
         typeof(PublicWantedHint),
         typeof(PublicWantedBoard),
         typeof(PublicWantedPhoto),
+        typeof(PublicBounty),
+        typeof(PublicBountyAnnouncement),
         typeof(PublicPageLink),
         typeof(PublicPageView),
         typeof(PublicPageSnapshot),
@@ -50,6 +52,10 @@ public class PublicWantedModelTests
         [typeof(WarnhinweisUsage)] = "Werteliste-Zeile mit Verwendungszähler; nach außen geht nur das Label.",
         [typeof(WarnhinweisOption)] = "Auswahl im Editor-Picker; trägt die Zeilen-Id.",
         [typeof(WarnhinweisInput)] = "Formulareingabe des Warnhinweis-Dialogs.",
+        [typeof(BountyShareRow)] = "Ein Kopfgeld-Anteil im internen Panel; nennt Herkunft, Stifter und Konto.",
+        [typeof(BountySummary)] = "Aufschlüsselung der Summe; nach außen geht ausschließlich Advertised.",
+        [typeof(BountyCoverage)] = "Deckung eines Kassenkontos; ein Kontostand verlässt das Haus nie.",
+        [typeof(BountyRequestRow)] = "Offener Kopfgeld-Antrag im Posteingang.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>

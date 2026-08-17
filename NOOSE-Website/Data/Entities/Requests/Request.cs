@@ -59,6 +59,15 @@ public class Request : IAuditable, ISoftDelete
     [Column("VeroeffentlichungFahndungId")]
     public string? PublicationWantedId { get; set; }
 
+    // ---- Kopfgeld field (only set when Type == Kopfgeld) ----
+    /// <summary>Bounty share this request would confirm; its own column rather than reusing the one above.</summary>
+    /// <remarks>
+    /// PublicWantedService joins its pending list on <see cref="PublicationWantedId"/>, so a shared column would let
+    /// bounty requests appear in the publication inbox.
+    /// </remarks>
+    [Column("KopfgeldAnteilId")]
+    public string? BountyShareId { get; set; }
+
     // ---- IAuditable ----
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }

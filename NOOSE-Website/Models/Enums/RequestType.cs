@@ -9,6 +9,8 @@ public enum RequestType
     PartnerFreigabe = 1,
     /// <summary>Public wanted notice awaiting leadership approval.</summary>
     Veroeffentlichung = 2,
+    /// <summary>Official bounty share awaiting leadership approval.</summary>
+    Kopfgeld = 3,
 }
 
 /// <summary>Display labels.</summary>
@@ -19,6 +21,7 @@ public static class RequestTypeDisplay
         RequestType.Upgrade => "Hochstufung",
         RequestType.PartnerFreigabe => "Partner-Freigabe",
         RequestType.Veroeffentlichung => "Veröffentlichung",
+        RequestType.Kopfgeld => "Kopfgeld",
         _ => "—",
     };
 }

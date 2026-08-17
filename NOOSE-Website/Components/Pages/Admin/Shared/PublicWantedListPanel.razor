@@ -42,6 +42,7 @@ else
             <MudTh>Status</MudTh>
             <MudTh>Stufe</MudTh>
             <MudTh>Veröffentlicht</MudTh>
+            <MudTh>Kopfgeld</MudTh>
             <MudTh>Aufrufe</MudTh>
             <MudTh Style="text-align:right;">Aktion</MudTh>
         </HeaderContent>
@@ -78,6 +79,11 @@ else
                     @(context.PublishedAt is { } published
                         ? $"{published.ToLocalTime():dd.MM.yyyy} · {context.PublishedByName ?? "—"}"
                         : "—")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Kopfgeld">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @(context.Bounty > 0 ? $"{context.Bounty:N0} $" : "—")
                 </MudText>
             </MudTd>
             <MudTd DataLabel="Aufrufe">

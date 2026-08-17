@@ -76,11 +76,19 @@ public class PublicWantedService(
         {
             return PublicWantedBoard.Empty;
         }
-        return await LoadAsync(cancellationToken);
+        var board = await LoadAsync(cancellationToken);
+        // the bounty switch is read outside the content cache for the same reason as the board's own; dropping the
+        // dictionary is one assignment because the amounts live on the board rather than on each card
+        return await modules.IsEnabledAsync(PublicModules.Bounty, cancellationToken)
+            ? board
+            : board with { BountyByCaseNumber = PublicWantedBoard.NoBounties };
     }
 
     public async Task<PublicWantedDetail?> GetByCaseNumberAsync(string? caseNumber, CancellationToken cancellationToken = default)
         => (await GetBoardAsync(cancellationToken)).Find(caseNumber);
+
+    public async Task<PublicBounty?> GetBountyAsync(string? caseNumber, CancellationToken cancellationToken = default)
+        => (await GetBoardAsync(cancellationToken)).BountyFor(caseNumber);
 
     public async Task<IReadOnlyList<PublicWantedArchiveCard>> GetArchiveAsync(CancellationToken cancellationToken = default)
     {
@@ -176,13 +184,20 @@ public class PublicWantedService(
                 f.PublishedBy!.Codename,
                 f.ExpiresAt,
                 f.ModifiedAt ?? f.CreatedAt,
-                f.ViewCount) })
+                f.ViewCount,
+                0m) })
             .ToListAsync(cancellationToken);
 
         // a notice carries the file's content, so it answers to the file's read gate — otherwise the list would show
         // the name, accusation and Aktenzeichen of a Verschlusssache to every rank-3 agent
         var visible = await VisibleRecordsAsync(db, rows.Select(r => r.PersonId), actor, cancellationToken);
-        return rows.Where(r => r.PersonId is null || visible.Contains(r.PersonId)).Select(r => r.Row).ToList();
+        var kept = rows.Where(r => r.PersonId is null || visible.Contains(r.PersonId)).Select(r => r.Row).ToList();
+
+        // summed after the gate and in one query, not as a correlated subquery per row
+        var bounties = await BountiesAsync(db, kept.Select(r => r.Id), cancellationToken);
+        return kept
+            .Select(r => bounties.TryGetValue(r.Id, out var total) ? r with { Bounty = total } : r)
+            .ToList();
     }
 
     public async Task<PublicWantedDraft?> GetDraftAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -194,7 +209,7 @@ public class PublicWantedService(
             .AsNoTracking()
             .Where(f => f.Id == id)
             .Select(f => new { f.PersonId, Draft = new PublicWantedDraft(f.Id, f.CaseNumber, f.Status, f.DisplayName,
-                f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml) })
+                f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml, f.BountyIsCap) })
             .FirstOrDefaultAsync(cancellationToken);
 
         return row is not null && await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken)
@@ -244,15 +259,22 @@ public class PublicWantedService(
             return null;
         }
 
-        return await db.OeffentlicheFahndungen
+        var row = await db.OeffentlicheFahndungen
             .AsNoTracking()
             .Where(f => f.PersonId == personId)
             .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
             .Select(f => new PublicWantedEdit(
                 f.Id, f.CaseNumber, f.Kind, f.Status, f.DisplayName, f.Person!.CaseNumber, f.PublicHazardLevel,
                 f.PhotoFileName != null, f.PublishedAt, f.PublishedBy!.Codename, f.ExpiresAt,
-                f.ModifiedAt ?? f.CreatedAt, f.ViewCount))
+                f.ModifiedAt ?? f.CreatedAt, f.ViewCount, 0m))
             .FirstOrDefaultAsync(cancellationToken);
+        if (row is null)
+        {
+            return null;
+        }
+
+        var bounties = await BountiesAsync(db, [row.Id], cancellationToken);
+        return bounties.TryGetValue(row.Id, out var total) ? row with { Bounty = total } : row;
     }
 
     // ---- writes ----
@@ -626,6 +648,39 @@ public class PublicWantedService(
         await SaveAndInvalidateAsync(db, cancellationToken);
     }
 
+    // ---- bounty ----
+
+    public async Task SetBountyIsCapAsync(string id, bool isCap, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException(NotFound);
+
+        // the same gate as the chips: the flag is snapshot data on the notice and reads "bis X" outside
+        if (!await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken))
+        {
+            throw new InvalidOperationException(NotFound);
+        }
+        if (row.BountyIsCap == isCap)
+        {
+            return;
+        }
+        if (row.Status == PublicWantedStatus.Veroeffentlicht)
+        {
+            await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+            await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
+        }
+
+        row.BountyIsCap = isCap;
+        await SaveAndInvalidateAsync(db, cancellationToken);
+    }
+
+    public Task InvalidatePublicViewAsync(CancellationToken cancellationToken = default)
+        => SaveAndInvalidateAsync(null, cancellationToken);
+
     // ---- counter and expiry ----
 
     public async Task CountViewAsync(string? caseNumber, CancellationToken cancellationToken = default)
@@ -873,10 +928,13 @@ public class PublicWantedService(
     /// for the same reason: two keys would double every one of these call sites and create a new failure class where
     /// one is dropped and the other stays.
     /// </remarks>
-    private async Task SaveAndInvalidateAsync(AppDbContext db, CancellationToken cancellationToken,
+    private async Task SaveAndInvalidateAsync(AppDbContext? db, CancellationToken cancellationToken,
         IDbContextTransaction? transaction = null)
     {
-        await db.SaveChangesAsync(cancellationToken);
+        if (db is not null)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
         // commit before the drop: invalidating first lets a concurrent read cache a pre-commit board for 10 s
         if (transaction is not null)
         {
@@ -972,7 +1030,8 @@ public class PublicWantedService(
     }
 
     /// <summary>Loads the file behind a notice and refuses a classified or deleted one, rank-independently.</summary>
-    private static async Task<Person> RequirePublishableRecordAsync(AppDbContext db, OeffentlicheFahndung row,
+    /// <remarks>Internal rather than private: the bounty service names this gate instead of copying its predicate.</remarks>
+    internal static async Task<Person> RequirePublishableRecordAsync(AppDbContext db, OeffentlicheFahndung row,
         ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         if (row.PersonId is null)
@@ -1073,6 +1132,7 @@ public class PublicWantedService(
                     f.LastArea,
                     f.VehicleText,
                     f.ExpiresAt,
+                    f.BountyIsCap,
                 })
                 .ToListAsync(cancellationToken);
 
@@ -1104,14 +1164,22 @@ public class PublicWantedService(
             var visible = rows.Where(r => r.PersonId is null || open.Contains(r.PersonId)).ToList();
             // after the belt, so a suppressed notice does not even get its chips queried
             var hints = await HintsAsync(db, visible.Select(r => r.Id), cancellationToken);
+            // and the money for the same reason — a notice nobody may see must not have its bounty summed either
+            var bounties = await BountiesAsync(db, visible.Select(r => r.Id), cancellationToken);
 
-            // deduplicated before the dictionary: a throwing ToDictionary inside this try would blank the whole board
-            var byCaseNumber = visible
-                .Select(r => new PublicWantedDetail(r.CaseNumber, r.Kind, r.DisplayName, r.AliasText, r.HasPhoto,
+            // Deduplicated before the dictionary: a throwing ToDictionary inside this try would blank the whole board.
+            // Chosen once and reused below, so card, chips and money always describe the same notice — picking the row
+            // a second time would let a duplicated case number pair one notice's card with another's bounty.
+            var chosen = visible
+                .GroupBy(r => r.CaseNumber, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+            var byCaseNumber = chosen.ToDictionary(
+                r => r.CaseNumber,
+                r => new PublicWantedDetail(r.CaseNumber, r.Kind, r.DisplayName, r.AliasText, r.HasPhoto,
                     r.PublicHazardLevel, r.PublishedAt, r.ChargeHtml, r.LastArea, r.VehicleText, r.ExpiresAt,
-                    hints.GetValueOrDefault(r.Id, NoHints)))
-                .GroupBy(f => f.CaseNumber, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                    hints.GetValueOrDefault(r.Id, NoHints)),
+                StringComparer.OrdinalIgnoreCase);
             var cards = byCaseNumber.Values
                 .OrderByDescending(f => f.PublishedAt)
                 .Select(f => new PublicWantedCard(f.CaseNumber, f.Kind, f.DisplayName, f.AliasText, f.HasPhoto,
@@ -1126,7 +1194,14 @@ public class PublicWantedService(
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             var archive = capturedByCaseNumber.Values.OrderByDescending(f => f.CapturedAt).ToList();
 
-            board = new PublicWantedBoard(cards, byCaseNumber, archive, capturedByCaseNumber);
+            // keyed by case number like everything else the outside addresses; a notice whose shares add up to
+            // nothing gets no entry at all rather than an advertised "0 $"
+            var bountyByCaseNumber = chosen
+                .Where(r => bounties.ContainsKey(r.Id))
+                .ToDictionary(r => r.CaseNumber, r => new PublicBounty(bounties[r.Id], r.BountyIsCap),
+                    StringComparer.OrdinalIgnoreCase);
+
+            board = new PublicWantedBoard(cards, byCaseNumber, archive, capturedByCaseNumber, bountyByCaseNumber);
         }
         catch (Exception)
         {
@@ -1164,6 +1239,35 @@ public class PublicWantedService(
                 g => (IReadOnlyList<PublicWantedHint>)g
                     .Select(z => new PublicWantedHint(z.Label, z.Colour ?? string.Empty)).ToList(),
                 StringComparer.Ordinal);
+    }
+
+    /// <summary>The advertised bounty of the given notices, keyed by notice; nothing for a notice without money.</summary>
+    /// <remarks>
+    /// Summed here rather than kept as a column on the notice: a denormalised total drifts silently, and a wrong
+    /// number about money is worse than a ten-second-old one. Only pledged and secured shares count — a share still
+    /// awaiting a decision is not money yet, and advertising it would leak an open internal decision.
+    /// </remarks>
+    private static async Task<Dictionary<string, decimal>> BountiesAsync(
+        AppDbContext db, IEnumerable<string> wantedIds, CancellationToken cancellationToken)
+    {
+        var ids = wantedIds.Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<string, decimal>(StringComparer.Ordinal);
+        }
+
+        var rows = await db.FahndungKopfgeldAnteile
+            .AsNoTracking()
+            .Where(k => ids.Contains(k.WantedId))
+            // named, not spelled out again: the same rule decides the internal breakdown and the raise announcement
+            .Where(BountyShares.Advertised)
+            .GroupBy(k => k.WantedId)
+            .Select(g => new { WantedId = g.Key, Total = g.Sum(k => k.Amount) })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Where(r => r.Total > 0m)
+            .ToDictionary(r => r.WantedId, r => r.Total, StringComparer.Ordinal);
     }
 
     /// <summary>Open publication requests whose notice still exists; count and list share it so they cannot disagree.</summary>
