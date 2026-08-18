@@ -327,6 +327,10 @@ public class FactionService(
             .Where(m => m.FactionId == factionId)
             .Include(m => m.Person)
             .ToListAsync(cancellationToken);
+        var rankOrder = (await db.FactionRanks
+                .Where(r => r.FactionId == factionId)
+                .ToListAsync(cancellationToken))
+            .ToDictionary(r => r.Designation, r => r.Order, StringComparer.OrdinalIgnoreCase);
 
         // Person == null means the record is trashed; classified people are leadership-only.
         var visible = members
@@ -340,8 +344,10 @@ public class FactionService(
                 visible.Select(m => m.PersonId).Distinct().ToList(), agency, scope.MeId, cancellationToken);
             visible = visible.Where(m => released.Contains(m.PersonId)).ToList();
         }
+        // hierarchy order: known ranks first (highest on top), unknown/none last, lead breaks ties
         return visible
-            .OrderByDescending(m => m.IsLead)
+            .OrderBy(m => m.Rank is not null && rankOrder.TryGetValue(m.Rank, out var order) ? order : int.MaxValue)
+            .ThenByDescending(m => m.IsLead)
             .ThenBy(m => m.Person!.Name)
             .ToList();
     }

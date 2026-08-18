@@ -323,6 +323,18 @@ public class LinkService(IDbContextFactory<AppDbContext> dbFactory, IThreatScore
         }
     }
 
+    public async Task UpdateLabelAsync(string linkId, string? label, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var v = await db.Links.FirstOrDefaultAsync(x => x.Id == linkId, cancellationToken);
+        if (v is null)
+        {
+            return;
+        }
+        v.Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task RemoveAsync(string linkId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

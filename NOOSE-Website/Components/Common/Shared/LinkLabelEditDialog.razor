@@ -1,0 +1,90 @@
+@* Dialog for editing the label/role of an existing link. *@
+@inject ILinkService LinkService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle1">@OtherDesignation</MudText>
+            @if (WithRoleSuggestions)
+            {
+                <MudAutocomplete T="string" @bind-Value="_label" Label="Rolle im Vorgang (optional)"
+                                 SearchFunc="@RoleSearch" Variant="Variant.Outlined"
+                                 CoerceText="false" CoerceValue="true" ResetValueOnEmptyText="false"
+                                 MinCharacters="0" Immediate="true" MaxItems="20" Clearable="true"
+                                 Placeholder="z. B. Zeuge, Beschuldigter …" />
+            }
+            else
+            {
+                <MudTextField @bind-Value="_label" Label="Bezeichnung (optional)" Variant="Variant.Outlined"
+                              Placeholder="z. B. siehe auch / Quelle für" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="SaveAsync">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string LinkId { get; set; } = default!;
+    [Parameter, EditorRequired] public string OtherDesignation { get; set; } = default!;
+    [Parameter] public string? InitialLabel { get; set; }
+    /// <summary>Person role picker instead of the generic label field.</summary>
+    [Parameter] public bool WithRoleSuggestions { get; set; }
+
+    private string? _label;
+    private bool _saving;
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        _label = InitialLabel;
+    }
+
+    private static Task<IEnumerable<string>> RoleSearch(string value, CancellationToken token)
+    {
+        IEnumerable<string> hit = string.IsNullOrWhiteSpace(value)
+            ? CasePersonRoles.Suggestions
+            : CasePersonRoles.Suggestions.Where(v => v.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(hit);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await LinkService.UpdateLabelAsync(LinkId, _label, _user);
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public static async Task<bool> ShowAsync(IDialogService dialog, LinkDisplay link, bool withRoleSuggestions)
+    {
+        var parameters = new DialogParameters<LinkLabelEditDialog>
+        {
+            { x => x.LinkId, link.LinkId },
+            { x => x.OtherDesignation, link.OtherDesignation },
+            { x => x.InitialLabel, link.Label },
+            { x => x.WithRoleSuggestions, withRoleSuggestions },
+        };
+        var reference = await dialog.ShowAsync<LinkLabelEditDialog>("Bezeichnung bearbeiten", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await reference.Result;
+        return result is { Canceled: false };
+    }
+}

@@ -53,6 +53,8 @@
                             </MudStack>
                             @if (User.MayWrite())
                             {
+                                <MudIconButton Icon="@Icons.Material.Outlined.Edit" Color="Color.Default" Size="Size.Small"
+                                               OnClick="@(() => EditAsync(v))" aria-label="Bezeichnung bearbeiten" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                                OnClick="@(() => RemoveAsync(v))" aria-label="Akte aus dem Vorgang entfernen" />
                             }
@@ -97,7 +99,7 @@
 
     private async Task AddAsync()
     {
-        var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership());
+        var choice = await LinkDialog.ShowAsync(DialogService, User.IsLeadership(), sourceType: nameof(Case));
         if (choice is null)
         {
             return;
@@ -111,6 +113,16 @@
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task EditAsync(LinkDisplay v)
+    {
+        var saved = await LinkLabelEditDialog.ShowAsync(DialogService, v, v.OtherType == nameof(Person));
+        if (saved)
+        {
+            Snackbar.Add("Bezeichnung gespeichert.", Severity.Success);
+            await LoadAsync();
         }
     }
 

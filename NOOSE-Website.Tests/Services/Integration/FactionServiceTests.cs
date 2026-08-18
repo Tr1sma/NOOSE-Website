@@ -531,6 +531,33 @@ public sealed class FactionServiceTests
     }
 
     [Fact]
+    public async Task GetMembersAsync_OrdersByRankHierarchy()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.Factions.Add(Seed.Faction(id: "f1"));
+            db.FactionRanks.Add(new FactionRank { FactionId = "f1", Designation = "Boss", Order = 0 });
+            db.FactionRanks.Add(new FactionRank { FactionId = "f1", Designation = "Lieutenant", Order = 1 });
+            db.People.Add(Seed.Person(id: "pb", name: "Beta", configure: p => p.CaseNumber = "P-b"));
+            db.People.Add(Seed.Person(id: "pl", name: "Lambda", configure: p => p.CaseNumber = "P-l"));
+            db.People.Add(Seed.Person(id: "pn", name: "Noro", configure: p => p.CaseNumber = "P-n"));
+            db.People.Add(Seed.Person(id: "px", name: "Xray", configure: p => p.CaseNumber = "P-x"));
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "pl", Rank = "Lieutenant" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "pn" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "pb", Rank = "Boss" });
+            db.FactionMembers.Add(new FactionMember { FactionId = "f1", PersonId = "px", Rank = "Alt-Bezeichnung" });
+            db.SaveChanges();
+        }
+        var svc = NewService(ctx);
+
+        var result = await svc.GetMembersAsync("f1", ViewerScope.From(Leader()));
+
+        // rank hierarchy first (Boss before Lieutenant); unknown ("Alt-Bezeichnung") and no rank last, then by name
+        Assert.Equal(new[] { "pb", "pl", "pn", "px" }, result.Select(m => m.PersonId));
+    }
+
+    [Fact]
     public async Task GetMembersAsync_ExcludesClassifiedPerson_ForNonLeader()
     {
         using var ctx = new SqliteTestContext();
