@@ -26,6 +26,7 @@ public class PublicWantedService(
     IFileStorageService peopleFiles,
     IPublicWantedPhotoStorageService publicFiles,
     INotificationService notifications,
+    ITipPriorityService tipPriority,
     IDiscordWebhookService discord,
     IMemoryCache cache) : IPublicWantedService
 {
@@ -497,6 +498,7 @@ public class PublicWantedService(
 
         row.PublicHazardLevel = HazardLevelLogic.From(person.ThreatScore);
         await SaveAndInvalidateAsync(db, cancellationToken);
+        await tipPriority.StampForNoticeAsync(row.Id, cancellationToken);
     }
 
     public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
@@ -902,6 +904,9 @@ public class PublicWantedService(
 
         // after the commit: a rollback would otherwise have thrown away the row that still points at this file
         DeleteCopy(previousPhoto is { Length: > 0 } && previousPhoto != row.PhotoFileName ? previousPhoto : null);
+
+        // the hazard level is a factor of the inbox order of every tip on this notice
+        await tipPriority.StampForNoticeAsync(row.Id, cancellationToken);
 
         // and after the commit for the same reason: a Discord post cannot be recalled, so it must never announce a
         // notice that never went live. Both entry points share this body, so it can neither fire twice nor fire for

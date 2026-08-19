@@ -107,7 +107,8 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 5 | Fahndung Ausbau: Warnhinweise, Ablauf, Archiv, Druck, Push | `Oeffentlich05_Warnhinweise` | 4 | **fertig** |
 | 6 | Kopfgeld: Anteile, behördlich + privat, Deckung, Historie | `Oeffentlich06_Kopfgeld` | 4 | **fertig** |
 | 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | **fertig** |
-| 8 | Hinweise Ausbau: Dubletten, Priorität, Vertrauen, Übernahme | keine | 7 | offen |
+| 8a | Hinweise Triage: Dubletten, Priorität, Vertrauensstufe | `Oeffentlich08_HinweisTriage` (nur Indizes) | 7 | **fertig** |
+| 8b | Hinweise Übernahme: Akte, Kontoverknüpfung, Gegenaufklärung | `Oeffentlich08_HinweisUebernahme` (nur Seed) | 8a | **fertig** |
 | 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | offen |
 | 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | offen |
 | 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | offen |
@@ -908,6 +909,107 @@ Gegenaufklärungs-Regel feuert nur im beschriebenen Fall.
 
 **Fertig, wenn** zwei gleiche Hinweise als Gruppe erscheinen, ein Hinweis in eine Personenakte übernommen
 wird und die Akte den Hinweisgeber-Bezug zeigt.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+Aufgeteilt in **8a** (Triage: Dubletten, Priorität, Vertrauensstufe) und **8b** (Übernahme, Kontoverknüpfung,
+Gegenaufklärung). 8a ist reine Trage-/Sortierlogik in eigenen Dateien, 8b fasst `PersonService`/`CaseService`/
+`ObservationService`/`LinkService` **und** die Gegenaufklärungs-Engine an — zwei Fertig-Kriterien, zwei Testwellen.
+
+1. **Zwei Migrationen statt „keine".** `Oeffentlich08_HinweisTriage` legt **nur zwei Indizes** an
+   (`{Status, Prioritaet}` für die neue Standard-Sortierung, `DublettenGruppeId` für Gruppen),
+   `Oeffentlich08_HinweisUebernahme` **nur eine `InsertData`-Zeile** (die vierte Vorgabe-Regel). Am Datenmodell
+   ändert sich nichts — die Felder standen schon aus Phase 7 bereit.
+2. **Die Priorität multipliziert Bänder mit Untergrenze 1, nicht die Rohwerte.** „Kopfgeld × Gefahrenstufe ×
+   Vertrauen" wörtlich genommen wäre ohne Kopfgeld immer 0, und ein `Critical`-Hinweis sortierte unter eine
+   Bagatelle. `TipPriority` ist die einzige Wahrheit der Formel (1..100). Bewusste Folge: ein Hinweis **ohne**
+   Fahndungsbezug bekommt `1 × 1 × Vertrauensband` und liegt unter jedem bezogenen — tragbar, weil der Eingang
+   ohnehin nach Status in drei Reiter trennt.
+3. **`Prioritaet` ist ein Cache, und `TipPriorityService` ist sein einziger Schreiber.** Er hängt **nur** am
+   `IDbContextFactory` — genau deshalb dürfen `PublicWantedService` und `BountyService` ihn rufen, ohne einen
+   DI-Zyklus zu bauen (`TipService → IPublicWantedService` besteht schon). Geschrieben wird per
+   `ExecuteUpdateAsync` und nur für **offene** Hinweise: ein getrackter Write stempelte `GeaendertAm`, schriebe
+   eine `AuditLog`-Zeile und schöbe den Hinweis bei jeder Kopfgeld-Erhöhung auf den Zeitstrahl der Personenakte.
+   Vierter dokumentierter Fall neben Score-Writes, `FactionRecency.StampAsync` und `CountViewAsync`.
+   `BountyService.SaveAsync` nimmt dafür die `wantedId` — ein Choke-Point für beide Folgen eines Anteil-Writes
+   (Snapshot verwerfen **und** nachstempeln).
+4. **Die Datei nennt `FahndungKopfgeldAnteile`, aber kein `SaveChangesAsync`** — deshalb greift
+   `PublicSurfaceGuardTests.EveryWriterOfTheBountyTable_DropsThePublicSnapshot` bewusst nicht: sie *liest*
+   Anteile und schreibt `Hinweise`. Wer dort je ein `SaveChangesAsync` ergänzt, braucht
+   `InvalidatePublicViewAsync`, und der Wächter sagt es ihm.
+5. **Dublettenerkennung ist ein symmetrisches Maß, nicht `PhraseSimilar`.** Das verlangt für *jedes* Wort einer
+   Seite einen Partner — zwei Meldungen zum selben Vorfall mit ungleicher Länge fielen damit immer durch, und
+   ein Zweizeiler „Der Gesuchte war am Hafen" schluckte einen ausführlichen Bericht. `TipDuplicates` mittelt
+   deshalb beide Richtungen (Schwelle 0.6) und verlangt mindestens vier tragende Wörter je Seite. In-Memory,
+   weil Pomelo keine Edit-Distanz übersetzt — dieselbe Begründung wie in der Suche.
+6. **Gruppiert wird nach dem Commit und nie auf Kosten der Einreichung.** Kandidatenfenster: 30 Tage,
+   **gleicher** Fahndungsbezug (beide `null` zählt als gleich, mit ausgeschriebenen Zweigen — ein `== null`
+   gegen eine Variable übersetzt zu SQL-`NULL` und fände nichts), 300 neueste. Ein Fehlschlag der Erkennung
+   wird geloggt und verworfen: der Hinweis ist schon gespeichert.
+7. **Die Vertrauensstufe wird neu berechnet, nicht inkrementiert.** `TipRules.IsTransitionAllowed` erlaubt
+   `Bestaetigt → InPruefung → Bestaetigt`; ein Inkrement zählte denselben Hinweis mehrfach und bliebe nach einem
+   Rückzieher dauerhaft zu hoch. `RecomputeConfirmedTipsAsync` zählt die Zeilen und ist damit selbstheilend —
+   auch beim Löschen und Wiederherstellen, die denselben Pfad rufen. `TipRules.PerDay` bleibt stehen und **ist**
+   `TipTrust.DailyQuota(1)`; ein Test hält die Gleichheit, zwei Zahlen wären Drift.
+8. **Die Vertrauens*stufe* geht auch bei anonymen Hinweisen nach innen, die exakte Zahl nicht.** Die Stufe
+   steckt ohnehin als Faktor in der sichtbaren Priorität und ließe sich zurückrechnen; die Zusage gilt der
+   Identität, nicht der Erfolgsbilanz. `CitizenConfirmedTips` bleibt gesperrt (ein Wiedererkennungsmerkmal),
+   `CitizenName` unverändert `null`.
+9. **Jede Übernahme endet in einer *manuellen* Verknüpfung.** `TimelineService`, `ChronikParentResolver` und
+   `LinkPanel` filtern `!v.Automatic` — eine automatische Verknüpfung wäre auf dem Zeitstrahl unsichtbar, und
+   genau dort ist sie der Herkunftsnachweis. Ein zweites `ManualAudit.Row` gegen die Personenakte gibt es
+   deshalb **nicht** (Präzedenz Phase 4: eine `Person`-getypte Zusatzzeile liest sich als „Akte geändert").
+10. **`TipTakeoverService` ruft nur Dienste, es baut keine Entität.** Vorbild `ApplicationCaseService`: die
+    Klassifizierungs-Gates bleiben bei `PersonService`/`ObservationService`, die Sichtbarkeitsprüfung des Ziels
+    bei `LinkService.CreateAsync`, und `ICaseNumberService.NextAsync` bekommt seine umschließende Transaktion
+    von den Diensten. **Eine Ausnahme braucht eine eigene Prüfung:** `ObservationService.CreateAsync` gatet nur
+    die `SecrecyLevel`, nicht die Einstufung der Akte, und die `personId` kommt vom Client — `ToObservationAsync`
+    ruft daher selbst `Visibility.IsRecordVisibleAsync`, sonst schriebe ein Rang-2-Agent in eine
+    Verschlusssache, die er nicht öffnen darf. Der Guard davor ist `RequireTipHandling` — `MayWrite` allein ließe ein angemeldetes
+    Bürgerkonto durch. Ein `Neu`-Hinweis geht danach auf `InPruefung` (wie beim Übernehmen); bestätigen bleibt
+    eine eigene Entscheidung, weil daran Vertrauensstufe und später die Auszahlung hängen.
+11. **Doppelklick-Schutz statt Compare-and-swap.** Es gibt keine Anspruchsspalte auf `Hinweise`, also prüft
+    `ToNewPersonAsync` vorab auf eine bestehende `Hinweis → Person`-Verknüpfung und weist mit Klartext ab;
+    verliert ein zweiter Tab das Rennen doch, wird die frische Akte soft-gelöscht und die Verwerfung auditiert
+    (wörtlich der Rollback aus `ApplicationCaseService`). Anders als bei Geld ist eine doppelte Akte ein
+    Papierkorb-Eintrag, kein Schaden.
+12. **Drei Registries, damit die Verknüpfung nicht als GUID erscheint.** `LinkService` (Auflösungs-Arm **und**
+    `knownTypes`), `RecordsReference` (sonst steht auf dem Zeitstrahl „Akte") und `LinkPanel.TypeDisplay`.
+    Ausgeliefert wird nur das Aktenzeichen — ein Hinweis trägt einen Bürger hinter sich. Für einen Partner
+    fällt die Verknüpfung automatisch heraus: `releasedTargets` kennt den Typ nicht.
+13. **Die Hinweisgeber-Historie an der Personenakte listet nur offengelegte Hinweise — auch nicht als Zähler.**
+    Der Abschnitt ist über die Identität des Bürgers verschlüsselt, eine Zahl nannte ihn also durch Rechnen.
+    Die Regel steht als `TipAnonymity.IsHidden` plus Query-Zwilling `TipAnonymity.Disclosable` an **einer**
+    Stelle, und beide Lesepfade nennen sie. Der Abschnitt ist intern (`@if (!_isPartner)`), sein Slug steht
+    **nicht** in `_tabs` und **nicht** in `PartnerTabCatalog`.
+14. **Kontoverknüpfung ist Führungsarbeit und prüft mehr als ihr Vorbild.**
+    `IBuergerService.LinkPersonAsync` verlangt `RequireLeadership` + `RequireWriteAccess` und prüft
+    `Visibility.IsRecordVisibleAsync` gegen den Akteur — `BewerbungService.LinkPersonAsync` prüft nur
+    `AnyAsync(p => p.Id == personId)` und ließe damit eine Verschlusssache verlinken, die der Akteur nicht
+    öffnen darf. Das wurde bewusst nicht kopiert.
+15. **Die Gegenaufklärung wurde als echte Bedingungskategorie gebaut, nicht als Nebenpfad.** Die Engine hat
+    keine Regel-Art, sondern eine kombinierbare Bedingungsmenge; `ActorSharesOrgWithTarget` ist deshalb ein
+    Tri-State im Akteur-Block (Idiom von `RequireTru`) mit **`null` als Default** — die geseedeten Regeln tragen
+    ihr JSON als Literal aus der Migration und kennen die Eigenschaft nicht. Sieben koordinierte Stellen:
+    Definition + `NeedsOrgLookup`, drei Felder auf `CounterIntelEvent`, Anreicherung im Loader, ein
+    **fail-closed** Arm in `Matches`, ein `if`-Block in `Summary`, ein `Flag(...)` im Dialog samt `ActorLabel`,
+    und die vierte Vorgabe-Regel in `CounterIntelRuleDefaults` + Migration.
+16. **Aufgelöst wird über die Zivil-Identität des handelnden Kontos**, nicht über den Agentenstatus: ein Agent,
+    der über sein Bürgerprofil meldet, ist derselbe Interessenkonflikt. Ziel-Person ist bei einem `Hinweis` die
+    Person hinter der Ausschreibung, bei einem `Person`-Ereignis die Akte selbst; alles andere bleibt `null` und
+    kann die Bedingung baulich nicht erfüllen. Meldung über die **eigene** Akte gilt als geteilt — die stärkste
+    Form desselben Konflikts.
+17. **Das Cockpit ist keine Hintertür um `ResolveAnonymityAsync`.** Sind **alle** gezählten Ereignisse einer
+    Gruppe Hinweise mit gewahrter Zusage, heißt das Subjekt „Anonymer Hinweisgeber" und trägt **kein** `Href`;
+    sonst zeigt ein Bürgerkonto auf `/einstellungen?tab=buerger` statt auf `/personal/{id}`, das für einen
+    Zivilisten ins Leere führt. Gemeldet wird das Muster, der Name kommt weiter nur über den auditierten,
+    führungsgebundenen Weg.
+18. **Neue Wächter.** `MySqlTranslationTests` bekam fünf Formen dazu (Kandidatenfenster in beiden
+    Bezugs-Zweigen, Gruppen-Zählung über eine nullable Spalte, Kopfgeld-Summe je Ausschreibung, die beiden
+    `TipRules`-Prädikate). `TheSeededOwnCircleRule_MatchesTheCodeDefault` liest das JSON-Literal aus der
+    Migration und vergleicht es mit `CounterIntelRuleDefaults` — vorher hätte eine Drift zwischen Code und
+    Seed niemand bemerkt. Und `PublicWantedModelTests` verlangte für die zwei neuen `Models.Public`-Records
+    je eine Begründung, wie vorgesehen.
 
 ---
 

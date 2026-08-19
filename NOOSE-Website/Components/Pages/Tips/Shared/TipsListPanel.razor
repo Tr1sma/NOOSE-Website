@@ -11,6 +11,7 @@
                   OnDebounceIntervalElapsed="ReloadAsync" Style="max-width:340px;" />
     <MudSwitch T="bool" @bind-Value="_onlyMine" Color="Color.Primary" Label="Nur meine"
                @bind-Value:after="ReloadAsync" />
+    <MudSwitch T="bool" @bind-Value="_collapse" Color="Color.Primary" Label="Dubletten zusammenfassen" />
 </MudStack>
 
 @if (_load)
@@ -24,9 +25,10 @@ else if (_rows.Count == 0)
 }
 else
 {
-    <MudTable Items="_rows" Hover="true" Dense="true" Style="cursor:pointer;"
+    <MudTable Items="Displayed" Hover="true" Dense="true" Style="cursor:pointer;"
               OnRowClick="@((TableRowClickEventArgs<TipRow> e) => Open(e.Item))">
         <HeaderContent>
+            <MudTh>Prio</MudTh>
             <MudTh>Aktenzeichen</MudTh>
             <MudTh>Hinweisgeber</MudTh>
             <MudTh>Bezug</MudTh>
@@ -35,6 +37,10 @@ else
             <MudTh>Eingegangen</MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd DataLabel="Prio">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Color="@PriorityColour(context.Priority)">@context.Priority</MudChip>
+            </MudTd>
             <MudTd DataLabel="Aktenzeichen">
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                     @context.CaseNumber
@@ -45,6 +51,11 @@ else
                     @if (context.AwaitingAnswer)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.MarkEmailUnread" Size="Size.Small" Color="Color.Warning" />
+                    }
+                    @if (context.DuplicateCount > 1)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Secondary"
+                                 Icon="@Icons.Material.Filled.ContentCopy">Dublette ×@context.DuplicateCount</MudChip>
                     }
                 </MudStack>
             </MudTd>
@@ -58,6 +69,8 @@ else
                 {
                     @(context.CitizenName ?? "—")
                 }
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                         Class="ml-1">@TipTrust.Label(context.TrustTier)</MudChip>
             </MudTd>
             <MudTd DataLabel="Bezug">@(context.WantedCaseNumber is null ? "—" : $"{context.WantedDisplayName} ({context.WantedCaseNumber})")</MudTd>
             <MudTd DataLabel="Status">
@@ -83,7 +96,14 @@ else
     private IReadOnlyList<TipRow> _rows = Array.Empty<TipRow>();
     private string? _search;
     private bool _onlyMine;
+    private bool _collapse;
     private bool _load = true;
+
+    // collapsing is client-side over the rows already fetched: the group is a display decision, and the service
+    // order (priority, then age) already decides which row speaks for its group
+    private IReadOnlyList<TipRow> Displayed => _collapse
+        ? _rows.GroupBy(r => r.DuplicateGroupId ?? r.Id).Select(g => g.First()).ToList()
+        : _rows;
 
     protected override async Task OnInitializedAsync()
     {
@@ -121,6 +141,14 @@ else
         => InvokeAsync(async () => { await ReloadAsync(); StateHasChanged(); });
 
     public void Dispose() => Broadcaster.Modified -= OnModified;
+
+    private static Color PriorityColour(int priority) => priority switch
+    {
+        >= 45 => Color.Error,
+        >= 20 => Color.Warning,
+        >= 8 => Color.Primary,
+        _ => Color.Default,
+    };
 
     private static Color StatusColour(TipStatus status) => status switch
     {

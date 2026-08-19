@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using NOOSE_Website.Models.CounterIntel;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
@@ -473,5 +474,160 @@ public sealed class CounterIntelRuleEvaluatorTests
         Assert.Null(CounterIntelRuleDefinition.TryParse("not json"));
         Assert.Null(CounterIntelRuleDefinition.TryParse(null));
         Assert.Null(CounterIntelRuleDefinition.TryParse("   "));
+    }
+    // ==================== organisation of actor and target ====================
+
+    private static CounterIntelEvent TipEvent(
+        DateTime when, string agent = "a1", string id = "h1", bool? shares = null,
+        bool citizen = true, bool withheld = false)
+        => new()
+        {
+            AgentId = agent,
+            AgentName = agent.ToUpperInvariant(),
+            LocalTimestamp = when,
+            EntityType = "Hinweis",
+            EntityId = id,
+            Action = CounterIntelActionKind.Created,
+            ActorSharesOrgWithTarget = shares,
+            ActorIsCitizen = citizen,
+            ActorIdentityWithheld = withheld,
+        };
+
+    [Fact]
+    public void OrgCondition_FlagsWhenBothSidesShareOne()
+    {
+        var events = Enumerable.Range(0, 3).Select(i => TipEvent(Now.AddMinutes(-i), id: $"h{i}", shares: true));
+
+        Assert.Single(Run(Definition(d => d.ActorSharesOrgWithTarget = true), events));
+    }
+
+    [Fact]
+    public void OrgCondition_DoesNotFlagWhenTheyShareNone()
+    {
+        var events = Enumerable.Range(0, 3).Select(i => TipEvent(Now.AddMinutes(-i), id: $"h{i}", shares: false));
+
+        Assert.Empty(Run(Definition(d => d.ActorSharesOrgWithTarget = true), events));
+    }
+
+    [Fact]
+    public void OrgCondition_FailsClosedOnAnUnresolvedSide()
+    {
+        // no civilian profile, no notice behind the tip: the condition cannot be satisfied, so it must not fire
+        var events = Enumerable.Range(0, 3).Select(i => TipEvent(Now.AddMinutes(-i), id: $"h{i}", shares: null));
+
+        Assert.Empty(Run(Definition(d => d.ActorSharesOrgWithTarget = true), events));
+    }
+
+    [Fact]
+    public void OrgCondition_CanAlsoDemandTheAbsenceOfAnOverlap()
+    {
+        var events = Enumerable.Range(0, 3).Select(i => TipEvent(Now.AddMinutes(-i), id: $"h{i}", shares: false));
+
+        Assert.Single(Run(Definition(d => d.ActorSharesOrgWithTarget = false), events));
+    }
+
+    [Fact]
+    public void OrgCondition_IsIgnoredWhenTheRuleDoesNotAskForIt()
+    {
+        var events = Enumerable.Range(0, 3).Select(i => TipEvent(Now.AddMinutes(-i), id: $"h{i}", shares: null));
+
+        Assert.Single(Run(Definition(), events));
+    }
+
+    [Fact]
+    public void AnAnonymousTipsterIsNeverNamed()
+    {
+        var events = Enumerable.Range(0, 3)
+            .Select(i => TipEvent(Now.AddMinutes(-i), id: $"h{i}", shares: true, withheld: true));
+
+        var flag = Assert.Single(Run(Definition(d => d.ActorSharesOrgWithTarget = true), events));
+
+        Assert.Equal("Anonymer Hinweisgeber", flag.AgentName);
+        Assert.Null(flag.Href);
+    }
+
+    [Fact]
+    public void OneNamedTipAmongAnonymousOnesNamesTheAccount()
+    {
+        var events = new[]
+        {
+            TipEvent(Now.AddMinutes(-1), id: "h1", shares: true, withheld: true),
+            TipEvent(Now.AddMinutes(-2), id: "h2", shares: true, withheld: true),
+            TipEvent(Now.AddMinutes(-3), id: "h3", shares: true, withheld: false),
+        };
+
+        var flag = Assert.Single(Run(Definition(d => d.ActorSharesOrgWithTarget = true), events));
+
+        Assert.Equal("A1", flag.AgentName);
+        Assert.Equal("/einstellungen?tab=buerger", flag.Href);
+    }
+
+    [Fact]
+    public void AnAgentKeepsThePersonnelLink()
+    {
+        var events = Enumerable.Range(0, 3).Select(i => Event(Now.AddMinutes(-i), id: $"p{i}"));
+
+        var flag = Assert.Single(Run(Definition(), events));
+
+        Assert.Equal("/personal/a1", flag.Href);
+    }
+
+    [Fact]
+    public void Defaults_ReproduceTheOwnCircleRule()
+    {
+        var rule = CounterIntelRuleDefaults.All.Single(r => r.Name == "Hinweisgeber im eigenen Umfeld");
+
+        var fires = CounterIntelRuleEvaluator.Evaluate(
+            [TipEvent(Now.AddHours(-1), shares: true)], [rule], Now);
+        var silent = CounterIntelRuleEvaluator.Evaluate(
+            [TipEvent(Now.AddHours(-1), shares: false)], [rule], Now);
+
+        Assert.Single(fires);
+        Assert.Empty(silent);
+    }
+
+    [Fact]
+    public void Defaults_TheOwnCircleRuleIgnoresOrdinaryAccess()
+    {
+        var rule = CounterIntelRuleDefaults.All.Single(r => r.Name == "Hinweisgeber im eigenen Umfeld");
+        var reads = Enumerable.Range(0, 50).Select(i => Event(Now.AddMinutes(-i), id: $"p{i}")).ToList();
+
+        Assert.Empty(CounterIntelRuleEvaluator.Evaluate(reads, [rule], Now));
+    }
+
+    [Fact]
+    public void Defaults_KeepTheOrgConditionUnsetOnTheOlderRules()
+    {
+        // the seeded JSON of the first three rules does not carry the property; a non-null default would change them
+        foreach (var rule in CounterIntelRuleDefaults.All.Where(r => r.Name != "Hinweisgeber im eigenen Umfeld"))
+        {
+            Assert.Null(rule.Definition.ActorSharesOrgWithTarget);
+        }
+        Assert.Null(new CounterIntelRuleDefinition().ActorSharesOrgWithTarget);
+    }
+
+    [Fact]
+    public void TheSeededOwnCircleRule_MatchesTheCodeDefault()
+    {
+        // the migration carries the definition as a literal; parsing it back must yield the same rule
+        var expected = CounterIntelRuleDefaults.All.Single(r => r.Id == CounterIntelRuleDefaults.OwnCircleId).Definition;
+        var seeded = SeededDefinitionJson();
+
+        var parsed = CounterIntelRuleDefinition.TryParse(seeded);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(expected.ToJson(), parsed!.ToJson());
+    }
+
+    private static string SeededDefinitionJson([CallerFilePath] string here = "")
+    {
+        var root = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "NOOSE-Website"));
+        var file = Directory.EnumerateFiles(Path.Combine(root, "Data", "Migrations"),
+            "*Oeffentlich08_HinweisUebernahme.cs").Single();
+        var text = File.ReadAllText(file);
+        var start = text.IndexOf("{\\\"WindowDays", StringComparison.Ordinal);
+        // the closing quote of the C# literal, not the escaped one right after the brace
+        var end = text.IndexOf("}\"", start, StringComparison.Ordinal) + 1;
+        return text[start..end].Replace("\\\"", "\"");
     }
 }

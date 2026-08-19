@@ -61,6 +61,12 @@ public static class CounterIntelRuleDisplay
                 parts.Add(value ? $"nur {label}" : $"ohne {label}");
             }
         }
+        if (definition.ActorSharesOrgWithTarget is { } shared)
+        {
+            parts.Add(shared
+                ? "teilt Organisation mit der Ziel-Akte"
+                : "teilt keine Organisation mit der Ziel-Akte");
+        }
         if (definition.PartnerScope != CounterIntelPartnerScope.Any)
         {
             parts.Add(CounterIntelPartnerScopeDisplay.Name(definition.PartnerScope));

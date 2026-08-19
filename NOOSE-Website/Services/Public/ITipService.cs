@@ -49,6 +49,14 @@ public interface ITipService
 
     Task<TipDetail?> GetAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
+    /// <summary>Tips of the citizens tied to this person file; the ones under an anonymity promise are left out.</summary>
+    Task<IReadOnlyList<TipHistoryRow>> GetForLinkedPersonAsync(string personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The other tips of this one's duplicate group, newest first; empty when it has none.</summary>
+    Task<IReadOnlyList<TipDuplicateRow>> GetDuplicatesAsync(string id, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
     /// <summary>One thread of one tip; the citizen audience is readable by the owner as well.</summary>
     Task<IReadOnlyList<TipMessageRow>> GetMessagesAsync(string id, TipMessageAudience audience,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);

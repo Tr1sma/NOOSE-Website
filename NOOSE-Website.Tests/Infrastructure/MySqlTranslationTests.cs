@@ -3,6 +3,7 @@ using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Requests;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Tests.Infrastructure;
 
@@ -259,5 +260,84 @@ public sealed class MySqlTranslationTests : IDisposable
             .ToQueryString();
 
         Assert.Contains("SELECT", sql, StringComparison.Ordinal);
+    }
+    [Fact]
+    public void TheDuplicateCandidateWindow_TranslatesInBothReferenceBranches()
+    {
+        // spelled-out branches: comparing the column to a null variable would translate to "= NULL" and find nothing
+        var since = new DateTime(2026, 8, 16, 12, 0, 0, DateTimeKind.Utc);
+        var withReference = _db.Hinweise.AsNoTracking()
+            .Where(h => h.Id != "h1" && h.CreatedAt >= since)
+            .Where(h => h.WantedId == "f1")
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(300)
+            .Select(h => new { h.Id, h.Text, h.DuplicateGroupId })
+            .ToQueryString();
+        var withoutReference = _db.Hinweise.AsNoTracking()
+            .Where(h => h.Id != "h1" && h.CreatedAt >= since)
+            .Where(h => h.WantedId == null)
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(300)
+            .Select(h => new { h.Id, h.Text, h.DuplicateGroupId })
+            .ToQueryString();
+
+        Assert.Contains("LIMIT", withReference, StringComparison.Ordinal);
+        Assert.Contains("IS NULL", withoutReference, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheDuplicateGroupCount_TranslatesToAGroupedCountOverANullableColumn()
+    {
+        var groups = new[] { "g1", "g2" };
+        var sql = _db.Hinweise.AsNoTracking()
+            .Where(h => h.DuplicateGroupId != null && groups.Contains(h.DuplicateGroupId))
+            .GroupBy(h => h.DuplicateGroupId!)
+            .Select(g => new { Group = g.Key, Count = g.Count() })
+            .ToQueryString();
+
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COUNT(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheAdvertisedBountyPerNotice_TranslatesToAGroupedSum()
+    {
+        // the priority stamper reads the same predicate the public snapshot sums with
+        var ids = new[] { "f1", "f2" };
+        var sql = _db.FahndungKopfgeldAnteile.AsNoTracking()
+            .Where(k => ids.Contains(k.WantedId))
+            .Where(BountyShares.Advertised)
+            .GroupBy(k => k.WantedId)
+            .Select(g => new { WantedId = g.Key, Total = g.Sum(k => k.Amount) })
+            .ToQueryString();
+
+        Assert.Contains("SUM(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ThePriorityStampScope_TranslatesTheOpenRowsPredicate()
+    {
+        var sql = _db.Hinweise.AsNoTracking()
+            .Where(TipRules.OpenRows)
+            .Where(h => h.WantedId == "f1")
+            .Select(h => new { h.Id, h.WantedId, h.CitizenProfileId, h.Priority })
+            .ToQueryString();
+
+        Assert.Contains("Status", sql, StringComparison.Ordinal);
+        Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTrustCounterRecount_TranslatesItsConfirmedPredicate()
+    {
+        var sql = _db.Hinweise.AsNoTracking()
+            .Where(TipRules.ConfirmedRows)
+            .Where(h => h.CitizenProfileId == "profil1")
+            .Select(h => h.Id)
+            .ToQueryString();
+
+        Assert.Contains("Status", sql, StringComparison.Ordinal);
+        Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
     }
 }

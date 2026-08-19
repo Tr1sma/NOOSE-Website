@@ -12,6 +12,7 @@ using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Data.Entities.Appointments;
 using NOOSE_Website.Data.Entities.Cases;
 using NOOSE_Website.Data.Entities.Meetings;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Common;
 
@@ -191,6 +192,17 @@ public static class RecordsReference
                 map[(nameof(Document), x.Id)] = new(
                     string.IsNullOrWhiteSpace(x.Title) ? "Dokument" : x.Title,
                     x.Classified, SearchNavigation.For(nameof(Document), x.Id));
+            }
+        }
+
+        // citizen tips: case number only, and the route is spelled out because a tip is deliberately not searchable
+        var tipIds = OpenIds(nameof(Hinweis));
+        if (tipIds.Count > 0)
+        {
+            foreach (var x in await db.Hinweise.Where(h => tipIds.Contains(h.Id))
+                .Select(h => new { h.Id, h.CaseNumber }).ToListAsync(ct))
+            {
+                map[(nameof(Hinweis), x.Id)] = new($"Bürgerhinweis {x.CaseNumber}", false, $"/hinweise/{x.Id}");
             }
         }
 

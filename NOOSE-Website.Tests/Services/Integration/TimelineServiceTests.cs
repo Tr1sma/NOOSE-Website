@@ -531,6 +531,34 @@ public sealed class TimelineServiceTests
     }
 
     [Fact]
+    public async Task GetTimelineAsync_TakeoverLink_NamesTheTipByCaseNumber()
+    {
+        using var ctx = new SqliteTestContext();
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("p1", "Max"));
+            db.Hinweise.Add(new Hinweis
+            {
+                Id = "h1", CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = "profil1",
+                Text = "Am Hafen gesehen.", CreatedAt = Utc(1),
+            });
+            db.Links.Add(new Link
+            {
+                SourceType = "Hinweis", SourceId = "h1", TargetType = "Person", TargetId = "p1",
+                Label = "Übernahme aus Bürgerhinweis NOOSE-H-2026-0001", Automatic = false, CreatedAt = Utc(2),
+            });
+            db.SaveChanges();
+        }
+        var svc = Build(ctx);
+
+        var result = await svc.GetTimelineAsync("Person", "p1", Leader());
+
+        // RecordsReference resolves the counterpart; without its arm the entry would read "Akte"
+        var entry = Assert.Single(result.Where(e => e.Category == TimelineCategory.Link));
+        Assert.Contains("Bürgerhinweis NOOSE-H-2026-0001", entry.Title, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetTimelineAsync_Link_Mapped_AndDeletedEmitsRemoval()
     {
         using var ctx = new SqliteTestContext();

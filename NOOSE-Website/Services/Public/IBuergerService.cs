@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Public;
+using NOOSE_Website.Models.Recruiting;
 
 namespace NOOSE_Website.Services.Public;
 
@@ -28,4 +29,24 @@ public interface IBuergerService
     Task BlockAsync(string profileId, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     Task UnblockAsync(string profileId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Ties a citizen account to a person file, or unties it when personId is null.</summary>
+    /// <remarks>
+    /// Leadership work: it joins a civilian identity to the record stock. Unlike the application twin it checks that
+    /// the target is visible to the actor, so a classified file cannot be linked by someone who may not open it.
+    /// </remarks>
+    Task LinkPersonAsync(string profileId, string? personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The linked person file, or null when there is none or the caller may not see it.</summary>
+    Task<LinkedPersonInfo?> GetLinkedPersonAsync(string profileId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Recounts the citizen's confirmed tips, the trust tier behind the quota and the inbox order.</summary>
+    /// <remarks>
+    /// Recomputed rather than incremented: the status whitelist allows a tip back into review and confirmed again, so an
+    /// increment would count one tip twice and stay too high after a retraction. No actor — the number is derived, and
+    /// every caller is a guarded write path.
+    /// </remarks>
+    Task RecomputeConfirmedTipsAsync(string profileId, CancellationToken cancellationToken = default);
 }

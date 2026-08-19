@@ -347,7 +347,9 @@ builder.Services.AddScoped<IPublicWantedService, PublicWantedService>();
 builder.Services.AddHostedService<PublicWantedExpiryWorker>();
 builder.Services.AddScoped<IWarnhinweisService, WarnhinweisService>();
 builder.Services.AddScoped<IBountyService, BountyService>();
+builder.Services.AddScoped<ITipPriorityService, TipPriorityService>();
 builder.Services.AddScoped<ITipService, TipService>();
+builder.Services.AddScoped<ITipTakeoverService, TipTakeoverService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 builder.Services.AddSingleton<TipsBroadcaster>();
 

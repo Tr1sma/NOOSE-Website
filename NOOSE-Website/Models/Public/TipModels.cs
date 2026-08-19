@@ -40,6 +40,11 @@ public record CitizenTipMessage(DateTime CreatedAt, string Text, bool FromCitize
 // ---- inward: the handler's view ----
 
 /// <summary>One tip in the internal inbox.</summary>
+/// <remarks>
+/// <see cref="TrustTier"/> travels even for an anonymous tip: it is a factor of the visible <see cref="Priority"/>, and
+/// the promise covers the identity, not the track record. The exact confirmed count does not — that one is a
+/// recognition mark.
+/// </remarks>
 public record TipRow(
     string Id,
     string CaseNumber,
@@ -53,7 +58,11 @@ public record TipRow(
     bool HasAttachment,
     string? HandlerCodename,
     DateTime? LastMessageAt,
-    bool AwaitingAnswer);
+    bool AwaitingAnswer,
+    int Priority,
+    int TrustTier,
+    string? DuplicateGroupId,
+    int DuplicateCount);
 
 /// <summary>One tip, opened by a handler.</summary>
 /// <remarks>
@@ -77,7 +86,27 @@ public record TipDetail(
     bool HasAttachment,
     string? AttachmentName,
     string? HandlerId,
-    string? HandlerCodename);
+    string? HandlerCodename,
+    int Priority,
+    int TrustTier,
+    string? DuplicateGroupId);
+
+/// <summary>One tip of a citizen tied to a person file, as that file's tipster section shows it.</summary>
+/// <remarks>
+/// The section is keyed on the citizen's identity, so a tip under an anonymity promise never reaches this record —
+/// not even as a count, which would name the tipster by arithmetic. <c>TipAnonymity.Disclosable</c> is that filter.
+/// </remarks>
+public record TipHistoryRow(
+    string Id,
+    string CaseNumber,
+    TipStatus Status,
+    DateTime CreatedAt,
+    string Excerpt,
+    string? CitizenName,
+    int TrustTier);
+
+/// <summary>A sibling of the same duplicate group, as a handler sees it.</summary>
+public record TipDuplicateRow(string Id, string CaseNumber, TipStatus Status, DateTime CreatedAt, string Excerpt);
 
 /// <summary>One line of either thread as a handler sees it.</summary>
 public record TipMessageRow(

@@ -82,7 +82,7 @@ public sealed class PublicWantedServiceTests
         var notifications = Substitute.For<INotificationService>();
 
         var service = new PublicWantedService(factory, modules, caseNumbers, peopleFiles, publicFiles,
-            notifications, discord, cache);
+            notifications, new TipPriorityService(factory), discord, cache);
         return new Host(service, modules, peopleFiles, publicFiles, caseNumbers, discord, notifications, cache);
     }
 

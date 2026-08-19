@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Infrastructure.Audit;
 using NOOSE_Website.Infrastructure.CurrentUser;
@@ -358,5 +359,123 @@ public sealed class BuergerServiceTests
     {
         await using var db = ctx.NewContext();
         return await db.BuergerProfile.Where(p => p.UserId == userId).Select(p => p.Id).SingleAsync();
+    }
+    // ---- linked person file ----
+
+    private static async Task<string> ProfileAsync(SqliteTestContext ctx, BuergerService service)
+    {
+        var profile = await service.SaveOwnAsync("Erika", "Musterfrau", Citizen());
+        return profile.Id;
+    }
+
+    private static async Task SeedPeopleAsync(SqliteTestContext ctx)
+    {
+        await using var db = ctx.NewContext();
+        db.People.Add(Seed.Person("p1", "Max Mustermann", p => p.CaseNumber = "NOOSE-P-2026-0001"));
+        db.People.Add(Seed.Person("p2", "Verschluss", p =>
+        {
+            p.CaseNumber = "NOOSE-P-2026-0002";
+            p.IsClassified = true;
+        }));
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Leadership_ties_a_citizen_account_to_a_person_file()
+    {
+        using var ctx = await SeededAsync();
+        await SeedPeopleAsync(ctx);
+        var service = NewService(ctx);
+        var profileId = await ProfileAsync(ctx, service);
+
+        await service.LinkPersonAsync(profileId, "p1", Leader());
+
+        var linked = await service.GetLinkedPersonAsync(profileId, Leader());
+        Assert.NotNull(linked);
+        Assert.Equal("p1", linked!.PersonId);
+        Assert.Equal("NOOSE-P-2026-0001", linked.CaseNumber);
+    }
+
+    [Fact]
+    public async Task Untying_clears_the_link()
+    {
+        using var ctx = await SeededAsync();
+        await SeedPeopleAsync(ctx);
+        var service = NewService(ctx);
+        var profileId = await ProfileAsync(ctx, service);
+        await service.LinkPersonAsync(profileId, "p1", Leader());
+
+        await service.LinkPersonAsync(profileId, null, Leader());
+
+        Assert.Null(await service.GetLinkedPersonAsync(profileId, Leader()));
+    }
+
+    [Fact]
+    public async Task A_plain_agent_may_not_tie_an_account_to_a_file()
+    {
+        using var ctx = await SeededAsync();
+        await SeedPeopleAsync(ctx);
+        var service = NewService(ctx);
+        var profileId = await ProfileAsync(ctx, service);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.LinkPersonAsync(profileId, "p1", PlainAgent()));
+    }
+
+    [Fact]
+    public async Task Read_only_supervision_may_not_tie_an_account_to_a_file()
+    {
+        using var ctx = await SeededAsync();
+        await SeedPeopleAsync(ctx);
+        var service = NewService(ctx);
+        var profileId = await ProfileAsync(ctx, service);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => service.LinkPersonAsync(profileId, "p1", OnlyReader()));
+    }
+
+    [Fact]
+    public async Task An_unknown_person_file_is_refused()
+    {
+        using var ctx = await SeededAsync();
+        await SeedPeopleAsync(ctx);
+        var service = NewService(ctx);
+        var profileId = await ProfileAsync(ctx, service);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.LinkPersonAsync(profileId, "gibt-es-nicht", Leader()));
+    }
+
+    [Fact]
+    public async Task The_trust_counter_is_recomputed_from_the_tips_themselves()
+    {
+        using var ctx = await SeededAsync();
+        var service = NewService(ctx);
+        var profileId = await ProfileAsync(ctx, service);
+        await using (var db = ctx.NewContext())
+        {
+            db.Hinweise.Add(new Hinweis
+            {
+                CaseNumber = "NOOSE-H-2026-0001", CitizenProfileId = profileId,
+                Text = "Bestätigt", Status = TipStatus.Bestaetigt,
+            });
+            db.Hinweise.Add(new Hinweis
+            {
+                CaseNumber = "NOOSE-H-2026-0002", CitizenProfileId = profileId,
+                Text = "Führte zur Ergreifung", Status = TipStatus.FuehrteZurErgreifung,
+            });
+            db.Hinweise.Add(new Hinweis
+            {
+                CaseNumber = "NOOSE-H-2026-0003", CitizenProfileId = profileId,
+                Text = "Offen", Status = TipStatus.InPruefung,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await service.RecomputeConfirmedTipsAsync(profileId);
+
+        await using var check = ctx.NewContext();
+        Assert.Equal(2, await check.BuergerProfile.Where(p => p.Id == profileId)
+            .Select(p => p.ConfirmedTips).SingleAsync());
     }
 }

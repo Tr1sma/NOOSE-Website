@@ -61,6 +61,15 @@ public sealed record CounterIntelEvent
     public bool ActorIsAdmin { get; init; }
     public PartnerAgency? ActorPartnerAgency { get; init; }
 
+    /// <summary>True/false once both sides resolve to a person file; null when either does not.</summary>
+    public bool? ActorSharesOrgWithTarget { get; init; }
+
+    // display only, never a condition: how a flag names its subject
+    public bool ActorIsCitizen { get; init; }
+
+    /// <summary>The event is a tip whose anonymity promise still holds, so no flag may name the person behind it.</summary>
+    public bool ActorIdentityWithheld { get; init; }
+
     /// <summary>Stable key for distinct-record counting.</summary>
     public string RecordKey => $"{EntityType}:{EntityId}";
 }

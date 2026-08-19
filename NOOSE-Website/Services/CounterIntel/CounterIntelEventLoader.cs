@@ -6,9 +6,11 @@ using NOOSE_Website.Data.Entities.Groups;
 using NOOSE_Website.Data.Entities.Operations;
 using NOOSE_Website.Data.Entities.Parties;
 using NOOSE_Website.Data.Entities.People;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Data.Entities.Taskforces;
 using NOOSE_Website.Models.CounterIntel;
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Services;
 
@@ -83,6 +85,15 @@ public static class CounterIntelEventLoader
             ? await TagsAsync(db, rows, cancellationToken)
             : [];
 
+        // tips are loaded whenever any of them was touched, not only for the org condition: the anonymity promise
+        // decides how a flag may name its subject, whatever the rule counted
+        var tips = rows.Any(r => r.EntityType == nameof(Hinweis))
+            ? await TipsAsync(db, rows, cancellationToken)
+            : [];
+        var orgs = definitions.Any(d => d.NeedsOrgLookup)
+            ? await OrgsAsync(db, rows, tips, definitions, cancellationToken)
+            : new OrgLookup();
+
         return rows.Select(r =>
         {
             var key = $"{r.EntityType}:{r.EntityId}";
@@ -104,6 +115,11 @@ public static class CounterIntelEventLoader
                 ActorIsHrb = actor.IsHrb,
                 ActorIsAdmin = actor.IsAdmin,
                 ActorPartnerAgency = actor.PartnerAgency,
+                ActorSharesOrgWithTarget = orgs.Shares(r.AgentId, r.EntityType, r.EntityId),
+                ActorIsCitizen = actor.IsCitizen,
+                // fail closed: a tip we cannot resolve keeps its subject unnamed, the promise is not guessed at
+                ActorIdentityWithheld = r.EntityType == nameof(Hinweis)
+                                        && (!tips.TryGetValue(r.EntityId, out var tip) || tip.Withheld),
             };
         }).ToList();
     }
@@ -113,12 +129,123 @@ public static class CounterIntelEventLoader
         var rows = await db.Users.AsNoTracking()
             .Select(u => new
             {
-                u.Id, u.Codename, u.Rank, u.IsTRU, u.IsHRB, u.IsAdmin, u.IsTeamLead, u.PartnerAgency,
+                u.Id, u.Codename, u.Rank, u.IsTRU, u.IsHRB, u.IsAdmin, u.IsTeamLead, u.PartnerAgency, u.Status,
             })
             .ToListAsync(ct);
         return rows.ToDictionary(
             u => u.Id,
-            u => new Actor(u.Codename, u.Rank, u.IsTRU, u.IsHRB, u.IsAdmin, u.IsTeamLead && !u.IsAdmin, u.PartnerAgency));
+            u => new Actor(u.Codename, u.Rank, u.IsTRU, u.IsHRB, u.IsAdmin, u.IsTeamLead && !u.IsAdmin,
+                u.PartnerAgency, u.Status == AgentStatus.Civilian));
+    }
+
+    // one row per touched tip: the person it points at through its notice, and whether its anonymity still holds
+    private static async Task<Dictionary<string, Tip>> TipsAsync(AppDbContext db, List<Raw> rows, CancellationToken ct)
+    {
+        var result = new Dictionary<string, Tip>(StringComparer.Ordinal);
+        var ids = rows.Where(r => r.EntityType == nameof(Hinweis)).Select(r => r.EntityId).Distinct().ToList();
+        foreach (var batch in Batches(ids))
+        {
+            // IgnoreQueryFilters like the target lookup: a deleted tip or notice must stay resolvable
+            var found = await db.Hinweise.AsNoTracking().IgnoreQueryFilters()
+                .Where(h => batch.Contains(h.Id))
+                .Select(h => new
+                {
+                    h.Id,
+                    h.WantsAnonymity,
+                    h.AnonymityResolvedAt,
+                    PersonId = h.Wanted!.PersonId,
+                })
+                .ToListAsync(ct);
+            foreach (var t in found)
+            {
+                result[t.Id] = new Tip(t.PersonId, TipAnonymity.IsHidden(t.WantsAnonymity, t.AnonymityResolvedAt));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Organisation membership of actor and target, and the overlap test the rule asks for.</summary>
+    private static async Task<OrgLookup> OrgsAsync(AppDbContext db, List<Raw> rows,
+        Dictionary<string, Tip> tips, IReadOnlyList<CounterIntelRuleDefinition> definitions, CancellationToken ct)
+    {
+        // narrowed to the record types the asking rules actually name — this is the first enrichment that ships
+        // switched on, and resolving memberships for every read in the window would slow every cockpit load
+        var asking = definitions.Where(d => d.NeedsOrgLookup).ToList();
+        var wantsEveryType = asking.Any(d => d.EntityTypes.Count == 0);
+        var wantedTypes = asking.SelectMany(d => d.EntityTypes).ToHashSet(StringComparer.Ordinal);
+        var relevant = rows
+            .Where(r => wantsEveryType || wantedTypes.Contains(r.EntityType))
+            .ToList();
+        if (relevant.Count == 0)
+        {
+            return new OrgLookup();
+        }
+
+        // the acting account is resolved through its civilian profile: an agent reporting through their own civil
+        // identity is the same conflict, so it is not excluded here
+        var actorIds = relevant.Select(r => r.AgentId).Distinct().ToList();
+        var actorPersons = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var batch in Batches(actorIds))
+        {
+            var found = await db.BuergerProfile.AsNoTracking().IgnoreQueryFilters()
+                .Where(b => batch.Contains(b.UserId) && b.LinkedPersonId != null)
+                .Select(b => new { b.UserId, b.LinkedPersonId })
+                .ToListAsync(ct);
+            foreach (var b in found)
+            {
+                actorPersons[b.UserId] = b.LinkedPersonId!;
+            }
+        }
+
+        var targetPersons = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var r in relevant)
+        {
+            var person = r.EntityType switch
+            {
+                nameof(Person) => r.EntityId,
+                nameof(Hinweis) => tips.TryGetValue(r.EntityId, out var tip) ? tip.PersonId : null,
+                _ => null,
+            };
+            if (person is not null)
+            {
+                targetPersons[$"{r.EntityType}:{r.EntityId}"] = person;
+            }
+        }
+
+        var personIds = actorPersons.Values.Concat(targetPersons.Values).Distinct().ToList();
+        var memberships = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        void Remember(string personId, string org)
+        {
+            if (!memberships.TryGetValue(personId, out var set))
+            {
+                memberships[personId] = set = new HashSet<string>(StringComparer.Ordinal);
+            }
+            set.Add(org);
+        }
+
+        foreach (var batch in Batches(personIds))
+        {
+            foreach (var m in await db.FactionMembers.AsNoTracking().IgnoreQueryFilters()
+                         .Where(m => batch.Contains(m.PersonId))
+                         .Select(m => new { m.PersonId, m.FactionId }).ToListAsync(ct))
+            {
+                Remember(m.PersonId, $"F:{m.FactionId}");
+            }
+            foreach (var m in await db.PersonGroupMembers.AsNoTracking().IgnoreQueryFilters()
+                         .Where(m => batch.Contains(m.PersonId))
+                         .Select(m => new { m.PersonId, m.PersonGroupId }).ToListAsync(ct))
+            {
+                Remember(m.PersonId, $"G:{m.PersonGroupId}");
+            }
+            foreach (var m in await db.PartyMembers.AsNoTracking().IgnoreQueryFilters()
+                         .Where(m => batch.Contains(m.PersonId))
+                         .Select(m => new { m.PersonId, m.PartyId }).ToListAsync(ct))
+            {
+                Remember(m.PersonId, $"P:{m.PartyId}");
+            }
+        }
+
+        return new OrgLookup(actorPersons, targetPersons, memberships);
     }
 
     // soft-deleted targets stay resolvable: a rule on "Gelöscht" is exactly about records that are gone now
@@ -213,7 +340,38 @@ public static class CounterIntelEventLoader
         CounterIntelActionKind Action);
 
     private readonly record struct Actor(
-        string? Codename, Rank? Rank, bool IsTru, bool IsHrb, bool IsAdmin, bool IsOnlyReader, PartnerAgency? PartnerAgency);
+        string? Codename, Rank? Rank, bool IsTru, bool IsHrb, bool IsAdmin, bool IsOnlyReader,
+        PartnerAgency? PartnerAgency, bool IsCitizen);
+
+    private readonly record struct Tip(string? PersonId, bool Withheld);
+
+    /// <summary>Answers the one question the org condition asks; unresolved on either side stays null.</summary>
+    private sealed class OrgLookup(
+        Dictionary<string, string>? actorPersons = null,
+        Dictionary<string, string>? targetPersons = null,
+        Dictionary<string, HashSet<string>>? memberships = null)
+    {
+        public bool? Shares(string agentId, string entityType, string entityId)
+        {
+            if (actorPersons is null || targetPersons is null || memberships is null)
+            {
+                return null;
+            }
+            if (!actorPersons.TryGetValue(agentId, out var actorPerson)
+                || !targetPersons.TryGetValue($"{entityType}:{entityId}", out var targetPerson))
+            {
+                return null;
+            }
+            // reporting about one's own file is the strongest form of the same conflict
+            if (string.Equals(actorPerson, targetPerson, StringComparison.Ordinal))
+            {
+                return true;
+            }
+            return memberships.TryGetValue(actorPerson, out var mine)
+                   && memberships.TryGetValue(targetPerson, out var theirs)
+                   && mine.Overlaps(theirs);
+        }
+    }
 
     private readonly record struct Target(bool IsClassified, Classification Level);
 

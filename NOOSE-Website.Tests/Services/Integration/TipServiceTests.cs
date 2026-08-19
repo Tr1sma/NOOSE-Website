@@ -42,6 +42,7 @@ public sealed class TipServiceTests
 
     private sealed record Host(
         TipService Service,
+        TipPriorityService Priority,
         PublicWantedService Wanted,
         PublicModuleService Modules,
         ITipAttachmentStorageService Storage,
@@ -70,9 +71,10 @@ public sealed class TipServiceTests
         caseNumbers.NextAsync(Arg.Any<AppDbContext>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(ci => $"NOOSE-{ci.ArgAt<string>(1)}-2026-{++seq:0000}");
 
+        var tipPriority = new TipPriorityService(factory);
         var wanted = new PublicWantedService(factory, modules, caseNumbers,
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
-            Substitute.For<INotificationService>(), Substitute.For<IDiscordWebhookService>(), cache);
+            Substitute.For<INotificationService>(), tipPriority, Substitute.For<IDiscordWebhookService>(), cache);
 
         var storage = Substitute.For<ITipAttachmentStorageService>();
         storage.IsAllowedType(Arg.Any<string>()).Returns(ci => ci.ArgAt<string>(0).StartsWith("image/"));
@@ -81,8 +83,8 @@ public sealed class TipServiceTests
 
         var notifications = Substitute.For<INotificationService>();
         var service = new TipService(factory, modules, new BuergerService(factory), wanted, caseNumbers,
-            storage, notifications, new TipsBroadcaster());
-        return new Host(service, wanted, modules, storage, notifications, cache, factory);
+            storage, notifications, tipPriority, new TipsBroadcaster());
+        return new Host(service, tipPriority, wanted, modules, storage, notifications, cache, factory);
     }
 
     /// <summary>Seeds module switches, one person file and one complete citizen profile.</summary>
@@ -522,5 +524,301 @@ public sealed class TipServiceTests
         await host.Service.RestoreAsync(id, Agent());
         Assert.Empty(await host.Service.GetTrashAsync());
         Assert.Single(await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent()));
+    }
+    // ---- triage: duplicates, priority, trust ----
+
+    private const string Sighting =
+        "Der Gesuchte wurde heute Abend am Hafen von Los Santos gesehen, in einem blauen Wagen.";
+
+    private const string Reworded =
+        "Heute Abend war der Gesuchte am Hafen von Los Santos, er saß in einem blauen Wagen.";
+
+    private const string OtherIncident =
+        "Vor der Bank in Paleto Bay stand ein Motorrad ohne Kennzeichen, zwei Männer warteten dort.";
+
+    private static async Task<string> NoticeIdAsync(Host host, string caseNumber)
+    {
+        await using var db = host.Factory.CreateDbContext();
+        return await db.OeffentlicheFahndungen.Where(f => f.CaseNumber == caseNumber)
+            .Select(f => f.Id).SingleAsync();
+    }
+
+    private static async Task PledgeAsync(Host host, string wantedId, decimal amount)
+    {
+        await using var db = host.Factory.CreateDbContext();
+        db.FahndungKopfgeldAnteile.Add(new FahndungKopfgeldAnteil
+        {
+            WantedId = wantedId,
+            Origin = BountyOrigin.NooseKasse,
+            Amount = amount,
+            Status = BountyShareStatus.Zugesagt,
+            Timestamp = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task ScoreAsync(Host host, int score)
+    {
+        await using var db = host.Factory.CreateDbContext();
+        var person = await db.People.SingleAsync(p => p.Id == PersonId);
+        person.ThreatScore = score;
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<int> ConfirmedTipsAsync(Host host)
+    {
+        await using var db = host.Factory.CreateDbContext();
+        return await db.BuergerProfile.Where(p => p.Id == ProfileId).Select(p => p.ConfirmedTips).SingleAsync();
+    }
+
+    [Fact]
+    public async Task Two_reports_of_one_incident_land_in_one_group()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SubmitAsync(host, Sighting);
+        await SubmitAsync(host, Reworded);
+
+        var rows = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent());
+
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.NotNull(r.DuplicateGroupId));
+        Assert.Single(rows.Select(r => r.DuplicateGroupId).Distinct());
+        Assert.All(rows, r => Assert.Equal(2, r.DuplicateCount));
+    }
+
+    [Fact]
+    public async Task Two_different_incidents_stay_ungrouped()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SubmitAsync(host, Sighting);
+        await SubmitAsync(host, OtherIncident);
+
+        var rows = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent());
+
+        Assert.All(rows, r => Assert.Null(r.DuplicateGroupId));
+        Assert.All(rows, r => Assert.Equal(0, r.DuplicateCount));
+    }
+
+    [Fact]
+    public async Task The_same_text_on_a_different_reference_is_not_a_duplicate()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+        await SubmitAsync(host, Sighting, reference: notice);
+        await SubmitAsync(host, Sighting);
+
+        var rows = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent());
+
+        Assert.All(rows, r => Assert.Null(r.DuplicateGroupId));
+    }
+
+    [Fact]
+    public async Task The_sibling_list_names_the_other_tips_of_the_group()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var first = await SubmitAsync(host, Sighting);
+        var second = await SubmitAsync(host, Reworded);
+
+        var siblings = await host.Service.GetDuplicatesAsync(await TipIdAsync(host, second), Agent());
+
+        Assert.Equal(first, Assert.Single(siblings).CaseNumber);
+    }
+
+    [Fact]
+    public async Task A_tip_on_a_dangerous_notice_with_bounty_sorts_above_a_plain_one()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await ScoreAsync(host, 90);
+        var notice = await PublishedNoticeAsync(host);
+        await PledgeAsync(host, await NoticeIdAsync(host, notice), 250_000m);
+
+        await SubmitAsync(host, OtherIncident);
+        var hot = await SubmitAsync(host, Sighting, reference: notice);
+
+        var rows = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent());
+
+        Assert.Equal(hot, rows[0].CaseNumber);
+        Assert.True(rows[0].Priority > rows[1].Priority);
+    }
+
+    [Fact]
+    public async Task A_later_bounty_raises_the_priority_of_a_tip_already_filed()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+        var wantedId = await NoticeIdAsync(host, notice);
+        var caseNumber = await SubmitAsync(host, Sighting, reference: notice);
+        var before = (await host.Service.GetAsync(await TipIdAsync(host, caseNumber), Agent()))!.Priority;
+
+        await PledgeAsync(host, wantedId, 250_000m);
+        await host.Priority.StampForNoticeAsync(wantedId);
+
+        var after = (await host.Service.GetAsync(await TipIdAsync(host, caseNumber), Agent()))!.Priority;
+        Assert.True(after > before);
+    }
+
+    [Fact]
+    public async Task A_decided_tip_is_not_re_stamped()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var notice = await PublishedNoticeAsync(host);
+        var wantedId = await NoticeIdAsync(host, notice);
+        var id = await TipIdAsync(host, await SubmitAsync(host, Sighting, reference: notice));
+        await host.Service.SetStatusAsync(id, TipStatus.Verworfen, Agent());
+        var before = (await host.Service.GetAsync(id, Agent()))!.Priority;
+
+        await PledgeAsync(host, wantedId, 250_000m);
+        await host.Priority.StampForNoticeAsync(wantedId);
+
+        Assert.Equal(before, (await host.Service.GetAsync(id, Agent()))!.Priority);
+    }
+
+    [Fact]
+    public async Task A_trusted_tipster_may_submit_more_than_the_base_quota()
+    {
+        using var ctx = await SeededAsync(profile: p => p.ConfirmedTips = 5);
+        var host = NewHost(ctx);
+
+        for (var i = 0; i <= TipRules.PerDay; i++)
+        {
+            await SubmitAsync(host, $"Meldung Nummer {i} über einen Vorfall am Hafen von Los Santos heute Abend.");
+        }
+
+        var rows = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent());
+        Assert.Equal(TipRules.PerDay + 1, rows.Count);
+    }
+
+    [Fact]
+    public async Task The_quota_message_names_the_personal_allowance()
+    {
+        using var ctx = await SeededAsync(profile: p => p.ConfirmedTips = 20);
+        var host = NewHost(ctx);
+        var quota = TipTrust.QuotaFor(20);
+        for (var i = 0; i < quota; i++)
+        {
+            await SubmitAsync(host, $"Meldung Nummer {i} über einen Vorfall am Hafen von Los Santos heute Abend.");
+        }
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => SubmitAsync(host));
+        Assert.Contains(quota.ToString(), error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Confirming_a_tip_twice_leaves_the_trust_counter_at_one()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+
+        await host.Service.SetStatusAsync(id, TipStatus.InPruefung, Agent());
+        await host.Service.SetStatusAsync(id, TipStatus.Bestaetigt, Agent());
+        Assert.Equal(1, await ConfirmedTipsAsync(host));
+
+        // the status whitelist allows a decided tip back into review; an increment would count it twice
+        await host.Service.SetStatusAsync(id, TipStatus.InPruefung, Agent());
+        Assert.Equal(0, await ConfirmedTipsAsync(host));
+        await host.Service.SetStatusAsync(id, TipStatus.Bestaetigt, Agent());
+        Assert.Equal(1, await ConfirmedTipsAsync(host));
+    }
+
+    [Fact]
+    public async Task A_deleted_confirmed_tip_stops_counting()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host));
+        await host.Service.SetStatusAsync(id, TipStatus.InPruefung, Agent());
+        await host.Service.SetStatusAsync(id, TipStatus.Bestaetigt, Agent());
+
+        await host.Service.DeleteAsync(id, Agent());
+        Assert.Equal(0, await ConfirmedTipsAsync(host));
+
+        await host.Service.RestoreAsync(id, Agent());
+        Assert.Equal(1, await ConfirmedTipsAsync(host));
+    }
+
+    [Fact]
+    public async Task An_anonymous_tip_shows_the_trust_tier_but_neither_name_nor_count()
+    {
+        using var ctx = await SeededAsync(profile: p => p.ConfirmedTips = 5);
+        var host = NewHost(ctx);
+        var id = await TipIdAsync(host, await SubmitAsync(host, anonymous: true));
+
+        var detail = await host.Service.GetAsync(id, Agent());
+        var row = Assert.Single(await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Agent()));
+
+        Assert.Null(detail!.CitizenName);
+        Assert.Null(detail.CitizenConfirmedTips);
+        Assert.Equal(TipTrust.Tier(5), detail.TrustTier);
+        Assert.Null(row.CitizenName);
+        Assert.Equal(TipTrust.Tier(5), row.TrustTier);
+    }
+    // ---- tipster history on the person file ----
+
+    [Fact]
+    public async Task The_person_file_lists_the_tips_of_its_linked_citizen()
+    {
+        using var ctx = await SeededAsync(profile: p => p.LinkedPersonId = PersonId);
+        var host = NewHost(ctx);
+        var named = await SubmitAsync(host, Sighting);
+
+        var rows = await host.Service.GetForLinkedPersonAsync(PersonId, Agent());
+
+        var row = Assert.Single(rows);
+        Assert.Equal(named, row.CaseNumber);
+        Assert.Equal("Erika Musterfrau", row.CitizenName);
+    }
+
+    [Fact]
+    public async Task A_promised_tip_never_reaches_the_person_file()
+    {
+        using var ctx = await SeededAsync(profile: p => p.LinkedPersonId = PersonId);
+        var host = NewHost(ctx);
+        await SubmitAsync(host, Sighting, anonymous: true);
+        await SubmitAsync(host, OtherIncident, anonymous: true);
+
+        // not even as a count: the section is keyed on the citizen, so a number would name them by arithmetic
+        Assert.Empty(await host.Service.GetForLinkedPersonAsync(PersonId, Agent()));
+    }
+
+    [Fact]
+    public async Task A_resolved_anonymity_brings_the_tip_onto_the_person_file()
+    {
+        using var ctx = await SeededAsync(profile: p => p.LinkedPersonId = PersonId);
+        var host = NewHost(ctx);
+        var caseNumber = await SubmitAsync(host, Sighting, anonymous: true);
+        Assert.Empty(await host.Service.GetForLinkedPersonAsync(PersonId, Agent()));
+
+        await host.Service.ResolveAnonymityAsync(await TipIdAsync(host, caseNumber), "Belohnung", Leader());
+
+        Assert.Single(await host.Service.GetForLinkedPersonAsync(PersonId, Agent()));
+    }
+
+    [Fact]
+    public async Task An_unlinked_person_file_shows_no_tipster_history()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SubmitAsync(host, Sighting);
+
+        Assert.Empty(await host.Service.GetForLinkedPersonAsync(PersonId, Agent()));
+    }
+
+    [Fact]
+    public async Task A_citizen_may_not_read_a_tipster_history()
+    {
+        using var ctx = await SeededAsync(profile: p => p.LinkedPersonId = PersonId);
+        var host = NewHost(ctx);
+        await SubmitAsync(host, Sighting);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => host.Service.GetForLinkedPersonAsync(PersonId, Citizen()));
     }
 }

@@ -144,6 +144,11 @@ else
                 <RecordSection Group="Akte" Slug="oeffentlich" Label="Öffentliche Ausschreibung" Icon="@Icons.Material.Filled.Public">
                     <PublicWantedPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
                 </RecordSection>
+                @* internal only for the same reason: who reported to the agency is not partner business, and the
+                   slug stays out of _tabs and PartnerTabCatalog *@
+                <RecordSection Group="Ermittlung" Slug="hinweisgeber" Label="Hinweisgeber" Icon="@Icons.Material.Filled.TipsAndUpdates">
+                    <TipHistoryPanel PersonId="@_person.Id" User="_user" />
+                </RecordSection>
                 }
                 @if (TabOn("einstufung"))
                 {

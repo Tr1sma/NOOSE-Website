@@ -79,4 +79,34 @@ public class TipAnonymityTests
             || n.Contains("Codename", StringComparison.Ordinal)
             || n.Contains("AgentId", StringComparison.Ordinal));
     }
+    [Fact]
+    public void The_promise_holds_until_it_is_resolved()
+    {
+        Assert.True(TipAnonymity.IsHidden(true, null));
+        Assert.False(TipAnonymity.IsHidden(true, new DateTime(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc)));
+        Assert.False(TipAnonymity.IsHidden(false, null));
+    }
+
+    [Fact]
+    public void The_handler_projection_and_the_record_history_ask_the_same_rule()
+    {
+        var service = Read("Services", "Public", "TipService.cs");
+
+        // the handler projection through the private twin, the person file through the query twin
+        Assert.Contains("TipAnonymity.IsHidden", service, StringComparison.Ordinal);
+        Assert.Contains("TipAnonymity.Disclosable", service, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_tipster_history_never_lists_a_promised_tip()
+    {
+        var service = Read("Services", "Public", "TipService.cs");
+        var start = service.IndexOf("GetForLinkedPersonAsync", StringComparison.Ordinal);
+        Assert.True(start > 0, "GetForLinkedPersonAsync fehlt.");
+        var body = service[start..(start + 2000)];
+
+        // no hand-written clause in this read path: the one rule decides, or the promise drifts
+        Assert.Contains("TipAnonymity.Disclosable", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("WantsAnonymity", body, StringComparison.Ordinal);
+    }
 }

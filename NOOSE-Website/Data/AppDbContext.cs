@@ -1760,11 +1760,14 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasOne(h => h.Handler).WithMany()
                 .HasForeignKey(h => h.HandlerId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(h => h.CaseNumber).IsUnique();
-            // the inbox order
+            // the inbox order: priority first, creation time as the tie-break
+            b.HasIndex(h => new { h.Status, h.Priority });
             b.HasIndex(h => new { h.Status, h.CreatedAt });
             // the rate-limit count
             b.HasIndex(h => new { h.CitizenProfileId, h.CreatedAt });
             b.HasIndex(h => h.WantedId);
+            // duplicate groups: the sibling list and the per-group count
+            b.HasIndex(h => h.DuplicateGroupId);
         });
 
         modelBuilder.Entity<HinweisNachricht>(b =>

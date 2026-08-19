@@ -72,6 +72,14 @@ public sealed class CounterIntelRuleDefinition
 
     public CounterIntelPartnerScope PartnerScope { get; set; } = CounterIntelPartnerScope.Any;
 
+    /// <summary>null = any, true = actor and target share an organisation, false = they must not.</summary>
+    /// <remarks>
+    /// Resolved over the civilian profile of the acting account: its linked person file against the person behind the
+    /// target. The default must stay null — the seeded rules carry their JSON as a literal from the migration and do
+    /// not know this property, so it deserializes to the C# default there and must change no existing rule.
+    /// </remarks>
+    public bool? ActorSharesOrgWithTarget { get; set; }
+
     // ---- time of day ----
 
     /// <summary>Start of the daily window; equal to <see cref="ToHour"/> means all day.</summary>
@@ -106,6 +114,10 @@ public sealed class CounterIntelRuleDefinition
     /// <summary>True when any condition needs the target's tags looked up.</summary>
     [JsonIgnore]
     public bool NeedsTagLookup => TagIds.Count > 0;
+
+    /// <summary>True when any condition needs the organisations of actor and target.</summary>
+    [JsonIgnore]
+    public bool NeedsOrgLookup => ActorSharesOrgWithTarget is not null;
 
     /// <summary>True when any condition needs the actor's roster row.</summary>
     [JsonIgnore]

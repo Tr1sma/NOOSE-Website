@@ -18,6 +18,7 @@ public class BountyService(
     IPublicModuleService modules,
     IKassenService kasse,
     INotificationService notifications,
+    ITipPriorityService tipPriority,
     IDiscordWebhookService discord) : IBountyService
 {
     /// <summary>Sanity ceiling per share; a typo of six extra zeroes is advertised money the agency cannot pay.</summary>
@@ -188,7 +189,7 @@ public class BountyService(
             });
             // no bell: the publication request does not ring one either, and the inbox badge is the signal. A filed
             // request through NotificationType.RequestDecided would read "Antrag entschieden" in the bell list.
-            await SaveAsync(db, cancellationToken);
+            await SaveAsync(db, wantedId, cancellationToken);
             return BountyAddOutcome.Requested;
         }
 
@@ -196,7 +197,7 @@ public class BountyService(
         var before = await AdvertisedAsync(db, wantedId, cancellationToken);
         share.Status = BountyShareStatus.Zugesagt;
         db.FahndungKopfgeldAnteile.Add(share);
-        await SaveAsync(db, cancellationToken);
+        await SaveAsync(db, wantedId, cancellationToken);
         await PushRaiseAsync(row, before, before + amount, cancellationToken);
         return BountyAddOutcome.Committed;
     }
@@ -224,7 +225,7 @@ public class BountyService(
             Status = BountyShareStatus.Zugesagt,
             Timestamp = DateTime.UtcNow,
         });
-        await SaveAsync(db, cancellationToken);
+        await SaveAsync(db, wantedId, cancellationToken);
         await PushRaiseAsync(row, before, before + amount, cancellationToken);
     }
 
@@ -335,7 +336,7 @@ public class BountyService(
             await CloseOpenRequestsAsync(db, shareId, cancellationToken);
         }
         // no push: a bounty going down is not announced, and the old post already stands uncorrectably
-        await SaveAsync(db, cancellationToken);
+        await SaveAsync(db, share.WantedId, cancellationToken);
     }
 
     // ---- requests ----
@@ -386,7 +387,7 @@ public class BountyService(
         var before = await AdvertisedAsync(db, share.WantedId, cancellationToken);
         Decide(request, approved: true, note, actor);
         share.Status = BountyShareStatus.Zugesagt;
-        await SaveAsync(db, cancellationToken);
+        await SaveAsync(db, share.WantedId, cancellationToken);
 
         await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
             "Kopfgeld genehmigt", "/fahndung?tab=oeffentlich", cancellationToken);
@@ -405,7 +406,7 @@ public class BountyService(
         Decide(request, approved: false, note, actor);
         share.Status = BountyShareStatus.Zurueckgezogen;
         share.WithdrawnReason = "Antrag abgelehnt";
-        await SaveAsync(db, cancellationToken);
+        await SaveAsync(db, share.WantedId, cancellationToken);
 
         await notifications.NotifyAsync(request.CreatedById, NotificationType.RequestDecided,
             "Kopfgeld abgelehnt", "/fahndung?tab=oeffentlich", cancellationToken);
@@ -522,10 +523,13 @@ public class BountyService(
             .SumAsync(k => k.Amount, cancellationToken);
 
     /// <summary>Every write of this table ends here: saving without dropping the public snapshot is the one bug worth preventing structurally.</summary>
-    private async Task SaveAsync(AppDbContext db, CancellationToken cancellationToken)
+    // one choke point for both consequences of a share write: the public snapshot and the inbox order of the
+    // tips on this notice, which weigh the advertised sum
+    private async Task SaveAsync(AppDbContext db, string wantedId, CancellationToken cancellationToken)
     {
         await db.SaveChangesAsync(cancellationToken);
         await wanted.InvalidatePublicViewAsync(cancellationToken);
+        await tipPriority.StampForNoticeAsync(wantedId, cancellationToken);
     }
 
     /// <summary>Announces a raise in the public channel; silent on a drop, a draft, an expiry or a switched-off module.</summary>

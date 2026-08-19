@@ -23,6 +23,7 @@ public class TipService(
     ICaseNumberService caseNumbers,
     ITipAttachmentStorageService storage,
     INotificationService notifications,
+    ITipPriorityService priority,
     TipsBroadcaster broadcaster) : ITipService
 {
     private const string CaseNumberPrefix = "H";
@@ -56,10 +57,11 @@ public class TipService(
         var since = DateTime.UtcNow - TipRules.QuotaWindow;
         var recent = await db.Hinweise.IgnoreQueryFilters()
             .CountAsync(h => h.CitizenProfileId == profile.Id && h.CreatedAt >= since, cancellationToken);
-        if (recent >= TipRules.PerDay)
+        var quota = TipTrust.QuotaFor(profile.ConfirmedTips);
+        if (recent >= quota)
         {
             throw new InvalidOperationException(
-                $"Du hast das Kontingent von {TipRules.PerDay} Hinweisen in 24 Stunden erreicht. "
+                $"Du hast dein Kontingent von {quota} Hinweisen in 24 Stunden erreicht. "
                 + "Bitte versuche es später erneut.");
         }
 
@@ -87,6 +89,7 @@ public class TipService(
             AttachmentOriginalName = fileName is null ? null : Trim(originalName, 255),
             AttachmentContentType = fileName is null ? null : contentType,
             Status = TipStatus.Neu,
+            Priority = await priority.ComputeAsync(db, wantedId, profile.ConfirmedTips, cancellationToken),
         };
 
         try
@@ -107,6 +110,7 @@ public class TipService(
             throw;
         }
 
+        await GroupDuplicatesAsync(db, row, cancellationToken);
         await NotifyDeskAsync(db, row, cancellationToken);
         broadcaster.Report(row.Id);
         return row.CaseNumber;
@@ -306,10 +310,15 @@ public class TipService(
                 WantedDisplayName = h.Wanted!.DisplayName,
                 HasAttachment = h.AttachmentFileName != null,
                 HandlerCodename = h.Handler!.Codename,
+                h.Priority,
+                h.DuplicateGroupId,
+                ConfirmedTips = h.CitizenProfile!.ConfirmedTips,
             })
             .ToListAsync(cancellationToken);
 
         var last = await LastCitizenMessageAsync(db, rows.Select(r => r.Id).ToList(), cancellationToken);
+        var duplicates = await DuplicateCountsAsync(db,
+            rows.Select(r => r.DuplicateGroupId).OfType<string>().Distinct().ToList(), cancellationToken);
 
         return rows
             .Select(r => new TipRow(r.Id, r.CaseNumber, r.Status, r.CreatedAt, Excerpt(r.Text),
@@ -319,7 +328,9 @@ public class TipService(
                     : Name(r.CitizenFirstName, r.CitizenLastName),
                 r.WantedCaseNumber, r.WantedDisplayName, r.HasAttachment, r.HandlerCodename,
                 last.TryGetValue(r.Id, out var m) ? m.At : (DateTime?)null,
-                last.TryGetValue(r.Id, out var m2) && m2.FromCitizen))
+                last.TryGetValue(r.Id, out var m2) && m2.FromCitizen,
+                r.Priority, TipTrust.Tier(r.ConfirmedTips), r.DuplicateGroupId,
+                r.DuplicateGroupId is null ? 0 : duplicates.GetValueOrDefault(r.DuplicateGroupId)))
             .ToList();
     }
 
@@ -375,6 +386,8 @@ public class TipService(
                 h.AttachmentOriginalName,
                 h.HandlerId,
                 HandlerCodename = h.Handler!.Codename,
+                h.Priority,
+                h.DuplicateGroupId,
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null)
@@ -398,7 +411,73 @@ public class TipService(
             hidden ? null : row.CitizenConfirmedTips,
             row.WantedCaseNumber, row.WantedDisplayName,
             row.AttachmentFileName is not null, row.AttachmentOriginalName,
-            row.HandlerId, row.HandlerCodename);
+            row.HandlerId, row.HandlerCodename,
+            row.Priority, TipTrust.Tier(row.CitizenConfirmedTips ?? 0), row.DuplicateGroupId);
+    }
+
+    public async Task<IReadOnlyList<TipHistoryRow>> GetForLinkedPersonAsync(string personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var profileIds = await db.BuergerProfile.AsNoTracking()
+            .Where(p => p.LinkedPersonId == personId)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+        if (profileIds.Count == 0)
+        {
+            return [];
+        }
+
+        // TipAnonymity.Disclosable, not a hand-written clause: this surface is keyed on the citizen, so a promised
+        // tip must not show up here in any form
+        var rows = await db.Hinweise.AsNoTracking()
+            .Where(TipAnonymity.Disclosable)
+            .Where(h => profileIds.Contains(h.CitizenProfileId))
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(ListCap)
+            .Select(h => new
+            {
+                h.Id,
+                h.CaseNumber,
+                h.Status,
+                h.CreatedAt,
+                h.Text,
+                CitizenFirstName = h.CitizenProfile!.FirstName,
+                CitizenLastName = h.CitizenProfile!.LastName,
+                ConfirmedTips = h.CitizenProfile!.ConfirmedTips,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(r => new TipHistoryRow(r.Id, r.CaseNumber, r.Status, r.CreatedAt, Excerpt(r.Text),
+                Name(r.CitizenFirstName, r.CitizenLastName), TipTrust.Tier(r.ConfirmedTips)))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<TipDuplicateRow>> GetDuplicatesAsync(string id, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipRead(actor);
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var group = await db.Hinweise.AsNoTracking()
+            .Where(h => h.Id == id)
+            .Select(h => h.DuplicateGroupId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrEmpty(group))
+        {
+            return [];
+        }
+
+        var rows = await db.Hinweise.AsNoTracking()
+            .Where(h => h.DuplicateGroupId == group && h.Id != id)
+            .OrderByDescending(h => h.CreatedAt)
+            .Take(ListCap)
+            .Select(h => new { h.Id, h.CaseNumber, h.Status, h.CreatedAt, h.Text })
+            .ToListAsync(cancellationToken);
+        return rows
+            .Select(r => new TipDuplicateRow(r.Id, r.CaseNumber, r.Status, r.CreatedAt, Excerpt(r.Text)))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<TipMessageRow>> GetMessagesAsync(string id, TipMessageAudience audience,
@@ -440,9 +519,17 @@ public class TipService(
                 $"Der Wechsel von „{TipStatusDisplay.Name(row.Status)}“ nach „{TipStatusDisplay.Name(status)}“ "
                 + "ist nicht vorgesehen.");
         }
+        var wasConfirmed = TipRules.CountsAsConfirmed(row.Status);
         row.Status = status;
         row.HandlerId ??= actor.GetAgentId();
         await db.SaveChangesAsync(cancellationToken);
+
+        // the trust tier moved, so the citizen's whole open queue is re-ordered
+        if (wasConfirmed || TipRules.CountsAsConfirmed(status))
+        {
+            await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
+            await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
+        }
         broadcaster.Report(row.Id);
     }
 
@@ -541,6 +628,13 @@ public class TipService(
         // the interceptor rewrites this into a soft delete; the attachment stays until the tip is purged for good
         db.Hinweise.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
+
+        // a deleted tip stops counting towards the trust tier, so the counter is recomputed rather than left standing
+        if (TipRules.CountsAsConfirmed(row.Status))
+        {
+            await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
+            await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
+        }
         broadcaster.Report(id);
     }
 
@@ -592,6 +686,12 @@ public class TipService(
         row.DeletedAt = null;
         row.DeletedById = null;
         await db.SaveChangesAsync(cancellationToken);
+
+        if (TipRules.CountsAsConfirmed(row.Status))
+        {
+            await buerger.RecomputeConfirmedTipsAsync(row.CitizenProfileId, cancellationToken);
+            await priority.StampForCitizenAsync(row.CitizenProfileId, cancellationToken);
+        }
         broadcaster.Report(id);
     }
 
@@ -629,8 +729,71 @@ public class TipService(
                       || h.Status == TipStatus.FuehrteZurErgreifung,
         };
 
+    // one line per group, so a page of 200 rows costs one query instead of one per group
+    private static async Task<Dictionary<string, int>> DuplicateCountsAsync(AppDbContext db,
+        List<string> groupIds, CancellationToken ct)
+    {
+        if (groupIds.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.Ordinal);
+        }
+        var rows = await db.Hinweise.AsNoTracking()
+            .Where(h => h.DuplicateGroupId != null && groupIds.Contains(h.DuplicateGroupId))
+            .GroupBy(h => h.DuplicateGroupId!)
+            .Select(g => new { Group = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.Group, r => r.Count, StringComparer.Ordinal);
+    }
+
+    // grouping runs after the commit and never fails the submission: the tip is stored, the group is convenience
+    private async Task GroupDuplicatesAsync(AppDbContext db, Hinweis row, CancellationToken ct)
+    {
+        try
+        {
+            var since = DateTime.UtcNow.AddDays(-TipDuplicates.CandidateDays);
+            var query = db.Hinweise.AsNoTracking().Where(h => h.Id != row.Id && h.CreatedAt >= since);
+            // spelled out: comparing a column to a null variable translates to SQL NULL and would find nothing
+            query = row.WantedId is null
+                ? query.Where(h => h.WantedId == null)
+                : query.Where(h => h.WantedId == row.WantedId);
+
+            var candidates = await query
+                .OrderByDescending(h => h.CreatedAt)
+                .Take(TipDuplicates.CandidateCap)
+                .Select(h => new { h.Id, h.Text, h.DuplicateGroupId })
+                .ToListAsync(ct);
+            if (candidates.Count == 0)
+            {
+                return;
+            }
+
+            var words = TextSimilarity.Tokens(row.Text);
+            var match = candidates
+                .FirstOrDefault(c => TipDuplicates.AreDuplicates(words, TextSimilarity.Tokens(c.Text)));
+            if (match is null)
+            {
+                return;
+            }
+
+            var group = match.DuplicateGroupId ?? Guid.NewGuid().ToString();
+            if (match.DuplicateGroupId is null)
+            {
+                await db.Hinweise.Where(h => h.Id == match.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(h => h.DuplicateGroupId, group), ct);
+            }
+            await db.Hinweise.Where(h => h.Id == row.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(h => h.DuplicateGroupId, group), ct);
+            // the tracked entity is left alone on purpose: assigning the group would mark it Modified, and the next
+            // SaveChanges on this context would stamp GeaendertAm and write the audit row this path avoids
+        }
+        catch (Exception)
+        {
+            /* best effort */
+        }
+    }
+
     private static bool IsHidden(bool wantsAnonymity, DateTime? resolvedAt)
-        => wantsAnonymity && resolvedAt is null;
+        => TipAnonymity.IsHidden(wantsAnonymity, resolvedAt);
 
     private static string? Name(string? first, string? last)
     {

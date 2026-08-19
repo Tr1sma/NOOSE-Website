@@ -76,11 +76,12 @@ public sealed class BountyServiceTests
         var discord = Substitute.For<IDiscordWebhookService>();
         var notifications = Substitute.For<INotificationService>();
 
+        var tipPriority = new TipPriorityService(factory);
         var wanted = new PublicWantedService(factory, modules, caseNumbers,
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
-            notifications, discord, cache);
+            notifications, tipPriority, discord, cache);
         var kasse = new KassenService(factory, caseNumbers);
-        var bounty = new BountyService(factory, wanted, modules, kasse, notifications, discord);
+        var bounty = new BountyService(factory, wanted, modules, kasse, notifications, tipPriority, discord);
         return new Host(bounty, wanted, kasse, discord, notifications, cache);
     }
 

@@ -2,8 +2,10 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
+using NOOSE_Website.Data.Entities.People;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Public;
+using NOOSE_Website.Models.Recruiting;
 
 namespace NOOSE_Website.Services.Public;
 
@@ -11,7 +13,8 @@ namespace NOOSE_Website.Services.Public;
 /// <remarks>
 /// No <see cref="ManualAudit"/> anywhere: <see cref="BuergerProfil"/> is <c>IAuditable</c> and every write here
 /// goes through a plain SaveChanges, so the audit interceptor already records the field diff. A manual row would
-/// double-log the same rename.
+/// double-log the same rename. The one exception is the trust counter, which is a derived cache and deliberately
+/// silent — like a threat score, it would otherwise stamp the profile on every status change of any tip.
 /// </remarks>
 public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuergerService
 {
@@ -142,6 +145,68 @@ public class BuergerService(IDbContextFactory<AppDbContext> dbFactory) : IBuerge
         profile.IsBlocked = false;
         // reason and timestamp stay: the history of a lifted block is worth keeping
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task LinkPersonAsync(string profileId, string? personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var profile = await GetOrThrowAsync(db, profileId, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(personId))
+        {
+            profile.LinkedPersonId = null;
+        }
+        else
+        {
+            // the visible read path, not a bare existence check: a classified file must not be linkable blind
+            if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId,
+                    ViewerScope.From(actor), cancellationToken))
+            {
+                throw new InvalidOperationException("Die ausgewählte Personenakte wurde nicht gefunden.");
+            }
+            profile.LinkedPersonId = personId;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<LinkedPersonInfo?> GetLinkedPersonAsync(string profileId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var personId = await db.BuergerProfile.AsNoTracking()
+            .Where(p => p.Id == profileId).Select(p => p.LinkedPersonId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrEmpty(personId))
+        {
+            return null;
+        }
+
+        var person = await db.People.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == personId, cancellationToken);
+        if (person is null || (person.IsClassified && !actor.MayClassifiedRead()))
+        {
+            return null;
+        }
+        return new LinkedPersonInfo(person.Id, person.Name, person.CaseNumber, person.ThreatScore,
+            person.ThreatConfidence, person.ScoreCalculatedAt, person.IsClassified);
+    }
+
+    public async Task RecomputeConfirmedTipsAsync(string profileId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var confirmed = await db.Hinweise.AsNoTracking().Where(TipRules.ConfirmedRows)
+            .CountAsync(h => h.CitizenProfileId == profileId, cancellationToken);
+
+        // ExecuteUpdate, and only when it moved: a tracked write would audit-stamp the profile per tip decision
+        await db.BuergerProfile.Where(p => p.Id == profileId && p.ConfirmedTips != confirmed)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.ConfirmedTips, confirmed), cancellationToken);
     }
 
     private static async Task<BuergerProfil> GetOrThrowAsync(AppDbContext db, string profileId,

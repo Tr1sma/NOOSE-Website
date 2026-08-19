@@ -64,6 +64,8 @@ public class PublicWantedModelTests
         [typeof(TipDetail)] = "Ein Hinweis in der Bearbeitung, inklusive Vertrauensstufe des Hinweisgebers.",
         [typeof(TipMessageRow)] = "Nachricht mit Autor; die interne Zielgruppe verlässt das Haus nie.",
         [typeof(TipInboxCounts)] = "Zähler der Eingangs-Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
+        [typeof(TipDuplicateRow)] = "Geschwister einer Dublettengruppe im Eingang; trägt Aktenzeichen und Auszug.",
+        [typeof(TipHistoryRow)] = "Hinweisgeber-Historie an der Personenakte; anonyme Hinweise fehlen darin ganz.",
         [typeof(TipAttachmentAccess)] = "Dateiname und Typ für den autorisierten Ausliefer-Endpoint.",
         [typeof(TipInput)] = "Formulareingabe des Hinweis-Formulars.",
     };

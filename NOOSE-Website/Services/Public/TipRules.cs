@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
 
 namespace NOOSE_Website.Services.Public;
@@ -25,6 +27,18 @@ public static class TipRules
     /// <summary>Still being worked on; drives the inbox badge and the citizen's "offen" list.</summary>
     public static bool IsOpen(TipStatus status)
         => status is TipStatus.Neu or TipStatus.InPruefung or TipStatus.Rueckfrage;
+
+    /// <summary>Query twin of <see cref="IsOpen"/>; the priority stamper only ever touches these rows.</summary>
+    public static readonly Expression<Func<Hinweis, bool>> OpenRows =
+        h => h.Status == TipStatus.Neu || h.Status == TipStatus.InPruefung || h.Status == TipStatus.Rueckfrage;
+
+    /// <summary>Counts towards the tipster's trust tier.</summary>
+    public static bool CountsAsConfirmed(TipStatus status)
+        => status is TipStatus.Bestaetigt or TipStatus.FuehrteZurErgreifung;
+
+    /// <summary>Query twin of <see cref="CountsAsConfirmed"/>; the trust counter is recomputed from these rows.</summary>
+    public static readonly Expression<Func<Hinweis, bool>> ConfirmedRows =
+        h => h.Status == TipStatus.Bestaetigt || h.Status == TipStatus.FuehrteZurErgreifung;
 
     /// <summary>Decided; the conversation is closed for both sides.</summary>
     public static bool IsClosed(TipStatus status)
