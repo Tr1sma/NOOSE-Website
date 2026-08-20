@@ -456,10 +456,11 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–7 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
+Gebaut sind Phase 1–9 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
 öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
-Discord-Push), das Kopfgeld und die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung).
-Belohnung, Tickets, Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre
+Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
+Übernahme) und die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger).
+Tickets, Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre
 Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
@@ -882,6 +883,62 @@ Modul-Schlüssel existieren schon und stehen auf „aus".
     Hinweise mit gewahrter Zusage, heißt das Subjekt „Anonymer Hinweisgeber" und trägt **kein** `Href`; sonst
     zeigt ein Bürgerkonto auf `/einstellungen?tab=buerger` statt auf `/personal/{id}`, das für einen Zivilisten
     ins Leere führt. Gemeldet wird das Muster, der Name kommt weiter nur über den auditierten Weg.
+- **Phase 9 (Belohnung) — was daran anders ist:**
+  - **Ein Auszahlungspfad, eine Transaktion.** `RewardService.PayoutAsync` bucht je Anteil über
+    `IKassenService.BookAsync(db, …)`, legt die `HinweisBelohnungen` an, setzt die Anteile auf `Ausgezahlt` und
+    schließt die Hinweise über `ITipService.MarkRewardedAsync(db, …)` — alles in **einem** Kontext und **einer**
+    Transaktion, weil kein Geld ohne Statuswechsel und kein Statuswechsel ohne Geld existieren darf. Die Transaktion
+    ist ohnehin Pflicht: `ICaseNumberService.NextAsync` verweigert ohne umschließende Transaktion. Nach dem Commit,
+    nie davor: `InvalidatePublicViewAsync`, `StampForNoticeAsync`, `AfterRewardAsync`.
+  - **Eigener `IRewardService`, nicht `IBountyService.PayoutAsync`.** `BountyService` ist einaudienz-intern; die
+    Belohnung ist der erste Geldpfad mit einer **Bürger**-Leseseite (Beleg). Er besitzt `HinweisBelohnungen` und ist
+    der einzige Schreiber von `BountyShareStatus.Ausgezahlt` — das macht ihn zum Schreiber der Anteil-Tabelle, also
+    greift `PublicSurfaceGuardTests.EveryWriterOfTheBountyTable_DropsThePublicSnapshot` und verlangt
+    `InvalidatePublicViewAsync`. Richtig so: `Ausgezahlt` fällt aus `BountyShares.Advertised`, die öffentliche Summe
+    sinkt auf 0.
+  - **`Gefasst` ist Vorbedingung, keine Nebenwirkung.** Die Auszahlung weist eine nicht gefasste Ausschreibung ab,
+    statt sie selbst umzuschalten — die Fahndungstabelle behält ihren einen Schreibpfad (`PublicWantedService`), und
+    das Panel schreibt den Hinweis darauf hin, statt einen toten Knopf zu zeigen.
+  - **Eine Auszahlung je Ausschreibung.** Danach sind **alle** beworbenen Anteile `Ausgezahlt`; der Statuswechsel ist
+    der Idempotenz-Token (Muster Ablauf-Worker), gesetzt per Compare-and-swap wie in `PayInAsync`, mit
+    `ManualAudit.Row` je Anteil, weil `ExecuteUpdate` den Interceptor umgeht. **`Ausgezahlt` heißt erledigt, nicht
+    restlos geleert** — sonst zählt `GetCoverageAsync` einen abgeschlossenen Fall für immer als offene Verpflichtung.
+  - **Die Verteilregel steht einmal**, in `Services/Public/RewardAllocation.cs`: zuerst Geld ohne persönliche
+    Übergabe (`Gesichert`, `NooseKasse`), dann unbezahlte private Zusagen (`AgentPrivat` + `Zugesagt` ⇒ keine
+    Buchung, `SelbstAusgezahltAm`), je Gruppe ältester Anteil zuerst, `AnteilId` als Gleichstand-Entscheider —
+    dieselbe Auszahlung muss immer dieselben Buchungen erzeugen. Dort sitzen auch die Σ-Invariante und die Ablehnung
+    einer dritten Dezimalstelle (die Spalte hält zwei, MySQL schneidet die dritte wortlos ab).
+  - **`HinweisBelohnung` ist `IAuditable`, aber **nicht** `ISoftDelete`** — Geldhistorie ist append-only, Präzedenz
+    `FahndungKopfgeldAnteil`. Keine `TrashService`-Registrierung; eine Fehlbuchung wird in der Kasse gegengebucht.
+    Die **`BelegNummer` trägt eine Gruppe** (je Auszahlung und Hinweis) und ist deshalb **nicht** unique indexiert:
+    eine Zeile ist ein (Hinweis × Anteil)-Paar, der Bürger bekommt einen Beleg je Hinweis, und der Beleg summiert
+    seine Zeilen. Unique ist `KassenBuchungId`. Präfix **`BEL`** (`B` gehört den Bewerbungen).
+  - **Der Verwendungszweck der Kassenbuchung nennt nur Aktenzeichen.** `/kasse` liest jeder Agent; ein Bürgername
+    dort wäre die Anonymitätszusage über das Kassenbuch umgangen — auch bei aufgelöster Anonymität. Eigener Test.
+  - **Anonym ist unauszahlbar** (`TipAnonymity.IsHidden`): Geld braucht einen Empfänger, und der Beleg nennt ihn.
+    Ein `Neu`-Hinweis ebenso — `TipRules` erlaubt den Sprung nach `FuehrteZurErgreifung` bewusst nicht. Der Dialog
+    listet beide Fälle mit Grund.
+  - **`Permission.RequireRewardPayout` ist eine eigene Achse** (interner Agent + Schreibrecht + Führung):
+    `RequireKassenBookingWrite` greift nur im Buchungszweig, eine vollständig aus privater Zusage bezahlte Belohnung
+    liefe also ohne Führungsprüfung durch. Schreib-Guard vor allem anderen (Präzedenz Phase 6).
+  - **Das Modul-Gate sitzt auf den Bürger-Lesepfaden, nicht auf der Auszahlung** — Präzedenz „Publizieren braucht
+    ein lebendes Modul, *De*publizieren nie"; eine interne Geldbewegung hängt an keinem öffentlichen Schalter.
+    Gefragt wird die **gespeicherte Wahl allein** (`PublicModuleSnapshot.Find(key)?.IsEnabled`), nicht
+    `RequireEnabledAsync`: das faltet den Not-Aus ein, und der lässt `/buerger` bewusst offen. Derselbe Grund führt
+    `PartnerRoutes.IsAllowed` für `/buerger/**` auf `true` — `BuergerLayout` fragt die Liste nie, `PrintLayout`
+    schon, und ohne die Zeile wäre der Beleg die einzige Bürgerseite mit „nicht freigegeben" für einen Partner.
+  - **Beleg: Eigentümer und Führung**, jeder andere bekommt `null` ⇒ „nicht gefunden" (nie „kein Zugriff", sonst
+    Existenz-Orakel). Der Bearbeiter steht auf **keiner** Projektion — `CitizenRewardReceipt` kann ihn strukturell
+    nicht tragen —, und `RewardReceipt.razor` setzt `PrintedBy` nicht. Die Seite liegt unter `Pages/Portal/`, nicht
+    unter `Pages/Public/`: der Kontobereich eines angemeldeten Bürgers ist nicht öffentlich, also greifen
+    `PublicPageScanTests` und `PublicRoutes` dort nicht — und `PrintFrame` funktioniert, weil Portal-Seiten
+    interaktiv sind (anders als das Fahndungsposter).
+  - **`PublicRewardPaid` ist nicht routbar** — eine Belohnungsmeldung im öffentlichen Kanal outet den Hinweisgeber.
+  - **Zeitstrahl über drei Hops, in zwei Abfragen.** Belohnung → Anteil → Ausschreibung → Akte; gestaffelt statt
+    verschachtelt, weil `IgnoreQueryFilters()` kompilierungsweit gilt (Phase-4-Falle). Registriert in
+    `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `AuditEntityDisplay` und
+    `ChronikParentResolver`; **nicht** im `WatchlistRecordRollup` (statische Map ohne Datenbank — beobachtbar ist
+    das Gefasst-Setzen).
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -911,7 +968,7 @@ Modul-Schlüssel existieren schon und stehen auf „aus".
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–7 gebaut**, 8–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–9 gebaut**, 10–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

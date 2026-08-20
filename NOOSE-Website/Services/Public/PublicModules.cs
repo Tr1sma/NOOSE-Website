@@ -85,8 +85,9 @@ public static class PublicModules
         new(Tips, "Hinweis geben", "Formular zur Übermittlung von Hinweisen.",
             Icons.Material.Filled.TipsAndUpdates, "/hinweis", PublicModuleGroup.Service, 200, false, true,
             "Wir nehmen derzeit keine Hinweise über die Website an."),
+        // no nav route: a receipt is opened from the tip it belongs to, not from a tab
         new(Reward, "Belohnung", "Auszahlung und Belege für bestätigte Hinweise.",
-            Icons.Material.Filled.Redeem, null, PublicModuleGroup.Service, 210, false, false, OffGeneric),
+            Icons.Material.Filled.Redeem, null, PublicModuleGroup.Service, 210, false, true, OffGeneric),
         new(Tickets, "Ticket-Chat", "Anliegen an die Führungsebene im Bürgerbereich.",
             Icons.Material.Filled.Forum, null, PublicModuleGroup.Service, 220, false, false,
             "Der Ticket-Chat ist derzeit geschlossen."),

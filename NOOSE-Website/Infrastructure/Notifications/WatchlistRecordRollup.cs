@@ -100,6 +100,9 @@ public static class WatchlistRecordRollup
             // watched through the notice that was published, not line by line
             case Hinweis:
             case HinweisNachricht:
+            // a reward is three hops from a file (reward, share, notice) and money at that: the watchable event is
+            // the notice being marked captured
+            case HinweisBelohnung:
                 return Array.Empty<(string, string)>();
 
             default:

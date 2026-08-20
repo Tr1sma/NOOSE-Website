@@ -153,6 +153,8 @@ public class PublicSurfaceGuardTests
     [
         "IBountyService", "BountyShareRow", "BountySummary", "BountyCoverage",
         "BountyOrigin", "BountyShareStatus", "KassenKonto", "DonorAgentId", "KassenBuchungId",
+        // a payout breakdown is the same class of leak: who was paid how much out of whose money
+        "IRewardService", "RewardRow", "RewardDraft",
     ];
 
     [Fact]

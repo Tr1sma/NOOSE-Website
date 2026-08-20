@@ -1,0 +1,128 @@
+@* Splits the bounty of one captured notice across the tips that earned it. *@
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width:520px;max-width:640px;">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                    @Money.Format(Draft.Available) verfügbar
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Color="@(Rest < 0 ? Color.Error : Color.Default)"
+                         Variant="Variant.Outlined">
+                    @Money.Format(Total) verteilt · @Money.Format(Rest) offen
+                </MudChip>
+            </MudStack>
+
+            @if (Draft.Handover > 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    @Money.Format(Draft.Handover) davon sind zugesagtes Privatgeld, das der Stifter selbst übergibt —
+                    dafür entsteht keine Kassenbuchung. Zuerst wird das Geld der Kasse verwendet.
+                </MudAlert>
+            }
+
+            @if (Draft.Payable.Count == 0)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                    Auf dieser Ausschreibung ist kein Hinweis auszahlbar.
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.subtitle2">Belohnung verteilen</MudText>
+                @foreach (var tip in Draft.Payable)
+                {
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                            <MudStack Spacing="0" Style="flex:1 1 260px;">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                    <MudText Typo="Typo.body2"><b>@tip.CitizenName</b></MudText>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@tip.CaseNumber</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
+                                        @TipTrust.Label(tip.TrustTier)
+                                    </MudChip>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@tip.Excerpt</MudText>
+                            </MudStack>
+                            <MudNumericField T="decimal" Value="@Amount(tip.TipId)"
+                                             ValueChanged="@(v => Set(tip.TipId, v))"
+                                             Label="Betrag" Adornment="Adornment.End" AdornmentText="$"
+                                             Variant="Variant.Outlined" Min="0" Step="1000"
+                                             Style="flex:0 0 180px;" />
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+
+            @if (Draft.Blocked.Count > 0)
+            {
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Nicht auszahlbar</MudText>
+                @foreach (var blocked in Draft.Blocked)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @blocked.CaseNumber — @blocked.Reason
+                    </MudText>
+                }
+            }
+
+            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
+                Nach der Auszahlung ist das Kopfgeld dieser Ausschreibung erledigt und die belohnten Hinweise stehen
+                auf „Führte zur Ergreifung“ — beides lässt sich nicht zurücknehmen.
+            </MudAlert>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" Disabled="@(!MayApply)" OnClick="Apply">
+            Auszahlen
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public RewardDraft Draft { get; set; } = default!;
+
+    private readonly Dictionary<string, decimal> _amounts = new(StringComparer.Ordinal);
+
+    private decimal Total => _amounts.Values.Sum();
+    private decimal Rest => Draft.Available - Total;
+    private bool MayApply => Total > 0m && Rest >= 0m;
+
+    protected override void OnInitialized()
+    {
+        // one tipster is the common case, and then the whole bounty is his
+        if (Draft.Payable.Count == 1)
+        {
+            _amounts[Draft.Payable[0].TipId] = Draft.Available;
+        }
+    }
+
+    private decimal Amount(string tipId) => _amounts.GetValueOrDefault(tipId);
+
+    private void Set(string tipId, decimal value) => _amounts[tipId] = value < 0m ? 0m : value;
+
+    private void Apply()
+        => MudDialog.Close(DialogResult.Ok(_amounts
+            .Where(a => a.Value > 0m)
+            .Select(a => new RewardTipAmount { TipId = a.Key, Amount = a.Value })
+            .ToList()));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the split form; returns the amounts per tip or null on cancel.</summary>
+    public static async Task<List<RewardTipAmount>?> ShowAsync(IDialogService dialog, RewardDraft draft)
+    {
+        var parameters = new DialogParameters<RewardPayoutDialog> { { x => x.Draft, draft } };
+        var title = draft.WantedCaseNumber is { Length: > 0 } number
+            ? $"Belohnung — {draft.DisplayName} ({number})"
+            : $"Belohnung — {draft.DisplayName}";
+        var reference = await dialog.ShowAsync<RewardPayoutDialog>(title, parameters);
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: List<RewardTipAmount> amounts } ? amounts : null;
+    }
+}

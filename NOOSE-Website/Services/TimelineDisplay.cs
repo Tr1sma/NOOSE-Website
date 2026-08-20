@@ -135,6 +135,11 @@ public static class TimelineDisplay
         {
             return (TimelineCategory.Change, $"Bürgerhinweis {Verb("eingegangen", "gelöscht")}");
         }
+        // no recipient in the title: the reward names a citizen, the file's timeline does not
+        if (entityType == nameof(HinweisBelohnung))
+        {
+            return (TimelineCategory.Change, "Belohnung ausgezahlt");
+        }
 
         var kat = action switch
         {

@@ -47,6 +47,13 @@ public static class PartnerRoutes
         {
             return true;
         }
+        // the citizen portal for the same reason, one step further in: it is open to every signed-in account
+        // (MayUseCitizenPortal), and BuergerLayout does not consult this list at all — so blocking it here would
+        // refuse a partner exactly one citizen page, the printable one, and nothing else
+        if (path == "buerger" || path.StartsWith("buerger/"))
+        {
+            return true;
+        }
         if (BlockedSuffixes.Any(s => ("/" + path).EndsWith(s)))
         {
             return false;

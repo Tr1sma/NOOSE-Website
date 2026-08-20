@@ -350,6 +350,7 @@ builder.Services.AddScoped<IBountyService, BountyService>();
 builder.Services.AddScoped<ITipPriorityService, TipPriorityService>();
 builder.Services.AddScoped<ITipService, TipService>();
 builder.Services.AddScoped<ITipTakeoverService, TipTakeoverService>();
+builder.Services.AddScoped<IRewardService, RewardService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 builder.Services.AddSingleton<TipsBroadcaster>();
 

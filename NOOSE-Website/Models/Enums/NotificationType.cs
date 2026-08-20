@@ -76,6 +76,9 @@ public enum NotificationType
 
     /// <summary>The agency wrote to a citizen about their tip. Not routable for the same reason.</summary>
     PublicTipAnswered = 23,
+
+    /// <summary>A citizen's tip was rewarded. Not routable: a reward announcement in the public channel outs the tipster.</summary>
+    PublicRewardPaid = 24,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -107,6 +110,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicWantedBountyRaised => "Kopfgeld erhöht",
         NotificationType.PublicTipReceived => "Bürgerhinweis",
         NotificationType.PublicTipAnswered => "Antwort zu deinem Hinweis",
+        NotificationType.PublicRewardPaid => "Belohnung ausgezahlt",
         _ => "Benachrichtigung",
     };
 
@@ -137,6 +141,7 @@ public static class NotificationTypeDisplay
         NotificationType.PublicWantedBountyRaised => Icons.Material.Filled.Paid,
         NotificationType.PublicTipReceived => Icons.Material.Filled.TipsAndUpdates,
         NotificationType.PublicTipAnswered => Icons.Material.Filled.MarkEmailUnread,
+        NotificationType.PublicRewardPaid => Icons.Material.Filled.Redeem,
         _ => Icons.Material.Filled.Notifications,
     };
 }

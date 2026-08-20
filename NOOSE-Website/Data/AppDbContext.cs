@@ -246,6 +246,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<FahndungKopfgeldAnteil> FahndungKopfgeldAnteile => Set<FahndungKopfgeldAnteil>();
     public DbSet<Hinweis> Hinweise => Set<Hinweis>();
     public DbSet<HinweisNachricht> HinweisNachrichten => Set<HinweisNachricht>();
+    public DbSet<HinweisBelohnung> HinweisBelohnungen => Set<HinweisBelohnung>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1738,6 +1739,25 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.HasIndex(k => new { k.WantedId, k.Status });
             // one booking backs at most one share, mirroring FinancingRequest
             b.HasIndex(k => k.KassenBuchungId).IsUnique();
+        });
+
+        modelBuilder.Entity<HinweisBelohnung>(b =>
+        {
+            b.Property(x => x.ReceiptNumber).HasMaxLength(32).IsRequired();
+            b.Property(x => x.TipId).HasMaxLength(64);
+            b.Property(x => x.ShareId).HasMaxLength(64);
+            b.Property(x => x.KassenBuchungId).HasMaxLength(255);
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            // Restrict for the same reason as the share: a payment trail must not disappear with its target
+            b.HasOne(x => x.Tip).WithMany()
+                .HasForeignKey(x => x.TipId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Share).WithMany()
+                .HasForeignKey(x => x.ShareId).OnDelete(DeleteBehavior.Restrict);
+            // not unique: one tip may draw from several shares, and its rows share the receipt
+            b.HasIndex(x => x.ReceiptNumber);
+            b.HasIndex(x => x.TipId);
+            b.HasIndex(x => x.ShareId);
+            b.HasIndex(x => x.KassenBuchungId).IsUnique();
         });
 
         modelBuilder.Entity<Hinweis>(b =>

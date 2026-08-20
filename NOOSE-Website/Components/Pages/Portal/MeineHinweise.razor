@@ -5,6 +5,7 @@
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
 @inject ITipService Tips
+@inject IRewardService Reward
 @inject IPublicModuleService Modules
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
@@ -56,6 +57,25 @@
                             ? "Die Anonymität wurde von der Führungsebene aufgehoben — eine Belohnung ist damit möglich."
                             : "Dieser Hinweis ist anonym. Für eine Belohnung muss die Anonymität aufgehoben werden.")
                     </MudAlert>
+                }
+
+                @foreach (var reward in _rewards.Where(r => r.TipCaseNumber == _detail.CaseNumber))
+                {
+                    <MudPaper Outlined="true" Class="pa-4">
+                        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                            <MudIcon Icon="@Icons.Material.Filled.Redeem" Color="Color.Success" />
+                            <MudStack Spacing="0" Style="flex:1 1 240px;">
+                                <MudText Typo="Typo.h6">Belohnung: @Money.Format(reward.Amount)</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Beleg @reward.ReceiptNumber ·
+                                    ausgezahlt am @reward.PaidAt.ToLocalTime().ToString("dd.MM.yyyy")
+                                </MudText>
+                            </MudStack>
+                            <MudButton Href="@($"/buerger/belohnung/{reward.ReceiptNumber}/druck")" Target="_blank"
+                                       Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Print">Beleg drucken</MudButton>
+                        </MudStack>
+                    </MudPaper>
                 }
 
                 <MudPaper Outlined="true" Class="pa-4">
@@ -166,6 +186,7 @@
 
     private ClaimsPrincipal _user = default!;
     private IReadOnlyList<CitizenTipRow> _rows = Array.Empty<CitizenTipRow>();
+    private IReadOnlyList<CitizenRewardRow> _rewards = Array.Empty<CitizenRewardRow>();
     private CitizenTipDetail? _detail;
     private string _reply = string.Empty;
     private bool _ready;
@@ -195,6 +216,10 @@
     private async Task LoadAsync()
     {
         try { _moduleOn = (await Modules.GetAsync()).IsEnabled(PublicModules.Tips); }
+        catch { /* best effort */ }
+
+        // its own try: the reward module is switched separately, and a closed one only costs the receipt card
+        try { _rewards = await Reward.GetOwnAsync(_user); }
         catch { /* best effort */ }
 
         try

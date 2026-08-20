@@ -226,4 +226,16 @@ public class PartnerRoutesTests
     {
         Assert.True(PartnerRoutes.IsAllowed("dokumente/neu/foo"));
     }
+
+    // --- The citizen portal: every signed-in account may open it, so this list must not refuse it either ---
+
+    [Theory]
+    [InlineData("buerger")]
+    [InlineData("buerger/hinweise")]
+    [InlineData("buerger/belohnung/NOOSE-BEL-2026-0001/druck")]
+    public void IsAllowed_CitizenPortal_ReturnsTrue(string path)
+    {
+        // BuergerLayout does not consult this list; blocking it here would refuse a partner the printable page only
+        Assert.True(PartnerRoutes.IsAllowed(path));
+    }
 }

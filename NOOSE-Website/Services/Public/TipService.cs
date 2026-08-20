@@ -664,6 +664,48 @@ public class TipService(
         return new TipAttachmentAccess(row.AttachmentFileName, row.AttachmentContentType, row.AttachmentOriginalName);
     }
 
+    // ---- reward ----
+
+    public async Task<TipRewardTarget> MarkRewardedAsync(AppDbContext db, string tipId, decimal amount,
+        string receiptNumber, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireTipHandling(actor);
+        var row = await GetOrThrowAsync(db, tipId, cancellationToken);
+        if (!TipRules.IsTransitionAllowed(row.Status, TipStatus.FuehrteZurErgreifung))
+        {
+            throw new InvalidOperationException(
+                $"Ein Hinweis im Status „{TipStatusDisplay.Name(row.Status)}“ lässt sich nicht als belohnt schließen.");
+        }
+
+        row.Status = TipStatus.FuehrteZurErgreifung;
+        row.HandlerId ??= actor.GetAgentId();
+        // written here rather than through AskCitizenAsync: that one refuses a closed tip and would switch the
+        // status to Rueckfrage. No author, so the line reads as "NOOSE" outside.
+        db.HinweisNachrichten.Add(new HinweisNachricht
+        {
+            HinweisId = row.Id,
+            Audience = TipMessageAudience.Buerger,
+            Text = $"Ihr Hinweis hat zur Ergreifung geführt. Belohnung: {Money.Format(amount)} · Beleg {receiptNumber}.",
+            AuthorAgentId = null,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return new TipRewardTarget(row.Id, row.CaseNumber, row.CitizenProfileId);
+    }
+
+    public async Task AfterRewardAsync(IReadOnlyList<TipRewardTarget> targets,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var target in targets)
+        {
+            // the trust tier moved, so the citizen's whole open queue is re-ordered
+            await buerger.RecomputeConfirmedTipsAsync(target.CitizenProfileId, cancellationToken);
+            await priority.StampForCitizenAsync(target.CitizenProfileId, cancellationToken);
+            await NotifyRewardAsync(target, cancellationToken);
+            broadcaster.Report(target.TipId);
+        }
+    }
+
     // ---- trash ----
 
     public async Task<List<Hinweis>> GetTrashAsync(CancellationToken cancellationToken = default)
@@ -908,6 +950,25 @@ public class TipService(
                 .FirstOrDefaultAsync(ct);
             await notifications.NotifyAsync(userId, NotificationType.PublicTipAnswered,
                 $"Rückfrage zu deinem Hinweis {row.CaseNumber}", $"/buerger/hinweise/{row.CaseNumber}", ct);
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    private async Task NotifyRewardAsync(TipRewardTarget target, CancellationToken ct)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var userId = await db.BuergerProfile.AsNoTracking()
+                .Where(p => p.Id == target.CitizenProfileId)
+                .Select(p => p.UserId)
+                .FirstOrDefaultAsync(ct);
+            await notifications.NotifyAsync(userId, NotificationType.PublicRewardPaid,
+                $"Belohnung für deinen Hinweis {target.CaseNumber}",
+                $"/buerger/hinweise/{target.CaseNumber}", ct);
         }
         catch
         {

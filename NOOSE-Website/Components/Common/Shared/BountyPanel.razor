@@ -4,6 +4,7 @@
 @using NOOSE_Website.Models.Public
 @using NOOSE_Website.Services.Public
 @inject IBountyService Bounty
+@inject IRewardService Reward
 @inject IPublicWantedService Wanted
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -28,6 +29,11 @@
                        Label="Obergrenze" Disabled="_busy" />
             <MudButton OnClick="AddAsync" Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
                        Disabled="_busy" StartIcon="@Icons.Material.Filled.Paid">Setzen</MudButton>
+            @if (IsLeadership && _summary.Advertised > 0 && _rewards.Count == 0)
+            {
+                <MudButton OnClick="PayoutAsync" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                           Disabled="_busy" StartIcon="@Icons.Material.Filled.Redeem">Auszahlen</MudButton>
+            }
         }
     </MudStack>
 
@@ -116,6 +122,57 @@
             </tbody>
         </MudSimpleTable>
     }
+
+    @if (_rewards.Count > 0)
+    {
+        <MudDivider />
+        <MudText Typo="Typo.subtitle2">Ausgezahlte Belohnung</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Striped="false" Elevation="0">
+            <thead>
+                <tr>
+                    <th>Beleg</th>
+                    <th>Hinweis</th>
+                    <th>Empfänger</th>
+                    <th>Betrag</th>
+                    <th>Buchung</th>
+                    <th>Am</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var reward in _rewards)
+                {
+                    <tr>
+                        <td>@reward.ReceiptNumber</td>
+                        <td><MudLink Href="@($"/hinweise/{reward.TipId}")">@reward.TipCaseNumber</MudLink></td>
+                        <td>@(reward.CitizenName ?? "—")</td>
+                        <td>@Money.Format(reward.Amount)</td>
+                        <td>
+                            @if (reward.SelfPaid)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
+                                    selbst ausgezahlt
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @(reward.BookingCaseNumber ?? "—")@(reward.Account is { } acc ? $" · {KassenKontoDisplay.Name(acc)}" : string.Empty)
+                                </MudText>
+                            }
+                        </td>
+                        <td>@reward.PaidAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    else if (MayWrite && IsLeadership && _summary.Advertised > 0 && !IsCaptured)
+    {
+        @* not a dead button: the payout needs a captured notice, and the wanted service owns that write *@
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Auszahlen wird möglich, sobald die Ausschreibung auf gefasst gesetzt ist.
+        </MudText>
+    }
 </MudStack>
 
 @code {
@@ -125,7 +182,11 @@
     /// <summary>Whether the hosting editor is in write mode; the read-only supervision sees the numbers only.</summary>
     [Parameter] public bool MayWrite { get; set; }
 
+    /// <summary>Whether the notice is marked captured; a reward is paid only after the arrest.</summary>
+    [Parameter] public bool IsCaptured { get; set; }
+
     private IReadOnlyList<BountyShareRow> _shares = [];
+    private IReadOnlyList<RewardRow> _rewards = [];
     private BountySummary _summary = BountySummary.Empty;
     private List<BountyCoverage> _shortfalls = [];
     private bool _load = true;
@@ -154,12 +215,14 @@
         {
             _shares = await Bounty.GetSharesAsync(WantedId, User);
             _summary = await Bounty.GetSummaryAsync(WantedId, User);
+            _rewards = await Reward.GetForNoticeAsync(WantedId, User);
         }
         catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
             _shares = [];
             _summary = BountySummary.Empty;
+            _rewards = [];
         }
         finally
         {
@@ -221,6 +284,23 @@
         }
         await Bounty.WithdrawAsync(share.Id, reason, User);
         Snackbar.Add("Anteil zurückgezogen.", Severity.Success);
+    });
+
+    private async Task PayoutAsync() => await RunAsync(async () =>
+    {
+        var draft = await Reward.GetDraftAsync(WantedId, User);
+        if (!draft.IsCaptured)
+        {
+            Snackbar.Add("Erst die Ausschreibung auf gefasst setzen, dann die Belohnung auszahlen.", Severity.Warning);
+            return;
+        }
+        var amounts = await RewardPayoutDialog.ShowAsync(DialogService, draft);
+        if (amounts is null || amounts.Count == 0)
+        {
+            return;
+        }
+        var receipts = await Reward.PayoutAsync(new RewardPayoutInput { WantedId = WantedId, Tips = amounts }, User);
+        Snackbar.Add($"Belohnung ausgezahlt · {string.Join(", ", receipts)}", Severity.Success);
     });
 
     private async Task SetCapAsync(bool isCap) => await RunAsync(async () =>

@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = Policies.InternalAgent)]
 @inject ITipService Tips
 @inject ITipTakeoverService Takeover
+@inject IRewardService Reward
 @inject IPersonService PersonService
 @inject TipsBroadcaster Broadcaster
 @inject ISnackbar Snackbar
@@ -74,6 +75,16 @@ else
                             <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true"
                                       Icon="@Icons.Material.Filled.PersonSearch">
                                 Bezug: <b>@_tip.WantedDisplayName</b> (@_tip.WantedCaseNumber)
+                            </MudAlert>
+                        }
+
+                        @if (_rewards.Count > 0)
+                        {
+                            @* the paying agent is not named: the reward row carries them, the panel does not need to *@
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true"
+                                      Icon="@Icons.Material.Filled.Redeem">
+                                Belohnt: <b>@Money.Format(_rewards.Sum(r => r.Amount))</b> ·
+                                Beleg @string.Join(", ", _rewards.Select(r => r.ReceiptNumber).Distinct())
                             </MudAlert>
                         }
 
@@ -271,6 +282,7 @@ else
     private bool _load = true;
     private bool _busy;
     private bool _canWrite;
+    private IReadOnlyList<RewardRow> _rewards = [];
     private string? _loadedId;
 
     protected override void OnInitialized() => Broadcaster.Modified += OnModified;
@@ -299,6 +311,9 @@ else
             _takeover = _tip is null
                 ? Array.Empty<LinkDisplay>()
                 : await Takeover.GetStateAsync(Id, _user);
+            _rewards = _tip is null
+                ? Array.Empty<RewardRow>()
+                : await Reward.GetForTipAsync(Id, _user);
         }
         catch (Exception ex)
         {

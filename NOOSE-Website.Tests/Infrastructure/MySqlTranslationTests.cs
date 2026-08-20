@@ -340,4 +340,81 @@ public sealed class MySqlTranslationTests : IDisposable
         Assert.Contains("Status", sql, StringComparison.Ordinal);
         Assert.Contains("IstGeloescht", sql, StringComparison.Ordinal);
     }
+
+    // ---- phase 9: the reward ----
+
+    [Fact]
+    public void TheRewardRowsOfANotice_TranslateAcrossThreeNavigations()
+    {
+        // reward → share and reward → tip → citizen in one projection; the deepest shape the phase introduced
+        var ids = new[] { "k1", "k2" };
+        var sql = _db.HinweisBelohnungen.AsNoTracking()
+            .Where(b => ids.Contains(b.ShareId))
+            .OrderByDescending(b => b.PaidAt)
+            .Select(b => new
+            {
+                b.ReceiptNumber,
+                TipCaseNumber = b.Tip!.CaseNumber,
+                b.Tip!.WantsAnonymity,
+                FirstName = b.Tip!.CitizenProfile!.FirstName,
+                Origin = b.Share!.Origin,
+                b.KassenBuchungId,
+            })
+            .ToQueryString();
+
+        Assert.Contains("Hinweise", sql, StringComparison.Ordinal);
+        Assert.Contains("FahndungKopfgeldAnteile", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheReceiptLookup_TranslatesTheWholeChainToTheNotice()
+    {
+        var sql = _db.HinweisBelohnungen.AsNoTracking()
+            .Where(b => b.ReceiptNumber == "NOOSE-BEL-2026-0001")
+            .Select(b => new
+            {
+                b.Amount,
+                WantedCaseNumber = b.Tip!.Wanted!.CaseNumber,
+                CitizenUserId = b.Tip!.CitizenProfile!.UserId,
+            })
+            .ToQueryString();
+
+        Assert.Contains("BelegNummer", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOwnRewardsOfACitizen_TranslateOverTheTipNavigation()
+    {
+        var sql = _db.HinweisBelohnungen.AsNoTracking()
+            .Where(b => b.Tip!.CitizenProfileId == "profil1")
+            .Select(b => new { b.ReceiptNumber, TipCaseNumber = b.Tip!.CaseNumber, b.Amount, b.PaidAt })
+            .ToQueryString();
+
+        Assert.Contains("BuergerProfilId", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThePayoutCompareAndSwap_TranslatesTheAdvertisedPredicate()
+    {
+        // the settle step runs as ExecuteUpdate; what has to translate is its filter
+        var sql = _db.FahndungKopfgeldAnteile
+            .Where(k => k.WantedId == "f1")
+            .Where(BountyShares.Advertised)
+            .ToQueryString();
+
+        Assert.Contains("Status", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheChronicleFanInOfAReward_TranslatesItsThreeHops()
+    {
+        // reward → share → notice → person file, the shape ChronikParentResolver compiles
+        var ids = new List<string> { "b1" };
+        var sql = _db.HinweisBelohnungen.IgnoreQueryFilters()
+            .Where(b => ids.Contains(b.Id) && b.Share!.Wanted!.PersonId != null)
+            .Select(b => new { b.Id, ParentId = b.Share!.Wanted!.PersonId! })
+            .ToQueryString();
+
+        Assert.Contains("PersonId", sql, StringComparison.Ordinal);
+    }
 }

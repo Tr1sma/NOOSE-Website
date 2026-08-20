@@ -318,8 +318,8 @@ public class BountyService(
         if (share.Status == BountyShareStatus.Gesichert)
         {
             // the money is in the till; giving it back is a withdrawal from the treasury, not an edit of a pledge
-            throw new InvalidOperationException(
-                "Gesichertes Geld liegt in der Kasse; eine Rückzahlung ist eine Auszahlung und kommt mit der Belohnungsphase.");
+            throw new InvalidOperationException("Gesichertes Geld liegt in der Kasse; eine Rückzahlung an den "
+                + "Stifter ist eine Kassen-Auszahlung und läuft nicht über den Kopfgeld-Rückzug.");
         }
         if (share.Status is BountyShareStatus.Ausgezahlt or BountyShareStatus.Zurueckgezogen)
         {
@@ -464,9 +464,10 @@ public class BountyService(
     /// <summary>The notice, or null when the actor may not read the file behind it.</summary>
     /// <remarks>
     /// Not-found and not-allowed answer the same way on purpose: anything else makes the bounty panel an existence
-    /// oracle for classified records.
+    /// oracle for classified records. Internal rather than private so the reward service reaches the same gate instead
+    /// of writing a second visibility predicate — precedent: <c>PublicWantedService.RequirePublishableRecordAsync</c>.
     /// </remarks>
-    private static async Task<OeffentlicheFahndung?> VisibleNoticeAsync(AppDbContext db, string wantedId,
+    internal static async Task<OeffentlicheFahndung?> VisibleNoticeAsync(AppDbContext db, string wantedId,
         ClaimsPrincipal actor, CancellationToken cancellationToken)
     {
         var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == wantedId, cancellationToken);

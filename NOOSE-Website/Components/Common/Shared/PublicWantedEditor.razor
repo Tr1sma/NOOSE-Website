@@ -99,7 +99,8 @@ else
         @* its own service, its own table, its own save path — never part of UpdateSnapshotAsync. No reload of this
            editor afterwards: nothing here renders bounty data, and LoadAsync would reset _input and throw away
            whatever the author has typed into the fields above but not saved yet. *@
-        <BountyPanel WantedId="@_draft.Id" User="User" MayWrite="_mayWrite" />
+        <BountyPanel WantedId="@_draft.Id" User="User" MayWrite="_mayWrite"
+                     IsCaptured="@(_draft.Status == PublicWantedStatus.Gefasst)" />
         <MudDivider />
 
         <MudText Typo="Typo.subtitle2">Vorwurf</MudText>

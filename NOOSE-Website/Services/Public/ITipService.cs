@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Public;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Public;
@@ -78,6 +79,21 @@ public interface ITipService
     /// <summary>Attachment access for the delivery endpoint: the owner or a handler, nobody else.</summary>
     Task<TipAttachmentAccess?> GetAttachmentAsync(string id, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default);
+
+    // ---- reward ----
+
+    /// <summary>Closes a tip as the one that led to the arrest, inside the caller's context and transaction.</summary>
+    /// <remarks>
+    /// The caller owns the transaction, because the status change and the money must commit together — same shape as
+    /// <c>IKassenService.BookAsync(db, …)</c>. Saves into that context; it never commits. The status rules stay here rather than being copied into the reward
+    /// service, and <see cref="TipStatus.FuehrteZurErgreifung"/> is a one-way door in <see cref="TipRules"/>.
+    /// </remarks>
+    Task<TipRewardTarget> MarkRewardedAsync(AppDbContext db, string tipId, decimal amount, string receiptNumber,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Post-commit follow-ups of a rewarded tip: trust counter, inbox order, citizen notice, live update.</summary>
+    /// <remarks>Best effort throughout — a notification must never topple a committed payout.</remarks>
+    Task AfterRewardAsync(IReadOnlyList<TipRewardTarget> targets, CancellationToken cancellationToken = default);
 
     // ---- trash ----
 

@@ -199,6 +199,8 @@ public static class PublicVisibility
                 + "Hinweis angemeldet im Bürgerbereich — das ist sein Konto, nicht die Öffentlichkeit.",
             ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; er gehört den beiden Beteiligten. "
                 + "Die interne Zielgruppe verlässt das Haus nie.",
+            ["HinweisBelohnung"] = "Ausgezahltes Geld: Betrag, Anteil, Kassenbuchung und Empfänger. Nach draußen "
+                + "geht ausschließlich der eigene Beleg eines Bürgers, angemeldet im Bürgerbereich.",
         };
 
     /// <summary>True when someone has decided the entity's public fate either way.</summary>

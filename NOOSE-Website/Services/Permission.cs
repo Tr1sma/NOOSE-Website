@@ -330,6 +330,21 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to pay a reward out to a tipster.</summary>
+    /// <remarks>
+    /// Its own axis, and not RequireKassenBookingWrite: that one only fires on the booking branch, so a reward paid
+    /// entirely from a donor's own pocket would move money with no leadership check at all. The write guard comes
+    /// first: RequireLeadership alone admits the read-only supervision and the demo principal, which would mint
+    /// receipt numbers before the ReadOnlyBarrierInterceptor refuses the save.
+    /// </remarks>
+    public static void RequireRewardPayout(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayWrite() || !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException("Belohnungen zahlt nur die Führung aus.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

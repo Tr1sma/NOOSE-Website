@@ -445,6 +445,8 @@ public static class SearchCatalog
             ["HinweisNachricht"] = "Schriftwechsel zu einem Hinweis; gefunden wird der Hinweis, nicht die "
                 + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst an der "
                 + "Bearbeiter-Prüfung vorbei lesbar.",
+            ["HinweisBelohnung"] = "Auszahlung an einen Hinweisgeber; gesucht wird der Hinweis oder die "
+                + "Kassenbuchung. Eine durchsuchbare Geldliste müsste zusätzlich die Anonymitätszusage tragen.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

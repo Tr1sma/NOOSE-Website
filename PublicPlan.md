@@ -109,7 +109,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 7 | Hinweise Kern: Formular, Eingang, Rückfrage, Verfolgung | `Oeffentlich07_Hinweise` | 4 | **fertig** |
 | 8a | Hinweise Triage: Dubletten, Priorität, Vertrauensstufe | `Oeffentlich08_HinweisTriage` (nur Indizes) | 7 | **fertig** |
 | 8b | Hinweise Übernahme: Akte, Kontoverknüpfung, Gegenaufklärung | `Oeffentlich08_HinweisUebernahme` (nur Seed) | 8a | **fertig** |
-| 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | offen |
+| 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | **fertig** |
 | 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | offen |
 | 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | offen |
 | 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | offen |
@@ -1013,7 +1013,7 @@ Gegenaufklärung). 8a ist reine Trage-/Sortierlogik in eigenen Dateien, 8b fasst
 
 ---
 
-## Phase 9 — Belohnung & Auszahlung
+## Phase 9 — Belohnung & Auszahlung ✅
 
 **Ziel:** Geld fließt nachvollziehbar, auch bei mehreren Hinweisgebern.
 
@@ -1037,6 +1037,82 @@ Agentennamen · anonymer Hinweis ohne Auflösung ist nicht auszahlbar.
 
 **Fertig, wenn** eine Ergreifung mit zwei Hinweisgebern ausgezahlt ist, `/kasse` genau die erwarteten
 Buchungen zeigt und beide Bürger ihren Beleg drucken können.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Eigener `IRewardService` statt `IBountyService.PayoutAsync`.** `BountyService` ist einaudienz-intern — jede
+   Methode beginnt mit einem internen Guard. Die Belohnung hat zum ersten Mal auf dem Geldpfad **zwei** Audienzen:
+   das Panel der Führung und den Beleg des Bürgers. Muster `TipService` (zwei Audienzen) bzw. `TipTakeoverService`
+   (Orchestrator, ruft nur Dienste). Der neue Dienst besitzt `HinweisBelohnungen` und ist der einzige Schreiber von
+   `BountyShareStatus.Ausgezahlt`.
+2. **„Gefasst" bleibt eine eigene Handlung.** Die Auszahlung **verlangt** `Status == Gefasst` und weist sonst mit
+   Klartext ab, statt die Ausschreibung selbst umzuschalten. Die Fahndungstabelle behält damit ihren *einen*
+   Schreibpfad (`PublicWantedService`, `PublicWantedCacheDisciplineTests`), und die Reihenfolge ist die des
+   Geschehens: erst die Ergreifung, dann das Geld. Das Panel schreibt es hin, statt einen toten Knopf zu zeigen.
+3. **Eine Auszahlung je Ausschreibung, alles auf einmal.** Ein Dialog verteilt das gesamte ausgeschriebene Kopfgeld
+   auf 1..n Hinweisgeber; danach sind **alle** beworbenen Anteile `Ausgezahlt`. Der Statuswechsel ist der
+   Idempotenz-Token — dieselbe Konstruktion wie beim Ablauf-Worker aus Phase 5 —, deshalb existiert die Klasse
+   „doppelt bezahlt" baulich nicht, und es gibt keine Restbetrags-Verfolgung je Anteil, die zwei Tabs sich teilen
+   könnten. Gesetzt wird per Compare-and-swap (`ExecuteUpdate` mit `BountyShares.Advertised` im `Where`, betroffene
+   Zeilenzahl geprüft), wörtlich das Muster aus `PayInAsync`, samt `ManualAudit.Row` je Anteil.
+4. **`Ausgezahlt` heißt erledigt, nicht restlos geleert.** Wird weniger verteilt als ausgeschrieben, bleibt der Rest
+   in der Kasse und der Anteil gilt trotzdem als abgeschlossen. Sonst zählte `GetCoverageAsync` das Geld eines
+   abgeschlossenen Falls für immer als offene Verpflichtung.
+5. **Kein `ISoftDelete`** — anders als im Plantext, und aus demselben Grund wie beim Kopfgeld-Anteil aus Phase 6:
+   Geldhistorie ist append-only, und ein Soft-Delete-Filter könnte genau die Zahlungsspur verbergen, deren Nachweis
+   der Beleg ist. Folge: keine `TrashService`-Registrierung, kein `MergedPageSections`-Eintrag. Eine Fehlbuchung wird
+   in der Kasse gegengebucht, nicht gelöscht.
+6. **Die Belegnummer trägt eine Gruppe, sie ist nicht eindeutig je Zeile.** Eine Zeile ist ein
+   (Hinweis × Anteil)-Paar, weil ein Hinweis Geld aus zwei Anteilen mit verschiedenen Konten ziehen kann. Der Bürger
+   bekommt **einen** Beleg je Hinweis, also ist `BelegNummer` je (Auszahlung, Hinweis) geprägt und der Index
+   **nicht** unique; der Beleg summiert seine Zeilen. Eindeutig indexiert ist `KassenBuchungId` — eine Buchung deckt
+   höchstens eine Zeile, wie beim Anteil. Präfix **`BEL`**, weil `B` den Bewerbungen gehört und `CaseNumberCounter`
+   auf `(Präfix, Jahr)` verschlüsselt ist.
+7. **Die Verteilregel steht einmal, in `Services/Public/RewardAllocation.cs`.** Zuerst wird Geld verwendet, das ohne
+   persönliche Übergabe fließt (`Gesichert` liegt in der Kasse, `NooseKasse` ist behördlich), erst danach eine
+   unbezahlte private Zusage — die verlangt, dass ein Agent physisch Bargeld übergibt, und ist damit die schwächste
+   Deckung. Innerhalb jeder Gruppe ältester Anteil zuerst, `AnteilId` als Gleichstand-Entscheider: dieselbe
+   Auszahlung muss immer dieselben Buchungen erzeugen. Dort sitzt auch die Σ-Invariante und die Ablehnung einer
+   dritten Dezimalstelle — die Spalte hält zwei, die Datenbank würde die dritte wortlos abschneiden.
+8. **`Permission.RequireRewardPayout` ist eine eigene Achse.** `RequireKassenBookingWrite` greift nur im
+   Buchungszweig, eine vollständig aus privater Zusage bezahlte Belohnung liefe also **ohne** Führungsprüfung durch.
+   Und der Schreib-Guard steht vor allem anderen (Präzedenz Phase 6): `RequireLeadership` allein lässt die
+   Nur-Lese-Aufsicht und das Demo-Principal durch, die dann Belegnummern prägen, bevor der
+   `ReadOnlyBarrierInterceptor` das Speichern verweigert.
+9. **Der Verwendungszweck der Kassenbuchung nennt nur Aktenzeichen.** `/kasse` liest jeder Agent; ein Bürgername
+   dort wäre die Anonymitätszusage über das Kassenbuch umgangen — auch bei aufgelöster Anonymität bleibt es bei
+   `Belohnung {Hinweis-Az} · Fahndung {Fahndungs-Az}`. Eigener Test.
+10. **Anonym bleibt unauszahlbar.** Ein Hinweis mit gewahrter Zusage wird abgewiesen (`TipAnonymity.IsHidden`), weil
+    Geld einen Empfänger braucht und der Beleg ihn nennt; auflösen darf weiter nur die Führung, auditiert. Ein
+    `Neu`-Hinweis ist ebenfalls nicht auszahlbar — `TipRules` erlaubt den Sprung nach `FuehrteZurErgreifung` bewusst
+    nicht, ein Hinweis wird erst bearbeitet, dann belohnt. Der Dialog listet beide Fälle mit Grund statt sie zu
+    verstecken.
+11. **Die Statusregeln des Hinweises bleiben in `TipService`.** Die Auszahlung ruft zwei neue Methoden:
+    `MarkRewardedAsync(db, …)` schreibt in den Kontext **und die Transaktion des Aufrufers** (Muster
+    `IKassenService.BookAsync(db, …)`) und legt die Bürger-Nachricht ohne Autor an — **nicht** über
+    `AskCitizenAsync`, das einen abgeschlossenen Hinweis abweist und auf `Rueckfrage` schalten würde; `AfterRewardAsync`
+    läuft **nach** dem Commit und macht Vertrauenszähler, Eingangs-Sortierung, Benachrichtigung und Live-Update.
+12. **`PublicRewardPaid` ist nicht routbar.** `NotifyManyAsync` pusht jede routbare Kategorie in den öffentlichen
+    Discord-Kanal, und eine Belohnungsmeldung dort outet den Hinweisgeber.
+13. **Das Modul-Gate sitzt auf den Bürger-Lesepfaden, nicht auf der Auszahlung.** Präzedenz Phase 4/5: Publizieren
+    braucht ein lebendes Modul, *De*publizieren nie. Eine Auszahlung ist eine interne Geldbewegung — sie darf die
+    Kasse nicht blockieren. `Available` steht damit auf `true`, `DefaultEnabled` bleibt `false`: eine frische
+    Installation zeigt Belege erst, wenn jemand den Schalter umlegt.
+    **Und gefragt wird die gespeicherte Wahl allein, nicht `RequireEnabledAsync`** — das faltet den Not-Aus ein, und
+    der nimmt laut Leitsatz aus Phase 2 den privaten Kontobereich `/buerger` bewusst *nicht* mit. Ein Beleg ist der
+    private Inhalt eines angemeldeten Bürgers; ein eigener Test hält fest, dass der Not-Aus ihn stehen lässt.
+    Aus demselben Grund gibt `PartnerRoutes.IsAllowed` für `/buerger/**` jetzt `true` zurück: `BuergerLayout` fragt
+    diese Liste gar nicht, `PrintLayout` schon — ohne die Zeile wäre die Druckseite die *einzige* Bürgerseite, die
+    einem Partner mit Zivil-Identität „nicht freigegeben" meldet.
+14. **Beleg: Eigentümer **und** Führung.** Beide lesen ihn, jeder andere bekommt `null` ⇒ „nicht gefunden" — nie
+    „kein Zugriff", sonst wäre die Route ein Existenz-Orakel über Auszahlungen. Der Bearbeiter steht auf **keiner**
+    Projektion: `CitizenRewardReceipt` kann ihn strukturell nicht tragen, und die Seite setzt `PrintedBy` nicht.
+15. **Der Zeitstrahl braucht drei Hops und zwei Abfragen.** Belohnung → Anteil → Ausschreibung → Akte. In
+    `TimelineService.AuditSourceAsync` gestaffelt statt verschachtelt, weil `IgnoreQueryFilters()` für die ganze
+    Kompilierung gilt und in einer Unterabfrage den Soft-Delete-Filter auch außen entfernt (die Phase-4-Falle).
+    Registriert sind alle vier Stellen: `AuditSourceAsync`, `TimelineDisplay.MapAudit`, `AuditEntityDisplay` und
+    `ChronikParentResolver`. **Nicht** in der Beobachtungsliste (`WatchlistRecordRollup`): die statische Map hat
+    keine Datenbank für drei Hops, und das beobachtbare Ereignis ist das Gefasst-Setzen der Ausschreibung.
 
 ---
 

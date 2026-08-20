@@ -35,6 +35,8 @@ public class PublicWantedModelTests
         typeof(CitizenTipRow),
         typeof(CitizenTipDetail),
         typeof(CitizenTipMessage),
+        typeof(CitizenRewardRow),
+        typeof(CitizenRewardReceipt),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -68,6 +70,13 @@ public class PublicWantedModelTests
         [typeof(TipHistoryRow)] = "Hinweisgeber-Historie an der Personenakte; anonyme Hinweise fehlen darin ganz.",
         [typeof(TipAttachmentAccess)] = "Dateiname und Typ für den autorisierten Ausliefer-Endpoint.",
         [typeof(TipInput)] = "Formulareingabe des Hinweis-Formulars.",
+        [typeof(RewardRow)] = "Ausgezahlte Belohnung im internen Panel; nennt Herkunft, Konto und Kassenbuchung.",
+        [typeof(RewardDraft)] = "Vorbereitung der Auszahlung; nennt die Aufschlüsselung des Kopfgelds.",
+        [typeof(RewardDraftTip)] = "Auszahlbarer Hinweis im Dialog, inklusive Klarname des Hinweisgebers.",
+        [typeof(RewardDraftBlocked)] = "Nicht auszahlbarer Hinweis mit dem internen Grund dafür.",
+        [typeof(RewardPayoutInput)] = "Formulareingabe des Auszahlungs-Dialogs; trägt Zeilen-Ids.",
+        [typeof(RewardTipAmount)] = "Eine Zeile der Verteilung; trägt die Zeilen-Id des Hinweises.",
+        [typeof(TipRewardTarget)] = "Übergabewert zwischen Auszahlung und Nachlauf; trägt Zeilen-Ids.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>
