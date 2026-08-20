@@ -59,7 +59,8 @@ public sealed class TipTakeoverServiceTests
             Substitute.For<IFileStorageService>(), Substitute.For<IPublicWantedPhotoStorageService>(),
             notifications, tipPriority, Substitute.For<IDiscordWebhookService>(), cache);
         var tips = new TipService(factory, modules, new BuergerService(factory), wanted, caseNumbers,
-            Substitute.For<ITipAttachmentStorageService>(), notifications, tipPriority, new TipsBroadcaster());
+            Substitute.For<ITipAttachmentStorageService>(), notifications, tipPriority,
+            new PublicTemplateService(factory), new TipsBroadcaster());
 
         var people = new PersonService(factory, Substitute.For<IFileStorageService>(), suggestion, caseNumbers,
             threat, notifications, wanted);

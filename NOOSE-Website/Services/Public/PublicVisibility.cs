@@ -206,6 +206,9 @@ public static class PublicVisibility
                 + "Öffentlichkeit.",
             ["TicketNachricht"] = "Schriftwechsel eines Tickets; er gehört den beiden Beteiligten. "
                 + "Die interne Zielgruppe verlässt das Haus nie.",
+            ["OeffentlicheVorlage"] = "Rohtext einer Bürger-Nachricht, mit unaufgelösten Tokens und dem "
+                + "Arbeitstitel der Redaktion. Nach draußen geht die gerenderte Nachrichtenzeile, nie die "
+                + "Vorlage selbst.",
         };
 
     /// <summary>True when someone has decided the entity's public fate either way.</summary>

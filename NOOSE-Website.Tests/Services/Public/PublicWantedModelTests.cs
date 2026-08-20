@@ -84,6 +84,9 @@ public class PublicWantedModelTests
         [typeof(TicketDetail)] = "Ein Ticket in der Bearbeitung, inklusive Sperrstatus des Bürgerkontos.",
         [typeof(TicketMessageRow)] = "Nachricht mit Autor; die interne Zielgruppe verlässt das Haus nie.",
         [typeof(TicketInput)] = "Formulareingabe des Ticket-Dialogs.",
+        [typeof(PublicTemplateRow)] = "Vorlage mit rohen Tokens und internem Arbeitstitel; nach außen geht die "
+            + "gerenderte Nachricht.",
+        [typeof(PublicTemplateInput)] = "Formulareingabe des Vorlagen-Dialogs.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>

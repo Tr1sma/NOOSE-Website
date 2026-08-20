@@ -77,7 +77,7 @@ public sealed class TicketServiceTests
 
         var notifications = Substitute.For<INotificationService>();
         var service = new TicketService(factory, modules, new BuergerService(factory), caseNumbers,
-            notifications, new TicketBroadcaster());
+            notifications, new PublicTemplateService(factory), new TicketBroadcaster());
         return new Host(service, modules, notifications, factory);
     }
 
@@ -560,5 +560,73 @@ public sealed class TicketServiceTests
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.Service.DeleteAsync(id, Junior()));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => host.Service.RestoreAsync(id, Supervision()));
+    }
+
+    // ---- the automatic confirmation ----
+
+    private static async Task SeedConfirmationAsync(SqliteTestContext ctx, bool active = true)
+    {
+        await new PublicTemplateService(ctx.Factory).SaveAsync(
+            new PublicTemplateInput(null, PublicTemplateKind.TicketEingang, "Eingang",
+                "Guten Tag BUERGER, Ihr Anliegen AKTENZEICHEN ist eingegangen. Mit Gruss NAME", active, 10),
+            Leader());
+    }
+
+    [Fact]
+    public async Task Opening_with_an_active_template_confirms_without_naming_an_agent()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        var caseNumber = await OpenAsync(host);
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        var confirmation = Assert.Single(detail!.Messages, m => !m.FromCitizen);
+        Assert.Contains("Erika Musterfrau", confirmation.Text, StringComparison.Ordinal);
+        Assert.Contains(caseNumber, confirmation.Text, StringComparison.Ordinal);
+        Assert.Contains(PublicTemplateRenderer.Redaction, confirmation.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Falcon", confirmation.Text, StringComparison.Ordinal);
+
+        await using var db = host.Factory.CreateDbContext();
+        var row = await db.TicketNachrichten.SingleAsync(m => !m.AuthorIsCitizen);
+        Assert.Null(row.AuthorAgentId);
+        Assert.Equal(TicketMessageAudience.Buerger, row.Audience);
+    }
+
+    [Fact]
+    public async Task The_confirmation_moves_no_status_and_rings_no_bell()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        var caseNumber = await OpenAsync(host);
+
+        // an untouched ticket stays Offen; anything else would claim work nobody did
+        var ticket = await host.Service.GetAsync(await IdAsync(host, caseNumber), Leader());
+        Assert.Equal(TicketStatus.Offen, ticket!.Status);
+        // the unread counter shows the confirmation by itself
+        Assert.Equal(1, await host.Service.GetOwnUnreadCountAsync(Citizen()));
+        await host.Notifications.DidNotReceive().NotifyManyAsync(
+            Arg.Any<IReadOnlyList<string>>(), NotificationType.PublicTicketAnswered, Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Without_an_active_template_no_confirmation_is_written()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx, active: false);
+
+        var caseNumber = await OpenAsync(host);
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        var only = Assert.Single(detail!.Messages);
+        Assert.True(only.FromCitizen);
+        // and nothing leaked into the internal thread either
+        Assert.Empty(await host.Service.GetMessagesAsync(await IdAsync(host, caseNumber),
+            TicketMessageAudience.Intern, Leader()));
     }
 }

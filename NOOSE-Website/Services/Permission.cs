@@ -372,6 +372,21 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to write a template for citizen-facing messages.</summary>
+    /// <remarks>
+    /// The write check stands before the rank one, same as the ticket and payout guards: RequireLeadership alone lets
+    /// the read-only supervision and the demo principal through, and they would then edit the text every citizen gets
+    /// until the ReadOnlyBarrierInterceptor refuses the save. Reading a template needs no guard at all — it is agency
+    /// boilerplate, and the automatic confirmation is read while a citizen, not an agent, is acting.
+    /// </remarks>
+    public static void RequirePublicTemplateWrite(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayWrite() || !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException("Öffentliche Vorlagen pflegt nur die Führung.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {

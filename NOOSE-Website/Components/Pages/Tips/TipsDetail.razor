@@ -256,6 +256,7 @@ else
         <MudItem xs="12" md="6">
             <MudStack Spacing="4">
                 <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Buerger"
+                                 CaseNumber="@_tip.CaseNumber" CitizenName="@_tip.CitizenName"
                                  CanWrite="@(_canWrite && !TipRules.IsClosed(_tip.Status))" />
                 <TipMessagePanel TipId="@_tip.Id" User="_user" Audience="TipMessageAudience.Intern"
                                  CanWrite="_canWrite" />

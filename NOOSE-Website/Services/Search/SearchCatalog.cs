@@ -453,6 +453,8 @@ public static class SearchCatalog
             ["TicketNachricht"] = "Schriftwechsel eines Tickets; gefunden wird das Ticket, nicht die "
                 + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst am "
                 + "Führungs-Gate vorbei lesbar.",
+            ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
+                + "die Nachricht, die daraus entstand, nicht der Baustein.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

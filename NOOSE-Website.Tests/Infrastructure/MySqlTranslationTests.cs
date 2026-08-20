@@ -478,4 +478,18 @@ public sealed class MySqlTranslationTests : IDisposable
 
         Assert.Contains("VonBuerger", sql, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheActiveTemplateLookup_TranslatesItsKindAndOrder()
+    {
+        // the one shape the template read path knows, and the automatic confirmation runs it on every submission
+        var sql = _db.OeffentlicheVorlagen.AsNoTracking()
+            .Where(v => v.Kind == PublicTemplateKind.HinweisEingang && v.IsActive)
+            .OrderBy(v => v.SortOrder).ThenBy(v => v.Title)
+            .Select(v => new { v.Id, v.Kind, v.Title, v.Text, v.IsActive, v.SortOrder })
+            .ToQueryString();
+
+        Assert.Contains("Reihenfolge", sql, StringComparison.Ordinal);
+        Assert.Contains("IstAktiv", sql, StringComparison.Ordinal);
+    }
 }

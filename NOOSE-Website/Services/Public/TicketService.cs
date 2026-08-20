@@ -20,6 +20,7 @@ public class TicketService(
     IBuergerService buerger,
     ICaseNumberService caseNumbers,
     INotificationService notifications,
+    IPublicTemplateService templates,
     TicketBroadcaster broadcaster) : ITicketService
 {
     private const string CaseNumberPrefix = "T";
@@ -73,6 +74,10 @@ public class TicketService(
                 + "Bitte versuche es später erneut.");
         }
 
+        // read before the transaction, like any other lookup: without an active template no confirmation is
+        // written at all, and there is deliberately no fallback text in code
+        var confirmation = await templates.GetAutomaticAsync(PublicTemplateKind.TicketEingang, cancellationToken);
+
         var row = new Ticket
         {
             Kind = TicketArt.Fuehrungsebene,
@@ -95,6 +100,20 @@ public class TicketService(
             Text = text,
             AuthorIsCitizen = true,
         });
+        if (confirmation is not null)
+        {
+            // same transaction: a confirmation without a ticket must be impossible. It carries no agent, moves no
+            // status (an untouched ticket stays Offen) and rings no bell — the unread counter shows it by itself
+            db.TicketNachrichten.Add(new TicketNachricht
+            {
+                Ticket = row,
+                TicketId = row.Id,
+                Audience = TicketMessageAudience.Buerger,
+                Text = PublicTemplateRenderer.Render(confirmation.Text,
+                    new PublicTemplateContext(Name(profile.FirstName, profile.LastName), row.CaseNumber)),
+                AuthorIsCitizen = false,
+            });
+        }
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 

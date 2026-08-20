@@ -1,0 +1,188 @@
+@* Templates for every citizen-facing message: ticket confirmation and answer, tip confirmation, follow-up, refusal. *@
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IPublicTemplateService Templates
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    Textbausteine für Nachrichten an Bürger. Die beiden Eingangsbestätigungen gehen <em>automatisch</em>
+    hinaus, sobald ein Ticket geöffnet oder ein Hinweis eingereicht wird — dafür wird jeweils die erste
+    aktive Vorlage der Art genommen. Ist keine aktiv, wird schlicht keine Bestätigung geschickt.
+    Die übrigen Arten stehen im Nachrichtenfeld zur Auswahl. Platzhalter bleiben hier stehen und werden
+    erst beim Versand gefüllt.
+</MudText>
+
+@if (_load)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @foreach (var kind in PublicTemplateKindDisplay.All)
+    {
+        var rows = _rows.Where(r => r.Kind == kind).ToList();
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-4 mb-1">
+            <MudIcon Icon="@(PublicTemplateKindDisplay.IsAutomatic(kind)
+                               ? Icons.Material.Filled.AutoMode
+                               : Icons.Material.Filled.Drafts)"
+                     Color="Color.Primary" Size="Size.Small" />
+            <MudText Typo="Typo.subtitle1">@PublicTemplateKindDisplay.Name(kind)</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewAsync(kind))">
+                Neue Vorlage
+            </MudButton>
+        </MudStack>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">
+            @PublicTemplateKindDisplay.Hint(kind)
+        </MudText>
+        @if (rows.Count == 0)
+        {
+            <MudAlert Severity="@(PublicTemplateKindDisplay.IsAutomatic(kind) ? Severity.Warning : Severity.Normal)"
+                      Variant="Variant.Outlined" Dense="true" Class="mb-4">
+                @(PublicTemplateKindDisplay.IsAutomatic(kind)
+                    ? "Keine Vorlage — es wird keine Bestätigung verschickt."
+                    : "Keine Vorlage vorhanden.")
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="rows" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="1" Dense="true" Class="mb-4">
+                <HeaderContent>
+                    <MudTh>Titel</MudTh>
+                    <MudTh>Reihenfolge</MudTh>
+                    <MudTh>Aktiv</MudTh>
+                    <MudTh Style="text-align:right;">Aktion</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Titel">
+                        <MudText Typo="Typo.body2">@context.Title</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Excerpt(context.Text)</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Reihenfolge">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.SortOrder</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Aktiv">
+                        <MudSwitch Value="context.IsActive" T="bool" Color="Color.Primary"
+                                   ValueChanged="@(v => ToggleAsync(context, v))" />
+                    </MudTd>
+                    <MudTd DataLabel="Aktion" Style="text-align:right;">
+                        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                           OnClick="@(() => EditAsync(context))" aria-label="Vorlage bearbeiten" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => DeleteAsync(context))" aria-label="Vorlage löschen" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private const int ExcerptLength = 90;
+
+    private bool _load = true;
+    private IReadOnlyList<PublicTemplateRow> _rows = [];
+    private ClaimsPrincipal _user = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = (await AuthStateTask).User;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            _rows = await Templates.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private static string Excerpt(string text)
+    {
+        var flat = text.ReplaceLineEndings(" ").Trim();
+        return flat.Length <= ExcerptLength ? flat : flat[..ExcerptLength] + "…";
+    }
+
+    private async Task NewAsync(PublicTemplateKind kind)
+    {
+        var siblings = _rows.Where(r => r.Kind == kind).ToList();
+        var next = siblings.Count == 0 ? 10 : siblings.Max(r => r.SortOrder) + 10;
+        var input = await PublicTemplateDialog.ShowAsync(DialogService, "Neue Vorlage", kind: kind, sortOrder: next);
+        await SaveAsync(input, "Vorlage angelegt.");
+    }
+
+    private async Task EditAsync(PublicTemplateRow row)
+    {
+        var input = await PublicTemplateDialog.ShowAsync(DialogService, "Vorlage bearbeiten", existing: row);
+        await SaveAsync(input, "Vorlage gespeichert.");
+    }
+
+    private async Task SaveAsync(PublicTemplateInput? input, string success)
+    {
+        if (input is null)
+        {
+            return;
+        }
+        try
+        {
+            await Templates.SaveAsync(input, _user);
+            Snackbar.Add(success, Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ToggleAsync(PublicTemplateRow row, bool active)
+    {
+        try
+        {
+            await Templates.SetActiveAsync(row.Id, active, _user);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteAsync(PublicTemplateRow row)
+    {
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Vorlage löschen?",
+            $"„{row.Title}“ wird entfernt. Zum vorübergehenden Zurückziehen genügt der Aktiv-Schalter.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Templates.DeleteAsync(row.Id, _user);
+            Snackbar.Add("Vorlage gelöscht.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

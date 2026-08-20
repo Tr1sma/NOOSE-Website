@@ -352,6 +352,7 @@ builder.Services.AddScoped<ITipService, TipService>();
 builder.Services.AddScoped<ITipTakeoverService, TipTakeoverService>();
 builder.Services.AddScoped<IRewardService, RewardService>();
 builder.Services.AddScoped<ITicketService, TicketService>();
+builder.Services.AddScoped<IPublicTemplateService, PublicTemplateService>();
 builder.Services.AddSingleton<BewerbungBroadcaster>();
 builder.Services.AddSingleton<TipsBroadcaster>();
 builder.Services.AddSingleton<TicketBroadcaster>();
@@ -456,6 +457,9 @@ using (var scope = app.Services.CreateScope())
 
     // seed the four starting warning chips (only while the table is empty; a deleted one stays deleted)
     await NOOSE_Website.Infrastructure.WarnhinweisSeeder.SeedAsync(db);
+
+    // seed one starting template per kind (only while the table is empty; a deleted one stays deleted)
+    await NOOSE_Website.Infrastructure.PublicTemplateSeeder.SeedAsync(db);
 
     // warm the static enum-label overrides so display classes show custom names
     var labelRows = await db.EnumLabelOverrides.Select(o => new { o.List, o.Key, o.Label }).ToListAsync();

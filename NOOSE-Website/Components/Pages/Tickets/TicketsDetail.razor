@@ -96,6 +96,7 @@ else
         <MudItem xs="12" md="7">
             <TicketMessagePanel TicketId="@_ticket.Id" User="@_user"
                                 Audience="TicketMessageAudience.Buerger"
+                                CaseNumber="@_ticket.CaseNumber" CitizenName="@_ticket.CitizenName"
                                 CanWrite="@(_canWrite && TicketRules.IsOpen(_ticket.Status))" />
         </MudItem>
     </MudGrid>

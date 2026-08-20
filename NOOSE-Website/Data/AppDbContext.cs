@@ -249,6 +249,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<HinweisBelohnung> HinweisBelohnungen => Set<HinweisBelohnung>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
+    public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1836,6 +1837,15 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(m => m.AuthorAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(m => new { m.TicketId, m.Audience });
             b.HasIndex(m => new { m.TicketId, m.CreatedAt });
+        });
+
+        modelBuilder.Entity<OeffentlicheVorlage>(b =>
+        {
+            b.Property(v => v.Title).HasMaxLength(160).IsRequired();
+            // longtext: the body is a message, and a length cap here would truncate it without a word
+            b.Property(v => v.Text).HasColumnType("longtext");
+            // the only shape the read path knows: the active templates of one kind, in order
+            b.HasIndex(v => new { v.Kind, v.IsActive, v.SortOrder });
         });
 
         // global soft-delete filter

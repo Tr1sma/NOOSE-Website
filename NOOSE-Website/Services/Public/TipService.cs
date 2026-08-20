@@ -24,6 +24,7 @@ public class TipService(
     ITipAttachmentStorageService storage,
     INotificationService notifications,
     ITipPriorityService priority,
+    IPublicTemplateService templates,
     TipsBroadcaster broadcaster) : ITipService
 {
     private const string CaseNumberPrefix = "H";
@@ -79,6 +80,10 @@ public class TipService(
             fileName = await storage.SaveAsync(attachment, contentType, cancellationToken);
         }
 
+        // read before the transaction, like the attachment above: without an active template no confirmation is
+        // written at all, and there is deliberately no fallback text in code
+        var confirmation = await templates.GetAutomaticAsync(PublicTemplateKind.HinweisEingang, cancellationToken);
+
         var row = new Hinweis
         {
             CitizenProfileId = profile.Id,
@@ -97,6 +102,24 @@ public class TipService(
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             row.CaseNumber = await caseNumbers.NextAsync(db, CaseNumberPrefix, cancellationToken);
             db.Hinweise.Add(row);
+            if (confirmation is not null)
+            {
+                // same transaction: a confirmation without a tip must be impossible. It carries no agent, leaves the
+                // status at Neu and rings no bell — the unread counter shows it by itself. Under the anonymity
+                // promise the renderer gets no name, so the salutation falls back instead of leaking one
+                var salutation = TipAnonymity.IsHidden(row.WantsAnonymity, row.AnonymityResolvedAt)
+                    ? null
+                    : Name(profile.FirstName, profile.LastName);
+                db.HinweisNachrichten.Add(new HinweisNachricht
+                {
+                    Hinweis = row,
+                    HinweisId = row.Id,
+                    Audience = TipMessageAudience.Buerger,
+                    Text = PublicTemplateRenderer.Render(confirmation.Text,
+                        new PublicTemplateContext(salutation, row.CaseNumber)),
+                    AuthorIsCitizen = false,
+                });
+            }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }

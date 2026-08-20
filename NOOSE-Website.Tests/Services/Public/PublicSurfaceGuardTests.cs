@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using NOOSE_Website.Authorization;
 using Microsoft.Extensions.Logging;
 using NOOSE_Website.Data;
@@ -225,5 +226,64 @@ public class PublicSurfaceGuardTests
 
         Assert.True(offenders.Length == 0,
             "Der Absender nach außen ist eine Konstante, kein Agent: " + string.Join(", ", offenders));
+    }
+
+    /// <summary>Token systems that must not be applied on the citizen-facing path.</summary>
+    /// <remarks>
+    /// MentionParser is deliberately absent: the public services call it to <em>reject</em> outward text that carries
+    /// a mention, which is the opposite of using it as a token system. A scan that forbade it would be defused on the
+    /// next reading rather than understood.
+    /// </remarks>
+    private static readonly string[] ForeignTokenSystems =
+    [
+        "BewerbungTemplateRenderer", "IBewerbungTemplateService",
+        "PlaceholderService", "IPlaceholderService", "IDocumentTemplateService",
+    ];
+
+    [Fact]
+    public void NoPublicPath_AppliesAForeignTokenSystem()
+    {
+        // Three systems already exist and none of them fits a citizen message: the recruiting renderer HTML-encodes
+        // and validates against the applicant token set, the placeholder service resolves record fields, and both
+        // would travel half-expanded to the outside. The fourth set has its own renderer, and this keeps it that way.
+        var root = ProjectRoot();
+        var folders = new[]
+        {
+            Path.Combine(root, "Services", "Public"),
+            Path.Combine(root, "Components", "Pages", "Public"),
+            Path.Combine(root, "Components", "Pages", "Portal"),
+            Path.Combine(root, "Components", "Pages", "Tickets"),
+            Path.Combine(root, "Components", "Pages", "Tips"),
+        };
+        foreach (var folder in folders)
+        {
+            Assert.True(Directory.Exists(folder), $"Ordner nicht gefunden: {folder}");
+        }
+
+        var offenders = folders
+            .SelectMany(f => Directory.EnumerateFiles(f, "*.*", SearchOption.AllDirectories))
+            .Where(f => f.EndsWith(".cs", StringComparison.Ordinal) || f.EndsWith(".razor", StringComparison.Ordinal))
+            .Select(f => (File: Path.GetFileName(f), Text: WithoutComments(File.ReadAllText(f))))
+            .SelectMany(f => ForeignTokenSystems
+                .Where(name => System.Text.RegularExpressions.Regex.IsMatch(f.Text, $@"\b{name}\b"))
+                .Select(name => $"{f.File}: {name}"))
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der öffentliche Pfad nutzt ausschließlich PublicTemplateRenderer: " + string.Join(", ", offenders));
+    }
+
+    /// <summary>Strips comments: the rule is about code, and prose has to be allowed to name what it rules out.</summary>
+    /// <remarks>
+    /// Otherwise the next reader deletes the sentence explaining why the recruiting renderer is not reused, just to
+    /// make this test green — the same defusing this file warns about for MentionParser.
+    /// </remarks>
+    private static string WithoutComments(string text)
+    {
+        const RegexOptions overLines = RegexOptions.Singleline;
+        text = Regex.Replace(text, @"@\*.*?\*@", " ", overLines);
+        text = Regex.Replace(text, @"/\*.*?\*/", " ", overLines);
+        return Regex.Replace(text, @"//[^\r\n]*", " ");
     }
 }

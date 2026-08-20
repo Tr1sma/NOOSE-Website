@@ -1,0 +1,126 @@
+@* Create/edit one template for citizen-facing messages. *@
+@using NOOSE_Website.Models.Enums
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudStack Spacing="3">
+                <MudSelect T="PublicTemplateKind" Label="Art" @bind-Value="_kind" Variant="Variant.Outlined">
+                    @foreach (var kind in PublicTemplateKindDisplay.All)
+                    {
+                        <MudSelectItem T="PublicTemplateKind" Value="@kind">
+                            @PublicTemplateKindDisplay.Name(kind)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    @PublicTemplateKindDisplay.Hint(_kind)
+                </MudAlert>
+
+                <MudTextField @bind-Value="_title" Label="Titel" Variant="Variant.Outlined"
+                              Required="true" RequiredError="Titel ist erforderlich"
+                              MaxLength="@PublicTemplateRules.TitleMaxLength" AutoFocus="true"
+                              HelperText="Nur intern sichtbar: so heißt die Vorlage in der Auswahl." />
+
+                <MudTextField @bind-Value="_text" Label="Text an den Bürger" Variant="Variant.Outlined"
+                              Lines="14" Immediate="true" Required="true" RequiredError="Text ist erforderlich"
+                              MaxLength="@PublicTemplateRules.MaxLength" Counter="@PublicTemplateRules.MaxLength" />
+
+                @* the four tokens this system fills, plus the redaction; anything else is refused on save *@
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Platzhalter:</MudText>
+                    @foreach (var token in Tokens)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Color="Color.Primary">@token</MudChip>
+                    }
+                </MudStack>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    <code>NAME</code> wird immer zu <code>@PublicTemplateRenderer.Redaction</code> geschwärzt —
+                    Agenten bleiben nach außen anonym. Platzhalter anderer Systeme
+                    (<code>&#123;&#123;…&#125;&#125;</code>, Erwähnungen, <code>BEWERBER</code>,
+                    <code>DIENSTGRAD</code>) werden abgewiesen.
+                </MudText>
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Vorschau mit Beispielwerten</MudText>
+                <MudPaper Outlined="true" Class="pa-3">
+                    <div style="white-space:pre-wrap;">@Preview()</div>
+                </MudPaper>
+
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                    <MudSwitch @bind-Value="_isActive" Color="Color.Primary" Label="Aktiv" T="bool" />
+                    <MudNumericField @bind-Value="_sortOrder" Label="Reihenfolge" Variant="Variant.Outlined"
+                                     Min="0" Max="9999" Style="max-width:160px;" />
+                </MudStack>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">Speichern</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly string[] Tokens = ["BUERGER", "AKTENZEICHEN", "DATUM", "UHRZEIT", "NAME"];
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public PublicTemplateRow? Existing { get; set; }
+    [Parameter] public PublicTemplateKind Kind { get; set; }
+    [Parameter] public int SortOrder { get; set; }
+
+    private MudForm _form = default!;
+    private PublicTemplateKind _kind;
+    private string _title = string.Empty;
+    private string _text = string.Empty;
+    private bool _isActive = true;
+    private int _sortOrder;
+
+    protected override void OnInitialized()
+    {
+        _kind = Existing?.Kind ?? Kind;
+        _title = Existing?.Title ?? string.Empty;
+        _text = Existing?.Text ?? string.Empty;
+        _isActive = Existing?.IsActive ?? true;
+        _sortOrder = Existing?.SortOrder ?? SortOrder;
+    }
+
+    private string Preview()
+        => string.IsNullOrWhiteSpace(_text)
+            ? "—"
+            : PublicTemplateRenderer.Render(_text, PublicTemplateRenderer.SampleContext());
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(new PublicTemplateInput(
+            Existing?.Id, _kind, _title.Trim(), _text.Trim(), _isActive, _sortOrder)));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>Shows the create/edit dialog; returns null on cancel.</summary>
+    public static async Task<PublicTemplateInput?> ShowAsync(IDialogService dialog, string title,
+        PublicTemplateRow? existing = null, PublicTemplateKind kind = PublicTemplateKind.TicketEingang,
+        int sortOrder = 0)
+    {
+        var parameters = new DialogParameters<PublicTemplateDialog>
+        {
+            { x => x.Existing, existing },
+            { x => x.Kind, kind },
+            { x => x.SortOrder, sortOrder },
+        };
+        var reference = await dialog.ShowAsync<PublicTemplateDialog>(title, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var result = await reference.Result;
+        return result is { Canceled: false, Data: PublicTemplateInput e } ? e : null;
+    }
+}

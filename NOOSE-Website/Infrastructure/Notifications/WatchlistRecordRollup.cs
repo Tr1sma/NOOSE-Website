@@ -107,6 +107,8 @@ public static class WatchlistRecordRollup
             // for a follower of a file to be told about
             case Ticket:
             case TicketNachricht:
+            // a template is configuration; what a follower could care about is the message it produced
+            case OeffentlicheVorlage:
                 return Array.Empty<(string, string)>();
 
             default:

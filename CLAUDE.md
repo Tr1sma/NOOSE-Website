@@ -160,7 +160,9 @@ Schichten innerhalb von `NOOSE-Website/`:
     entschieden hat — das ist die eigentliche Garantie, nicht der Katalog. **Seit dem öffentlichen Bereich sind es
     zwei Wächter:** dieselbe neue Tabelle braucht zusätzlich einen Eintrag in `PublicVisibility`.
 - **Maintenance/Banner/Theme/Logo:** `SystemSettingService` über Key/Value-Tabelle, 10s `IMemoryCache`. Logo/Uploads liegen **außerhalb wwwroot** unter `App_Data/uploads`, ausgeliefert über autorisierte Minimal-API-Endpoints.
-- **Drei getrennte Token-Systeme, nie vermischen:** `PlaceholderService` (`{{Name}}`, `{{Aktenzeichen}}`, `{{Datum}}`, `{{Uhrzeit}}`, `{{Agent}}`, `{{Dienstgrad}}` — Dokument-/Aktivitäts-/Personal-Vorlagen) · `BewerbungTemplateRenderer` (bare `NAME`/`BEWERBER`/`DATUM`/`UHRZEIT`/`DIENSTGRAD`, nur Bewerbungs-Anschreiben) · `MentionParser` (`@{Typ:GUID}`, aufgelöst über `MentionService.ResolveManyAsync` → `<MentionText>`).
+- **Vier getrennte Token-Systeme, nie vermischen:** `PlaceholderService` (`{{Name}}`, `{{Aktenzeichen}}`, `{{Datum}}`, `{{Uhrzeit}}`, `{{Agent}}`, `{{Dienstgrad}}` — Dokument-/Aktivitäts-/Personal-Vorlagen) · `BewerbungTemplateRenderer` (bare `NAME`/`BEWERBER`/`DATUM`/`UHRZEIT`/`DIENSTGRAD`, nur Bewerbungs-Anschreiben) · `MentionParser` (`@{Typ:GUID}`, aufgelöst über `MentionService.ResolveManyAsync` → `<MentionText>`) ·
+  `PublicTemplateRenderer` (bare `BUERGER`/`AKTENZEICHEN`/`DATUM`/`UHRZEIT`/`NAME`, nur Bürger-Nachrichten,
+  **ohne** HTML-Encoding — siehe „Phase 11" im öffentlichen Bereich).
 - **Platzhalter werden NUR beim Anwenden einer Vorlage expandiert**, nicht beim Speichern: Vorlagen-*Editoren* und der Edit-Modus gespeicherter Records lassen Tokens bewusst roh stehen (dort sind sie der Payload).
 
 ## Authorization, Ränge & Rollen
@@ -456,12 +458,12 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–10 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
+Gebaut sind Phase 1–11 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
 öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
 Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
-Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger) und der Ticket-Chat an die
-Führungsebene. Presse, öffentliche Vorlagen und die öffentlichen Zahlen sind geplant, aber **nicht**
-vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
+Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
+Führungsebene und die Vorlagen für Bürger-Nachrichten. Presse und die öffentlichen Zahlen sind geplant,
+aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -985,6 +987,48 @@ vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
     Anonymitätszusage, weil das Konto die Missbrauchskontrolle ist). In **Chronik und Zeitstrahl** taucht ein
     Ticket gar nicht auf: `GlobalChronikService.RecordTypes` ist eine geschlossene Liste von zehn Aktenarten,
     und ein Typ ohne Elternteil fällt dort heraus.
+- **Phase 11 (Öffentliche Vorlagen) — was daran anders ist:**
+  - **Klartext, kein HTML — und das ist der Grund, `BewerbungTemplateRenderer` nicht wiederzuverwenden.**
+    `HinweisNachricht.Text` und `TicketNachricht.Text` sind Klartext; der Bewerbungs-Renderer `HtmlEncode`t
+    jede Ersetzung, weil ein Anschreiben Markup ist, und hätte dem Bürger „Müller &amp;amp; Sohn" zugestellt.
+    `PublicTemplateRenderer` encodet deshalb **nichts** (eigener Test hält die Abweichung fest) und
+    `OeffentlicheVorlage.Text` ist `longtext` mit mehrzeiligem Textfeld statt RichTextEditor: Zeilenumbrüche
+    sind die Formatierung.
+  - **Fünf Arten, jede mit Konsument** (`TicketEingang`, `TicketAntwort`, `HinweisEingang`,
+    `HinweisRueckfrage`, `HinweisAblehnung`). `Belohnungszusage` und `Pressemitteilung` aus dem Plantext sind
+    **nicht** gebaut — der erste bräuchte einen neuen Schreibpfad in `RewardService` (der schickt dem Bürger
+    heute nur Glocke und Beleg), der zweite kommt mit Phase 14. Aus demselben Grund fehlt `BETRAG`: ein nie
+    ersetztes Token geht als Literal nach draußen. Präzedenz `TicketArt` mit einem Wert.
+  - **Ein Fallback für `BUERGER`, und der anonyme Hinweis ist der Grund.** Die Auto-Bestätigung fragt
+    `TipAnonymity.IsHidden` — die Zusage gilt auch gegen die eigene Bestätigung der Behörde, nicht nur gegen
+    die Bearbeiter-Projektion. `NAME` wird **zuerst** geschwärzt (Muster Bewerber-Pfad), damit nichts
+    Eingesetztes nachträglich getroffen wird.
+  - **Die Lesepfade tragen bewusst keinen Guard** (`IPublicTemplateService`): eine Vorlage ist
+    Behörden-Textbaustein, kein Akteninhalt, und die Auto-Bestätigung wird gelesen, während ein **Bürger**
+    handelt — ein Guard hätte sie mit `UnauthorizedAccessException` beantwortet. Muster
+    `IDocumentTemplateService.GetActiveAsync`. Geschrieben wird nur über
+    `Permission.RequirePublicTemplateWrite` (Schreibprüfung vor der Rangprüfung).
+  - **Tokens bleiben beim Speichern roh, Fremdtokens werden abgewiesen** (`HasForeignToken`: `{{…}}`,
+    Erwähnungen, `BEWERBER`, `DIENSTGRAD`). `DATUM`/`UHRZEIT` teilt sich der Satz bewusst mit dem
+    Bewerber-Pfad. **`MentionParser.Parse` als Ablehnungsprüfung ist erlaubt** (wie in `WarnhinweisService`);
+    verboten ist das Auflösen im öffentlichen Pfad — deshalb steht er nicht im Datei-Scan, und der streicht
+    Kommentare, bevor er sucht: die Sätze, die erklären, warum ein System nicht benutzt wird, müssen es
+    nennen dürfen.
+  - **Die Auto-Bestätigung bewegt keinen Status und läutet nicht.** Ticket bleibt `Offen`, Hinweis bleibt
+    `Neu`; `Public*Answered` ist für eine echte Antwort. Sie entsteht in **derselben** Transaktion wie Akte
+    und erste Nachricht (Bestätigung ohne Vorgang ist damit unmöglich), die Vorlage wird davor gelesen.
+    **Ohne aktive Vorlage passiert nichts** — es gibt keinen Fallback-Text im Code, der Aktiv-Schalter ist
+    also auch der Aus-Schalter. `PublicTemplateSeeder` füllt je Art eine Startvorlage, aber **nur bei ganz
+    leerer Tabelle** (Muster `WarnhinweisSeeder`).
+  - **`PublicTemplateRules.MaxLength` ist abgeleitet** (`TicketRules.MaxMessageLength` minus Reserve): was
+    gespeichert wird, muss gerendert noch in eine Nachricht passen.
+  - **Kein `PublicModules`-Schlüssel** (interne Konfiguration) und **kein Papierkorb-Eintrag**
+    (Konfigurationstabelle, Präzedenz `Warnhinweis`/`DocumentTemplate` — beide `ISoftDelete` und trotzdem
+    nicht im globalen Papierkorb; zurückgezogen wird über `IstAktiv`). Registriert ist die Tabelle in
+    `PublicVisibility`, `SearchCatalog` (`NotSearchable`), `AuditEntityDisplay` (Label **und** Route),
+    `MergedPageSections.Settings`, `WatchlistRecordRollup` — **und in `FeedbackPageTabs`, der sechsten
+    Registry**, die jeder neue `/einstellungen`-Abschnitt braucht (`FeedbackPageTabsTests` verlangt jeden
+    `MergedPageSections`-Slug im Feedback-Picker).
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -1014,7 +1058,7 @@ vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–10 gebaut**, 11–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–11 gebaut**, 12–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

@@ -32,6 +32,7 @@ public static class FeedbackPageTabs
         new("oeffentliche-module", "Module & Not-Aus"),
         new("oeffentliche-seiten", "Öffentliche Seiten"),
         new("warnhinweise", "Warnhinweise"),
+        new("oeffentliche-vorlagen", "Öffentliche Vorlagen"),
         new("buerger", "Bürgerkonten"),
         new("basisdaten", "Wertelisten"),
     ];

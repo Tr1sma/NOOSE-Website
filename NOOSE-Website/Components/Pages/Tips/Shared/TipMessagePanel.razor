@@ -1,4 +1,5 @@
 @inject ITipService Tips
+@inject IPublicTemplateService Templates
 @inject TipsBroadcaster Broadcaster
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -47,12 +48,25 @@
         {
             <MudTextField @bind-Value="_draft" Label="@(IsInternal ? "Notiz" : "Nachricht an den Hinweisgeber")"
                           Lines="3" Variant="Variant.Outlined" MaxLength="@TipRules.MaxMessageLength" />
-            <div>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudButton OnClick="SendAsync" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Send">
                     @(IsInternal ? "Notiz speichern" : "Senden")
                 </MudButton>
-            </div>
+                @* the template only fills the field; sending stays a deliberate act *@
+                @if (_templates.Count > 0)
+                {
+                    <MudMenu Label="Vorlage" Variant="Variant.Outlined" Size="Size.Small"
+                             EndIcon="@Icons.Material.Filled.ArrowDropDown">
+                        @foreach (var template in _templates)
+                        {
+                            <MudMenuItem OnClick="@(() => Apply(template))">
+                                @PublicTemplateKindDisplay.Name(template.Kind) · @template.Title
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
+                }
+            </MudStack>
         }
     </MudStack>
 </MudPaper>
@@ -73,7 +87,17 @@
     [Parameter]
     public bool CanWrite { get; set; }
 
+    /// <summary>Fills the AKTENZEICHEN token of a picked template.</summary>
+    [Parameter]
+    public string? CaseNumber { get; set; }
+
+    /// <summary>Fills the BUERGER token; null while the anonymity promise holds, and then the salutation falls back.</summary>
+    [Parameter]
+    public string? CitizenName { get; set; }
+
     private IReadOnlyList<TipMessageRow> _messages = Array.Empty<TipMessageRow>();
+    private IReadOnlyList<PublicTemplateRow> _templates = Array.Empty<PublicTemplateRow>();
+    private bool _templatesLoaded;
     private string _draft = string.Empty;
     private bool _load = true;
     private bool _busy;
@@ -85,6 +109,9 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // before the id guard: CanWrite turns true only when a closed tip moves back, and the guard would then
+        // skip the template load for the life of the component
+        await LoadTemplatesAsync();
         if (_loadedId == TipId)
         {
             return;
@@ -92,6 +119,26 @@
         _loadedId = TipId;
         await LoadAsync();
     }
+
+    private async Task LoadTemplatesAsync()
+    {
+        if (_templatesLoaded || IsInternal || !CanWrite)
+        {
+            return;
+        }
+        _templatesLoaded = true;
+        // both kinds land in one menu: asking back and turning down are the same field
+        try
+        {
+            var follow = await Templates.GetActiveAsync(PublicTemplateKind.HinweisRueckfrage);
+            var refuse = await Templates.GetActiveAsync(PublicTemplateKind.HinweisAblehnung);
+            _templates = follow.Concat(refuse).ToList();
+        }
+        catch { /* ignore */ }
+    }
+
+    private void Apply(PublicTemplateRow template)
+        => _draft = PublicTemplateRenderer.Render(template.Text, new PublicTemplateContext(CitizenName, CaseNumber));
 
     private async Task LoadAsync()
     {

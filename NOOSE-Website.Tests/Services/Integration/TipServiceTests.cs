@@ -83,7 +83,7 @@ public sealed class TipServiceTests
 
         var notifications = Substitute.For<INotificationService>();
         var service = new TipService(factory, modules, new BuergerService(factory), wanted, caseNumbers,
-            storage, notifications, tipPriority, new TipsBroadcaster());
+            storage, notifications, tipPriority, new PublicTemplateService(factory), new TipsBroadcaster());
         return new Host(service, tipPriority, wanted, modules, storage, notifications, cache, factory);
     }
 
@@ -820,5 +820,83 @@ public sealed class TipServiceTests
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => host.Service.GetForLinkedPersonAsync(PersonId, Citizen()));
+    }
+
+    // ---- the automatic confirmation ----
+
+    private static async Task SeedConfirmationAsync(SqliteTestContext ctx, bool active = true)
+    {
+        await new PublicTemplateService(ctx.Factory).SaveAsync(
+            new PublicTemplateInput(null, PublicTemplateKind.HinweisEingang, "Eingang",
+                "Guten Tag BUERGER, Ihr Hinweis AKTENZEICHEN ist eingegangen. Mit Gruss NAME", active, 10),
+            Leader());
+    }
+
+    [Fact]
+    public async Task Submitting_with_an_active_template_confirms_without_naming_an_agent()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        var caseNumber = await SubmitAsync(host);
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        var confirmation = Assert.Single(detail!.Messages, m => !m.FromCitizen);
+        Assert.Contains("Erika Musterfrau", confirmation.Text, StringComparison.Ordinal);
+        Assert.Contains(caseNumber, confirmation.Text, StringComparison.Ordinal);
+        Assert.Contains(PublicTemplateRenderer.Redaction, confirmation.Text, StringComparison.Ordinal);
+
+        await using var db = host.Factory.CreateDbContext();
+        var row = await db.HinweisNachrichten.SingleAsync();
+        Assert.Null(row.AuthorAgentId);
+        Assert.False(row.AuthorIsCitizen);
+        Assert.Equal(TipMessageAudience.Buerger, row.Audience);
+    }
+
+    [Fact]
+    public async Task An_anonymous_tip_is_confirmed_without_the_name()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        var caseNumber = await SubmitAsync(host, anonymous: true);
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        var confirmation = Assert.Single(detail!.Messages, m => !m.FromCitizen);
+        // the promise holds against the agency's own confirmation, not only against the desk projection
+        Assert.Contains(PublicTemplateRenderer.CitizenFallback, confirmation.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Erika", confirmation.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Musterfrau", confirmation.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_confirmation_leaves_the_status_at_new_and_writes_nothing_internally()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        var caseNumber = await SubmitAsync(host);
+        var id = await TipIdAsync(host, caseNumber);
+
+        var tip = await host.Service.GetAsync(id, Leader());
+        Assert.Equal(TipStatus.Neu, tip!.Status);
+        Assert.Equal(1, await host.Service.GetOwnUnreadCountAsync(Citizen()));
+        Assert.Empty(await host.Service.GetMessagesAsync(id, TipMessageAudience.Intern, Leader()));
+    }
+
+    [Fact]
+    public async Task Without_an_active_template_no_confirmation_is_written()
+    {
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx, active: false);
+
+        var caseNumber = await SubmitAsync(host);
+
+        var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
+        Assert.Empty(detail!.Messages);
     }
 }

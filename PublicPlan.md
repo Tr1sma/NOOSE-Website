@@ -111,7 +111,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 8b | Hinweise Übernahme: Akte, Kontoverknüpfung, Gegenaufklärung | `Oeffentlich08_HinweisUebernahme` (nur Seed) | 8a | **fertig** |
 | 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | **fertig** |
 | 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | **fertig** |
-| 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | offen |
+| 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | **fertig** |
 | 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | offen |
 | 13 | Gesuchte Fahrzeuge/Waffen + Einspruch | `Oeffentlich13_FahrzeugeEinspruch` | 4, 1 | offen |
 | 14 | Presse, Lageberichte, Gesetzesauszüge, Warnungen | `Oeffentlich14_Redaktion` | 3 | offen |
@@ -1225,7 +1225,7 @@ und ein Junior-Agent nichts davon sieht.
 
 ---
 
-## Phase 11 — Öffentliche Vorlagen (4. Token-System)
+## Phase 11 — Öffentliche Vorlagen (4. Token-System) ✅
 
 **Ziel:** Vorlagen für jede Art öffentlicher Kommunikation, ohne die drei bestehenden Token-Systeme zu berühren.
 
@@ -1250,6 +1250,72 @@ Dokument-Tokens im öffentlichen Pfad benutzt.
 
 **Fertig, wenn** eine Ticket-Antwort per Vorlage entsteht, der Absender geschwärzt ist und die
 Eingangsbestätigung automatisch kommt.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Klartext, nicht HTML — und das ist der eigentliche Grund, `BewerbungTemplateRenderer` nicht
+   wiederzuverwenden.** Beide Zielspalten (`HinweisNachricht.Text`, `TicketNachricht.Text`) sind Klartext und
+   werden außen als Text gerendert; ein RichTextEditor verspräche Formatierung, die beim Anwenden immer
+   verloren geht. Daraus folgt die konkrete Unverträglichkeit: der Bewerbungs-Renderer `HtmlEncode`t jede
+   Ersetzung, weil ein Anschreiben Markup ist — hier hätte das dem Bürger „Müller &amp;amp; Sohn"
+   zugestellt. Deshalb `PublicTemplateRenderer` mit eigenem Satz und **ohne** Encoding, und ein Test hält
+   genau diese Abweichung fest.
+2. **Fünf Arten, jede mit Konsument.** `TicketEingang`, `TicketAntwort`, `HinweisEingang`,
+   `HinweisRueckfrage`, `HinweisAblehnung`. Der Plantext nannte sechs: `Belohnungszusage` bräuchte einen
+   neuen Schreibpfad in Phase 9 (`RewardService` schickt dem Bürger heute keine Nachricht, nur Glocke und
+   Beleg), `Pressemitteilung` baut Phase 14, die den Entwurfs-Pfad ohnehin mitbringt. Präzedenz `TicketArt`
+   mit einem Wert: keine Vorratswerte, die nichts setzt. Aus demselben Grund fehlt das Token `BETRAG` —
+   ohne Belohnungszusage gäbe es keinen Betrag, und ein nie ersetztes Token geht als Literal nach draußen.
+   Statt der einen `Eingangsbestaetigung` zwei Arten: „Ihr Anliegen" und „Ihr Hinweis" sind zwei Texte.
+3. **Ein Fallback für `BUERGER`, und der anonyme Hinweis ist der Grund dafür.** `TipDetail.CitizenName` ist
+   unter der Zusage `null`; der Renderer bekommt damit baulich nichts, was er ausplaudern könnte, und setzt
+   „Bürger/in". Die Auto-Bestätigung eines anonymen Hinweises fragt dafür `TipAnonymity.IsHidden` — die
+   Zusage gilt **auch gegen die eigene Bestätigung der Behörde**, nicht nur gegen die Bearbeiter-Projektion.
+4. **`NAME` wird geschwärzt, obwohl der Absender außen schon eine Konstante ist.** Die Schwärzung greift auf
+   dem *Textkörper*, in den ein Redakteur „Mit freundlichen Grüßen, NAME" schreibt. Sie läuft **zuerst**,
+   wie im Bewerber-Pfad: dann kann nichts Eingesetztes nachträglich von ihr getroffen werden (ein Bürger
+   namens „NAME Nachname" hat einen Test).
+5. **Die Lesepfade tragen bewusst keinen Guard.** Eine Vorlage ist Behörden-Textbaustein, kein Akteninhalt —
+   und die Auto-Bestätigung wird gelesen, während ein **Bürger** handelt, nicht ein Agent. Ein Guard hätte
+   die Eingangsbestätigung mit `UnauthorizedAccessException` beantwortet. Muster
+   `IDocumentTemplateService.GetActiveAsync` und `ITicketService.GetOpenCountAsync`: der Aufrufer ist das
+   Gate. Geschrieben wird nur über `Permission.RequirePublicTemplateWrite` (interner Agent + Schreibrecht +
+   Führung, Schreibprüfung **vor** der Rangprüfung — Präzedenz Phase 6/9/10).
+6. **Tokens bleiben beim Speichern roh; Fremdtokens werden abgewiesen, nicht halb expandiert.** Sie *sind*
+   hier die Nutzlast (Hausregel, gilt schon für alle drei bestehenden Systeme). Beim Speichern prüft
+   `HasForeignToken` auf `{{…}}`, Erwähnungen, `BEWERBER` und `DIENSTGRAD` — `DATUM`/`UHRZEIT` teilt sich der
+   Satz bewusst mit dem Bewerber-Pfad, gleiche Schreibweise, gleiche Bedeutung, und dieser Renderer füllt
+   sie. **`MentionParser.Parse` ist dabei der richtige Aufruf**, wie in `WarnhinweisService` und
+   `PublicWantedService`: verboten ist das *Auflösen* im öffentlichen Pfad, nicht das Ablehnen.
+7. **Die Auto-Bestätigung bewegt keinen Status und läutet nicht.** Ein Ticket bleibt `Offen`, ein Hinweis
+   bleibt `Neu` — sonst behauptete der Status Arbeit, die niemand getan hat (Phase-10-Regel).
+   `PublicTicketAnswered`/`PublicTipAnswered` sind für eine echte Antwort; der Bürger steht in derselben
+   Sekunde auf der Seite, und der Ungelesen-Zähler zeigt die Bestätigung von selbst. Geschrieben wird sie in
+   **derselben** Transaktion wie Akte und erste Nachricht: eine Bestätigung ohne Vorgang ist damit baulich
+   unmöglich. Die Vorlage wird **vor** der Transaktion gelesen (ein Lesen gehört nicht hinein).
+8. **Ohne aktive Vorlage passiert nichts.** Kein Fallback-Text im Code, keine leere Zeile — deshalb ist der
+   Aktiv-Schalter auch der Aus-Schalter für die Bestätigung. `PublicTemplateSeeder` legt je Art eine deutsche
+   Startvorlage an, aber **nur solange die Tabelle ganz leer ist**: Muster `WarnhinweisSeeder`, nicht
+   `PublicModuleSeeder` — ein Modulschlüssel lebt im Code und ist nicht löschbar, eine Vorlage gehört dem
+   Betreiber, und per-Art-Seeding würde eine gelöschte bei jedem Neustart wiederbeleben. Die geseedeten Texte
+   laufen im Test durch dieselben Prüfungen wie ein handgeschriebener.
+9. **`PublicTemplateRules.MaxLength` ist abgeleitet, nicht gesetzt:** `TicketRules.MaxMessageLength` minus
+   Reserve für die Ersetzungen. Was gespeichert wird, muss gerendert noch in eine Nachricht passen; zwei
+   Zahlen wären Drift (Präzedenz `TipRules.PerDay == TipTrust.DailyQuota(1)`).
+10. **Kein `PublicModules`-Schlüssel.** Vorlagen sind interne Konfiguration, keine öffentliche Fläche. Ein
+    Modul-Gate hätte die Bestätigung an einen Schalter gehängt, der schon den ganzen Kanal abschaltet.
+11. **`FeedbackPageTabs` ist die sechste Registry, die ein neuer `/einstellungen`-Abschnitt braucht.** Der
+    Plan zählte fünf (`PublicVisibility`, `SearchCatalog`, `AuditEntityDisplay`, `MergedPageSections`,
+    `WatchlistRecordRollup`); rot wurde `FeedbackPageTabsTests`, das jeden `MergedPageSections`-Slug im
+    Feedback-Picker verlangt. Kein Papierkorb-Eintrag dagegen: Konfigurationstabelle, Präzedenz
+    `Warnhinweis` und `DocumentTemplate` (beide `ISoftDelete` und trotzdem nicht im globalen Papierkorb) —
+    der gedachte Weg zum Zurückziehen ist `IstAktiv = false`, und der Dialog sagt es.
+12. **Der Datei-Scan streicht Kommentare, bevor er sucht.** Die Regel gilt für Code; die Sätze, die
+    *erklären*, warum der Bewerbungs-Renderer nicht wiederverwendet wird, müssen ihn nennen dürfen — sonst
+    löscht der nächste Leser den Kommentar, um den Test grün zu machen. Aus demselben Grund steht
+    `MentionParser` nicht auf der Liste (siehe 6.), und gesucht wird nach den *Diensten*
+    (`IDocumentTemplateService`, `IPlaceholderService`, …) statt nach dem Entitätsnamen `DocumentTemplate`,
+    der in `PublicVisibility` als Registrierungs-Schlüssel steht.
 
 ---
 

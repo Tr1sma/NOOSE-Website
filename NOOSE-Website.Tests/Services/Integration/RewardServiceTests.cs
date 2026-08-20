@@ -89,7 +89,7 @@ public sealed class RewardServiceTests
 
         var storage = Substitute.For<ITipAttachmentStorageService>();
         var tips = new TipService(factory, modules, buerger, wanted, caseNumbers, storage, notifications,
-            tipPriority, new TipsBroadcaster());
+            tipPriority, new PublicTemplateService(factory), new TipsBroadcaster());
         var reward = new RewardService(factory, kasse, caseNumbers, tips, buerger, wanted, tipPriority, modules);
         return new Host(reward, bounty, tips, wanted, kasse, cache, factory);
     }
