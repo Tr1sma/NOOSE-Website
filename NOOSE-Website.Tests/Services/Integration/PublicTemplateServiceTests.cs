@@ -184,11 +184,22 @@ public sealed class PublicTemplateServiceTests
         {
             Assert.NotNull(await service.GetAutomaticAsync(kind));
         }
-        // the seeded texts have to survive the same checks a hand-written one does
+        // the seeded texts have to survive the same checks a hand-written one does — the seeder adds rows
+        // directly, so SaveAsync never sees them
         foreach (var row in seeded)
         {
             Assert.False(PublicTemplateRenderer.HasForeignToken(row.Text));
             Assert.InRange(row.Text.Length, PublicTemplateRules.MinLength, PublicTemplateRules.MaxLength);
+            Assert.True(row.Title.Length <= PublicTemplateRules.TitleMaxLength);
+            // raw string literals keep whatever indentation the closing delimiter does not strip, and a
+            // citizen would read it as a broken letter
+            Assert.DoesNotContain(row.Text.ReplaceLineEndings("\n").Split('\n'),
+                line => line.StartsWith(' ') || line.StartsWith('\t'));
+            Assert.Contains("BUERGER", row.Text, StringComparison.Ordinal);
+            Assert.Contains("AKTENZEICHEN", row.Text, StringComparison.Ordinal);
+            // an interpolation hole left unfilled would ship "{TicketRules.AgencySender}" to the citizen, and
+            // the foreign-token check only looks at doubled braces
+            Assert.DoesNotContain("{", row.Text, StringComparison.Ordinal);
         }
 
         // a deleted template stays deleted: seeding tops up nothing once a row exists

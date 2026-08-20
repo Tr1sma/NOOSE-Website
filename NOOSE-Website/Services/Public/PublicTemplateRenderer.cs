@@ -48,7 +48,9 @@ public static partial class PublicTemplateRenderer
     /// </remarks>
     public static bool HasForeignToken(string? text)
         => !string.IsNullOrEmpty(text)
-            && (PlaceholderToken().IsMatch(text)
+            // the bare opener, exactly like WarnhinweisService: "{{Name" without its closing pair is not a token
+            // of this system either, and it would travel to the citizen verbatim
+            && (text.Contains("{{", StringComparison.Ordinal)
                 || MentionParser.Parse(text).Count > 0
                 || RecruitingToken().IsMatch(text));
 
@@ -70,9 +72,6 @@ public static partial class PublicTemplateRenderer
 
     [GeneratedRegex(@"\bNAME\b")]
     private static partial Regex NameToken();
-
-    [GeneratedRegex(@"\{\{[^}]*\}\}")]
-    private static partial Regex PlaceholderToken();
 
     [GeneratedRegex(@"\b(BEWERBER|DIENSTGRAD)\b")]
     private static partial Regex RecruitingToken();

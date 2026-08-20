@@ -87,6 +87,8 @@ public class PublicTemplateRendererTests
 
     [Theory]
     [InlineData("Hallo {{Name}}")]
+    // the bare opener too: it would be delivered verbatim, and WarnhinweisService rejects it the same way
+    [InlineData("Hallo {{Name ohne Ende")]
     [InlineData("Siehe @{Person:11111111-1111-1111-1111-111111111111}")]
     [InlineData("Lieber BEWERBER")]
     [InlineData("Ihr DIENSTGRAD")]

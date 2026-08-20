@@ -926,7 +926,12 @@ public class TipService(
                 g => g.Key,
                 g =>
                 {
-                    var newest = g.OrderByDescending(r => r.CreatedAt).First();
+                    // the audit interceptor stamps one timestamp per SaveChanges, so the opening message and an
+                    // automatic confirmation are simultaneous by construction: on a tie the citizen line is the
+                    // event, and without this tie-break the newest row would be whatever the database returned first
+                    var newest = g.OrderByDescending(r => r.CreatedAt)
+                        .ThenByDescending(r => r.AuthorIsCitizen)
+                        .First();
                     return (newest.CreatedAt, newest.AuthorIsCitizen);
                 });
     }

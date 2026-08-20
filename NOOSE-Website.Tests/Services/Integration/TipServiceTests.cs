@@ -899,4 +899,24 @@ public sealed class TipServiceTests
         var detail = await host.Service.GetOwnDetailAsync(caseNumber, Citizen());
         Assert.Empty(detail!.Messages);
     }
+
+    [Fact]
+    public async Task The_confirmation_does_not_shadow_a_real_citizen_message()
+    {
+        // unlike a ticket, a tip carries its own text on the record and starts with an empty thread, so a fresh
+        // one never awaited an answer. What must hold is that the confirmation neither claims one nor hides the
+        // citizen's later reply — the two would share a timestamp if they ever landed in one SaveChanges.
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        var caseNumber = await SubmitAsync(host);
+        var fresh = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Leader());
+        Assert.False(fresh[0].AwaitingAnswer);
+
+        await host.Service.ReplyAsCitizenAsync(caseNumber, "Ich habe noch ein Foto vom Fahrzeug.", Citizen());
+
+        var after = await host.Service.GetInboxAsync(TipInboxScope.Eingang, null, false, Leader());
+        Assert.True(after[0].AwaitingAnswer);
+    }
 }

@@ -629,4 +629,21 @@ public sealed class TicketServiceTests
         Assert.Empty(await host.Service.GetMessagesAsync(await IdAsync(host, caseNumber),
             TicketMessageAudience.Intern, Leader()));
     }
+
+    [Fact]
+    public async Task A_fresh_ticket_still_awaits_an_answer_although_the_confirmation_is_newer()
+    {
+        // the audit interceptor stamps one timestamp per SaveChanges, so the opening message and the automatic
+        // confirmation are simultaneous — without the tie-break the desk chip would go dark on every new ticket
+        using var ctx = await SeededAsync();
+        var host = NewHost(ctx);
+        await SeedConfirmationAsync(ctx);
+
+        await OpenAsync(host);
+
+        var open = await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader());
+        Assert.True(open[0].AwaitingAnswer);
+        // and the desk's own unread counter ignores the agency line
+        Assert.Equal(1, open[0].UnreadCount);
+    }
 }
