@@ -44,6 +44,8 @@ public static class AuditEntityDisplay
         "Hinweis" => "Bürgerhinweis",
         "HinweisNachricht" => "Hinweis-Nachricht",
         "HinweisBelohnung" => "Hinweis-Belohnung",
+        "Ticket" => "Bürger-Ticket",
+        "TicketNachricht" => "Ticket-Nachricht",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -87,6 +89,9 @@ public static class AuditEntityDisplay
         "HinweisBelohnung" => "/fahndung?tab=oeffentlich",
         // a message has no page; point at the tip that carries the conversation is impossible from here, so the inbox
         "HinweisNachricht" => "/hinweise",
+        "Ticket" => $"/tickets/{id}",
+        // same as the tip message: the row has no page, so the desk it belongs to
+        "TicketNachricht" => "/tickets",
         _ => null,
     };
 }

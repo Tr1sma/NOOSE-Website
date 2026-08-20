@@ -417,4 +417,65 @@ public sealed class MySqlTranslationTests : IDisposable
 
         Assert.Contains("PersonId", sql, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheTicketDeskProjection_TranslatesItsSearchAndItsTwoNavigations()
+    {
+        var sql = _db.Tickets.AsNoTracking()
+            .Where(TicketRules.ScopeFilter(TicketInboxScope.Offen))
+            .Where(t => t.CaseNumber.Contains("T-2026")
+                || t.Subject.Contains("T-2026")
+                || t.CitizenProfile!.FirstName.Contains("T-2026")
+                || t.CitizenProfile!.LastName.Contains("T-2026"))
+            .OrderByDescending(t => t.LastActivityAt)
+            .Select(t => new
+            {
+                t.Id,
+                FirstName = t.CitizenProfile!.FirstName,
+                HandlerCodename = t.Handler!.Codename,
+            })
+            .ToQueryString();
+
+        Assert.Contains("LetzteAktivitaetAm", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTicketOpenCap_TranslatesTheOpenRowsPredicate()
+    {
+        // the cap runs the same expression the badge counts with; an untranslatable one would break opening
+        var sql = _db.Tickets.AsNoTracking()
+            .Where(t => t.CitizenProfileId == "profil1")
+            .Where(TicketRules.OpenRows)
+            .ToQueryString();
+
+        Assert.Contains("Status", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTicketDailyCap_TranslatesWithTheSoftDeleteFilterOff()
+    {
+        // IgnoreQueryFilters is what keeps deleting from refilling the quota
+        var since = new DateTime(2026, 8, 19, 12, 0, 0, DateTimeKind.Utc);
+        // projected to one column, like the Count the service runs: an entity query lists every column, and
+        // the soft-delete flag would then show up in the SELECT rather than in the WHERE this asserts about
+        var sql = _db.Tickets.IgnoreQueryFilters()
+            .Where(t => t.CitizenProfileId == "profil1" && t.CreatedAt >= since)
+            .Select(t => t.Id)
+            .ToQueryString();
+
+        Assert.DoesNotContain("IstGeloescht", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTicketUnreadLookup_TranslatesItsAudienceAndSideFilter()
+    {
+        var ids = new List<string> { "t1" };
+        var sql = _db.TicketNachrichten.AsNoTracking()
+            .Where(m => ids.Contains(m.TicketId) && m.Audience == TicketMessageAudience.Buerger
+                && m.AuthorIsCitizen == false)
+            .Select(m => new { m.TicketId, m.CreatedAt })
+            .ToQueryString();
+
+        Assert.Contains("VonBuerger", sql, StringComparison.Ordinal);
+    }
 }

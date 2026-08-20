@@ -88,8 +88,9 @@ public static class PublicModules
         // no nav route: a receipt is opened from the tip it belongs to, not from a tab
         new(Reward, "Belohnung", "Auszahlung und Belege für bestätigte Hinweise.",
             Icons.Material.Filled.Redeem, null, PublicModuleGroup.Service, 210, false, true, OffGeneric),
+        // no nav route: a ticket is opened inside the citizen area, not from a public tab
         new(Tickets, "Ticket-Chat", "Anliegen an die Führungsebene im Bürgerbereich.",
-            Icons.Material.Filled.Forum, null, PublicModuleGroup.Service, 220, false, false,
+            Icons.Material.Filled.Forum, null, PublicModuleGroup.Service, 220, false, true,
             "Der Ticket-Chat ist derzeit geschlossen."),
         new(Objection, "Einspruch", "Widerspruch gegen eine öffentliche Ausschreibung.",
             Icons.Material.Filled.Balance, null, PublicModuleGroup.Service, 230, false, false, OffGeneric),

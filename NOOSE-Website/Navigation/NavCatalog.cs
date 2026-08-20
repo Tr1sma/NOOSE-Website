@@ -110,6 +110,9 @@ public static class NavCatalog
             Description: "NOOSE-Kasse: Schwarz- und Grüngeld buchen, Vorlagen und Statistik"),
         new NavEntry("einstellungen", "/einstellungen", Icons.Material.Filled.SettingsApplications, "Einstellungen", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "System, Vorlagen, Tags, Score, Partner und Protokoll an einer Stelle"),
+        new NavEntry("tickets", "/tickets", Icons.Material.Filled.Forum, "Bürger-Tickets",
+            NavSection.VerwaltungFuehrung, NavArea.Verwaltung, BadgeKey: "tickets",
+            Description: "Anliegen von Bürgern an die Führungsebene: Schriftwechsel und Abschluss"),
         new NavEntry("papierkorb", "/papierkorb", Icons.Material.Filled.Delete, "Papierkorb", NavSection.VerwaltungFuehrung, NavArea.Verwaltung,
             Description: "Gelöschte Akten aller Typen wiederherstellen"),
     };

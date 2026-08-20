@@ -247,6 +247,8 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<Hinweis> Hinweise => Set<Hinweis>();
     public DbSet<HinweisNachricht> HinweisNachrichten => Set<HinweisNachricht>();
     public DbSet<HinweisBelohnung> HinweisBelohnungen => Set<HinweisBelohnung>();
+    public DbSet<Ticket> Tickets => Set<Ticket>();
+    public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1801,6 +1803,39 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(m => m.AuthorAgentId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(m => new { m.HinweisId, m.Audience });
             b.HasIndex(m => new { m.HinweisId, m.CreatedAt });
+        });
+
+        modelBuilder.Entity<Ticket>(b =>
+        {
+            b.Property(t => t.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(t => t.CitizenProfileId).HasMaxLength(64);
+            b.Property(t => t.Subject).HasMaxLength(160).IsRequired();
+            b.Property(t => t.HandlerId).HasMaxLength(64);
+            b.Property(t => t.ClosedById).HasMaxLength(64);
+            // Restrict throughout: a ticket outlives the account and the handler it names
+            b.HasOne(t => t.CitizenProfile).WithMany()
+                .HasForeignKey(t => t.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(t => t.Handler).WithMany()
+                .HasForeignKey(t => t.HandlerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(t => t.CaseNumber).IsUnique();
+            // the desk order: newest activity first within a status tab
+            b.HasIndex(t => new { t.Status, t.LastActivityAt });
+            // both caps of the quota read these
+            b.HasIndex(t => new { t.CitizenProfileId, t.Status });
+            b.HasIndex(t => new { t.CitizenProfileId, t.CreatedAt });
+        });
+
+        modelBuilder.Entity<TicketNachricht>(b =>
+        {
+            b.Property(m => m.TicketId).HasMaxLength(64);
+            b.Property(m => m.AuthorAgentId).HasMaxLength(64);
+            b.Property(m => m.Text).HasColumnType("longtext");
+            b.HasOne(m => m.Ticket).WithMany()
+                .HasForeignKey(m => m.TicketId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(m => m.AuthorAgent).WithMany()
+                .HasForeignKey(m => m.AuthorAgentId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(m => new { m.TicketId, m.Audience });
+            b.HasIndex(m => new { m.TicketId, m.CreatedAt });
         });
 
         // global soft-delete filter

@@ -447,6 +447,12 @@ public static class SearchCatalog
                 + "Bearbeiter-Prüfung vorbei lesbar.",
             ["HinweisBelohnung"] = "Auszahlung an einen Hinweisgeber; gesucht wird der Hinweis oder die "
                 + "Kassenbuchung. Eine durchsuchbare Geldliste müsste zusätzlich die Anonymitätszusage tragen.",
+            ["Ticket"] = "Bürgeranliegen an die Führungsebene; bearbeitet wird es am Schalter unter "
+                + "/tickets. Ein eigener Provider kommt mit der Suchanbindung des öffentlichen Bereichs — er "
+                + "müsste zusätzlich das Führungs-Gate tragen, das bisher nur der Schalter kennt.",
+            ["TicketNachricht"] = "Schriftwechsel eines Tickets; gefunden wird das Ticket, nicht die "
+                + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst am "
+                + "Führungs-Gate vorbei lesbar.",
         };
 
     private static readonly Dictionary<string, SearchCategory> ByClr =

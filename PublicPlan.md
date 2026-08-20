@@ -110,7 +110,7 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 8a | Hinweise Triage: Dubletten, Priorität, Vertrauensstufe | `Oeffentlich08_HinweisTriage` (nur Indizes) | 7 | **fertig** |
 | 8b | Hinweise Übernahme: Akte, Kontoverknüpfung, Gegenaufklärung | `Oeffentlich08_HinweisUebernahme` (nur Seed) | 8a | **fertig** |
 | 9 | Belohnung: Split-Zuordnung, Auszahlung, Beleg | `Oeffentlich09_Belohnung` | 6, 7 | **fertig** |
-| 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | offen |
+| 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | **fertig** |
 | 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | offen |
 | 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | offen |
 | 13 | Gesuchte Fahrzeuge/Waffen + Einspruch | `Oeffentlich13_FahrzeugeEinspruch` | 4, 1 | offen |
@@ -1116,7 +1116,7 @@ Buchungen zeigt und beide Bürger ihren Beleg drucken können.
 
 ---
 
-## Phase 10 — Ticket-Chat
+## Phase 10 — Ticket-Chat ✅
 
 **Ziel:** Das öffentliche Discord-Ticketsystem ist ersetzt.
 
@@ -1144,6 +1144,70 @@ verhindert die Antwort · Bürger-Projektion ohne Autor · Broadcaster erreicht 
 
 **Fertig, wenn** ein Bürger ein Ticket öffnet, die Führung live antwortet, der Absender außen konstant ist
 und ein Junior-Agent nichts davon sieht.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Ein Ticket hängt an keiner Akte, und das entscheidet fünf Registrierungen.** Es ist Schriftwechsel, kein
+   Aktenmaterial: kein Fall in `TimelineService.AuditSourceAsync`, kein Titel in `TimelineDisplay.MapAudit`, kein
+   Eintrag im `ChronikParentResolver`, keine Zeile in `RecordsReference`/`LinkService`. Registriert ist es dort, wo
+   die Zugehörigkeit zu einer Akte keine Rolle spielt: `PublicVisibility` (beide Tabellen `NeverPublic`),
+   `SearchCatalog` (`NotSearchable`, Provider kommt mit Phase 16), `AuditEntityDisplay` (Label **und** Route),
+   `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` und `MergedPageSections.Trash`.
+2. **Zwei Guards, und `MayClassifiedRead` ist die Service-Seite von `Policies.LeadershipPage`.**
+   `Permission.RequireTicketRead` = interner Agent **und** `MayClassifiedRead()` — also Führung *oder*
+   Nur-Lese-Aufsicht, exakt die Menge, die die Seiten-Policy hereinlässt. `RequireTicketHandling` legt `MayWrite()`
+   darüber, und zwar **vor** der Rangprüfung (Präzedenz Phase 6/9): `RequireLeadership` allein ließe Aufsicht und
+   Demo-Principal Aktenzeichen prägen, bevor der `ReadOnlyBarrierInterceptor` das Speichern verweigert.
+   `IsInternalAgent()` steht davor, weil ein angemeldetes Bürgerkonto überhaupt keinen Rang-Claim trägt.
+3. **Der Absender nach außen ist eine Konstante, keine Bedingung in der UI.** `TicketRules.AgencySender`
+   („NOOSE – Führungsebene") steht einmal; eine Antwort der Führung wird mit `AutorAgentId = null` geschrieben, und
+   `CitizenTicketMessage` hat **kein** Autorfeld. Zwei Schichten wie beim Kopfgeld: die bauliche und ein Dateiscan
+   (`PublicSurfaceGuardTests.NoCitizenPage_NamesTheHandlerSideOfAConversation`) über `Components/Pages/Portal/` —
+   eine Bürgerseite könnte den Dienst auch selbst nach der Bearbeiter-Projektion fragen. Der Scan matcht **ganze
+   Bezeichner**: `CitizenTicketDetail` enthält `TicketDetail`, ein Teilstring-Treffer hätte genau die Typen
+   gemeldet, die die Zusage einhalten. Deshalb liegt auch der Öffnen-Dialog unter `Pages/Portal/Shared/` und nicht
+   in `Common/Shared` — der Ordner **ist** die Grenze des Wächters.
+4. **Zwei unabhängige Deckel, und nur einer ignoriert den Soft-Delete.** `MaxOpen = 2` zählt lebende Zeilen
+   (`TicketRules.OpenRows`), `PerDay = 3` zählt mit `IgnoreQueryFilters` über 24 Stunden. Die Asymmetrie ist
+   gewollt: löscht die Führung ein missbräuchliches Ticket, bekommt der Bürger den Platz zurück, sein
+   Tageskontingent bleibt verbraucht. Beide Deckel sitzen im Dienst, nicht in der Middleware — das Öffnen läuft
+   über SignalR und erreicht `UseRateLimiter` nie (Präzedenz `TipRules.PerDay`).
+5. **Geschlossen ist geschlossen.** Eine Antwort des Bürgers auf ein abgeschlossenes Ticket wird abgewiesen statt
+   es wiederzueröffnen; `TicketRules.IsTransitionAllowed` erlaubt `Geschlossen → InBearbeitung` nur der Führung,
+   und bewusst nicht zurück auf `Offen` — gelesen hat es zu diesem Zeitpunkt jemand. Wiedereröffnen räumt
+   `GeschlossenAm` und `GeschlossenVonId` ab: die beiden Felder beschreiben die *aktuelle* Schließung, nicht
+   deren Geschichte.
+6. **Automatisch bewegen sich genau zwei Kanten.** Eine Antwort der Führung schaltet auf `WartetAufBuerger`, eine
+   Antwort des Bürgers von dort zurück auf `InBearbeitung`. Ein **unangetastetes** Ticket bleibt `Offen`, auch wenn
+   der Bürger nachträgt — sonst behauptete der Status, jemand arbeite daran. Ein Auto-Schluss wartender Tickets ist
+   bewusst nicht gebaut; er wäre ein eigener Worker samt Idempotenz-Token (Präzedenz `PublicWantedExpiryWorker`).
+7. **Lesestände per `ExecuteUpdateAsync`, `LetzteAktivitaetAm` getrackt.** Lesen ist keine Änderung (Präzedenz
+   `MarkCitizenReadAsync` bei den Hinweisen); der Aktivitätsstempel dagegen reitet auf dem Statuswechsel mit, der
+   ihn verursacht hat. Anders als bei einem Hinweis ist das unschädlich: ein Ticket hängt an keiner Akte, also
+   verschmutzt ein `GeaendertAm` keinen Zeitstrahl, und `TicketNachricht` ist ohnehin `IAuditable`. Je Seite ein
+   eigener Stempel — die Aufsicht setzt **keinen** (`MayWrite()`-Prüfung im Dienst, nicht erst im Interceptor).
+8. **Beide Benachrichtigungen sind nicht routbar.** `NotifyManyAsync` pusht jede routbare Kategorie in den
+   öffentlichen Discord-Kanal, und das Anliegen eines namentlich bekannten Bürgers gehört dort nicht hin. Beim
+   Bürger klingelt es nur bei `WartetAufBuerger` und `Geschlossen`: ein interner Sprung von `Offen` auf
+   `InBearbeitung` ist Nachricht an den Schalter, nicht an ihn.
+9. **Die Papierkorb-Zeile nennt Betreff und Status, nicht den Bürger und nicht den Schriftwechsel** (Muster
+   `TrashProjection.Tip`). `/papierkorb` hängt an `Policies.LeadershipPage`, liest also dieselbe Audienz — der
+   Faden selbst gehört trotzdem den beiden Beteiligten.
+10. **`TicketBroadcaster` trägt zwei Handles**, nicht eines: der Schalter kennt die Zeilen-Id, die Bürgerseite nur
+    das Aktenzeichen. Ohne das zweite müsste jeder Bürger-Circuit bei **jeder** Ticketänderung im Haus neu laden,
+    um herauszufinden, ob es das eigene war. Er heißt nach seiner Domäne (`Infrastructure/Chat/`, Muster
+    `TipsBroadcaster`) und nicht `PublicChatBroadcaster` — ein Sammelname verspricht einen zweiten öffentlichen Chat.
+11. **`TicketArt` hat genau einen Wert.** Die Spalte existiert, damit eine zweite Art ein Enum-Wert und keine
+    Migration ist; Vorratswerte wie bei `PublicWantedKind` gibt es nicht, weil keine spätere Phase eine zweite Art
+    nennt — sie wären toter Code hinter dem Fallback-Arm.
+12. **Der Not-Aus stoppt neue Anliegen, er strandet keine laufenden.** `OpenAsync` fragt das Modul als **erstes**
+    (ob dieses Konto einreichen dürfte, ist bei geschlossenem Schalter niemandes Sache), `GetOwnDetailAsync` und
+    `ReplyAsCitizenAsync` fragen es nie — sonst schlösse ein Schalterdreh Menschen aus einem Gespräch aus, das die
+    Behörde selbst begonnen hat (Präzedenz Phase 7).
+13. **Der Nav-Eintrag ist der Zugangsschutz, nicht eine zweite Prüfung.** `NavSection.VerwaltungFuehrung` **ist**
+    `Policies.LeadershipPage` (`NavSectionPolicy.For`), also ist „ein Junior-Agent sieht nichts davon" eine
+    Katalog-Eigenschaft. Das Badge (`BadgeKey: "tickets"`) zählt laufende Tickets ohne Guard — die Zahl steht in
+    einem Eintrag, den nur diese Policy überhaupt rendert.
 
 ---
 

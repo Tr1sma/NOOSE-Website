@@ -107,6 +107,12 @@ public static class TrashProjection
         => new("hinweise", x.Id, x.CaseNumber, $"Bürgerhinweis {x.CaseNumber}",
             TipStatusDisplay.Name(x.Status), x.DeletedAt);
 
+    // the subject travels, the conversation does not: the trash page is a list, and the thread is the part
+    // that belongs to the two people having it
+    public static TrashItem Ticket(Data.Entities.Public.Ticket x)
+        => new("tickets", x.Id, x.CaseNumber, x.Subject,
+            TicketStatusDisplay.Name(x.Status), x.DeletedAt);
+
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");
 

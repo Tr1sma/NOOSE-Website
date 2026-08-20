@@ -456,12 +456,12 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–9 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
+Gebaut sind Phase 1–10 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
 öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
 Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
-Übernahme) und die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger).
-Tickets, Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre
-Modul-Schlüssel existieren schon und stehen auf „aus".
+Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger) und der Ticket-Chat an die
+Führungsebene. Presse, öffentliche Vorlagen und die öffentlichen Zahlen sind geplant, aber **nicht**
+vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -939,6 +939,44 @@ Modul-Schlüssel existieren schon und stehen auf „aus".
     `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `AuditEntityDisplay` und
     `ChronikParentResolver`; **nicht** im `WatchlistRecordRollup` (statische Map ohne Datenbank — beobachtbar ist
     das Gefasst-Setzen).
+- **Phase 10 (Ticket-Chat) — was daran anders ist:**
+  - **Ein Ticket hängt an keiner Akte.** Es ist Schriftwechsel, kein Aktenmaterial: **kein** Eintrag in
+    `TimelineService.AuditSourceAsync`, `TimelineDisplay.MapAudit`, `ChronikParentResolver`, `RecordsReference`
+    oder `LinkService` — es gibt keinen Elternteil, auf den es fan-in könnte. Registriert ist es in
+    `PublicVisibility`, `SearchCatalog` (`NotSearchable`, Provider mit Phase 16), `AuditEntityDisplay`
+    (Label **und** Route), `WatchlistRecordRollup` („not watchable"), `TrashService`/`TrashProjection` und
+    `MergedPageSections.Trash`.
+  - **`MayClassifiedRead` ist die Service-Seite von `Policies.LeadershipPage`.** `Permission.RequireTicketRead`
+    = `IsInternalAgent() && MayClassifiedRead()`, also Führung *oder* Nur-Lese-Aufsicht — genau die Menge, die
+    die Seiten-Policy hereinlässt. `RequireTicketHandling` legt `MayWrite()` darüber, **vor** der Rangprüfung
+    (Präzedenz Phase 6/9), damit Aufsicht und Demo-Principal nicht erst ein Aktenzeichen prägen.
+    `IsInternalAgent()` steht davor, weil ein Bürgerkonto überhaupt keinen Rang-Claim trägt.
+  - **Der Absender außen ist eine Konstante** (`TicketRules.AgencySender`), kein UI-Zweig: die Bürger-Zeile wird
+    mit `AutorAgentId = null` geschrieben, und `CitizenTicketMessage` hat kein Autorfeld. Zweite Schicht ist ein
+    Dateiscan über `Components/Pages/Portal/` (`PublicSurfaceGuardTests`), der auf **ganze Bezeichner** matcht —
+    `CitizenTicketDetail` enthält `TicketDetail`, ein Teilstring-Treffer meldete die Typen, die die Zusage
+    einhalten. Der Öffnen-Dialog liegt deshalb unter `Pages/Portal/Shared/`: der Ordner ist die Grenze des Wächters.
+  - **Zwei Deckel, nur einer ignoriert den Soft-Delete.** `MaxOpen = 2` zählt lebende Zeilen
+    (`TicketRules.OpenRows`), `PerDay = 3` zählt mit `IgnoreQueryFilters` — Löschen gibt den Platz zurück, nicht
+    das Tageskontingent. Beide im Dienst, nicht in der Middleware: das Öffnen läuft über SignalR.
+  - **Geschlossen ist geschlossen.** Die Bürger-Antwort auf ein abgeschlossenes Ticket wird abgewiesen, nur die
+    Führung öffnet wieder (`Geschlossen → InBearbeitung`, nie zurück auf `Offen`). Wiedereröffnen räumt
+    `GeschlossenAm`/`GeschlossenVonId` — die Felder beschreiben die aktuelle Schließung, nicht ihre Geschichte.
+    Automatisch bewegen sich nur zwei Kanten (Führung antwortet ⇒ `WartetAufBuerger`, Bürger antwortet von dort
+    ⇒ `InBearbeitung`); ein **unangetastetes** Ticket bleibt `Offen`, sonst behauptete der Status Arbeit.
+  - **Lesestände per `ExecuteUpdateAsync`, `LetzteAktivitaetAm` getrackt.** Der Stempel reitet auf dem
+    Statuswechsel mit, der ihn verursacht — anders als bei einem Hinweis unschädlich, weil kein Zeitstrahl daran
+    hängt. Je Seite ein eigener Lesestand; die Aufsicht setzt keinen (`MayWrite()` im Dienst, nicht erst im
+    Interceptor).
+  - **`PublicTicketOpened`/`PublicTicketAnswered` sind nicht routbar** — eine Ticketmeldung im öffentlichen Kanal
+    nennt einen namentlich bekannten Bürger. Beim Bürger klingelt es nur bei `WartetAufBuerger` und `Geschlossen`.
+  - **`TicketBroadcaster` trägt Zeilen-Id *und* Aktenzeichen:** der Schalter adressiert über die Id, die
+    Bürgerseite nur über das Aktenzeichen — ohne das zweite Handle lädt jeder Bürger-Circuit bei jeder
+    Ticketänderung im Haus neu. **`TicketArt` hat genau einen Wert**; die Spalte existiert, damit eine zweite Art
+    ein Enum-Wert und keine Migration ist.
+  - **Der Nav-Eintrag ist der Zugangsschutz:** `NavSection.VerwaltungFuehrung` **ist** `Policies.LeadershipPage`,
+    also ist „ein Junior-Agent sieht nichts davon" eine Katalog-Eigenschaft. Die Papierkorb-Zeile nennt Betreff
+    und Status, nie den Bürger oder den Schriftwechsel.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -968,7 +1006,7 @@ Modul-Schlüssel existieren schon und stehen auf „aus".
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–9 gebaut**, 10–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–10 gebaut**, 11–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

@@ -37,6 +37,9 @@ public class PublicWantedModelTests
         typeof(CitizenTipMessage),
         typeof(CitizenRewardRow),
         typeof(CitizenRewardReceipt),
+        typeof(CitizenTicketRow),
+        typeof(CitizenTicketDetail),
+        typeof(CitizenTicketMessage),
     ];
 
     /// <summary>Types that never reach an anonymous page, each with the reason.</summary>
@@ -77,6 +80,11 @@ public class PublicWantedModelTests
         [typeof(RewardPayoutInput)] = "Formulareingabe des Auszahlungs-Dialogs; trägt Zeilen-Ids.",
         [typeof(RewardTipAmount)] = "Eine Zeile der Verteilung; trägt die Zeilen-Id des Hinweises.",
         [typeof(TipRewardTarget)] = "Übergabewert zwischen Auszahlung und Nachlauf; trägt Zeilen-Ids.",
+        [typeof(TicketRow)] = "Zeile des Führungs-Schalters; nennt Bürger und Bearbeiter.",
+        [typeof(TicketDetail)] = "Ein Ticket in der Bearbeitung, inklusive Sperrstatus des Bürgerkontos.",
+        [typeof(TicketMessageRow)] = "Nachricht mit Autor; die interne Zielgruppe verlässt das Haus nie.",
+        [typeof(TicketInboxCounts)] = "Zähler der Schalter-Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
+        [typeof(TicketInput)] = "Formulareingabe des Ticket-Dialogs.",
     };
 
     /// <summary>Anything that names an agent, a record id or an internal identifier.</summary>

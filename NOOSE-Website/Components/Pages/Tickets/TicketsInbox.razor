@@ -1,0 +1,25 @@
+@page "/tickets"
+@attribute [Authorize(Policy = Policies.LeadershipPage)]
+
+@* The desk that replaces the public Discord ticket. Leadership only, and the read-only supervision reads it. *@
+
+<PageTitle>Bürger-Tickets · NOOSE</PageTitle>
+
+<PageHeader Icon="@Icons.Material.Filled.Forum"
+            Title="Bürger-Tickets"
+            Subtitle="Anliegen von Bürgern an die Führungsebene: Schriftwechsel und Abschluss." />
+
+<RecordSectionRail>
+    <RecordSection Group="Schalter" Slug="offen" Label="Offen" Icon="@Icons.Material.Filled.Inbox">
+        <TicketsListPanel Scope="TicketInboxScope.Offen" />
+    </RecordSection>
+    <RecordSection Group="Schalter" Slug="bearbeitung" Label="In Bearbeitung" Icon="@Icons.Material.Filled.HourglassTop">
+        <TicketsListPanel Scope="TicketInboxScope.Bearbeitung" />
+    </RecordSection>
+    <RecordSection Group="Schalter" Slug="wartet" Label="Wartet auf Bürger" Icon="@Icons.Material.Filled.MarkEmailRead">
+        <TicketsListPanel Scope="TicketInboxScope.Wartet" />
+    </RecordSection>
+    <RecordSection Group="Schalter" Slug="geschlossen" Label="Geschlossen" Icon="@Icons.Material.Filled.DoneAll">
+        <TicketsListPanel Scope="TicketInboxScope.Geschlossen" />
+    </RecordSection>
+</RecordSectionRail>

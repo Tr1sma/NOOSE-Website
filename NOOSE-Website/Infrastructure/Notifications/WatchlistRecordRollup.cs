@@ -103,6 +103,10 @@ public static class WatchlistRecordRollup
             // a reward is three hops from a file (reward, share, notice) and money at that: the watchable event is
             // the notice being marked captured
             case HinweisBelohnung:
+            // a ticket hangs off no record at all — it is correspondence with a citizen, so there is nothing
+            // for a follower of a file to be told about
+            case Ticket:
+            case TicketNachricht:
                 return Array.Empty<(string, string)>();
 
             default:

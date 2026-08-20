@@ -197,4 +197,33 @@ public class PublicSurfaceGuardTests
         Assert.True(offenders.Length == 0,
             "Wer Kopfgeld-Anteile schreibt, verwirft den öffentlichen Snapshot: " + string.Join(", ", offenders));
     }
+
+    /// <summary>Names that would put an agent behind a citizen-facing message.</summary>
+    private static readonly string[] DeskInternals =
+    [
+        "AuthorAgentId", "AuthorCodename", "TicketMessageRow", "TicketRow", "TicketDetail",
+        "TipMessageRow", "TipRow", "TipDetail",
+    ];
+
+    [Fact]
+    public void NoCitizenPage_NamesTheHandlerSideOfAConversation()
+    {
+        // The agency answers under one constant name. The outward records structurally carry no author, but a
+        // portal page could still reach past them and ask the service for the handler projection.
+        var pages = Path.Combine(ProjectRoot(), "Components", "Pages", "Portal");
+        Assert.True(Directory.Exists(pages), $"Bürgerseiten nicht gefunden: {pages}");
+
+        // whole identifiers only: the outward records are named CitizenTicketDetail and CitizenTipDetail, and a
+        // substring match would report the very types that keep the promise
+        var offenders = Directory.EnumerateFiles(pages, "*.razor", SearchOption.AllDirectories)
+            .Select(f => (File: Path.GetFileName(f), Text: File.ReadAllText(f)))
+            .SelectMany(f => DeskInternals
+                .Where(name => System.Text.RegularExpressions.Regex.IsMatch(f.Text, $@"\b{name}\b"))
+                .Select(name => $"{f.File}: {name}"))
+            .Order()
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Der Absender nach außen ist eine Konstante, kein Agent: " + string.Join(", ", offenders));
+    }
 }

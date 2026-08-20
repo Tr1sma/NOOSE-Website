@@ -201,6 +201,11 @@ public static class PublicVisibility
                 + "Die interne Zielgruppe verlässt das Haus nie.",
             ["HinweisBelohnung"] = "Ausgezahltes Geld: Betrag, Anteil, Kassenbuchung und Empfänger. Nach draußen "
                 + "geht ausschließlich der eigene Beleg eines Bürgers, angemeldet im Bürgerbereich.",
+            ["Ticket"] = "Anliegen eines namentlich bekannten Bürgers an die Führungsebene. Nach draußen "
+                + "geht nur der eigene Faden, angemeldet im Bürgerbereich — das ist sein Konto, nicht die "
+                + "Öffentlichkeit.",
+            ["TicketNachricht"] = "Schriftwechsel eines Tickets; er gehört den beiden Beteiligten. "
+                + "Die interne Zielgruppe verlässt das Haus nie.",
         };
 
     /// <summary>True when someone has decided the entity's public fate either way.</summary>

@@ -4,6 +4,8 @@
 @using NOOSE_Website.Services.Public
 @inject IBuergerService BuergerService
 @inject ITipService Tips
+@inject ITicketService Tickets
+@inject IPublicModuleService Modules
 @inject NavigationManager Nav
 
 <PageTitle>Bürgerbereich · NOOSE</PageTitle>
@@ -72,6 +74,22 @@
 
                 <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
                     <MudStack Spacing="2">
+                        <MudBadge Content="@_unreadTickets" Visible="@(_unreadTickets > 0)" Color="Color.Error" Overlap="true">
+                            <MudIcon Icon="@Icons.Material.Filled.Forum" Color="Color.Primary" Size="Size.Large" />
+                        </MudBadge>
+                        <MudText Typo="Typo.h6">Meine Tickets</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Anliegen an die Führungsebene und ihre Antworten. Die zuständigen Agenten bleiben anonym.
+                        </MudText>
+                        <MudButton Href="/buerger/tickets" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Forum" Class="mt-2">
+                            @(_ticketsOn ? "Tickets ansehen" : "Bestehende Tickets")
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudPaper Outlined="true" Class="pa-5" Style="flex:1 1 260px;">
+                    <MudStack Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.Campaign" Color="Color.Primary" Size="Size.Large" />
                         <MudText Typo="Typo.h6">Öffentlicher Bereich</MudText>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -97,6 +115,8 @@
     private string? _blockedReason;
     private bool _needsProfile;
     private int _unreadTips;
+    private int _unreadTickets;
+    private bool _ticketsOn;
 
     protected override async Task OnInitializedAsync()
     {
@@ -116,6 +136,13 @@
 
         // its own try: an unread counter must never cost the whole page
         try { _unreadTips = await Tips.GetOwnUnreadCountAsync(user); }
+        catch { /* best effort */ }
+
+        // and its own again: the ticket module is switched separately from the tip one
+        try { _unreadTickets = await Tickets.GetOwnUnreadCountAsync(user); }
+        catch { /* best effort */ }
+
+        try { _ticketsOn = (await Modules.GetAsync()).IsEnabled(PublicModules.Tickets); }
         catch { /* best effort */ }
 
         _ready = true;

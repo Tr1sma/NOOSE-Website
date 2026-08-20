@@ -345,6 +345,33 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to read the citizen ticket desk.</summary>
+    /// <remarks>
+    /// MayClassifiedRead is exactly leadership or the read-only supervision, which makes this the service side of
+    /// Policies.LeadershipPage — the supervision reads the desk, it just cannot answer. IsInternalAgent comes first
+    /// because a signed-in citizen carries no rank claim at all.
+    /// </remarks>
+    public static void RequireTicketRead(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayClassifiedRead())
+        {
+            throw new UnauthorizedAccessException("Bürger-Tickets sieht nur die Führung.");
+        }
+    }
+
+    /// <summary>Require the right to answer or decide a citizen ticket.</summary>
+    /// <remarks>
+    /// The write check stands before the rank one: RequireLeadership alone admits the read-only supervision and the
+    /// demo principal, which would then mint a case number before the ReadOnlyBarrierInterceptor refuses the save.
+    /// </remarks>
+    public static void RequireTicketHandling(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayWrite() || !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException("Bürger-Tickets bearbeitet nur die Führung.");
+        }
+    }
+
     /// <summary>Require recruiting management access (HRB or leadership).</summary>
     public static void RequireHrbOrLeadership(ClaimsPrincipal actor)
     {
