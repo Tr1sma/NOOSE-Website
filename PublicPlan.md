@@ -1208,6 +1208,20 @@ und ein Junior-Agent nichts davon sieht.
     `Policies.LeadershipPage` (`NavSectionPolicy.For`), also ist „ein Junior-Agent sieht nichts davon" eine
     Katalog-Eigenschaft. Das Badge (`BadgeKey: "tickets"`) zählt laufende Tickets ohne Guard — die Zahl steht in
     einem Eintrag, den nur diese Policy überhaupt rendert.
+14. **Das Änderungsprotokoll liest jeder interne Agent, Ticketinhalt kommt trotzdem nie dort an.** Der
+    `AuditSaveChangesInterceptor` erfasst Feldwerte nur bei `Modified`/`Deleted`, nie bei `Created` — das Anlegen
+    eines Tickets und **jede** Nachricht schreiben deshalb eine Zeile ohne `ChangesJson`, und an einem Ticket
+    ändern sich später nur Status, Bearbeiter und Zeitstempel. Auf `/nachweis` steht damit „Ticket existiert,
+    Status bewegte sich" plus das handelnde Konto: dieselbe bewusste Offenlegung wie bei `Hinweis`, wo sie sogar
+    trotz Anonymitätszusage gilt, weil das Konto die Missbrauchskontrolle ist. Die Filterliste dort kommt aus
+    `Distinct()` über die Daten, es gibt also keine zweite Registrierung — nur `AuditEntityDisplay` entscheidet
+    das Label. **Chronik und Zeitstrahl** zeigen ein Ticket gar nicht: `GlobalChronikService.RecordTypes` ist eine
+    geschlossene Liste von zehn Aktenarten, und ein Typ ohne Elternteil fällt beim Anker-Vergleich heraus — das
+    ist die Kehrseite von Punkt 1 und der Grund, warum dort nichts registriert werden musste.
+15. **`GetCountsAsync` ist bewusst nicht gebaut.** Der Plantext hatte es, `ITipService` hat es seit Phase 7 —
+    **ohne einen einzigen Consumer**. Vier Reiter *sind* die Aufteilung; eine Zahl im Reiter-Label veraltete beim
+    ersten Statuswechsel, solange die Seite kein Broadcaster-Abo dafür hält. Toter Interface-Platz wird nicht
+    kopiert; wenn eine spätere Phase Zähler braucht, sind es fünf Zeilen.
 
 ---
 

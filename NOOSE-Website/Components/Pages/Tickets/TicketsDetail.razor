@@ -194,7 +194,13 @@ else
         {
             return;
         }
-        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+        // the mark moves again: a line arriving while the handler has the ticket open has been read
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            await Tickets.MarkAgentReadAsync(Id, _user);
+            StateHasChanged();
+        });
     }
 
     public void Dispose() => Broadcaster.Modified -= OnModified;

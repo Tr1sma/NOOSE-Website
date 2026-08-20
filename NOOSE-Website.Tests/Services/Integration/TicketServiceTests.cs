@@ -249,7 +249,7 @@ public sealed class TicketServiceTests
     {
         using var ctx = await SeededAsync();
         var host = NewHost(ctx);
-        await OpenAsync(host);
+        var id = await IdAsync(host, await OpenAsync(host));
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Junior()));
@@ -258,7 +258,7 @@ public sealed class TicketServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Partner()));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            host.Service.GetCountsAsync(Junior()));
+            host.Service.GetAsync(id, Junior()));
     }
 
     [Fact]
@@ -482,9 +482,8 @@ public sealed class TicketServiceTests
         await host.Service.SetStatusAsync(first, TicketStatus.Geschlossen, Leader());
         Assert.Equal(1, await host.Service.GetOpenCountAsync());
 
-        var counts = await host.Service.GetCountsAsync(Leader());
-        Assert.Equal(1, counts.Open);
-        Assert.Equal(1, counts.Closed);
+        Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Offen, null, false, Leader()));
+        Assert.Single(await host.Service.GetInboxAsync(TicketInboxScope.Geschlossen, null, false, Leader()));
     }
 
     [Fact]

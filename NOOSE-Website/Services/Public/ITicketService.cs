@@ -40,8 +40,6 @@ public interface ITicketService
     Task<IReadOnlyList<TicketRow>> GetInboxAsync(TicketInboxScope scope, string? search, bool onlyMine,
         ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    Task<TicketInboxCounts> GetCountsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
-
     /// <summary>Running tickets for the navigation badge.</summary>
     Task<int> GetOpenCountAsync(CancellationToken cancellationToken = default);
 

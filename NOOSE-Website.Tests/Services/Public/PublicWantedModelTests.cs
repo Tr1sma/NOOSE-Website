@@ -83,7 +83,6 @@ public class PublicWantedModelTests
         [typeof(TicketRow)] = "Zeile des Führungs-Schalters; nennt Bürger und Bearbeiter.",
         [typeof(TicketDetail)] = "Ein Ticket in der Bearbeitung, inklusive Sperrstatus des Bürgerkontos.",
         [typeof(TicketMessageRow)] = "Nachricht mit Autor; die interne Zielgruppe verlässt das Haus nie.",
-        [typeof(TicketInboxCounts)] = "Zähler der Schalter-Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
         [typeof(TicketInput)] = "Formulareingabe des Ticket-Dialogs.",
     };
 

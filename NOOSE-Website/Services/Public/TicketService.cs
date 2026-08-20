@@ -132,7 +132,8 @@ public class TicketService(
             })
             .ToListAsync(cancellationToken);
 
-        var unread = await MessagesByTicketAsync(db, rows.Select(r => r.Id).ToList(), false, cancellationToken);
+        var unread = await MessagesByTicketAsync(db, rows.Select(r => r.Id).ToList(), fromCitizen: false,
+            cancellationToken);
 
         return rows
             .Select(r => new CitizenTicketRow(r.CaseNumber, r.Subject, r.Status, r.CreatedAt, r.LastActivityAt,
@@ -242,7 +243,8 @@ public class TicketService(
             .Where(t => t.CitizenProfileId == profile.Id)
             .Select(t => new { t.Id, t.CitizenLastReadAt })
             .ToListAsync(cancellationToken);
-        var unread = await MessagesByTicketAsync(db, marks.Select(m => m.Id).ToList(), false, cancellationToken);
+        var unread = await MessagesByTicketAsync(db, marks.Select(m => m.Id).ToList(), fromCitizen: false,
+            cancellationToken);
         return marks.Sum(m => UnreadFor(unread, m.Id, m.CitizenLastReadAt));
     }
 
@@ -288,7 +290,7 @@ public class TicketService(
             .ToListAsync(cancellationToken);
 
         var ids = rows.Select(r => r.Id).ToList();
-        var fromCitizen = await MessagesByTicketAsync(db, ids, true, cancellationToken);
+        var fromCitizen = await MessagesByTicketAsync(db, ids, fromCitizen: true, cancellationToken);
         var last = await LastMessageAsync(db, ids, cancellationToken);
 
         return rows
@@ -297,21 +299,6 @@ public class TicketService(
                 last.TryGetValue(r.Id, out var newest) && newest.FromCitizen,
                 UnreadFor(fromCitizen, r.Id, r.AgentLastReadAt)))
             .ToList();
-    }
-
-    public async Task<TicketInboxCounts> GetCountsAsync(ClaimsPrincipal actor,
-        CancellationToken cancellationToken = default)
-    {
-        Permission.RequireTicketRead(actor);
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var rows = await db.Tickets.AsNoTracking()
-            .GroupBy(t => t.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
-            .ToListAsync(cancellationToken);
-
-        int For(TicketStatus status) => rows.FirstOrDefault(r => r.Status == status)?.Count ?? 0;
-        return new TicketInboxCounts(For(TicketStatus.Offen), For(TicketStatus.InBearbeitung),
-            For(TicketStatus.WartetAufBuerger), For(TicketStatus.Geschlossen));
     }
 
     /// <inheritdoc />

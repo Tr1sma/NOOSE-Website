@@ -69,9 +69,6 @@ public record TicketMessageRow(
     string? AuthorCodename,
     DateTime CreatedAt);
 
-/// <summary>Desk tab counters.</summary>
-public record TicketInboxCounts(int Open, int InProgress, int Waiting, int Closed);
-
 /// <summary>Form input when a citizen opens a ticket.</summary>
 public class TicketInput
 {

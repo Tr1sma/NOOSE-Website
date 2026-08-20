@@ -247,6 +247,8 @@
             else
             {
                 _detail = await Tickets.GetOwnDetailAsync(CaseNumber, _user);
+                // an answer arriving while the thread is open has been read
+                await Tickets.MarkCitizenReadAsync(CaseNumber, _user);
             }
             StateHasChanged();
         });
