@@ -201,6 +201,51 @@ else
 
     <MudDivider Class="my-6" />
 
+    <MudText Typo="Typo.h6" Class="mb-2">Profilbilder</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
+        Selbst eingereichte Profilbilder von Agenten unterhalb Supervisory. Beim Genehmigen wird das Bild
+        sofort überall sichtbar; beim Ablehnen wird es verworfen.
+    </MudText>
+    @if (_avatars.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Keine offenen Profilbilder.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_avatars" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="2">
+            <HeaderContent>
+                <MudTh>Bild</MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => DisplayName(x))">Agent</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel T="Agent" SortBy="@(x => x.AvatarRequestedAt)">Beantragt</MudTableSortLabel></MudTh>
+                <MudTh Style="text-align:right;">Aktion</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Bild">
+                    <MudAvatar Rounded="true" Style="height:64px;width:64px;">
+                        <MudImage Src="@AgentAvatar.Url(context.PendingAvatarFileName)"
+                                  Alt="@($"Beantragtes Profilbild von {DisplayName(context)}")" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                    </MudAvatar>
+                </MudTd>
+                <MudTd DataLabel="Agent">
+                    <MudText Typo="Typo.body2">@DisplayName(context)</MudText>
+                </MudTd>
+                <MudTd DataLabel="Beantragt">
+                    <MudText Typo="Typo.caption">@(context.AvatarRequestedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm"))</MudText>
+                </MudTd>
+                <MudTd DataLabel="Aktion" Style="text-align:right;">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                               StartIcon="@Icons.Material.Filled.Check" Class="mr-2"
+                               OnClick="() => AvatarApprove(context)">Genehmigen</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Close"
+                               OnClick="() => AvatarReject(context)">Ablehnen</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <MudDivider Class="my-6" />
+
     <MudText Typo="Typo.h6" Class="mb-2">Taskforce-Anträge</MudText>
     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-3">
         Beantragte Taskforces warten auf Genehmigung. Beim Genehmigen wird die Einsatzgruppe aktiv; beim Ablehnen wird der Antrag abgelehnt.
@@ -367,6 +412,7 @@ else
     private List<Request> _openPartnerRequests = new();
     private List<Agent> _pending = new();
     private List<Agent> _nameChanges = new();
+    private List<Agent> _avatars = new();
     private List<Taskforce> _requestedTaskforces = new();
     private List<AgentPromotionRequest> _openPromotions = new();
     private Dictionary<string, string> _agentNames = new();
@@ -413,6 +459,7 @@ else
             _openPartnerRequests = await PartnerShareService.GetPendingPartnerShareRequestsAsync();
             _pending = await AgentService.GetPendingAsync();
             _nameChanges = await AgentService.GetPendingNameChangesAsync();
+            _avatars = await AgentService.GetPendingAvatarsAsync();
             _requestedTaskforces = await TaskforceService.GetRequestedAsync();
             _openPromotions = await PersonnelFileService.GetOpenPromotionRequestsAsync();
             _agentNames = (await AgentService.GetAllAsync())
@@ -529,6 +576,42 @@ else
         {
             await AgentService.NameChangeRejectAsync(agent.Id, string.IsNullOrWhiteSpace(reason) ? "Namensänderung abgelehnt" : reason, _user);
             Snackbar.Add($"Namensänderung von {DisplayName(agent)} abgelehnt.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task AvatarApprove(Agent agent)
+    {
+        try
+        {
+            await AgentService.AvatarApproveAsync(agent.Id, _user);
+            Snackbar.Add($"Profilbild von {DisplayName(agent)} genehmigt.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await LoadAsync();
+    }
+
+    private async Task AvatarReject(Agent agent)
+    {
+        var reason = await ReasonDialog.ShowAsync(DialogService,
+            $"Profilbild von {DisplayName(agent)} ablehnen?",
+            "Das Bild wird verworfen. Die Begründung wird protokolliert.",
+            confirmText: "Ablehnen", label: "Begründung (optional)", colour: Color.Error);
+        if (reason is null)
+        {
+            return;
+        }
+        try
+        {
+            await AgentService.AvatarRejectAsync(agent.Id, string.IsNullOrWhiteSpace(reason) ? "Profilbild abgelehnt" : reason, _user);
+            Snackbar.Add($"Profilbild von {DisplayName(agent)} abgelehnt.", Severity.Info);
         }
         catch (Exception ex)
         {

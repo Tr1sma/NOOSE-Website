@@ -424,11 +424,12 @@
                 open += await RequestService.GetOpenCountAsync(_user.IsLeadership());
             }
 
-            // registrations, name changes, taskforce and promotion requests are leadership-only
+            // registrations, name changes, profile pictures, taskforce and promotion requests are leadership-only
             if (_user.IsLeadership())
             {
                 open += (await AgentService.GetPendingAsync()).Count
                     + (await AgentService.GetPendingNameChangesAsync()).Count
+                    + (await AgentService.GetPendingAvatarsAsync()).Count
                     + (await TaskforceService.GetRequestedAsync()).Count
                     + (await PersonnelFileService.GetOpenPromotionRequestsAsync()).Count;
             }

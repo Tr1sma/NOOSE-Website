@@ -1,6 +1,15 @@
 <MudPaper Class="pa-3" Elevation="1" Style="height:100%;">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-        <MudAvatar Color="@(IsLead ? Color.Warning : Color.Primary)" Rounded="true">@Initials(Agent.Codename)</MudAvatar>
+        @if (AgentAvatar.Url(Agent.AvatarFileName) is { } bild)
+        {
+            <MudAvatar Rounded="true">
+                <MudImage Src="@bild" Alt="@($"Profilbild von {Agent.Codename}")" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+            </MudAvatar>
+        }
+        else
+        {
+            <MudAvatar Color="@(IsLead ? Color.Warning : Color.Primary)" Rounded="true">@AgentAvatar.Initials(Agent.Codename)</MudAvatar>
+        }
         <MudStack Spacing="0" Style="min-width:0;">
             <MudLink Href="@($"/personal/{Agent.Id}")" Typo="Typo.body1">
                 <b>@(string.IsNullOrWhiteSpace(Agent.Codename) ? "Unbenannter Agent" : Agent.Codename)</b>
@@ -40,19 +49,4 @@
     [Parameter] public bool ShowRank { get; set; } = true;
     [Parameter] public string? RoleText { get; set; }
     [Parameter] public bool IsLead { get; set; }
-
-    private static string Initials(string? codename)
-    {
-        if (string.IsNullOrWhiteSpace(codename))
-        {
-            return "?";
-        }
-        var parts = codename.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length >= 2)
-        {
-            return string.Concat(char.ToUpperInvariant(parts[0][0]), char.ToUpperInvariant(parts[1][0]));
-        }
-        var word = parts[0];
-        return word.Length >= 2 ? word[..2].ToUpperInvariant() : word[..1].ToUpperInvariant();
-    }
 }

@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @inject IGamificationService Gamification
+@inject IDialogService DialogService
 @using NOOSE_Website.Models.Gamification
 
 <PageTitle>Mein Profil · NOOSE</PageTitle>
@@ -53,6 +54,22 @@
             </MudAlert>
         }
 
+        @if (_agent.AvatarRequestedAt is not null)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.HourglassTop">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Rounded="true" Style="height:56px;width:56px;">
+                        <MudImage Src="@AgentAvatar.Url(_agent.PendingAvatarFileName)" Alt="Beantragtes Profilbild" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                    </MudAvatar>
+                    <span>
+                        Dein Profilbild wartet auf Freigabe durch die Führung
+                        (eingereicht am @_agent.AvatarRequestedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")).
+                        Bis dahin bleibt dein bisheriges Bild sichtbar.
+                    </span>
+                </MudStack>
+            </MudAlert>
+        }
+
         @* Centres the lone card when the performance column is absent. *@
         <MudGrid Spacing="6" Justify="Justify.Center">
 
@@ -60,6 +77,45 @@
                 <MudPaper Class="pa-6" Elevation="2" Style="height:100%;">
                     <MudForm @ref="_form">
                         <MudStack Spacing="3">
+                            <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                                @if (AgentAvatar.Url(_agent.AvatarFileName) is { } bild)
+                                {
+                                    <MudAvatar Rounded="true" Style="height:120px;width:120px;">
+                                        <MudImage Src="@bild" Alt="Mein Profilbild" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                                    </MudAvatar>
+                                }
+                                else
+                                {
+                                    <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;font-size:2.5rem;">
+                                        @AgentAvatar.Initials(_agent.Codename)
+                                    </MudAvatar>
+                                }
+                                @if (_mayWrite)
+                                {
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap" Justify="Justify.Center">
+                                        <MudFileUpload T="IBrowserFile" FilesChanged="AvatarUploadAsync" Accept="image/*">
+                                            <CustomContent>
+                                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.PhotoCamera" Disabled="_avatarBusy"
+                                                           OnClick="@context.OpenFilePickerAsync">
+                                                    Profilbild @(_agent.AvatarFileName is null ? "hochladen" : "ändern")
+                                                </MudButton>
+                                            </CustomContent>
+                                        </MudFileUpload>
+                                        @if (_agent.AvatarFileName is not null || _agent.PendingAvatarFileName is not null)
+                                        {
+                                            <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Delete" Disabled="_avatarBusy"
+                                                       OnClick="AvatarRemoveAsync">Entfernen</MudButton>
+                                        }
+                                    </MudStack>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="text-align:center;">
+                                        JPG, PNG, WebP oder GIF, max. 2 MB.
+                                        @(_isLeadership ? "Als Führungskraft greift dein Bild sofort." : "Dein Bild wird erst nach Freigabe durch die Führung sichtbar.")
+                                    </MudText>
+                                }
+                            </MudStack>
+
                             <MudAlert Severity="Severity.Normal" Dense="true" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Shield">
                                 @RankDisplay.Name(_agent.Rank)
                                 @if (!string.IsNullOrWhiteSpace(_agent.DiscordUsername))
@@ -169,6 +225,7 @@
     private List<Request> _myRequests = new();
     private AgentStats _stats = AgentStats.Empty;
 
+    private bool _avatarBusy;
     private MudForm _form = default!;
     private string _codename = string.Empty;
     private string? _realName;
@@ -220,6 +277,75 @@
             _codename = _agent.Codename;
             _realName = _agent.RealName;
             _badgeNumber = _agent.BadgeNumber;
+        }
+    }
+
+    private async Task AvatarUploadAsync(IBrowserFile? file)
+    {
+        if (file is null || _agent is null || _avatarBusy)
+        {
+            return;
+        }
+        _avatarBusy = true;
+        try
+        {
+            // 2 MB cap mirrors FileUploadOptions.AvatarMaxBytes; the service revalidates
+            await using var buffer = new MemoryStream();
+            await file.OpenReadStream(2 * 1024 * 1024).CopyToAsync(buffer);
+            buffer.Position = 0;
+            await AgentService.AvatarSetAsync(_agent.Id, buffer, file.ContentType, buffer.Length, _user);
+            Snackbar.Add(_isLeadership
+                ? "Profilbild gespeichert."
+                : "Profilbild eingereicht. Es wird nach Freigabe durch die Führung sichtbar.", Severity.Success);
+            await AgentReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            // a write-block or an oversized file must not kill the circuit
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _avatarBusy = false;
+        }
+    }
+
+    private async Task AvatarRemoveAsync()
+    {
+        if (_agent is null || _avatarBusy)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Profilbild entfernen?",
+            "Dein Bild wird gelöscht; überall erscheinen wieder deine Initialen.", "Entfernen");
+        if (!ok)
+        {
+            return;
+        }
+        _avatarBusy = true;
+        try
+        {
+            await AgentService.AvatarRemoveAsync(_agent.Id, _user);
+            Snackbar.Add("Profilbild entfernt.", Severity.Success);
+            await AgentReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _avatarBusy = false;
+        }
+    }
+
+    // no SecurityStamp rotation on a picture, so the session stays and only the row is re-read
+    private async Task AgentReloadAsync()
+    {
+        _agent = await AgentService.FindAsync(_agent!.Id);
+        if (_agent is not null)
+        {
+            FieldsPrefill();
         }
     }
 

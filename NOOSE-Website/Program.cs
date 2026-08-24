@@ -160,6 +160,7 @@ builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISourcesStorageService, SourcesStorageService>();
 builder.Services.AddScoped<IFactionPhotoStorageService, FactionPhotoStorageService>();
 builder.Services.AddScoped<IEvidenceImageStorageService, EvidenceImageStorageService>();
+builder.Services.AddScoped<IAgentAvatarStorageService, AgentAvatarStorageService>();
 builder.Services.AddScoped<ICaseNumberService, CaseNumberService>();
 builder.Services.AddScoped<IPersonService, PersonService>();
 builder.Services.AddScoped<IPersonDocService, PersonDocService>();
@@ -388,6 +389,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapNooseAccountEndpoints();
 app.MapNoosePeopleFileEndpoints();
+app.MapNooseAgentFileEndpoints();
 app.MapNooseSourcesFileEndpoints();
 app.MapNooseFactionsFileEndpoints();
 app.MapNooseEvidenceFileEndpoints();

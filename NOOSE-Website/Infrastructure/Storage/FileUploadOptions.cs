@@ -12,6 +12,12 @@ public class FileUploadOptions
     /// <summary>Evidence-room item images path.</summary>
     public string AsservatePath { get; set; } = "App_Data/uploads/asservate";
 
+    /// <summary>Agent profile picture path.</summary>
+    public string AvatarsPath { get; set; } = "App_Data/uploads/agenten";
+
+    /// <summary>Max profile picture size; smaller than the record cap, an avatar is never a document.</summary>
+    public long AvatarMaxBytes { get; set; } = 2 * 1024 * 1024;
+
     /// <summary>Max file size.</summary>
     public long MaxBytes { get; set; } = 10 * 1024 * 1024;
 

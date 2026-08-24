@@ -21,6 +21,23 @@ public class Agent : IdentityUser
 
     public string? AvatarUrl { get; set; }
 
+    /// <summary>Approved profile picture; bare file name under the agent avatar upload path.</summary>
+    [Column("Profilbild")]
+    public string? AvatarFileName { get; set; }
+
+    [Column("ProfilbildTyp")]
+    public string? AvatarContentType { get; set; }
+
+    /// <summary>Uploaded but not yet released; leadership decides on the release inbox.</summary>
+    [Column("AusstehendesProfilbild")]
+    public string? PendingAvatarFileName { get; set; }
+
+    [Column("AusstehendesProfilbildTyp")]
+    public string? PendingAvatarContentType { get; set; }
+
+    [Column("ProfilbildBeantragtAm")]
+    public DateTime? AvatarRequestedAt { get; set; }
+
     [Column("Dienstgrad")]
     public Rank? Rank { get; set; }
 

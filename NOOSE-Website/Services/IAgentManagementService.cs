@@ -43,6 +43,24 @@ public interface IAgentManagementService
     /// <summary>Reject the pending name-change request; staged values are discarded.</summary>
     Task NameChangeRejectAsync(string agentId, string reason, ClaimsPrincipal actor);
 
+    /// <summary>Set the own profile picture. Leadership applies instantly, everyone else stages it for release; a repeat call replaces a staged picture.</summary>
+    Task AvatarSetAsync(string agentId, Stream content, string contentType, long sizeBytes, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Drop the profile picture including a staged one; own account, or any account for leadership (moderation).</summary>
+    Task AvatarRemoveAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Staged profile pictures for the release inbox.</summary>
+    Task<List<Agent>> GetPendingAvatarsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Approve the staged profile picture; replaces the active one.</summary>
+    Task AvatarApproveAsync(string agentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Reject the staged profile picture; the active one stays.</summary>
+    Task AvatarRejectAsync(string agentId, string reason, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Resolve the owner of a stored picture file; the serving endpoint's only way into the data.</summary>
+    Task<Agent?> FindByAvatarFileAsync(string fileName, CancellationToken cancellationToken = default);
+
     Task RankChangeAsync(string agentId, Rank rank, ClaimsPrincipal actor);
 
     /// <summary>Change a partner account's partner rank; refreshes the claims.</summary>
