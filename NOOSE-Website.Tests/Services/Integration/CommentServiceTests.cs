@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Common;
+using NOOSE_Website.Infrastructure.Audit;
+using NOOSE_Website.Infrastructure.CurrentUser;
 using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Services;
 using NSubstitute;
@@ -325,5 +328,205 @@ public sealed class CommentServiceTests
 
         using var check = ctx.NewContext();
         Assert.True(await check.Comments.AnyAsync(c => c.Id == comment.Id));
+    }
+
+    // ---------- EditAsync ----------
+
+    [Fact]
+    public async Task EditAsync_UpdatesTrimmedText_WhenAuthor()
+    {
+        using var ctx = new SqliteTestContext();
+        var comment = MakeComment("Person", "e1", "alt", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), createdById: "junior");
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("e1"));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        var result = await svc.EditAsync(comment.Id, "  neu  ", Junior("junior"));
+
+        Assert.Equal("neu", result.Text);
+        using var check = ctx.NewContext();
+        Assert.Equal("neu", (await check.Comments.FirstAsync(c => c.Id == comment.Id)).Text);
+    }
+
+    [Fact]
+    public async Task EditAsync_Throws_WhenNotAuthor()
+    {
+        using var ctx = new SqliteTestContext();
+        var comment = MakeComment("Person", "e2", "fremd", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), createdById: "other");
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("e2"));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.EditAsync(comment.Id, "uebernommen", Junior("junior")));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("fremd", (await check.Comments.FirstAsync(c => c.Id == comment.Id)).Text);
+    }
+
+    [Fact]
+    public async Task EditAsync_Throws_WhenLeadershipButNotAuthor()
+    {
+        using var ctx = new SqliteTestContext();
+        var comment = MakeComment("Person", "e3", "fremd", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), createdById: "other");
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("e3"));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        // deliberate difference to DeleteAsync: leadership may remove a comment, never rewrite it
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.EditAsync(comment.Id, "korrigiert", Leader()));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("fremd", (await check.Comments.FirstAsync(c => c.Id == comment.Id)).Text);
+    }
+
+    [Fact]
+    public async Task EditAsync_Throws_WhenAuthorUnknown()
+    {
+        using var ctx = new SqliteTestContext();
+        // legacy row without an author id: a null == null match would open it to everyone
+        var comment = MakeComment("Person", "e4", "herrenlos", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("e4"));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.EditAsync(comment.Id, "neu", Junior("junior")));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("herrenlos", (await check.Comments.FirstAsync(c => c.Id == comment.Id)).Text);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task EditAsync_Throws_OnEmptyOrWhitespaceText(string? text)
+    {
+        using var ctx = new SqliteTestContext();
+        var comment = MakeComment("Person", "e5", "bleibt", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), createdById: "junior");
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("e5"));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.EditAsync(comment.Id, text!, Junior("junior")));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("bleibt", (await check.Comments.FirstAsync(c => c.Id == comment.Id)).Text);
+    }
+
+    [Fact]
+    public async Task EditAsync_Throws_WhenCommentMissing()
+    {
+        using var ctx = new SqliteTestContext();
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.EditAsync("missing", "neu", Junior("junior")));
+    }
+
+    [Fact]
+    public async Task EditAsync_Throws_WhenRecordNotVisible()
+    {
+        using var ctx = new SqliteTestContext();
+        var comment = MakeComment("Person", "e6", "geheim", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), createdById: "junior");
+        using (var db = ctx.NewContext())
+        {
+            // the record was classified after the comment was written
+            db.People.Add(Seed.Person("e6", configure: p => p.IsClassified = true));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, _) = Build(ctx);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => svc.EditAsync(comment.Id, "neu", Junior("junior")));
+
+        using var check = ctx.NewContext();
+        Assert.Equal("geheim", (await check.Comments.FirstAsync(c => c.Id == comment.Id)).Text);
+    }
+
+    [Fact]
+    public async Task EditAsync_NotifiesOnlyMentionsAddedByTheEdit()
+    {
+        using var ctx = new SqliteTestContext();
+        var comment = MakeComment("Person", "e7", "ohne", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), createdById: "junior");
+        using (var db = ctx.NewContext())
+        {
+            db.People.Add(Seed.Person("e7"));
+            db.Comments.Add(comment);
+            db.SaveChanges();
+        }
+        var (svc, notifications) = Build(ctx);
+
+        await svc.EditAsync(comment.Id, "jetzt mit Erwaehnung", Junior("junior"));
+
+        // the delta fanout gets both texts; anyone already named at creation stays unpinged
+        await notifications.Received(1).NotifyMentionedDeltaAsync(
+            "ohne", "jetzt mit Erwaehnung", Arg.Any<string>(), Arg.Any<string?>(),
+            "Person", "e7", Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await notifications.DidNotReceive().NotifyMentionedAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Stub acting agent for the interceptor-backed test.</summary>
+    private sealed class FixedUser : ICurrentUserService
+    {
+        public Task<CurrentUserInfo> GetAsync() => Task.FromResult(Get());
+
+        public CurrentUserInfo Get() => new("lead", "Falcon", false, false, false);
+    }
+
+    [Fact]
+    public async Task EditAsync_StampsModified_AndLogsOldAndNewText()
+    {
+        using var ctx = new SqliteTestContext();
+        // the shared test context omits the interceptors; the audit trail is the whole point here
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(ctx.Connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(new FixedUser()))
+            .Options;
+        var comment = MakeComment("Person", "e8", "alter Wortlaut", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        using (var db = new AppDbContext(options))
+        {
+            db.People.Add(Seed.Person("e8"));
+            db.Comments.Add(comment);
+            db.SaveChanges(); // stamps CreatedById = "lead"
+        }
+        var svc = new CommentService(new TestDbContextFactory(options), Substitute.For<INotificationService>());
+
+        await svc.EditAsync(comment.Id, "neuer Wortlaut", Leader());
+
+        using var check = ctx.NewContext();
+        var stored = await check.Comments.FirstAsync(c => c.Id == comment.Id);
+        Assert.NotNull(stored.ModifiedAt); // drives the "bearbeitet" marker in the panel
+        Assert.Equal("lead", stored.ModifiedById);
+
+        var row = await check.AuditLogs.SingleAsync(a => a.EntityType == nameof(Comment) && a.Action == AuditAction.Modified);
+        Assert.Contains("alter Wortlaut", row.ChangesJson);
+        Assert.Contains("neuer Wortlaut", row.ChangesJson);
     }
 }
