@@ -145,6 +145,16 @@ public static class Permission
         }
     }
 
+    /// <summary>Require an internal agent; twin of <c>Policies.InternalAgent</c>, denies partner agencies.</summary>
+    public static void RequireInternalAgent(ClaimsPrincipal actor)
+    {
+        if (actor.IsPartner())
+        {
+            throw new UnauthorizedAccessException(
+                "Dieser Bereich ist internen Agenten vorbehalten.");
+        }
+    }
+
     /// <summary>Require read access to leadership-level content; read-only supervision is admitted.</summary>
     public static void RequireClassifiedRead(ClaimsPrincipal actor)
     {

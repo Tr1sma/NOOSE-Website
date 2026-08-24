@@ -24,6 +24,7 @@ public record FeedbackRow(
     string? PageRoute,
     string? PageTab,
     string Text,
+    string AgentId,
     string AgentCodename,
     DateTime CreatedAt,
     string? Response,

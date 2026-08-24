@@ -110,8 +110,9 @@
     // read-only supervision reads the inbox but decides nothing
     private bool MayDecide => User.IsLeadership() && User.MayWrite();
 
-    // both list sources only surface rows the caller may delete: own reports, or the whole inbox for leadership
-    private bool MayDelete => User.MayWrite();
+    // everyone reads every report, so mirror the service rule: own report, or leadership
+    private bool MayDelete => User.MayWrite()
+        && (User.IsLeadership() || Row.AgentId == User.GetAgentId());
 
     protected override void OnInitialized()
     {

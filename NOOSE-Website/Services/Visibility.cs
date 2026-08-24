@@ -161,11 +161,6 @@ public static class Visibility
             case nameof(CounterIntelRule):
                 return scope.IsLeadership
                     && await db.CounterIntelRules.AnyAsync(r => r.Id == entityId, cancellationToken);
-            // own report, or anyone who reads everything. Fully qualified: the entity shares its simple name with
-            // the namespace it lives in, and an alias would make nameof() yield the alias instead of the CLR name.
-            case nameof(Data.Entities.Feedback.Feedback):
-                return await db.Feedbacks.AnyAsync(
-                    f => f.Id == entityId && (scope.MayClassifiedRead || f.AgentId == scope.MeId), cancellationToken);
         }
 
         // open to every internal agent, but named rather than left to the tail below: a type that falls through
@@ -180,6 +175,10 @@ public static class Visibility
             nameof(AgentAbduction) => await db.AgentAbductions.AnyAsync(a => a.Id == entityId, cancellationToken),
             nameof(AgentActivity) => await db.AgentActivities.AnyAsync(a => a.Id == entityId, cancellationToken),
             nameof(TrainingModule) => await db.TrainingModules.AnyAsync(m => m.Id == entityId, cancellationToken),
+            // fully qualified: the entity shares its simple name with the namespace it lives in, and an alias
+            // would make nameof() yield the alias instead of the CLR name
+            nameof(Data.Entities.Feedback.Feedback) =>
+                await db.Feedbacks.AnyAsync(f => f.Id == entityId, cancellationToken),
             // unknown type = visible
             _ => true,
         };

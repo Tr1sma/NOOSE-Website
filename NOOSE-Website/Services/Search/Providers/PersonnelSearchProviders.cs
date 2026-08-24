@@ -412,7 +412,7 @@ public sealed class AbsenceSearchProvider(IDbContextFactory<AppDbContext> dbFact
     }
 }
 
-/// <summary>Feedback reports: own always, everything for leadership.</summary>
+/// <summary>Feedback reports: every internal agent reads every report; AppliesTo keeps partners out.</summary>
 public sealed class FeedbackSearchProvider(IDbContextFactory<AppDbContext> dbFactory) : ISearchProvider
 {
     public string Category => nameof(Feedback);
@@ -425,8 +425,7 @@ public sealed class FeedbackSearchProvider(IDbContextFactory<AppDbContext> dbFac
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var meId = query.Scope.MeId;
-        var all = query.Scope.MayClassifiedRead;
-        var q = all ? db.Feedbacks.AsQueryable() : db.Feedbacks.Where(f => f.AgentId == meId);
+        var q = db.Feedbacks.AsQueryable();
         if (query.HasText)
         {
             var s = query.Text;

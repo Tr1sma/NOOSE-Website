@@ -327,7 +327,7 @@ public sealed class FilterRecordsTool(
         }
     }
 
-    /// <summary>The inbox for leadership, one's own reports otherwise — the two arms of feedback visibility.</summary>
+    /// <summary>Every report for an internal agent, one's own otherwise — the two arms of feedback visibility.</summary>
     private async Task<IReadOnlyList<FeedbackRow>> FeedbackAsync(
         ClaimsPrincipal actor, CancellationToken cancellationToken)
     {

@@ -278,7 +278,7 @@ public sealed class FilterRecordsToolTests
             .Returns(Task.FromResult<IReadOnlyList<FeedbackRow>>(new[]
             {
                 new FeedbackRow("f1", FeedbackKind.Bug, FeedbackStatus.New, null, null,
-                    "Absturz beim Speichern", "Falke", DateTime.UtcNow, null, null, null),
+                    "Absturz beim Speichern", "a1", "Falke", DateTime.UtcNow, null, null, null),
             }));
 
         var result = await NooseiToolHost.Filter(feedback: feedback)
