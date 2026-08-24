@@ -4,8 +4,55 @@
 @inject IBewerbungTestService TestService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Eignungstest · NOOSE</PageTitle>
+
+<style>
+    /* Deterrent, not protection: the prompts are in the DOM either way. */
+    .noose-pruefung {
+        user-select: none;
+        -webkit-user-select: none;
+        position: relative;
+        /* clips the rotated watermark layer to the questions */
+        overflow: hidden;
+    }
+    /* The applicant must still be able to edit their own free-text answer. */
+    .noose-pruefung input,
+    .noose-pruefung textarea {
+        user-select: text;
+        -webkit-user-select: text;
+    }
+    .noose-pruefung-wasserzeichen {
+        position: absolute;
+        /* oversized so the rotated layer still covers every corner */
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        z-index: 3;
+        pointer-events: none;
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        gap: 48px 64px;
+        transform: rotate(-30deg);
+        transform-origin: center;
+        opacity: 0.08;
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+        color: var(--mud-palette-text-primary);
+    }
+    .noose-pruefung-druckhinweis { display: none; }
+    @@media print {
+        .noose-pruefung { display: none !important; }
+        .noose-pruefung-druckhinweis { display: block !important; }
+    }
+</style>
 
 @if (_ready && _test is not null)
 {
@@ -26,6 +73,18 @@
             }
             else
             {
+                <MudText Typo="Typo.body2" Class="noose-pruefung-druckhinweis">
+                    Der Fragebogen wird nicht gedruckt. Bitte beantworte den Test online.
+                </MudText>
+                <div id="@ContainerId" class="noose-pruefung"
+                     @oncopy:preventDefault="true" @oncut:preventDefault="true"
+                     @oncontextmenu:preventDefault="true" @ondragstart:preventDefault="true">
+                <div class="noose-pruefung-wasserzeichen" aria-hidden="true">
+                    @for (var i = 0; i < 40; i++)
+                    {
+                        <span>@Watermark</span>
+                    }
+                </div>
                 @foreach (var (q, index) in _test.Questions.Select((q, i) => (q, i + 1)))
                 {
                     <MudPaper Outlined="true" Class="pa-4">
@@ -61,6 +120,7 @@
                         }
                     </MudPaper>
                 }
+                </div>
 
                 <MudStack Row="true" Justify="Justify.FlexEnd">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send"
@@ -82,6 +142,15 @@
     private readonly Dictionary<string, string> _choice = new();
     private readonly Dictionary<string, string> _text = new();
 
+    private const string ContainerId = "noose-pruefung-bogen";
+    private IJSObjectReference? _module;
+    private bool _guarded;
+
+    /// <summary>Traceability, not prevention: a leaked screenshot points back at one applicant.</summary>
+    private string Watermark => _test is null
+        ? string.Empty
+        : $"{_test.CaseNumber} · {DateTime.Now:dd.MM.yyyy HH:mm}";
+
     protected override async Task OnInitializedAsync()
     {
         _user = (await AuthStateTask).User;
@@ -97,6 +166,39 @@
             return;
         }
         _ready = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _test is null || _test.Completed)
+        {
+            return;
+        }
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/pruefung.js?v=2");
+            await _module.InvokeVoidAsync("schuetzen", ContainerId);
+            _guarded = true;
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch { /* best effort */ }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null && _guarded)
+            {
+                await _module.InvokeVoidAsync("freigeben", ContainerId);
+            }
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { /* ignore */ }
+        catch { /* ignore */ }
     }
 
     private async Task SubmitAsync()

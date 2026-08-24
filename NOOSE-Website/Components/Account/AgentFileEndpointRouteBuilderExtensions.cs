@@ -5,7 +5,7 @@ using NOOSE_Website.Services;
 
 namespace NOOSE_Website.Components.Account;
 
-/// <summary>Serves agent profile pictures; a staged one reaches only its owner and leadership.</summary>
+/// <summary>Serves agent profile pictures; the visibility decision lives in AgentAvatar, not here.</summary>
 public static class AgentFileEndpointRouteBuilderExtensions
 {
     public static IEndpointConventionBuilder MapNooseAgentFileEndpoints(this IEndpointRouteBuilder endpoints)
@@ -19,15 +19,10 @@ public static class AgentFileEndpointRouteBuilderExtensions
             HttpContext http,
             CancellationToken cancellationToken) =>
         {
-            var agent = await agents.FindByAvatarFileAsync(fileName, cancellationToken);
-            if (agent is null)
-            {
-                return Results.NotFound();
-            }
-
-            var released = agent.AvatarFileName == fileName;
-            // an unreleased picture is not public yet; leadership must see it to decide
-            if (!released && http.User.GetAgentId() != agent.Id && !http.User.IsLeadership())
+            var owner = await agents.FindByAvatarFileAsync(fileName, cancellationToken);
+            // unknown file and a staged one the viewer may not have answer alike
+            if (owner is null
+                || AgentAvatar.ServableContentType(owner, fileName, http.User) is not { } contentType)
             {
                 return Results.NotFound();
             }
@@ -42,8 +37,6 @@ public static class AgentFileEndpointRouteBuilderExtensions
                 return Results.NotFound();
             }
 
-            var contentType = (released ? agent.AvatarContentType : agent.PendingAvatarContentType)
-                ?? "application/octet-stream";
             return Results.File(stream, contentType);
         })
         .RequireAuthorization(Policies.ActiveAgent);

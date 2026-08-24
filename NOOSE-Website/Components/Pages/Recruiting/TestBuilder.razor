@@ -56,6 +56,13 @@
             {
                 <MudDivider Class="my-2" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Antwortoptionen (richtige markieren)</MudText>
+                <MudCheckBox T="bool" @bind-Value="qe.Question.KeepOptionOrder" @bind-Value:after="@(() => MarkDirty(qe.Question.Id))"
+                             Label="Reihenfolge festhalten"
+                             Dense="true" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">
+                    Standard: der Bewerber sieht die Optionen gemischt, damit die Eingabereihenfolge nicht die
+                    richtige Antwort verrät. Nur festhalten, wenn die Optionen sachlich geordnet sind (z.&nbsp;B. Zahlen).
+                </MudText>
                 @foreach (var o in qe.Options)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-1">
@@ -145,7 +152,7 @@
         try
         {
             var q = qe.Question;
-            await TestService.UpdateQuestionAsync(q.Id, q.Prompt, q.Required, q.Points, q.CorrectYesNo, q.Keywords, q.MinKeywordHits, _user);
+            await TestService.UpdateQuestionAsync(q.Id, q.Prompt, q.Required, q.Points, q.CorrectYesNo, q.Keywords, q.MinKeywordHits, q.KeepOptionOrder, _user);
             foreach (var o in qe.Options)
             {
                 await TestService.UpdateOptionAsync(o.Id, o.Label, o.IsCorrect, _user);

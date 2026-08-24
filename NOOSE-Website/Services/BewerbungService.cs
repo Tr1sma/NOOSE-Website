@@ -203,7 +203,7 @@ public class BewerbungService(
         try
         {
             await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
-                $"Statusänderung: {BewerbungStatusDisplay.Name(target)}", "/portal/status", cancellationToken);
+                $"Statusänderung: {BewerbungStatusDisplay.ApplicantName(target)}", "/portal/status", cancellationToken);
         }
         catch { /* best effort */ }
 
@@ -245,7 +245,7 @@ public class BewerbungService(
         try
         {
             await notifications.NotifyAsync(bewerbung.ApplicantUserId, NotificationType.Recruiting,
-                passed ? $"Statusänderung: {BewerbungStatusDisplay.Name(BewerbungStatus.ImTest)}" : "Deine Bewerbung wurde abgeschlossen.",
+                passed ? $"Statusänderung: {BewerbungStatusDisplay.ApplicantName(BewerbungStatus.ImTest)}" : "Deine Bewerbung wurde abgeschlossen.",
                 "/portal/status", cancellationToken);
         }
         catch { /* best effort */ }

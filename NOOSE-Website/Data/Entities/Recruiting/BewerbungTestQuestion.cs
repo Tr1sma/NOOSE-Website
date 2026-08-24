@@ -40,6 +40,10 @@ public class BewerbungTestQuestion : IAuditable, ISoftDelete
     [Column("MindestTreffer")]
     public int? MinKeywordHits { get; set; }
 
+    /// <summary>Serve options in authoring order instead of shuffled; for factually ordered options.</summary>
+    [Column("ReihenfolgeFesthalten")]
+    public bool KeepOptionOrder { get; set; }
+
     [Column("ErstelltAm")]
     public DateTime CreatedAt { get; set; }
     [Column("ErstelltVonId")]

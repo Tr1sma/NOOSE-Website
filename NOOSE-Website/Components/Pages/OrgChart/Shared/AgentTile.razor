@@ -3,7 +3,7 @@
         @if (AgentAvatar.Url(Agent.AvatarFileName) is { } bild)
         {
             <MudAvatar Rounded="true">
-                <MudImage Src="@bild" Alt="@($"Profilbild von {Agent.Codename}")" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                <MudImage Src="@bild" Alt="@($"Profilbild von {Agent.Codename}")" />
             </MudAvatar>
         }
         else

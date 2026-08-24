@@ -59,7 +59,7 @@
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4" Icon="@Icons.Material.Filled.HourglassTop">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
                     <MudAvatar Rounded="true" Style="height:56px;width:56px;">
-                        <MudImage Src="@AgentAvatar.Url(_agent.PendingAvatarFileName)" Alt="Beantragtes Profilbild" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                        <MudImage Src="@AgentAvatar.Url(_agent.PendingAvatarFileName)" Alt="Beantragtes Profilbild" />
                     </MudAvatar>
                     <span>
                         Dein Profilbild wartet auf Freigabe durch die Führung
@@ -81,7 +81,7 @@
                                 @if (AgentAvatar.Url(_agent.AvatarFileName) is { } bild)
                                 {
                                     <MudAvatar Rounded="true" Style="height:120px;width:120px;">
-                                        <MudImage Src="@bild" Alt="Mein Profilbild" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                                        <MudImage Src="@bild" Alt="Mein Profilbild" />
                                     </MudAvatar>
                                 }
                                 else
@@ -225,6 +225,8 @@
     private List<Request> _myRequests = new();
     private AgentStats _stats = AgentStats.Empty;
 
+    // mirrors FileUploadOptions.AvatarMaxBytes; the service revalidates against the real option
+    private const long AvatarMaxBytes = 2 * 1024 * 1024;
     private bool _avatarBusy;
     private MudForm _form = default!;
     private string _codename = string.Empty;
@@ -286,14 +288,20 @@
         {
             return;
         }
+        // checked before OpenReadStream, which would otherwise throw its own English message
+        if (file.Size > AvatarMaxBytes)
+        {
+            Snackbar.Add($"Das Profilbild ist zu groß (max. {AvatarMaxBytes / (1024 * 1024)} MB).", Severity.Error);
+            return;
+        }
         _avatarBusy = true;
         try
         {
-            // 2 MB cap mirrors FileUploadOptions.AvatarMaxBytes; the service revalidates
+            await using var stream = file.OpenReadStream(AvatarMaxBytes);
             await using var buffer = new MemoryStream();
-            await file.OpenReadStream(2 * 1024 * 1024).CopyToAsync(buffer);
+            await stream.CopyToAsync(buffer);
             buffer.Position = 0;
-            await AgentService.AvatarSetAsync(_agent.Id, buffer, file.ContentType, buffer.Length, _user);
+            await AgentService.AvatarSetAsync(_agent.Id, buffer, file.ContentType, file.Size, _user);
             Snackbar.Add(_isLeadership
                 ? "Profilbild gespeichert."
                 : "Profilbild eingereicht. Es wird nach Freigabe durch die Führung sichtbar.", Severity.Success);
@@ -339,15 +347,10 @@
         }
     }
 
-    // no SecurityStamp rotation on a picture, so the session stays and only the row is re-read
+    // no SecurityStamp rotation on a picture, so the session stays; the form fields are left
+    // untouched on purpose, re-prefilling them would discard unsubmitted master-data edits
     private async Task AgentReloadAsync()
-    {
-        _agent = await AgentService.FindAsync(_agent!.Id);
-        if (_agent is not null)
-        {
-            FieldsPrefill();
-        }
-    }
+        => _agent = await AgentService.FindAsync(_agent!.Id) ?? _agent;
 
     private async Task SaveAsync()
     {
