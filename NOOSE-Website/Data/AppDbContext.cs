@@ -265,6 +265,10 @@ public class AppDbContext : IdentityDbContext<Agent>
             b.Property(a => a.DiscordId).HasMaxLength(32);
             b.Property(a => a.DiscordUsername).HasMaxLength(64);
             b.Property(a => a.AvatarUrl).HasMaxLength(512);
+            b.Property(a => a.AvatarFileName).HasMaxLength(128);
+            b.Property(a => a.AvatarContentType).HasMaxLength(100);
+            b.Property(a => a.PendingAvatarFileName).HasMaxLength(128);
+            b.Property(a => a.PendingAvatarContentType).HasMaxLength(100);
             b.Property(a => a.BlockedReason).HasMaxLength(512);
             b.Property(a => a.TerminatedById).HasMaxLength(64);
             b.Property(a => a.TerminatedByName).HasMaxLength(128);

@@ -368,6 +368,81 @@ public sealed class LinkServiceTests
             () => svc.CreateAsync("Person", "p1", "Faction", "f1", null, NonLeader()));
     }
 
+    // ---- UpdateLabelAsync --------------------------------------------------
+
+    [Fact]
+    public async Task UpdateLabelAsync_SetsLabel_Trimmed()
+    {
+        using var ctx = new SqliteTestContext();
+        var link = new Link { SourceType = "Case", SourceId = "c1", TargetType = "Person", TargetId = "p1" };
+        using (var db = ctx.NewContext())
+        {
+            db.Links.Add(link);
+            db.SaveChanges();
+        }
+        var (svc, _) = NewService(ctx);
+
+        await svc.UpdateLabelAsync(link.Id, "  Zeuge  ", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.Equal("Zeuge", (await check.Links.SingleAsync(x => x.Id == link.Id)).Label);
+    }
+
+    [Fact]
+    public async Task UpdateLabelAsync_OverwritesExistingLabel()
+    {
+        using var ctx = new SqliteTestContext();
+        var link = new Link { SourceType = "Case", SourceId = "c1", TargetType = "Person", TargetId = "p1", Label = "Zeuge" };
+        using (var db = ctx.NewContext())
+        {
+            db.Links.Add(link);
+            db.SaveChanges();
+        }
+        var (svc, _) = NewService(ctx);
+
+        await svc.UpdateLabelAsync(link.Id, "Beschuldigter", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.Equal("Beschuldigter", (await check.Links.SingleAsync(x => x.Id == link.Id)).Label);
+    }
+
+    [Fact]
+    public async Task UpdateLabelAsync_NullsBlankLabel()
+    {
+        using var ctx = new SqliteTestContext();
+        var link = new Link { SourceType = "Case", SourceId = "c1", TargetType = "Person", TargetId = "p1", Label = "Zeuge" };
+        using (var db = ctx.NewContext())
+        {
+            db.Links.Add(link);
+            db.SaveChanges();
+        }
+        var (svc, _) = NewService(ctx);
+
+        await svc.UpdateLabelAsync(link.Id, "   ", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.Null((await check.Links.SingleAsync(x => x.Id == link.Id)).Label);
+    }
+
+    [Fact]
+    public async Task UpdateLabelAsync_NoOp_OnUnknownId()
+    {
+        using var ctx = new SqliteTestContext();
+        var link = new Link { SourceType = "Case", SourceId = "c1", TargetType = "Person", TargetId = "p1", Label = "Zeuge" };
+        using (var db = ctx.NewContext())
+        {
+            db.Links.Add(link);
+            db.SaveChanges();
+        }
+        var (svc, _) = NewService(ctx);
+
+        // returns without throwing; existing link untouched.
+        await svc.UpdateLabelAsync("missing", "Beschuldigter", Leader());
+
+        using var check = ctx.NewContext();
+        Assert.Equal("Zeuge", (await check.Links.SingleAsync(x => x.Id == link.Id)).Label);
+    }
+
     // ---- RemoveAsync -------------------------------------------------------
 
     [Fact]

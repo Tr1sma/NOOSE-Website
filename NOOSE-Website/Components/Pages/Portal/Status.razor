@@ -16,8 +16,8 @@
         <MudPaper Elevation="4" Class="pa-4" Style="flex:0 0 auto;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-                    <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(_bewerbung.Status)" Variant="Variant.Filled">
-                        @BewerbungStatusDisplay.Name(_bewerbung.Status)
+                    <MudChip T="string" Color="BewerbungStatusDisplay.ChipColor(BewerbungStatusDisplay.ApplicantStep(_bewerbung.Status))" Variant="Variant.Filled">
+                        @BewerbungStatusDisplay.ApplicantName(_bewerbung.Status)
                     </MudChip>
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.subtitle2" Style="line-height:1.15;">@_bewerbung.Name</MudText>
@@ -25,7 +25,9 @@
                     </MudStack>
                 </MudStack>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    @if (_test is { Completed: false } && _bewerbung.Status == BewerbungStatus.ImTest)
+                    @* merged stage, so the button does not vanish when HRB advances past the test *@
+                    @if (_test is { Completed: false }
+                         && BewerbungStatusDisplay.ApplicantStep(_bewerbung.Status) == BewerbungStatus.ImTest)
                     {
                         <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Quiz" Href="/portal/test">Eignungstest ausfüllen</MudButton>
@@ -68,7 +70,7 @@
                 <MudDivider Class="my-3" />
                 @if (_ban is not null)
                 {
-                    <BewerbungssperreCard Ban="_ban" DecisionStatus="_bewerbung.Status" />
+                    <BewerbungssperreCard IsBlacklist="_ban.IsBlacklist" BannedUntil="_ban.BannedUntil" DecisionStatus="_bewerbung.Status" />
                 }
                 else
                 {
@@ -89,8 +91,8 @@
                         @foreach (var step in Steps)
                         {
                             <MudTimelineItem Color="@(StepReached(step) ? Color.Primary : Color.Default)"
-                                             Variant="@(step == _bewerbung.Status ? Variant.Filled : Variant.Outlined)">
-                                <MudText Typo="Typo.body2">@BewerbungStatusDisplay.Name(step)</MudText>
+                                             Variant="@(step == BewerbungStatusDisplay.ApplicantStep(_bewerbung.Status) ? Variant.Filled : Variant.Outlined)">
+                                <MudText Typo="Typo.body2">@BewerbungStatusDisplay.ApplicantName(step)</MudText>
                             </MudTimelineItem>
                         }
                     </MudTimeline>
@@ -120,12 +122,12 @@
     [CascadingParameter]
     private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
+    // interview stage merged into the test stage; see ApplicantName
     private static readonly BewerbungStatus[] Steps =
     [
         BewerbungStatus.Eingereicht,
         BewerbungStatus.InSicherheitspruefung,
         BewerbungStatus.ImTest,
-        BewerbungStatus.ImVorstellungsgespraech,
         BewerbungStatus.Angenommen,
     ];
 

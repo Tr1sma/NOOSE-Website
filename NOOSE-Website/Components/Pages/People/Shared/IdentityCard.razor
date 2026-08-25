@@ -32,10 +32,10 @@
                 }
                 @if (_informant is not null)
                 {
-                    <MudTooltip Text="@InformantTooltip()">
+                    <MudTooltip Text="@($"Als Informant geführt · {InformantEnumDisplay.Status(_informant.Status)} · {_informant.CaseNumber}")">
                         <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
                                  Icon="@Icons.Material.Filled.VisibilityOff"
-                                 Href="@(_informant.MayOpen ? $"/informanten/{_informant.InformantId}" : null)">Informant</MudChip>
+                                 Href="@($"/informanten/{_informant.InformantId}")">Informant</MudChip>
                     </MudTooltip>
                 }
             </MudStack>
@@ -116,12 +116,6 @@
         }
         _markerFor = Person.Id;
         _informant = await Informants.GetPersonMarkerAsync(Person.Id, User);
-    }
-
-    private string InformantTooltip()
-    {
-        var text = $"Als Informant geführt · {InformantEnumDisplay.Status(_informant!.Status)}";
-        return _informant.MayOpen ? $"{text} · {_informant.CaseNumber}" : text;
     }
 
     private async Task OpenLightboxAsync(PersonPhoto photo)

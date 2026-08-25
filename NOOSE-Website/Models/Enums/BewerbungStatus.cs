@@ -41,6 +41,19 @@ public static class BewerbungStatusDisplay
         _ => Color.Default,
     };
 
+    /// <summary>Label shown to the applicant; test and interview stage are merged.</summary>
+    /// <remarks>Advancing past ImTest would otherwise tell the applicant the test was acceptable, which
+    /// is the one verdict inference left. The internal Name stays untouched so HRB sees the real stage.</remarks>
+    public static string ApplicantName(BewerbungStatus status) => status switch
+    {
+        BewerbungStatus.ImTest or BewerbungStatus.ImVorstellungsgespraech => "Auswahlverfahren",
+        _ => Name(status),
+    };
+
+    /// <summary>Collapses the interview stage onto the test stage for the applicant stepper.</summary>
+    public static BewerbungStatus ApplicantStep(BewerbungStatus status)
+        => status == BewerbungStatus.ImVorstellungsgespraech ? BewerbungStatus.ImTest : status;
+
     /// <summary>Terminal states allow no further transitions.</summary>
     public static bool IsTerminal(BewerbungStatus status)
         => status is BewerbungStatus.Angenommen or BewerbungStatus.Abgelehnt or BewerbungStatus.Geschlossen;

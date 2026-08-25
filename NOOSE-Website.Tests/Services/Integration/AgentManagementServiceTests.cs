@@ -2,12 +2,14 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities;
 using NOOSE_Website.Data.Entities.Recruiting;
+using NOOSE_Website.Infrastructure.Storage;
 using NOOSE_Website.Services;
 using NOOSE_Website.Models.Enums;
 
@@ -22,7 +24,16 @@ public class AgentManagementServiceTests
         public required AgentManagementService Svc;
         public required INotificationService Notifications;
         public required IDiscordWebhookService Discord;
-        public void Dispose() { Db.Dispose(); Ctx.Dispose(); }
+        public required string AvatarPath;
+        public required string Root;
+        public void Dispose()
+        {
+            Db.Dispose();
+            Ctx.Dispose();
+            try { Directory.Delete(Root, recursive: true); }
+            catch (IOException) { /* ignore */ }
+            catch (UnauthorizedAccessException) { /* ignore */ }
+        }
     }
 
     private static UserManager<Agent> BuildUserManager(AppDbContext db)
@@ -45,10 +56,23 @@ public class AgentManagementServiceTests
                 ["Bootstrap:AdminDiscordId"] = bootstrapDiscordId,
             });
         }
+        // real files on disk: the service deletes superseded pictures, and that is worth asserting
+        var root = Path.Combine(Path.GetTempPath(), "noose-avatar-tests", Guid.NewGuid().ToString("N"));
+        var env = Substitute.For<IWebHostEnvironment>();
+        env.ContentRootPath.Returns(root);
+        var uploadOptions = new FileUploadOptions();
+        var avatars = new AgentAvatarStorageService(env, Options.Create(uploadOptions));
+
         var svc = new AgentManagementService(BuildUserManager(db), db, ctx.Factory, notifications,
-            discord, builder.Build());
-        return new Fixture { Ctx = ctx, Db = db, Svc = svc, Notifications = notifications, Discord = discord };
+            discord, builder.Build(), avatars);
+        return new Fixture
+        {
+            Ctx = ctx, Db = db, Svc = svc, Notifications = notifications, Discord = discord,
+            Root = root, AvatarPath = Path.Combine(root, uploadOptions.AvatarsPath),
+        };
     }
+
+    private static MemoryStream Image(int bytes = 32) => new(new byte[bytes]);
 
     private static void Persist(SqliteTestContext ctx, params Agent[] agents)
     {
@@ -841,5 +865,270 @@ public class AgentManagementServiceTests
         Persist(f.Ctx, NewAgent("gone", AgentStatus.Terminated));
 
         Assert.Contains(await f.Svc.GetAllAsync(), a => a.Id == "gone");
+    }
+
+    // ---- profile picture ----
+
+    [Fact]
+    public async Task AvatarSetAsync_BelowLeadership_StagesForRelease()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+
+        var agent = Reload(f, "jr");
+        Assert.Null(agent.AvatarFileName);
+        Assert.NotNull(agent.PendingAvatarFileName);
+        Assert.Equal("image/png", agent.PendingAvatarContentType);
+        Assert.NotNull(agent.AvatarRequestedAt);
+        Assert.True(File.Exists(Path.Combine(f.AvatarPath, agent.PendingAvatarFileName!)));
+    }
+
+    [Fact]
+    public async Task AvatarSetAsync_Leadership_AppliesInstantly()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("lead", AgentStatus.Active, Rank.SupervisorySpecialAgent));
+
+        await f.Svc.AvatarSetAsync("lead", Image(), "image/jpeg", 32, Leader("lead"));
+
+        var agent = Reload(f, "lead");
+        Assert.NotNull(agent.AvatarFileName);
+        Assert.Equal("image/jpeg", agent.AvatarContentType);
+        Assert.Null(agent.PendingAvatarFileName);
+        Assert.Null(agent.AvatarRequestedAt);
+    }
+
+    [Fact]
+    public async Task AvatarSetAsync_SecondUpload_ReplacesStagedFile()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        var first = Reload(f, "jr").PendingAvatarFileName!;
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        var second = Reload(f, "jr").PendingAvatarFileName!;
+
+        Assert.NotEqual(first, second);
+        Assert.False(File.Exists(Path.Combine(f.AvatarPath, first)));
+        Assert.True(File.Exists(Path.Combine(f.AvatarPath, second)));
+    }
+
+    [Theory]
+    [InlineData("application/pdf")]
+    [InlineData("text/plain")]
+    [InlineData("")]
+    public async Task AvatarSetAsync_Throws_OnDisallowedType(string contentType)
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.AvatarSetAsync("jr", Image(), contentType, 32, Junior("jr")));
+
+        Assert.Null(Reload(f, "jr").PendingAvatarFileName);
+    }
+
+    [Fact]
+    public async Task AvatarSetAsync_Throws_WhenTooLarge()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+        var tooBig = new FileUploadOptions().AvatarMaxBytes + 1;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => f.Svc.AvatarSetAsync("jr", Image(), "image/png", tooBig, Junior("jr")));
+
+        Assert.Null(Reload(f, "jr").PendingAvatarFileName);
+    }
+
+    [Fact]
+    public async Task AvatarSetAsync_Throws_ForForeignAccount_EvenAsLeadership()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+
+        // leadership moderates by removing, it never uploads on someone else's behalf
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Leader()));
+    }
+
+    [Fact]
+    public async Task AvatarSetAsync_Throws_ForOnlyReader()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("ro", AgentStatus.Active, Rank.Director, a => a.IsTeamLead = true));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => f.Svc.AvatarSetAsync("ro", Image(), "image/png", 32, OnlyReader("ro")));
+    }
+
+    [Fact]
+    public async Task AvatarSetAsync_Throws_ForPartner()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("pa", AgentStatus.Active, Rank.JuniorAgent, a => a.PartnerAgency = PartnerAgency.LSPD));
+        var partner = ClaimsPrincipalBuilder.Agent("pa").AsPartner(PartnerAgency.LSPD, PartnerRank.Chief).Build();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => f.Svc.AvatarSetAsync("pa", Image(), "image/png", 32, partner));
+    }
+
+    [Fact]
+    public async Task AvatarApproveAsync_MovesStagedToActive_AndNotifies()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        var staged = Reload(f, "jr").PendingAvatarFileName!;
+
+        await f.Svc.AvatarApproveAsync("jr", Leader());
+
+        var agent = Reload(f, "jr");
+        Assert.Equal(staged, agent.AvatarFileName);
+        Assert.Equal("image/png", agent.AvatarContentType);
+        Assert.Null(agent.PendingAvatarFileName);
+        Assert.Null(agent.AvatarRequestedAt);
+        Assert.True(File.Exists(Path.Combine(f.AvatarPath, staged)));
+        await f.Notifications.Received(1).NotifyAsync("jr", NotificationType.Account,
+            Arg.Any<string>(), "/profil", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AvatarApproveAsync_DeletesThePreviousPicture()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        await f.Svc.AvatarApproveAsync("jr", Leader());
+        var first = Reload(f, "jr").AvatarFileName!;
+
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        await f.Svc.AvatarApproveAsync("jr", Leader());
+        var second = Reload(f, "jr").AvatarFileName!;
+
+        Assert.NotEqual(first, second);
+        Assert.False(File.Exists(Path.Combine(f.AvatarPath, first)));
+        Assert.True(File.Exists(Path.Combine(f.AvatarPath, second)));
+    }
+
+    [Fact]
+    public async Task AvatarApproveAsync_Throws_WithoutStagedPicture()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Svc.AvatarApproveAsync("jr", Leader()));
+    }
+
+    [Fact]
+    public async Task AvatarApproveAsync_Throws_ForNonLeadership()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Svc.AvatarApproveAsync("jr", Junior("other")));
+    }
+
+    [Fact]
+    public async Task AvatarRejectAsync_DropsStaged_KeepsActive()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent,
+            a => { a.AvatarFileName = "alt.png"; a.AvatarContentType = "image/png"; }));
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        var staged = Reload(f, "jr").PendingAvatarFileName!;
+
+        await f.Svc.AvatarRejectAsync("jr", "unpassend", Leader());
+
+        var agent = Reload(f, "jr");
+        Assert.Equal("alt.png", agent.AvatarFileName);
+        Assert.Null(agent.PendingAvatarFileName);
+        Assert.Null(agent.AvatarRequestedAt);
+        Assert.False(File.Exists(Path.Combine(f.AvatarPath, staged)));
+    }
+
+    [Fact]
+    public async Task AvatarRejectAsync_Throws_ForNonLeadership()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Svc.AvatarRejectAsync("jr", "nein", Junior("other")));
+    }
+
+    [Fact]
+    public async Task AvatarRemoveAsync_OwnAccount_ClearsBothAndDeletesFiles()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        await f.Svc.AvatarApproveAsync("jr", Leader());
+        var active = Reload(f, "jr").AvatarFileName!;
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        var staged = Reload(f, "jr").PendingAvatarFileName!;
+
+        await f.Svc.AvatarRemoveAsync("jr", Junior("jr"));
+
+        var agent = Reload(f, "jr");
+        Assert.Null(agent.AvatarFileName);
+        Assert.Null(agent.AvatarContentType);
+        Assert.Null(agent.PendingAvatarFileName);
+        Assert.Null(agent.AvatarRequestedAt);
+        Assert.False(File.Exists(Path.Combine(f.AvatarPath, active)));
+        Assert.False(File.Exists(Path.Combine(f.AvatarPath, staged)));
+    }
+
+    [Fact]
+    public async Task AvatarRemoveAsync_ForeignAccount_LeadershipOnly()
+    {
+        using var f = Make();
+        Persist(f.Ctx, NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent,
+            a => { a.AvatarFileName = "alt.png"; a.AvatarContentType = "image/png"; }));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => f.Svc.AvatarRemoveAsync("jr", Junior("other")));
+        Assert.Equal("alt.png", Reload(f, "jr").AvatarFileName);
+
+        await f.Svc.AvatarRemoveAsync("jr", Leader());
+        Assert.Null(Reload(f, "jr").AvatarFileName);
+    }
+
+    [Fact]
+    public async Task GetPendingAvatarsAsync_ListsOnlyStaged_OrderedByRequest()
+    {
+        using var f = Make();
+        Persist(f.Ctx,
+            NewAgent("a", AgentStatus.Active, Rank.JuniorAgent),
+            NewAgent("b", AgentStatus.Active, Rank.JuniorAgent),
+            NewAgent("c", AgentStatus.Active, Rank.JuniorAgent,
+                a => { a.AvatarFileName = "aktiv.png"; a.AvatarContentType = "image/png"; }));
+        await f.Svc.AvatarSetAsync("b", Image(), "image/png", 32, Junior("b"));
+        await f.Svc.AvatarSetAsync("a", Image(), "image/png", 32, Junior("a"));
+
+        var pending = await f.Svc.GetPendingAvatarsAsync();
+
+        Assert.Equal(new[] { "b", "a" }, pending.Select(x => x.Id));
+    }
+
+    [Fact]
+    public async Task FindByAvatarFileAsync_MatchesActiveAndStaged()
+    {
+        using var f = Make();
+        Persist(f.Ctx,
+            NewAgent("act", AgentStatus.Active, Rank.JuniorAgent,
+                a => { a.AvatarFileName = "aktiv.png"; a.AvatarContentType = "image/png"; }),
+            NewAgent("jr", AgentStatus.Active, Rank.JuniorAgent));
+        await f.Svc.AvatarSetAsync("jr", Image(), "image/png", 32, Junior("jr"));
+        var staged = Reload(f, "jr").PendingAvatarFileName!;
+
+        Assert.Equal("act", (await f.Svc.FindByAvatarFileAsync("aktiv.png"))?.Id);
+        Assert.Equal("jr", (await f.Svc.FindByAvatarFileAsync(staged))?.Id);
+        Assert.Null(await f.Svc.FindByAvatarFileAsync("unbekannt.png"));
+        Assert.Null(await f.Svc.FindByAvatarFileAsync(""));
     }
 }

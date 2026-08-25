@@ -114,7 +114,7 @@ public sealed class NooseiOpenedTypesTests
     }
 
     [Fact]
-    public async Task AnInformant_StaysHiddenFromAnAgentWhoIsNotTheHandler()
+    public async Task AnInformant_IsReadableByEveryInternalAgent()
     {
         using var ctx = new SqliteTestContext();
         using (var db = ctx.NewContext())
@@ -128,11 +128,15 @@ public sealed class NooseiOpenedTypesTests
             db.SaveChanges();
         }
 
-        var (forbidden, allowed) = await ReadBothAsync(ctx, "Informant", "i1", Junior(), Junior(Owner));
+        var tool = Tool(ctx);
+        var stranger = await tool.InvokeAsync(
+            Args("""{"typ":"Informant","id":"i1"}"""), NooseiToolContext.From(Junior()));
+        var handler = await tool.InvokeAsync(
+            Args("""{"typ":"Informant","id":"i1"}"""), NooseiToolContext.From(Junior(Owner)));
 
-        Assert.DoesNotContain("Klara Klarname", forbidden);
-        // record access implies full detail: the handler sees the real name, there is no second tier
-        Assert.Contains("Klara Klarname", allowed);
+        // record access implies full detail: no second tier hides the real name from a non-handler
+        Assert.Contains("Klara Klarname", stranger.Text);
+        Assert.Contains("Klara Klarname", handler.Text);
     }
 
     [Fact]

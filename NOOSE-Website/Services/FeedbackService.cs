@@ -9,7 +9,7 @@ using FeedbackEntity = NOOSE_Website.Data.Entities.Feedback.Feedback;
 
 namespace NOOSE_Website.Services;
 
-/// <summary>Agents file feedback about the site; leadership reads the inbox and the trash.</summary>
+/// <summary>Agents file feedback about the site; every internal agent reads all of it, leadership decides and reads the trash.</summary>
 public class FeedbackService(
     IDbContextFactory<AppDbContext> dbFactory,
     INotificationService notifications) : IFeedbackService
@@ -47,21 +47,21 @@ public class FeedbackService(
             .Where(f => f.AgentId == meId)
             .OrderByDescending(f => f.CreatedAt)
             .Select(f => new FeedbackRow(
-                f.Id, f.Kind, f.Status, f.PageRoute, f.PageTab, f.Text, f.Agent!.Codename, f.CreatedAt,
+                f.Id, f.Kind, f.Status, f.PageRoute, f.PageTab, f.Text, f.AgentId, f.Agent!.Codename, f.CreatedAt,
                 f.Response, f.DeciderName, f.DecidedAt))
             .ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<FeedbackRow>> GetInboxAsync(ClaimsPrincipal viewer, CancellationToken cancellationToken = default)
     {
-        // twin of Policies.LeadershipPage, which gates the inbox section
-        Permission.RequireClassifiedRead(viewer);
+        // twin of Policies.InternalAgent, which gates the page carrying this section
+        Permission.RequireInternalAgent(viewer);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Feedbacks.AsNoTracking()
             .OrderByDescending(f => f.CreatedAt)
             .Select(f => new FeedbackRow(
-                f.Id, f.Kind, f.Status, f.PageRoute, f.PageTab, f.Text, f.Agent!.Codename, f.CreatedAt,
+                f.Id, f.Kind, f.Status, f.PageRoute, f.PageTab, f.Text, f.AgentId, f.Agent!.Codename, f.CreatedAt,
                 f.Response, f.DeciderName, f.DecidedAt))
             .ToListAsync(cancellationToken);
     }

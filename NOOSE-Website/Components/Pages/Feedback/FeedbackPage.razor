@@ -5,7 +5,7 @@
 
 <PageHeader Icon="@Icons.Material.Filled.Feedback"
             Title="Feedback"
-            Subtitle="Fehler, Ideen und Wünsche zur Website melden; die Führung liest den Eingang." />
+            Subtitle="Fehler, Ideen und Wünsche zur Website melden; jeder Agent sieht alle Meldungen, die Führung entscheidet." />
 
 <RecordSectionRail>
     <RecordSection Slug="melden" Label="Melden" Icon="@Icons.Material.Filled.Feedback">
@@ -17,10 +17,8 @@
         <FeedbackListPanel Inbox="false" />
     </RecordSection>
 
-    @* the inbox section neither renders nor registers for anyone below leadership *@
-    <AuthorizeView Policy="@Policies.LeadershipPage" Context="inboxSection">
-        <RecordSection Slug="eingang" Label="Eingang" Icon="@Icons.Material.Filled.Inbox">
-            <FeedbackListPanel Inbox="true" />
-        </RecordSection>
-    </AuthorizeView>
+    @* open to every internal agent; the page policy already keeps partners out *@
+    <RecordSection Slug="eingang" Label="Alle Meldungen" Icon="@Icons.Material.Filled.Inbox">
+        <FeedbackListPanel Inbox="true" />
+    </RecordSection>
 </RecordSectionRail>

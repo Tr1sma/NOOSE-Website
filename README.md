@@ -32,7 +32,7 @@ Alles ist auditiert (Created/Modified/Deleted), Soft-Delete-fähig und rang-/rol
 - **Dienstbesprechungen** `/besprechungen` - Tagesordnung, Protokoll-Notizen, Anwesenheitsliste, Klonen der Folgebesprechung, Erinnerungs-Worker (24 h/30 min).
 - **Abmeldungen** `/abmeldungen` - Urlaub/Krank/RP-Pause mit Sichtbarkeits-Scopes, Kenntnisnahme und Anwesenheits-Statistik mit Anomalie-Ampel.
 - **Dienst-Aktivitäten** `/aktivitaeten` - Diensteinträge der Agenten mit Vorlagen und Akten-Verknüpfung.
-- **Informanten** `/informanten` - V-Personen mit Klarname (kein Deckname), Zuverlässigkeit, Kontaktdaten, Treffen-Protokollen; optional mit Personen- und Fraktionsakte verknüpft. Sichtbar für Führung, Nur-Lese-Aufsicht und den zuständigen Führungsagenten.
+- **Informanten** `/informanten` - V-Personen mit Klarname (kein Deckname), Zuverlässigkeit, Kontaktdaten, Treffen-Protokollen; optional mit Personen- und Fraktionsakte verknüpft. Jeder interne Agent darf sie anlegen, lesen, bearbeiten und in den Papierkorb legen (Wiederherstellen wie überall nur die Führung); Partnerbehörden sehen nichts davon. Aufrufe landen im Zugriffsprotokoll.
 - **Dokumente** `/dokumente` - Dokumenten-Bibliothek mit Rich-Text (Quill), Kategorien, Anheften, Datei-Anhängen; VS-Stufen (Leadership/TRU/HRB) und individuelle Freigabe-/Sperrlisten pro Agent.
 - **Datei-Bibliothek** - zentrale Upload-Ablage (Formulare, SOPs) mit Kategorien und Download-Endpoint.
 - **Gesetzbuch** `/gesetze` - durchsuchbare Gesetzes-Referenz, verknüpfbar mit Fällen/Doks, partner-freigebbar.

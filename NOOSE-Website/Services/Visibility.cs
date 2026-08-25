@@ -161,11 +161,6 @@ public static class Visibility
             case nameof(CounterIntelRule):
                 return scope.IsLeadership
                     && await db.CounterIntelRules.AnyAsync(r => r.Id == entityId, cancellationToken);
-            // own report, or anyone who reads everything. Fully qualified: the entity shares its simple name with
-            // the namespace it lives in, and an alias would make nameof() yield the alias instead of the CLR name.
-            case nameof(Data.Entities.Feedback.Feedback):
-                return await db.Feedbacks.AnyAsync(
-                    f => f.Id == entityId && (scope.MayClassifiedRead || f.AgentId == scope.MeId), cancellationToken);
         }
 
         // open to every internal agent, but named rather than left to the tail below: a type that falls through
@@ -180,21 +175,20 @@ public static class Visibility
             nameof(AgentAbduction) => await db.AgentAbductions.AnyAsync(a => a.Id == entityId, cancellationToken),
             nameof(AgentActivity) => await db.AgentActivities.AnyAsync(a => a.Id == entityId, cancellationToken),
             nameof(TrainingModule) => await db.TrainingModules.AnyAsync(m => m.Id == entityId, cancellationToken),
+            // fully qualified: the entity shares its simple name with the namespace it lives in, and an alias
+            // would make nameof() yield the alias instead of the CLR name
+            nameof(Data.Entities.Feedback.Feedback) =>
+                await db.Feedbacks.AnyAsync(f => f.Id == entityId, cancellationToken),
             // unknown type = visible
             _ => true,
         };
     }
 
-    /// <summary>Informant gate: leadership or the assigned handler, fail-closed on a missing record.</summary>
+    /// <summary>Informant gate: every internal agent, never a partner — fail-closed on a missing record.</summary>
     private static async Task<bool> InformantVisibleAsync(
         AppDbContext db, string informantId, ViewerScope scope, CancellationToken cancellationToken)
-    {
-        var handler = await db.Informants.AsNoTracking()
-            .Where(i => i.Id == informantId)
-            .Select(i => new { i.HandlerId })
-            .FirstOrDefaultAsync(cancellationToken);
-        return handler is not null && InformantVisibility.MaySeeRecord(scope, handler.HandlerId);
-    }
+        => InformantVisibility.MaySeeRecord(scope)
+        && await db.Informants.AsNoTracking().AnyAsync(i => i.Id == informantId, cancellationToken);
 
     /// <summary>Request gate: its own requester always, everyone else exactly as far as the target record reaches.</summary>
     /// <remarks>Mirrors the search provider, which resolves a request through its target rather than through a rank.

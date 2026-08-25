@@ -46,13 +46,14 @@ public sealed class BewerbungTestServiceTests
     }
 
     private static BewerbungTestQuestion AddQuestion(SqliteTestContext ctx, string id, string testId, TestQuestionType type, int sorting,
-        int points = 1, bool? correctYesNo = null, string? keywords = null, int? minKeywordHits = null)
+        int points = 1, bool? correctYesNo = null, string? keywords = null, int? minKeywordHits = null, bool keepOptionOrder = false)
     {
         using var db = ctx.NewContext();
         var q = new BewerbungTestQuestion
         {
             Id = id, TestId = testId, Type = type, Prompt = $"Frage {id}", Sorting = sorting,
-            Points = points, CorrectYesNo = correctYesNo, Keywords = keywords, MinKeywordHits = minKeywordHits, CreatedAt = Ts,
+            Points = points, CorrectYesNo = correctYesNo, Keywords = keywords, MinKeywordHits = minKeywordHits,
+            KeepOptionOrder = keepOptionOrder, CreatedAt = Ts,
         };
         db.BewerbungTestQuestions.Add(q);
         db.SaveChanges();
@@ -373,7 +374,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await svc.UpdateQuestionAsync("q1", "  Neuer Text  ", required: true, points: -5,
-            correctYesNo: true, keywords: "  a; b  ", minKeywordHits: 2, Hrb());
+            correctYesNo: true, keywords: "  a; b  ", minKeywordHits: 2, keepOptionOrder: false, Hrb());
 
         using var check = ctx.NewContext();
         var q = await check.BewerbungTestQuestions.SingleAsync(x => x.Id == "q1");
@@ -393,7 +394,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await svc.UpdateQuestionAsync("q1", "Ja oder nein?", required: true, points: 3,
-            correctYesNo: false, keywords: "ignored", minKeywordHits: 5, Hrb());
+            correctYesNo: false, keywords: "ignored", minKeywordHits: 5, keepOptionOrder: false, Hrb());
 
         using var check = ctx.NewContext();
         var q = await check.BewerbungTestQuestions.SingleAsync(x => x.Id == "q1");
@@ -410,7 +411,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.UpdateQuestionAsync("nope", "Q", true, 1, null, null, null, Hrb()));
+            () => svc.UpdateQuestionAsync("nope", "Q", true, 1, null, null, null, false, Hrb()));
     }
 
     [Fact]
@@ -422,7 +423,7 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => svc.UpdateQuestionAsync("q1", "Q", true, 1, null, null, null, NonHrb()));
+            () => svc.UpdateQuestionAsync("q1", "Q", true, 1, null, null, null, false, NonHrb()));
     }
 
     // ---------- DeleteQuestionAsync ----------
@@ -803,6 +804,37 @@ public sealed class BewerbungTestServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => svc.SetManualGradeAsync("an1", true, NonHrb()));
     }
 
+    [Fact]
+    public async Task UpdateQuestionAsync_MultipleChoice_PersistsKeepOptionOrder()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1);
+        var (svc, _, _) = Build(ctx);
+
+        await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 1,
+            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: true, Hrb());
+
+        using var check = ctx.NewContext();
+        Assert.True((await check.BewerbungTestQuestions.SingleAsync(q => q.Id == "q1")).KeepOptionOrder);
+    }
+
+    [Fact]
+    public async Task UpdateQuestionAsync_NonMultipleChoice_ClearsKeepOptionOrder()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.FreeText, sorting: 1, keepOptionOrder: true);
+        var (svc, _, _) = Build(ctx);
+
+        await svc.UpdateQuestionAsync("q1", "Frage", required: true, points: 1,
+            correctYesNo: null, keywords: null, minKeywordHits: null, keepOptionOrder: true, Hrb());
+
+        using var check = ctx.NewContext();
+        // not applicable without options
+        Assert.False((await check.BewerbungTestQuestions.SingleAsync(q => q.Id == "q1")).KeepOptionOrder);
+    }
+
     // ---------- GetAssignedForApplicantAsync ----------
 
     [Fact]
@@ -850,6 +882,65 @@ public sealed class BewerbungTestServiceTests
         var (svc, _, _) = Build(ctx);
 
         Assert.Null(await svc.GetAssignedForApplicantAsync(Applicant("app1")));
+    }
+
+    [Fact]
+    public async Task GetAssignedForApplicantAsync_CarriesCaseNumber_ForTheWatermark()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "app1", caseNumber: "NOOSE-B-2026-0042");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        var (svc, _, _) = Build(ctx);
+
+        var view = await svc.GetAssignedForApplicantAsync(Applicant("app1"));
+
+        Assert.Equal("NOOSE-B-2026-0042", view!.CaseNumber);
+    }
+
+    [Fact]
+    public async Task GetAssignedForApplicantAsync_KeepOptionOrder_ServesAuthoringOrder()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1, keepOptionOrder: true);
+        for (var i = 1; i <= 6; i++)
+        {
+            AddOption(ctx, $"o{i}", "q1", $"Option {i}", isCorrect: i == 1, sorting: i);
+        }
+        var (svc, _, _) = Build(ctx);
+
+        var view = await svc.GetAssignedForApplicantAsync(Applicant("app1"));
+
+        Assert.Equal(new[] { "o1", "o2", "o3", "o4", "o5", "o6" },
+            view!.Questions.Single().Options.Select(o => o.OptionId).ToArray());
+    }
+
+    [Fact]
+    public async Task GetAssignedForApplicantAsync_Default_ShufflesOptions_ButStaysStableAcrossCalls()
+    {
+        using var ctx = new SqliteTestContext();
+        AddTest(ctx, "t1", "Test", sorting: 1);
+        AddBewerbung(ctx, "b1", "app1");
+        AddAssignment(ctx, "as1", "b1", "t1");
+        AddQuestion(ctx, "q1", "t1", TestQuestionType.MultipleChoice, sorting: 1);
+        for (var i = 1; i <= 8; i++)
+        {
+            AddOption(ctx, $"o{i}", "q1", $"Option {i}", isCorrect: i == 1, sorting: i);
+        }
+        var (svc, _, _) = Build(ctx);
+        var authored = new[] { "o1", "o2", "o3", "o4", "o5", "o6", "o7", "o8" };
+
+        var first = (await svc.GetAssignedForApplicantAsync(Applicant("app1")))!
+            .Questions.Single().Options.Select(o => o.OptionId).ToArray();
+        var second = (await svc.GetAssignedForApplicantAsync(Applicant("app1")))!
+            .Questions.Single().Options.Select(o => o.OptionId).ToArray();
+
+        Assert.Equal(first, second);                          // the actual point: deterministic
+        Assert.NotEqual(authored, first);                     // creation order is no longer the key
+        Assert.Equal(authored.OrderBy(x => x), first.OrderBy(x => x));  // nothing lost
     }
 
     [Fact]

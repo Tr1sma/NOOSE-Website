@@ -1,9 +1,23 @@
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
-        <MudStack AlignItems="AlignItems.Center" Class="py-2">
-            <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
-                <MudIcon Icon="@Icons.Material.Filled.Badge" Style="font-size:3rem;" />
-            </MudAvatar>
+        <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="py-2">
+            @if (AgentAvatar.Url(Agent.AvatarFileName) is { } bild)
+            {
+                <MudAvatar Rounded="true" Style="height:120px;width:120px;">
+                    <MudImage Src="@bild" Alt="@($"Profilbild von {Agent.Codename}")" />
+                </MudAvatar>
+                @if (MayRemove)
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Delete" OnClick="OnRemove">Profilbild entfernen</MudButton>
+                }
+            }
+            else
+            {
+                <MudAvatar Color="Color.Primary" Rounded="true" Style="height:120px;width:120px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Badge" Style="font-size:3rem;" />
+                </MudAvatar>
+            }
         </MudStack>
 
         <div>
@@ -45,4 +59,8 @@
 @code {
     [Parameter, EditorRequired] public Agent Agent { get; set; } = default!;
     [Parameter] public bool MayRealName { get; set; }
+
+    /// <summary>Shows the moderation button; the page decides who may and runs the service call.</summary>
+    [Parameter] public bool MayRemove { get; set; }
+    [Parameter] public EventCallback OnRemove { get; set; }
 }

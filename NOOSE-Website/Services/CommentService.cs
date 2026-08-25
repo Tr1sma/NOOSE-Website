@@ -68,6 +68,43 @@ public class CommentService(IDbContextFactory<AppDbContext> dbFactory, INotifica
         return comment;
     }
 
+    public async Task<Comment> EditAsync(string commentId, string text, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        text = (text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new InvalidOperationException("Der Kommentar darf nicht leer sein.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var comment = await db.Comments.FirstOrDefaultAsync(k => k.Id == commentId, cancellationToken);
+        if (comment is null)
+        {
+            throw new InvalidOperationException("Der Kommentar wurde nicht gefunden.");
+        }
+
+        // author only; an unowned row belongs to nobody, so a null match must not open it
+        if (comment.CreatedById is null || comment.CreatedById != actor.GetAgentId())
+        {
+            throw new UnauthorizedAccessException("Nur eigene Kommentare können bearbeitet werden.");
+        }
+
+        // the record may have been classified since the comment was written
+        if (!await Visibility.IsRecordVisibleAsync(db, comment.EntityType, comment.EntityId, ViewerScope.From(actor), cancellationToken))
+        {
+            throw new UnauthorizedAccessException("Diese Akte ist für dich nicht zugänglich.");
+        }
+
+        var oldText = comment.Text;
+        comment.Text = text;
+        await db.SaveChangesAsync(cancellationToken);
+
+        await MentionNotify.DeltaAsync(notifications, oldText, text, "einem Vermerk",
+            comment.EntityType, comment.EntityId, actor, cancellationToken);
+
+        return comment;
+    }
+
     public async Task DeleteAsync(string commentId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);

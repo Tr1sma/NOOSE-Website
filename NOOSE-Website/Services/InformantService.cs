@@ -3,23 +3,33 @@ using Microsoft.EntityFrameworkCore;
 using NOOSE_Website.Authorization;
 using NOOSE_Website.Data;
 using NOOSE_Website.Data.Entities.Informants;
+using NOOSE_Website.Models.Enums;
 using NOOSE_Website.Models.Informants;
 
 namespace NOOSE_Website.Services;
 
 /// <summary>Confidential informant management. Informants carry a real name only (no codename) and may be linked to a
-/// person record and a faction. Record access is all-or-nothing.</summary>
+/// person record and a faction. Every internal agent may do everything with every record; partners see nothing.</summary>
 public interface IInformantService
 {
     Task<List<InformantDisplay>> GetListAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<InformantDisplay?> GetDetailAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<string> CreateAsync(InformantInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task UpdateAsync(string id, InformantInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+    /// <summary>Move the informant to the trash (soft delete); any internal agent may.</summary>
+    Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Deleted informants for the trash page; gated by that page, like every other record type.</summary>
+    Task<List<InformantTrashItem>> GetTrashAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Restore from the trash — leadership only, same as every other record type.</summary>
+    Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
     Task<List<InformantMeetingDisplay>> GetMeetingsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task AddMeetingAsync(string id, InformantMeetingInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
     Task<List<InformantHandlerOption>> GetHandlerOptionsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Informant marker for a person record, or null when the person is not an informant.</summary>
+    /// <summary>Informant marker for a person record, or null when the person is not an informant (or the viewer is a partner).</summary>
     Task<InformantPersonMarker?> GetPersonMarkerAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
     /// <summary>Informants linked to a faction; empty for partners.</summary>
@@ -31,13 +41,12 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 {
     public async Task<List<InformantDisplay>> GetListAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var ids = await InformantVisibility.VisibleIdsAsync(db, actor, cancellationToken);
-        if (ids.Count == 0)
+        if (!InformantVisibility.MaySeeRecord(actor))
         {
             return new List<InformantDisplay>();
         }
-        var rows = await db.Informants.Where(i => ids.Contains(i.Id))
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Informants
             .Select(i => new
             {
                 i.Id, i.CaseNumber, i.RealName, i.PersonId, i.FactionId, i.Description,
@@ -47,6 +56,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         var handlers = await HandlerDisplayAsync(db, rows.Select(r => r.HandlerId), actor.MayRealNameSee(), cancellationToken);
         var people = await LinkedPeopleAsync(db, rows.Select(r => r.PersonId), actor, cancellationToken);
         var factions = await LinkedFactionsAsync(db, rows.Select(r => r.FactionId), actor, cancellationToken);
+        var mayEdit = actor.MayWrite();
 
         return rows
             .Select(r =>
@@ -58,7 +68,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
                     person?.Id, person?.Name, person?.CaseNumber,
                     r.FactionId, r.FactionId is null ? null : factions.GetValueOrDefault(r.FactionId),
                     r.ContactInfo, r.Notes,
-                    InformantVisibility.MayWrite(actor, r.HandlerId));
+                    mayEdit);
             })
             .OrderBy(d => d.Name)
             .ToList();
@@ -66,6 +76,10 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task<InformantDisplay?> GetDetailAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        if (!InformantVisibility.MaySeeRecord(actor))
+        {
+            return null;
+        }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var inf = await db.Informants.Where(i => i.Id == id)
             .Select(i => new
@@ -74,7 +88,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
                 i.Reliability, i.Status, i.HandlerId, i.ContactInfo, i.Notes,
             })
             .FirstOrDefaultAsync(cancellationToken);
-        if (inf is null || !InformantVisibility.MaySeeRecord(actor, inf.HandlerId))
+        if (inf is null)
         {
             return null;
         }
@@ -90,18 +104,19 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
             person?.Id, person?.Name, person?.CaseNumber,
             inf.FactionId, inf.FactionId is null ? null : factions.GetValueOrDefault(inf.FactionId),
             inf.ContactInfo, inf.Notes,
-            InformantVisibility.MayWrite(actor, inf.HandlerId));
+            actor.MayWrite());
     }
 
     public async Task<string> CreateAsync(InformantInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor); // creating + assigning a handler is a leadership act
+        Permission.RequireWriteAccess(actor);
         if (string.IsNullOrWhiteSpace(input.HandlerId))
         {
             throw new InvalidOperationException("Führungsagent erforderlich.");
         }
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        await EnsureSelectableHandlerAsync(db, input.HandlerId, cancellationToken);
         var (personId, realName) = await ResolveNameSourceAsync(db, input, null, null, actor, cancellationToken);
         var factionId = await ResolveFactionAsync(db, input.FactionId, actor, cancellationToken);
 
@@ -128,13 +143,13 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task UpdateAsync(string id, InformantInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        Permission.RequireWriteAccess(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var inf = await db.Informants.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
         if (inf is null)
         {
             return;
         }
-        Permission.RequireInformantWrite(actor, inf.HandlerId);
 
         var (personId, realName) = await ResolveNameSourceAsync(db, input, id, inf.PersonId, actor, cancellationToken);
         inf.RealName = realName;
@@ -146,23 +161,79 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         inf.Reliability = input.Reliability;
         inf.Status = input.Status;
 
-        // reassigning the handler is leadership-only
+        // an empty handler would orphan the record, so only a real id reassigns it
         if (!string.IsNullOrWhiteSpace(input.HandlerId) && input.HandlerId != inf.HandlerId)
         {
-            Permission.RequireLeadership(actor);
+            await EnsureSelectableHandlerAsync(db, input.HandlerId, cancellationToken);
             inf.HandlerId = input.HandlerId;
         }
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<InformantMeetingDisplay>> GetMeetingsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var inf = await db.Informants.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (inf is null)
+        {
+            return;
+        }
+        // soft delete via interceptor; the meetings stay put so a restore brings the file back whole
+        db.Informants.Remove(inf);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<InformantTrashItem>> GetTrashAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var handlerId = await db.Informants.Where(i => i.Id == id).Select(i => i.HandlerId).FirstOrDefaultAsync(cancellationToken);
-        if (handlerId is null || !InformantVisibility.MaySeeRecord(actor, handlerId))
+        var rows = await db.Informants.AsNoTracking().IgnoreQueryFilters()
+            .Where(i => i.IsDeleted)
+            .OrderByDescending(i => i.DeletedAt)
+            .Select(i => new { i.Id, i.CaseNumber, i.RealName, i.PersonId, i.Status, i.DeletedAt })
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return new List<InformantTrashItem>();
+        }
+        // no classification filter: every viewer of the trash page may read classified records anyway
+        var personIds = rows.Where(r => r.PersonId != null).Select(r => r.PersonId!).Distinct().ToList();
+        var people = await db.People.AsNoTracking().Where(p => personIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name })
+            .ToDictionaryAsync(p => p.Id, p => p.Name, cancellationToken);
+
+        return rows
+            .Select(r => new InformantTrashItem(
+                r.Id, r.CaseNumber,
+                Label(r.PersonId is null ? null : people.GetValueOrDefault(r.PersonId), r.RealName, r.CaseNumber),
+                InformantEnumDisplay.Status(r.Status), r.DeletedAt))
+            .ToList();
+    }
+
+    public async Task RestoreAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var inf = await db.Informants.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken)
+            ?? throw new InvalidOperationException($"Informant '{id}' nicht gefunden.");
+
+        inf.IsDeleted = false;
+        inf.DeletedAt = null;
+        inf.DeletedById = null;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<InformantMeetingDisplay>> GetMeetingsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        if (!InformantVisibility.MaySeeRecord(actor))
         {
             return new List<InformantMeetingDisplay>();
         }
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var meetings = await db.InformantMeetings.Where(m => m.InformantId == id)
             .OrderByDescending(m => m.MeetingDate)
             .Select(m => new { m.Id, m.MeetingDate, m.Location, m.Content, m.CreatedById })
@@ -176,13 +247,12 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task AddMeetingAsync(string id, InformantMeetingInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
+        Permission.RequireWriteAccess(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var handlerId = await db.Informants.Where(i => i.Id == id).Select(i => i.HandlerId).FirstOrDefaultAsync(cancellationToken);
-        if (handlerId is null)
+        if (!await db.Informants.AnyAsync(i => i.Id == id, cancellationToken))
         {
             return;
         }
-        Permission.RequireInformantWrite(actor, handlerId);
         db.InformantMeetings.Add(new InformantMeeting
         {
             InformantId = id, MeetingDate = input.MeetingDate, Location = input.Location, Content = input.Content,
@@ -192,7 +262,7 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task<List<InformantHandlerOption>> GetHandlerOptionsAsync(ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        Permission.RequireLeadership(actor);
+        Permission.RequireWriteAccess(actor);
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Users.OnlySelectable()
             .Select(u => new { u.Id, u.Codename, u.RealName })
@@ -205,29 +275,26 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
 
     public async Task<InformantPersonMarker?> GetPersonMarkerAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        // the marker itself is open to every internal agent; only opening the V-person file is tiered
-        if (actor.IsPartner() || string.IsNullOrWhiteSpace(personId))
+        if (!InformantVisibility.MaySeeRecord(actor) || string.IsNullOrWhiteSpace(personId))
         {
             return null;
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.Informants.Where(i => i.PersonId == personId)
-            .Select(i => new { i.Id, i.CaseNumber, i.Status, i.HandlerId })
+            .Select(i => new { i.Id, i.CaseNumber, i.Status })
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null
-            ? null
-            : new InformantPersonMarker(row.Id, row.CaseNumber, row.Status, InformantVisibility.MaySeeRecord(actor, row.HandlerId));
+        return row is null ? null : new InformantPersonMarker(row.Id, row.CaseNumber, row.Status);
     }
 
     public async Task<List<InformantFactionEntry>> GetForFactionAsync(string factionId, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
-        if (actor.IsPartner() || string.IsNullOrWhiteSpace(factionId))
+        if (!InformantVisibility.MaySeeRecord(actor) || string.IsNullOrWhiteSpace(factionId))
         {
             return new List<InformantFactionEntry>();
         }
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rows = await db.Informants.Where(i => i.FactionId == factionId)
-            .Select(i => new { i.Id, i.CaseNumber, i.RealName, i.PersonId, i.HandlerId, i.Status })
+            .Select(i => new { i.Id, i.CaseNumber, i.RealName, i.PersonId, i.Status })
             .ToListAsync(cancellationToken);
         if (rows.Count == 0)
         {
@@ -238,14 +305,21 @@ public class InformantService(IDbContextFactory<AppDbContext> dbFactory, ICaseNu
         return rows
             .Select(r =>
             {
-                var mayOpen = InformantVisibility.MaySeeRecord(actor, r.HandlerId);
                 var person = r.PersonId is null ? null : people.GetValueOrDefault(r.PersonId);
-                // without record access the roster stays anonymous — case number only
-                var name = mayOpen ? Label(person?.Name, r.RealName, r.CaseNumber) : r.CaseNumber;
-                return new InformantFactionEntry(r.Id, r.CaseNumber, name, r.Status, mayOpen);
+                return new InformantFactionEntry(
+                    r.Id, r.CaseNumber, Label(person?.Name, r.RealName, r.CaseNumber), r.Status);
             })
             .OrderBy(e => e.Name)
             .ToList();
+    }
+
+    // Keep the write path exactly as wide as the picker; an unselectable handler would surface a hidden account.
+    private static async Task EnsureSelectableHandlerAsync(AppDbContext db, string handlerId, CancellationToken ct)
+    {
+        if (!await db.Users.OnlySelectable().AnyAsync(u => u.Id == handlerId, ct))
+        {
+            throw new InvalidOperationException("Führungsagent nicht gefunden oder nicht auswählbar.");
+        }
     }
 
     // Decide where the informant's name comes from: a linked person record wins, otherwise the free-text real name.

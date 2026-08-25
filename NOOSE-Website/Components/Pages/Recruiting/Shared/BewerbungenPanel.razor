@@ -18,7 +18,7 @@
         <div>
             <MudText Typo="Typo.overline" Class="mud-text-secondary">Ablehnungsquote</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                @RejectedCount von @TotalCount Bewerbungen abgelehnt (inkl. Discord-Ära)
+                @RejectedCount von @TotalCount Bewerbungen abgelehnt
             </MudText>
         </div>
     </MudStack>
@@ -76,12 +76,8 @@ else
 
     private List<Bewerbung> Current => _tab switch { 1 => _archived, 2 => _all, _ => _open };
 
-    // applications handled over Discord before this system existed (fixed historical tally)
-    private const int LegacyAccepted = 20;
-    private const int LegacyRejected = 84;
-
-    private int RejectedCount => _all.Count(b => b.Status == BewerbungStatus.Abgelehnt) + LegacyRejected;
-    private int TotalCount => _all.Count + LegacyAccepted + LegacyRejected;
+    private int RejectedCount => _all.Count(b => b.Status == BewerbungStatus.Abgelehnt);
+    private int TotalCount => _all.Count;
     private double RejectionRate => TotalCount > 0 ? (double)RejectedCount / TotalCount : 0d;
 
     protected override async Task OnInitializedAsync()

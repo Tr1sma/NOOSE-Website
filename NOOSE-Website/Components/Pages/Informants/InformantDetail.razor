@@ -1,8 +1,14 @@
 @page "/informanten/{Id}"
+@attribute [Authorize(Policy = Policies.InternalAgent)]
 @using NOOSE_Website.Models.Enums
 @using NOOSE_Website.Models.Informants
 @using NOOSE_Website.Components.Pages.Informants.Shared
+@using NOOSE_Website.Data.Entities.Informants
 @inject IInformantService Service
+@inject IAccessLogService AccessLog
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>@Label · NOOSE</PageTitle>
 
@@ -26,6 +32,8 @@ else
             {
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
                            Href="@($"/informanten/{Id}/bearbeiten")">Bearbeiten</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                           OnClick="DeleteAsync">Löschen</MudButton>
             }
         </Actions>
     </PageHeader>
@@ -98,5 +106,34 @@ else
         _user = (await AuthStateTask).User;
         _detail = await Service.GetDetailAsync(Id, _user);
         _load = false;
+        if (_detail is not null)
+        {
+            // open to every internal agent now, so who looked is worth keeping
+            await AccessLog.LogViewAsync(nameof(Informant), Id);
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_detail is null)
+        {
+            return;
+        }
+        var ok = await ConfirmDialog.ShowAsync(DialogService, "Informant löschen?",
+            "Die Akte wird in den Papierkorb verschoben und kann von der Führung wiederhergestellt werden.");
+        if (!ok)
+        {
+            return;
+        }
+        try
+        {
+            await Service.DeleteAsync(Id, _user);
+            Snackbar.Add("Informant in den Papierkorb verschoben.", Severity.Success);
+            Nav.NavigateTo("/informanten");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 }

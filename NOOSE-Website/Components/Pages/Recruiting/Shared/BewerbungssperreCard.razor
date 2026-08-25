@@ -4,13 +4,13 @@
     <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Large" />
     <MudText Typo="Typo.h5" Align="Align.Center">@Headline</MudText>
 
-    @if (Ban.IsBlacklist)
+    @if (IsBlacklist)
     {
         <MudText Typo="Typo.body1" Align="Align.Center" Class="mud-text-secondary">
             Eine erneute Bewerbung bei der NOOSE ist nicht möglich.
         </MudText>
     }
-    else if (Ban.BannedUntil is { } until)
+    else if (BannedUntil is { } until)
     {
         <MudText Typo="Typo.body1" Align="Align.Center">
             Gesperrt bis <b>@until.ToLocalTime().ToString("dd.MM.yyyy")</b>
@@ -27,7 +27,12 @@
 </MudStack>
 
 @code {
-    [Parameter, EditorRequired] public BewerbungssperreInfo Ban { get; set; } = default!;
+    /// <summary>Scalars only on purpose: the full ban record also carries the HRB free-text note and the
+    /// deciding agent's codename, neither of which an applicant may see.</summary>
+    [Parameter, EditorRequired] public bool IsBlacklist { get; set; }
+
+    /// <summary>End of a temporary ban; null for a blacklist.</summary>
+    [Parameter] public DateTime? BannedUntil { get; set; }
 
     /// <summary>Decision behind the ban; drives the headline wording.</summary>
     [Parameter] public BewerbungStatus? DecisionStatus { get; set; }
