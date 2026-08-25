@@ -40,6 +40,7 @@ public class PublicWantedModelTests
         typeof(CitizenTicketRow),
         typeof(CitizenTicketDetail),
         typeof(CitizenTicketMessage),
+        typeof(CitizenObjectionRow),
         // the organisation hub and both hazard rankings render these
         typeof(PublicFactionCard),
         typeof(PublicFactionBoard),
@@ -52,8 +53,14 @@ public class PublicWantedModelTests
         [typeof(PublicWantedDraft)] = "Die eine Ausschreibung im Editor, inklusive Entwurfs-HTML.",
         [typeof(PublicWantedOptions)] = "Foto- und Gegend-Auswahl aus der Akte; live gelesen, nie Snapshot.",
         [typeof(PublicWantedPhotoOption)] = "Ein Aktenfoto zur Auswahl im Editor.",
+        [typeof(PublicWantedItemSource)] = "Fahrzeug- oder Waffenzeile des Steckbriefs zur Auswahl im Panel; "
+            + "trägt die Zeilen-Id, die nach dem nächsten Speichern der Akte ohnehin eine andere ist.",
         [typeof(PublicWantedBanner)] = "Warnbanner auf der Personenakte; rein intern.",
         [typeof(PublicWantedRequestRow)] = "Offener Veröffentlichungsantrag im Posteingang.",
+        [typeof(ObjectionRow)] = "Zeile des Einspruchs-Abschnitts; nennt den Bürger und den Entscheider.",
+        [typeof(ObjectionDetail)] = "Ein Einspruch in der Bearbeitung; trägt Zeilen-Ids und den Sperrstatus des Kontos.",
+        [typeof(ObjectionCounts)] = "Zähler der beiden Abschnitte; eine Aussage über die Arbeitslast der Behörde.",
+        [typeof(ObjectionInput)] = "Formulareingabe des Bürgers; wandert nach innen, nicht nach außen.",
         [typeof(PublicWantedInput)] = "Formulareingabe des internen Editors.",
         [typeof(PublicFactionProfileEdit)] = "Zeile der internen Verwaltungsliste; trägt Codename und Aktenzeichen.",
         [typeof(PublicFactionProfileDraft)] = "Das eine Profil im Editor, inklusive Entwurfs-HTML und FraktionId.",

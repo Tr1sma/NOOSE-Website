@@ -70,6 +70,9 @@ public static class WatchlistRecordRollup
             case PersonRelation pb: return Two((nameof(Person), pb.PersonAId), (nameof(Person), pb.PersonBId));
 
             // not watchable
+            // the objection is two hops from a file (notice, then record) and this map has no database; the
+            // publication of the notice stays the watchable event
+            case FahndungEinspruch:
             case Job:
             case JobAssignment:
             case Announcement:

@@ -325,13 +325,17 @@ public class TimelineService(IDbContextFactory<AppDbContext> dbFactory) : ITimel
                 // second hop as well; the messages are left out on purpose, a conversation is not file history
                 ids.UnionWith(await db.Hinweise.IgnoreQueryFilters()
                     .Where(h => h.WantedId != null && noticeIds.Contains(h.WantedId)).Select(h => h.Id).ToListAsync(ct));
+                // second hop as well: an objection disputes the notice, so it belongs to the file behind it
+                ids.UnionWith(await db.FahndungEinsprueche.IgnoreQueryFilters()
+                    .Where(e => noticeIds.Contains(e.WantedId)).Select(e => e.Id).ToListAsync(ct));
                 // third hop, and staged rather than nested: the reward hangs off a share, which hangs off the notice
                 var shareIds = await db.FahndungKopfgeldAnteile
                     .Where(k => noticeIds.Contains(k.WantedId)).Select(k => k.Id).ToListAsync(ct);
                 ids.UnionWith(await db.HinweisBelohnungen
                     .Where(b => shareIds.Contains(b.ShareId)).Select(b => b.Id).ToListAsync(ct));
                 types.AddRange([nameof(PersonDoc), nameof(PersonPhoto), nameof(OeffentlicheFahndung),
-                    nameof(FahndungKopfgeldAnteil), nameof(Hinweis), nameof(HinweisBelohnung)]);
+                    nameof(FahndungKopfgeldAnteil), nameof(Hinweis), nameof(HinweisBelohnung),
+                    nameof(FahndungEinspruch)]);
                 break;
             case nameof(Faction):
                 ids.UnionWith(await db.FactionMembers.IgnoreQueryFilters().Where(m => m.FactionId == id).Select(m => m.Id).ToListAsync(ct));

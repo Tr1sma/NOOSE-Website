@@ -544,4 +544,95 @@ public sealed class MySqlTranslationTests : IDisposable
 
         Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
     }
+
+    /// <summary>Mirrors the state set in which a notice occupies its subject.</summary>
+    private static readonly PublicWantedStatus[] LiveStates =
+    [
+        PublicWantedStatus.Entwurf,
+        PublicWantedStatus.Beantragt,
+        PublicWantedStatus.Veroeffentlicht,
+    ];
+
+    [Fact]
+    public void TheItemDuplicateCheck_TranslatesOverKindNameAndState()
+    {
+        // deduplicated on the text rather than on the profile row: the file's profile children are replaced
+        // wholesale on every save, so their ids are worthless a moment later
+        var sql = _db.OeffentlicheFahndungen
+            .Where(f => f.PersonId == "p1" && f.Kind == PublicWantedKind.Fahrzeug && f.DisplayName == "4XYZ123"
+                && LiveStates.Contains(f.Status))
+            .ToQueryString();
+
+        Assert.Contains("AnzeigeName", sql, StringComparison.Ordinal);
+        Assert.Contains("IN (", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheItemKindFilter_TranslatesAsANamedExpression()
+    {
+        // the kind axis is named rather than spelled out at each site; it has to survive the translation as one
+        var sql = _db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(WantedKinds.ItemRows)
+            .Where(f => f.PersonId == "p1")
+            .Select(f => new { f.Kind, f.DisplayName })
+            .ToQueryString();
+
+        Assert.Contains("Art", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheObjectionDeskProjection_TranslatesOverAllThreeNavigations()
+    {
+        // notice, citizen profile and decider come through three optional navigations; on a deleted case the last
+        // one has to yield null rather than fail
+        var sql = _db.FahndungEinsprueche.AsNoTracking()
+            .OrderByDescending(e => e.CreatedAt)
+            .Select(e => new
+            {
+                e.Id,
+                Fahndung = e.Wanted!.CaseNumber,
+                Buerger = e.CitizenProfile!.FirstName + " " + e.CitizenProfile.LastName,
+                Von = e.DecidedBy!.Codename,
+                Vorgang = e.LinkedCase!.CaseNumber,
+            })
+            .ToQueryString();
+
+        Assert.Contains("LEFT JOIN", sql, StringComparison.Ordinal);
+        Assert.Contains("Aktenzeichen", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheObjectionCaps_TranslateIncludingTheNamedOpenPredicate()
+    {
+        // the per-notice cap names the open predicate rather than spelling it out; it has to survive translation
+        var open = _db.FahndungEinsprueche
+            .Where(e => e.CitizenProfileId == "b1" && e.WantedId == "f1")
+            .Where(ObjectionRules.OpenRows)
+            .ToQueryString();
+        Assert.Contains("Status", open, StringComparison.Ordinal);
+
+        // and the daily cap widens past the soft-delete filter on purpose. Counted rather than searched: the
+        // column is in the SELECT list either way, so only the extra occurrence in the WHERE tells them apart.
+        var daily = _db.FahndungEinsprueche.IgnoreQueryFilters()
+            .Where(e => e.CitizenProfileId == "b1")
+            .ToQueryString();
+        var filtered = _db.FahndungEinsprueche
+            .Where(e => e.CitizenProfileId == "b1")
+            .ToQueryString();
+        Assert.True(Occurrences(filtered, "IstGeloescht") > Occurrences(daily, "IstGeloescht"),
+            "IgnoreQueryFilters muss den Soft-Delete-Filter aus dem WHERE nehmen.");
+    }
+
+    private static int Occurrences(string text, string needle)
+    {
+        var count = 0;
+        var at = 0;
+        while ((at = text.IndexOf(needle, at, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            at += needle.Length;
+        }
+        return count;
+    }
 }

@@ -140,6 +140,12 @@ public static class TimelineDisplay
         {
             return (TimelineCategory.Change, $"Bürgerhinweis {Verb("eingegangen", "gelöscht")}");
         }
+        // no citizen and no argument in the title: an objection disputes what was published, and the file's
+        // timeline records that it happened, not who said what
+        if (entityType == nameof(FahndungEinspruch))
+        {
+            return (TimelineCategory.Change, $"Einspruch gegen die Ausschreibung {Verb("eingegangen", "gelöscht")}");
+        }
         // no recipient in the title: the reward names a citizen, the file's timeline does not
         if (entityType == nameof(HinweisBelohnung))
         {

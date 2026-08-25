@@ -39,10 +39,12 @@
             <MudItem xs="12" sm="@(_entry.HasPhoto ? 7 : 12)" md="@(_entry.HasPhoto ? 8 : 12)">
                 <MudStack Spacing="3">
                     <div>
-                        <MudText Typo="Typo.h4">@_entry.DisplayName</MudText>
+                        <MudText Typo="Typo.h4" Style="@NameStyle(_entry.Kind)">@_entry.DisplayName</MudText>
                         @if (!string.IsNullOrWhiteSpace(_entry.AliasText))
                         {
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">alias @_entry.AliasText</MudText>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                                @(WantedKinds.IsItem(_entry.Kind) ? "auch" : "alias") @_entry.AliasText
+                            </MudText>
                         }
                     </div>
 
@@ -86,7 +88,10 @@
                             }
                             @if (!string.IsNullOrWhiteSpace(_entry.VehicleText))
                             {
-                                <MudText Typo="Typo.body2"><b>Fahrzeug:</b> @_entry.VehicleText</MudText>
+                                <MudText Typo="Typo.body2">
+                                    <b>@(_entry.Kind == PublicWantedKind.Fahrzeug ? "Modell" : "Fahrzeug"):</b>
+                                    @_entry.VehicleText
+                                </MudText>
                             }
                         </MudStack>
                     }
@@ -107,6 +112,15 @@
                             <MudButton Href="@($"/hinweis?fahndung={_entry.CaseNumber}")" Variant="Variant.Filled"
                                        Color="Color.Primary" Size="Size.Small"
                                        StartIcon="@Icons.Material.Filled.TipsAndUpdates">Hinweis geben</MudButton>
+                        }
+                        @if (_mayObject)
+                        {
+                            @* a link, not a dialog: this page is statically rendered and has no circuit. It leads
+                               into the citizen area, which greets an anonymous visitor with the login instead of
+                               bouncing them *@
+                            <MudButton Href="@($"/buerger/einspruch?fahndung={_entry.CaseNumber}")"
+                                       Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Balance">Einspruch erheben</MudButton>
                         }
                         @if (_mayPrint)
                         {
@@ -130,6 +144,7 @@
     private PublicBounty? _bounty;
     private bool _mayPrint;
     private bool _mayTip;
+    private bool _mayObject;
     private string? _loadedKey;
 
     // navigating from one case number to another stays on this route template, so Blazor reuses the instance and
@@ -159,6 +174,7 @@
                 var snapshot = await Modules.GetAsync();
                 _mayPrint = snapshot.IsEnabled(PublicModules.WantedPrint);
                 _mayTip = snapshot.IsEnabled(PublicModules.Tips);
+                _mayObject = snapshot.IsEnabled(PublicModules.Objection);
             }
             catch { /* best effort */ }
 
@@ -174,6 +190,10 @@
             try { await Wanted.CountViewAsync(_entry.CaseNumber); } catch { /* best effort */ }
         }
     }
+
+    /// <summary>A licence plate reads as a plate, not as a name.</summary>
+    private static string? NameStyle(PublicWantedKind kind)
+        => WantedKinds.IsItem(kind) ? "font-family:monospace;letter-spacing:.08em;" : null;
 
     private static Color LevelColour(HazardLevel level) => level switch
     {

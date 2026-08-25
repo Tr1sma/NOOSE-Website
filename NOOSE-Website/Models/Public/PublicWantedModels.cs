@@ -1,4 +1,5 @@
 using NOOSE_Website.Models.Enums;
+using NOOSE_Website.Services.Public;
 
 namespace NOOSE_Website.Models.Public;
 
@@ -96,6 +97,34 @@ public sealed record PublicWantedBoard(
     /// </remarks>
     public PublicBounty? BountyFor(string? caseNumber)
         => caseNumber is not null && BountyByCaseNumber.TryGetValue(caseNumber, out var bounty) ? bounty : null;
+
+    /// <summary>The same snapshot without the vehicle and weapon notices; what the item module switch owns.</summary>
+    /// <remarks>
+    /// One pass over all five collections rather than a second cache key: board, archive and item notices come from
+    /// the same table and are invalidated by the same writes, so a second key would double every drop site — the
+    /// reason board and archive already share one. Dropping a card without its bounty and archive entry would leave
+    /// a plate advertised on a page that no longer lists it.
+    /// </remarks>
+    public PublicWantedBoard WithoutItems()
+    {
+        var byCaseNumber = ByCaseNumber
+            .Where(e => !WantedKinds.IsItem(e.Value.Kind))
+            .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+        var capturedByCaseNumber = CapturedByCaseNumber
+            .Where(e => !WantedKinds.IsItem(e.Value.Kind))
+            .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase);
+
+        return this with
+        {
+            Cards = Cards.Where(c => !WantedKinds.IsItem(c.Kind)).ToList(),
+            ByCaseNumber = byCaseNumber,
+            Archive = Archive.Where(c => !WantedKinds.IsItem(c.Kind)).ToList(),
+            CapturedByCaseNumber = capturedByCaseNumber,
+            BountyByCaseNumber = BountyByCaseNumber
+                .Where(e => byCaseNumber.ContainsKey(e.Key))
+                .ToDictionary(e => e.Key, e => e.Value, StringComparer.OrdinalIgnoreCase),
+        };
+    }
 }
 
 /// <summary>What the anonymous photo endpoint needs to stream a file, and nothing else.</summary>
@@ -127,6 +156,8 @@ public sealed record PublicWantedEdit(
 public sealed record PublicWantedDraft(
     string Id,
     string? CaseNumber,
+    /// <summary>Decides what the editor offers: an item notice has no photo and different field labels.</summary>
+    PublicWantedKind Kind,
     PublicWantedStatus Status,
     string DisplayName,
     string? AliasText,
@@ -139,6 +170,14 @@ public sealed record PublicWantedDraft(
 
 /// <summary>One selectable file photo, labelled by upload date rather than by file name.</summary>
 public sealed record PublicWantedPhotoOption(string Id, string Label);
+
+/// <summary>One vehicle or weapon of a file, offered as the source of an item notice.</summary>
+/// <remarks>
+/// The id is only good until the file's profile is saved again — PersonService replaces the profile children
+/// wholesale — so it is read once, at draft creation, and never stored. <see cref="Advertised"/> is carried rather
+/// than filtered out: an author has to see that a plate is already outside, not miss it from the list.
+/// </remarks>
+public sealed record PublicWantedItemSource(string Id, PublicWantedKind Kind, string Label, bool Advertised);
 
 /// <summary>What the editor may offer: the file's photos and its recorded areas.</summary>
 public sealed record PublicWantedOptions(

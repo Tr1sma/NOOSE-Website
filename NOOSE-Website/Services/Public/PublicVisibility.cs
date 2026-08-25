@@ -34,9 +34,10 @@ public static class PublicVisibility
             ["OeffentlicheFahndung"] = "Der Publikations-Snapshot einer Ausschreibung: öffentliches Aktenzeichen, "
                 + "Art, Anzeigename, die vom Autor gewählten Aliase, Vorwurfstext, letzte Gegend, Fahrzeugtext, die "
                 + "beim Publizieren festgehaltene Gefahrenstufe, eine Kopie des Fotos und — im Archiv — das "
-                + "Gefasst-Datum, dazu die Kopfgeld-Obergrenze als \"bis X\". Der Aktenbezug "
-                + "(PersonId/FraktionId), der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund "
-                + "bleiben drinnen.",
+                + "Gefasst-Datum, dazu die Kopfgeld-Obergrenze als \"bis X\". Bei einer Fahrzeug- oder "
+                + "Waffen-Ausschreibung ist der Anzeigename das Kennzeichen bzw. die Bezeichnung, und ein Foto gibt "
+                + "es dort nicht. Der Aktenbezug (PersonId/FraktionId), die Steckbrief-Zeile, aus der vorbefüllt "
+                + "wurde, der rohe Bedrohungs-Score, der Aufrufzähler und der Rückzugsgrund bleiben drinnen.",
             ["FahndungKopfgeldAnteil"] = "Ausschließlich die Summe aller zugesagten und gesicherten Anteile "
                 + "einer laufenden Ausschreibung, als eine Zahl. Herkunft, Stifter, der Betrag eines einzelnen "
                 + "Anteils, ihre Anzahl, das Konto, die Kassenbuchung und der Status bleiben drinnen — eine "
@@ -53,6 +54,10 @@ public static class PublicVisibility
     public static readonly IReadOnlyDictionary<string, string> NeverPublic =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            ["FahndungEinspruch"] = "Widerspruch eines Bürgers gegen eine Ausschreibung; vertraulich zwischen "
+                + "Bürger und Behörde. Nach außen liest ausschließlich der Einreicher selbst seinen eigenen "
+                + "Einspruch samt Entscheidung, im Bürgerbereich.",
+
             // --- the agency itself ---
             ["Agent"] = "Agenten bleiben nach außen anonym; weder Codename noch Klarname noch Dienstgrad verlassen das Haus.",
 

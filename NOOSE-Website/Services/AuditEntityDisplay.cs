@@ -48,6 +48,7 @@ public static class AuditEntityDisplay
         "TicketNachricht" => "Ticket-Nachricht",
         "OeffentlicheVorlage" => "Öffentliche Vorlage",
         "OeffentlichesFraktionsprofil" => "Öffentliches Organisationsprofil",
+        "FahndungEinspruch" => "Einspruch gegen eine Ausschreibung",
         "PublicArea" => "Öffentlicher Bereich",
         _ => type,
     };
@@ -96,6 +97,7 @@ public static class AuditEntityDisplay
         "TicketNachricht" => "/tickets",
         "OeffentlicheVorlage" => "/einstellungen?tab=oeffentliche-vorlagen",
         "OeffentlichesFraktionsprofil" => "/fahndung?tab=organisationen",
+        "FahndungEinspruch" => "/fahndung?tab=einsprueche",
         _ => null,
     };
 }

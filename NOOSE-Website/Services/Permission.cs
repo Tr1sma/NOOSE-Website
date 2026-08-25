@@ -402,6 +402,36 @@ public static class Permission
         }
     }
 
+    /// <summary>Require the right to read the objections against public wanted notices.</summary>
+    /// <remarks>
+    /// The same set that works the notice list, not the ticket desk's: an objection is fahndungs-work, and the agent
+    /// who published the notice has to be able to see it disputed. Deciding is narrower — see
+    /// <see cref="RequireObjectionHandling"/>.
+    /// </remarks>
+    public static void RequireObjectionRead(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || (!actor.MayHighestClassification() && !actor.IsOnlyReader()))
+        {
+            throw new UnauthorizedAccessException(
+                "Einsprüche sieht Senior Special Agent aufwärts und die Aufsicht.");
+        }
+    }
+
+    /// <summary>Require the right to decide an objection.</summary>
+    /// <remarks>
+    /// The write check stands before the rank one, as with the ticket and payout guards: RequireLeadership alone lets
+    /// the read-only supervision and the demo principal through, and they would then mint a case number before the
+    /// ReadOnlyBarrierInterceptor refuses the save. IsInternalAgent comes first because a signed-in citizen carries
+    /// no rank claim at all.
+    /// </remarks>
+    public static void RequireObjectionHandling(ClaimsPrincipal actor)
+    {
+        if (!actor.IsInternalAgent() || !actor.MayWrite() || !actor.IsLeadership())
+        {
+            throw new UnauthorizedAccessException("Einsprüche entscheidet nur die Führung.");
+        }
+    }
+
     /// <summary>Require the right to write a template for citizen-facing messages.</summary>
     /// <remarks>
     /// The write check stands before the rank one, same as the ticket and payout guards: RequireLeadership alone lets

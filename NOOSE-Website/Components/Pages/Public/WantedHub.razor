@@ -12,8 +12,9 @@
     <MudStack Spacing="4">
         <MudText Typo="Typo.h4">Öffentliche Fahndung</MudText>
         <MudText Typo="Typo.body1" Class="mud-text-secondary">
-            Das National Office of Security Enforcement sucht die hier ausgeschriebenen Personen.
-            Nähern Sie sich niemandem selbst — melden Sie Beobachtungen der nächsten Dienststelle.
+            Das National Office of Security Enforcement sucht die hier ausgeschriebenen Personen, Fahrzeuge und
+            Waffen. Nähern Sie sich niemandem und nichts davon selbst — melden Sie Beobachtungen der nächsten
+            Dienststelle.
         </MudText>
 
         @* static render, no circuit: the filters are links that rewrite the query, not interactive controls *@
@@ -60,11 +61,23 @@
                                               ObjectFit="ObjectFit.Cover" Width="100" Height="180" Fluid="true"
                                               Class="rounded-t" Style="width:100%;object-position:center 25%;" />
                                 }
+                                else if (WantedKinds.IsItem(card.Kind))
+                                {
+                                    @* an item notice carries no picture by design, so the card gets a banded head
+                                       instead of the blank slot a missing mugshot would leave *@
+                                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center"
+                                              Class="rounded-t py-8"
+                                              Style="background:var(--mud-palette-background-grey);">
+                                        <MudIcon Icon="@KindIcon(card.Kind)" Size="Size.Large" Color="Color.Primary" />
+                                    </MudStack>
+                                }
                                 <MudStack Spacing="1" Class="pa-4">
-                                    <MudText Typo="Typo.h6">@card.DisplayName</MudText>
+                                    <MudText Typo="Typo.h6" Style="@NameStyle(card.Kind)">@card.DisplayName</MudText>
                                     @if (!string.IsNullOrWhiteSpace(card.AliasText))
                                     {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">alias @card.AliasText</MudText>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                            @(WantedKinds.IsItem(card.Kind) ? "auch" : "alias") @card.AliasText
+                                        </MudText>
                                     }
                                     <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
@@ -158,6 +171,14 @@
     }
 
     private static Variant ChipVariant(bool active) => active ? Variant.Filled : Variant.Outlined;
+
+    private static string KindIcon(PublicWantedKind kind) => kind == PublicWantedKind.Waffe
+        ? Icons.Material.Filled.Dangerous
+        : Icons.Material.Filled.DirectionsCar;
+
+    /// <summary>A licence plate reads as a plate, not as a name.</summary>
+    private static string? NameStyle(PublicWantedKind kind)
+        => WantedKinds.IsItem(kind) ? "font-family:monospace;letter-spacing:.08em;" : null;
 
     private static Color LevelColour(HazardLevel level) => level switch
     {

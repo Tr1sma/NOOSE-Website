@@ -314,6 +314,26 @@ public class EnumDisplayTests_B
     public void PublicWantedStatusName_undefinedValue_returnsDash()
         => Assert.Equal("—", PublicWantedStatusDisplay.Name((PublicWantedStatus)99));
 
+    [Theory]
+    [InlineData(ObjectionStatus.Neu, "Neu", "Eingegangen")]
+    [InlineData(ObjectionStatus.InPruefung, "In Prüfung", "In Prüfung")]
+    [InlineData(ObjectionStatus.Angenommen, "Stattgegeben", "Stattgegeben")]
+    [InlineData(ObjectionStatus.Abgelehnt, "Abgelehnt", "Zurückgewiesen")]
+    public void ObjectionStatusName_definedValue_mapsToBothLabels(
+        ObjectionStatus status, string expected, string citizen)
+    {
+        Assert.Equal(expected, ObjectionStatusDisplay.Name(status));
+        Assert.Equal(citizen, ObjectionStatusDisplay.CitizenName(status));
+    }
+
+    [Fact]
+    public void ObjectionStatusName_undefinedValue_returnsDash()
+    {
+        Assert.Equal("—", ObjectionStatusDisplay.Name((ObjectionStatus)99));
+        Assert.Equal("—", ObjectionStatusDisplay.CitizenName((ObjectionStatus)99));
+        Assert.Equal(Enum.GetValues<ObjectionStatus>().Length, ObjectionStatusDisplay.All.Count);
+    }
+
     [Fact]
     public void PublicWantedDisplays_ListEveryDefinedValue()
     {

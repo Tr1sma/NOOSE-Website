@@ -37,7 +37,8 @@ public class TrashServiceTests
         Substitute.For<IPublicWantedService>(),
         Substitute.For<IPublicFactionProfileService>(),
         Substitute.For<ITipService>(),
-        Substitute.For<ITicketService>());
+        Substitute.For<ITicketService>(),
+        Substitute.For<IObjectionService>());
 
     [Fact]
     public void Kind_keys_are_unique()

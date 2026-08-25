@@ -49,6 +49,7 @@ public static class ChronikParentResolver
         [nameof(FahndungKopfgeldAnteil)] = nameof(Person),
         [nameof(Hinweis)] = nameof(Person),
         [nameof(HinweisBelohnung)] = nameof(Person),
+        [nameof(FahndungEinspruch)] = nameof(Person),
     };
 
     /// <summary>True when the audit type is a child rather than a record itself.</summary>
@@ -181,6 +182,9 @@ public static class ChronikParentResolver
         // two hops as well: tip → notice → file. A tip without a reference belongs to no record and stays unresolved
         await FanInAsync(nameof(Hinweis), nameof(Person), i => db.Hinweise.IgnoreQueryFilters()
             .Where(h => i.Contains(h.Id) && h.Wanted!.PersonId != null).Select(h => new Pair(h.Id, h.Wanted!.PersonId!)));
+        // two hops: objection → notice → file, same reasoning as the tip it sits beside
+        await FanInAsync(nameof(FahndungEinspruch), nameof(Person), i => db.FahndungEinsprueche.IgnoreQueryFilters()
+            .Where(e => i.Contains(e.Id) && e.Wanted!.PersonId != null).Select(e => new Pair(e.Id, e.Wanted!.PersonId!)));
         // three hops: reward → share → notice → file, same reasoning as the share it hangs off
         await FanInAsync(nameof(HinweisBelohnung), nameof(Person), i => db.HinweisBelohnungen.IgnoreQueryFilters()
             .Where(b => i.Contains(b.Id) && b.Share!.Wanted!.PersonId != null)

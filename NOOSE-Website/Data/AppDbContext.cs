@@ -251,6 +251,7 @@ public class AppDbContext : IdentityDbContext<Agent>
     public DbSet<TicketNachricht> TicketNachrichten => Set<TicketNachricht>();
     public DbSet<OeffentlicheVorlage> OeffentlicheVorlagen => Set<OeffentlicheVorlage>();
     public DbSet<OeffentlichesFraktionsprofil> OeffentlicheFraktionsprofile => Set<OeffentlichesFraktionsprofil>();
+    public DbSet<FahndungEinspruch> FahndungEinsprueche => Set<FahndungEinspruch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -1865,6 +1866,34 @@ public class AppDbContext : IdentityDbContext<Agent>
                 .HasForeignKey(p => p.FactionId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(p => p.PublishedBy).WithMany()
                 .HasForeignKey(p => p.PublishedById).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FahndungEinspruch>(b =>
+        {
+            b.Property(e => e.CaseNumber).HasMaxLength(32).IsRequired();
+            b.Property(e => e.WantedId).HasMaxLength(64);
+            b.Property(e => e.CitizenProfileId).HasMaxLength(64);
+            b.Property(e => e.DecidedById).HasMaxLength(64);
+            b.Property(e => e.LinkedCaseId).HasMaxLength(64);
+            // longtext on both: an objection is an argument, and a cap would truncate it without a word
+            b.Property(e => e.Text).HasColumnType("longtext");
+            b.Property(e => e.DecisionNote).HasColumnType("longtext");
+            // Restrict throughout: an objection outlives the account and the agent it names, and deleting a notice
+            // out from under it would erase what was disputed
+            b.HasOne(e => e.Wanted).WithMany()
+                .HasForeignKey(e => e.WantedId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(e => e.CitizenProfile).WithMany()
+                .HasForeignKey(e => e.CitizenProfileId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(e => e.DecidedBy).WithMany()
+                .HasForeignKey(e => e.DecidedById).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(e => e.LinkedCase).WithMany()
+                .HasForeignKey(e => e.LinkedCaseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(e => e.CaseNumber).IsUnique();
+            // the desk order: newest first within a status tab
+            b.HasIndex(e => new { e.Status, e.CreatedAt });
+            // the two caps and the banner on a notice read these
+            b.HasIndex(e => new { e.CitizenProfileId, e.CreatedAt });
+            b.HasIndex(e => new { e.WantedId, e.Status });
         });
 
         // global soft-delete filter

@@ -41,13 +41,35 @@ public interface IPublicWantedService
     /// <summary>Photo and area choices the editor may offer for a notice; the component never reads the file itself.</summary>
     Task<PublicWantedOptions> GetOptionsAsync(string id, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Newest notice of a person file for the file page, whatever its state; null when there is none.</summary>
+    /// <summary>Newest person notice of a file for the file page, whatever its state; null when there is none.</summary>
+    /// <remarks>Item notices are excluded: they hang off the same file but say nothing about the person.</remarks>
     Task<PublicWantedEdit?> GetForPersonAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>The vehicle and weapon notices of a file, newest first.</summary>
+    Task<IReadOnlyList<PublicWantedEdit>> GetItemsForPersonAsync(string personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The file's vehicles and weapons as possible sources, each flagged if it is already advertised.</summary>
+    Task<IReadOnlyList<PublicWantedItemSource>> GetItemSourcesAsync(string personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     // ---- writes ----
 
     /// <summary>Create a draft from a person file and return its id; pulls name and accusation only.</summary>
     Task<string> CreateDraftFromPersonAsync(string personId, ClaimsPrincipal actor, CancellationToken cancellationToken = default);
+
+    /// <summary>Create a vehicle draft from one of a file's vehicles and return its id.</summary>
+    /// <remarks>
+    /// The source row is read once for the prefill and never referenced again: the file's profile children are
+    /// replaced wholesale on every save, so a stored source id would be a dangling pointer after the first edit.
+    /// The notice keeps the file's id all the same — that is what the suppression belt and the timeline hang on.
+    /// </remarks>
+    Task<string> CreateDraftFromVehicleAsync(string vehicleId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Create a weapon draft from one of a file's weapons and return its id.</summary>
+    Task<string> CreateDraftFromWeaponAsync(string weaponId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Update the snapshot fields of a notice.</summary>
     Task UpdateSnapshotAsync(PublicWantedInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default);

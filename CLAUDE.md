@@ -458,13 +458,13 @@ Einträge genau eines Bereichs. Ein Icon-Klick **navigiert nicht**, er wechselt 
 
 ## Öffentlicher Bereich
 
-Gebaut sind Phase 1–12 aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen Seiten, die
-öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
+Gebaut sind Phase 1–12 und 13a aus `PublicPlan.md`: Bürgerkonten, das Schaltergerüst, die redaktionellen
+Seiten, die öffentliche Fahndung, ihr Ausbau (Warnhinweise, Gefasst-Archiv, Poster, Ablauf, Aufrufzähler,
 Discord-Push), das Kopfgeld, die Bürgerhinweise (Formular, Eingang, Rückfrage, Verfolgung, Triage,
 Übernahme), die Belohnung (Auszahlung über die Kasse, Beleg für den Bürger), der Ticket-Chat an die
-Führungsebene, die Vorlagen für Bürger-Nachrichten und die Organisationsprofile samt beider
-Gefahrenlisten. Presse und die öffentlichen Zahlen sind geplant, aber **nicht** vorhanden — ihre
-Modul-Schlüssel existieren schon und stehen auf „aus".
+Führungsebene, die Vorlagen für Bürger-Nachrichten, die Organisationsprofile samt beider Gefahrenlisten
+und die Sachfahndung (gesuchte Fahrzeuge und Waffen). Der Einspruch (13b), die Presse und die öffentlichen
+Zahlen sind geplant, aber **nicht** vorhanden — ihre Modul-Schlüssel existieren schon und stehen auf „aus".
 
 - **Ein Bürger ist ein `Agent` mit `Status = Civilian`**, nicht mit Rechten (`IsCitizen()`). Der Klarname
   liegt in `BuergerProfil`, **nie** in `Agent.RealName` — das ist der behördliche Klarname hinter einem
@@ -1105,6 +1105,64 @@ Modul-Schlüssel existieren schon und stehen auf „aus".
     steht seit Phase 2 in `ExtraPrefixes`, `/organisationen` ist eine Modul-Nav-Route und damit unabhängig
     von `Available` schon in `Prefixes`) · `CaseNumberCounter` · kein Foto, kein Ablaufdatum, kein
     Aufrufzähler (ein Hub ohne Detailseite hat nichts zu zählen).
+- **Phase 13a (Sachfahndung) — was daran anders ist:**
+  - **Keine Migration, und das ist ein Fund.** Geplant war eine Spalte auf die Quellzeile des Steckbriefs.
+    `PersonService.EditAsync` ersetzt die Steckbrief-Kinder aber **vollständig**
+    (`db.PersonVehicles.RemoveRange(person.Vehicles)` + `ChildrenMap`) — jede `PersonVehicle`-/
+    `PersonWeapon`-Id ist nach dem nächsten Speichern der Akte eine neue GUID. Ein gespeicherter Verweis
+    wäre toter Zeiger, und als FK mit `Restrict` hätte er **jeden Steckbrief-Edit** einer ausgeschriebenen
+    Person blockiert. Die Quellzeile ist deshalb reine Vorbefüllung: einmal gelesen, nie gespeichert.
+    Dedupliziert wird folgerichtig auf `(Akte, Art, Anzeigename)` — das Kennzeichen benennt die
+    Ausschreibung ohnehin nach außen.
+  - **„Ohne Personenbezug" gilt nach außen, nicht intern.** `PersonId` bleibt gesetzt, weil daran
+    Unterdrückungsgürtel, Zeitstrahl, Chronik und `RetractForRecordAsync` hängen: eine als Verschlusssache
+    eingestufte Halterin zieht ihr Kennzeichen ohne eine Zeile neuen Code offline. Der Riegel in
+    `PublishAsync` gegen `PersonId is null` bleibt deshalb stehen — eine trägerlose Ausschreibung wäre die
+    einzige öffentliche Zeile, hinter der keine Akte steht, also die einzige ohne Gürtel.
+  - **Kein Foto, in drei Schichten.** Der einzige Fotospeicher im Haus ist `PersonPhotos`, und
+    `PhotoSourceSetAsync` löst über `row.PersonId` auf — mit gesetzter `PersonId` **würde** ein Lichtbild
+    der Halterin an einem Kennzeichen auflösen. `GetOptionsAsync` bietet keins an, `UpdateSnapshotAsync`
+    **weist** ein `PhotoSourceId` **ab** statt es still zu nullen (Präzedenz `SetHintsAsync`: der Riegel
+    gilt dem manipulierten Dialog-Post), `PhotoCopyAsync` räumt bedingungslos.
+  - **Der Vorwurf wird bewusst nicht vorbefüllt.** `Person.WantedReason` ist ein Vorwurf gegen die Person
+    und nennt sie im Freitext meist beim Namen; auf einer Kennzeichen-Karte wäre das genau der Bezug, den
+    die Phase nicht veröffentlicht. `RequirePublishableContent` verlangt den Text ohnehin.
+  - **`Services/Public/WantedKinds.cs` ist die einzige Art-Achse** (`IsItem` + die zwei EF-Zwillinge,
+    Muster `BountyShares`/`TipAnonymity`). `Vermisst` und `Zeugenaufruf` liegen auf der **Personen**-Seite:
+    beide sind Aussagen über einen Menschen, auch wenn sie noch niemand ausstellt.
+  - **`FahndungFahrzeuge` ist ein Unterschalter von `Fahndung`**, kein zweites Board: `/gesucht` hängt am
+    Board-Modul, aus ⇒ alles dunkel; nur die Sachfahndung aus ⇒ die Kennzeichen fallen, die Personen
+    bleiben. Umgesetzt über `PublicWantedBoard.WithoutItems()`, das Karten, Steckbriefe, Archiv **und**
+    Kopfgeld-Wörterbuch in einem Zug räumt — **kein zweiter Cache-Schlüssel**, aus demselben Grund, aus dem
+    Board und Archiv sich schon einen teilen. `GetByCaseNumberAsync`/`GetBountyAsync` gehen darüber und
+    brauchten keine Änderung; `GetPublishedPhotoAsync` bekam das Gate trotzdem ausdrücklich, weil ein
+    Endpoint sich nicht auf eine Regel verlassen darf, die in einer anderen Datei steht.
+  - **Kein eigener Nav-Tab.** Die `art=`-Chips auf `/gesucht` existieren seit Phase 4 und erzeugen sich aus
+    den Arten, die tatsächlich auf dem Board liegen; ein Tab auf `/gesucht?art=…` wäre eine zweite Wahrheit
+    über dieselbe Seite (`NavRoute` bleibt `null`, Muster `Kopfgeld`).
+  - **Der Personen-Pfad wurde art-eng gezogen:** „eine Ausschreibung je Akte" gilt jetzt nur noch für
+    `WantedKinds.PersonRows`, sonst sperrte ein ausgeschriebenes Kennzeichen die Personenfahndung derselben
+    Akte. `GetForPersonAsync` und `GetBannerForPersonAsync` ignorieren Sach-Zeilen — der rote Banner
+    behauptet, diese **Person** sei öffentlich ausgeschrieben, was ein Kennzeichen nicht wahr macht.
+  - **Keine Registry-Runde**, weil keine neue Entität entsteht: kein `AuditEntityDisplay`, kein
+    `WatchlistRecordRollup`, kein Papierkorb, kein Zeitstrahl-Arm, kein `SearchCatalog`, keine
+    `MergedPageSections`, keine Route, kein Aktenzeichen-Präfix, kein `NotificationType`. Geändert wurden
+    zwei Zeilen: der `Available`-Schalter und der `PublicVisibility`-Text der Ausschreibung.
+  - **Publizieren gatet auf beide Schalter, und das Gate sitzt hinter dem Zeilen-Ladevorgang.**
+    `RequireModulesAsync(kind)` verlangt immer `Fahndung` und zusätzlich `FahndungFahrzeuge` für eine
+    Sach-Art — sonst ginge ein Kennzeichen bei ausgeschaltetem Sach-Modul auf `Veroeffentlicht`, der
+    Lesepfad striche es weg, und der **nicht zurückrufbare** Discord-Post verlinkte auf eine 404. Welches
+    Modul greift, hängt an der Art, also muss die Zeile vorher geladen sein; `RequirePublicWantedWrite`
+    läuft weiter davor, damit die Nur-Lese-Aufsicht nichts über Schalterstände erfährt. Dieselbe Regel
+    gilt für Bearbeiten, Chips und Kopfgeld-Obergrenze einer laufenden Zeile — *De*publizieren gatet nach
+    wie vor nie.
+  - **Die Gefahrenstufe kommt weiter aus dem Score der Akte**, auch auf einer Sach-Ausschreibung: die Stufe
+    ist die nach außen zulässige Form des Werts, und sie sagt hier, wie gefährlich die Annäherung an das
+    Fahrzeug ist. `HazardLevel.No` auf jeder Sach-Karte wäre die schlechtere Aussage — sie läse sich als
+    „harmlos“. In der Personen-Rangliste taucht sie trotzdem nicht auf: `/gefahr/personen` filtert seit
+    Phase 12 auf `Kind == Fahndung`, und dieser Filter wird jetzt erst scharf.
+  - Im Archiv heißt es **„Sichergestellt"**, nicht „Gefasst" — ein Fahrzeug wird nicht gefasst. Route und
+    Überschrift behalten das gemeinsame Wort.
 - **Migrationen des öffentlichen Bereichs heißen `Oeffentlich<Planphase>_<Name>`**, nicht `PhaseNN_` — die
   interne Zählung steht schon bei `Phase69` und hätte sich sechsfach überschnitten. Einzige Ausnahme:
   `Phase61_BuergerKonto` (Phase 1) war beim Auffallen bereits angewendet.
@@ -1134,7 +1192,7 @@ Modul-Schlüssel existieren schon und stehen auf „aus".
 - `Plan.md` — Phasenplan (Status, Datenmodell, Rechte-Matrix, Glossar)
 - `Features.md` — kompakte Funktionsübersicht
 - `AlgoPlan.md` — Spezifikation des EHK-/Bedrohungs-Scores (S1–S4 Fraktion, P1–P5 Person)
-- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–12 gebaut**, 13–16 offen
+- `PublicPlan.md` — Öffentlicher Bereich (Fahndung/Kopfgeld/Hinweise/Ticket-Chat/CMS), 16 Phasen; **Phase 1–12 und 13a gebaut**, 13b–16 offen
 - `DEPLOYMENT.md` — Server-Setup (nginx → Kestrel `127.0.0.1:5000` → MariaDB), systemd, Troubleshooting
 - `GoalOfTheSite.txt` — Original-Spec (Ränge, Feldlisten, Einstufungs-Stufen)
 - `CODE_REVIEW_TODO.md` — bekannte Tech-Debt-/Review-Findings

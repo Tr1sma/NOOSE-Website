@@ -48,7 +48,8 @@ public class PublicWantedService(
     /// Gefasst belongs here since the archive exists: a person caught in August and classified in September would
     /// otherwise keep photo, name and date on /gefasst, because the hook only ever looked at live notices.
     /// </remarks>
-    private static readonly PublicWantedStatus[] PubliclyVisible =
+    /// <remarks>Internal rather than private: the objection service names this set instead of copying it.</remarks>
+    internal static readonly PublicWantedStatus[] PubliclyVisible =
     [
         PublicWantedStatus.Veroeffentlicht,
         PublicWantedStatus.Beantragt,
@@ -63,7 +64,16 @@ public class PublicWantedService(
     private const int MaxLastArea = 200;
     private const int MaxVehicleText = 400;
 
+    /// <summary>The states in which a notice occupies its subject; a second one for the same subject is refused.</summary>
+    private static readonly PublicWantedStatus[] LiveStates =
+    [
+        PublicWantedStatus.Entwurf,
+        PublicWantedStatus.Beantragt,
+        PublicWantedStatus.Veroeffentlicht,
+    ];
+
     private const string NotFound = "Ausschreibung nicht gefunden.";
+    private const string SourceNotFound = "Der Eintrag aus dem Steckbrief ist nicht mehr vorhanden.";
     private const string RecordNotFound = "Akte nicht gefunden.";
     private const string Classified = "Eine Verschlusssache wird nicht öffentlich ausgeschrieben.";
 
@@ -78,6 +88,13 @@ public class PublicWantedService(
             return PublicWantedBoard.Empty;
         }
         var board = await LoadAsync(cancellationToken);
+        // the item switch is read outside the content cache for the same reason as the board's own, and it is a
+        // sub-switch: turning the vehicles off has to leave the person notices standing, while the board switch
+        // above takes everything with it
+        if (!await modules.IsEnabledAsync(PublicModules.WantedVehicles, cancellationToken))
+        {
+            board = board.WithoutItems();
+        }
         // the bounty switch is read outside the content cache for the same reason as the board's own; dropping the
         // dictionary is one assignment because the amounts live on the board rather than on each card
         return await modules.IsEnabledAsync(PublicModules.Bounty, cancellationToken)
@@ -99,7 +116,12 @@ public class PublicWantedService(
         {
             return [];
         }
-        return (await LoadAsync(cancellationToken)).Archive;
+        var board = await LoadAsync(cancellationToken);
+        if (!await modules.IsEnabledAsync(PublicModules.WantedVehicles, cancellationToken))
+        {
+            board = board.WithoutItems();
+        }
+        return board.Archive;
     }
 
     public async Task<PublicWantedPhoto?> GetPublishedPhotoAsync(string? caseNumber, CancellationToken cancellationToken = default)
@@ -126,6 +148,13 @@ public class PublicWantedService(
         {
             return null;
         }
+        // the module of the set the row was found in, like the two gates above. An item notice cannot carry a photo
+        // today; an endpoint that relies on a rule enforced in another file is exactly the coupling that rots.
+        if (WantedKinds.IsItem(live?.Kind ?? captured!.Kind)
+            && !await modules.IsEnabledAsync(PublicModules.WantedVehicles, cancellationToken))
+        {
+            return null;
+        }
 
         var name = live?.CaseNumber ?? captured!.CaseNumber;
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
@@ -143,6 +172,20 @@ public class PublicWantedService(
             : null;
     }
 
+    /// <summary>Every notice answers to the board switch; an item notice answers to its own on top.</summary>
+    /// <remarks>
+    /// Without the second gate a licence plate could go live while its module is off: the row would say published,
+    /// the board would strip it, and the Discord post — which cannot be recalled — would link to a 404.
+    /// </remarks>
+    private async Task RequireModulesAsync(PublicWantedKind kind, CancellationToken cancellationToken)
+    {
+        await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+        if (WantedKinds.IsItem(kind))
+        {
+            await modules.RequireEnabledAsync(PublicModules.WantedVehicles, cancellationToken);
+        }
+    }
+
     // ---- internal reads ----
 
     public async Task<PublicWantedBanner?> GetBannerForPersonAsync(string personId, CancellationToken cancellationToken = default)
@@ -155,6 +198,9 @@ public class PublicWantedService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.OeffentlicheFahndungen
             .AsNoTracking()
+            // person kinds only: the banner says this PERSON is publicly wanted, which an advertised plate on the
+            // same file does not make true
+            .Where(WantedKinds.PersonRows)
             .Where(f => f.PersonId == personId
                 && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Beantragt))
             .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
@@ -209,8 +255,9 @@ public class PublicWantedService(
         var row = await db.OeffentlicheFahndungen
             .AsNoTracking()
             .Where(f => f.Id == id)
-            .Select(f => new { f.PersonId, Draft = new PublicWantedDraft(f.Id, f.CaseNumber, f.Status, f.DisplayName,
-                f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml, f.BountyIsCap) })
+            .Select(f => new { f.PersonId, Draft = new PublicWantedDraft(f.Id, f.CaseNumber, f.Kind, f.Status,
+                f.DisplayName, f.AliasText, f.LastArea, f.VehicleText, f.PhotoSourceId, f.ExpiresAt, f.ChargeHtml,
+                f.BountyIsCap) })
             .FirstOrDefaultAsync(cancellationToken);
 
         return row is not null && await IsRecordVisibleAsync(db, row.PersonId, actor, cancellationToken)
@@ -223,11 +270,12 @@ public class PublicWantedService(
         Permission.RequirePublicWantedRecordRead(actor);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var personId = await db.OeffentlicheFahndungen
+        var row = await db.OeffentlicheFahndungen
             .AsNoTracking()
             .Where(f => f.Id == id)
-            .Select(f => f.PersonId)
+            .Select(f => new { f.PersonId, f.Kind })
             .FirstOrDefaultAsync(cancellationToken);
+        var personId = row?.PersonId;
         // these are LIVE rows of the file, not snapshot fields — without the gate the editor hands a rank-3 agent
         // the current whereabouts of a file he may not open anywhere else
         if (personId is null || !await IsRecordVisibleAsync(db, personId, actor, cancellationToken))
@@ -235,7 +283,11 @@ public class PublicWantedService(
             return PublicWantedOptions.Empty;
         }
 
-        var photos = await db.PersonPhotos
+        // the only photo store in the house holds mugshots, and this notice hangs off the owner's file — offering
+        // them here would put her portrait on a licence plate. Areas stay: where a vehicle was last seen is its own.
+        var photos = WantedKinds.IsItem(row!.Kind)
+            ? []
+            : await db.PersonPhotos
             .AsNoTracking()
             .Where(f => f.PersonId == personId)
             .OrderByDescending(f => f.CreatedAt)
@@ -262,6 +314,8 @@ public class PublicWantedService(
 
         var row = await db.OeffentlicheFahndungen
             .AsNoTracking()
+            // the file page shows the person notice here; the vehicles and weapons have their own panel
+            .Where(WantedKinds.PersonRows)
             .Where(f => f.PersonId == personId)
             .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
             .Select(f => new PublicWantedEdit(
@@ -276,6 +330,81 @@ public class PublicWantedService(
 
         var bounties = await BountiesAsync(db, [row.Id], cancellationToken);
         return bounties.TryGetValue(row.Id, out var total) ? row with { Bounty = total } : row;
+    }
+
+    public async Task<IReadOnlyList<PublicWantedEdit>> GetItemsForPersonAsync(string personId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRecordRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        if (!await IsRecordVisibleAsync(db, personId, actor, cancellationToken))
+        {
+            return [];
+        }
+
+        var rows = await db.OeffentlicheFahndungen
+            .AsNoTracking()
+            .Where(WantedKinds.ItemRows)
+            .Where(f => f.PersonId == personId)
+            .OrderByDescending(f => f.PublishedAt ?? f.CreatedAt)
+            .Select(f => new PublicWantedEdit(
+                f.Id, f.CaseNumber, f.Kind, f.Status, f.DisplayName, f.Person!.CaseNumber, f.PublicHazardLevel,
+                f.PhotoFileName != null, f.PublishedAt, f.PublishedBy!.Codename, f.ExpiresAt,
+                f.ModifiedAt ?? f.CreatedAt, f.ViewCount, 0m))
+            .ToListAsync(cancellationToken);
+
+        var bounties = await BountiesAsync(db, rows.Select(r => r.Id), cancellationToken);
+        return rows
+            .Select(r => bounties.TryGetValue(r.Id, out var total) ? r with { Bounty = total } : r)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PublicWantedItemSource>> GetItemSourcesAsync(string personId,
+        ClaimsPrincipal actor, CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedRecordRead(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // LIVE rows of the file, like the photo and area choices: without the gate the panel would hand a rank-3
+        // agent the vehicles of a file he may not open anywhere else
+        if (!await IsRecordVisibleAsync(db, personId, actor, cancellationToken))
+        {
+            return [];
+        }
+
+        var vehicles = await db.PersonVehicles
+            .AsNoTracking()
+            .Where(v => v.PersonId == personId)
+            .OrderBy(v => v.Designation)
+            .Select(v => new { v.Id, v.Designation, v.LicensePlate })
+            .ToListAsync(cancellationToken);
+        var weapons = await db.PersonWeapons
+            .AsNoTracking()
+            .Where(w => w.PersonId == personId)
+            .OrderBy(w => w.Text)
+            .Select(w => new { w.Id, w.Text })
+            .ToListAsync(cancellationToken);
+
+        var taken = (await db.OeffentlicheFahndungen
+                .AsNoTracking()
+                .Where(WantedKinds.ItemRows)
+                .Where(f => f.PersonId == personId && LiveStates.Contains(f.Status))
+                .Select(f => new { f.Kind, f.DisplayName })
+                .ToListAsync(cancellationToken))
+            .Select(f => SubjectKey(f.Kind, f.DisplayName))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var sources = vehicles
+            .Select(v => new PublicWantedItemSource(v.Id, PublicWantedKind.Fahrzeug,
+                VehicleLabel(v.Designation, v.LicensePlate),
+                taken.Contains(SubjectKey(PublicWantedKind.Fahrzeug,
+                    VehicleSubject(v.Designation, v.LicensePlate)))))
+            .Concat(weapons.Select(w => new PublicWantedItemSource(w.Id, PublicWantedKind.Waffe, w.Text,
+                taken.Contains(SubjectKey(PublicWantedKind.Waffe, w.Text)))))
+            .Where(o => o.Label.Trim().Length > 0)
+            .ToList();
+        return sources;
     }
 
     // ---- writes ----
@@ -296,9 +425,10 @@ public class PublicWantedService(
             ?? throw new InvalidOperationException(RecordNotFound);
         RequireNotClassified(person, actor);
 
-        var live = await db.OeffentlicheFahndungen.AnyAsync(f => f.PersonId == personId
-            && (f.Status == PublicWantedStatus.Veroeffentlicht || f.Status == PublicWantedStatus.Beantragt
-                || f.Status == PublicWantedStatus.Entwurf), cancellationToken);
+        // person kinds only: an advertised licence plate hangs off the same file and must not block the manhunt
+        var live = await db.OeffentlicheFahndungen
+            .Where(WantedKinds.PersonRows)
+            .AnyAsync(f => f.PersonId == personId && LiveStates.Contains(f.Status), cancellationToken);
         if (live)
         {
             throw new InvalidOperationException("Für diese Akte gibt es bereits eine Ausschreibung.");
@@ -321,6 +451,87 @@ public class PublicWantedService(
         return row.Id;
     }
 
+    public async Task<string> CreateDraftFromVehicleAsync(string vehicleId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var source = await db.PersonVehicles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.Id == vehicleId, cancellationToken)
+            ?? throw new InvalidOperationException(SourceNotFound);
+
+        // the plate is what identifies the vehicle outside; the model goes into the description line beside it, and
+        // only when the plate is actually known — otherwise both fields would say the same thing
+        var plateKnown = !string.IsNullOrWhiteSpace(source.LicensePlate);
+        return await ItemDraftAsync(db, PublicWantedKind.Fahrzeug, source.PersonId,
+            VehicleSubject(source.Designation, source.LicensePlate),
+            plateKnown ? source.Designation : null, actor, cancellationToken);
+    }
+
+    public async Task<string> CreateDraftFromWeaponAsync(string weaponId, ClaimsPrincipal actor,
+        CancellationToken cancellationToken = default)
+    {
+        Permission.RequirePublicWantedWrite(actor);
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var source = await db.PersonWeapons
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == weaponId, cancellationToken)
+            ?? throw new InvalidOperationException(SourceNotFound);
+
+        return await ItemDraftAsync(db, PublicWantedKind.Waffe, source.PersonId, source.Text, null, actor,
+            cancellationToken);
+    }
+
+    /// <summary>The one body behind both item entry points; the source row is read for the prefill and dropped.</summary>
+    private async Task<string> ItemDraftAsync(AppDbContext db, PublicWantedKind kind, string personId,
+        string subject, string? vehicleText, ClaimsPrincipal actor, CancellationToken cancellationToken)
+    {
+        // resolved through the canonical visibility gate first, exactly as the person path does: an invisible file
+        // must read as "not found", never as "not allowed"
+        if (!await Visibility.IsRecordVisibleAsync(db, nameof(Person), personId, ViewerScope.From(actor),
+                cancellationToken))
+        {
+            throw new InvalidOperationException(RecordNotFound);
+        }
+
+        var person = await db.People.AsNoTracking().FirstOrDefaultAsync(p => p.Id == personId, cancellationToken)
+            ?? throw new InvalidOperationException(RecordNotFound);
+        RequireNotClassified(person, actor);
+
+        var name = Cut(subject.Trim(), MaxDisplayName);
+        if (name.Length == 0)
+        {
+            throw new InvalidOperationException("Der Eintrag trägt keine Bezeichnung, aus der sich etwas ausschreiben lässt.");
+        }
+
+        // deduplicated on the text, not on the source row: the file's profile children are replaced wholesale on
+        // every save, so their ids are worthless a moment later — and the plate is what names the notice outside
+        var live = await db.OeffentlicheFahndungen
+            .AnyAsync(f => f.PersonId == personId && f.Kind == kind && f.DisplayName == name
+                && LiveStates.Contains(f.Status), cancellationToken);
+        if (live)
+        {
+            throw new InvalidOperationException("Dafür gibt es an dieser Akte bereits eine Ausschreibung.");
+        }
+
+        var row = new OeffentlicheFahndung
+        {
+            PersonId = person.Id,
+            Kind = kind,
+            Status = PublicWantedStatus.Entwurf,
+            DisplayName = name,
+            VehicleText = CutOrNull(vehicleText, MaxVehicleText),
+            // the accusation is deliberately not prefilled from the file: WantedReason is an allegation against the
+            // person and usually names her, which is the very reference an item notice promises not to publish
+        };
+        db.OeffentlicheFahndungen.Add(row);
+        await SaveAndInvalidateAsync(db, cancellationToken);
+        return row.Id;
+    }
+
     public async Task UpdateSnapshotAsync(PublicWantedInput input, ClaimsPrincipal actor, CancellationToken cancellationToken = default)
     {
         Permission.RequirePublicWantedWrite(actor);
@@ -333,7 +544,7 @@ public class PublicWantedService(
         if (live)
         {
             // editing a live notice is a publication, so it answers to the same gates
-            await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+            await RequireModulesAsync(row.Kind, cancellationToken);
             await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
         }
 
@@ -348,6 +559,13 @@ public class PublicWantedService(
         row.LastArea = CutOrNull(input.LastArea, MaxLastArea);
         row.VehicleText = CutOrNull(input.VehicleText, MaxVehicleText);
         row.ExpiresAt = ExpiryFrom(input.ExpiresAt);
+
+        // refused rather than quietly nulled: the editor offers no picker for an item notice, so a value here can
+        // only come from a manipulated post — and the only photo store in the house holds the owner's mugshots
+        if (WantedKinds.IsItem(row.Kind) && !string.IsNullOrEmpty(input.PhotoSourceId))
+        {
+            throw new InvalidOperationException("Eine Fahrzeug- oder Waffen-Ausschreibung trägt kein Foto.");
+        }
 
         var previousPhoto = row.PhotoFileName;
         await PhotoSourceSetAsync(db, row, input.PhotoSourceId, cancellationToken);
@@ -390,20 +608,23 @@ public class PublicWantedService(
     public async Task<PublicWantedPublishOutcome> PublishAsync(string id, string? justification, ClaimsPrincipal actor,
         CancellationToken cancellationToken = default)
     {
-        // first, so a read-only supervisor does not even learn whether the module is on
+        // first, so a read-only supervisor does not even learn whether any module is on
         Permission.RequirePublicWantedWrite(actor);
-        await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var row = await db.OeffentlicheFahndungen.FirstOrDefaultAsync(f => f.Id == id, cancellationToken)
             ?? throw new InvalidOperationException(NotFound);
+        // after the row, not before it: which module has to be live depends on the kind
+        await RequireModulesAsync(row.Kind, cancellationToken);
         if (row.Status == PublicWantedStatus.Veroeffentlicht)
         {
             throw new InvalidOperationException("Die Ausschreibung ist bereits veröffentlicht.");
         }
+        // fail closed: every notice is drawn from a record so the suppression belt has something to grip. A row
+        // without one would be the only public entry no belt protects.
         if (row.PersonId is null)
         {
-            throw new InvalidOperationException("Diese Phase veröffentlicht nur Personen-Ausschreibungen.");
+            throw new InvalidOperationException("Eine Ausschreibung ohne Aktenbezug lässt sich nicht veröffentlichen.");
         }
 
         var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
@@ -592,7 +813,7 @@ public class PublicWantedService(
         if (row.Status == PublicWantedStatus.Veroeffentlicht)
         {
             // chipping a live notice changes what is outside, so it answers to the same gates as an edit
-            await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+            await RequireModulesAsync(row.Kind, cancellationToken);
             await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
         }
 
@@ -672,7 +893,7 @@ public class PublicWantedService(
         }
         if (row.Status == PublicWantedStatus.Veroeffentlicht)
         {
-            await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
+            await RequireModulesAsync(row.Kind, cancellationToken);
             await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
         }
 
@@ -834,10 +1055,11 @@ public class PublicWantedService(
         // ReadOnlyBarrierInterceptor vetoes the save
         Permission.RequirePublicWantedWrite(actor);
         Permission.RequireHighestClassification(actor);
-        await modules.RequireEnabledAsync(PublicModules.Wanted, cancellationToken);
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var (request, row) = await PendingRequestAsync(db, requestId, cancellationToken);
+        // after the row for the same reason as the direct path: the kind decides which module has to be live
+        await RequireModulesAsync(row.Kind, cancellationToken);
         var person = await RequirePublishableRecordAsync(db, row, actor, cancellationToken);
 
         DecideRequest(request, approved: true, note, actor);
@@ -960,6 +1182,15 @@ public class PublicWantedService(
     /// <summary>Copies the chosen file photo into the public folder; the notice never points at an internal file.</summary>
     private async Task PhotoCopyAsync(AppDbContext db, OeffentlicheFahndung row, CancellationToken cancellationToken)
     {
+        // the last of the three layers: an item notice hangs off the owner's file, so a mugshot would resolve here
+        if (WantedKinds.IsItem(row.Kind))
+        {
+            row.PhotoSourceId = null;
+            row.PhotoFileName = null;
+            row.PhotoContentType = null;
+            return;
+        }
+
         if (row.PhotoSourceId is not { Length: > 0 } sourceId)
         {
             row.PhotoFileName = null;
@@ -1352,6 +1583,18 @@ public class PublicWantedService(
         var bare = MentionParser.Strip(wantedReason);
         return bare.Length == 0 ? string.Empty : HtmlCleanup.Clean($"<p>{WebUtility.HtmlEncode(bare)}</p>");
     }
+
+    /// <summary>What a vehicle is called outside: the plate when there is one, otherwise the model.</summary>
+    private static string VehicleSubject(string designation, string? plate)
+        => string.IsNullOrWhiteSpace(plate) ? designation : plate.Trim();
+
+    /// <summary>How a source reads in the picker; the same shape the file's own profile list uses.</summary>
+    private static string VehicleLabel(string designation, string? plate)
+        => string.IsNullOrWhiteSpace(plate) ? designation : $"{designation} – {plate}";
+
+    /// <summary>Kind and display name together — one live notice per subject of a file.</summary>
+    private static string SubjectKey(PublicWantedKind kind, string displayName)
+        => $"{(int)kind}|{displayName.Trim()}";
 
     private static string Cut(string value, int max) => value.Length <= max ? value : value[..max];
 

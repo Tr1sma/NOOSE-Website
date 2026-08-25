@@ -56,7 +56,7 @@ else
         <h2>@_entry.DisplayName</h2>
         @if (!string.IsNullOrWhiteSpace(_entry.AliasText))
         {
-            <p><b>Aliase:</b> @_entry.AliasText</p>
+            <p><b>@(WantedKinds.IsItem(_entry.Kind) ? "Weitere Bezeichnungen" : "Aliase"):</b> @_entry.AliasText</p>
         }
 
         <p><b>Gefahrenstufe:</b> @HazardLevelLogic.Name(_entry.HazardLevel)</p>
@@ -88,7 +88,7 @@ else
         }
         @if (!string.IsNullOrWhiteSpace(_entry.VehicleText))
         {
-            <p><b>Fahrzeug:</b> @_entry.VehicleText</p>
+            <p><b>@(_entry.Kind == PublicWantedKind.Fahrzeug ? "Modell" : "Fahrzeug"):</b> @_entry.VehicleText</p>
         }
 
         <footer class="druck-fusszeile">

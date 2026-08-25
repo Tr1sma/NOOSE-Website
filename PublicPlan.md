@@ -113,7 +113,8 @@ bleiben. Wurde abgewogen und so entschieden (nur für publizierte Einträge).
 | 10 | Ticket-Chat (Führungsebene) | `Oeffentlich10_Tickets` | 2 | **fertig** |
 | 11 | Öffentliche Vorlagen + 4. Token-System | `Oeffentlich11_Vorlagen` | 7, 10 | **fertig** |
 | 12 | Organisationen + Gefahrenlisten | `Oeffentlich12_Fraktionsprofile` | 4 | **fertig** |
-| 13 | Gesuchte Fahrzeuge/Waffen + Einspruch | `Oeffentlich13_FahrzeugeEinspruch` | 4, 1 | offen |
+| 13a | Sachfahndung: gesuchte Fahrzeuge und Waffen | keine | 4 | **fertig** |
+| 13b | Einspruch gegen eine Ausschreibung | `Oeffentlich13_Einspruch` | 4, 1 | offen |
 | 14 | Presse, Lageberichte, Gesetzesauszüge, Warnungen | `Oeffentlich14_Redaktion` | 3 | offen |
 | 15 | Zahlen: Gefahrenlage-Ampel, Trend, Zähler, Landing-Hero | keine | 4, 7, 14 | offen |
 | 16 | Suche & NOOSEI-Anbindung + interne KPIs | keine | 4, 7, 10 | offen |
@@ -1433,28 +1434,110 @@ nachweislich fehlt.
 
 ---
 
-## Phase 13 — Gesuchte Fahrzeuge/Waffen & Einspruch
+## Phase 13a — Sachfahndung ✅
 
-**Ziel:** Zwei kleine, unabhängige Ergänzungen.
+**Ziel:** Ein Kennzeichen oder eine Waffe lässt sich ausschreiben — auf demselben Board, ohne Namen und
+ohne Foto.
 
-**Daten** (`Oeffentlich13_FahrzeugeEinspruch`)
-- `FahndungEinspruch` → `FahndungEinsprueche`: `FahndungId`, `BuergerProfilId`, `Text`, `Status`,
-  `Entscheidungsnotiz`, `EntschiedenVonId`/`Am`, `LinkedCaseId`, `IAuditable`, `ISoftDelete`.
-- Fahrzeuge/Waffen brauchen keine neue Tabelle — `Art = Fahrzeug|Waffe` aus Phase 4 plus die vorhandenen
-  Snapshot-Felder (`FahrzeugText`, `FotoDateiname`).
+**Migration:** keine.
 
 **Code**
-- `IObjectionService`: einreichen (Bürger, Rate-Limit), entscheiden (`Permission.RequireLeadership`),
-  optional Vorgang anlegen; Statusanzeige in `/buerger/einspruch`.
-- Board-Variante `/gesucht?art=fahrzeug` mit eigener Kachel-Optik; Quelle sind `PersonVehicle`/
-  `PersonWeapon` beim Snapshot-Ziehen.
-- `PublicModules`: `Einspruch`, `FahndungFahrzeuge`.
+- `Art = Fahrzeug|Waffe` aus Phase 4 plus die vorhandenen Snapshot-Felder; Entwurf entsteht aus einer
+  `PersonVehicle`- oder `PersonWeapon`-Zeile des Steckbriefs.
+- `Services/Public/WantedKinds.cs` als einzige Art-Achse; `PublicWantedBoard.WithoutItems()` als das, was
+  der Modul-Schalter besitzt.
+- Panel `PublicItemNoticePanel` im Abschnitt „Öffentlich" der Personenakte; Board, Steckbrief, Archiv und
+  Poster art-bewusst.
+- `PublicModules`: `FahndungFahrzeuge` ⇒ `Available`.
+
+### Gebaut — was daran anders ist als am Rest des öffentlichen Bereichs
+
+1. **Keine Migration, und das ist ein Fund, keine Sparmaßnahme.** Geplant war eine Quell-Spalte auf die
+   `PersonVehicle`-/`PersonWeapon`-Zeile. `PersonService.EditAsync` ersetzt die Steckbrief-Kinder aber
+   **vollständig** (`db.PersonVehicles.RemoveRange(person.Vehicles)` + `ChildrenMap`) — jede Id ist nach
+   dem nächsten Speichern der Akte eine neue GUID. Ein gespeicherter Verweis wäre danach toter Zeiger, und
+   als FK mit `Restrict` hätte er jeden Steckbrief-Edit einer ausgeschriebenen Person **blockiert**. Die
+   Quellzeile ist deshalb reine Vorbefüllung: einmal gelesen, nie gespeichert. Genau die Snapshot-Doktrin,
+   hier vom Datenmodell erzwungen statt bloß bevorzugt.
+2. **„Ohne Personenbezug" gilt nach außen, nicht intern.** `PersonId` bleibt auf der Zeile, weil daran
+   Unterdrückungsgürtel, Zeitstrahl, Chronik und `RetractForRecordAsync` hängen — eine als Verschlusssache
+   eingestufte Halterin zieht ihr Kennzeichen **ohne eine Zeile neuen Code** offline. Eine trägerlose
+   Ausschreibung wäre die einzige öffentliche Zeile, hinter der keine Akte steht, und damit die einzige,
+   die kein Gürtel schützt. `PublishAsync` behält den Riegel gegen `PersonId is null`, jetzt als dauerhafte
+   Fail-closed-Regel statt als Phasen-Marker.
+3. **Kein Foto, in drei Schichten.** Der einzige Fotospeicher im Haus ist `PersonPhotos`, und
+   `PhotoSourceSetAsync` löst über `row.PersonId` auf — mit gesetzter `PersonId` **würde** ein Lichtbild der
+   Halterin an einem Kennzeichen auflösen. Also: `GetOptionsAsync` bietet keine an, `UpdateSnapshotAsync`
+   **weist** ein `PhotoSourceId` **ab** statt es still auf `null` zu setzen (Riegel gegen einen
+   manipulierten Dialog-Post, Präzedenz `SetHintsAsync`), und `PhotoCopyAsync` räumt bedingungslos.
+4. **Der Vorwurf wird bewusst nicht vorbefüllt.** `Person.WantedReason` ist ein Vorwurf *gegen die Person*
+   und nennt sie im Freitext meist beim Namen — auf einer Kennzeichen-Karte wäre das genau der Bezug, den
+   die Phase verspricht nicht zu veröffentlichen. `RequirePublishableContent` verlangt den Text ohnehin,
+   der Autor schreibt ihn also, bevor irgendetwas live geht.
+5. **Ein Unterschalter, ein Snapshot.** `FahndungFahrzeuge` ist ein *Unter*schalter von `Fahndung`:
+   `/gesucht` hängt am Board-Modul, aus ⇒ alles dunkel; nur die Sachfahndung aus ⇒ die Kennzeichen fallen,
+   die Personen bleiben. Umgesetzt über `PublicWantedBoard.WithoutItems()`, das Karten, Steckbriefe,
+   Archiv **und** Kopfgeld-Wörterbuch in einem Zug räumt — kein zweiter Cache-Schlüssel, aus demselben
+   Grund, aus dem Board und Archiv sich schon einen teilen. `GetByCaseNumberAsync` und `GetBountyAsync`
+   gehen darüber und brauchten deshalb keine Änderung; `GetPublishedPhotoAsync` bekam das Gate trotzdem
+   ausdrücklich, weil ein Endpoint sich nicht auf eine Regel verlassen darf, die in einer anderen Datei
+   steht.
+6. **Kein eigener Nav-Tab.** Die `art=`-Chips auf `/gesucht` existieren seit Phase 4 und erzeugen sich aus
+   den Arten, die tatsächlich auf dem Board liegen — ein Tab auf `/gesucht?art=…` wäre eine zweite Wahrheit
+   über dieselbe Seite. `NavRoute` bleibt `null`, Muster `Kopfgeld`/`Fahndungsposter`.
+7. **Der Personen-Pfad wurde art-eng gezogen.** „Eine Ausschreibung je Akte" galt bis dahin für *jede* Art;
+   ohne die Einschränkung auf `WantedKinds.PersonRows` hätte ein ausgeschriebenes Kennzeichen die
+   Personenfahndung derselben Akte gesperrt. Aus demselben Grund ignorieren `GetForPersonAsync` und
+   `GetBannerForPersonAsync` Sach-Zeilen: der rote Banner behauptet, diese **Person** sei öffentlich
+   ausgeschrieben, was ein Kennzeichen nicht wahr macht.
+8. **Dedupliziert wird auf dem Text, nicht auf der Quelle** (Folge von 1): keine zweite lebende Zeile
+   derselben Art an derselben Akte mit demselben Anzeigenamen. Das Kennzeichen ist ohnehin das, was die
+   Ausschreibung draußen benennt.
+9. **Keine Registry-Runde.** Es entsteht keine neue Entität, also kein `AuditEntityDisplay`, kein
+   `WatchlistRecordRollup`, kein Papierkorb, kein Zeitstrahl-Eintrag, kein `SearchCatalog`, keine
+   `MergedPageSections`, keine Route, kein Aktenzeichen-Präfix, kein `NotificationType`. Geändert wurden
+   genau zwei Zeilen: der `Available`-Schalter und der `PublicVisibility`-Text der Ausschreibung.
+10. **Publizieren gatet auf beide Schalter.** `RequireModulesAsync(kind)` verlangt immer `Fahndung`, für
+    eine Sach-Art zusätzlich `FahndungFahrzeuge`. Ohne das ginge ein Kennzeichen bei ausgeschaltetem
+    Sach-Modul auf `Veroeffentlicht`, der Lesepfad striche es weg, und der nicht zurückrufbare
+    Discord-Post verlinkte auf eine 404. Das Gate sitzt deshalb **hinter** dem Laden der Zeile — welches
+    Modul greift, hängt an der Art —, während der Schreib-Guard davor bleibt. *De*publizieren gatet nie.
+11. **Die Gefahrenstufe kommt weiter aus dem Score der Akte.** Sie ist die nach außen zulässige Form des
+    Werts und sagt an einem Kennzeichen, wie gefährlich die Annäherung ist; `HazardLevel.No` auf jeder
+    Sach-Karte wäre die schlechtere Aussage. In `/gefahr/personen` taucht sie trotzdem nicht auf — die
+    Liste filtert seit Phase 12 auf `Kind == Fahndung`, und dieser Filter wird jetzt erst scharf.
+12. **Im Archiv heißt es „Sichergestellt".** Ein Fahrzeug wird nicht gefasst. Route und Überschrift behalten
+    das gemeinsame Wort, die Karte nicht.
+
+---
+
+## Phase 13b — Einspruch gegen eine Ausschreibung
+
+**Ziel:** Ein Bürger kann einer Ausschreibung widersprechen, die Führung entscheidet.
+
+**Daten** (`Oeffentlich13_Einspruch`)
+- `FahndungEinspruch` → `FahndungEinsprueche`: `FahndungId`, `BuergerProfilId`, `Text`, `Status`,
+  `Entscheidungsnotiz`, `EntschiedenVonId`/`Am`, `LinkedCaseId`, `IAuditable`, `ISoftDelete`.
+
+**Code**
+- `IObjectionService`: einreichen (Bürger, Rate-Limit im Dienst, nicht in der Middleware — die Einreichung
+  läuft über SignalR), entscheiden (Führung), Vorgang anlegen; Statusanzeige in `/buerger/einspruch`,
+  Entscheidung als Abschnitt auf `/fahndung`.
+- `PublicModules`: `Einspruch` ⇒ `Available`.
+
+**Vorentschieden**
+- **Annehmen setzt voraus, dass die Ausschreibung schon zurückgezogen ist.** Wörtlich das Phase-9-Muster
+  („`Gefasst` ist Vorbedingung, keine Nebenwirkung"): der Mensch zieht mit echtem Grund zurück, das
+  Annehmen ist der letzte Schritt. Kann baulich keinen angenommenen Einspruch neben einer laufenden
+  Ausschreibung hinterlassen — und die Fahndungstabelle behält ihren einen Schreibpfad.
+- **`LinkedCaseId` wird vollständig gebaut.** `ObjectionService` ruft `ICaseService`, es baut keine
+  Entität selbst (Muster `TipTakeoverService`), damit Aktenzeichen-Transaktion und Sichtbarkeits-Gate dort
+  bleiben, wo sie schon stehen.
 
 **Tests** Einspruch nur zu veröffentlichten Einträgen · Entscheidung erzeugt Audit-Zeile an der Akte ·
-Fahrzeug-Board zeigt keine Personendaten außer dem publizierten Snapshot.
+Annehmen auf laufender Ausschreibung wird abgewiesen.
 
-**Fertig, wenn** ein Bürger widersprechen kann, die Führung entscheidet, und ein Kennzeichen-Steckbrief
-ohne Personenbezug online ist.
+**Fertig, wenn** ein Bürger widersprechen kann und die Führung entscheidet.
 
 ---
 

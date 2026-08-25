@@ -453,6 +453,9 @@ public static class SearchCatalog
             ["TicketNachricht"] = "Schriftwechsel eines Tickets; gefunden wird das Ticket, nicht die "
                 + "einzelne Zeile. Die interne Zielgruppe wäre über eine Volltextsuche sonst am "
                 + "Führungs-Gate vorbei lesbar.",
+            ["FahndungEinspruch"] = "Widerspruch eines Bürgers gegen eine Ausschreibung; bearbeitet wird er "
+                + "unter /fahndung?tab=einsprueche. Ein eigener Provider kommt mit der Suchanbindung des "
+                + "öffentlichen Bereichs — er müsste dasselbe Gate tragen, das bisher nur der Abschnitt kennt.",
             ["OeffentlicheVorlage"] = "Werteliste ohne Aktenbezug, gepflegt in /einstellungen. Gesucht wird "
                 + "die Nachricht, die daraus entstand, nicht der Baustein.",
             ["OeffentlichesFraktionsprofil"] = "Publikations-Snapshot einer Fraktion; intern gefunden wird "

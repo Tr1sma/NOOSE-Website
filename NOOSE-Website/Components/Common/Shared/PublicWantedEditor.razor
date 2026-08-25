@@ -25,6 +25,9 @@ else
             <MudChip T="string" Size="Size.Small" Color="@StatusColour(_draft.Status)" Variant="Variant.Filled">
                 @PublicWantedStatusDisplay.Name(_draft.Status)
             </MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                @PublicWantedKindDisplay.Name(_draft.Kind)
+            </MudChip>
             @if (!string.IsNullOrWhiteSpace(_draft.CaseNumber))
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_draft.CaseNumber</MudChip>
@@ -39,12 +42,12 @@ else
 
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_input.DisplayName" Label="Anzeigename" Variant="Variant.Outlined"
+                <MudTextField @bind-Value="_input.DisplayName" Label="@NameLabel" Variant="Variant.Outlined"
                               Required="true" RequiredError="Anzeigename ist erforderlich" />
             </MudItem>
             <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_input.AliasText" Label="Aliase (optional)" Variant="Variant.Outlined"
-                              HelperText="Nur was nach außen darf — Aliase werden bewusst nicht automatisch übernommen." />
+                <MudTextField @bind-Value="_input.AliasText" Label="@AliasLabel" Variant="Variant.Outlined"
+                              HelperText="Nur was nach außen darf — nichts davon wird automatisch aus der Akte übernommen." />
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField @bind-Value="_input.LastArea" Label="Zuletzt gesehen (optional)" Variant="Variant.Outlined" />
@@ -59,19 +62,27 @@ else
                     </MudStack>
                 }
             </MudItem>
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_input.VehicleText" Label="Fahrzeug (optional)" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <MudSelect T="string" @bind-Value="_input.PhotoSourceId" Label="Foto" Clearable="true"
-                           Variant="Variant.Outlined"
-                           HelperText="Wird beim Veröffentlichen kopiert; ein späteres Löschen des Aktenfotos ändert den Steckbrief nicht.">
-                    @foreach (var photo in _options.Photos)
-                    {
-                        <MudSelectItem T="string" Value="@photo.Id">Foto vom @photo.Label</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
+            @if (_draft.Kind != PublicWantedKind.Waffe)
+            {
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_input.VehicleText" Label="@VehicleLabel" Variant="Variant.Outlined" />
+                </MudItem>
+            }
+            @* no photo picker for an item notice: the only photo store in the house holds mugshots of the owner,
+               and the service refuses a source id here rather than dropping it quietly *@
+            @if (!WantedKinds.IsItem(_draft.Kind))
+            {
+                <MudItem xs="12" md="6">
+                    <MudSelect T="string" @bind-Value="_input.PhotoSourceId" Label="Foto" Clearable="true"
+                               Variant="Variant.Outlined"
+                               HelperText="Wird beim Veröffentlichen kopiert; ein späteres Löschen des Aktenfotos ändert den Steckbrief nicht.">
+                        @foreach (var photo in _options.Photos)
+                        {
+                            <MudSelectItem T="string" Value="@photo.Id">Foto vom @photo.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
             <MudItem xs="12" md="6">
                 <MudDatePicker @bind-Date="_input.ExpiresAt" Label="Ablaufdatum (optional)" Variant="Variant.Outlined"
                                Clearable="true" />
@@ -347,6 +358,25 @@ else
             _busy = false;
         }
     }
+
+    /// <summary>Field labels follow the kind: a licence plate is not an "Anzeigename" to the agent typing it.</summary>
+    private string NameLabel => _draft?.Kind switch
+    {
+        PublicWantedKind.Fahrzeug => "Kennzeichen",
+        PublicWantedKind.Waffe => "Bezeichnung der Waffe",
+        _ => "Anzeigename",
+    };
+
+    private string AliasLabel => _draft?.Kind switch
+    {
+        PublicWantedKind.Fahrzeug => "Weitere Kennzeichen (optional)",
+        PublicWantedKind.Waffe => "Weitere Bezeichnungen (optional)",
+        _ => "Aliase (optional)",
+    };
+
+    private string VehicleLabel => _draft?.Kind == PublicWantedKind.Fahrzeug
+        ? "Modell und Farbe (optional)"
+        : "Fahrzeug (optional)";
 
     private static Color StatusColour(PublicWantedStatus status) => status switch
     {

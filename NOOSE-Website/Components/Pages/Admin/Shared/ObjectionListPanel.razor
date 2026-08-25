@@ -1,0 +1,303 @@
+@* Objections against public wanted notices: read by everyone who works the notice list, decided by leadership. *@
+@using System.Security.Claims
+@using NOOSE_Website.Models.Public
+@using NOOSE_Website.Services.Public
+@inject IObjectionService Objections
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        <MudIcon Icon="@Icons.Material.Filled.Balance" Color="Color.Primary" />
+        <MudText Typo="Typo.h6">Einsprüche</MudText>
+        <MudSpacer />
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+            <MudButton Color="@(_onlyOpen ? Color.Primary : Color.Default)"
+                       OnClick="@(() => SwitchAsync(true))">Offen (@_counts.Open)</MudButton>
+            <MudButton Color="@(_onlyOpen ? Color.Default : Color.Primary)"
+                       OnClick="@(() => SwitchAsync(false))">Entschieden (@_counts.Decided)</MudButton>
+        </MudButtonGroup>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Ein Einspruch bestreitet, was die Behörde veröffentlicht hat. Stattgeben lässt sich ihm erst, wenn die
+        Ausschreibung zurückgezogen ist — mit einem Grund, den ein Mensch gewählt hat.
+    </MudText>
+
+    @if (_load)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (!_mayRead)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Einsprüche sieht Senior Special Agent aufwärts und die Aufsicht.
+        </MudAlert>
+    }
+    else if (_rows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            @(_onlyOpen ? "Derzeit liegt kein Einspruch vor." : "Es wurde noch kein Einspruch entschieden.")
+        </MudAlert>
+    }
+    else
+    {
+    <MudExpansionPanels MultiExpansion="true" Elevation="0" Outlined="true">
+        @foreach (var row in _rows)
+        {
+            <MudExpansionPanel Expanded="@_open.Contains(row.Id)"
+                               ExpandedChanged="@(open => ToggleAsync(row.Id, open))">
+                <TitleContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@StatusColour(row.Status)">
+                            @ObjectionStatusDisplay.Name(row.Status)
+                        </MudChip>
+                        <MudText Typo="Typo.body2"><b>@row.CaseNumber</b></MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            gegen @row.WantedDisplayName (@row.WantedCaseNumber) ·
+                            @PublicWantedStatusDisplay.Name(row.WantedStatus)
+                        </MudText>
+                        <MudSpacer />
+                        @if (row.HasCase)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.FolderSpecial" Size="Size.Small"
+                                     Class="mud-text-secondary" />
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@row.CitizenName</MudText>
+                    </MudStack>
+                </TitleContent>
+                <ChildContent>
+                    @if (_detail?.Id == row.Id)
+                    {
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap;">@_detail.Text</MudText>
+                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                <MudButton Href="@($"/gesucht/{_detail.WantedCaseNumber}")" Target="_blank"
+                                           Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
+                                           StartIcon="@Icons.Material.Filled.OpenInNew">Öffentliche Seite</MudButton>
+                                @if (_detail.LinkedCaseId is { Length: > 0 } vorgang)
+                                {
+                                    <MudButton Href="@($"/vorgaenge/{vorgang}")" Variant="Variant.Text"
+                                               Size="Size.Small" Color="Color.Default"
+                                               StartIcon="@Icons.Material.Filled.FolderSpecial">
+                                        Vorgang @_detail.LinkedCaseNumber
+                                    </MudButton>
+                                }
+                                @if (_detail.CitizenIsBlocked)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error"
+                                             Variant="Variant.Outlined">Konto gesperrt</MudChip>
+                                }
+                            </MudStack>
+
+                            @if (!string.IsNullOrWhiteSpace(_detail.DecisionNote))
+                            {
+                                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true">
+                                    <b>Entscheidung @_detail.DecidedByCodename</b>
+                                    <div style="white-space:pre-wrap;">@_detail.DecisionNote</div>
+                                </MudAlert>
+                            }
+
+                            @if (_mayDecide)
+                            {
+                                <MudDivider />
+                                <MudTextField @bind-Value="_note" Label="Begründung der Entscheidung"
+                                              Variant="Variant.Outlined" Lines="4"
+                                              MaxLength="@ObjectionRules.MaxNoteLength"
+                                              HelperText="Der Bürger liest diesen Text." />
+                                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                    @foreach (var target in ObjectionRules.AllowedTargets(_detail.Status))
+                                    {
+                                        <MudButton OnClick="@(() => SetAsync(target))" Disabled="_busy"
+                                                   Variant="Variant.Filled" Size="Size.Small"
+                                                   Color="@StatusColour(target)">
+                                            @ObjectionStatusDisplay.Name(target)
+                                        </MudButton>
+                                    }
+                                    @if (_detail.LinkedCaseId is null)
+                                    {
+                                        <MudButton OnClick="ToCaseAsync" Disabled="_busy" Variant="Variant.Outlined"
+                                                   Size="Size.Small" Color="Color.Default"
+                                                   StartIcon="@Icons.Material.Filled.FolderSpecial">
+                                            Vorgang anlegen
+                                        </MudButton>
+                                    }
+                                    <MudSpacer />
+                                    <MudButton OnClick="DeleteAsync" Disabled="_busy" Variant="Variant.Text"
+                                               Size="Size.Small" Color="Color.Error"
+                                               StartIcon="@Icons.Material.Filled.Delete">Löschen</MudButton>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+    }
+</MudStack>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+
+    private ClaimsPrincipal _user = default!;
+    private IReadOnlyList<ObjectionRow> _rows = [];
+    private ObjectionCounts _counts = new(0, 0);
+    private ObjectionDetail? _detail;
+    private readonly HashSet<string> _open = new(StringComparer.Ordinal);
+    private string _note = string.Empty;
+    private bool _onlyOpen = true;
+    private bool _load = true;
+    private bool _busy;
+    private bool _mayRead;
+    private bool _mayDecide;
+    private bool _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded)
+        {
+            return;
+        }
+        _loaded = true;
+        _user = (await AuthStateTask).User;
+        // mirrors the two guards; which rows resolve is still the service's decision
+        _mayRead = _user.IsInternalAgent() && (_user.MayHighestClassification() || _user.IsOnlyReader());
+        _mayDecide = _user.IsInternalAgent() && _user.MayWrite() && _user.IsLeadership();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _load = true;
+        try
+        {
+            if (_mayRead)
+            {
+                _rows = await Objections.GetListAsync(_onlyOpen, _user);
+                _counts = await Objections.GetCountsAsync(_user);
+            }
+        }
+        catch
+        {
+            /* best effort */
+            _rows = [];
+        }
+        finally
+        {
+            _load = false;
+        }
+    }
+
+    private async Task SwitchAsync(bool onlyOpen)
+    {
+        if (_onlyOpen == onlyOpen)
+        {
+            return;
+        }
+        _onlyOpen = onlyOpen;
+        _open.Clear();
+        _detail = null;
+        await LoadAsync();
+    }
+
+    /// <summary>Only the open panel pulls its detail; the list carries no argument text at all.</summary>
+    private async Task ToggleAsync(string id, bool open)
+    {
+        if (!open)
+        {
+            _open.Remove(id);
+            return;
+        }
+        _open.Add(id);
+        _note = string.Empty;
+        try { _detail = await Objections.GetAsync(id, _user); }
+        catch { /* best effort */ _detail = null; }
+    }
+
+    private async Task SetAsync(ObjectionStatus status)
+    {
+        if (_detail is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Objections.SetStatusAsync(_detail.Id, status, _note, _user);
+            Snackbar.Add("Einspruch aktualisiert.", Severity.Success);
+            var id = _detail.Id;
+            await LoadAsync();
+            await ToggleAsync(id, true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToCaseAsync()
+    {
+        if (_detail is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Objections.ToCaseAsync(_detail.Id, null, _user);
+            Snackbar.Add("Vorgang angelegt.", Severity.Success);
+            var id = _detail.Id;
+            await LoadAsync();
+            await ToggleAsync(id, true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_detail is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await Objections.DeleteAsync(_detail.Id, _user);
+            Snackbar.Add("Einspruch in den Papierkorb verschoben.", Severity.Success);
+            _detail = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static Color StatusColour(ObjectionStatus status) => status switch
+    {
+        ObjectionStatus.Angenommen => Color.Success,
+        ObjectionStatus.Abgelehnt => Color.Error,
+        ObjectionStatus.InPruefung => Color.Warning,
+        _ => Color.Default,
+    };
+}

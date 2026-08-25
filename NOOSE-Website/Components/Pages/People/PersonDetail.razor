@@ -141,8 +141,11 @@ else
                 </RecordSection>
                 @* deliberately outside the "einstufung" section: PartnerTabCatalog lists that slug, so anything in it
                    is visible to a released partner — and what NOOSE is preparing to publish is not partner business *@
-                <RecordSection Group="Akte" Slug="oeffentlich" Label="Öffentliche Ausschreibung" Icon="@Icons.Material.Filled.Public">
-                    <PublicWantedPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                <RecordSection Group="Akte" Slug="oeffentlich" Label="Öffentliche Ausschreibungen" Icon="@Icons.Material.Filled.Public">
+                    <MudStack Spacing="3">
+                        <PublicWantedPanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                        <PublicItemNoticePanel PersonId="@_person.Id" User="_user" Changed="NewLoadAsync" />
+                    </MudStack>
                 </RecordSection>
                 @* internal only for the same reason: who reported to the agency is not partner business, and the
                    slug stays out of _tabs and PartnerTabCatalog *@

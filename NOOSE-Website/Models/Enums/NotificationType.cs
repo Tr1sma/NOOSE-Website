@@ -85,6 +85,12 @@ public enum NotificationType
 
     /// <summary>Leadership answered a ticket. Not routable for the same reason.</summary>
     PublicTicketAnswered = 26,
+
+    /// <summary>A citizen objected to a public notice. Not routable — it names a citizen disputing an accusation.</summary>
+    PublicObjectionReceived = 27,
+
+    /// <summary>The agency decided an objection. Not routable for the same reason; it is addressed to one citizen.</summary>
+    PublicObjectionDecided = 28,
 }
 
 /// <summary>Display labels and icons.</summary>
@@ -119,6 +125,8 @@ public static class NotificationTypeDisplay
         NotificationType.PublicRewardPaid => "Belohnung ausgezahlt",
         NotificationType.PublicTicketOpened => "Neues Bürger-Ticket",
         NotificationType.PublicTicketAnswered => "Antwort zu deinem Ticket",
+        NotificationType.PublicObjectionReceived => "Einspruch gegen eine Ausschreibung",
+        NotificationType.PublicObjectionDecided => "Entscheidung zu deinem Einspruch",
         _ => "Benachrichtigung",
     };
 
@@ -152,6 +160,8 @@ public static class NotificationTypeDisplay
         NotificationType.PublicRewardPaid => Icons.Material.Filled.Redeem,
         NotificationType.PublicTicketOpened => Icons.Material.Filled.Forum,
         NotificationType.PublicTicketAnswered => Icons.Material.Filled.MarkChatUnread,
+        NotificationType.PublicObjectionReceived => Icons.Material.Filled.Balance,
+        NotificationType.PublicObjectionDecided => Icons.Material.Filled.Gavel,
         _ => Icons.Material.Filled.Notifications,
     };
 }

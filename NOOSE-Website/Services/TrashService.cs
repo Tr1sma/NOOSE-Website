@@ -29,7 +29,8 @@ public sealed class TrashService(
     IPublicWantedService publicWanted,
     IPublicFactionProfileService factionProfiles,
     ITipService tips,
-    ITicketService tickets) : ITrashService
+    ITicketService tickets,
+    IObjectionService objections) : ITrashService
 {
     /// <summary>Loading and restoring for one record type; Restore stays a domain-service call.</summary>
     private sealed record TrashSource(
@@ -97,6 +98,9 @@ public sealed class TrashService(
             tips.GetTrashAsync, TrashProjection.Tip, tips.RestoreAsync),
         Source(new TrashKind("tickets", "Bürger-Tickets", Icons.Material.Filled.Forum, "/tickets"),
             tickets.GetTrashAsync, TrashProjection.Ticket, tickets.RestoreAsync),
+        Source(new TrashKind("fahndungs-einsprueche", "Einsprüche", Icons.Material.Filled.Balance,
+                "/fahndung?tab=einsprueche"),
+            objections.GetTrashAsync, TrashProjection.Objection, objections.RestoreAsync),
     ];
 
     public IReadOnlyList<TrashKind> Kinds => _sources.Select(s => s.Kind).ToList();

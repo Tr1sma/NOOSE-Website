@@ -119,6 +119,12 @@ public static class TrashProjection
         => new("tickets", x.Id, x.CaseNumber, x.Subject,
             TicketStatusDisplay.Name(x.Status), x.DeletedAt);
 
+    // neither the citizen nor the argument: the bin is a list every handler reads, and what was disputed is the
+    // part that belongs to the two sides of it
+    public static TrashItem Objection(FahndungEinspruch x)
+        => new("fahndungs-einsprueche", x.Id, x.CaseNumber, $"Einspruch {x.CaseNumber}",
+            ObjectionStatusDisplay.Name(x.Status), x.DeletedAt);
+
     private static string Snippet(string text)
         => text.Length <= 40 ? text : string.Concat(text.AsSpan(0, 40), "…");
 

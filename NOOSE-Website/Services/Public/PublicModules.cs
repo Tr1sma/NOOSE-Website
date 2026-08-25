@@ -48,8 +48,10 @@ public static class PublicModules
     [
         new(Wanted, "Gesucht", "Öffentliches Fahndungsboard mit Steckbriefen.",
             Icons.Material.Filled.PersonSearch, "/gesucht", PublicModuleGroup.Fahndung, 10, false, true, OffWanted),
+        // no nav route: the item notices share the board and its kind filter with the person notices, so a tab of
+        // its own would be a second truth about the same page. A sub-switch of Fahndung, like Kopfgeld.
         new(WantedVehicles, "Gesuchte Fahrzeuge & Waffen", "Ausschreibungen ohne Personenbezug (Kennzeichen, Waffen).",
-            Icons.Material.Filled.DirectionsCar, null, PublicModuleGroup.Fahndung, 15, false, false, OffWanted),
+            Icons.Material.Filled.DirectionsCar, null, PublicModuleGroup.Fahndung, 15, false, true, OffWanted),
         new(WantedArchive, "Gefasst", "Archiv abgeschlossener Ausschreibungen.",
             Icons.Material.Filled.Inventory2, "/gefasst", PublicModuleGroup.Fahndung, 20, false, true, OffGeneric),
         // no nav route: the poster is reached from a profile, not from a tab
@@ -92,8 +94,10 @@ public static class PublicModules
         new(Tickets, "Ticket-Chat", "Anliegen an die Führungsebene im Bürgerbereich.",
             Icons.Material.Filled.Forum, null, PublicModuleGroup.Service, 220, false, true,
             "Der Ticket-Chat ist derzeit geschlossen."),
+        // no nav route: an objection is filed from the notice it disputes and read in the citizen area, not from
+        // a public tab of its own
         new(Objection, "Einspruch", "Widerspruch gegen eine öffentliche Ausschreibung.",
-            Icons.Material.Filled.Balance, null, PublicModuleGroup.Service, 230, false, false, OffGeneric),
+            Icons.Material.Filled.Balance, null, PublicModuleGroup.Service, 230, false, true, OffGeneric),
         new(CitizenRegistration, "Bürger-Registrierung", "Neuanmeldung eines Bürgerkontos über Discord. Bestehende Konten behalten ihren Zugang.",
             Icons.Material.Filled.Person, null, PublicModuleGroup.Service, 240, true, true,
             "Neue Bürgerkonten können derzeit nicht angelegt werden."),
